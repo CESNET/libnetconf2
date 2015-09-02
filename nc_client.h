@@ -23,6 +23,7 @@
 #ifndef NC_CLIENT_H_
 #define NC_CLIENT_H_
 
+#include <libnetconf2/netconf.h>
 #include <libnetconf2/log.h>
 
 #endif /* NC_CLIENT_H_ */

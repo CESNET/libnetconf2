@@ -23,6 +23,6 @@
 #ifndef NC_TRANSAPI_H_
 #define NC_TRANSAPI_H_
 
-#include <libnetconf2/log.h>
+#include <nc_server.h>
 
 #endif /* NC_TRANSAPI_H_ */

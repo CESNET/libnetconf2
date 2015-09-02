@@ -1,7 +1,7 @@
 /**
- * \file nc_server.h
+ * \file config.h
  * \author Radek Krejci <rkrejci@cesnet.cz>
- * \brief libnetconf2's main public header for NETCONF servers.
+ * \brief libnetconf2 various configuration settings.
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
@@ -20,10 +20,12 @@
  *
  */
 
-#ifndef NC_SERVER_H_
-#define NC_SERVER_H_
+#ifndef NC_CONFIG_H_
+#define NC_CONFIG_H_
 
-#include <libnetconf2/netconf.h>
-#include <libnetconf2/log.h>
+/*
+ * Mark all objects as hidden and export only objects explicitly marked to be part of the public API.
+ */
+#define API __attribute__((visibility("default")))
 
-#endif /* NC_SERVER_H_ */
+#endif /* NC_CONFIG_H_ */

@@ -1,7 +1,7 @@
 /**
- * \file nc_server.h
+ * \file libnetconf.h
  * \author Radek Krejci <rkrejci@cesnet.cz>
- * \brief libnetconf2's main public header for NETCONF servers.
+ * \brief libnetconf2 main internal header.
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
@@ -20,10 +20,10 @@
  *
  */
 
-#ifndef NC_SERVER_H_
-#define NC_SERVER_H_
+#ifndef NC_LIBNETCONF_H_
+#define NC_LIBNETCONF_H_
 
-#include <libnetconf2/netconf.h>
-#include <libnetconf2/log.h>
+#include "config.h"
+#include "log_p.h"
 
-#endif /* NC_SERVER_H_ */
+#endif /* NC_LIBNETCONF_H_ */

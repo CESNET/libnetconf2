@@ -32,7 +32,8 @@ set(CMAKE_C_FLAGS_RELEASE "-O2 -DNDEBUG")
 set(CMAKE_C_FLAGS_DEBUG   "-g -O0")
 
 set(libsrc
-	src/log.c)
+	src/log.c
+	src/time.c)
 
 set(headers
 	src/log.h)
