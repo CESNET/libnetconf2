@@ -23,6 +23,10 @@
 #ifndef NC_LOG_PRIVATE_H_
 #define NC_LOG_PRIVATE_H_
 
+#include <stdint.h>
+
+#include "log.h"
+
 /*
  * libnetconf's message printing
  */

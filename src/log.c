@@ -21,11 +21,10 @@
  */
 
 #include <stdarg.h>
-#include <stdint.h>
 #include <stdio.h>
 
 #include "config.h"
-#include "log.h"
+#include "log_p.h"
 
 /**
  * @brief libnetconf verbose level variable
