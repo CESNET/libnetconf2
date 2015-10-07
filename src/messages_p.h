@@ -1,7 +1,7 @@
 /**
- * \file libnetconf.h
+ * \file messages_p.h
  * \author Radek Krejci <rkrejci@cesnet.cz>
- * \brief libnetconf2 main internal header.
+ * \brief libnetconf2's private functions and structures of NETCONF messages.
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
@@ -20,24 +20,13 @@
  *
  */
 
-#ifndef NC_LIBNETCONF_H_
-#define NC_LIBNETCONF_H_
+#ifndef NC_MESSAGES_P_H_
+#define NC_MESSAGES_P_H_
 
-#include "config.h"
-#include "netconf.h"
-#include "log_p.h"
+#include <libyang/libyang.h>
 
-/**
- * @brief Enumeration of NETCONF message types.
- */
-typedef enum NC_MSG_TYPE {
-    NC_MSG_ERROR,       /**< error return value */
-    NC_MSG_WOULDBLOCK,  /**< timeout return value */
-    NC_MSG_NONE,        /**< no message at input or message was processed internally */
-    NC_MSG_HELLO,       /**< \<hello\> message */
-    NC_MSG_RPC,         /**< \<rpc\> message */
-    NC_MSG_REPLY,       /**< \<rpc-reply\> message */
-    NC_MSG_NOTIFICATION /**< \<notification\> message */
-} NC_MSG_TYPE;
+struct nc_rpc {
+    struct lyd_node *tree;  /**< libyang data tree of the message */
+};
 
-#endif /* NC_LIBNETCONF_H_ */
+#endif /* NC_MESSAGES_P_H_ */

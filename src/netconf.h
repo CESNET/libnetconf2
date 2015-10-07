@@ -29,6 +29,9 @@
 extern "C" {
 #endif
 
+#define NC_NS_BASE  "urn:ietf:params:xml:ns:netconf:base:1.0"
+#define NC_NS_NOTIF "urn:ietf:params:xml:ns:netconf:notification:1.0"
+
 /**
  * @brief Enumeration of reasons of the NETCONF session termination as defined in RFC 6470.
  */
