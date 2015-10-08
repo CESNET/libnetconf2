@@ -44,6 +44,14 @@ set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_VERSION} SOVERSI
 option(ENABLE_LIBSSH "Use libssh for NETCONF over SSH implementation" ON)
 option(ENABLE_TLS "Enable NETCONF over TLS support (via OpenSSL)" OFF)
 
+if(CMAKE_BUILD_TYPE STREQUAL debug)
+	option(ENABLE_BUILD_TESTS "Build tests" ON)
+	option(ENABLE_VALGRIND_TESTS "Build tests with valgrind" ON)
+else()
+	option(ENABLE_BUILD_TESTS "Build tests" OFF)
+	option(ENABLE_VALGRIND_TESTS "Build tests with valgrind" OFF)
+endif()
+
 # dependencies - libssh
 if(ENABLE_LIBSSH)
 	find_package(LibSSH 0.6.4 REQUIRED)
@@ -82,6 +90,15 @@ install(FILES ${CMAKE_SOURCE_DIR}/nc_client.h DESTINATION ${INCLUDE_INSTALL_DIR}
 install(FILES ${CMAKE_SOURCE_DIR}/nc_server.h DESTINATION ${INCLUDE_INSTALL_DIR})
 install(FILES ${CMAKE_SOURCE_DIR}/nc_transapi.h DESTINATION ${INCLUDE_INSTALL_DIR})
 install(FILES ${headers} DESTINATION ${INCLUDE_INSTALL_SUBDIR})
+
+if(ENABLE_VALGRIND_TESTS)
+	set(ENABLE_BUILD_TESTS ON)
+endif()
+
+if(ENABLE_BUILD_TESTS)
+	enable_testing()
+	add_subdirectory(tests)
+endif()
 
 # clean cmake cache
 add_custom_target(cleancache
