@@ -26,6 +26,7 @@
 #include <libyang/libyang.h>
 
 struct nc_rpc {
+    struct lyxml_elem *root;
     struct lyd_node *tree;  /**< libyang data tree of the message */
 };
 

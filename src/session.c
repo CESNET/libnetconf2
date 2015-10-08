@@ -37,7 +37,7 @@
 #define TIMEOUT_STEP 50
 
 API NC_MSG_TYPE
-nc_recv_rpc(struct nc_session* session, int timeout, struct nc_rpc *rpc)
+nc_recv_rpc(struct nc_session* session, int timeout, struct nc_rpc **rpc)
 {
     int r;
     struct lyxml_elem *xml;
@@ -77,6 +77,10 @@ nc_recv_rpc(struct nc_session* session, int timeout, struct nc_rpc *rpc)
     msgtype = nc_read_msg(session, timeout, &xml);
 
     pthread_mutex_unlock(&session->ti_lock);
+
+    *rpc = calloc(1, sizeof **rpc);
+    (*rpc)->tree = lyd_parse_xml(session->ctx, xml, 0);
+    (*rpc)->root = xml;
 
     return msgtype;
 }
