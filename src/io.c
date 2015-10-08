@@ -109,20 +109,24 @@ nc_read(struct nc_session *session, char *buf, size_t count)
 #ifdef ENABLE_TLS
     case NC_TI_OPENSSL:
         /* read via OpenSSL */
-        r = SSL_read(session->ti.tls, &(buf[size]), count);
-        if (r <= 0) {
-            int x;
-            switch (x = SSL_get_error(session->ti.tls, r)) {
-            case SSL_ERROR_WANT_READ:
-                usleep(NC_READ_SLEEP);
-                continue;
-            case SSL_ERROR_ZERO_RETURN:
-                ERR("Communication socket unexpectedly closed (OpenSSL).");
-                return -1;
-            default:
-                ERR("Reading from the TLS session failed (SSL code %d)", x);
-                return -1;
+        while(count) {
+            r = SSL_read(session->ti.tls, &(buf[size]), count);
+            if (r <= 0) {
+                int x;
+                switch (x = SSL_get_error(session->ti.tls, r)) {
+                case SSL_ERROR_WANT_READ:
+                    usleep(NC_READ_SLEEP);
+                    continue;
+                case SSL_ERROR_ZERO_RETURN:
+                    ERR("Communication socket unexpectedly closed (OpenSSL).");
+                    return -1;
+                default:
+                    ERR("Reading from the TLS session failed (SSL code %d)", x);
+                    return -1;
+                }
             }
+            size = size + r;
+            count = count - r;
         }
         break;
 #endif
@@ -248,7 +252,7 @@ nc_read_msg(struct nc_session* session, int timeout, struct lyxml_elem **data)
         fds.fd = session->ti.fd.in;
 #ifdef ENABLE_TLS
     } else if (session->ti_type == NC_TI_OPENSSL) {
-        fds.fd = SSL_get_fd(session->ti->tls);
+        fds.fd = SSL_get_fd(session->ti.tls);
 #endif
     }
 
