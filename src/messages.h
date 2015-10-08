@@ -1,7 +1,7 @@
 /**
- * \file libnetconf.h
+ * \file messages.h
  * \author Radek Krejci <rkrejci@cesnet.cz>
- * \brief libnetconf2 main internal header.
+ * \brief libnetconf2's public functions and structures of NETCONF messages.
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
@@ -20,11 +20,12 @@
  *
  */
 
-#ifndef NC_LIBNETCONF_H_
-#define NC_LIBNETCONF_H_
+#ifndef NC_MESSAGES_H_
+#define NC_MESSAGES_H_
 
-#include "config.h"
-#include "netconf.h"
-#include "log_p.h"
+/**
+ * @brief NETCONF RPC object
+ */
+struct nc_rpc;
 
-#endif /* NC_LIBNETCONF_H_ */
+#endif /* NC_MESSAGES_H_ */

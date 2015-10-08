@@ -1,7 +1,7 @@
 /**
- * \file libnetconf.h
+ * \file session.h
  * \author Radek Krejci <rkrejci@cesnet.cz>
- * \brief libnetconf2 main internal header.
+ * \brief libnetconf2 session manipulation
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
@@ -20,11 +20,19 @@
  *
  */
 
-#ifndef NC_LIBNETCONF_H_
-#define NC_LIBNETCONF_H_
+#ifndef NC_SESSION_H_
+#define NC_SESSION_H_
 
-#include "config.h"
-#include "netconf.h"
-#include "log_p.h"
+#include "messages.h"
 
-#endif /* NC_LIBNETCONF_H_ */
+/**
+ * @brief NETCONF session object
+ */
+struct nc_session;
+
+/**
+ * @brief Receive NETCONF RPC
+ */
+NC_MSG_TYPE nc_recv_rpc(struct nc_session* session, int timeout, struct nc_rpc **rpc);
+
+#endif /* NC_SESSION_H_ */

@@ -37,6 +37,9 @@
 
 #include <libyang/libyang.h>
 
+#include "libnetconf.h"
+#include "session.h"
+
 /**
  * Sleep time in microseconds to wait between unsuccessful reading due to EAGAIN or EWOULDBLOCK
  */

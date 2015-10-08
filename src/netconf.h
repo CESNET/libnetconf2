@@ -55,6 +55,19 @@ typedef enum NC_TRANSPORT {
 } NC_TRANSPORT;
 
 /**
+ * @brief Enumeration of NETCONF message types.
+ */
+typedef enum NC_MSG_TYPE {
+    NC_MSG_ERROR,       /**< error return value */
+    NC_MSG_WOULDBLOCK,  /**< timeout return value */
+    NC_MSG_NONE,        /**< no message at input or message was processed internally */
+    NC_MSG_HELLO,       /**< \<hello\> message */
+    NC_MSG_RPC,         /**< \<rpc\> message */
+    NC_MSG_REPLY,       /**< \<rpc-reply\> message */
+    NC_MSG_NOTIFICATION /**< \<notification\> message */
+} NC_MSG_TYPE;
+
+/**
  * @brief Transform given time_t (seconds since the epoch) into the RFC 3339 format
  * accepted by NETCONF functions.
  *
