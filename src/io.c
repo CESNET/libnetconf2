@@ -180,7 +180,7 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, char
         size = BUFFERSIZE;
     }
     chunk = malloc ((size + 1) * sizeof *chunk);
-    if (!*chunk) {
+    if (!chunk) {
         ERRMEM;
         return -1;
     }
