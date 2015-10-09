@@ -79,12 +79,33 @@ typedef enum {
 #define NC_VERSION_10_ENDTAG_LEN 6
 
 /**
+ * @brief Container to serialize RPC reply objects
+ */
+struct nc_reply_cont {
+    struct nc_reply *msg;
+    struct nc_reply_cont *next;
+};
+
+/**
+ * @brief Container to serialize Notification objects
+ */
+struct nc_notif_cont {
+    struct nc_notif *msg;
+    struct nc_notif_cont *next;
+};
+
+/**
  * @brief NETCONF session structure
  */
 struct nc_session {
     NC_SIDE side;                /**< type of the session: client or server */
+
+    /* NETCONF data */
     uint32_t id;                 /**< NETCONF session ID (session-id-type) */
     NC_VERSION version;          /**< NETCONF protocol version */
+    pthread_t *notif;              /**< running notifications thread */
+
+    /* Transport implementation */
     NC_TRANSPORT_IMPL ti_type;   /**< transport implementation type to select items from ti union */
     pthread_mutex_t ti_lock;     /**< lock to access ti */
     union {
@@ -102,8 +123,14 @@ struct nc_session {
 #ifdef ENABLE_TLS
         SSL *tls;
 #endif
-    } ti;
-    struct ly_ctx *ctx;
+    } ti;                          /**< transport implementation data */
+
+    /* other */
+    struct ly_ctx *ctx;            /**< libyang context of the session */
+
+    /* client side only data */
+    struct nc_reply_cont *replies; /**< queue for RPC replies received instead of notifications */
+    struct nc_notif_cont *notifs;  /**< queue for notifications received instead of RPC reply */
 };
 
 /**
@@ -122,7 +149,7 @@ struct nc_session {
  *            zero value causes to return immediately.
  * @param[out] data XML tree built from the read data.
  * @return Type of the read message. #NC_MSG_WOULDBLOCK is returned if timeout is positive
- * (or zero) value and it passed out without any data on the wire. #NC_MSG_UNKNOWN is
+ * (or zero) value and it passed out without any data on the wire. #NC_MSG_ERROR is
  * returned on error and #NC_MSG_NONE is never returned by this function.
  */
 NC_MSG_TYPE nc_read_msg(struct nc_session* session, int timeout, struct lyxml_elem **data);

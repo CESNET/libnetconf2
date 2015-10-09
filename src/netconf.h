@@ -64,7 +64,7 @@ typedef enum NC_MSG_TYPE {
     NC_MSG_HELLO,       /**< \<hello\> message */
     NC_MSG_RPC,         /**< \<rpc\> message */
     NC_MSG_REPLY,       /**< \<rpc-reply\> message */
-    NC_MSG_NOTIFICATION /**< \<notification\> message */
+    NC_MSG_NOTIF        /**< \<notification\> message */
 } NC_MSG_TYPE;
 
 /**

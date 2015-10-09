@@ -409,7 +409,7 @@ nc_read_msg(struct nc_session* session, int timeout, struct lyxml_elem **data)
         }
     } else if (!strcmp((*data)->ns->value, NC_NS_NOTIF)) {
         if (!strcmp((*data)->name, "notification")) {
-            return NC_MSG_NOTIFICATION;
+            return NC_MSG_NOTIF;
         } else {
             ERR("Invalid message root element (invalid name \"%s\")", (*data)->name);
             goto error;

@@ -28,4 +28,14 @@
  */
 struct nc_rpc;
 
+/**
+ * @brief NETCONF RPC reply object
+ */
+struct nc_reply;
+
+/**
+ * @brief NETCONF Notification object
+ */
+struct nc_notif;
+
 #endif /* NC_MESSAGES_H_ */

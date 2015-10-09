@@ -35,4 +35,14 @@ struct nc_session;
  */
 NC_MSG_TYPE nc_recv_rpc(struct nc_session* session, int timeout, struct nc_rpc **rpc);
 
+/**
+ * @brief Receive NETCONF RPC reply
+ */
+NC_MSG_TYPE nc_recv_reply(struct nc_session* session, int timeout, struct nc_reply **reply);
+
+/**
+ * @brief Receive NETCONF Notification
+ */
+NC_MSG_TYPE nc_recv_notif(struct nc_session* session, int timeout, struct nc_notif **notif);
+
 #endif /* NC_SESSION_H_ */

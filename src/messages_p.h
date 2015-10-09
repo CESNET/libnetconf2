@@ -32,4 +32,14 @@ struct nc_rpc {
     struct lyd_node *tree;  /**< libyang data tree of the message */
 };
 
+struct nc_reply {
+    struct lyxml_elem *root;
+    struct lyd_node *tree;  /**< libyang data tree of the message */
+};
+
+struct nc_notif {
+    struct lyxml_elem *root;
+    struct lyd_node *tree;  /**< libyang data tree of the message */
+};
+
 #endif /* NC_MESSAGES_P_H_ */
