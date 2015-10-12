@@ -339,3 +339,34 @@ error:
 
     return NC_MSG_ERROR;
 }
+
+API NC_MSG_TYPE
+nc_send_rpc(struct nc_session* session, struct lyd_node *op, const char *attrs)
+{
+    int r;
+
+    if (!session || !op) {
+        ERR("%s: Invalid parameter", __func__);
+        return NC_MSG_ERROR;
+    } else if (session->side != NC_SIDE_CLIENT) {
+        ERR("%s: only clients are allowed to send RPCs.", __func__);
+        return NC_MSG_ERROR;
+    }
+
+    r = session_ti_lock(session, 0);
+    if (r != 0) {
+        /* error or blocking */
+        return NC_MSG_WOULDBLOCK;
+    }
+
+    r = nc_write_msg(session, NC_MSG_RPC, op, attrs);
+
+    session_ti_unlock(session);
+
+    if (r) {
+        return NC_MSG_ERROR;
+    } else {
+        return NC_MSG_RPC;
+    }
+}
+

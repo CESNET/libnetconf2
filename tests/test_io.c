@@ -39,6 +39,7 @@
 #include "config.h"
 
 struct nc_session session = {0};
+struct nc_rpc *rpc = NULL;
 
 static int
 setup_f(void **state)
@@ -66,6 +67,13 @@ teardown_f(void **state)
 {
     (void) state; /* unused */
 
+    if (rpc) {
+        lyxml_free_elem(session.ctx, rpc->root);
+        lyd_free(rpc->tree);
+        free(rpc);
+        rpc = NULL;
+    }
+
     ly_ctx_destroy(session.ctx);
 
     return 0;
@@ -75,16 +83,15 @@ static void
 test_read_rpc(void **state)
 {
     (void) state; /* unused */
-    struct nc_rpc *rpc;
     NC_MSG_TYPE type;
 
     /* test IO with standard file descriptors */
     session.ti_type = NC_TI_FD;
     session.ti.fd.c = 0;
     session.side = NC_SIDE_SERVER;
-    session.version = NC_VERSION_10;
+    session.version = NC_VERSION_11;
 
-    session.ti.fd.in = open(TESTS_DIR"/data/nc10/rpc-lock", O_RDONLY);
+    session.ti.fd.in = open(TESTS_DIR"/data/nc11/rpc-lock", O_RDONLY);
     if (session.ti.fd.in == -1) {
         fail_msg(" Openning \"%s\" failed (%s)", TESTS_DIR"/data/nc10/rpc-lock", strerror(errno));
     }
@@ -93,14 +100,31 @@ test_read_rpc(void **state)
     assert_int_equal(type, NC_MSG_RPC);
     assert_non_null(rpc);
 
-    lyxml_free_elem(session.ctx, rpc->root);
-    lyd_free(rpc->tree);
-    free(rpc);
+}
+
+static void
+test_write_rpc(void **state)
+{
+    (void) state; /* unused */
+    NC_MSG_TYPE type;
+
+    session.side = NC_SIDE_CLIENT;
+    session.ti.fd.out = STDOUT_FILENO;
+
+    do {
+        type = nc_send_rpc(&session, rpc->tree, NULL);
+    } while(type == NC_MSG_WOULDBLOCK);
+
+    assert_int_equal(type, NC_MSG_RPC);
+
+    write( session.ti.fd.out, "\n", 1);
 }
 
 int main(void)
 {
-    const struct CMUnitTest io[] = {cmocka_unit_test_setup_teardown(test_read_rpc, setup_f, teardown_f)};
+    const struct CMUnitTest io[] = {
+        cmocka_unit_test_setup(test_read_rpc, setup_f),
+        cmocka_unit_test_teardown(test_write_rpc, teardown_f)};
 
     return cmocka_run_group_tests(io, NULL, NULL);
 }

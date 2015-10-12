@@ -23,6 +23,7 @@
 #ifndef NC_SESSION_PRIVATE_H_
 #define NC_SESSION_PRIVATE_H_
 
+#include <stdint.h>
 #include <pthread.h>
 
 #ifdef ENABLE_LIBSSH
@@ -129,6 +130,7 @@ struct nc_session {
     struct ly_ctx *ctx;            /**< libyang context of the session */
 
     /* client side only data */
+    uint64_t msgid;
     struct nc_reply_cont *replies; /**< queue for RPC replies received instead of notifications */
     struct nc_notif_cont *notifs;  /**< queue for notifications received instead of RPC reply */
 };
@@ -153,5 +155,25 @@ struct nc_session {
  * returned on error and #NC_MSG_NONE is never returned by this function.
  */
 NC_MSG_TYPE nc_read_msg(struct nc_session* session, int timeout, struct lyxml_elem **data);
+
+/**
+ * @brief Write message into wire.
+ *
+ * @param[in] session NETCONF session to which the message will be written.
+ * @param[in] type Type of the message to write. According to the type, the
+ * specific additional parameters are required or accepted:
+ * - #NC_MSG_RPC
+ *   - `struct lyd_node *op;` - operation (content of the \<rpc/\> to be sent. Required parameter.
+ *   - `const char *attrs;` - additional attributes to be added into the \<rpc/\> element.
+ *     `message-id` attribute is added automatically and default namespace is set to
+ *     #NC_NS_BASE. Optional parameter.
+ * - #NC_MSG_REPLY
+ *   - `struct nc_rpc *rpc;` - RPC object to reply. Required parameter.
+ *   - TODO: content
+ * - #NC_MSG_NOTIF
+ *   - TODO: content
+ * @return 0 on success
+ */
+int nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...);
 
 #endif /* NC_SESSION_PRIVATE_H_ */
