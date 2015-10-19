@@ -30,6 +30,7 @@ set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSI
 set(libsrc
 	src/io.c
 	src/log.c
+	src/messages.c
 	src/session.c
 	src/time.c)
 

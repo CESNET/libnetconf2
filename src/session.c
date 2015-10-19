@@ -108,7 +108,8 @@ nc_recv_rpc(struct nc_session *session, int timeout, struct nc_rpc **rpc)
 
     switch(msgtype) {
     case NC_MSG_RPC:
-        *rpc = calloc(1, sizeof **rpc);
+        *rpc = malloc(sizeof **rpc);
+        (*rpc)->ctx = session->ctx;
         (*rpc)->tree = lyd_parse_xml(session->ctx, xml, 0);
         (*rpc)->root = xml;
         break;
@@ -194,7 +195,8 @@ nc_recv_reply(struct nc_session* session, int timeout, struct nc_reply **reply)
             }
 
             /* create notification object */
-            notif = calloc(1, sizeof *notif);
+            notif = malloc(sizeof *notif);
+            notif->ctx = session->ctx;
             notif->tree = lyd_parse_xml(session->ctx, xml, 0);
             notif->root = xml;
 
@@ -212,7 +214,8 @@ nc_recv_reply(struct nc_session* session, int timeout, struct nc_reply **reply)
 
         switch(msgtype) {
         case NC_MSG_REPLY:
-            *reply = calloc(1, sizeof **reply);
+            *reply = malloc(sizeof **reply);
+            (*reply)->ctx = session->ctx;
             (*reply)->tree = lyd_parse_xml(session->ctx, xml, 0);
             (*reply)->root = xml;
             break;
@@ -292,7 +295,8 @@ nc_recv_notif(struct nc_session* session, int timeout, struct nc_notif **notif)
         msgtype = nc_read_msg(session, timeout, &xml);
         if (msgtype == NC_MSG_REPLY) {
             /* create reply object */
-            reply = calloc(1, sizeof *reply);
+            reply = malloc(sizeof *reply);
+            reply->ctx = session->ctx;
             reply->tree = lyd_parse_xml(session->ctx, xml, 0);
             reply->root = xml;
 
@@ -310,7 +314,8 @@ nc_recv_notif(struct nc_session* session, int timeout, struct nc_notif **notif)
 
         switch(msgtype) {
         case NC_MSG_NOTIF:
-            *notif = calloc(1, sizeof **notif);
+            *notif = malloc(sizeof **notif);
+            (*notif)->ctx = session->ctx;
             (*notif)->tree = lyd_parse_xml(session->ctx, xml, 0);
             (*notif)->root = xml;
             break;

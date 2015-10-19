@@ -38,4 +38,22 @@ struct nc_reply;
  */
 struct nc_notif;
 
+/**
+ * @brief Free the NETCONF RPC object.
+ * @param[in] rpc Object to free.
+ */
+void nc_rpc_free(struct nc_rpc *rpc);
+
+/**
+ * @brief Free the NETCONF RPC reply object.
+ * @param[in] rpc Object to free.
+ */
+void nc_reply_free(struct nc_reply *reply);
+
+/**
+ * @brief Free the NETCONF Notification object.
+ * @param[in] rpc Object to free.
+ */
+void nc_notif_free(struct nc_notif *notif);
+
 #endif /* NC_MESSAGES_H_ */

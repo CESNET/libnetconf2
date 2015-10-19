@@ -38,17 +38,6 @@
 #include <messages_p.h>
 #include "config.h"
 
-static void
-free_rpc(struct nc_session *s, struct nc_rpc *rpc)
-{
-    if (rpc) {
-        lyxml_free_elem(s->ctx, rpc->root);
-        lyd_free(rpc->tree);
-        free(rpc);
-        rpc = NULL;
-    }
-}
-
 static int
 setup_read(void **state)
 {
@@ -107,7 +96,7 @@ test_read_rpc_10(void **state)
     assert_int_equal(type, NC_MSG_RPC);
     assert_non_null(rpc);
 
-    free_rpc(session, rpc);
+    nc_rpc_free(rpc);
 }
 
 static void
@@ -125,7 +114,7 @@ test_read_rpc_10_bad(void **state)
     assert_int_equal(type, NC_MSG_ERROR);
     assert_null(rpc);
 
-    free_rpc(session, rpc);
+    nc_rpc_free(rpc);
 }
 
 static void
@@ -143,7 +132,7 @@ test_read_rpc_11(void **state)
     assert_int_equal(type, NC_MSG_RPC);
     assert_non_null(rpc);
 
-    free_rpc(session, rpc);
+    nc_rpc_free(rpc);
 }
 
 static void
@@ -161,7 +150,7 @@ test_read_rpc_11_bad(void **state)
     assert_int_equal(type, NC_MSG_ERROR);
     assert_null(rpc);
 
-    free_rpc(session, rpc);
+    nc_rpc_free(rpc);
 }
 
 
@@ -224,7 +213,7 @@ teardown_write(void **state)
         close(w->session->ti.fd.out);
     }
 
-    free_rpc(w->session, w->rpc);
+    nc_rpc_free(w->rpc);
     ly_ctx_destroy(w->session->ctx);
 
     free(w->session);

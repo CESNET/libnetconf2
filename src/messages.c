@@ -1,7 +1,7 @@
 /**
- * \file messages_p.h
+ * \file messages.c
  * \author Radek Krejci <rkrejci@cesnet.cz>
- * \brief libnetconf2's private functions and structures of NETCONF messages.
+ * \brief libnetconf2 - NETCONF messages functions
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
@@ -20,29 +20,44 @@
  *
  */
 
-#ifndef NC_MESSAGES_P_H_
-#define NC_MESSAGES_P_H_
+#include <stdlib.h>
 
 #include <libyang/libyang.h>
 
-#include "messages.h"
+#include "libnetconf.h"
+#include "messages_p.h"
 
-struct nc_rpc {
-    struct ly_ctx *ctx;
-    struct lyxml_elem *root;
-    struct lyd_node *tree;  /**< libyang data tree of the message */
-};
+API void
+nc_rpc_free(struct nc_rpc *rpc)
+{
+    if (!rpc) {
+        return;
+    }
 
-struct nc_reply {
-    struct ly_ctx *ctx;
-    struct lyxml_elem *root;
-    struct lyd_node *tree;  /**< libyang data tree of the message */
-};
+    lyxml_free_elem(rpc->ctx, rpc->root);
+    lyd_free(rpc->tree);
+    free(rpc);
+}
 
-struct nc_notif {
-    struct ly_ctx *ctx;
-    struct lyxml_elem *root;
-    struct lyd_node *tree;  /**< libyang data tree of the message */
-};
+API void
+nc_reply_free(struct nc_reply *reply)
+{
+    if (!reply) {
+        return;
+    }
 
-#endif /* NC_MESSAGES_P_H_ */
+    lyxml_free_elem(reply->ctx, reply->root);
+    lyd_free(reply->tree);
+    free(reply);
+}
+API void
+nc_notif_free(struct nc_notif *notif)
+{
+    if (!notif) {
+        return;
+    }
+
+    lyxml_free_elem(notif->ctx, notif->root);
+    lyd_free(notif->tree);
+    free(notif);
+}
