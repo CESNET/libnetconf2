@@ -38,17 +38,30 @@
 #include <messages_p.h>
 #include "config.h"
 
-struct nc_session session = {0};
-struct nc_rpc *rpc = NULL;
+static void
+free_rpc(struct nc_session *s, struct nc_rpc *rpc)
+{
+    if (rpc) {
+        lyxml_free_elem(s->ctx, rpc->root);
+        lyd_free(rpc->tree);
+        free(rpc);
+        rpc = NULL;
+    }
+}
 
 static int
-setup_f(void **state)
+setup_read(void **state)
 {
-    (void) state; /* unused */
     int fd;
+    struct nc_session *session;
 
-    session.ctx = ly_ctx_new(TESTS_DIR"/models");
-    pthread_mutex_init(&session.ti_lock, NULL);
+    session = calloc(1, sizeof *session);
+    /* test IO with standard file descriptors */
+    session->ti_type = NC_TI_FD;
+    session->ti.fd.c = 0;
+
+    session->ctx = ly_ctx_new(TESTS_DIR"/models");
+    pthread_mutex_init(&session->ti_lock, NULL);
 
     /* ietf-netconf */
     fd = open(TESTS_DIR"/models/ietf-netconf.yin", O_RDONLY);
@@ -56,75 +69,263 @@ setup_f(void **state)
         return -1;
     }
 
-    lys_read(session.ctx, fd, LYS_IN_YIN);
+    lys_read(session->ctx, fd, LYS_IN_YIN);
     close(fd);
+
+    *state = session;
+    return 0;
+}
+
+static int
+teardown_read(void **state)
+{
+    struct nc_session *session = (struct nc_session *)*state;
+
+    close(session->ti.fd.in);
+    close(session->ti.fd.out);
+
+    ly_ctx_destroy(session->ctx);
+
+    free(session);
+    *state = NULL;
+
+    return 0;
+}
+
+static void
+test_read_rpc_10(void **state)
+{
+    struct nc_session *session = (struct nc_session *)*state;
+    struct nc_rpc *rpc = NULL;
+    NC_MSG_TYPE type;
+
+    session->ti.fd.in = open(TESTS_DIR"/data/nc10/rpc-lock", O_RDONLY);
+    session->version = NC_VERSION_10;
+    session->side = NC_SIDE_SERVER;
+
+    type = nc_recv_rpc(session, 1000, &rpc);
+    assert_int_equal(type, NC_MSG_RPC);
+    assert_non_null(rpc);
+
+    free_rpc(session, rpc);
+}
+
+static void
+test_read_rpc_10_bad(void **state)
+{
+    struct nc_session *session = (struct nc_session *)*state;
+    struct nc_rpc *rpc = NULL;
+    NC_MSG_TYPE type;
+
+    session->ti.fd.in = open(TESTS_DIR"/data/nc10/rpc-lock", O_RDONLY);
+    session->version = NC_VERSION_10;
+    session->side = NC_SIDE_CLIENT;
+
+    type = nc_recv_rpc(session, 1000, &rpc);
+    assert_int_equal(type, NC_MSG_ERROR);
+    assert_null(rpc);
+
+    free_rpc(session, rpc);
+}
+
+static void
+test_read_rpc_11(void **state)
+{
+    struct nc_session *session = (struct nc_session *)*state;
+    struct nc_rpc *rpc = NULL;
+    NC_MSG_TYPE type;
+
+    session->ti.fd.in = open(TESTS_DIR"/data/nc11/rpc-lock", O_RDONLY);
+    session->version = NC_VERSION_11;
+    session->side = NC_SIDE_SERVER;
+
+    type = nc_recv_rpc(session, 1000, &rpc);
+    assert_int_equal(type, NC_MSG_RPC);
+    assert_non_null(rpc);
+
+    free_rpc(session, rpc);
+}
+
+static void
+test_read_rpc_11_bad(void **state)
+{
+    struct nc_session *session = (struct nc_session *)*state;
+    struct nc_rpc *rpc = NULL;
+    NC_MSG_TYPE type;
+
+    session->ti.fd.in = open(TESTS_DIR"/data/nc11/rpc-lock", O_RDONLY);
+    session->version = NC_VERSION_11;
+    session->side = NC_SIDE_CLIENT;
+
+    type = nc_recv_rpc(session, 1000, &rpc);
+    assert_int_equal(type, NC_MSG_ERROR);
+    assert_null(rpc);
+
+    free_rpc(session, rpc);
+}
+
+
+struct wr {
+    struct nc_session *session;
+    struct nc_rpc *rpc;
+};
+
+static int
+setup_write(void **state)
+{
+    (void) state; /* unused */
+    int fd;
+    NC_MSG_TYPE type;
+    struct wr *w;
+
+    w = malloc(sizeof *w);
+    w->session = calloc(1, sizeof *w->session);
+    w->session->ctx = ly_ctx_new(TESTS_DIR"/models");
+    pthread_mutex_init(&w->session->ti_lock, NULL);
+
+    /* ietf-netconf */
+    fd = open(TESTS_DIR"/models/ietf-netconf.yin", O_RDONLY);
+    if (fd == -1) {
+        return -1;
+    }
+
+    lys_read(w->session->ctx, fd, LYS_IN_YIN);
+    close(fd);
+
+    /* get rpc to write - TODO client side way */
+    fd = open(TESTS_DIR"/data/nc10/rpc-lock", O_RDONLY);
+    w->session->version = NC_VERSION_10;
+    w->session->msgid = 999;
+    w->session->ti_type = NC_TI_FD;
+    w->session->ti.fd.c = 0;
+    w->session->ti.fd.in = fd;
+
+    type = nc_recv_rpc(w->session, 1000, &w->rpc);
+    assert_int_equal(type, NC_MSG_RPC);
+    assert_non_null(w->rpc);
+
+    close(fd);
+    w->session->ti.fd.in = -1;
+
+    *state = w;
 
     return 0;
 }
 
 static int
-teardown_f(void **state)
+teardown_write(void **state)
 {
-    (void) state; /* unused */
+    struct wr *w = (struct wr *)*state;
 
-    if (rpc) {
-        lyxml_free_elem(session.ctx, rpc->root);
-        lyd_free(rpc->tree);
-        free(rpc);
-        rpc = NULL;
+    if (w->session->ti.fd.in != -1) {
+        close(w->session->ti.fd.in);
+    }
+    if (w->session->ti.fd.out != -1) {
+        close(w->session->ti.fd.out);
     }
 
-    ly_ctx_destroy(session.ctx);
+    free_rpc(w->session, w->rpc);
+    ly_ctx_destroy(w->session->ctx);
+
+    free(w->session);
+    free(w);
+    *state = NULL;
 
     return 0;
 }
 
 static void
-test_read_rpc(void **state)
-{
-    (void) state; /* unused */
-    NC_MSG_TYPE type;
-
-    /* test IO with standard file descriptors */
-    session.ti_type = NC_TI_FD;
-    session.ti.fd.c = 0;
-    session.side = NC_SIDE_SERVER;
-    session.version = NC_VERSION_11;
-
-    session.ti.fd.in = open(TESTS_DIR"/data/nc11/rpc-lock", O_RDONLY);
-    if (session.ti.fd.in == -1) {
-        fail_msg(" Openning \"%s\" failed (%s)", TESTS_DIR"/data/nc10/rpc-lock", strerror(errno));
-    }
-
-    type = nc_recv_rpc(&session, 1000, &rpc);
-    assert_int_equal(type, NC_MSG_RPC);
-    assert_non_null(rpc);
-
-}
-
-static void
 test_write_rpc(void **state)
 {
-    (void) state; /* unused */
+    struct wr *w = (struct wr *)*state;
     NC_MSG_TYPE type;
 
-    session.side = NC_SIDE_CLIENT;
-    session.ti.fd.out = STDOUT_FILENO;
+    w->session->side = NC_SIDE_CLIENT;
+    w->session->ti_type = NC_TI_FD;
+    w->session->ti.fd.c = 0;
+    w->session->ti.fd.out = STDOUT_FILENO;
 
     do {
-        type = nc_send_rpc(&session, rpc->tree, NULL);
+        type = nc_send_rpc(w->session, w->rpc->tree, NULL);
     } while(type == NC_MSG_WOULDBLOCK);
 
     assert_int_equal(type, NC_MSG_RPC);
 
-    write( session.ti.fd.out, "\n", 1);
+    write(w->session->ti.fd.out, "\n", 1);
+
+    w->session->ti.fd.out = -1;
 }
 
+static void
+test_write_rpc_10(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+
+    w->session->version = NC_VERSION_10;
+
+    return test_write_rpc(state);
+}
+
+static void
+test_write_rpc_11(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+
+    w->session->version = NC_VERSION_11;
+
+    return test_write_rpc(state);
+}
+
+static void
+test_write_rpc_bad(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE type;
+
+    w->session->side = NC_SIDE_SERVER;
+    w->session->ti_type = NC_TI_FD;
+    w->session->ti.fd.c = 0;
+    w->session->ti.fd.out = STDOUT_FILENO;
+
+    do {
+        type = nc_send_rpc(w->session, w->rpc->tree, NULL);
+    } while(type == NC_MSG_WOULDBLOCK);
+
+    assert_int_equal(type, NC_MSG_ERROR);
+
+    w->session->ti.fd.out = -1;
+}
+
+static void
+test_write_rpc_10_bad(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+
+    w->session->version = NC_VERSION_10;
+
+    return test_write_rpc_bad(state);
+}
+
+static void
+test_write_rpc_11_bad(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+
+    w->session->version = NC_VERSION_11;
+
+    return test_write_rpc_bad(state);
+}
 int main(void)
 {
     const struct CMUnitTest io[] = {
-        cmocka_unit_test_setup(test_read_rpc, setup_f),
-        cmocka_unit_test_teardown(test_write_rpc, teardown_f)};
+        cmocka_unit_test_setup_teardown(test_read_rpc_10, setup_read, teardown_read),
+        cmocka_unit_test_setup_teardown(test_read_rpc_10_bad, setup_read, teardown_read),
+        cmocka_unit_test_setup_teardown(test_read_rpc_11, setup_read, teardown_read),
+        cmocka_unit_test_setup_teardown(test_read_rpc_11_bad, setup_read, teardown_read),
+        cmocka_unit_test_setup_teardown(test_write_rpc_10, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_write_rpc_10_bad, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_write_rpc_11, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_write_rpc_11_bad, setup_write, teardown_write)};
 
     return cmocka_run_group_tests(io, NULL, NULL);
 }
