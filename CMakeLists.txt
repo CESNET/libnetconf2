@@ -75,11 +75,11 @@ target_link_libraries(netconf2 ${LIBYANG_LIBRARIES})
 include_directories(${LIBYANG_INCLUDE_DIRS})
 
 if(NOT LIB_INSTALL_DIR)
-	set(LIB_INSTALL_DIR lib)
+	set(LIB_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/lib)
 endif()
 
 if(NOT INCLUDE_INSTALL_DIR)
-	set(INCLUDE_INSTALL_DIR include)
+	set(INCLUDE_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/include)
 endif()
 set(INCLUDE_INSTALL_SUBDIR ${INCLUDE_INSTALL_DIR}/libnetconf2)
 
