@@ -28,4 +28,9 @@
  */
 #define API __attribute__((visibility("default")))
 
+/*
+ * Location of installed basic YIN/YANG schemas
+ */
+#define SCHEMAS_DIR "@DATA_INSTALL_DIR@/"
+
 #endif /* NC_CONFIG_H_ */

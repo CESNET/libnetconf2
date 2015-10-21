@@ -83,6 +83,10 @@ if(NOT INCLUDE_INSTALL_DIR)
 endif()
 set(INCLUDE_INSTALL_SUBDIR ${INCLUDE_INSTALL_DIR}/libnetconf2)
 
+if(NOT DATA_INSTALL_DIR)
+	set(DATA_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/share/libnetconf2)
+endif()
+
 # install library
 install(TARGETS netconf2 DESTINATION ${LIB_INSTALL_DIR})
 
@@ -92,6 +96,12 @@ install(FILES ${CMAKE_SOURCE_DIR}/nc_server.h DESTINATION ${INCLUDE_INSTALL_DIR}
 install(FILES ${CMAKE_SOURCE_DIR}/nc_transapi.h DESTINATION ${INCLUDE_INSTALL_DIR})
 install(FILES ${headers} DESTINATION ${INCLUDE_INSTALL_SUBDIR})
 
+# install schemas
+install(
+	CODE "file(GLOB yin_schemas \"${CMAKE_SOURCE_DIR}/schemas/*.yin\")"
+	CODE "file(INSTALL \${yin_schemas} DESTINATION ${DATA_INSTALL_DIR})"
+)
+
 if(ENABLE_VALGRIND_TESTS)
 	set(ENABLE_BUILD_TESTS ON)
 endif()
@@ -100,6 +110,8 @@ if(ENABLE_BUILD_TESTS)
 	enable_testing()
 	add_subdirectory(tests)
 endif()
+
+configure_file(src/config.h.in src/config.h)
 
 # clean cmake cache
 add_custom_target(cleancache
