@@ -479,7 +479,7 @@ write_(struct nc_session *session, const void *buf, size_t count)
 #ifdef ENABLE_TLS
     case NC_TI_OPENSSL:
         if (session->version == NC_VERSION_11) {
-            c = snprintf(chunksize, "\n#%zu\n", count);
+            c = snprintf(chunksize, 20, "\n#%zu\n", count);
             SSL_write(session->ti.tls, chunksize, c);
         }
         return SSL_write(session->ti.tls, buf, count) + c;
