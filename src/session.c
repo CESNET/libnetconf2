@@ -133,7 +133,7 @@ connect_load_schemas(struct ly_ctx *ctx)
 }
 
 API struct nc_session *
-nc_session_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
+nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
 {
     int r;
     NC_MSG_TYPE type;
@@ -214,7 +214,7 @@ error:
 #ifdef ENABLE_LIBSSH
 
 API struct nc_session *
-nc_session_connect_ssh(const char *host, unsigned short port, const char* username, struct ly_ctx *ctx)
+nc_connect_ssh(const char *host, unsigned short port, const char* username, struct ly_ctx *ctx)
 {
     (void) host;
     (void) port;
@@ -225,7 +225,7 @@ nc_session_connect_ssh(const char *host, unsigned short port, const char* userna
 }
 
 API struct nc_session *
-nc_session_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
+nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
 {
     (void) ssh_session;
     (void) ctx;
@@ -234,7 +234,7 @@ nc_session_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
 }
 
 API struct nc_session *
-nc_session_connect_ssh_channel(struct nc_session *session)
+nc_connect_ssh_channel(struct nc_session *session)
 {
     (void) session;
 
@@ -246,7 +246,7 @@ nc_session_connect_ssh_channel(struct nc_session *session)
 #ifdef ENABLE_TLS
 
 API struct nc_session *
-nc_session_connect_tls(const char *host, unsigned short port, const char *username, struct ly_ctx *ctx)
+nc_connect_tls(const char *host, unsigned short port, const char *username, struct ly_ctx *ctx)
 {
     (void) host;
     (void) port;
@@ -257,7 +257,7 @@ nc_session_connect_tls(const char *host, unsigned short port, const char *userna
 }
 
 API struct nc_session *
-nc_session_connect_libssl(SSL *tls, struct ly_ctx *ctx)
+nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
 {
     (void) tls;
     (void) ctx;

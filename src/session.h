@@ -83,7 +83,7 @@ int nc_schema_searchpath(const char *path);
  *                (see nc_schema_searchpath()).
  * @return Created NETCONF session object or NULL in case of error.
  */
-struct nc_session *nc_session_connect_inout(int fdin, int fdout, struct ly_ctx *ctx);
+struct nc_session *nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx);
 
 #ifdef ENABLE_LIBSSH
 
@@ -91,7 +91,7 @@ struct nc_session *nc_session_connect_inout(int fdin, int fdout, struct ly_ctx *
  * @brief Connect to the NETCONF server using SSH transport (via libssh).
  *
  * SSH session is created with default options. If a caller need to change SSH session properties,
- * it is supposed to use nc_session_connect_libssh().
+ * it is supposed to use nc_connect_libssh().
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  *
@@ -107,7 +107,7 @@ struct nc_session *nc_session_connect_inout(int fdin, int fdout, struct ly_ctx *
  *                (see nc_schema_searchpath()).
  * @return Created NETCONF session object or NULL in case of error.
  */
-struct nc_session *nc_session_connect_ssh(const char *host, unsigned short port, const char* username, struct ly_ctx *ctx);
+struct nc_session *nc_connect_ssh(const char *host, unsigned short port, const char* username, struct ly_ctx *ctx);
 
 /**
  * @brief Connect to the NETCONF server using the provided SSH (libssh) session.
@@ -122,7 +122,7 @@ struct nc_session *nc_session_connect_ssh(const char *host, unsigned short port,
  *                (see nc_schema_searchpath()).
  * @return Created NETCONF session object or NULL in case of error.
  */
-struct nc_session *nc_session_connect_libssh(ssh_session *ssh_session, struct ly_ctx *ctx);
+struct nc_session *nc_connect_libssh(ssh_session *ssh_session, struct ly_ctx *ctx);
 
 /**
  * @brief Create another NETCONF session on existing SSH session using separated SSH channel.
@@ -130,11 +130,10 @@ struct nc_session *nc_session_connect_libssh(ssh_session *ssh_session, struct ly
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  *
  * @param[in] session Existing NETCONF session. The session has to be created on SSH transport layer using libssh -
- *                    it has to be created by nc_session_connect_ssh(), nc_session_connect_libssh() or
- *                    nc_session_connect_ssh_channel().
+ *                    it has to be created by nc_connect_ssh(), nc_connect_libssh() or nc_connect_ssh_channel().
  * @return Created NETCONF session object or NULL in case of error.
  */
-struct nc_session *nc_session_connect_ssh_channel(struct nc_session *session);
+struct nc_session *nc_connect_ssh_channel(struct nc_session *session);
 
 #endif /* ENABLE_LIBSSH */
 
@@ -144,7 +143,7 @@ struct nc_session *nc_session_connect_ssh_channel(struct nc_session *session);
  * @brief Connect to the NETCONF server using TLS transport (via libssl)
  *
  * TLS session is created with default options. If a caller need to change TLS session properties,
- * it is supposed to use nc_session_connect_libssl().
+ * it is supposed to use nc_connect_libssl().
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  *
@@ -160,7 +159,7 @@ struct nc_session *nc_session_connect_ssh_channel(struct nc_session *session);
  *                (see nc_schema_searchpath()).
  * @return Created NETCONF session object or NULL in case of error.
  */
-struct nc_session *nc_session_connect_tls(const char *host, unsigned short port, const char *username, struct ly_ctx *ctx);
+struct nc_session *nc_connect_tls(const char *host, unsigned short port, const char *username, struct ly_ctx *ctx);
 
 /**
  * @brief Connect to the NETCONF server using the provided TLS (libssl) session.
@@ -175,7 +174,7 @@ struct nc_session *nc_session_connect_tls(const char *host, unsigned short port,
  *                (see nc_schema_searchpath()).
  * @return Created NETCONF session object or NULL in case of error.
  */
-struct nc_session *nc_session_connect_libssl(SSL *tls, struct ly_ctx *ctx);
+struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
 
 #endif /* ENABLE_TLS */
 
