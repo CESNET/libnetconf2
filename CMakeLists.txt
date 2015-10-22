@@ -26,6 +26,10 @@ set(LIBNETCONF2_MICRO_VERSION 0)
 set(LIBNETCONF2_VERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION}.${LIBNETCONF2_MICRO_VERSION})
 set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION})
 
+# build options
+option(ENABLE_LIBSSH "Use libssh for NETCONF over SSH implementation" ON)
+option(ENABLE_TLS "Enable NETCONF over TLS support (via OpenSSL)" OFF)
+
 # source files
 set(libsrc
 	src/datastore.c
@@ -34,6 +38,11 @@ set(libsrc
 	src/messages.c
 	src/session.c
 	src/time.c)
+
+if(ENABLE_LIBSSH)
+	set(libsrc ${libsrc}
+		src/session_ssh.c)
+endif()
 
 set(headers
 	src/log.h
@@ -44,10 +53,6 @@ set(headers
 # libnetconf2 target
 add_library(netconf2 SHARED ${libsrc})
 set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_VERSION} SOVERSION ${LIBNETCONF2_SOVERSION})
-
-# build options
-option(ENABLE_LIBSSH "Use libssh for NETCONF over SSH implementation" ON)
-option(ENABLE_TLS "Enable NETCONF over TLS support (via OpenSSL)" OFF)
 
 if(CMAKE_BUILD_TYPE STREQUAL debug)
 	option(ENABLE_BUILD_TESTS "Build tests" ON)

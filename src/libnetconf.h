@@ -26,5 +26,12 @@
 #include "config.h"
 #include "netconf.h"
 #include "log_p.h"
+#include "session_p.h"
+#include "messages_p.h"
+#include "datastore_p.h"
+
+/* Tests whether string is empty or non-empty. */
+#define strisempty(str) ((str)[0] == '\0')
+#define strnonempty(str) ((str)[0] != '\0')
 
 #endif /* NC_LIBNETCONF_H_ */

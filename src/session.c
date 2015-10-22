@@ -23,20 +23,18 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <netdb.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <pthread.h>
 #include <unistd.h>
 
 #include <libyang/libyang.h>
 
-#include "config.h"
 #include "libnetconf.h"
-#include "messages_p.h"
-#include "session_p.h"
-#include "datastore_p.h"
 
 #define TIMEOUT_STEP 50
 
@@ -102,6 +100,24 @@ session_ti_unlock(struct nc_session *session)
     return pthread_mutex_unlock(session->ti_lock);
 }
 
+int
+handshake(struct nc_session *session)
+{
+    NC_MSG_TYPE type;
+
+    type = nc_send_hello_(session);
+    if (type != NC_MSG_HELLO) {
+        return 1;
+    }
+
+    type = nc_recv_hello(session);
+    if (type != NC_MSG_HELLO) {
+        return 1;
+    }
+
+    return 0;
+}
+
 static int
 connect_load_schemas(struct ly_ctx *ctx)
 {
@@ -132,18 +148,12 @@ connect_load_schemas(struct ly_ctx *ctx)
     return 0;
 }
 
-API struct nc_session *
-nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
+struct nc_session *
+connect_init(struct ly_ctx *ctx)
 {
-    int r;
-    NC_MSG_TYPE type;
-    const char *str;
     struct nc_session *session = NULL;
-
-    if (fdin < 0 || fdout < 0) {
-        ERR("%s: Invalid parameter", __func__);
-        return NULL;
-    }
+    const char *str;
+    int r;
 
     /* prepare session structure */
     session = calloc(1, sizeof *session);
@@ -153,9 +163,6 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     }
     session->status = NC_STATUS_STARTING;
     session->side = NC_CLIENT;
-    session->ti_type = NC_TI_FD;
-    session->ti.fd.in = fdin;
-    session->ti.fd.out = fdout;
 
     /* transport lock */
     session->ti_lock = malloc(sizeof *session->ti_lock);
@@ -178,7 +185,8 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
             ly_ctx_set_searchdir(session->ctx, str);
 
             if (r) {
-                goto error;
+                nc_session_free(session);
+                return NULL;
             }
         }
     } else {
@@ -186,20 +194,39 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
 
         /* load basic NETCONF schemas required for libnetconf work */
         if (connect_load_schemas(session->ctx)) {
-            goto error;
+            nc_session_free(session);
+            return NULL;
         }
 
         ly_ctx_set_searchdir(session->ctx, schema_searchpath);
     }
 
-    /* NETCONF handshake */
-    type = nc_send_hello_(session);
-    if (type != NC_MSG_HELLO) {
-        goto error;
+    return session;
+}
+
+API struct nc_session *
+nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
+{
+    struct nc_session *session = NULL;
+
+    if (fdin < 0 || fdout < 0) {
+        ERR("%s: Invalid parameter", __func__);
+        return NULL;
     }
 
-    type = nc_recv_hello(session);
-    if (type != NC_MSG_HELLO) {
+    /* prepare session structure */
+    session = connect_init(ctx);
+    if (!session) {
+        return NULL;
+    }
+
+    /* transport specific data */
+    session->ti_type = NC_TI_FD;
+    session->ti.fd.in = fdin;
+    session->ti.fd.out = fdout;
+
+    /* NETCONF handshake */
+    if (handshake(session)) {
         goto error;
     }
 
@@ -211,37 +238,60 @@ error:
     return NULL;
 }
 
-#ifdef ENABLE_LIBSSH
-
-API struct nc_session *
-nc_connect_ssh(const char *host, unsigned short port, const char* username, struct ly_ctx *ctx)
+int
+connect_getsocket(const char* host, unsigned short port)
 {
-    (void) host;
-    (void) port;
-    (void) username;
-    (void) ctx;
+    int sock = -1;
+    int i;
+    struct addrinfo hints, *res_list, *res;
+    char port_s[6]; /* length of string representation of short int */
 
-    return NULL;
+    snprintf(port_s, 6, "%u", port);
+
+    /* Connect to a server */
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    i = getaddrinfo(host, port_s, &hints, &res_list);
+    if (i != 0) {
+        ERR("Unable to translate the host address (%s).", gai_strerror(i));
+        return -1;
+    }
+
+    for (i = 0, res = res_list; res != NULL; res = res->ai_next) {
+        sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        if (sock == -1) {
+            /* socket was not created, try another resource */
+            i = errno;
+            goto errloop;
+        }
+
+        if (connect(sock, res->ai_addr, res->ai_addrlen) == -1) {
+            /* network connection failed, try another resource */
+            i = errno;
+            close(sock);
+            sock = -1;
+            goto errloop;
+        }
+
+        /* we're done, network connection established */
+        break;
+errloop:
+        VRB("Unable to connect to %s:%s over %s (%s).", host, port,
+            (res->ai_family == AF_INET6) ? "IPv6" : "IPv4", strerror(i));
+        continue;
+    }
+
+    if (sock == -1) {
+        ERR("Unable to connect to %s:%s.", host, port);
+    } else {
+        VRB("Successfully connected to %s:%s over %s", host, port, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
+    }
+    freeaddrinfo(res_list);
+
+    return sock;
 }
-
-API struct nc_session *
-nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
-{
-    (void) ssh_session;
-    (void) ctx;
-
-    return NULL;
-}
-
-API struct nc_session *
-nc_connect_ssh_channel(struct nc_session *session)
-{
-    (void) session;
-
-    return NULL;
-}
-
-#endif /* ENABLE_LIBSSH */
 
 #ifdef ENABLE_TLS
 
@@ -380,6 +430,8 @@ nc_session_free(struct nc_session *session)
         break;
 #endif
     }
+    lydict_remove(session->ctx, session->username);
+    lydict_remove(session->ctx, session->host);
 
     /* final cleanup */
     if (multisession) {

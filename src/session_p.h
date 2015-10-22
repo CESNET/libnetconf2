@@ -129,6 +129,9 @@ struct nc_session {
         SSL *tls;
 #endif
     } ti;                          /**< transport implementation data */
+    const char *username;
+    const char *host;
+    unsigned short port;
 
     /* other */
     struct ly_ctx *ctx;            /**< libyang context of the session */
