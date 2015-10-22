@@ -293,30 +293,6 @@ errloop:
     return sock;
 }
 
-#ifdef ENABLE_TLS
-
-API struct nc_session *
-nc_connect_tls(const char *host, unsigned short port, const char *username, struct ly_ctx *ctx)
-{
-    (void) host;
-    (void) port;
-    (void) username;
-    (void) ctx;
-
-    return NULL;
-}
-
-API struct nc_session *
-nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
-{
-    (void) tls;
-    (void) ctx;
-
-    return NULL;
-}
-
-#endif /* ENABLE_TLS */
-
 API void
 nc_session_free(struct nc_session *session)
 {

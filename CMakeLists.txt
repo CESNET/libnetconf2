@@ -44,6 +44,11 @@ if(ENABLE_LIBSSH)
 		src/session_ssh.c)
 endif()
 
+if(ENABLE_TLS)
+	set(libsrc ${libsrc}
+		src/session_tls.c)
+endif()
+
 set(headers
 	src/log.h
 	src/netconf.h
