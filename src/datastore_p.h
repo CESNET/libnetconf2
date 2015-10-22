@@ -1,7 +1,7 @@
 /**
- * @file conig.h
- * @author Radek Krejci <rkrejci@cesnet.cz>
- * @brief cmocka tests configuration header.
+ * \file datastore_p.h
+ * \author Radek Krejci <rkrejci@cesnet.cz>
+ * \brief libnetconf2 datastore internal manipulation
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
@@ -17,7 +17,12 @@
  * 3. Neither the name of the Company nor the names of its contributors
  *    may be used to endorse or promote products derived from this
  *    software without specific prior written permission.
+ *
  */
 
-#define TESTS_DIR "@CMAKE_SOURCE_DIR@/tests/"
+#ifndef NC_DATASTORE_PRIVATE_H_
+#define NC_DATASTORE_PRIVATE_H_
 
+extern const char *ncds2str[];
+
+#endif /* NC_DATASTORE_PRIVATE_H_ */

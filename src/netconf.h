@@ -68,6 +68,18 @@ typedef enum NC_MSG_TYPE {
 } NC_MSG_TYPE;
 
 /**
+ * @brief Enumeration of the supported types of datastores defined by NETCONF
+ */
+typedef enum NC_DATASTORE_TYPE {
+    NC_DATASTORE_ERROR,    /**< error state of functions returning the datastore type */
+    NC_DATASTORE_CONFIG,   /**< value describing that the datastore is set as config */
+    NC_DATASTORE_URL,      /**< value describing that the datastore data should be given from the URL */
+    NC_DATASTORE_RUNNING,  /**< base NETCONF's datastore containing the current device configuration */
+    NC_DATASTORE_STARTUP,  /**< separated startup datastore as defined in Distinct Startup Capability */
+    NC_DATASTORE_CANDIDATE /**< separated working datastore as defined in Candidate Configuration Capability */
+} NC_DATASTORE;
+
+/**
  * @brief Transform given time_t (seconds since the epoch) into the RFC 3339 format
  * accepted by NETCONF functions.
  *

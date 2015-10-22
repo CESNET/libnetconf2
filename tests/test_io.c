@@ -47,13 +47,14 @@ setup_read(void **state)
     session = calloc(1, sizeof *session);
     /* test IO with standard file descriptors */
     session->ti_type = NC_TI_FD;
-    session->ti.fd.c = 0;
 
-    session->ctx = ly_ctx_new(TESTS_DIR"/models");
-    pthread_mutex_init(&session->ti_lock, NULL);
+    session->status = NC_STATUS_RUNNING;
+    session->ctx = ly_ctx_new(TESTS_DIR"../schemas");
+    session->ti_lock = malloc(sizeof *session->ti_lock);
+    pthread_mutex_init(session->ti_lock, NULL);
 
     /* ietf-netconf */
-    fd = open(TESTS_DIR"/models/ietf-netconf.yin", O_RDONLY);
+    fd = open(TESTS_DIR"../schemas/ietf-netconf.yin", O_RDONLY);
     if (fd == -1) {
         return -1;
     }
@@ -70,12 +71,7 @@ teardown_read(void **state)
 {
     struct nc_session *session = (struct nc_session *)*state;
 
-    close(session->ti.fd.in);
-    close(session->ti.fd.out);
-
-    ly_ctx_destroy(session->ctx);
-
-    free(session);
+    nc_session_free(session);
     *state = NULL;
 
     return 0;
@@ -85,72 +81,72 @@ static void
 test_read_rpc_10(void **state)
 {
     struct nc_session *session = (struct nc_session *)*state;
-    struct nc_rpc *rpc = NULL;
+    struct nc_rpc_server *rpc = NULL;
     NC_MSG_TYPE type;
 
     session->ti.fd.in = open(TESTS_DIR"/data/nc10/rpc-lock", O_RDONLY);
     session->version = NC_VERSION_10;
-    session->side = NC_SIDE_SERVER;
+    session->side = NC_SERVER;
 
     type = nc_recv_rpc(session, 1000, &rpc);
     assert_int_equal(type, NC_MSG_RPC);
     assert_non_null(rpc);
 
-    nc_rpc_free(rpc);
+    nc_rpc_free((struct nc_rpc *)rpc);
 }
 
 static void
 test_read_rpc_10_bad(void **state)
 {
     struct nc_session *session = (struct nc_session *)*state;
-    struct nc_rpc *rpc = NULL;
+    struct nc_rpc_server *rpc = NULL;
     NC_MSG_TYPE type;
 
     session->ti.fd.in = open(TESTS_DIR"/data/nc10/rpc-lock", O_RDONLY);
     session->version = NC_VERSION_10;
-    session->side = NC_SIDE_CLIENT;
+    session->side = NC_CLIENT;
 
     type = nc_recv_rpc(session, 1000, &rpc);
     assert_int_equal(type, NC_MSG_ERROR);
     assert_null(rpc);
 
-    nc_rpc_free(rpc);
+    nc_rpc_free((struct nc_rpc *)rpc);
 }
 
 static void
 test_read_rpc_11(void **state)
 {
     struct nc_session *session = (struct nc_session *)*state;
-    struct nc_rpc *rpc = NULL;
+    struct nc_rpc_server *rpc = NULL;
     NC_MSG_TYPE type;
 
     session->ti.fd.in = open(TESTS_DIR"/data/nc11/rpc-lock", O_RDONLY);
     session->version = NC_VERSION_11;
-    session->side = NC_SIDE_SERVER;
+    session->side = NC_SERVER;
 
     type = nc_recv_rpc(session, 1000, &rpc);
     assert_int_equal(type, NC_MSG_RPC);
     assert_non_null(rpc);
 
-    nc_rpc_free(rpc);
+    nc_rpc_free((struct nc_rpc *)rpc);
 }
 
 static void
 test_read_rpc_11_bad(void **state)
 {
     struct nc_session *session = (struct nc_session *)*state;
-    struct nc_rpc *rpc = NULL;
+    struct nc_rpc_server *rpc = NULL;
     NC_MSG_TYPE type;
 
     session->ti.fd.in = open(TESTS_DIR"/data/nc11/rpc-lock", O_RDONLY);
     session->version = NC_VERSION_11;
-    session->side = NC_SIDE_CLIENT;
+    session->side = NC_CLIENT;
 
     type = nc_recv_rpc(session, 1000, &rpc);
     assert_int_equal(type, NC_MSG_ERROR);
     assert_null(rpc);
 
-    nc_rpc_free(rpc);
+    nc_rpc_free((struct nc_rpc *)rpc);
 }
 
 
@@ -164,16 +160,16 @@ setup_write(void **state)
 {
     (void) state; /* unused */
     int fd;
-    NC_MSG_TYPE type;
     struct wr *w;
 
     w = malloc(sizeof *w);
     w->session = calloc(1, sizeof *w->session);
-    w->session->ctx = ly_ctx_new(TESTS_DIR"/models");
-    pthread_mutex_init(&w->session->ti_lock, NULL);
+    w->session->ctx = ly_ctx_new(TESTS_DIR"../schemas");
+    w->session->ti_lock = malloc(sizeof *w->session->ti_lock);
+    pthread_mutex_init(w->session->ti_lock, NULL);
 
     /* ietf-netconf */
-    fd = open(TESTS_DIR"/models/ietf-netconf.yin", O_RDONLY);
+    fd = open(TESTS_DIR"../schemas/ietf-netconf.yin", O_RDONLY);
     if (fd == -1) {
         return -1;
     }
@@ -181,16 +177,15 @@ setup_write(void **state)
     lys_read(w->session->ctx, fd, LYS_IN_YIN);
     close(fd);
 
-    /* get rpc to write - TODO client side way */
-    fd = open(TESTS_DIR"/data/nc10/rpc-lock", O_RDONLY);
+    w->session->status = NC_STATUS_RUNNING;
     w->session->version = NC_VERSION_10;
     w->session->msgid = 999;
     w->session->ti_type = NC_TI_FD;
-    w->session->ti.fd.c = 0;
-    w->session->ti.fd.in = fd;
+    w->session->ti.fd.in = STDIN_FILENO;
+    w->session->ti.fd.out = STDOUT_FILENO;
 
-    type = nc_recv_rpc(w->session, 1000, &w->rpc);
-    assert_int_equal(type, NC_MSG_RPC);
+    /* get rpc to write */
+    w->rpc = nc_rpc_lock(NC_DATASTORE_RUNNING);
     assert_non_null(w->rpc);
 
     close(fd);
@@ -206,17 +201,10 @@ teardown_write(void **state)
 {
     struct wr *w = (struct wr *)*state;
 
-    if (w->session->ti.fd.in != -1) {
-        close(w->session->ti.fd.in);
-    }
-    if (w->session->ti.fd.out != -1) {
-        close(w->session->ti.fd.out);
-    }
-
     nc_rpc_free(w->rpc);
-    ly_ctx_destroy(w->session->ctx);
-
-    free(w->session);
+    w->session->ti.fd.in = -1;
+    w->session->ti.fd.out = -1;
+    nc_session_free(w->session);
     free(w);
     *state = NULL;
 
@@ -229,20 +217,15 @@ test_write_rpc(void **state)
     struct wr *w = (struct wr *)*state;
     NC_MSG_TYPE type;
 
-    w->session->side = NC_SIDE_CLIENT;
-    w->session->ti_type = NC_TI_FD;
-    w->session->ti.fd.c = 0;
-    w->session->ti.fd.out = STDOUT_FILENO;
+    w->session->side = NC_CLIENT;
 
     do {
-        type = nc_send_rpc(w->session, w->rpc->tree, NULL);
+        type = nc_send_rpc(w->session, w->rpc);
     } while(type == NC_MSG_WOULDBLOCK);
 
     assert_int_equal(type, NC_MSG_RPC);
 
     write(w->session->ti.fd.out, "\n", 1);
-
-    w->session->ti.fd.out = -1;
 }
 
 static void
@@ -271,18 +254,13 @@ test_write_rpc_bad(void **state)
     struct wr *w = (struct wr *)*state;
     NC_MSG_TYPE type;
 
-    w->session->side = NC_SIDE_SERVER;
-    w->session->ti_type = NC_TI_FD;
-    w->session->ti.fd.c = 0;
-    w->session->ti.fd.out = STDOUT_FILENO;
+    w->session->side = NC_SERVER;
 
     do {
-        type = nc_send_rpc(w->session, w->rpc->tree, NULL);
+        type = nc_send_rpc(w->session, w->rpc);
     } while(type == NC_MSG_WOULDBLOCK);
 
     assert_int_equal(type, NC_MSG_ERROR);
-
-    w->session->ti.fd.out = -1;
 }
 
 static void

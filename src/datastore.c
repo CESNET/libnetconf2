@@ -1,7 +1,7 @@
 /**
- * @file conig.h
- * @author Radek Krejci <rkrejci@cesnet.cz>
- * @brief cmocka tests configuration header.
+ * \file datastore.c
+ * \author Radek Krejci <rkrejci@cesnet.cz>
+ * \brief libnetconf2 - datastore functions
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
@@ -17,7 +17,11 @@
  * 3. Neither the name of the Company nor the names of its contributors
  *    may be used to endorse or promote products derived from this
  *    software without specific prior written permission.
+ *
  */
 
-#define TESTS_DIR "@CMAKE_SOURCE_DIR@/tests/"
+#include "config.h"
+#include "libnetconf.h"
+#include "datastore_p.h"
 
+const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "candidate"};

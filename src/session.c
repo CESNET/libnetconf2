@@ -22,8 +22,11 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <pthread.h>
 #include <unistd.h>
 
@@ -33,8 +36,28 @@
 #include "libnetconf.h"
 #include "messages_p.h"
 #include "session_p.h"
+#include "datastore_p.h"
 
 #define TIMEOUT_STEP 50
+
+static NC_MSG_TYPE nc_send_hello_(struct nc_session *session);
+static NC_MSG_TYPE nc_recv_hello(struct nc_session *session);
+static NC_MSG_TYPE nc_send_rpc_(struct nc_session *session, struct lyd_node *op);
+
+static char *schema_searchpath = NULL;
+
+/* session configuration */
+static struct {
+    uint16_t hello_timeout; /**< hello-timeout in seconds, default is 600 */
+} cfg = {600};
+
+API int
+nc_schema_searchpath(const char *path)
+{
+    schema_searchpath = strdup(path);
+
+    return schema_searchpath ? 0 : 1;
+}
 
 /*
  * @return 0 - success
@@ -49,7 +72,7 @@ session_ti_lock(struct nc_session *session, int timeout)
     if (timeout >= 0) {
         /* limited waiting for lock */
         do {
-            r = pthread_mutex_trylock(&session->ti_lock);
+            r = pthread_mutex_trylock(session->ti_lock);
             if (r == EBUSY) {
                 /* try later until timeout passes */
                 usleep(TIMEOUT_STEP);
@@ -69,18 +92,461 @@ session_ti_lock(struct nc_session *session, int timeout)
         return -1;
     } else {
         /* infinite waiting for lock */
-        return pthread_mutex_lock(&session->ti_lock);
+        return pthread_mutex_lock(session->ti_lock);
     }
 }
 
 static int
 session_ti_unlock(struct nc_session *session)
 {
-    return pthread_mutex_unlock(&session->ti_lock);
+    return pthread_mutex_unlock(session->ti_lock);
+}
+
+static int
+connect_load_schemas(struct ly_ctx *ctx)
+{
+    int fd;
+    struct lys_module *ietfnc;
+
+    fd = open(SCHEMAS_DIR"ietf-netconf.yin", O_RDONLY);
+    if (fd < 0) {
+        ERR("Loading base NETCONF schema (%s) failed (%s).", SCHEMAS_DIR"ietf-netconf", strerror(errno));
+        return 1;
+    }
+    if (!(ietfnc = lys_read(ctx, fd, LYS_IN_YIN))) {
+        ERR("Loading base NETCONF schema (%s) failed.", SCHEMAS_DIR"ietf-netconf");
+        return 1;
+    }
+    close(fd);
+
+    /* set supported capabilities from ietf-netconf */
+    lys_features_enable(ietfnc, "writable-running");
+    lys_features_enable(ietfnc, "candidate");
+    //lys_features_enable(ietfnc, "confirmed-commit");
+    lys_features_enable(ietfnc, "rollback-on-error");
+    lys_features_enable(ietfnc, "validate");
+    lys_features_enable(ietfnc, "startup");
+    lys_features_enable(ietfnc, "url");
+    lys_features_enable(ietfnc, "xpath");
+
+    return 0;
+}
+
+API struct nc_session *
+nc_session_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
+{
+    int r;
+    NC_MSG_TYPE type;
+    const char *str;
+    struct nc_session *session = NULL;
+
+    if (fdin < 0 || fdout < 0) {
+        ERR("%s: Invalid parameter", __func__);
+        return NULL;
+    }
+
+    /* prepare session structure */
+    session = calloc(1, sizeof *session);
+    if (!session) {
+        ERRMEM;
+        return NULL;
+    }
+    session->status = NC_STATUS_STARTING;
+    session->side = NC_CLIENT;
+    session->ti_type = NC_TI_FD;
+    session->ti.fd.in = fdin;
+    session->ti.fd.out = fdout;
+
+    /* transport lock */
+    session->ti_lock = malloc(sizeof *session->ti_lock);
+    if (!session->ti_lock) {
+        ERRMEM;
+        return NULL;
+    }
+    pthread_mutex_init(session->ti_lock, NULL);
+
+    /* YANG context for the session */
+    if (ctx) {
+        session->flags |= NC_SESSION_SHAREDCTX;
+        session->ctx = ctx;
+
+        /* check presence of the required schemas */
+        if (!ly_ctx_get_module(session->ctx, "ietf-netconf", NULL)) {
+            str = ly_ctx_get_searchdir(session->ctx);
+            ly_ctx_set_searchdir(session->ctx, SCHEMAS_DIR);
+            r = connect_load_schemas(session->ctx);
+            ly_ctx_set_searchdir(session->ctx, str);
+
+            if (r) {
+                goto error;
+            }
+        }
+    } else {
+        session->ctx = ly_ctx_new(SCHEMAS_DIR);
+
+        /* load basic NETCONF schemas required for libnetconf work */
+        if (connect_load_schemas(session->ctx)) {
+            goto error;
+        }
+
+        ly_ctx_set_searchdir(session->ctx, schema_searchpath);
+    }
+
+    /* NETCONF handshake */
+    type = nc_send_hello_(session);
+    if (type != NC_MSG_HELLO) {
+        goto error;
+    }
+
+    type = nc_recv_hello(session);
+    if (type != NC_MSG_HELLO) {
+        goto error;
+    }
+
+    session->status = NC_STATUS_RUNNING;
+    return session;
+
+error:
+    nc_session_free(session);
+    return NULL;
+}
+
+#ifdef ENABLE_LIBSSH
+
+API struct nc_session *
+nc_session_connect_ssh(const char *host, unsigned short port, const char* username, struct ly_ctx *ctx)
+{
+    (void) host;
+    (void) port;
+    (void) username;
+    (void) ctx;
+
+    return NULL;
+}
+
+API struct nc_session *
+nc_session_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
+{
+    (void) ssh_session;
+    (void) ctx;
+
+    return NULL;
+}
+
+API struct nc_session *
+nc_session_connect_ssh_channel(struct nc_session *session)
+{
+    (void) session;
+
+    return NULL;
+}
+
+#endif /* ENABLE_LIBSSH */
+
+#ifdef ENABLE_TLS
+
+API struct nc_session *
+nc_session_connect_tls(const char *host, unsigned short port, const char *username, struct ly_ctx *ctx)
+{
+    (void) host;
+    (void) port;
+    (void) username;
+    (void) ctx;
+
+    return NULL;
+}
+
+API struct nc_session *
+nc_session_connect_libssl(SSL *tls, struct ly_ctx *ctx)
+{
+    (void) tls;
+    (void) ctx;
+
+    return NULL;
+}
+
+#endif /* ENABLE_TLS */
+
+API void
+nc_session_free(struct nc_session *session)
+{
+    int r, i;
+    int multisession = 0; /* flag for more NETCONF session on a single SSH session */
+    struct nc_session *siter;
+    struct nc_notif_cont *ntfiter;
+    struct nc_reply_cont *rpliter;
+    struct lyd_node *close_rpc;
+    struct lys_module *ietfnc;
+    void *p;
+
+    if (!session || session->status < NC_STATUS_INVALID) {
+        return;
+    }
+
+    /* mark session for closing */
+    do {
+        r = session_ti_lock(session, 0);
+    } while (r < 0);
+    if (r) {
+        return;
+    }
+
+    /* stop notifications loop if any */
+    if (session->notif) {
+        pthread_cancel(*session->notif);
+        pthread_join(*session->notif, NULL);
+    }
+
+    if (session->side == NC_CLIENT && session->status == NC_STATUS_RUNNING) {
+        /* cleanup message queues */
+        /* notifications */
+        for (ntfiter = session->notifs; ntfiter; ) {
+            nc_notif_free(ntfiter->msg);
+
+            p = ntfiter;
+            ntfiter = ntfiter->next;
+            free(p);
+        }
+
+        /* rpc replies */
+        for (rpliter = session->replies; rpliter; ) {
+            nc_reply_free(rpliter->msg);
+
+            p = rpliter;
+            rpliter = rpliter->next;
+            free(p);
+        }
+
+        /* send closing info to the other side */
+        ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL);
+        if (!ietfnc) {
+            WRN("%s: Missing ietf-netconf schema in context (session %u), unable to send <close-session\\>", session->id);
+        } else {
+            close_rpc = lyd_new(NULL, ietfnc, "close-session");
+            nc_send_rpc_(session, close_rpc);
+            lyd_free(close_rpc);
+        }
+
+        /* list of server's capabilities */
+        if (session->cpblts) {
+            for (i = 0; session->cpblts[i]; i++) {
+                lydict_remove(session->ctx, session->cpblts[i]);
+            }
+            free(session->cpblts);
+        }
+    }
+
+    session->status = NC_STATUS_CLOSING;
+
+    /* transport implementation cleanup */
+    switch (session->ti_type) {
+    case NC_TI_FD:
+        /* nothing needed - file descriptors were provided by caller,
+         * so it is up to the caller to close them correctly
+         * TODO use callbacks
+         */
+        break;
+
+#ifdef ENABLE_LIBSSH
+    case NC_TI_LIBSSH:
+        ssh_channel_free(session->ti.libssh.channel);
+        /* There can be multiple NETCONF sessions on the same SSH session (NETCONF session maps to
+         * SSH channel). So destroy the SSH session only if there is no other NETCONF session using
+         * it.
+         */
+        if (!session->ti.libssh.next) {
+            ssh_disconnect(session->ti.libssh.session);
+            ssh_free(session->ti.libssh.session);
+        } else {
+            /* multiple NETCONF sessions on a single SSH session */
+            multisession = 1;
+            /* remove the session from the list */
+            for (siter = session->ti.libssh.next; siter->ti.libssh.next != session; siter = siter->ti.libssh.next);
+            if (siter->ti.libssh.next == session->ti.libssh.next) {
+                /* there will be only one session */
+                siter->ti.libssh.next = NULL;
+            } else {
+                /* there are still multiple sessions, keep the ring list */
+                siter->ti.libssh.next = session->ti.libssh.next;
+            }
+        }
+        break;
+#endif
+
+#ifdef ENABLE_TLS
+    case NC_TI_OPENSSL:
+        SSL_shutdown(session->ti.tls);
+        SSL_free(session->ti.tls);
+        break;
+#endif
+    }
+
+    /* final cleanup */
+    if (multisession) {
+        session_ti_unlock(session);
+    } else {
+        pthread_mutex_destroy(session->ti_lock);
+        free(session->ti_lock);
+    }
+
+    if (!(session->flags & NC_SESSION_SHAREDCTX)) {
+        ly_ctx_destroy(session->ctx);
+    }
+
+    free(session);
+}
+
+static int
+parse_cpblts(struct lyxml_elem *xml, const char ***list)
+{
+    struct lyxml_elem *cpblt;
+    int ver = -1;
+    int i = 0;
+
+    if (list) {
+        /* get the storage for server's capabilities */
+        LY_TREE_FOR(xml->child, cpblt) {
+            i++;
+        }
+        *list = calloc(i, sizeof **list);
+        if (!*list) {
+            ERRMEM;
+            return -1;
+        }
+        i = 0;
+    }
+
+    LY_TREE_FOR(xml->child, cpblt) {
+        if (strcmp(cpblt->name, "capability") && cpblt->ns && cpblt->ns->value &&
+                    !strcmp(cpblt->ns->value, NC_NS_BASE)) {
+            ERR("Unexpected <%s> element in client's <hello>.", cpblt->name);
+            return -1;
+        } else if (!cpblt->ns || !cpblt->ns->value || strcmp(cpblt->ns->value, NC_NS_BASE)) {
+            continue;
+        }
+
+        /* detect NETCONF version */
+        if (ver < 0 && !strcmp(cpblt->content, "urn:ietf:params:netconf:base:1.0")) {
+            ver = 0;
+        } else if (ver < 1 && !strcmp(cpblt->content, "urn:ietf:params:netconf:base:1.1")) {
+            ver = 1;
+        }
+
+        /* store capabilities */
+        if (list) {
+            (*list)[i] = cpblt->content;
+            cpblt->content = NULL;
+            i++;
+        }
+    }
+
+    if (ver == -1) {
+        ERR("Peer does not support compatible NETCONF version.");
+    }
+
+    return ver;
+}
+
+static NC_MSG_TYPE
+nc_recv_hello(struct nc_session *session)
+{
+    struct lyxml_elem *xml = NULL, *node;
+    NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
+    int ver = -1;
+    char *str;
+    long long int id;
+    int flag = 0;
+
+    msgtype = nc_read_msg(session, cfg.hello_timeout * 1000, &xml);
+
+    switch(msgtype) {
+    case NC_MSG_HELLO:
+        /* parse <hello> data */
+        if (session->side == NC_SERVER) {
+            /* get know NETCONF version */
+            LY_TREE_FOR(xml->child, node) {
+                if (!node->ns || !node->ns->value || strcmp(node->ns->value, NC_NS_BASE)) {
+                    continue;
+                } else if (strcmp(node->name, "capabilities")) {
+                    ERR("Unexpected <%s> element in client's <hello>.", node->name);
+                    goto error;
+                }
+
+                if (flag) {
+                    /* multiple capabilities elements */
+                    ERR("Invalid <hello> message (multiple <capabilities> elements)");
+                    goto error;
+                }
+                flag = 1;
+
+                if ((ver = parse_cpblts(node, NULL)) < 0) {
+                    goto error;
+                }
+                session->version = ver;
+            }
+        } else { /* NC_CLIENT */
+            LY_TREE_FOR(xml->child, node) {
+                if (!node->ns || !node->ns->value || strcmp(node->ns->value, NC_NS_BASE)) {
+                    continue;
+                } else if (!strcmp(node->name, "session-id")) {
+                    if (!node->content || !strlen(node->content)) {
+                        ERR("No value of <session-id> element in server's <hello>");
+                        goto error;
+                    }
+                    str = NULL;
+                    id = strtoll(node->content, &str, 10);
+                    if (*str || id < 1 || id > UINT32_MAX) {
+                        ERR("Invalid value of <session-id> element in server's <hello>");
+                        goto error;
+                    }
+                    session->id = (uint32_t)id;
+                    continue;
+                } else if (strcmp(node->name, "capabilities")) {
+                    ERR("Unexpected <%s> element in client's <hello>.", node->name);
+                    goto error;
+                }
+
+                if (flag) {
+                    /* multiple capabilities elements */
+                    ERR("Invalid <hello> message (multiple <capabilities> elements)");
+                    goto error;
+                }
+                flag = 1;
+
+                if ((ver = parse_cpblts(node, NULL)) < 0) {
+                    goto error;
+                }
+                session->version = ver;
+            }
+
+            if (!session->id) {
+                ERR("Missing <session-id> in server's <hello>");
+                goto error;
+            }
+        }
+        break;
+    case NC_MSG_ERROR:
+        /* nothing special, just pass it out */
+        break;
+    default:
+        ERR("Unexpected message received instead of <hello>.");
+        msgtype = NC_MSG_ERROR;
+    }
+
+    /* cleanup */
+    lyxml_free_elem(session->ctx, xml);
+
+    return msgtype;
+
+error:
+    /* cleanup */
+    lyxml_free_elem(session->ctx, xml);
+
+    return NC_MSG_ERROR;
 }
 
 API NC_MSG_TYPE
-nc_recv_rpc(struct nc_session *session, int timeout, struct nc_rpc **rpc)
+nc_recv_rpc(struct nc_session *session, int timeout, struct nc_rpc_server **rpc)
 {
     int r;
     struct lyxml_elem *xml = NULL;
@@ -89,8 +555,8 @@ nc_recv_rpc(struct nc_session *session, int timeout, struct nc_rpc **rpc)
     if (!session || !rpc) {
         ERR("%s: Invalid parameter", __func__);
         return NC_MSG_ERROR;
-    } else if (session->side != NC_SIDE_SERVER) {
-        ERR("%s: only servers are allowed to receive RPCs.", __func__);
+    } else if (session->status != NC_STATUS_RUNNING || session->side != NC_SERVER) {
+        ERR("%s: invalid session to receive RPCs.", __func__);
         return NC_MSG_ERROR;
     }
 
@@ -109,6 +575,7 @@ nc_recv_rpc(struct nc_session *session, int timeout, struct nc_rpc **rpc)
     switch(msgtype) {
     case NC_MSG_RPC:
         *rpc = malloc(sizeof **rpc);
+        (*rpc)->type = NC_RPC_SERVER;
         (*rpc)->ctx = session->ctx;
         (*rpc)->tree = lyd_parse_xml(session->ctx, xml, 0);
         (*rpc)->root = xml;
@@ -140,7 +607,7 @@ error:
 }
 
 API NC_MSG_TYPE
-nc_recv_reply(struct nc_session* session, int timeout, struct nc_reply **reply)
+nc_recv_reply(struct nc_session *session, int timeout, struct nc_reply **reply)
 {
     int r;
     struct lyxml_elem *xml;
@@ -152,8 +619,8 @@ nc_recv_reply(struct nc_session* session, int timeout, struct nc_reply **reply)
     if (!session || !reply) {
         ERR("%s: Invalid parameter", __func__);
         return NC_MSG_ERROR;
-    } else if (session->side != NC_SIDE_CLIENT) {
-        ERR("%s: only clients are allowed to receive RPC replies.", __func__);
+    } else if (session->status != NC_STATUS_RUNNING || session->side != NC_CLIENT) {
+        ERR("%s: invalid session to receive RPC replies.", __func__);
         return NC_MSG_ERROR;
     }
 
@@ -246,7 +713,7 @@ error:
 }
 
 API NC_MSG_TYPE
-nc_recv_notif(struct nc_session* session, int timeout, struct nc_notif **notif)
+nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
 {
     int r;
     struct lyxml_elem *xml;
@@ -258,8 +725,8 @@ nc_recv_notif(struct nc_session* session, int timeout, struct nc_notif **notif)
     if (!session || !notif) {
         ERR("%s: Invalid parameter", __func__);
         return NC_MSG_ERROR;
-    } else if (session->side != NC_SIDE_CLIENT) {
-        ERR("%s: only clients are allowed to receive Notifications.", __func__);
+    } else if (session->status != NC_STATUS_RUNNING || session->side != NC_CLIENT) {
+        ERR("%s: invalid session to receive Notifications.", __func__);
         return NC_MSG_ERROR;
     }
 
@@ -345,28 +812,37 @@ error:
     return NC_MSG_ERROR;
 }
 
-API NC_MSG_TYPE
-nc_send_rpc(struct nc_session* session, struct lyd_node *op, const char *attrs)
+static NC_MSG_TYPE
+nc_send_hello_(struct nc_session *session)
+{
+    int r;
+    char **cpblts;
+
+    if (session->side == NC_CLIENT) {
+        /* client side hello - send only NETCONF base capabilities */
+        cpblts = malloc(3 * sizeof *cpblts);
+        cpblts[0] = "urn:ietf:params:netconf:base:1.0";
+        cpblts[1] = "urn:ietf:params:netconf:base:1.1";
+        cpblts[2] = NULL;
+
+        r = nc_write_msg(session, NC_MSG_HELLO, cpblts, NULL);
+        free(cpblts);
+    }
+
+
+    if (r) {
+        return NC_MSG_ERROR;
+    } else {
+        return NC_MSG_HELLO;
+    }
+}
+
+static NC_MSG_TYPE
+nc_send_rpc_(struct nc_session *session, struct lyd_node *op)
 {
     int r;
 
-    if (!session || !op) {
-        ERR("%s: Invalid parameter", __func__);
-        return NC_MSG_ERROR;
-    } else if (session->side != NC_SIDE_CLIENT) {
-        ERR("%s: only clients are allowed to send RPCs.", __func__);
-        return NC_MSG_ERROR;
-    }
-
-    r = session_ti_lock(session, 0);
-    if (r != 0) {
-        /* error or blocking */
-        return NC_MSG_WOULDBLOCK;
-    }
-
-    r = nc_write_msg(session, NC_MSG_RPC, op, attrs);
-
-    session_ti_unlock(session);
+    r = nc_write_msg(session, NC_MSG_RPC, op, NULL);
 
     if (r) {
         return NC_MSG_ERROR;
@@ -375,3 +851,86 @@ nc_send_rpc(struct nc_session* session, struct lyd_node *op, const char *attrs)
     }
 }
 
+API NC_MSG_TYPE
+nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc)
+{
+    NC_MSG_TYPE r;
+    struct nc_rpc_lock *rpc_lock;
+    struct nc_rpc_getconfig *rpc_gc;
+    struct lyd_node *data, *node;
+    struct lys_module *ietfnc;
+
+    if (!session || !rpc || rpc->type == NC_RPC_SERVER) {
+        ERR("%s: Invalid parameter", __func__);
+        return NC_MSG_ERROR;
+    } else if (session->status != NC_STATUS_RUNNING || session->side != NC_CLIENT) {
+        ERR("%s: invalid session to send RPCs.", __func__);
+        return NC_MSG_ERROR;
+    }
+
+    ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL);
+    if (!ietfnc) {
+        ERR("%s: Missing ietf-netconf schema in context (session %u)", session->id);
+        return NC_MSG_ERROR;
+    }
+
+    switch(rpc->type) {
+    case NC_RPC_GETCONFIG:
+        rpc_gc = (struct nc_rpc_getconfig *)rpc;
+
+        data = lyd_new(NULL, ietfnc, "get-config");
+        node = lyd_new(data, ietfnc, "source");
+        node = lyd_new_leaf_str(node, ietfnc, ncds2str[rpc_gc->source], LY_TYPE_EMPTY, NULL);
+        if (!node) {
+            lyd_free(data);
+            return NC_MSG_ERROR;
+        }
+        if (rpc_gc->filter) {
+            if (rpc_gc->filter->type == NC_FILTER_SUBTREE) {
+                node = lyd_new_anyxml(data, ietfnc, "filter", rpc_gc->filter->data);
+                lyd_insert_attr(node, "type", "subtree");
+            } else if (rpc_gc->filter->type == NC_FILTER_XPATH) {
+                node = lyd_new_anyxml(data, ietfnc, "filter", NULL);
+                /* TODO - handle namespaces from XPATH query */
+                lyd_insert_attr(node, "type", "xpath");
+                lyd_insert_attr(node, "select", rpc_gc->filter->data);
+            }
+        }
+        break;
+    case NC_RPC_LOCK:
+        rpc_lock = (struct nc_rpc_lock *)rpc;
+
+        data = lyd_new(NULL, ietfnc, "lock");
+        node = lyd_new(data, ietfnc, "target");
+        node = lyd_new_leaf_str(node, ietfnc, ncds2str[rpc_lock->target], LY_TYPE_EMPTY, NULL);
+        if (!node) {
+            lyd_free(data);
+            return NC_MSG_ERROR;
+        }
+        break;
+    case NC_RPC_UNLOCK:
+        rpc_lock = (struct nc_rpc_lock *)rpc;
+
+        data = lyd_new(NULL, ietfnc, "unlock");
+        node = lyd_new(data, ietfnc, "target");
+        node = lyd_new_leaf_str(node, ietfnc, ncds2str[rpc_lock->target], LY_TYPE_EMPTY, NULL);
+        if (!node) {
+            lyd_free(data);
+            return NC_MSG_ERROR;
+        }
+        break;
+    }
+
+    r = session_ti_lock(session, 0);
+    if (r != 0) {
+        /* error or blocking */
+        r = NC_MSG_WOULDBLOCK;
+    } else {
+        /* send RPC */
+        r = nc_send_rpc_(session, data);
+    }
+    session_ti_unlock(session);
+
+    lyd_free(data);
+    return r;
+}

@@ -54,14 +54,6 @@ nc_read(struct nc_session *session, char *buf, size_t count)
     switch(session->ti_type) {
     case NC_TI_FD:
         /* read via standard file descriptor */
-        if (session->ti.fd.c) {
-            /* get character from buffer (ungetc() simulation) */
-            buf[size++] = session->ti.fd.c;
-            session->ti.fd.c = 0;
-
-            count--;
-        }
-        /* read data from file descriptor */
         while(count) {
             r = read(session->ti.fd.in, &(buf[size]), count);
             if (r < 0) {
@@ -430,7 +422,7 @@ error:
     free(*data);
     *data = NULL;
 
-    if (session->side == NC_SIDE_SERVER && session->version == NC_VERSION_11) {
+    if (session->side == NC_SERVER && session->version == NC_VERSION_11) {
         /* NETCONF version 1.1 define sending error reply from the server */
         /* TODO
         reply = nc_reply_error(nc_err_new(NC_ERR_MALFORMED_MSG));
@@ -578,11 +570,12 @@ write_clb(void *arg, const void *buf, size_t count)
 static int
 write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
 {
-    int count;
+    int count, i;
     const char *attrs;
     struct lyd_node *content;
-    struct nc_rpc *rpc;
-    struct lyxml_elem *capabilities;
+    struct nc_rpc_server *rpc;
+    const char **capabilities;
+    uint32_t *sid = NULL;
     char *buf = NULL;
     struct wclb_arg arg;
 
@@ -625,7 +618,7 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
         break;
 
     case NC_MSG_REPLY:
-        rpc = va_arg(ap, struct nc_rpc *);
+        rpc = va_arg(ap, struct nc_rpc_server *);
         switch (session->ti_type) {
         case NC_TI_FD:
             write(session->ti.fd.out, "<rpc-reply", 10);
@@ -689,12 +682,19 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
         break;
 
     case NC_MSG_HELLO:
-        capabilities = va_arg(ap, struct lyxml_elem *);
+        capabilities = va_arg(ap, const char **);
+        sid = va_arg(ap, uint32_t*);
         switch (session->ti_type) {
         case NC_TI_FD:
-            dprintf(session->ti.fd.out, "<hello xmlns=\"%s\">", NC_NS_BASE);
-            lyxml_dump_fd(session->ti.fd.out, capabilities, 0);
-            write(session->ti.fd.out, "</hello>]]>]]>", 11);
+            dprintf(session->ti.fd.out, "<hello xmlns=\"%s\"><capabilities>", NC_NS_BASE);
+            for (i = 0; capabilities[i]; i++) {
+                dprintf(session->ti.fd.out, "<capability>%s</capability>", capabilities[i]);
+            }
+            if (sid) {
+                dprintf(session->ti.fd.out, "</capabilities><session-id>%u</session-id></hello>]]>]]>", *sid);
+            } else {
+                write(session->ti.fd.out, "</capabilities></hello>]]>]]>", 29);
+            }
             break;
 
 #ifdef ENABLE_LIBSSH
@@ -704,11 +704,21 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
         case NC_TI_OPENSSL:
 #endif
 #if defined(ENABLE_LIBSSH) || defined(ENABLE_TLS)
-            count = asprintf(&buf, "<hello xmlns=\"%s\">", NC_NS_BASE);
+            count = asprintf(&buf, "<hello xmlns=\"%s\"><capabilities>", NC_NS_BASE);
             write_clb((void *)&arg, buf, count);
             free(buf);
-            lyxml_dump_clb(write_clb, (void *)&arg, capabilities, 0);
-            write_clb((void *)&arg, "</hello>", 8);
+            for (i = 0; capabilities[i]; i++) {
+                count = asprintf(&buf, "<capability>%s</capability>", capabilities[i]);
+                write_clb((void *)&arg, buf, count);
+                free(buf);
+            }
+            if (sid) {
+                asprintf(&buf, "</capabilities><session-id>%u</session-id></hello>", *sid);
+                write_clb((void *)&arg, buf, count);
+                free(buf);
+            } else {
+                write_clb((void *)&arg, "</capabilities></hello>", 23);
+            }
 
             /* flush message */
             write_clb((void *)&arg, NULL, 0);
@@ -733,7 +743,7 @@ write_msg_11(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
     int count;
     const char *attrs;
     struct lyd_node *content;
-    struct nc_rpc *rpc;
+    struct nc_rpc_server *rpc;
     char *buf = NULL;
     struct wclb_arg arg;
 
@@ -754,7 +764,7 @@ write_msg_11(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
         session->msgid++;
         break;
     case NC_MSG_REPLY:
-        rpc = va_arg(ap, struct nc_rpc *);
+        rpc = va_arg(ap, struct nc_rpc_server *);
         write_clb((void *)&arg, "<rpc-reply", 10);
         lyxml_dump_clb(write_clb, (void *)&arg, rpc->root, LYXML_DUMP_ATTRS);
         write_clb((void *)&arg, ">", 1);

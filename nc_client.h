@@ -25,5 +25,7 @@
 
 #include <libnetconf2/netconf.h>
 #include <libnetconf2/log.h>
+#include <libnetconf2/messages.h>
+#include <libnetconf2/session.h>
 
 #endif /* NC_CLIENT_H_ */

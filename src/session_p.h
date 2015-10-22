@@ -61,11 +61,11 @@ typedef enum {
 } NC_TRANSPORT_IMPL;
 
 /**
- * @brief Enumeration of possible session types (communication sides)
+ * @brief type of the session
  */
 typedef enum {
-    NC_SIDE_SERVER,   /**< server side */
-    NC_SIDE_CLIENT    /**< client side */
+    NC_CLIENT,        /**< client side */
+    NC_SERVER         /**< server side */
 } NC_SIDE;
 
 /**
@@ -99,26 +99,30 @@ struct nc_notif_cont {
  * @brief NETCONF session structure
  */
 struct nc_session {
-    NC_SIDE side;                /**< type of the session: client or server */
+    NC_STATUS status;            /**< status of the session */
+    NC_SIDE side;                /**< side of the session: client or server */
 
     /* NETCONF data */
     uint32_t id;                 /**< NETCONF session ID (session-id-type) */
     NC_VERSION version;          /**< NETCONF protocol version */
-    pthread_t *notif;              /**< running notifications thread */
+    pthread_t *notif;            /**< running notifications thread - TODO server-side only? */
 
     /* Transport implementation */
     NC_TRANSPORT_IMPL ti_type;   /**< transport implementation type to select items from ti union */
-    pthread_mutex_t ti_lock;     /**< lock to access ti */
+    pthread_mutex_t *ti_lock;    /**< lock to access ti. Note that in case of libssh TI, it can be shared with other
+                                      NETCONF sessions on the same SSH session */
     union {
         struct {
             int in;              /**< input file descriptor */
             int out;             /**< output file descriptor */
-            char c;              /**< internal buffer (ungetc() simulation */
         } fd;                    /**< NC_TI_FD transport implementation structure */
 #ifdef ENABLE_LIBSSH
         struct {
-            ssh_session session;
             ssh_channel channel;
+            ssh_session session;
+            struct nc_session *next; /**< pointer to the next NETCONF session on the same
+                                          SSH session, but different SSH channel. If no such session exists, it is NULL.
+                                          otherwise there is a ring list of the NETCONF sessions */
         } libssh;
 #endif
 #ifdef ENABLE_TLS
@@ -128,9 +132,12 @@ struct nc_session {
 
     /* other */
     struct ly_ctx *ctx;            /**< libyang context of the session */
+    uint8_t flags;                 /**< various flags of the session - TODO combine with status and/or side */
+#define NC_SESSION_SHAREDCTX 0x1
 
     /* client side only data */
     uint64_t msgid;
+    const char **cpblts;           /**< list of server's capabilities on client side */
     struct nc_reply_cont *replies; /**< queue for RPC replies received instead of notifications */
     struct nc_notif_cont *notifs;  /**< queue for notifications received instead of RPC reply */
 };

@@ -28,6 +28,7 @@ set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSI
 
 # source files
 set(libsrc
+	src/datastore.c
 	src/io.c
 	src/log.c
 	src/messages.c
@@ -35,7 +36,10 @@ set(libsrc
 	src/time.c)
 
 set(headers
-	src/log.h)
+	src/log.h
+	src/netconf.h
+	src/session.h
+	src/messages.h)
 
 # libnetconf2 target
 add_library(netconf2 SHARED ${libsrc})
