@@ -346,6 +346,28 @@ nc_session_free(struct nc_session *session)
             close_rpc = lyd_new(NULL, ietfnc, "close-session");
             nc_send_rpc_(session, close_rpc);
             lyd_free(close_rpc);
+            switch (nc_read_msg(session, 200, &rpl)) {
+            case NC_MSG_REPLY:
+                LY_TREE_FOR(rpl->child, child) {
+                    if (!strcmp(child->name, "ok") && child->ns && !strcmp(child->ns->value, NC_NS_BASE)) {
+                        break;
+                    }
+                }
+                if (!child) {
+                    WRN("The reply to <close-session\\> was not <ok\\> as expected.");
+                }
+                lyxml_free_elem(session->ctx, rpl);
+                break;
+            case NC_MSG_WOULDBLOCK:
+                WRN("Timeout for receiving a reply to <close-session\\> elapsed.");
+                break;
+            case NC_MSG_ERROR:
+                ERR("Failed to receive a reply to <close-session\\>.");
+                break;
+            default:
+                /* cannot happen */
+                break;
+            }
         }
 
         /* list of server's capabilities */
