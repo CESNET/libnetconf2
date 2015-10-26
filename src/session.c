@@ -293,20 +293,23 @@ nc_session_free(struct nc_session *session)
     struct nc_session *siter;
     struct nc_notif_cont *ntfiter;
     struct nc_reply_cont *rpliter;
+    struct lyxml_elem *rpl, *child;
     struct lyd_node *close_rpc;
     struct lys_module *ietfnc;
     void *p;
 
-    if (!session || session->status < NC_STATUS_INVALID) {
+    if (!session || session->status == NC_STATUS_CLOSING) {
         return;
     }
 
     /* mark session for closing */
-    do {
-        r = session_ti_lock(session, 0);
-    } while (r < 0);
-    if (r) {
-        return;
+    if (session->ti_lock) {
+        do {
+            r = session_ti_lock(session, 0);
+        } while (r < 0);
+        if (r) {
+            return;
+        }
     }
 
     /* stop notifications loop if any */
@@ -402,11 +405,13 @@ nc_session_free(struct nc_session *session)
     lydict_remove(session->ctx, session->host);
 
     /* final cleanup */
-    if (multisession) {
-        session_ti_unlock(session);
-    } else {
-        pthread_mutex_destroy(session->ti_lock);
-        free(session->ti_lock);
+    if (session->ti_lock) {
+        if (multisession) {
+            session_ti_unlock(session);
+        } else {
+            pthread_mutex_destroy(session->ti_lock);
+            free(session->ti_lock);
+        }
     }
 
     if (!(session->flags & NC_SESSION_SHAREDCTX)) {
