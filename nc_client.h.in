@@ -23,6 +23,9 @@
 #ifndef NC_CLIENT_H_
 #define NC_CLIENT_H_
 
+@LIBSSH_MACRO@
+@TLS_MACRO@
+
 #include <libnetconf2/netconf.h>
 #include <libnetconf2/log.h>
 #include <libnetconf2/messages.h>

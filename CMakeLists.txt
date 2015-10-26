@@ -42,11 +42,13 @@ set(libsrc
 if(ENABLE_LIBSSH)
 	set(libsrc ${libsrc}
 		src/session_ssh.c)
+	set(LIBSSH_MACRO "#define ENABLE_LIBSSH")
 endif()
 
 if(ENABLE_TLS)
 	set(libsrc ${libsrc}
 		src/session_tls.c)
+	set(TLS_MACRO "#define ENABLE_TLS")
 endif()
 
 set(headers
@@ -126,6 +128,7 @@ if(ENABLE_BUILD_TESTS)
 endif()
 
 configure_file(src/config.h.in src/config.h)
+configure_file(nc_client.h.in nc_client.h)
 
 # clean cmake cache
 add_custom_target(cleancache
