@@ -405,7 +405,7 @@ nc_session_free(struct nc_session *session)
             multisession = 1;
             /* remove the session from the list */
             for (siter = session->ti.libssh.next; siter->ti.libssh.next != session; siter = siter->ti.libssh.next);
-            if (siter->ti.libssh.next == session->ti.libssh.next) {
+            if (session->ti.libssh.next == siter) {
                 /* there will be only one session */
                 siter->ti.libssh.next = NULL;
             } else {
