@@ -29,6 +29,33 @@
 #ifdef ENABLE_LIBSSH
 #   include <libssh/libssh.h>
 #   include <libssh/callbacks.h>
+
+/* seconds */
+#   define SSH_TIMEOUT 10
+#   define SSH_AUTH_COUNT 3
+
+typedef enum {
+    NC_SSH_AUTH_PUBLIC_KEYS = 0x01,
+    NC_SSH_AUTH_PASSWORD = 0x02,
+    NC_SSH_AUTH_INTERACTIVE = 0x04
+} NC_SSH_AUTH_TYPE;
+
+struct nc_ssh_auth_opts {
+    /* SSH authentication method preferences */
+    struct {
+        NC_SSH_AUTH_TYPE type;
+        short int value;
+    } auth_pref[SSH_AUTH_COUNT];
+
+    /* SSH key pairs */
+    struct {
+        char *pubkey_path;
+        char *privkey_path;
+        int privkey_crypt;
+    } *keys;
+    int key_count;
+};
+
 #endif
 
 #ifdef ENABLE_TLS

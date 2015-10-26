@@ -112,9 +112,15 @@ struct nc_session *nc_connect_ssh(const char *host, unsigned short port, const c
 /**
  * @brief Connect to the NETCONF server using the provided SSH (libssh) session.
  *
+ * SSH session can have any options set, they will not be modified. If no options were set,
+ * host 'localhost', port 22, and the username detected from the EUID is used. If socket is
+ * set and connected only username must be set/is detected. Or the \p ssh_session can already
+ * be authenticated in which case it is used directly.
+ *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  *
- * @param[in] ssh_session libssh structure representing SSH session object.
+ * @param[in] ssh_session libssh structure representing SSH session object. After passing it
+ *                        to libnetconf2 this way, it is fully managed by it (including freeing!).
  * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
  *                (ignoring what is actually supported by the server side). If not set,
  *                YANG context is created for the session using \<get-schema\> (if supported
@@ -122,7 +128,7 @@ struct nc_session *nc_connect_ssh(const char *host, unsigned short port, const c
  *                (see nc_schema_searchpath()).
  * @return Created NETCONF session object or NULL in case of error.
  */
-struct nc_session *nc_connect_libssh(ssh_session *ssh_session, struct ly_ctx *ctx);
+struct nc_session *nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx);
 
 /**
  * @brief Create another NETCONF session on existing SSH session using separated SSH channel.
@@ -131,9 +137,14 @@ struct nc_session *nc_connect_libssh(ssh_session *ssh_session, struct ly_ctx *ct
  *
  * @param[in] session Existing NETCONF session. The session has to be created on SSH transport layer using libssh -
  *                    it has to be created by nc_connect_ssh(), nc_connect_libssh() or nc_connect_ssh_channel().
+ * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
+ *                (ignoring what is actually supported by the server side). If not set,
+ *                YANG context is created for the session using \<get-schema\> (if supported
+ *                by the server side) or/and by searching for YANG schemas in the searchpath
+ *                (see nc_schema_searchpath()).
  * @return Created NETCONF session object or NULL in case of error.
  */
-struct nc_session *nc_connect_ssh_channel(struct nc_session *session);
+struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx);
 
 #endif /* ENABLE_LIBSSH */
 
