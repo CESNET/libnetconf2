@@ -56,7 +56,7 @@ typedef enum {
     NC_TI_LIBSSH,     /**< libssh - use libssh library, only for NETCONF over SSH transport */
 #endif
 #ifdef ENABLE_TLS
-    NC_TI_OPENSSL     /**< OpenSSL - use OpenSSK library, only for NETCONF over TLS transport */
+    NC_TI_OPENSSL     /**< OpenSSL - use OpenSSL library, only for NETCONF over TLS transport */
 #endif
 } NC_TRANSPORT_IMPL;
 
@@ -110,7 +110,7 @@ struct nc_session {
     /* Transport implementation */
     NC_TRANSPORT_IMPL ti_type;   /**< transport implementation type to select items from ti union */
     pthread_mutex_t *ti_lock;    /**< lock to access ti. Note that in case of libssh TI, it can be shared with other
-                                      NETCONF sessions on the same SSH session */
+                                      NETCONF sessions on the same SSH session (but different SSH channel) */
     union {
         struct {
             int in;              /**< input file descriptor */
