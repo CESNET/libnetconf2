@@ -278,15 +278,15 @@ connect_getsocket(const char* host, unsigned short port)
         /* we're done, network connection established */
         break;
 errloop:
-        VRB("Unable to connect to %s:%s over %s (%s).", host, port,
+        VRB("Unable to connect to %s:%s over %s (%s).", host, port_s,
             (res->ai_family == AF_INET6) ? "IPv6" : "IPv4", strerror(i));
         continue;
     }
 
     if (sock == -1) {
-        ERR("Unable to connect to %s:%s.", host, port);
+        ERR("Unable to connect to %s:%s.", host, port_s);
     } else {
-        VRB("Successfully connected to %s:%s over %s", host, port, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
+        VRB("Successfully connected to %s:%s over %s", host, port_s, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
     }
     freeaddrinfo(res_list);
 

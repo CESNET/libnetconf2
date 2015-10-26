@@ -379,7 +379,7 @@ nc_read_msg(struct nc_session* session, int timeout, struct lyxml_elem **data)
 
         break;
     }
-    DBG("Received message (session %s): %s", session->id, msg);
+    DBG("Received message (session %u): %s", session->id, msg);
 
     /* build XML tree */
     *data = lyxml_read(session->ctx, msg, 0);
