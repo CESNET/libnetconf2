@@ -164,14 +164,6 @@ connect_init(struct ly_ctx *ctx)
     session->status = NC_STATUS_STARTING;
     session->side = NC_CLIENT;
 
-    /* transport lock */
-    session->ti_lock = malloc(sizeof *session->ti_lock);
-    if (!session->ti_lock) {
-        ERRMEM;
-        return NULL;
-    }
-    pthread_mutex_init(session->ti_lock, NULL);
-
     /* YANG context for the session */
     if (ctx) {
         session->flags |= NC_SESSION_SHAREDCTX;
