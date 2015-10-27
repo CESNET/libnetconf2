@@ -73,7 +73,7 @@ endif()
 if(ENABLE_SSH)
 	find_package(LibSSH 0.6.4 REQUIRED)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_SSH ${LIBSSH_DEFINITIONS}")
-	target_link_libraries(netconf2 ${LIBSSH_LIBRARIES})
+	target_link_libraries(netconf2 ${LIBSSH_LIBRARIES} -lssh_threads)
 	include_directories(${LIBSSH_INCLUDE_DIRS})
 endif()
 

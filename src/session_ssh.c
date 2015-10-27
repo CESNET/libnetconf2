@@ -56,6 +56,28 @@ struct nc_session *connect_init(struct ly_ctx *ctx);
 int connect_getsocket(const char *host, unsigned short port);
 int handshake(struct nc_session *session);
 
+API void
+nc_client_init_ssh(void)
+{
+    ssh_threads_set_callbacks(ssh_threads_get_pthread());
+    ssh_init();
+}
+
+API void
+nc_client_destroy_ssh(void)
+{
+    int i;
+
+    for (i = 0; i < ssh_opts.key_count; ++i) {
+        free(ssh_opts.keys[i].pubkey_path);
+        free(ssh_opts.keys[i].privkey_path);
+    }
+
+    free(ssh_opts.keys);
+    ssh_opts.keys = NULL;
+    ssh_opts.key_count = 0;
+}
+
 static char *
 sshauth_password(const char *username, const char *hostname)
 {

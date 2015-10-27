@@ -88,10 +88,31 @@ struct nc_session *nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx);
 #ifdef ENABLE_SSH
 
 /**
+ * @brief Initialize libssh so that libnetconf2 can safely use it in a multi-threaded environment.
+ *
+ * Must be called before using any other client SSH functions (nc_connect_ssh(), nc_connect_libssh,
+ * or nc_connect_ssh_channel())! If your application uses libssh and inititalizes it for multi-threaded use,
+ * do not call this function.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
+ */
+void nc_client_init_ssh(void);
+
+/**
+ * @brief Destroy any dynamically allocated SSH-specific context.
+ *
+ * If nc_client_init_ssh() was not called before, this function still must be called to clear
+ * any key pairs set using nc_set_keypair_path().
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
+ */
+void nc_client_destroy_ssh(void);
+
+/**
  * @brief Connect to the NETCONF server using SSH transport (via libssh).
  *
- * SSH session is created with default options. If a caller need to change SSH session properties,
- * it is supposed to use nc_connect_libssh().
+ * SSH session is created with default options. If the caller needs to use specific SSH session properties,
+ * they are supposed to use nc_connect_libssh().
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  *
@@ -145,6 +166,32 @@ struct nc_session *nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx
  * @return Created NETCONF session object or NULL in case of error.
  */
 struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx);
+
+/**
+ * @brief Set (add) an SSH public and private key pair to be used for client authentization.
+ *
+ * Private key can be encrypted, the passphrase will be asked for before using it.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
+ *
+ * @param[in] pub_key Path to the public key.
+ * @param[in] priv_key Path to the private key.
+ *
+ * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
+ */
+int nc_set_keypair_path(const char *pub_key, const char *priv_key);
+
+/**
+ * @brief Remove an SSH public and private key pair that was used for client authentization.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
+ *
+ * @param[in] pub_key Path to the public key.
+ * @param[in] priv_key Path to the private key.
+ *
+ * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
+ */
+int nc_del_keypair_path(const char *pub_key, const char *priv_key);
 
 #endif /* ENABLE_SSH */
 
