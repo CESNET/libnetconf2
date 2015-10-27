@@ -48,9 +48,7 @@
 #include "session.h"
 
 static struct nc_ssh_auth_opts ssh_opts = {
-    .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLIC_KEYS, 1}},
-    .keys = NULL,
-    .key_count = 0
+    .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLIC_KEYS, 1}}
 };
 
 /* internal functions from session.c */
