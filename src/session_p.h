@@ -26,7 +26,7 @@
 #include <stdint.h>
 #include <pthread.h>
 
-#ifdef ENABLE_LIBSSH
+#ifdef ENABLE_SSH
 #   include <libssh/libssh.h>
 #   include <libssh/callbacks.h>
 
@@ -79,7 +79,7 @@ struct nc_ssh_auth_opts {
 typedef enum {
     NC_TI_FD,         /**< file descriptors - use standard input/output, transport protocol is implemented
                            outside the current application (only for NETCONF over SSH transport) */
-#ifdef ENABLE_LIBSSH
+#ifdef ENABLE_SSH
     NC_TI_LIBSSH,     /**< libssh - use libssh library, only for NETCONF over SSH transport */
 #endif
 #ifdef ENABLE_TLS
@@ -143,7 +143,7 @@ struct nc_session {
             int in;              /**< input file descriptor */
             int out;             /**< output file descriptor */
         } fd;                    /**< NC_TI_FD transport implementation structure */
-#ifdef ENABLE_LIBSSH
+#ifdef ENABLE_SSH
         struct {
             ssh_channel channel;
             ssh_session session;

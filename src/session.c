@@ -390,7 +390,7 @@ nc_session_free(struct nc_session *session)
          */
         break;
 
-#ifdef ENABLE_LIBSSH
+#ifdef ENABLE_SSH
     case NC_TI_LIBSSH:
         ssh_channel_free(session->ti.libssh.channel);
         /* There can be multiple NETCONF sessions on the same SSH session (NETCONF session maps to

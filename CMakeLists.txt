@@ -27,7 +27,7 @@ set(LIBNETCONF2_VERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION
 set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION})
 
 # build options
-option(ENABLE_LIBSSH "Use libssh for NETCONF over SSH implementation" ON)
+option(ENABLE_SSH "Enable NETCONF over SSH support (via libssh)" ON)
 option(ENABLE_TLS "Enable NETCONF over TLS support (via OpenSSL)" OFF)
 
 # source files
@@ -39,10 +39,10 @@ set(libsrc
 	src/session.c
 	src/time.c)
 
-if(ENABLE_LIBSSH)
+if(ENABLE_SSH)
 	set(libsrc ${libsrc}
 		src/session_ssh.c)
-	set(LIBSSH_MACRO "#define ENABLE_LIBSSH")
+	set(LIBSSH_MACRO "#define ENABLE_SSH")
 endif()
 
 if(ENABLE_TLS)
@@ -70,9 +70,9 @@ else()
 endif()
 
 # dependencies - libssh
-if(ENABLE_LIBSSH)
+if(ENABLE_SSH)
 	find_package(LibSSH 0.6.4 REQUIRED)
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_LIBSSH ${LIBSSH_DEFINITIONS}")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_SSH ${LIBSSH_DEFINITIONS}")
 	target_link_libraries(netconf2 ${LIBSSH_LIBRARIES})
 	include_directories(${LIBSSH_INCLUDE_DIRS})
 endif()

@@ -74,7 +74,7 @@ nc_read(struct nc_session *session, char *buf, size_t count)
         }
         break;
 
-#ifdef ENABLE_LIBSSH
+#ifdef ENABLE_SSH
     case NC_TI_LIBSSH:
         /* read via libssh */
         while(count) {
@@ -257,7 +257,7 @@ nc_read_msg(struct nc_session* session, int timeout, struct lyxml_elem **data)
         /* poll loop */
 
         switch(session->ti_type) {
-#ifdef ENABLE_LIBSSH
+#ifdef ENABLE_SSH
         case NC_TI_LIBSSH:
             /* we are getting data from libssh's channel */
             status = ssh_channel_poll_timeout(session->ti.libssh.channel, timeout, 0);
@@ -467,7 +467,7 @@ write_(struct nc_session *session, const void *buf, size_t count)
         }
         return write(session->ti.fd.out, buf, count) + c;
 
-#ifdef ENABLE_LIBSSH
+#ifdef ENABLE_SSH
     case NC_TI_LIBSSH:
         if (session->version == NC_VERSION_11) {
             c = snprintf(chunksize, 20, "\n#%zu\n", count);
@@ -501,7 +501,7 @@ write_endtag(struct nc_session *session)
         }
         break;
 
-#ifdef ENABLE_LIBSSH
+#ifdef ENABLE_SSH
     case NC_TI_LIBSSH:
         if (session->version == NC_VERSION_11) {
             ssh_channel_write(session->ti.libssh.channel, "\n##\n", 4);
@@ -594,13 +594,13 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
             write(session->ti.fd.out, "</rpc>]]>]]>", 12);
             break;
 
-#ifdef ENABLE_LIBSSH
+#ifdef ENABLE_SSH
         case NC_TI_LIBSSH:
 #endif
 #ifdef ENABLE_TLS
         case NC_TI_OPENSSL:
 #endif
-#if defined(ENABLE_LIBSSH) || defined(ENABLE_TLS)
+#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
             count = asprintf(&buf, "<rpc xmlns=\"%s\" message-id=\"%"PRIu64"\"%s>",
                              NC_NS_BASE, session->msgid + 1, attrs ? attrs : "");
             write_clb((void *)&arg, buf, count);
@@ -630,13 +630,13 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
             write(session->ti.fd.out, "</rpc-reply>]]>]]>", 18);
             break;
 
-#ifdef ENABLE_LIBSSH
+#ifdef ENABLE_SSH
         case NC_TI_LIBSSH:
 #endif
 #ifdef ENABLE_TLS
         case NC_TI_OPENSSL:
 #endif
-#if defined(ENABLE_LIBSSH) || defined(ENABLE_TLS)
+#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
             write_clb((void *)&arg, "<rpc-reply", 10);
             lyxml_dump_clb(write_clb, (void *)&arg, rpc->root, LYXML_DUMP_ATTRS);
 
@@ -661,13 +661,13 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
             write(session->ti.fd.out, "</notification>]]>]]>", 18);
             break;
 
-#ifdef ENABLE_LIBSSH
+#ifdef ENABLE_SSH
         case NC_TI_LIBSSH:
 #endif
 #ifdef ENABLE_TLS
         case NC_TI_OPENSSL:
 #endif
-#if defined(ENABLE_LIBSSH) || defined(ENABLE_TLS)
+#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
             write_clb((void *)&arg, "<notification xmlns=\""NC_NS_NOTIF"\"/>", 21 + 47 + 3);
 
             /* TODO content */
@@ -697,13 +697,13 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
             }
             break;
 
-#ifdef ENABLE_LIBSSH
+#ifdef ENABLE_SSH
         case NC_TI_LIBSSH:
 #endif
 #ifdef ENABLE_TLS
         case NC_TI_OPENSSL:
 #endif
-#if defined(ENABLE_LIBSSH) || defined(ENABLE_TLS)
+#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
             count = asprintf(&buf, "<hello xmlns=\"%s\"><capabilities>", NC_NS_BASE);
             write_clb((void *)&arg, buf, count);
             free(buf);

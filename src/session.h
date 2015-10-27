@@ -25,9 +25,9 @@
 
 #include <stdint.h>
 
-#ifdef ENABLE_LIBSSH
+#ifdef ENABLE_SSH
 #   include <libssh/libssh.h>
-#endif /* ENABLE_LIBSSH */
+#endif /* ENABLE_SSH */
 
 #ifdef ENABLE_TLS
 #   include <openssl/ssl.h>
@@ -85,7 +85,7 @@ int nc_schema_searchpath(const char *path);
  */
 struct nc_session *nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx);
 
-#ifdef ENABLE_LIBSSH
+#ifdef ENABLE_SSH
 
 /**
  * @brief Connect to the NETCONF server using SSH transport (via libssh).
@@ -146,7 +146,7 @@ struct nc_session *nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx
  */
 struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx);
 
-#endif /* ENABLE_LIBSSH */
+#endif /* ENABLE_SSH */
 
 #ifdef ENABLE_TLS
 
