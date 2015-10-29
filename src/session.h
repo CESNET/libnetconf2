@@ -30,7 +30,10 @@
 #endif /* ENABLE_SSH */
 
 #ifdef ENABLE_TLS
+#   include <openssl/bio.h>
 #   include <openssl/ssl.h>
+#   include <openssl/err.h>
+#   include <openssl/pem.h>
 #endif /* ENABLE_TLS */
 
 #include "messages.h"
@@ -198,10 +201,42 @@ int nc_del_keypair_path(const char *pub_key, const char *priv_key);
 #ifdef ENABLE_TLS
 
 /**
+ * @brief Initialize libssl context with certificates.
+ *
+ * Must be called before calling nc_connect_tls() or nc_connect_libssl()! This also initializes libssl, if your application
+ * uses it, do not initialize it again.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
+ *
+ * @param[in] client_cert Path to the file containing the client certificate. If NULL, only initializes libssl/libcrypto.
+ * @param[in] client_key Path to the file containing the private key for the \p client_cert.
+ *                       If NULL, key is expected to be stored with \p client_cert.
+ * @param[in] ca_file Location of the CA certificate file used to verify server certificates.
+ *                    For more info, see the documentation for SSL_CTX_load_verify_locations() from OpenSSL.
+ * @param[in] ca_dir Location of the CA certificates directory used to verify the server certificates.
+ *                   For more info, see the documentation for SSL_CTX_load_verify_locations() from OpenSSL.
+ * @param[in] crl_file Location of the CRL certificate file used to check for revocated certificates.
+ * @param[in] crl_dir Location of the CRL certificate directory used to check for revocated certificates.
+ *
+ * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
+ */
+int nc_client_init_tls(const char *client_cert, const char *client_key, const char *ca_file, const char *ca_dir,
+                       const char *crl_file, const char *crl_dir);
+
+/**
+ * @brief Destroy any dynamically allocated TLS-specific and libssl/librypto context.
+ *
+ * nc_connect_tls(), nc_connect_libssl() or any libssl/librypto functions cannnot be called after this.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
+ */
+void nc_client_destroy_tls(void);
+
+/**
  * @brief Connect to the NETCONF server using TLS transport (via libssl)
  *
- * TLS session is created with default options. If a caller need to change TLS session properties,
- * it is supposed to use nc_connect_libssl().
+ * TLS session is created with the certificates set using nc_client_init_tls(), which must be called beforehand!
+ * If the caller needs to use specific TLS session properties, they are supposed to use nc_connect_libssl().
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  *
@@ -222,9 +257,11 @@ struct nc_session *nc_connect_tls(const char *host, unsigned short port, const c
 /**
  * @brief Connect to the NETCONF server using the provided TLS (libssl) session.
  *
+ * The TLS session supplied is expected to be fully connected and authenticated!
+ *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  *
- * @param[in] tls libssl structure representing TLS session object.
+ * @param[in] tls libssl structure representing the TLS session object.
  * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
  *                (ignoring what is actually supported by the server side). If not set,
  *                YANG context is created for the session using \<get-schema\> (if supported

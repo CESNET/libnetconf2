@@ -61,6 +61,12 @@ struct nc_ssh_auth_opts {
 #ifdef ENABLE_TLS
 #   include <openssl/bio.h>
 #   include <openssl/ssl.h>
+
+struct nc_tls_auth_opts {
+    SSL_CTX *tls_ctx;
+    X509_STORE *tls_store;
+};
+
 #endif
 
 #include <libyang/libyang.h>
