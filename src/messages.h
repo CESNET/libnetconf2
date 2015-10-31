@@ -84,6 +84,8 @@ struct nc_notif;
  */
 struct nc_rpc *nc_rpc_getconfig(NC_DATASTORE source, struct nc_filter *filter);
 
+struct nc_rpc *nc_rpc_get(struct nc_filter *filter);
+
 /**
  * @brief Create NETCONF RPC \<lock\>
  *

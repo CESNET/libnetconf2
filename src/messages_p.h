@@ -58,6 +58,11 @@ struct nc_rpc_server {
     struct lyd_node *tree;   /**< libyang data tree of the message (NETCONF operation) */
 };
 
+struct nc_rpc_get {
+    NC_RPC_TYPE type;        /**< NC_RPC_GET */
+    struct nc_filter *filter;/**< data filter */
+};
+
 struct nc_rpc_getconfig {
     NC_RPC_TYPE type;        /**< NC_RPC_GETCONFIG */
     NC_DATASTORE source;     /**< NETCONF datastore being queried */

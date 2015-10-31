@@ -71,6 +71,26 @@ nc_filter_free(struct nc_filter *filter)
 }
 
 API struct nc_rpc *
+nc_rpc_get(struct nc_filter *filter)
+{
+    struct nc_rpc_get *rpc;
+
+    rpc = calloc(1, sizeof *rpc);
+    if (!rpc) {
+        ERRMEM;
+        return NULL;
+    }
+
+    rpc->type = NC_RPC_GET;
+    if (filter) {
+        filter->refs++;
+        rpc->filter = filter;
+    }
+
+    return (struct nc_rpc *)rpc;
+}
+
+API struct nc_rpc *
 nc_rpc_getconfig(NC_DATASTORE source, struct nc_filter *filter)
 {
     struct nc_rpc_getconfig *rpc;

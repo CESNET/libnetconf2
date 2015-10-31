@@ -904,6 +904,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc)
     NC_MSG_TYPE r;
     struct nc_rpc_lock *rpc_lock;
     struct nc_rpc_getconfig *rpc_gc;
+    struct nc_rpc_get *rpc_g;
     struct lyd_node *data, *node;
     struct lys_module *ietfnc;
 
@@ -922,6 +923,22 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc)
     }
 
     switch(rpc->type) {
+    case NC_RPC_GET:
+        rpc_g = (struct nc_rpc_get *)rpc;
+
+        data = lyd_new(NULL, ietfnc, "get");
+        if (rpc_g->filter) {
+            if (rpc_g->filter->type == NC_FILTER_SUBTREE) {
+                node = lyd_new_anyxml(data, ietfnc, "filter", rpc_g->filter->data);
+                lyd_insert_attr(node, "type", "subtree");
+            } else if (rpc_g->filter->type == NC_FILTER_XPATH) {
+                node = lyd_new_anyxml(data, ietfnc, "filter", NULL);
+                /* TODO - handle namespaces from XPATH query */
+                lyd_insert_attr(node, "type", "xpath");
+                lyd_insert_attr(node, "select", rpc_g->filter->data);
+            }
+        }
+        break;
     case NC_RPC_GETCONFIG:
         rpc_gc = (struct nc_rpc_getconfig *)rpc;
 
