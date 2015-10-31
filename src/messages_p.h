@@ -41,6 +41,12 @@ typedef enum {
     NC_RPC_GENERIC    /**< user-defined generic RPC */
 } NC_RPC_TYPE;
 
+typedef enum {
+    NC_REPLY_ERROR,
+    NC_REPLY_OK,
+    NC_REPLY_DATA,
+} NC_REPLY_TYPE;
+
 struct nc_filter {
     NC_FILTER type;   /**< filter type */
     int refs;         /**< number of references */
@@ -75,9 +81,23 @@ struct nc_rpc_lock {
 };
 
 struct nc_reply {
+    NC_REPLY_TYPE type;
     struct ly_ctx *ctx;
     struct lyxml_elem *root;
-    struct lyd_node *tree;  /**< libyang data tree of the message */
+};
+
+struct nc_reply_error {
+    NC_REPLY_TYPE type;     /**< NC_REPLY_ERROR */
+    struct ly_ctx *ctx;
+    struct lyxml_elem *root;
+    /* TODO */
+};
+
+struct nc_reply_data {
+    NC_REPLY_TYPE type;     /**< NC_REPLY_DATA */
+    struct ly_ctx *ctx;
+    struct lyxml_elem *root;
+    struct lyd_node *data;  /**< libyang data tree */
 };
 
 struct nc_notif {

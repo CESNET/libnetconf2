@@ -653,6 +653,61 @@ error:
     return NC_MSG_ERROR;
 }
 
+static struct nc_reply *
+parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml)
+{
+    struct lyxml_elem *iter;
+    struct nc_reply *reply = NULL;
+
+    LY_TREE_FOR(xml->child, iter) {
+        if (!iter->ns || strcmp(iter->ns->value, NC_NS_BASE)) {
+            continue;
+        }
+
+        if (!strcmp(iter->name, "ok")) {
+            if (reply) {
+                ERR("Unexpected content of the <rpc-reply>.");
+                goto error;
+            }
+            reply = malloc(sizeof(struct nc_reply));
+            reply->type = NC_REPLY_OK;
+            reply->ctx = ctx;
+            reply->root = xml;
+        } else if (!strcmp(iter->name, "data")) {
+            if (reply) {
+                ERR("Unexpected content of the <rpc-reply>.");
+                goto error;
+            }
+            reply = malloc(sizeof(struct nc_reply_data));
+            reply->type = NC_REPLY_DATA;
+            reply->ctx = ctx;
+            reply->root = xml;
+            ((struct nc_reply_data *)reply)->data = lyd_parse_xml(ctx, iter, 0);
+        } else if (!strcmp(iter->name, "rpc-error")) {
+            if (reply && reply->type != NC_REPLY_ERROR) {
+                ERR("<rpc-reply> content mismatch.");
+                goto error;
+            }
+            reply = malloc(sizeof(struct nc_reply_error));
+            reply->type = NC_REPLY_ERROR;
+            reply->ctx = ctx;
+            reply->root = xml;
+        }
+    }
+
+    if (!reply) {
+        ERR("Invalid content of the <rpc-reply>.");
+    }
+    return reply;
+
+error:
+    if (reply) {
+        reply->root = NULL;
+        nc_reply_free(reply);
+    }
+    return NULL;
+}
+
 API NC_MSG_TYPE
 nc_recv_reply(struct nc_session *session, int timeout, struct nc_reply **reply)
 {
@@ -670,6 +725,7 @@ nc_recv_reply(struct nc_session *session, int timeout, struct nc_reply **reply)
         ERR("%s: invalid session to receive RPC replies.", __func__);
         return NC_MSG_ERROR;
     }
+    *reply = NULL;
 
     do {
         if (msgtype && session->notif) {
@@ -728,10 +784,11 @@ nc_recv_reply(struct nc_session *session, int timeout, struct nc_reply **reply)
 
         switch(msgtype) {
         case NC_MSG_REPLY:
-            *reply = malloc(sizeof **reply);
-            (*reply)->ctx = session->ctx;
-            (*reply)->tree = lyd_parse_xml(session->ctx, xml, 0);
-            (*reply)->root = xml;
+            /* distinguish between data / ok / error reply */
+            *reply = parse_reply(session->ctx, xml);
+            if (!(*reply)) {
+                goto error;
+            }
             break;
         case NC_MSG_HELLO:
             ERR("SESSION %u: Received another <hello> message.", session->id);
@@ -808,11 +865,11 @@ nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
         /* read message from wire */
         msgtype = nc_read_msg(session, timeout, &xml);
         if (msgtype == NC_MSG_REPLY) {
-            /* create reply object */
-            reply = malloc(sizeof *reply);
-            reply->ctx = session->ctx;
-            reply->tree = lyd_parse_xml(session->ctx, xml, 0);
-            reply->root = xml;
+            /* distinguish between data / ok / error reply */
+            reply = parse_reply(session->ctx, xml);
+            if (!reply) {
+                goto error;
+            }
 
             /* store the message for nc_recv_reply() */
             cont_r = &session->replies;
@@ -847,7 +904,7 @@ nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
             break;
         }
 
-    } while(msgtype == NC_MSG_REPLY);
+    } while(msgtype == NC_MSG_NOTIF);
 
     return msgtype;
 

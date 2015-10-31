@@ -177,12 +177,27 @@ nc_rpc_free(struct nc_rpc *rpc)
 API void
 nc_reply_free(struct nc_reply *reply)
 {
+    struct lyd_node *node;
+
     if (!reply) {
         return;
     }
 
+    switch(reply->type) {
+    case NC_REPLY_DATA:
+        for (node = ((struct nc_reply_data *)reply)->data;
+             node;
+             node = ((struct nc_reply_data *)reply)->data) {
+            ((struct nc_reply_data *)reply)->data = node->next;
+            lyd_free(node);
+        }
+        break;
+    case NC_REPLY_OK:
+    case NC_REPLY_ERROR:
+        /* TODO */
+        break;
+    }
     lyxml_free_elem(reply->ctx, reply->root);
-    lyd_free(reply->tree);
     free(reply);
 }
 API void
