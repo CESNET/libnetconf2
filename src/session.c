@@ -624,7 +624,7 @@ nc_recv_rpc(struct nc_session *session, int timeout, struct nc_rpc_server **rpc)
         *rpc = malloc(sizeof **rpc);
         (*rpc)->type = NC_RPC_SERVER;
         (*rpc)->ctx = session->ctx;
-        (*rpc)->tree = lyd_parse_xml(session->ctx, xml, 0);
+        (*rpc)->tree = lyd_parse_xml(session->ctx, xml, LYD_OPT_DESTRUCT);
         (*rpc)->root = xml;
         break;
     case NC_MSG_HELLO:
@@ -682,7 +682,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml)
             reply->type = NC_REPLY_DATA;
             reply->ctx = ctx;
             reply->root = xml;
-            ((struct nc_reply_data *)reply)->data = lyd_parse_xml(ctx, iter, 0);
+            ((struct nc_reply_data *)reply)->data = lyd_parse_xml(ctx, iter, LYD_OPT_DESTRUCT);
         } else if (!strcmp(iter->name, "rpc-error")) {
             if (reply && reply->type != NC_REPLY_ERROR) {
                 ERR("<rpc-reply> content mismatch.");
@@ -767,7 +767,7 @@ nc_recv_reply(struct nc_session *session, int timeout, struct nc_reply **reply)
             /* create notification object */
             notif = malloc(sizeof *notif);
             notif->ctx = session->ctx;
-            notif->tree = lyd_parse_xml(session->ctx, xml, 0);
+            notif->tree = lyd_parse_xml(session->ctx, xml, LYD_OPT_DESTRUCT);
             notif->root = xml;
 
             /* store the message for nc_recv_notif() */
@@ -887,7 +887,7 @@ nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
         case NC_MSG_NOTIF:
             *notif = malloc(sizeof **notif);
             (*notif)->ctx = session->ctx;
-            (*notif)->tree = lyd_parse_xml(session->ctx, xml, 0);
+            (*notif)->tree = lyd_parse_xml(session->ctx, xml, LYD_OPT_DESTRUCT);
             (*notif)->root = xml;
             break;
         case NC_MSG_HELLO:
