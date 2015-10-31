@@ -927,7 +927,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc)
 
         data = lyd_new(NULL, ietfnc, "get-config");
         node = lyd_new(data, ietfnc, "source");
-        node = lyd_new_leaf_str(node, ietfnc, ncds2str[rpc_gc->source], LY_TYPE_EMPTY, NULL);
+        node = lyd_new_leaf(node, ietfnc, ncds2str[rpc_gc->source], NULL);
         if (!node) {
             lyd_free(data);
             return NC_MSG_ERROR;
@@ -949,7 +949,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc)
 
         data = lyd_new(NULL, ietfnc, "lock");
         node = lyd_new(data, ietfnc, "target");
-        node = lyd_new_leaf_str(node, ietfnc, ncds2str[rpc_lock->target], LY_TYPE_EMPTY, NULL);
+        node = lyd_new_leaf(node, ietfnc, ncds2str[rpc_lock->target], NULL);
         if (!node) {
             lyd_free(data);
             return NC_MSG_ERROR;
@@ -960,7 +960,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc)
 
         data = lyd_new(NULL, ietfnc, "unlock");
         node = lyd_new(data, ietfnc, "target");
-        node = lyd_new_leaf_str(node, ietfnc, ncds2str[rpc_lock->target], LY_TYPE_EMPTY, NULL);
+        node = lyd_new_leaf(node, ietfnc, ncds2str[rpc_lock->target], NULL);
         if (!node) {
             lyd_free(data);
             return NC_MSG_ERROR;
