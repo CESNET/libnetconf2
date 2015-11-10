@@ -134,7 +134,7 @@ ctx_load_model(struct nc_session *session, const char *cpblt, int get_schema_sup
         /* parse module */
         ptr = strstr(cpblt, "module=");
         if (!ptr) {
-            WRN("Unknown capability \"%s\" could not be parsed.");
+            WRN("Unknown capability \"%s\" could not be parsed.", cpblt);
             return 1;
         }
         ptr += 7;
