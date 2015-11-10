@@ -34,6 +34,7 @@
 
 #include "libnetconf.h"
 #include "session.h"
+#include "session_p.h"
 
 /* TLS certificate verification error messages */
 static const char* verify_ret_msg[] = {
@@ -73,11 +74,6 @@ static const char* verify_ret_msg[] = {
 };
 
 static struct nc_tls_auth_opts tls_opts;
-
-/* internal functions from session.c */
-struct nc_session *connect_init(struct ly_ctx *ctx);
-int connect_getsocket(const char* host, unsigned short port);
-int handshake(struct nc_session *session);
 
 static int
 tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
@@ -294,11 +290,13 @@ nc_connect_tls(const char *host, unsigned short port, const char *username, stru
     }
 
     /* prepare session structure */
-    session = connect_init(ctx);
+    session = calloc(1, sizeof *session);
     if (!session) {
+        ERRMEM;
         return NULL;
     }
-    session->ti_type = NC_TI_OPENSSL;
+    session->status = NC_STATUS_STARTING;
+    session->side = NC_CLIENT;
 
     /* transport lock */
     session->ti_lock = malloc(sizeof *session->ti_lock);
@@ -309,16 +307,14 @@ nc_connect_tls(const char *host, unsigned short port, const char *username, stru
     pthread_mutex_init(session->ti_lock, NULL);
 
     /* fill the session */
-    session->username = lydict_insert(session->ctx, username, 0);
-    session->host = lydict_insert(session->ctx, host, 0);
-    session->port = port;
+    session->ti_type = NC_TI_OPENSSL;
     if (!(session->ti.tls = SSL_new(tls_opts.tls_ctx))) {
         ERR("Failed to create new TLS session structure (%s)", ERR_reason_error_string(ERR_get_error()));
         goto fail;
     }
 
     /* create and assign socket */
-    sock = connect_getsocket(host, port);
+    sock = nc_connect_getsocket(host, port);
     if (sock == -1) {
         goto fail;
     }
@@ -343,10 +339,34 @@ nc_connect_tls(const char *host, unsigned short port, const char *username, stru
         WRN("Server certificate verification problem (%s).", verify_ret_msg[verify]);
     }
 
+    /* assign context (dicionary needed for handshake) */
+    if (!ctx) {
+        ctx = ly_ctx_new(SCHEMAS_DIR);
+    } else {
+        session->flags |= NC_SESSION_SHAREDCTX;
+    }
+    session->ctx = ctx;
+
     /* NETCONF handshake */
-    if (handshake(session)) {
+    if (nc_handshake(session)) {
         goto fail;
     }
+
+    /* check/fill libyang context */
+    if (session->flags & NC_SESSION_SHAREDCTX) {
+        if (nc_ctx_check(session)) {
+            goto fail;
+        }
+    } else {
+        if (nc_ctx_fill(session)) {
+            goto fail;
+        }
+    }
+
+    /* store information into session and the dictionary */
+    session->host = lydict_insert(ctx, host, 0);
+    session->port = port;
+    session->username = lydict_insert(ctx, username, 0);
 
     session->status = NC_STATUS_RUNNING;
     return session;
@@ -368,11 +388,13 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     }
 
     /* prepare session structure */
-    session = connect_init(ctx);
+    session = calloc(1, sizeof *session);
     if (!session) {
+        ERRMEM;
         return NULL;
     }
-    session->ti_type = NC_TI_OPENSSL;
+    session->status = NC_STATUS_STARTING;
+    session->side = NC_CLIENT;
 
     /* transport lock */
     session->ti_lock = malloc(sizeof *session->ti_lock);
@@ -382,15 +404,31 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     }
     pthread_mutex_init(session->ti_lock, NULL);
 
+    session->ti_type = NC_TI_OPENSSL;
     session->ti.tls = tls;
 
+    /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = session->ctx;
+        ctx = ly_ctx_new(SCHEMAS_DIR);
+    } else {
+        session->flags |= NC_SESSION_SHAREDCTX;
     }
+    session->ctx = ctx;
 
     /* NETCONF handshake */
-    if (handshake(session)) {
+    if (nc_handshake(session)) {
         goto fail;
+    }
+
+    /* check/fill libyang context */
+    if (session->flags & NC_SESSION_SHAREDCTX) {
+        if (nc_ctx_check(session)) {
+            goto fail;
+        }
+    } else {
+        if (nc_ctx_fill(session)) {
+            goto fail;
+        }
     }
 
     session->status = NC_STATUS_RUNNING;

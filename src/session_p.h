@@ -179,6 +179,43 @@ struct nc_session {
 };
 
 /**
+ * @brief Fill libyang context in \p session. Context models are based on the stored session
+ *        capabilities. If the server does not support \<get-schema\>, the models are searched
+ *        for in the directory set using nc_schema_searchpath().
+ *
+ * @param[in] session Session to create the context for.
+ * @return 0 on success, non-zero on failure.
+ */
+int nc_ctx_fill(struct nc_session *session);
+
+/**
+ * @brief Check whether the libyang context in \p session is suitable for NETCONF use
+ *        meaning whether the ietf-netconf model is loaded.
+ *
+ * @param[in] session Session with the capabilities to be supported if loading ietf-netconf
+ *                    explicitly.
+ * @return 0 on success, non-zero on failure.
+ */
+int nc_ctx_check(struct nc_session *session);
+
+/**
+ * @brief Create and connect a socket.
+ *
+ * @param[in] host Hostname to connect to.
+ * @param[in] port Port to connect on.
+ * @return Connected socket or -1 on error.
+ */
+int nc_connect_getsocket(const char *host, unsigned short port);
+
+/**
+ * @brief Perform NETCONF handshake on \p session.
+ *
+ * @param[in] session NETCONF session to use.
+ * @return 0 on success, non-zero on failure.
+ */
+int nc_handshake(struct nc_session *session);
+
+/**
  * Functions
  * - io.c
  */

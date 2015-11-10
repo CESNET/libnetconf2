@@ -46,15 +46,11 @@
 
 #include "libnetconf.h"
 #include "session.h"
+#include "session_p.h"
 
 static struct nc_ssh_auth_opts ssh_opts = {
     .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLIC_KEYS, 1}}
 };
-
-/* internal functions from session.c */
-struct nc_session *connect_init(struct ly_ctx *ctx);
-int connect_getsocket(const char *host, unsigned short port);
-int handshake(struct nc_session *session);
 
 API void
 nc_client_init_ssh(void)
@@ -859,11 +855,13 @@ nc_connect_ssh(const char *host, unsigned short port, const char *username, stru
     }
 
     /* prepare session structure */
-    session = connect_init(ctx);
+    session = calloc(1, sizeof *session);
     if (!session) {
+        ERRMEM;
         return NULL;
     }
-    session->ti_type = NC_TI_LIBSSH;
+    session->status = NC_STATUS_STARTING;
+    session->side = NC_CLIENT;
 
     /* transport lock */
     session->ti_lock = malloc(sizeof *session->ti_lock);
@@ -874,9 +872,7 @@ nc_connect_ssh(const char *host, unsigned short port, const char *username, stru
     pthread_mutex_init(session->ti_lock, NULL);
 
     /* other transport-specific data */
-    session->username = lydict_insert(session->ctx, username, 0);
-    session->host = lydict_insert(session->ctx, host, 0);
-    session->port = port;
+    session->ti_type = NC_TI_LIBSSH;
     session->ti.libssh.session = ssh_new();
     if (!session->ti.libssh.session) {
         ERR("Unable to initialize SSH session.");
@@ -884,26 +880,53 @@ nc_connect_ssh(const char *host, unsigned short port, const char *username, stru
     }
 
     /* set some basic SSH session options */
-    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, session->host);
-    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_PORT, &session->port);
-    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, session->username);
+    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
+    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_PORT, &port);
+    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_TIMEOUT, &timeout);
 
     /* create and assign communication socket */
-    sock = connect_getsocket(host, port);
+    sock = nc_connect_getsocket(host, port);
     if (sock == -1) {
         goto fail;
     }
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_FD, &sock);
 
+    /* temporarily, for session connection */
+    session->host = host;
+    session->username = username;
     if (connect_ssh_session_netconf(session)) {
         goto fail;
     }
 
+    /* assign context (dicionary needed for handshake) */
+    if (!ctx) {
+        ctx = ly_ctx_new(SCHEMAS_DIR);
+    } else {
+        session->flags |= NC_SESSION_SHAREDCTX;
+    }
+    session->ctx = ctx;
+
     /* NETCONF handshake */
-    if (handshake(session)) {
+    if (nc_handshake(session)) {
         goto fail;
     }
+
+    /* check/fill libyang context */
+    if (session->flags & NC_SESSION_SHAREDCTX) {
+        if (nc_ctx_check(session)) {
+            goto fail;
+        }
+    } else {
+        if (nc_ctx_fill(session)) {
+            goto fail;
+        }
+    }
+
+    /* store information into the dictionary */
+    session->host = lydict_insert(ctx, host, 0);
+    session->port = port;
+    session->username = lydict_insert(ctx, username, 0);
 
     session->status = NC_STATUS_RUNNING;
     return session;
@@ -916,18 +939,20 @@ fail:
 API struct nc_session *
 nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
 {
-    const char *host, *username;
-    unsigned short port;
+    char *host = NULL, *username = NULL;
+    unsigned short port = 0;
     int sock;
     struct passwd *pw;
     struct nc_session *session = NULL;
 
     /* prepare session structure */
-    session = connect_init(ctx);
+    session = calloc(1, sizeof *session);
     if (!session) {
+        ERRMEM;
         return NULL;
     }
-    session->ti_type = NC_TI_LIBSSH;
+    session->status = NC_STATUS_STARTING;
+    session->side = NC_CLIENT;
 
     /* transport lock */
     session->ti_lock = malloc(sizeof *session->ti_lock);
@@ -937,11 +962,8 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
     }
     pthread_mutex_init(session->ti_lock, NULL);
 
+    session->ti_type = NC_TI_LIBSSH;
     session->ti.libssh.session = ssh_session;
-
-    if (!ctx) {
-        ctx = session->ctx;
-    }
 
     if (ssh_get_fd(ssh_session) == -1) {
         /*
@@ -949,25 +971,19 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
          */
 
         /* was host, port set? */
-        if (ssh_options_get(ssh_session, SSH_OPTIONS_HOST, (char **)&host) != SSH_OK) {
+        if (ssh_options_get(ssh_session, SSH_OPTIONS_HOST, &host) != SSH_OK) {
             host = NULL;
         }
         ssh_options_get_port(ssh_session, (unsigned int *)&port);
 
         /* remember host */
         if (!host) {
-            host = lydict_insert(ctx, "localhost", 0);
+            host = strdup("localhost");
             ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
-        } else {
-            host = lydict_insert_zc(ctx, (char *)host);
         }
-        session->host = host;
-
-        /* remember port (even if not set, dumb libssh returns 22, no way to know if it was actually set) */
-        session->port = port;
 
         /* create and connect socket */
-        sock = connect_getsocket(host, port);
+        sock = nc_connect_getsocket(host, port);
         if (sock == -1) {
             goto fail;
         }
@@ -980,7 +996,7 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
          */
 
         /* was username set? */
-        if (ssh_options_get(ssh_session, SSH_OPTIONS_USER, (char **)&username) != SSH_OK) {
+        if (ssh_options_get(ssh_session, SSH_OPTIONS_USER, &username) != SSH_OK) {
             username = NULL;
         }
 
@@ -992,14 +1008,13 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
                 goto fail;
             }
 
-            username = lydict_insert(ctx, pw->pw_name, 0);
+            username = strdup(pw->pw_name);
             ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
-        } else {
-            username = lydict_insert_zc(ctx, (char *)username);
         }
-        session->username = username;
 
         /* authenticate SSH session */
+        session->host = host;
+        session->username = username;
         if (connect_ssh_session_netconf(session)) {
             goto fail;
         }
@@ -1009,9 +1024,39 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
      * SSH session is established, create NETCONF session. (Application layer)
      */
 
+    /* assign context (dicionary needed for handshake) */
+    if (!ctx) {
+        ctx = ly_ctx_new(SCHEMAS_DIR);
+    } else {
+        session->flags |= NC_SESSION_SHAREDCTX;
+    }
+    session->ctx = ctx;
+
     /* NETCONF handshake */
-    if (handshake(session)) {
+    if (nc_handshake(session)) {
         goto fail;
+    }
+
+    /* check/fill libyang context */
+    if (session->flags & NC_SESSION_SHAREDCTX) {
+        if (nc_ctx_check(session)) {
+            goto fail;
+        }
+    } else {
+        if (nc_ctx_fill(session)) {
+            goto fail;
+        }
+    }
+
+    /* store information into the dictionary */
+    if (host) {
+        session->host = lydict_insert_zc(ctx, host);
+    }
+    if (port) {
+        session->port = port;
+    }
+    if (username) {
+        session->username = lydict_insert_zc(ctx, username);
     }
 
     session->status = NC_STATUS_RUNNING;
@@ -1028,20 +1073,17 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     struct nc_session *new_session, *ptr;
 
     /* prepare session structure */
-    new_session = connect_init(ctx);
+    new_session = calloc(1, sizeof *new_session);
     if (!new_session) {
+        ERRMEM;
         return NULL;
     }
-    if (!ctx) {
-        ctx = new_session->ctx;
-    }
+    new_session->status = NC_STATUS_STARTING;
+    new_session->side = NC_CLIENT;
 
     /* share some parameters including the session lock */
     new_session->ti_type = NC_TI_LIBSSH;
     new_session->ti_lock = session->ti_lock;
-    new_session->host = lydict_insert(ctx, session->host, 0);
-    new_session->port = session->port;
-    new_session->username = lydict_insert(ctx, session->username, 0);
     new_session->ti.libssh.session = session->ti.libssh.session;
 
     /* create the channel safely */
@@ -1050,21 +1092,44 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     /* open a channel */
     new_session->ti.libssh.channel = ssh_channel_new(new_session->ti.libssh.session);
     if (ssh_channel_open_session(new_session->ti.libssh.channel) != SSH_OK) {
-        nc_session_free(new_session);
         ERR("Opening an SSH channel failed (%s)", ssh_get_error(session->ti.libssh.session));
-        return NULL;
+        goto fail;
     }
     /* execute the NETCONF subsystem on the channel */
     if (ssh_channel_request_subsystem(new_session->ti.libssh.channel, "netconf") != SSH_OK) {
-        nc_session_free(new_session);
         ERR("Starting the \"netconf\" SSH subsystem failed (%s)", ssh_get_error(session->ti.libssh.session));
-        return NULL;
+        goto fail;
     }
+
+    /* assign context (dicionary needed for handshake) */
+    if (!ctx) {
+        ctx = ly_ctx_new(SCHEMAS_DIR);
+    } else {
+        session->flags |= NC_SESSION_SHAREDCTX;
+    }
+    session->ctx = ctx;
+
     /* NETCONF handshake */
-    if (handshake(new_session)) {
-        nc_session_free(new_session);
-        return NULL;
+    if (nc_handshake(new_session)) {
+        goto fail;
     }
+
+    /* check/fill libyang context */
+    if (session->flags & NC_SESSION_SHAREDCTX) {
+        if (nc_ctx_check(session)) {
+            goto fail;
+        }
+    } else {
+        if (nc_ctx_fill(session)) {
+            goto fail;
+        }
+    }
+
+    /* store information into session and the dictionary */
+    session->host = lydict_insert(ctx, session->host, 0);
+    session->port = session->port;
+    session->username = lydict_insert(ctx, session->username, 0);
+
     new_session->status = NC_STATUS_RUNNING;
 
     pthread_mutex_unlock(new_session->ti_lock);
@@ -1080,4 +1145,8 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     }
 
     return new_session;
+
+fail:
+    nc_session_free(new_session);
+    return NULL;
 }

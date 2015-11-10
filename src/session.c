@@ -104,7 +104,7 @@ session_ti_unlock(struct nc_session *session)
 }
 
 int
-handshake(struct nc_session *session)
+nc_handshake(struct nc_session *session)
 {
     NC_MSG_TYPE type;
 
@@ -122,9 +122,89 @@ handshake(struct nc_session *session)
 }
 
 static int
-connect_load_schemas(struct ly_ctx *ctx)
+ctx_load_model(struct nc_session *session, const char *cpblt, int get_schema_support)
 {
-    int fd;
+    struct lys_module *module;
+    char *ptr, *ptr2;
+    char *model_name, *revision = NULL, *features = NULL;
+
+    /*if (get_schema_support) {
+        * TODO *
+    } else*/ {
+        /* parse module */
+        ptr = strstr(cpblt, "module=");
+        if (!ptr) {
+            WRN("Unknown capability \"%s\" could not be parsed.");
+            return 1;
+        }
+        ptr += 7;
+        ptr2 = strchr(ptr, '&');
+        if (!ptr2) {
+            ptr2 = ptr + strlen(ptr);
+        }
+        model_name = strndup(ptr, ptr2 - ptr);
+
+        /* parse revision */
+        ptr = strstr(cpblt, "revision=");
+        if (ptr) {
+            ptr += 9;
+            ptr2 = strchr(ptr, '&');
+            if (!ptr2) {
+                ptr2 = ptr + strlen(ptr);
+            }
+            revision = strndup(ptr, ptr2 - ptr);
+        }
+
+        /* load module */
+        module = ly_ctx_load_module(session->ctx, NULL, model_name, revision);
+
+        free(model_name);
+        free(revision);
+        if (!module) {
+            return 1;
+        }
+
+        /* parse features */
+        ptr = strstr(cpblt, "features=");
+        if (ptr) {
+            ptr += 9;
+            ptr2 = strchr(ptr, '&');
+            if (!ptr2) {
+                ptr2 = ptr + strlen(ptr);
+            }
+            features = strndup(ptr, ptr2 - ptr);
+        }
+
+        /* enable features */
+        if (features) {
+            /* basically manual strtok_r (to avoid macro) */
+            ptr2 = features;
+            for (ptr = features; *ptr; ++ptr) {
+                if (*ptr == ',') {
+                    *ptr = '\0';
+                    /* remember last feature */
+                    ptr2 = ptr + 1;
+                }
+            }
+
+            ptr = features;
+            lys_features_enable(module, ptr);
+            while (ptr != ptr2) {
+                ptr += strlen(ptr) + 1;
+                lys_features_enable(module, ptr);
+            }
+
+            free(features);
+        }
+    }
+
+    return 0;
+}
+
+static int
+ctx_load_ietf_netconf(struct ly_ctx *ctx, const char **cpblts)
+{
+    int fd, i;
     struct lys_module *ietfnc;
 
     fd = open(SCHEMAS_DIR"ietf-netconf.yin", O_RDONLY);
@@ -134,69 +214,87 @@ connect_load_schemas(struct ly_ctx *ctx)
     }
     if (!(ietfnc = lys_read(ctx, fd, LYS_IN_YIN))) {
         ERR("Loading base NETCONF schema (%s) failed.", SCHEMAS_DIR"ietf-netconf");
+        close(fd);
         return 1;
     }
     close(fd);
 
     /* set supported capabilities from ietf-netconf */
-    lys_features_enable(ietfnc, "writable-running");
-    lys_features_enable(ietfnc, "candidate");
-    //lys_features_enable(ietfnc, "confirmed-commit");
-    lys_features_enable(ietfnc, "rollback-on-error");
-    lys_features_enable(ietfnc, "validate");
-    lys_features_enable(ietfnc, "startup");
-    lys_features_enable(ietfnc, "url");
-    lys_features_enable(ietfnc, "xpath");
+    for (i = 0; cpblts[i]; ++i) {
+        if (!strncmp(cpblts[i], "urn:ietf:params:netconf:capability:", 35)) {
+            if (!strncmp(cpblts[i] + 35, "writable-running", 16)) {
+                lys_features_enable(ietfnc, "writable-running");
+            } else if (!strncmp(cpblts[i] + 35, "candidate", 9)) {
+                lys_features_enable(ietfnc, "candidate");
+            } else if (!strcmp(cpblts[i] + 35, "confirmed-commit:1.1")) {
+                lys_features_enable(ietfnc, "confirmed-commit");
+            } else if (!strncmp(cpblts[i] + 35, "rollback-on-error", 17)) {
+                lys_features_enable(ietfnc, "rollback-on-error");
+            } else if (!strcmp(cpblts[i] + 35, "validate:1.1")) {
+                lys_features_enable(ietfnc, "validate");
+            } else if (!strncmp(cpblts[i] + 35, "startup", 7)) {
+                lys_features_enable(ietfnc, "startup");
+            } else if (!strncmp(cpblts[i] + 35, "url", 3)) {
+                lys_features_enable(ietfnc, "url");
+            } else if (!strncmp(cpblts[i] + 35, "xpath", 5)) {
+                lys_features_enable(ietfnc, "xpath");
+            }
+        }
+    }
 
     return 0;
 }
 
-struct nc_session *
-connect_init(struct ly_ctx *ctx)
+/* session with an empty context is assumed */
+int
+nc_ctx_fill(struct nc_session *session)
 {
-    struct nc_session *session = NULL;
-    const char *str;
-    int r;
+    int i, get_schema_support;
 
-    /* prepare session structure */
-    session = calloc(1, sizeof *session);
-    if (!session) {
-        ERRMEM;
-        return NULL;
-    }
-    session->status = NC_STATUS_STARTING;
-    session->side = NC_CLIENT;
+    assert(session->cpblts && session->ctx);
 
-    /* YANG context for the session */
-    if (ctx) {
-        session->flags |= NC_SESSION_SHAREDCTX;
-        session->ctx = ctx;
-
-        /* check presence of the required schemas */
-        if (!ly_ctx_get_module(session->ctx, "ietf-netconf", NULL)) {
-            str = ly_ctx_get_searchdir(session->ctx);
-            ly_ctx_set_searchdir(session->ctx, SCHEMAS_DIR);
-            r = connect_load_schemas(session->ctx);
-            ly_ctx_set_searchdir(session->ctx, str);
-
-            if (r) {
-                nc_session_free(session);
-                return NULL;
-            }
+    /* check if get-schema is supported */
+    get_schema_support = 0;
+    for (i = 0; session->cpblts[i]; ++i) {
+        if (!strncmp(session->cpblts[i], "urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring", 51)) {
+            get_schema_support = 1;
+            break;
         }
-    } else {
-        session->ctx = ly_ctx_new(SCHEMAS_DIR);
-
-        /* load basic NETCONF schemas required for libnetconf work */
-        if (connect_load_schemas(session->ctx)) {
-            nc_session_free(session);
-            return NULL;
-        }
-
-        ly_ctx_set_searchdir(session->ctx, schema_searchpath);
     }
 
-    return session;
+    /* load base model disregarding whether it's in capabilities (but NETCONF capabilities are used to enable features) */
+    if (ctx_load_ietf_netconf(session->ctx, session->cpblts)) {
+        goto fail;
+    }
+
+    /* load all other models */
+    for (i = 0; session->cpblts[i]; ++i) {
+        if (!strncmp(session->cpblts[i], "urn:ietf:params:netconf:capability", 34)
+                || !strncmp(session->cpblts[i], "urn:ietf:params:netconf:base", 28)) {
+            continue;
+        }
+
+        ctx_load_model(session, session->cpblts[i], get_schema_support);
+    }
+
+    return 0;
+
+fail:
+    free(session->ctx);
+    return 1;
+}
+
+int
+nc_ctx_check(struct nc_session *session)
+{
+    /* check presence of the required base schema */
+    if (!ly_ctx_get_module(session->ctx, "ietf-netconf", NULL)) {
+        if (ctx_load_ietf_netconf(session->ctx, session->cpblts)) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 API struct nc_session *
@@ -210,31 +308,53 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     }
 
     /* prepare session structure */
-    session = connect_init(ctx);
+    session = calloc(1, sizeof *session);
     if (!session) {
+        ERRMEM;
         return NULL;
     }
+    session->status = NC_STATUS_STARTING;
+    session->side = NC_CLIENT;
 
     /* transport specific data */
     session->ti_type = NC_TI_FD;
     session->ti.fd.in = fdin;
     session->ti.fd.out = fdout;
 
+    /* assign context (dicionary needed for handshake) */
+    if (!ctx) {
+        ctx = ly_ctx_new(SCHEMAS_DIR);
+    } else {
+        session->flags |= NC_SESSION_SHAREDCTX;
+    }
+    session->ctx = ctx;
+
     /* NETCONF handshake */
-    if (handshake(session)) {
-        goto error;
+    if (nc_handshake(session)) {
+        goto fail;
+    }
+
+    /* check/fill libyang context */
+    if (session->flags & NC_SESSION_SHAREDCTX) {
+        if (nc_ctx_check(session)) {
+            goto fail;
+        }
+    } else {
+        if (nc_ctx_fill(session)) {
+            goto fail;
+        }
     }
 
     session->status = NC_STATUS_RUNNING;
     return session;
 
-error:
+fail:
     nc_session_free(session);
     return NULL;
 }
 
 int
-connect_getsocket(const char* host, unsigned short port)
+nc_connect_getsocket(const char* host, unsigned short port)
 {
     int sock = -1;
     int i;
@@ -458,7 +578,8 @@ parse_cpblts(struct lyxml_elem *xml, const char ***list)
         LY_TREE_FOR(xml->child, cpblt) {
             i++;
         }
-        *list = calloc(i, sizeof **list);
+        /* last item remains NULL */
+        *list = calloc(i + 1, sizeof **list);
         if (!*list) {
             ERRMEM;
             return -1;
@@ -529,7 +650,7 @@ nc_recv_hello(struct nc_session *session)
                 }
                 flag = 1;
 
-                if ((ver = parse_cpblts(node, NULL)) < 0) {
+                if ((ver = parse_cpblts(node, &session->cpblts)) < 0) {
                     goto error;
                 }
                 session->version = ver;
@@ -563,7 +684,7 @@ nc_recv_hello(struct nc_session *session)
                 }
                 flag = 1;
 
-                if ((ver = parse_cpblts(node, NULL)) < 0) {
+                if ((ver = parse_cpblts(node, &session->cpblts)) < 0) {
                     goto error;
                 }
                 session->version = ver;
