@@ -52,6 +52,9 @@ static struct {
 API int
 nc_schema_searchpath(const char *path)
 {
+    if (schema_searchpath) {
+        free(schema_searchpath);
+    }
     schema_searchpath = strdup(path);
 
     return schema_searchpath ? 0 : 1;
