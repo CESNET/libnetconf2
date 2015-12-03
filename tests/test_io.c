@@ -77,7 +77,7 @@ teardown_read(void **state)
     return 0;
 }
 
-static void
+/*static void
 test_read_rpc_10(void **state)
 {
     struct nc_session *session = (struct nc_session *)*state;
@@ -147,7 +147,7 @@ test_read_rpc_11_bad(void **state)
     assert_null(rpc);
 
     nc_rpc_free((struct nc_rpc *)rpc);
-}
+}*/
 
 
 struct wr {

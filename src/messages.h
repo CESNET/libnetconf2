@@ -23,6 +23,15 @@
 #ifndef NC_MESSAGES_H_
 #define NC_MESSAGES_H_
 
+#include <stdint.h>
+
+typedef enum {
+    NC_REPLY_ERROR,
+    NC_REPLY_OK,
+    NC_REPLY_DATA,
+    NC_REPLY_NOTIF
+} NC_REPLY_TYPE;
+
 typedef enum {
     NC_RPC_EDIT_DFLTOP_UNKNOWN = 0,
     NC_RPC_EDIT_DFLTOP_MERGE,
@@ -45,50 +54,94 @@ typedef enum {
 } NC_RPC_EDIT_ERROPT;
 
 typedef enum {
-    NC_FILTER_SUBTREE,
-    NC_FILTER_XPATH
-} NC_FILTER;
-
-struct nc_filter;
-
-/**
- * @brief Create NETCONF filter for \<get\> or \<get-config\> RPCs.
- *
- * The returned object can be used repeatedly. Caller is supposed to free it using nc_filter_free().
- *
- * @param[in] type Filter type of the \p data. #NC_FILTER_SUBTREE and #NC_FILTER_XPATH are supported.
- *                 Note that #NC_FILTER_XPATH is accepted only on sessions supporting the :xpath capability.
- * @param[in] data Content of the filter. Serialized XML data in case of #NC_FILTER_SUBTREE and XPath query
- *                 in case of #NC_FILTER_XPATH (use YANG schema names as namespace prefixes).
- * @param[in] constdata Flag for handling \p data. If set, the \p data is handled as const char* and the string
- *                 is duplicated for internal use. If not set, \p data is not duplicated but caller is supposed
- *                 to forget about the provided string.
- * @return Created filter structure to be used in nc_rpc_getconfig() and nc_rpc_get(). NULL in case of failure.
- */
-struct nc_filter *nc_filter_new(NC_FILTER type, char *data, int constdata);
+    NC_RPC_PARAMTYPE_CONST,
+    NC_RPC_PARAMTYPE_FREE,
+    NC_RPC_PARAMTYPE_DUP_AND_FREE
+} NC_RPC_PARAMTYPE;
 
 /**
- * @brief Free the NETCONF filter object.
- *
- * @param[in] filter Object to free.
+ * @brief NETCONF error structure representation
  */
-void nc_filter_free(struct nc_filter *filter);
+struct nc_err {
+    /**
+     * @brief \<error-type\>, error layer where the error occurred.
+     */
+    const char *type;
+    /**
+     * @brief \<error-tag\>.
+     */
+    const char *tag;
+    /**
+     * @brief \<error-severity\>.
+     */
+    const char *severity;
+    /**
+     * @brief \<error-app-tag\>, the data-model-specific or implementation-specific error condition, if one exists.
+     */
+    const char *apptag;
+    /**
+     * @brief \<error-path\>, XPATH expression identifying the element with the error.
+     */
+    const char *path;
+    /**
+     * @brief \<error-message\>, Human-readable description of the error.
+     */
+    const char *message;
+    const char *message_lang;
+
+    /* <error-info> */
+
+    /**
+     * @brief \<session-id\>, session ID of the session holding the requested lock.
+     */
+    const char *sid;
+    /**
+     * @brief \<bad-attr\>, the name of the data-model-specific XML attribute that caused the error.
+     */
+    const char **attr;
+    int attr_count;
+    /**
+     * @brief \<bad-element\>, the name of the data-model-specific XML element that caused the error.
+     */
+    const char **elem;
+    int elem_count;
+    /**
+     * @brief \<bad-namespace\>, the name of the unexpected XML namespace that caused the error.
+     */
+    const char **ns;
+    int ns_count;
+    /**
+     * @brief Remaining non-standard elements.
+     */
+    struct lyxml_elem **other;
+    int other_count;
+};
+
+struct nc_reply {
+    NC_REPLY_TYPE type;
+};
+
+struct nc_reply_error {
+    NC_REPLY_TYPE type;      /**< NC_REPLY_ERROR */
+    struct ly_ctx *ctx;
+    struct nc_err *err;      /**< errors, any of the values inside can be NULL */
+    int err_count;
+};
+
+struct nc_reply_data {
+    NC_REPLY_TYPE type;      /**< NC_REPLY_DATA */
+    struct lyd_node *data;   /**< libyang data tree */
+};
+
+struct nc_notif {
+    NC_REPLY_TYPE type;      /**< NC_REPLY_NOTIF */
+    struct lyd_node *tree;   /**< libyang data tree of the message */
+};
 
 /**
  * @brief NETCONF RPC object
  */
 struct nc_rpc;
-struct nc_rpc_server;
-
-/**
- * @brief NETCONF RPC reply object
- */
-struct nc_reply;
-
-/**
- * @brief NETCONF Notification object
- */
-struct nc_notif;
 
 /**
  * @brief Create a generic NETCONF RPC
@@ -96,10 +149,11 @@ struct nc_notif;
  * Note that created object can be sent via any NETCONF session that shares the context
  * of the \p data.
  *
- * @param[in] data NETCONF RPC data. Their ownership is passed to the RPC (they are freed with it).
+ * @param[in] data NETCONF RPC data as a data tree.
+ * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_generic(struct lyd_node *data);
+struct nc_rpc *nc_rpc_generic(const struct lyd_node *data, NC_RPC_PARAMTYPE paramtype);
 
 /**
  * @brief Create a generic NETCONF RPC from an XML string
@@ -110,10 +164,11 @@ struct nc_rpc *nc_rpc_generic(struct lyd_node *data);
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
- * @param[in] data NETCONF RPC data. Their ownership is passed to the RPC (they are freed with it).
+ * @param[in] xml_str NETCONF RPC data as an XML string.
+ * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_generic_xml(const char *xml_str);
+struct nc_rpc *nc_rpc_generic_xml(const char *xml_str, NC_RPC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<get-config\>
@@ -125,10 +180,11 @@ struct nc_rpc *nc_rpc_generic_xml(const char *xml_str);
  * needed NETCONF capabilities for the RPC.
  *
  * @param[in] source Source datastore being queried.
- * @param[in] filter Optional filter data, see nc_filter_new().
+ * @param[in] filter Optional filter data, an XML subtree or XPath expression.
+ * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_getconfig(NC_DATASTORE source, struct nc_filter *filter);
+struct nc_rpc *nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_RPC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<edit-config\>
@@ -144,10 +200,11 @@ struct nc_rpc *nc_rpc_getconfig(NC_DATASTORE source, struct nc_filter *filter);
  * @param[in] test_opt Optional test option.
  * @param[in] error_opt Optional error option.
  * @param[in] edit_content Config or URL where the config to perform is to be found.
+ * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, NC_RPC_EDIT_TESTOPT test_opt,
-                           NC_RPC_EDIT_ERROPT error_opt, const char *edit_content);
+                           NC_RPC_EDIT_ERROPT error_opt, const char *edit_content, NC_RPC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<copy-config\>
@@ -162,9 +219,11 @@ struct nc_rpc *nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, N
  * @param[in] url_trg Used instead \p target if the target is an URL.
  * @param[in] source Source datastore.
  * @param[in] url_or_config_src Used instead \p source if the source is an URL or a config.
+ * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTORE source, const char *url_or_config_src);
+struct nc_rpc *nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTORE source,
+                           const char *url_or_config_src, NC_RPC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<delete-config\>
@@ -177,9 +236,10 @@ struct nc_rpc *nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTOR
  *
  * @param[in] target Target datastore to delete.
  * @param[in] url Used instead \p target if the target is an URL.
+ * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_delete(NC_DATASTORE target, char *url);
+struct nc_rpc *nc_rpc_delete(NC_DATASTORE target, const char *url, NC_RPC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<lock\>
@@ -218,10 +278,11 @@ struct nc_rpc *nc_rpc_unlock(NC_DATASTORE target);
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
- * @param[in] filter Optional filter data, see nc_filter_new().
+ * @param[in] filter Optional filter data, an XML subtree or XPath expression.
+ * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_get(struct nc_filter *filter);
+struct nc_rpc *nc_rpc_get(const char *filter, NC_RPC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<kill-session\>
@@ -250,9 +311,11 @@ struct nc_rpc *nc_rpc_kill(uint32_t session_id);
  * @param[in] confirm_timeout Optional confirm timeout.
  * @param[in] persist Optional identification string of a new persistent confirmed commit.
  * @param[in] persist_id Optional identification string of a persistent confirmed commit to be commited.
+ * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_commit(int confirmed, uint32_t confirm_timeout, const char *persist, const char *persist_id);
+struct nc_rpc *nc_rpc_commit(int confirmed, uint32_t confirm_timeout, const char *persist, const char *persist_id,
+                             NC_RPC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<discard-changes\>
@@ -277,9 +340,10 @@ struct nc_rpc *nc_rpc_discard(void);
  * needed NETCONF capabilities for the RPC.
  *
  * @param[in] persist_id Optional identification string of a persistent confirmed commit.
+ * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_cancel(const char *persist_id);
+struct nc_rpc *nc_rpc_cancel(const char *persist_id, NC_RPC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<validate\>
@@ -292,9 +356,10 @@ struct nc_rpc *nc_rpc_cancel(const char *persist_id);
  *
  * @param[in] source Source datastore being validated.
  * @param[in] url_or_config Usedn instead \p source if the source is an URL or a config.
+ * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_validate(NC_DATASTORE source, const char *url_or_config);
+struct nc_rpc *nc_rpc_validate(NC_DATASTORE source, const char *url_or_config, NC_RPC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<get-schema\>
@@ -308,9 +373,10 @@ struct nc_rpc *nc_rpc_validate(NC_DATASTORE source, const char *url_or_config);
  * @param[in] identifier Requested model identifier.
  * @param[in] version Optional model version, either YANG version (1.0/1.1) or revision date.
  * @param[in] format Optional format of the model (default is YANG).
+ * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_getschema(const char *identifier, const char *version, const char *format);
+struct nc_rpc *nc_rpc_getschema(const char *identifier, const char *version, const char *format, NC_RPC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<create-subscription\>
@@ -322,13 +388,14 @@ struct nc_rpc *nc_rpc_getschema(const char *identifier, const char *version, con
  * needed NETCONF capabilities for the RPC.
  *
  * @param[in] stream_name Optional name of a NETCONF stream to subscribe to.
- * @param[in] filter Optional filter data, see nc_filter_new().
+ * @param[in] filter Optional filter data, an XML subtree or XPath expression.
  * @param[in] start_time Optional YANG datetime identifying the start of the subscription.
  * @param[in] stop_time Optional YANG datetime identifying the end of the subscription.
+ * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_subscribe(const char *stream_name, struct nc_filter *filter, const char *start_time,
-								const char *stop_time);
+struct nc_rpc *nc_rpc_subscribe(const char *stream_name, const char *filter, const char *start_time,
+								const char *stop_time, NC_RPC_PARAMTYPE paramtype);
 
 /**
  * @brief Free the NETCONF RPC object.

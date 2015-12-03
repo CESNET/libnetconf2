@@ -911,6 +911,7 @@ nc_connect_ssh(const char *host, unsigned short port, const char *username, stru
     if (nc_handshake(session)) {
         goto fail;
     }
+    session->status = NC_STATUS_RUNNING;
 
     /* check/fill libyang context */
     if (session->flags & NC_SESSION_SHAREDCTX) {
@@ -928,7 +929,6 @@ nc_connect_ssh(const char *host, unsigned short port, const char *username, stru
     session->port = port;
     session->username = lydict_insert(ctx, username, 0);
 
-    session->status = NC_STATUS_RUNNING;
     return session;
 
 fail:
@@ -1036,6 +1036,7 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
     if (nc_handshake(session)) {
         goto fail;
     }
+    session->status = NC_STATUS_RUNNING;
 
     /* check/fill libyang context */
     if (session->flags & NC_SESSION_SHAREDCTX) {
@@ -1059,7 +1060,6 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
         session->username = lydict_insert_zc(ctx, username);
     }
 
-    session->status = NC_STATUS_RUNNING;
     return session;
 
 fail:
@@ -1113,6 +1113,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     if (nc_handshake(new_session)) {
         goto fail;
     }
+    new_session->status = NC_STATUS_RUNNING;
 
     /* check/fill libyang context */
     if (session->flags & NC_SESSION_SHAREDCTX) {
@@ -1129,8 +1130,6 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     session->host = lydict_insert(ctx, session->host, 0);
     session->port = session->port;
     session->username = lydict_insert(ctx, session->username, 0);
-
-    new_session->status = NC_STATUS_RUNNING;
 
     pthread_mutex_unlock(new_session->ti_lock);
 

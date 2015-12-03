@@ -295,19 +295,6 @@ struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
 void nc_session_free(struct nc_session *session);
 
 /**
- * @brief Receive NETCONF RPC.
- *
- * @param[in] session NETCONF session from which the function gets data. It must be the
- *            server side session object.
- * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite
- *            waiting and 0 for immediate return if data are not available on wire.
- * @param[out] notif Resulting object of NETCONF RPC.
- * @return NC_MSG_RPC for success, NC_MSG_WOULDBLOCK if timeout reached and NC_MSG_ERROR
- *         when reading has failed.
- */
-NC_MSG_TYPE nc_recv_rpc(struct nc_session* session, int timeout, struct nc_rpc_server **rpc);
-
-/**
  * @brief Receive NETCONF RPC reply.
  *
  * @param[in] session NETCONF session from which the function gets data. It must be the
@@ -318,7 +305,8 @@ NC_MSG_TYPE nc_recv_rpc(struct nc_session* session, int timeout, struct nc_rpc_s
  * @return NC_MSG_REPLY for success, NC_MSG_WOULDBLOCK if timeout reached and NC_MSG_ERROR
  *         when reading has failed.
  */
-NC_MSG_TYPE nc_recv_reply(struct nc_session* session, int timeout, struct nc_reply **reply);
+NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout,
+                          struct nc_reply **reply);
 
 /**
  * @brief Receive NETCONF Notification.
@@ -342,6 +330,6 @@ NC_MSG_TYPE nc_recv_notif(struct nc_session* session, int timeout, struct nc_not
  * @return #NC_MSG_RPC on success, #NC_MSG_WOULDBLOCK in case of busy session
  * (try to repeat the function call) and #NC_MSG_ERROR in case of error.
  */
-NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc);
+NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_t *msgid);
 
 #endif /* NC_SESSION_H_ */

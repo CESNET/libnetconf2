@@ -573,7 +573,7 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
     int count, i;
     const char *attrs;
     struct lyd_node *content;
-    struct nc_rpc_server *rpc;
+    struct nc_server_rpc *rpc;
     const char **capabilities;
     uint32_t *sid = NULL;
     char *buf = NULL;
@@ -618,7 +618,7 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
         break;
 
     case NC_MSG_REPLY:
-        rpc = va_arg(ap, struct nc_rpc_server *);
+        rpc = va_arg(ap, struct nc_server_rpc *);
         switch (session->ti_type) {
         case NC_TI_FD:
             write(session->ti.fd.out, "<rpc-reply", 10);
@@ -743,7 +743,7 @@ write_msg_11(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
     int count;
     const char *attrs;
     struct lyd_node *content;
-    struct nc_rpc_server *rpc;
+    struct nc_server_rpc *rpc;
     char *buf = NULL;
     struct wclb_arg arg;
 
@@ -764,7 +764,7 @@ write_msg_11(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
         session->msgid++;
         break;
     case NC_MSG_REPLY:
-        rpc = va_arg(ap, struct nc_rpc_server *);
+        rpc = va_arg(ap, struct nc_server_rpc *);
         write_clb((void *)&arg, "<rpc-reply", 10);
         lyxml_dump_clb(write_clb, (void *)&arg, rpc->root, LYXML_DUMP_ATTRS);
         write_clb((void *)&arg, ">", 1);

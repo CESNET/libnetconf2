@@ -351,6 +351,7 @@ nc_connect_tls(const char *host, unsigned short port, const char *username, stru
     if (nc_handshake(session)) {
         goto fail;
     }
+    session->status = NC_STATUS_RUNNING;
 
     /* check/fill libyang context */
     if (session->flags & NC_SESSION_SHAREDCTX) {
@@ -368,7 +369,6 @@ nc_connect_tls(const char *host, unsigned short port, const char *username, stru
     session->port = port;
     session->username = lydict_insert(ctx, username, 0);
 
-    session->status = NC_STATUS_RUNNING;
     return session;
 
 fail:
@@ -419,6 +419,7 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     if (nc_handshake(session)) {
         goto fail;
     }
+    session->status = NC_STATUS_RUNNING;
 
     /* check/fill libyang context */
     if (session->flags & NC_SESSION_SHAREDCTX) {
@@ -431,7 +432,6 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
         }
     }
 
-    session->status = NC_STATUS_RUNNING;
     return session;
 
 fail:

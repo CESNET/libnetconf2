@@ -113,19 +113,11 @@ typedef enum {
 #define NC_VERSION_10_ENDTAG_LEN 6
 
 /**
- * @brief Container to serialize RPC reply objects
+ * @brief Container to serialize PRC messages
  */
-struct nc_reply_cont {
-    struct nc_reply *msg;
-    struct nc_reply_cont *next;
-};
-
-/**
- * @brief Container to serialize Notification objects
- */
-struct nc_notif_cont {
-    struct nc_notif *msg;
-    struct nc_notif_cont *next;
+struct nc_msg_cont {
+    struct lyxml_elem *msg;
+    struct nc_msg_cont *next;
 };
 
 /**
@@ -174,8 +166,8 @@ struct nc_session {
     /* client side only data */
     uint64_t msgid;
     const char **cpblts;           /**< list of server's capabilities on client side */
-    struct nc_reply_cont *replies; /**< queue for RPC replies received instead of notifications */
-    struct nc_notif_cont *notifs;  /**< queue for notifications received instead of RPC reply */
+    struct nc_msg_cont *replies;   /**< queue for RPC replies received instead of notifications */
+    struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
 };
 
 /**
