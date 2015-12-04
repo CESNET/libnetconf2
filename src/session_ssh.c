@@ -537,104 +537,135 @@ fail:
     return EXIT_FAILURE;
 }
 
-static int
-keypair_path_op(const char *pub_path, const char *priv_path, int to_add)
+API int
+nc_add_ssh_keypair(const char *pub_key, const char *priv_key)
 {
     int i;
     FILE *key;
     char line[128];
 
-    if (!pub_path || !priv_path) {
+    if (!pub_key || !priv_key) {
         return EXIT_FAILURE;
     }
 
     for (i = 0; i < ssh_opts.key_count; ++i) {
-        if (!strcmp(ssh_opts.keys[i].pubkey_path, pub_path) || !strcmp(ssh_opts.keys[i].privkey_path, priv_path)) {
-            if (strcmp(ssh_opts.keys[i].pubkey_path, pub_path)) {
+        if (!strcmp(ssh_opts.keys[i].pubkey_path, pub_key) || !strcmp(ssh_opts.keys[i].privkey_path, priv_key)) {
+            if (strcmp(ssh_opts.keys[i].pubkey_path, pub_key)) {
                 WRN("Private key \"%s\" found with another public key \"%s\".",
-                    priv_path, ssh_opts.keys[i].pubkey_path);
+                    priv_key, ssh_opts.keys[i].pubkey_path);
                 continue;
-            } else if (strcmp(ssh_opts.keys[i].privkey_path, priv_path)) {
+            } else if (strcmp(ssh_opts.keys[i].privkey_path, priv_key)) {
                 WRN("Public key \"%s\" found with another private key \"%s\".",
-                    pub_path, ssh_opts.keys[i].privkey_path);
+                    pub_key, ssh_opts.keys[i].privkey_path);
                 continue;
             }
 
-            if (to_add) {
-                ERR("SSH key pair already set.");
-                return EXIT_FAILURE;
-            } else {
-                break;
-            }
+            ERR("SSH key pair already set.");
+            return EXIT_FAILURE;
         }
-    }
-
-    if ((i == ssh_opts.key_count) && !to_add) {
-        ERR("SSH key pair to delete not found.");
-        return EXIT_FAILURE;
     }
 
     /* add the keys safely */
-    if (to_add) {
-        ++ssh_opts.key_count;
-        ssh_opts.keys = realloc(ssh_opts.keys, ssh_opts.key_count * sizeof *ssh_opts.keys);
-        ssh_opts.keys[ssh_opts.key_count - 1].pubkey_path = strdup(pub_path);
-        ssh_opts.keys[ssh_opts.key_count - 1].privkey_path = strdup(priv_path);
-        ssh_opts.keys[ssh_opts.key_count - 1].privkey_crypt = 0;
+    ++ssh_opts.key_count;
+    ssh_opts.keys = realloc(ssh_opts.keys, ssh_opts.key_count * sizeof *ssh_opts.keys);
+    ssh_opts.keys[ssh_opts.key_count - 1].pubkey_path = strdup(pub_key);
+    ssh_opts.keys[ssh_opts.key_count - 1].privkey_path = strdup(priv_key);
+    ssh_opts.keys[ssh_opts.key_count - 1].privkey_crypt = 0;
 
-        /* check encryption */
-        if ((key = fopen(priv_path, "r"))) {
-            /* 1st line - key type */
-            if (!fgets(line, sizeof line, key)) {
-                fclose(key);
-                ERR("fgets() on %s failed.", priv_path);
-                return EXIT_FAILURE;
-            }
-            /* 2nd line - encryption information or key */
-            if (!fgets(line, sizeof line, key)) {
-                fclose(key);
-                ERR("fgets() on %s failed.", priv_path);
-                return EXIT_FAILURE;
-            }
+    /* check encryption */
+    if ((key = fopen(priv_key, "r"))) {
+        /* 1st line - key type */
+        if (!fgets(line, sizeof line, key)) {
             fclose(key);
-            if (strcasestr(line, "encrypted")) {
-                ssh_opts.keys[ssh_opts.key_count - 1].privkey_crypt = 1;
-            }
+            ERR("fgets() on %s failed.", priv_key);
+            return EXIT_FAILURE;
         }
-
-    /* remove the keys safely */
-    } else {
-        free(ssh_opts.keys[i].pubkey_path);
-        free(ssh_opts.keys[i].privkey_path);
-
-        if (i + 1 < ssh_opts.key_count) {
-            memmove(ssh_opts.keys + i, ssh_opts.keys + i + 1, ((ssh_opts.key_count - i) - 1) * sizeof *ssh_opts.keys);
+        /* 2nd line - encryption information or key */
+        if (!fgets(line, sizeof line, key)) {
+            fclose(key);
+            ERR("fgets() on %s failed.", priv_key);
+            return EXIT_FAILURE;
         }
-        --ssh_opts.key_count;
-        ssh_opts.keys = realloc(ssh_opts.keys, ssh_opts.key_count * sizeof *ssh_opts.keys);
+        fclose(key);
+        if (strcasestr(line, "encrypted")) {
+            ssh_opts.keys[ssh_opts.key_count - 1].privkey_crypt = 1;
+        }
     }
 
     return EXIT_SUCCESS;
 }
 
 API int
-nc_set_keypair_path(const char *pub_key, const char *priv_key)
+nc_del_ssh_keypair(int idx)
 {
-    if (keypair_path_op(pub_key, priv_key, 1)) {
+    if (idx >= ssh_opts.key_count) {
         return EXIT_FAILURE;
     }
+
+    free(ssh_opts.keys[idx].pubkey_path);
+    free(ssh_opts.keys[idx].privkey_path);
+
+    --ssh_opts.key_count;
+
+    memmove(ssh_opts.keys + idx, ssh_opts.keys + idx + 1, (ssh_opts.key_count - idx) * sizeof *ssh_opts.keys);
+    ssh_opts.keys = realloc(ssh_opts.keys, ssh_opts.key_count * sizeof *ssh_opts.keys);
 
     return EXIT_SUCCESS;
 }
 
 API int
-nc_del_keypair_path(const char *pub_key, const char *priv_key)
+nc_get_ssh_keypair_count(void)
 {
-    if (keypair_path_op(pub_key, priv_key, 0)) {
+    return ssh_opts.key_count;
+}
+
+API int
+nc_get_ssh_keypair(int idx, const char **pub_key, const char **priv_key)
+{
+    if (idx >= ssh_opts.key_count) {
         return EXIT_FAILURE;
     }
 
+    if (pub_key) {
+        *pub_key = ssh_opts.keys[idx].pubkey_path;
+    }
+    if (priv_key) {
+        *priv_key = ssh_opts.keys[idx].privkey_path;
+    }
+
     return EXIT_SUCCESS;
+}
+
+API void
+nc_set_ssh_auth_pref(NC_SSH_AUTH_TYPE auth_type, short int pref)
+{
+    if (pref < 0) {
+        pref = -1;
+    }
+
+    if (auth_type == NC_SSH_AUTH_INTERACTIVE) {
+        ssh_opts.auth_pref[0].value = pref;
+    } else if (auth_type == NC_SSH_AUTH_PASSWORD) {
+        ssh_opts.auth_pref[1].value = pref;
+    } else if (auth_type == NC_SSH_AUTH_PUBLICKEY) {
+        ssh_opts.auth_pref[2].value = pref;
+    }
+}
+
+API short int
+nc_get_ssh_auth_pref(NC_SSH_AUTH_TYPE auth_type)
+{
+    short int pref = 0;
+
+    if (auth_type == NC_SSH_AUTH_INTERACTIVE) {
+        pref = ssh_opts.auth_pref[0].value;
+    } else if (auth_type == NC_SSH_AUTH_PASSWORD) {
+        pref = ssh_opts.auth_pref[1].value;
+    } else if (auth_type == NC_SSH_AUTH_PUBLICKEY) {
+        pref = ssh_opts.auth_pref[2].value;
+    }
+
+    return pref;
 }
 
 /* Establish a secure SSH connection, authenticate, and create a channel with the 'netconf' subsystem.

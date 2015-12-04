@@ -189,7 +189,7 @@ struct nc_session *nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx
 struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx);
 
 /**
- * @brief Set (add) an SSH public and private key pair to be used for client authentization.
+ * @brief Add an SSH public and private key pair to be used for client authentication.
  *
  * Private key can be encrypted, the passphrase will be asked for before using it.
  *
@@ -200,19 +200,57 @@ struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_
  *
  * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
  */
-int nc_set_keypair_path(const char *pub_key, const char *priv_key);
+int nc_add_ssh_keypair(const char *pub_key, const char *priv_key);
 
 /**
- * @brief Remove an SSH public and private key pair that was used for client authentization.
+ * @brief Remove an SSH public and private key pair that was used for client authentication.
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  *
- * @param[in] pub_key Path to the public key.
- * @param[in] priv_key Path to the private key.
+ * @param[in] idx Index of the keypair starting with 0.
  *
  * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
  */
-int nc_del_keypair_path(const char *pub_key, const char *priv_key);
+int nc_del_ssh_keypair(int idx);
+
+/**
+ * @brief Get the number of public an private key pairs set to be used for client authentication.
+ *
+ * @return Set keypair count.
+ */
+int nc_get_ssh_keypair_count(void);
+
+/**
+ * @brief Get a specific keypair set to be used for client authentication.
+ *
+ * @param[in] idx Index of the specific keypair.
+ * @param[out] pub_key Path to the public key.
+ * @param[out] priv_key Path to the private key.
+ *
+ * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
+ */
+int nc_get_ssh_keypair(int idx, const char **pub_key, const char **priv_key);
+
+/**
+ * @brief Set SSH authentication method preference.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
+ *
+ * @param[in] auth_type Authentication method to modify the prefrence of.
+ * @param[in] pref Preference of \p auth_type. Negative values disable the method.
+ */
+void nc_set_ssh_auth_pref(NC_SSH_AUTH_TYPE auth_type, short int pref);
+
+/**
+ * @brief Get SSH authentication method preference.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
+ *
+ * @param[in] auth_type Authentication method to retrieve the prefrence of.
+ *
+ * @return Preference of the \p auth_type.
+ */
+short int nc_get_ssh_auth_pref(NC_SSH_AUTH_TYPE auth_type);
 
 #endif /* ENABLE_SSH */
 
