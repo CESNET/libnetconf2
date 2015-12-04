@@ -26,19 +26,18 @@
 #include <stdint.h>
 #include <pthread.h>
 
+#include <libyang/libyang.h>
+#include "libnetconf.h"
+#include "session.h"
+
 #ifdef ENABLE_SSH
+
 #   include <libssh/libssh.h>
 #   include <libssh/callbacks.h>
 
 /* seconds */
 #   define SSH_TIMEOUT 10
 #   define SSH_AUTH_COUNT 3
-
-typedef enum {
-    NC_SSH_AUTH_PUBLIC_KEYS = 0x01,
-    NC_SSH_AUTH_PASSWORD = 0x02,
-    NC_SSH_AUTH_INTERACTIVE = 0x04
-} NC_SSH_AUTH_TYPE;
 
 struct nc_ssh_auth_opts {
     /* SSH authentication method preferences */
@@ -56,23 +55,19 @@ struct nc_ssh_auth_opts {
     int key_count;
 };
 
-#endif
+#endif /* ENABLE_SSH */
 
 #ifdef ENABLE_TLS
-#   include <openssl/bio.h>
-#   include <openssl/ssl.h>
+
+#include <openssl/bio.h>
+#include <openssl/ssl.h>
 
 struct nc_tls_auth_opts {
     SSL_CTX *tls_ctx;
     X509_STORE *tls_store;
 };
 
-#endif
-
-#include <libyang/libyang.h>
-
-#include "libnetconf.h"
-#include "session.h"
+#endif /* ENABLE_TLS */
 
 /**
  * Sleep time in microseconds to wait between unsuccessful reading due to EAGAIN or EWOULDBLOCK

@@ -26,14 +26,24 @@
 #include <stdint.h>
 
 #ifdef ENABLE_SSH
+
 #   include <libssh/libssh.h>
+
+typedef enum {
+    NC_SSH_AUTH_PUBLICKEY = 0x01,
+    NC_SSH_AUTH_PASSWORD = 0x02,
+    NC_SSH_AUTH_INTERACTIVE = 0x04
+} NC_SSH_AUTH_TYPE;
+
 #endif /* ENABLE_SSH */
 
 #ifdef ENABLE_TLS
+
 #   include <openssl/bio.h>
 #   include <openssl/ssl.h>
 #   include <openssl/err.h>
 #   include <openssl/pem.h>
+
 #endif /* ENABLE_TLS */
 
 #include "messages.h"
