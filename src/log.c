@@ -31,6 +31,8 @@
  */
 volatile uint8_t verbose_level = 0;
 
+void (*print_clb)(NC_VERB_LEVEL level, const char *msg);
+
 API void
 nc_verbosity(NC_VERB_LEVEL level)
 {
@@ -56,8 +58,11 @@ prv_vprintf(NC_VERB_LEVEL level, const char *format, va_list args)
     vsnprintf(prv_msg, PRV_MSG_SIZE - 1, format, args);
     prv_msg[PRV_MSG_SIZE - 1] = '\0';
 
-    /* TODO: allow to set printer via callbacks */
-    fprintf(stderr, "%s: %s\n", verb[level].label, prv_msg);
+    if (print_clb) {
+        print_clb(level, prv_msg);
+    } else {
+        fprintf(stderr, "%s: %s\n", verb[level].label, prv_msg);
+    }
 
 #undef PRV_MSG_SIZE
 }
@@ -70,6 +75,12 @@ prv_printf(NC_VERB_LEVEL level, const char *format, ...)
     va_start(ap, format);
     prv_vprintf(level, format, ap);
     va_end(ap);
+}
+
+API void
+nc_set_print_clb(void (*clb)(NC_VERB_LEVEL, const char *))
+{
+    print_clb = clb;
 }
 
 API void

@@ -49,7 +49,7 @@
 #include "session_p.h"
 
 static struct nc_ssh_auth_opts ssh_opts = {
-    .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLIC_KEYS, 1}}
+    .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 1}}
 };
 
 API void
@@ -674,7 +674,7 @@ connect_ssh_session_netconf(struct nc_session *session)
         auth |= NC_SSH_AUTH_PASSWORD;
     }
     if (userauthlist & SSH_AUTH_METHOD_PUBLICKEY) {
-        auth |= NC_SSH_AUTH_PUBLIC_KEYS;
+        auth |= NC_SSH_AUTH_PUBLICKEY;
     }
     if (userauthlist & SSH_AUTH_METHOD_INTERACTIVE) {
         auth |= NC_SSH_AUTH_INTERACTIVE;
@@ -732,7 +732,7 @@ connect_ssh_session_netconf(struct nc_session *session)
             }
 
             break;
-        case NC_SSH_AUTH_PUBLIC_KEYS:
+        case NC_SSH_AUTH_PUBLICKEY:
             VRB("Publickey athentication");
 
             /* if publickeys path not provided, we cannot continue */
