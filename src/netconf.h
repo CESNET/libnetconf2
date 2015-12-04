@@ -33,9 +33,14 @@ extern "C" {
 #define NC_NS_NOTIF "urn:ietf:params:xml:ns:netconf:notification:1.0"
 
 /** @brief Default NETCONF over SSH port */
-#define NC_PORT_SSH 830;
+#define NC_PORT_SSH 830
+/** @brief Default NETCONF over SSH Call Home port */
+#define NC_PORT_CH_SSH 6666
+
 /** @brief Default NETCONF over TLS port */
-#define NC_PORT_TLS 6513;
+#define NC_PORT_TLS 6513
+/** @brief Default NETCONF over TLS Call Home port */
+#define NC_PORT_CH_TLS 6667
 
 /**
  * @brief Enumeration of reasons of the NETCONF session termination as defined in RFC 6470.

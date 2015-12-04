@@ -52,11 +52,26 @@ typedef enum {
  * @brief Enumeration of possible session statuses
  */
 typedef enum {
-    NC_STATUS_STARTING, /**< session is not yet fully initiated */
-    NC_STATUS_CLOSING,  /**< session is being closed */
-    NC_STATUS_INVALID,  /**< session is corrupted and it is supposed to be closed (nc_session_free()) */
-    NC_STATUS_RUNNING   /**< up and running */
+    NC_STATUS_STARTING = 0, /**< session is not yet fully initiated */
+    NC_STATUS_CLOSING,      /**< session is being closed */
+    NC_STATUS_INVALID,      /**< session is corrupted and it is supposed to be closed (nc_session_free()) */
+    NC_STATUS_RUNNING       /**< up and running */
 } NC_STATUS;
+
+/**
+ * @brief Enumeration of transport implementations (ways how libnetconf implements NETCONF transport protocol)
+ */
+typedef enum {
+    NC_TI_NONE = 0,   /**< none - session is not connected yet */
+    NC_TI_FD,         /**< file descriptors - use standard input/output, transport protocol is implemented
+                           outside the current application */
+#ifdef ENABLE_SSH
+    NC_TI_LIBSSH,     /**< libssh - use libssh library, only for NETCONF over SSH transport */
+#endif
+#ifdef ENABLE_TLS
+    NC_TI_OPENSSL     /**< OpenSSL - use OpenSSL library, only for NETCONF over TLS transport */
+#endif
+} NC_TRANSPORT_IMPL;
 
 /**
  * @brief NETCONF session object
@@ -77,6 +92,69 @@ struct nc_session;
  * @return 0 on success, 1 on (memory allocation) failure.
  */
 int nc_schema_searchpath(const char *path);
+
+/**
+ * @brief Get session status.
+ *
+ * @param[in] session Session to get the information from.
+ *
+ * @return Session status.
+ */
+NC_STATUS nc_get_session_status(const struct nc_session *session);
+
+/**
+ * @brief Get session ID.
+ *
+ * @param[in] session Session to get the information from.
+ *
+ * @return Session ID.
+ */
+uint32_t nc_get_session_id(const struct nc_session *session);
+
+/**
+ * @brief Get session transport used.
+ *
+ * @param[in] session Session to get the information from.
+ *
+ * @return Session transport.
+ */
+NC_TRANSPORT_IMPL nc_get_session_ti(const struct nc_session *session);
+
+/**
+ * @brief Get session username.
+ *
+ * @param[in] session Session to get the information from.
+ *
+ * @return Session username.
+ */
+const char *nc_get_session_username(const struct nc_session *session);
+
+/**
+ * @brief Get session host.
+ *
+ * @param[in] session Session to get the information from.
+ *
+ * @return Session host.
+ */
+const char *nc_get_session_host(const struct nc_session *session);
+
+/**
+ * @brief Get session port.
+ *
+ * @param[in] session Session to get the information from.
+ *
+ * @return Session port.
+ */
+uint16_t nc_get_session_port(const struct nc_session *session);
+
+/**
+ * @brief Get session capabilities.
+ *
+ * @param[in] session Session to get the information from.
+ *
+ * @return Session capabilities.
+ */
+const char **nc_get_session_cpblts(const struct nc_session *session);
 
 /**
  * @brief Connect to the NETCONF server via proviaded input/output file descriptors.

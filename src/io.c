@@ -51,7 +51,10 @@ nc_read(struct nc_session *session, char *buf, size_t count)
         return 0;
     }
 
-    switch(session->ti_type) {
+    switch (session->ti_type) {
+    case NC_TI_NONE:
+        return 0;
+
     case NC_TI_FD:
         /* read via standard file descriptor */
         while(count) {
@@ -253,10 +256,13 @@ nc_read_msg(struct nc_session* session, int timeout, struct lyxml_elem **data)
 #endif
     }
 
-    while(1) {
+    while (1) {
         /* poll loop */
 
-        switch(session->ti_type) {
+        switch (session->ti_type) {
+        case NC_TI_NONE:
+            return NC_MSG_ERROR;
+
 #ifdef ENABLE_SSH
         case NC_TI_LIBSSH:
             /* we are getting data from libssh's channel */
@@ -461,6 +467,9 @@ write_(struct nc_session *session, const void *buf, size_t count)
     char chunksize[20];
 
     switch (session->ti_type) {
+    case NC_TI_NONE:
+        return -1;
+
     case NC_TI_FD:
         if (session->version == NC_VERSION_11) {
             c = dprintf(session->ti.fd.out, "\n#%zu\n", count);
@@ -493,6 +502,9 @@ static int
 write_endtag(struct nc_session *session)
 {
     switch(session->ti_type) {
+    case NC_TI_NONE:
+        return 0;
+
     case NC_TI_FD:
         if (session->version == NC_VERSION_11) {
             write(session->ti.fd.out, "\n##\n", 4);
@@ -587,6 +599,9 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
         content = va_arg(ap, struct lyd_node *);
         attrs = va_arg(ap, const char *);
         switch (session->ti_type) {
+        case NC_TI_NONE:
+            return -1;
+
         case NC_TI_FD:
             dprintf(session->ti.fd.out, "<rpc xmlns=\"%s\" message-id=\"%"PRIu64"\"%s>",
                     NC_NS_BASE, session->msgid + 1, attrs ? attrs : "");
@@ -620,6 +635,9 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
     case NC_MSG_REPLY:
         rpc = va_arg(ap, struct nc_server_rpc *);
         switch (session->ti_type) {
+        case NC_TI_NONE:
+            return -1;
+
         case NC_TI_FD:
             write(session->ti.fd.out, "<rpc-reply", 10);
             lyxml_dump_fd(session->ti.fd.out, rpc->root, LYXML_DUMP_ATTRS);
@@ -653,6 +671,9 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
 
     case NC_MSG_NOTIF:
         switch (session->ti_type) {
+        case NC_TI_NONE:
+            return -1;
+
         case NC_TI_FD:
             write(session->ti.fd.out, "<notification xmlns=\""NC_NS_NOTIF"\"/>", 21 + 47 + 3);
 
@@ -685,6 +706,9 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
         capabilities = va_arg(ap, const char **);
         sid = va_arg(ap, uint32_t*);
         switch (session->ti_type) {
+        case NC_TI_NONE:
+            return -1;
+
         case NC_TI_FD:
             dprintf(session->ti.fd.out, "<hello xmlns=\"%s\"><capabilities>", NC_NS_BASE);
             for (i = 0; capabilities[i]; i++) {

@@ -75,20 +75,6 @@ struct nc_tls_auth_opts {
 #define NC_READ_SLEEP 100
 
 /**
- * @brief Enumeration of transport implementations (ways how libnetconf implements NETCONF transport protocol)
- */
-typedef enum {
-    NC_TI_FD,         /**< file descriptors - use standard input/output, transport protocol is implemented
-                           outside the current application (only for NETCONF over SSH transport) */
-#ifdef ENABLE_SSH
-    NC_TI_LIBSSH,     /**< libssh - use libssh library, only for NETCONF over SSH transport */
-#endif
-#ifdef ENABLE_TLS
-    NC_TI_OPENSSL     /**< OpenSSL - use OpenSSL library, only for NETCONF over TLS transport */
-#endif
-} NC_TRANSPORT_IMPL;
-
-/**
  * @brief type of the session
  */
 typedef enum {
@@ -151,7 +137,7 @@ struct nc_session {
     } ti;                          /**< transport implementation data */
     const char *username;
     const char *host;
-    unsigned short port;
+    uint16_t port;
 
     /* other */
     struct ly_ctx *ctx;            /**< libyang context of the session */

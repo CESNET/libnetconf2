@@ -61,6 +61,48 @@ nc_schema_searchpath(const char *path)
     return schema_searchpath ? 0 : 1;
 }
 
+API NC_STATUS
+nc_get_session_status(const struct nc_session *session)
+{
+    return session->status;
+}
+
+API uint32_t
+nc_get_session_id(const struct nc_session *session)
+{
+    return session->id;
+}
+
+API NC_TRANSPORT_IMPL
+nc_get_session_ti(const struct nc_session *session)
+{
+    return session->ti_type;
+}
+
+API const char *
+nc_get_session_username(const struct nc_session *session)
+{
+    return session->username;
+}
+
+API const char *
+nc_get_session_host(const struct nc_session *session)
+{
+    return session->host;
+}
+
+API uint16_t
+nc_get_session_port(const struct nc_session *session)
+{
+    return session->port;
+}
+
+API const char **
+nc_get_session_cpblts(const struct nc_session *session)
+{
+    return session->cpblts;
+}
+
 /*
  * @return 0 - success
  *        -1 - timeout
@@ -547,6 +589,9 @@ nc_session_free(struct nc_session *session)
 
     /* transport implementation cleanup */
     switch (session->ti_type) {
+    case NC_TI_NONE:
+        break;
+
     case NC_TI_FD:
         /* nothing needed - file descriptors were provided by caller,
          * so it is up to the caller to close them correctly
