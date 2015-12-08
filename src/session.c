@@ -164,8 +164,9 @@ nc_handshake(struct nc_session *session)
     return 0;
 }
 
+/* SCHEMAS_DIR not used */
 static int
-ctx_load_model(struct nc_session *session, const char *cpblt)
+ctx_check_and_load_model(struct nc_session *session, const char *cpblt)
 {
     const struct lys_module *module;
     char *ptr, *ptr2;
@@ -243,13 +244,22 @@ ctx_load_model(struct nc_session *session, const char *cpblt)
     return 0;
 }
 
+/* SCHEMAS_DIR used */
 static int
-ctx_load_ietf_netconf(struct ly_ctx *ctx, const char **cpblts)
+ctx_check_and_load_ietf_netconf(struct ly_ctx *ctx, const char **cpblts, int from_file)
 {
     int i;
     const struct lys_module *ietfnc;
 
-    if (!(ietfnc = ly_ctx_load_module(ctx, "ietf-netconf", NULL))) {
+    ietfnc = ly_ctx_get_module(ctx, "ietf-netconf", NULL);
+    if (!ietfnc) {
+        if (from_file) {
+            ietfnc = lys_parse_path(ctx, SCHEMAS_DIR"/ietf-netconf.yin", LYS_IN_YIN);
+        } else {
+            ietfnc = ly_ctx_load_module(ctx, "ietf-netconf", NULL);
+        }
+    }
+    if (!ietfnc) {
         ERR("Loading base NETCONF schema failed.");
         return 1;
     }
@@ -323,11 +333,10 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
     return model_data;
 }
 
-/* session with an empty context is assumed */
 int
-nc_ctx_fill(struct nc_session *session)
+nc_ctx_check_and_fill(struct nc_session *session)
 {
-    int i;
+    int i, get_schema_support = 0;
     ly_module_clb old_clb = NULL;
     void *old_data = NULL;
 
@@ -336,21 +345,27 @@ nc_ctx_fill(struct nc_session *session)
     /* check if get-schema is supported */
     for (i = 0; session->cpblts[i]; ++i) {
         if (!strncmp(session->cpblts[i], "urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring", 51)) {
-            /* it is supported, load local ietf-netconf-monitoring so we can create <get-schema> RPCs */
-            if (ly_ctx_load_module(session->ctx, "ietf-netconf-monitoring", NULL)) {
-                /* set module retrieval using <get-schema> */
-                old_clb = ly_ctx_get_module_clb(session->ctx, &old_data);
-                ly_ctx_set_module_clb(session->ctx, &libyang_module_clb, session);
-            } else {
-                WRN("Loading NETCONF monitoring schema failed, cannot use <get-schema>.");
-            }
+            get_schema_support = 1;
             break;
         }
     }
 
+    /* get-schema is supported, load local ietf-netconf-monitoring so we can create <get-schema> RPCs */
+    if (get_schema_support && !ly_ctx_get_module(session->ctx, "ietf-netconf-monitoring", NULL)) {
+        if (lys_parse_path(session->ctx, SCHEMAS_DIR"/ietf-netconf-monitoring.yin", LYS_IN_YIN)) {
+            /* set module retrieval using <get-schema> */
+            old_clb = ly_ctx_get_module_clb(session->ctx, &old_data);
+            ly_ctx_set_module_clb(session->ctx, &libyang_module_clb, session);
+        } else {
+            WRN("Loading NETCONF monitoring schema failed, cannot use <get-schema>.");
+        }
+    }
+
     /* load base model disregarding whether it's in capabilities (but NETCONF capabilities are used to enable features) */
-    if (ctx_load_ietf_netconf(session->ctx, session->cpblts)) {
-        ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
+    if (ctx_check_and_load_ietf_netconf(session->ctx, session->cpblts, !get_schema_support)) {
+        if (old_clb) {
+            ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
+        }
         return 1;
     }
 
@@ -361,23 +376,12 @@ nc_ctx_fill(struct nc_session *session)
             continue;
         }
 
-        ctx_load_model(session, session->cpblts[i]);
+        ctx_check_and_load_model(session, session->cpblts[i]);
     }
 
-    ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
-    return 0;
-}
-
-int
-nc_ctx_check(struct nc_session *session)
-{
-    /* check presence of the required base schema */
-    if (!ly_ctx_get_module(session->ctx, "ietf-netconf", NULL)) {
-        if (ctx_load_ietf_netconf(session->ctx, session->cpblts)) {
-            return 1;
-        }
+    if (old_clb) {
+        ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
     }
-
     return 0;
 }
 
@@ -419,15 +423,8 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     }
     session->status = NC_STATUS_RUNNING;
 
-    /* check/fill libyang context */
-    if (session->flags & NC_SESSION_SHAREDCTX) {
-        if (nc_ctx_check(session)) {
-            goto fail;
-        }
-    } else {
-        if (nc_ctx_fill(session)) {
-            goto fail;
-        }
+    if (nc_ctx_check_and_fill(session)) {
+        goto fail;
     }
 
     return session;

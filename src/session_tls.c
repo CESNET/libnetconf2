@@ -353,15 +353,8 @@ nc_connect_tls(const char *host, unsigned short port, const char *username, stru
     }
     session->status = NC_STATUS_RUNNING;
 
-    /* check/fill libyang context */
-    if (session->flags & NC_SESSION_SHAREDCTX) {
-        if (nc_ctx_check(session)) {
-            goto fail;
-        }
-    } else {
-        if (nc_ctx_fill(session)) {
-            goto fail;
-        }
+    if (nc_ctx_check_and_fill(session)) {
+        goto fail;
     }
 
     /* store information into session and the dictionary */
@@ -421,15 +414,8 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     }
     session->status = NC_STATUS_RUNNING;
 
-    /* check/fill libyang context */
-    if (session->flags & NC_SESSION_SHAREDCTX) {
-        if (nc_ctx_check(session)) {
-            goto fail;
-        }
-    } else {
-        if (nc_ctx_fill(session)) {
-            goto fail;
-        }
+    if (nc_ctx_check_and_fill(session)) {
+        goto fail;
     }
 
     return session;

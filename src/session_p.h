@@ -159,17 +159,7 @@ struct nc_session {
  * @param[in] session Session to create the context for.
  * @return 0 on success, non-zero on failure.
  */
-int nc_ctx_fill(struct nc_session *session);
-
-/**
- * @brief Check whether the libyang context in \p session is suitable for NETCONF use
- *        meaning whether the ietf-netconf model is loaded.
- *
- * @param[in] session Session with the capabilities to be supported if loading ietf-netconf
- *                    explicitly.
- * @return 0 on success, non-zero on failure.
- */
-int nc_ctx_check(struct nc_session *session);
+int nc_ctx_check_and_fill(struct nc_session *session);
 
 /**
  * @brief Create and connect a socket.

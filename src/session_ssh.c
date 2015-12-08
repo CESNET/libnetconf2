@@ -944,15 +944,8 @@ nc_connect_ssh(const char *host, uint16_t port, const char *username, struct ly_
     }
     session->status = NC_STATUS_RUNNING;
 
-    /* check/fill libyang context */
-    if (session->flags & NC_SESSION_SHAREDCTX) {
-        if (nc_ctx_check(session)) {
-            goto fail;
-        }
-    } else {
-        if (nc_ctx_fill(session)) {
-            goto fail;
-        }
+    if (nc_ctx_check_and_fill(session)) {
+        goto fail;
     }
 
     /* store information into the dictionary */
@@ -1069,15 +1062,8 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
     }
     session->status = NC_STATUS_RUNNING;
 
-    /* check/fill libyang context */
-    if (session->flags & NC_SESSION_SHAREDCTX) {
-        if (nc_ctx_check(session)) {
-            goto fail;
-        }
-    } else {
-        if (nc_ctx_fill(session)) {
-            goto fail;
-        }
+    if (nc_ctx_check_and_fill(session)) {
+        goto fail;
     }
 
     /* store information into the dictionary */
@@ -1146,15 +1132,8 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     }
     new_session->status = NC_STATUS_RUNNING;
 
-    /* check/fill libyang context */
-    if (session->flags & NC_SESSION_SHAREDCTX) {
-        if (nc_ctx_check(session)) {
-            goto fail;
-        }
-    } else {
-        if (nc_ctx_fill(session)) {
-            goto fail;
-        }
+    if (nc_ctx_check_and_fill(session)) {
+        goto fail;
     }
 
     /* store information into session and the dictionary */
