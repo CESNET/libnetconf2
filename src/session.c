@@ -1198,7 +1198,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
             schema = ((struct nc_rpc_generic *)rpc)->data->schema;
             break;
         case NC_RPC_GENERIC_XML:
-            data = lyd_parse(ctx, ((struct nc_rpc_generic_xml *)rpc)->xml_str, LYD_XML, 0);
+            data = lyd_parse_data(ctx, ((struct nc_rpc_generic_xml *)rpc)->xml_str, LYD_XML, 0);
             if (!data) {
                 ERR("Failed to parse a generic RPC XML.");
                 return NULL;
@@ -1402,7 +1402,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uin
     case NC_RPC_GENERIC_XML:
         rpc_gen_xml = (struct nc_rpc_generic_xml *)rpc;
 
-        data = lyd_parse(session->ctx, rpc_gen_xml->xml_str, LYD_XML, LYD_OPT_STRICT);
+        data = lyd_parse_data(session->ctx, rpc_gen_xml->xml_str, LYD_XML, LYD_OPT_STRICT);
         break;
 
     case NC_RPC_GETCONFIG:
