@@ -463,6 +463,8 @@ void nc_session_free(struct nc_session *session);
  *
  * @param[in] session NETCONF session from which the function gets data. It must be the
  *            client side session object.
+ * @param[in] rpc Original RPC this should be the reply to.
+ * @param[in] msgid Expected message ID of the reply.
  * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite
  *            waiting and 0 for immediate return if data are not available on wire.
  * @param[out] reply Resulting object of NETCONF RPC reply.
@@ -490,9 +492,12 @@ NC_MSG_TYPE nc_recv_notif(struct nc_session* session, int32_t timeout, struct nc
  *
  * @param[in] session NETCONF session where the RPC will be written.
  * @param[in] rpc NETCOFN RPC object to send via specified session. Object can be created by
-              nc_rpc_lock(), nc_rpc_unlock() and nc_rpc_generic() functions.
+ *            nc_rpc_lock(), nc_rpc_unlock() and nc_rpc_generic() functions.
+ * @param[in] timeout Timeout for writing in milliseconds. Use negative value for infinite
+ *            waiting and 0 for return if data cannot be sent immediatelly.
+ * @param[out] msgid If RPC was successfully sent, this is it's message ID.
  * @return #NC_MSG_RPC on success, #NC_MSG_WOULDBLOCK in case of busy session
- * (try to repeat the function call) and #NC_MSG_ERROR in case of error.
+ *         and #NC_MSG_ERROR on error.
  */
 NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uint64_t *msgid);
 
