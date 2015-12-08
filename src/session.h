@@ -230,8 +230,8 @@ struct nc_session *nc_connect_ssh(const char *host, uint16_t port, const char* u
  *
  * SSH session can have any options set, they will not be modified. If no options were set,
  * host 'localhost', port 22, and the username detected from the EUID is used. If socket is
- * set and connected only username must be set/is detected. Or the \p ssh_session can already
- * be authenticated in which case it is used directly.
+ * set and connected only the host and the username must be set/is detected. Or the \p ssh_session
+ * can already be authenticated in which case it is used directly.
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  *

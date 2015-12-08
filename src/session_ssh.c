@@ -42,6 +42,7 @@
 #   include <validator/validator-compat.h>
 #endif
 
+#include <libssh/libssh.h>
 #include <libyang/libyang.h>
 
 #include "libnetconf.h"
@@ -989,22 +990,18 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
     session->ti_type = NC_TI_LIBSSH;
     session->ti.libssh.session = ssh_session;
 
-    if (ssh_get_fd(ssh_session) == -1) {
+    /* was port set? */
+    ssh_options_get_port(ssh_session, (unsigned int *)&port);
+
+    if (ssh_options_get(ssh_session, SSH_OPTIONS_HOST, &host) != SSH_OK) {
         /*
-         * There is no file descriptor, we need to create it. (TCP/IP layer)
+         * There is no file descriptor (detected based on the host, there is no way to check
+         * the SSH_OPTIONS_FD directly :/), we need to create it. (TCP/IP layer)
          */
 
-        /* was host, port set? */
-        if (ssh_options_get(ssh_session, SSH_OPTIONS_HOST, &host) != SSH_OK) {
-            host = NULL;
-        }
-        ssh_options_get_port(ssh_session, (unsigned int *)&port);
-
         /* remember host */
-        if (!host) {
-            host = strdup("localhost");
-            ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
-        }
+        host = strdup("localhost");
+        ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
 
         /* create and connect socket */
         sock = nc_connect_getsocket(host, port);
@@ -1014,15 +1011,13 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
         ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_FD, &sock);
     }
 
+    /* was username set? */
+    ssh_options_get(ssh_session, SSH_OPTIONS_USER, &username);
+
     if (!ssh_is_connected(ssh_session)) {
         /*
          * We are connected, but not SSH authenticated. (Transport layer)
          */
-
-        /* was username set? */
-        if (ssh_options_get(ssh_session, SSH_OPTIONS_USER, &username) != SSH_OK) {
-            username = NULL;
-        }
 
         /* remember username */
         if (!username) {
