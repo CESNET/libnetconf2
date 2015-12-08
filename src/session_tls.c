@@ -25,8 +25,6 @@
 
 #include <assert.h>
 #include <errno.h>
-#include <pwd.h>
-#include <sys/types.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -261,9 +259,8 @@ nc_tls_client_destroy()
 }
 
 API struct nc_session *
-nc_connect_tls(const char *host, unsigned short port, const char *username, struct ly_ctx *ctx)
+nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
 {
-    struct passwd *pw;
     struct nc_session *session = NULL;
     int sock, verify;
 
@@ -280,13 +277,6 @@ nc_connect_tls(const char *host, unsigned short port, const char *username, stru
 
     if (!port) {
         port = NC_PORT_TLS;
-    }
-
-    if (!username) {
-        pw = getpwuid(getuid());
-        if (pw) {
-            username = pw->pw_name;
-        }
     }
 
     /* prepare session structure */
@@ -360,7 +350,7 @@ nc_connect_tls(const char *host, unsigned short port, const char *username, stru
     /* store information into session and the dictionary */
     session->host = lydict_insert(ctx, host, 0);
     session->port = port;
-    session->username = lydict_insert(ctx, username, 0);
+    session->username = lydict_insert(ctx, "certificate-based", 0);
 
     return session;
 

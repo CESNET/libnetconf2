@@ -377,8 +377,6 @@ void nc_tls_client_destroy(void);
  * @param[in] host Hostname or address (both Ipv4 and IPv6 are accepted) of the target server.
  *                 'localhost' is used by default if NULL is specified.
  * @param[in] port Port number of the target server. Default value 6513 is used if 0 is specified.
- * @param[in] username Name of the user to login to the server. The user running the application (detected from the
- *                 effective UID) is used if NULL is specified.
  * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
  *                (ignoring what is actually supported by the server side). If not set,
  *                YANG context is created for the session using \<get-schema\> (if supported
@@ -386,9 +384,9 @@ void nc_tls_client_destroy(void);
  *                (see nc_schema_searchpath()). In every case except not providing context
  *                to connect to a server supporting \<get-schema\> it is possible that
  *                the session context will not include all the models supported by the server.
- * @return Created NETCONF session object or NULL in case of error.
+ * @return Created NETCONF session object or NULL on error.
  */
-struct nc_session *nc_connect_tls(const char *host, unsigned short port, const char *username, struct ly_ctx *ctx);
+struct nc_session *nc_connect_tls(const char *host, uint16_t port, struct ly_ctx *ctx);
 
 /**
  * @brief Connect to the NETCONF server using the provided TLS (libssl) session.
