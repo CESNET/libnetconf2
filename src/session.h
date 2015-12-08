@@ -100,7 +100,7 @@ int nc_schema_searchpath(const char *path);
  *
  * @return Session status.
  */
-NC_STATUS nc_get_session_status(const struct nc_session *session);
+NC_STATUS nc_session_get_status(const struct nc_session *session);
 
 /**
  * @brief Get session ID.
@@ -109,7 +109,7 @@ NC_STATUS nc_get_session_status(const struct nc_session *session);
  *
  * @return Session ID.
  */
-uint32_t nc_get_session_id(const struct nc_session *session);
+uint32_t nc_session_get_id(const struct nc_session *session);
 
 /**
  * @brief Get session transport used.
@@ -118,7 +118,7 @@ uint32_t nc_get_session_id(const struct nc_session *session);
  *
  * @return Session transport.
  */
-NC_TRANSPORT_IMPL nc_get_session_ti(const struct nc_session *session);
+NC_TRANSPORT_IMPL nc_session_get_ti(const struct nc_session *session);
 
 /**
  * @brief Get session username.
@@ -127,7 +127,7 @@ NC_TRANSPORT_IMPL nc_get_session_ti(const struct nc_session *session);
  *
  * @return Session username.
  */
-const char *nc_get_session_username(const struct nc_session *session);
+const char *nc_session_get_username(const struct nc_session *session);
 
 /**
  * @brief Get session host.
@@ -136,7 +136,7 @@ const char *nc_get_session_username(const struct nc_session *session);
  *
  * @return Session host.
  */
-const char *nc_get_session_host(const struct nc_session *session);
+const char *nc_session_get_host(const struct nc_session *session);
 
 /**
  * @brief Get session port.
@@ -145,7 +145,7 @@ const char *nc_get_session_host(const struct nc_session *session);
  *
  * @return Session port.
  */
-uint16_t nc_get_session_port(const struct nc_session *session);
+uint16_t nc_session_get_port(const struct nc_session *session);
 
 /**
  * @brief Get session capabilities.
@@ -154,7 +154,7 @@ uint16_t nc_get_session_port(const struct nc_session *session);
  *
  * @return Session capabilities.
  */
-const char **nc_get_session_cpblts(const struct nc_session *session);
+const char **nc_session_get_cpblts(const struct nc_session *session);
 
 /**
  * @brief Connect to the NETCONF server via proviaded input/output file descriptors.
@@ -189,7 +189,7 @@ struct nc_session *nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx);
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  */
-void nc_client_init_ssh(void);
+void nc_ssh_client_init(void);
 
 /**
  * @brief Destroy any dynamically allocated SSH-specific context.
@@ -199,7 +199,7 @@ void nc_client_init_ssh(void);
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  */
-void nc_client_destroy_ssh(void);
+void nc_ssh_client_destroy(void);
 
 /**
  * @brief Connect to the NETCONF server using SSH transport (via libssh).
@@ -213,7 +213,7 @@ void nc_client_destroy_ssh(void);
  *                 'localhost' is used by default if NULL is specified.
  * @param[in] port Port number of the target server. Default value 830 is used if 0 is specified.
  * @param[in] username Name of the user to login to the server. The user running the application (detected from the
- *                 effective UID) is used if NULL is specified.
+ *                     effective UID) is used if NULL is specified.
  * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
  *                (ignoring what is actually supported by the server side). If not set,
  *                YANG context is created for the session using \<get-schema\> (if supported
@@ -221,9 +221,9 @@ void nc_client_destroy_ssh(void);
  *                (see nc_schema_searchpath()). In every case except not providing context
  *                to connect to a server supporting \<get-schema\> it is possible that
  *                the session context will not include all the models supported by the server.
- * @return Created NETCONF session object or NULL in case of error.
+ * @return Created NETCONF session object or NULL on error.
  */
-struct nc_session *nc_connect_ssh(const char *host, unsigned short port, const char* username, struct ly_ctx *ctx);
+struct nc_session *nc_connect_ssh(const char *host, uint16_t port, const char* username, struct ly_ctx *ctx);
 
 /**
  * @brief Connect to the NETCONF server using the provided SSH (libssh) session.
@@ -244,7 +244,7 @@ struct nc_session *nc_connect_ssh(const char *host, unsigned short port, const c
  *                (see nc_schema_searchpath()). In every case except not providing context
  *                to connect to a server supporting \<get-schema\> it is possible that
  *                the session context will not include all the models supported by the server.
- * @return Created NETCONF session object or NULL in case of error.
+ * @return Created NETCONF session object or NULL on error.
  */
 struct nc_session *nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx);
 
@@ -278,7 +278,7 @@ struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_
  *
  * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
  */
-int nc_add_ssh_keypair(const char *pub_key, const char *priv_key);
+int nc_ssh_add_keypair(const char *pub_key, const char *priv_key);
 
 /**
  * @brief Remove an SSH public and private key pair that was used for client authentication.
@@ -289,14 +289,14 @@ int nc_add_ssh_keypair(const char *pub_key, const char *priv_key);
  *
  * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
  */
-int nc_del_ssh_keypair(int idx);
+int nc_ssh_del_keypair(int idx);
 
 /**
  * @brief Get the number of public an private key pairs set to be used for client authentication.
  *
  * @return Set keypair count.
  */
-int nc_get_ssh_keypair_count(void);
+int nc_ssh_get_keypair_count(void);
 
 /**
  * @brief Get a specific keypair set to be used for client authentication.
@@ -307,7 +307,7 @@ int nc_get_ssh_keypair_count(void);
  *
  * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
  */
-int nc_get_ssh_keypair(int idx, const char **pub_key, const char **priv_key);
+int nc_ssh_get_keypair(int idx, const char **pub_key, const char **priv_key);
 
 /**
  * @brief Set SSH authentication method preference.
@@ -317,7 +317,7 @@ int nc_get_ssh_keypair(int idx, const char **pub_key, const char **priv_key);
  * @param[in] auth_type Authentication method to modify the prefrence of.
  * @param[in] pref Preference of \p auth_type. Negative values disable the method.
  */
-void nc_set_ssh_auth_pref(NC_SSH_AUTH_TYPE auth_type, short int pref);
+void nc_ssh_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, short int pref);
 
 /**
  * @brief Get SSH authentication method preference.
@@ -328,7 +328,7 @@ void nc_set_ssh_auth_pref(NC_SSH_AUTH_TYPE auth_type, short int pref);
  *
  * @return Preference of the \p auth_type.
  */
-short int nc_get_ssh_auth_pref(NC_SSH_AUTH_TYPE auth_type);
+short int nc_ssh_get_auth_pref(NC_SSH_AUTH_TYPE auth_type);
 
 #endif /* ENABLE_SSH */
 
@@ -354,7 +354,7 @@ short int nc_get_ssh_auth_pref(NC_SSH_AUTH_TYPE auth_type);
  *
  * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
  */
-int nc_client_init_tls(const char *client_cert, const char *client_key, const char *ca_file, const char *ca_dir,
+int nc_tls_client_init(const char *client_cert, const char *client_key, const char *ca_file, const char *ca_dir,
                        const char *crl_file, const char *crl_dir);
 
 /**
@@ -364,7 +364,7 @@ int nc_client_init_tls(const char *client_cert, const char *client_key, const ch
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  */
-void nc_client_destroy_tls(void);
+void nc_tls_client_destroy(void);
 
 /**
  * @brief Connect to the NETCONF server using TLS transport (via libssl)
@@ -431,7 +431,7 @@ void nc_session_free(struct nc_session *session);
  * @return NC_MSG_REPLY for success, NC_MSG_WOULDBLOCK if timeout reached and NC_MSG_ERROR
  *         when reading has failed.
  */
-NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout,
+NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int32_t timeout,
                           struct nc_reply **reply);
 
 /**
@@ -445,7 +445,7 @@ NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64
  * @return NC_MSG_NOTIF for success, NC_MSG_WOULDBLOCK if timeout reached and NC_MSG_ERROR
  *         when reading has failed.
  */
-NC_MSG_TYPE nc_recv_notif(struct nc_session* session, int timeout, struct nc_notif **notif);
+NC_MSG_TYPE nc_recv_notif(struct nc_session* session, int32_t timeout, struct nc_notif **notif);
 
 /**
  * @brief Send NETCONF RPC message via the session.
@@ -456,6 +456,6 @@ NC_MSG_TYPE nc_recv_notif(struct nc_session* session, int timeout, struct nc_not
  * @return #NC_MSG_RPC on success, #NC_MSG_WOULDBLOCK in case of busy session
  * (try to repeat the function call) and #NC_MSG_ERROR in case of error.
  */
-NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_t *msgid);
+NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uint64_t *msgid);
 
 #endif /* NC_SESSION_H_ */

@@ -36,15 +36,15 @@
 #   include <libssh/callbacks.h>
 
 /* seconds */
-#   define SSH_TIMEOUT 10
-#   define SSH_AUTH_COUNT 3
+#   define NC_SSH_TIMEOUT 10
+#   define NC_SSH_AUTH_COUNT 3
 
 struct nc_ssh_auth_opts {
     /* SSH authentication method preferences */
     struct {
         NC_SSH_AUTH_TYPE type;
         short int value;
-    } auth_pref[SSH_AUTH_COUNT];
+    } auth_pref[NC_SSH_AUTH_COUNT];
 
     /* SSH key pairs */
     struct {
@@ -59,8 +59,8 @@ struct nc_ssh_auth_opts {
 
 #ifdef ENABLE_TLS
 
-#include <openssl/bio.h>
-#include <openssl/ssl.h>
+#   include <openssl/bio.h>
+#   include <openssl/ssl.h>
 
 struct nc_tls_auth_opts {
     SSL_CTX *tls_ctx;
@@ -70,7 +70,7 @@ struct nc_tls_auth_opts {
 #endif /* ENABLE_TLS */
 
 /**
- * Sleep time in microseconds to wait between unsuccessful reading due to EAGAIN or EWOULDBLOCK
+ * Sleep time in microseconds to wait between unsuccessful reading due to EAGAIN or EWOULDBLOCK.
  */
 #define NC_READ_SLEEP 100
 

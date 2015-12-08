@@ -160,7 +160,7 @@ tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
 }
 
 API int
-nc_client_init_tls(const char *client_cert, const char *client_key, const char *ca_file, const char *ca_dir,
+nc_tls_client_init(const char *client_cert, const char *client_key, const char *ca_file, const char *ca_dir,
                    const char *crl_file, const char *crl_dir)
 {
     const char *key_ = client_key;
@@ -246,7 +246,7 @@ nc_client_init_tls(const char *client_cert, const char *client_key, const char *
 }
 
 API void
-nc_client_destroy_tls()
+nc_tls_client_destroy()
 {
     CRYPTO_THREADID crypto_tid;
 

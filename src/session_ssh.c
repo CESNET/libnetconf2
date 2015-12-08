@@ -53,14 +53,14 @@ static struct nc_ssh_auth_opts ssh_opts = {
 };
 
 API void
-nc_client_init_ssh(void)
+nc_ssh_client_init(void)
 {
     ssh_threads_set_callbacks(ssh_threads_get_pthread());
     ssh_init();
 }
 
 API void
-nc_client_destroy_ssh(void)
+nc_ssh_client_destroy(void)
 {
     int i;
 
@@ -510,7 +510,7 @@ sshauth_hostkey_check(const char *hostname, ssh_session session)
                 /* store the key into the host file */
                 ret = ssh_write_knownhost(session);
                 if (ret < 0) {
-                    WRN("Adding the known host %s failed (%s).", hostname, strerror(errno));
+                    WRN("Adding the known host %s failed (%s).", hostname, ssh_get_error(session));
                 }
             } else if (!strcmp("no", answer)) {
                 goto fail;
@@ -538,7 +538,7 @@ fail:
 }
 
 API int
-nc_add_ssh_keypair(const char *pub_key, const char *priv_key)
+nc_ssh_add_keypair(const char *pub_key, const char *priv_key)
 {
     int i;
     FILE *key;
@@ -596,7 +596,7 @@ nc_add_ssh_keypair(const char *pub_key, const char *priv_key)
 }
 
 API int
-nc_del_ssh_keypair(int idx)
+nc_ssh_del_keypair(int idx)
 {
     if (idx >= ssh_opts.key_count) {
         return EXIT_FAILURE;
@@ -614,13 +614,13 @@ nc_del_ssh_keypair(int idx)
 }
 
 API int
-nc_get_ssh_keypair_count(void)
+nc_ssh_get_keypair_count(void)
 {
     return ssh_opts.key_count;
 }
 
 API int
-nc_get_ssh_keypair(int idx, const char **pub_key, const char **priv_key)
+nc_ssh_get_keypair(int idx, const char **pub_key, const char **priv_key)
 {
     if (idx >= ssh_opts.key_count) {
         return EXIT_FAILURE;
@@ -637,7 +637,7 @@ nc_get_ssh_keypair(int idx, const char **pub_key, const char **priv_key)
 }
 
 API void
-nc_set_ssh_auth_pref(NC_SSH_AUTH_TYPE auth_type, short int pref)
+nc_ssh_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, short int pref)
 {
     if (pref < 0) {
         pref = -1;
@@ -653,7 +653,7 @@ nc_set_ssh_auth_pref(NC_SSH_AUTH_TYPE auth_type, short int pref)
 }
 
 API short int
-nc_get_ssh_auth_pref(NC_SSH_AUTH_TYPE auth_type)
+nc_ssh_get_auth_pref(NC_SSH_AUTH_TYPE auth_type)
 {
     short int pref = 0;
 
@@ -716,7 +716,7 @@ connect_ssh_session_netconf(struct nc_session *session)
     }
 
     /* select authentication according to preferences */
-    for (i = 0; i < SSH_AUTH_COUNT; i++) {
+    for (i = 0; i < NC_SSH_AUTH_COUNT; i++) {
         if (!(ssh_opts.auth_pref[i].type & auth)) {
             /* method not supported by server, skip */
             continue;
@@ -859,9 +859,9 @@ connect_ssh_session_netconf(struct nc_session *session)
 }
 
 API struct nc_session *
-nc_connect_ssh(const char *host, unsigned short port, const char *username, struct ly_ctx *ctx)
+nc_connect_ssh(const char *host, uint16_t port, const char *username, struct ly_ctx *ctx)
 {
-    const int timeout = SSH_TIMEOUT;
+    const int timeout = NC_SSH_TIMEOUT;
     int sock;
     struct passwd *pw;
     struct nc_session *session = NULL;

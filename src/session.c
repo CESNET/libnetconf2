@@ -62,43 +62,43 @@ nc_schema_searchpath(const char *path)
 }
 
 API NC_STATUS
-nc_get_session_status(const struct nc_session *session)
+nc_session_get_status(const struct nc_session *session)
 {
     return session->status;
 }
 
 API uint32_t
-nc_get_session_id(const struct nc_session *session)
+nc_session_get_id(const struct nc_session *session)
 {
     return session->id;
 }
 
 API NC_TRANSPORT_IMPL
-nc_get_session_ti(const struct nc_session *session)
+nc_session_get_ti(const struct nc_session *session)
 {
     return session->ti_type;
 }
 
 API const char *
-nc_get_session_username(const struct nc_session *session)
+nc_session_get_username(const struct nc_session *session)
 {
     return session->username;
 }
 
 API const char *
-nc_get_session_host(const struct nc_session *session)
+nc_session_get_host(const struct nc_session *session)
 {
     return session->host;
 }
 
 API uint16_t
-nc_get_session_port(const struct nc_session *session)
+nc_session_get_port(const struct nc_session *session)
 {
     return session->port;
 }
 
 API const char **
-nc_get_session_cpblts(const struct nc_session *session)
+nc_session_get_cpblts(const struct nc_session *session)
 {
     return session->cpblts;
 }
@@ -109,7 +109,7 @@ nc_get_session_cpblts(const struct nc_session *session)
  *        >0 - error
  */
 static int
-session_ti_lock(struct nc_session *session, int timeout)
+session_ti_lock(struct nc_session *session, int32_t timeout)
 {
     int r;
 
@@ -438,10 +438,9 @@ fail:
 }
 
 int
-nc_connect_getsocket(const char* host, unsigned short port)
+nc_connect_getsocket(const char* host, uint16_t port)
 {
-    int sock = -1;
-    int i;
+    int i, sock = -1;
     struct addrinfo hints, *res_list, *res;
     char port_s[6]; /* length of string representation of short int */
 
@@ -803,7 +802,7 @@ error:
 }
 
 NC_MSG_TYPE
-nc_recv_rpc(struct nc_session *session, int timeout, struct nc_server_rpc **rpc)
+nc_recv_rpc(struct nc_session *session, int32_t timeout, struct nc_server_rpc **rpc)
 {
     int r;
     struct lyxml_elem *xml = NULL;
@@ -862,7 +861,7 @@ error:
 }
 
 static NC_MSG_TYPE
-get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_elem **msg)
+get_msg(struct nc_session *session, int32_t timeout, uint64_t msgid, struct lyxml_elem **msg)
 {
     int r;
     char *ptr;
@@ -1254,7 +1253,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
 }
 
 API NC_MSG_TYPE
-nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout, struct nc_reply **reply)
+nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int32_t timeout, struct nc_reply **reply)
 {
     struct lyxml_elem *xml;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
@@ -1357,7 +1356,7 @@ nc_send_msg(struct nc_session *session, struct lyd_node *op)
 }
 
 API NC_MSG_TYPE
-nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_t *msgid)
+nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uint64_t *msgid)
 {
     NC_MSG_TYPE r;
     struct nc_rpc_generic *rpc_gen;
