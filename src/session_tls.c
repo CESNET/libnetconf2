@@ -165,14 +165,15 @@ nc_tls_client_init(const char *client_cert, const char *client_key, const char *
     X509_LOOKUP *lookup;
 
     if (tls_opts.tls_ctx) {
-        ERR("TLS context already initialized!");
-        return EXIT_FAILURE;
+        VRB("TLS context reinitialization.");
+        SSL_CTX_free(tls_opts.tls_ctx);
+        tls_opts.tls_ctx = NULL;
+    } else {
+        /* init libssl */
+        SSL_load_error_strings();
+        ERR_load_BIO_strings();
+        SSL_library_init();
     }
-
-    /* init libssl */
-    SSL_load_error_strings();
-    ERR_load_BIO_strings();
-    SSL_library_init();
 
     if (!client_cert) {
         return EXIT_SUCCESS;
