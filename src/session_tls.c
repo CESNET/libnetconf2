@@ -415,3 +415,58 @@ fail:
     return NULL;
 }
 
+API struct nc_session *
+nc_callhome_accept_tls(uint16_t port, int32_t timeout, struct ly_ctx *ctx)
+{
+    int sock, verify;
+    char *server_host;
+    SSL *tls;
+    struct nc_session *session;
+
+    if (!port) {
+        port = NC_PORT_CH_TLS;
+    }
+
+    sock = nc_callhome_accept_connection(port, timeout, NULL, &server_host);
+    if (sock == -1) {
+        return NULL;
+    }
+
+    if (!(tls = SSL_new(tls_opts.tls_ctx))) {
+        ERR("Failed to create new TLS session structure (%s).", ERR_reason_error_string(ERR_get_error()));
+        close(sock);
+        return NULL;
+    }
+
+    SSL_set_fd(tls, sock);
+
+    /* set the SSL_MODE_AUTO_RETRY flag to allow OpenSSL perform re-handshake automatically */
+    SSL_set_mode(tls, SSL_MODE_AUTO_RETRY);
+
+    /* connect and perform the handshake */
+    if (SSL_connect(tls) != 1) {
+        ERR("Connecting over TLS failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        SSL_free(tls);
+        return NULL;
+    }
+
+    /* check certificate verification result */
+    verify = SSL_get_verify_result(tls);
+    switch (verify) {
+    case X509_V_OK:
+        VRB("Server certificate successfully verified.");
+        break;
+    default:
+        WRN("Server certificate verification problem (%s).", verify_ret_msg[verify]);
+    }
+
+    session = nc_connect_libssl(tls, ctx);
+    if (session) {
+        /* store information into session and the dictionary */
+        session->host = lydict_insert_zc(session->ctx, server_host);
+        session->port = port;
+        session->username = lydict_insert(session->ctx, "certificate-based", 0);
+    }
+
+    return session;
+}

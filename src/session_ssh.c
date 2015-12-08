@@ -1154,3 +1154,40 @@ fail:
     nc_session_free(new_session);
     return NULL;
 }
+
+API struct nc_session *
+nc_callhome_accept_ssh(uint16_t port, const char *username, int32_t timeout, struct ly_ctx *ctx)
+{
+    const int ssh_timeout = NC_SSH_TIMEOUT;
+    int sock;
+    char *server_host;
+    ssh_session sess;
+
+    if (!port) {
+        port = NC_PORT_CH_SSH;
+    }
+
+    sock = nc_callhome_accept_connection(port, timeout, NULL, &server_host);
+    if (sock == -1) {
+        return NULL;
+    }
+
+    sess = ssh_new();
+    if (!sess) {
+        ERR("Unable to initialize an SSH session.");
+        close(sock);
+        return NULL;
+    }
+
+    ssh_options_set(sess, SSH_OPTIONS_FD, &sock);
+    ssh_options_set(sess, SSH_OPTIONS_HOST, server_host);
+    ssh_options_set(sess, SSH_OPTIONS_PORT, &port);
+    ssh_options_set(sess, SSH_OPTIONS_TIMEOUT, &ssh_timeout);
+    if (username) {
+        ssh_options_set(sess, SSH_OPTIONS_USER, username);
+    }
+
+    free(server_host);
+
+    return nc_connect_libssh(sess, ctx);
+}

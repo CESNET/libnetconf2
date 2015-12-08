@@ -75,6 +75,11 @@ struct nc_tls_auth_opts {
 #define NC_READ_SLEEP 100
 
 /**
+ * Number of sockets kept waiting to be accepted.
+ */
+#define NC_REVERSE_QUEUE 1
+
+/**
  * @brief type of the session
  */
 typedef enum {
@@ -177,6 +182,17 @@ int nc_connect_getsocket(const char *host, unsigned short port);
  * @return 0 on success, non-zero on failure.
  */
 int nc_handshake(struct nc_session *session);
+
+/**
+ * @brief Accept a new (Call Home) connection.
+ *
+ * @param[in] port Port to listen on.
+ * @param[in] timeout Timeout in msec.
+ * @param[out] server_port Port the new connection is connected on. Can be NULL.
+ * @param[out] server_host Host the new connection was initiated from. Can be NULL.
+ * @return Connected socket with the new connection, -1 on error.
+ */
+int nc_callhome_accept_connection(uint16_t port, int32_t timeout, uint16_t *server_port, char **server_host);
 
 /**
  * Functions

@@ -262,9 +262,30 @@ struct nc_session *nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx
  *                (see nc_schema_searchpath()). In every case except not providing context
  *                to connect to a server supporting \<get-schema\> it is possible that
  *                the session context will not include all the models supported by the server.
- * @return Created NETCONF session object or NULL in case of error.
+ * @return Created NETCONF session object or NULL on error.
  */
 struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx);
+
+/**
+ * @brief Accept a Call Home SSH connection from a NETCONF server.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
+ *
+ * @param[in] port Port the NETCONF client will listen on.
+ * @param[in] username Name of the user to login to the server. The user running the application (detected from the
+ *                     effective UID) is used if NULL is specified.
+ * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite
+ *                    waiting and 0 for immediate return if data are not available on wire.
+ * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
+ *                (ignoring what is actually supported by the server side). If not set,
+ *                YANG context is created for the session using \<get-schema\> (if supported
+ *                by the server side) or/and by searching for YANG schemas in the searchpath
+ *                (see nc_schema_searchpath()). In every case except not providing context
+ *                to connect to a server supporting \<get-schema\> it is possible that
+ *                the session context will not include all the models supported by the server.
+ * @return Created NETCONF session object or NULL on error.
+ */
+struct nc_session *nc_callhome_accept_ssh(uint16_t port, const char *username, int32_t timeout, struct ly_ctx *ctx);
 
 /**
  * @brief Add an SSH public and private key pair to be used for client authentication.
@@ -403,9 +424,28 @@ struct nc_session *nc_connect_tls(const char *host, uint16_t port, struct ly_ctx
  *                (see nc_schema_searchpath()). In every case except not providing context
  *                to connect to a server supporting \<get-schema\> it is possible that
  *                the session context will not include all the models supported by the server.
- * @return Created NETCONF session object or NULL in case of error.
+ * @return Created NETCONF session object or NULL on error.
  */
 struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
+
+/**
+ * @brief Accept a Call Home TLS connection from a NETCONF server.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
+ *
+ * @param[in] port Port the NETCONF client will listen on.
+ * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite
+ *                    waiting and 0 for immediate return if data are not available on wire.
+ * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
+ *                (ignoring what is actually supported by the server side). If not set,
+ *                YANG context is created for the session using \<get-schema\> (if supported
+ *                by the server side) or/and by searching for YANG schemas in the searchpath
+ *                (see nc_schema_searchpath()). In every case except not providing context
+ *                to connect to a server supporting \<get-schema\> it is possible that
+ *                the session context will not include all the models supported by the server.
+ * @return Created NETCONF session object or NULL on error.
+ */
+struct nc_session *nc_callhome_accept_tls(uint16_t port, int32_t timeout, struct ly_ctx *ctx);
 
 #endif /* ENABLE_TLS */
 
