@@ -23,6 +23,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+#include <libyang/libyang.h>
+
 #include "config.h"
 #include "log_p.h"
 
@@ -37,6 +39,7 @@ API void
 nc_verbosity(NC_VERB_LEVEL level)
 {
     verbose_level = level;
+    ly_verb(level);
 }
 
 struct {
@@ -81,6 +84,7 @@ API void
 nc_set_print_clb(void (*clb)(NC_VERB_LEVEL, const char *))
 {
     print_clb = clb;
+    ly_set_log_clb((void (*)(LY_LOG_LEVEL, const char *))clb);
 }
 
 API void
