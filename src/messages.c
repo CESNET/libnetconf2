@@ -87,7 +87,7 @@ nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_WD_MODE wd_mode, NC
 {
     struct nc_rpc_getconfig *rpc;
 
-    if ((filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
+    if (filter && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
         ERR("Filter must either be an XML subtree or an XPath expression.");
         return NULL;
     }
@@ -241,7 +241,7 @@ nc_rpc_get(const char *filter, NC_WD_MODE wd_mode, NC_RPC_PARAMTYPE paramtype)
 {
     struct nc_rpc_get *rpc;
 
-    if ((filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
+    if (filter && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
         ERR("Filter must either be an XML subtree or an XPath expression.");
         return NULL;
     }
