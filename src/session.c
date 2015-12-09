@@ -1157,7 +1157,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
 {
     struct lyxml_elem *iter;
     const struct lys_node *schema;
-    struct lyd_node *data;
+    struct lyd_node *data = NULL;
     struct nc_reply_error *error_rpl;
     struct nc_reply_data *data_rpl;
     struct nc_reply *reply = NULL;
@@ -1213,7 +1213,12 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
         switch (rpc->type) {
         case NC_RPC_GENERIC:
             schema = ((struct nc_rpc_generic *)rpc)->data->schema;
+            if (!schema) {
+                ERR("%s: internal error (%s:%d).", __func__, __FILE__, __LINE__);
+                return NULL;
+            }
             break;
+
         case NC_RPC_GENERIC_XML:
             data = lyd_parse_data(ctx, ((struct nc_rpc_generic_xml *)rpc)->xml_str, LYD_XML, 0);
             if (!data) {
@@ -1222,16 +1227,32 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
             }
             schema = data->schema;
             lyd_free(data);
+            data = NULL;
+            if (!schema) {
+                ERR("%s: internal error (%s:%d).", __func__, __FILE__, __LINE__);
+                return NULL;
+            }
             break;
+
         case NC_RPC_GETCONFIG:
-            schema = ly_ctx_get_node(ctx, "/ietf-netconf:get-config");
-            break;
         case NC_RPC_GET:
-            schema = ly_ctx_get_node(ctx, "/ietf-netconf:get");
+            /* special treatment */
+            data = lyd_parse_xml(ctx, xml->child, LYD_OPT_DESTRUCT
+                                 | (rpc->type == NC_RPC_GETCONFIG ? LYD_OPT_GETCONFIG : LYD_OPT_GET));
+            if (!data) {
+                ERR("Failed to parse <%s> reply.", (rpc->type == NC_RPC_GETCONFIG ? "get-config" : "get"));
+                return NULL;
+            }
             break;
+
         case NC_RPC_GETSCHEMA:
             schema = ly_ctx_get_node(ctx, "/ietf-netconf-monitoring:get-schema");
+            if (!schema) {
+                ERR("%s: internal error (%s:%d).", __func__, __FILE__, __LINE__);
+                return NULL;
+            }
             break;
+
         case NC_RPC_EDIT:
         case NC_RPC_COPY:
         case NC_RPC_DELETE:
@@ -1244,17 +1265,18 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
         case NC_RPC_VALIDATE:
         case NC_RPC_SUBSCRIBE:
             /* there is no output defined */
-            break;
-        }
-
-        if (!schema) {
-            ERR("%s: internal error (%s:%d).", __func__, __FILE__, __LINE__);
+            ERR("Unexpected data reply (root elem \"%s\").", xml->child->name);
             return NULL;
         }
 
         data_rpl = malloc(sizeof *data_rpl);
         data_rpl->type = NC_REPLY_DATA;
-        data_rpl->data = lyd_parse_output_xml(schema, xml, LYD_OPT_DESTRUCT);
+        if (!data) {
+            data_rpl->data = lyd_parse_output_xml(schema, xml, LYD_OPT_DESTRUCT);
+        } else {
+            /* <get>, <get-config> */
+            data_rpl->data = data;
+        }
         if (!data_rpl->data) {
             ERR("Failed to parse <rpc-reply>.");
             free(data_rpl);
@@ -1405,7 +1427,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uin
             && (rpc->type != NC_RPC_GENERIC_XML) && (rpc->type != NC_RPC_SUBSCRIBE)) {
         ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL);
         if (!ietfnc) {
-            ERR("%s: Missing ietf-netconf schema in context (session %u)", session->id);
+            ERR("%s: Missing ietf-netconf schema in context (session %u).", __func__, session->id);
             return NC_MSG_ERROR;
         }
     }

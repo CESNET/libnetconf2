@@ -471,6 +471,10 @@ void nc_session_free(struct nc_session *session);
 /**
  * @brief Receive NETCONF RPC reply.
  *
+ * If a reply to \<get\> or \<get-config\> RPCs is received, the data are the whole configuration
+ * parsed (usually results in more top-level nodes), not just a single 'data' anyxml node with
+ * the configuration unparsed inside (which would strictly be according to the model).
+ *
  * @param[in] session NETCONF session from which the function gets data. It must be the
  *            client side session object.
  * @param[in] rpc Original RPC this should be the reply to.
