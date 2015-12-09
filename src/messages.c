@@ -83,7 +83,7 @@ nc_rpc_generic_xml(const char *xml_str, NC_RPC_PARAMTYPE paramtype)
 }
 
 API struct nc_rpc *
-nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_RPC_PARAMTYPE paramtype)
+nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_WD_MODE wd_mode, NC_RPC_PARAMTYPE paramtype)
 {
     struct nc_rpc_getconfig *rpc;
 
@@ -105,6 +105,7 @@ nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_RPC_PARAMTYPE param
     } else {
         rpc->filter = (char *)filter;
     }
+    rpc->wd_mode = wd_mode;
     rpc->free = (paramtype == NC_RPC_PARAMTYPE_CONST ? 0 : 1);
 
     return (struct nc_rpc *)rpc;
@@ -144,7 +145,7 @@ nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, NC_RPC_EDIT_TEST
 
 API struct nc_rpc *
 nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTORE source, const char *url_or_config_src,
-            NC_RPC_PARAMTYPE paramtype)
+            NC_WD_MODE wd_mode, NC_RPC_PARAMTYPE paramtype)
 {
     struct nc_rpc_copy *rpc;
 
@@ -172,6 +173,7 @@ nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTORE source, const
     } else {
         rpc->url_config_src = (char *)url_or_config_src;
     }
+    rpc->wd_mode = wd_mode;
     rpc->free = (paramtype == NC_RPC_PARAMTYPE_CONST ? 0 : 1);
 
     return (struct nc_rpc *)rpc;
@@ -235,7 +237,7 @@ nc_rpc_unlock(NC_DATASTORE target)
 }
 
 API struct nc_rpc *
-nc_rpc_get(const char *filter, NC_RPC_PARAMTYPE paramtype)
+nc_rpc_get(const char *filter, NC_WD_MODE wd_mode, NC_RPC_PARAMTYPE paramtype)
 {
     struct nc_rpc_get *rpc;
 
@@ -256,6 +258,7 @@ nc_rpc_get(const char *filter, NC_RPC_PARAMTYPE paramtype)
     } else {
         rpc->filter = (char *)filter;
     }
+    rpc->wd_mode = wd_mode;
     rpc->free = (paramtype == NC_RPC_PARAMTYPE_CONST ? 0 : 1);
 
     return (struct nc_rpc *)rpc;

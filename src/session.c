@@ -1374,7 +1374,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uin
     struct nc_rpc_getschema *rpc_gs;
     struct nc_rpc_subscribe *rpc_sub;
     struct lyd_node *data, *node;
-    const struct lys_module *ietfnc, *ietfncmon, *notifs;
+    const struct lys_module *ietfnc, *ietfncmon, *notifs, *ietfncwd = NULL;
     char str[11];
     uint64_t cur_msgid;
 
@@ -1426,6 +1426,41 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uin
                 node = lyd_new_anyxml(data, ietfnc, "filter", NULL);
                 lyd_insert_attr(node, "type", "xpath");
                 lyd_insert_attr(node, "select", rpc_gc->filter);
+            }
+            if (!node) {
+                lyd_free(data);
+                return NC_MSG_ERROR;
+            }
+        }
+
+        if (rpc_gc->wd_mode) {
+            if (!ietfncwd) {
+                ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
+                if (!ietfncwd) {
+                    ERR("%s: Missing ietf-netconf-with-defaults schema in context (session %u).", __func__, session->id);
+                    return NC_MSG_ERROR;
+                }
+            }
+            switch (rpc_gc->wd_mode) {
+            case NC_WD_UNKNOWN:
+                /* cannot get here */
+                break;
+            case NC_WD_ALL:
+                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all");
+                break;
+            case NC_WD_ALL_TAG:
+                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all-tagged");
+                break;
+            case NC_WD_TRIM:
+                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "trim");
+                break;
+            case NC_WD_EXPLICIT:
+                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "explicit");
+                break;
+            }
+            if (!node) {
+                lyd_free(data);
+                return NC_MSG_ERROR;
             }
         }
         break;
@@ -1505,6 +1540,37 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uin
             lyd_free(data);
             return NC_MSG_ERROR;
         }
+
+        if (rpc_cp->wd_mode) {
+            if (!ietfncwd) {
+                ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
+                if (!ietfncwd) {
+                    ERR("%s: Missing ietf-netconf-with-defaults schema in context (session %u).", __func__, session->id);
+                    return NC_MSG_ERROR;
+                }
+            }
+            switch (rpc_cp->wd_mode) {
+            case NC_WD_UNKNOWN:
+                /* cannot get here */
+                break;
+            case NC_WD_ALL:
+                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all");
+                break;
+            case NC_WD_ALL_TAG:
+                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all-tagged");
+                break;
+            case NC_WD_TRIM:
+                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "trim");
+                break;
+            case NC_WD_EXPLICIT:
+                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "explicit");
+                break;
+            }
+            if (!node) {
+                lyd_free(data);
+                return NC_MSG_ERROR;
+            }
+        }
         break;
 
     case NC_RPC_DELETE:
@@ -1559,6 +1625,37 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uin
                 node = lyd_new_anyxml(data, ietfnc, "filter", NULL);
                 lyd_insert_attr(node, "type", "xpath");
                 lyd_insert_attr(node, "select", rpc_g->filter);
+            }
+            if (!node) {
+                lyd_free(data);
+                return NC_MSG_ERROR;
+            }
+        }
+
+        if (rpc_g->wd_mode) {
+            if (!ietfncwd) {
+                ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
+                if (!ietfncwd) {
+                    ERR("%s: Missing ietf-netconf-with-defaults schema in context (session %u).", __func__, session->id);
+                    return NC_MSG_ERROR;
+                }
+            }
+            switch (rpc_g->wd_mode) {
+            case NC_WD_UNKNOWN:
+                /* cannot get here */
+                break;
+            case NC_WD_ALL:
+                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all");
+                break;
+            case NC_WD_ALL_TAG:
+                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all-tagged");
+                break;
+            case NC_WD_TRIM:
+                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "trim");
+                break;
+            case NC_WD_EXPLICIT:
+                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "explicit");
+                break;
             }
             if (!node) {
                 lyd_free(data);

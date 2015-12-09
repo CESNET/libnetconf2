@@ -105,6 +105,7 @@ struct nc_rpc_getconfig {
     NC_RPC_TYPE type;        /**< NC_RPC_GETCONFIG */
     NC_DATASTORE source;     /**< NETCONF datastore being queried */
     char *filter;            /**< either XML subtree (starts with '<') or an XPath (starts with '/' or an alpha) */
+    NC_WD_MODE wd_mode;
     char free;
 };
 
@@ -124,6 +125,7 @@ struct nc_rpc_copy {
     char *url_trg;
     NC_DATASTORE source;
     char *url_config_src;    /**< either URL (starts with aplha) or config (starts with '<') */
+    NC_WD_MODE wd_mode;
     char free;
 };
 
@@ -142,6 +144,7 @@ struct nc_rpc_lock {
 struct nc_rpc_get {
     NC_RPC_TYPE type;        /**< NC_RPC_GET */
     char *filter;            /**< either XML subtree (starts with '<') or an XPath (starts with '/' or an alpha) */
+    NC_WD_MODE wd_mode;
     char free;
 };
 

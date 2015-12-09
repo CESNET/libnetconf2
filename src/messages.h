@@ -54,6 +54,14 @@ typedef enum {
 } NC_RPC_EDIT_ERROPT;
 
 typedef enum {
+    NC_WD_UNKNOWN = 0,
+    NC_WD_ALL,
+    NC_WD_ALL_TAG,
+    NC_WD_TRIM,
+    NC_WD_EXPLICIT
+} NC_WD_MODE;
+
+typedef enum {
     NC_RPC_PARAMTYPE_CONST,
     NC_RPC_PARAMTYPE_FREE,
     NC_RPC_PARAMTYPE_DUP_AND_FREE
@@ -181,10 +189,12 @@ struct nc_rpc *nc_rpc_generic_xml(const char *xml_str, NC_RPC_PARAMTYPE paramtyp
  *
  * @param[in] source Source datastore being queried.
  * @param[in] filter Optional filter data, an XML subtree or XPath expression.
+ * @param[in] wd_mode Optional with-defaults capability mode.
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_RPC_PARAMTYPE paramtype);
+struct nc_rpc *nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_WD_MODE wd_mode,
+                                NC_RPC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<edit-config\>
@@ -219,11 +229,12 @@ struct nc_rpc *nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, N
  * @param[in] url_trg Used instead \p target if the target is an URL.
  * @param[in] source Source datastore.
  * @param[in] url_or_config_src Used instead \p source if the source is an URL or a config.
+ * @param[in] wd_mode Optional with-defaults capability mode.
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTORE source,
-                           const char *url_or_config_src, NC_RPC_PARAMTYPE paramtype);
+                           const char *url_or_config_src, NC_WD_MODE wd_mode, NC_RPC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<delete-config\>
@@ -279,10 +290,11 @@ struct nc_rpc *nc_rpc_unlock(NC_DATASTORE target);
  * needed NETCONF capabilities for the RPC.
  *
  * @param[in] filter Optional filter data, an XML subtree or XPath expression.
+ * @param[in] wd_mode Optional with-defaults capability mode.
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_get(const char *filter, NC_RPC_PARAMTYPE paramtype);
+struct nc_rpc *nc_rpc_get(const char *filter, NC_WD_MODE wd_mode, NC_RPC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<kill-session\>
