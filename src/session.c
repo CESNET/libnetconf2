@@ -1273,6 +1273,7 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
 
     if (msgtype == NC_MSG_REPLY) {
         *reply = parse_reply(session->ctx, xml, rpc);
+        lyxml_free(session->ctx, xml);
         if (!(*reply)) {
             return NC_MSG_ERROR;
         }

@@ -617,6 +617,7 @@ nc_reply_free(struct nc_reply *reply)
             }
             free(error->err[i].other);
         }
+        free(error->err);
         break;
     case NC_REPLY_NOTIF:
         nc_notif_free((struct nc_notif *)reply);
