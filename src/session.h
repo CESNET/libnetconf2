@@ -157,6 +157,16 @@ uint16_t nc_session_get_port(const struct nc_session *session);
 const char **nc_session_get_cpblts(const struct nc_session *session);
 
 /**
+ * @brief Check capability presence in a session.
+ *
+ * @param[in] session Session to check.
+ * @param[in] capab Capability to look for, capability with any additional suffix will match.
+ *
+ * @return Matching capability, NULL if none found.
+ */
+const char *nc_session_cpblt(const struct nc_session *session, const char *capab);
+
+/**
  * @brief Connect to the NETCONF server via proviaded input/output file descriptors.
  *
  * Transport layer is supposed to be already set. Function do not cover authentication
