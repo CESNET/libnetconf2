@@ -388,7 +388,7 @@ nc_read_msg(struct nc_session* session, int timeout, struct lyxml_elem **data)
     DBG("Received message (session %u): %s", session->id, msg);
 
     /* build XML tree */
-    *data = lyxml_read(session->ctx, msg, 0);
+    *data = lyxml_read_data(session->ctx, msg, 0);
     if (!*data) {
         goto error;
     } else if (!(*data)->ns) {
