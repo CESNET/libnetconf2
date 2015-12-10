@@ -31,10 +31,10 @@
 #include "netconf.h"
 
 API time_t
-nc_datetime2time(const char* datetime)
+nc_datetime2time(const char *datetime)
 {
     struct tm time;
-    char* dt;
+    char *dt;
     int i;
     long int shift, shift_m;
     time_t retval;
@@ -93,11 +93,11 @@ nc_datetime2time(const char* datetime)
     return (retval);
 }
 
-API char*
-nc_time2datetime(time_t time, const char* tz)
+API char *
+nc_time2datetime(time_t time, const char *tz)
 {
-    char* date = NULL;
-    char* zoneshift = NULL;
+    char *date = NULL;
+    char *zoneshift = NULL;
     int zonediff, zonediff_h, zonediff_m;
     struct tm tm, *tm_ret;
     char *tz_origin;
