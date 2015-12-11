@@ -59,7 +59,7 @@ setup_read(void **state)
         return -1;
     }
 
-    lys_read(session->ctx, fd, LYS_IN_YIN);
+    lys_parse_fd(session->ctx, fd, LYS_IN_YIN);
     close(fd);
 
     *state = session;
@@ -174,7 +174,7 @@ setup_write(void **state)
         return -1;
     }
 
-    lys_read(w->session->ctx, fd, LYS_IN_YIN);
+    lys_parse_fd(w->session->ctx, fd, LYS_IN_YIN);
     close(fd);
 
     w->session->status = NC_STATUS_RUNNING;

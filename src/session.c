@@ -316,7 +316,7 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
     struct nc_reply *reply;
     struct nc_reply_data *data_rpl;
     NC_MSG_TYPE msg;
-    char *model_data;
+    char *model_data, *ptr, *ptr2, *anyxml;
     uint64_t msgid;
 
     /* TODO later replace with yang to reduce model size? */
@@ -343,9 +343,20 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
     }
 
     data_rpl = (struct nc_reply_data *)reply;
-    model_data = lyxml_serialize(((struct lyd_node_anyxml *)data_rpl->data)->value);
+    anyxml = lyxml_serialize(((struct lyd_node_anyxml *)data_rpl->data)->value);
     nc_reply_free(reply);
     *free_model_data = NULL;
+
+    /* it's with the data root node, remove it */
+    if (anyxml) {
+        ptr = strchr(anyxml, '>');
+        ++ptr;
+
+        ptr2 = strrchr(anyxml, '<');
+
+        model_data = strndup(ptr, strlen(ptr) - strlen(ptr2));
+        free(anyxml);
+    }
 
     return model_data;
 }
