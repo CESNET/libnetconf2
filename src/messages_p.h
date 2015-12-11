@@ -32,32 +32,6 @@ extern const char *rpcedit_testopt2str[];
 extern const char *rpcedit_erropt2str[];
 
 typedef enum {
-    NC_RPC_GENERIC,     /**< user-defined generic RPC with content as data. */
-    NC_RPC_GENERIC_XML, /**< user-defined generic RPC with content as an XML string. */
-
-    /* ietf-netconf */
-    NC_RPC_GETCONFIG,   /**< \<get-config\> RPC. */
-    NC_RPC_EDIT,        /**< \<edit-config\> RPC. */
-    NC_RPC_COPY,        /**< \<copy-config\> RPC. */
-    NC_RPC_DELETE,      /**< \<delete-config\> RPC. */
-    NC_RPC_LOCK,        /**< \<lock\> RPC. */
-    NC_RPC_UNLOCK,      /**< \<unlock\> RPC. */
-    NC_RPC_GET,         /**< \<get\> RPC. */
-    /* NC_RPC_CLOSE is not defined since sending \<close-session\> is done by nc_session_free() */
-    NC_RPC_KILL,        /**< \<kill-session\> RPC. */
-    NC_RPC_COMMIT,      /**< \<commit\> RPC. */
-    NC_RPC_DISCARD,     /**< \<discard-changes\> RPC. */
-    NC_RPC_CANCEL,      /**< \<cancel-commit\> RPC. */
-    NC_RPC_VALIDATE,    /**< \<validate\> RPC. */
-
-    /* ietf-netconf-monitoring */
-    NC_RPC_GETSCHEMA,   /**< \<get-schema\> RPC. */
-
-    /* notifications */
-    NC_RPC_SUBSCRIBE    /**< \<create-subscription\> RPC. */
-} NC_RPC_TYPE;
-
-typedef enum {
     NC_ERR_EMPTY,
     NC_ERR_IN_USE,
     NC_ERR_INVALID_VALUE,
@@ -79,10 +53,6 @@ typedef enum {
     NC_ERR_OP_FAILED,
     NC_ERR_MALFORMED_MSG
 } NC_ERR;
-
-struct nc_rpc {
-    NC_RPC_TYPE type;
-};
 
 struct nc_server_rpc {
     struct lyxml_elem *root; /**< RPC element of the received XML message */

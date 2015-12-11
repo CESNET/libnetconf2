@@ -33,6 +33,12 @@ const char *rpcedit_dfltop2str[] = {NULL, "merge", "replace", "none"};
 const char *rpcedit_testopt2str[] = {NULL, "test-then-set", "set", "test-only"};
 const char *rpcedit_erropt2str[] = {NULL, "stop-on-error", "continue-on-error", "rollback-on-error"};
 
+API NC_RPC_TYPE
+nc_rpc_get_type(const struct nc_rpc *rpc)
+{
+    return rpc->type;
+}
+
 API struct nc_rpc *
 nc_rpc_generic(const struct lyd_node *data, NC_RPC_PARAMTYPE paramtype)
 {
