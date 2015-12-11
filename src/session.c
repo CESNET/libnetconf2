@@ -1161,6 +1161,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
     struct nc_reply_error *error_rpl;
     struct nc_reply_data *data_rpl;
     struct nc_reply *reply = NULL;
+    struct nc_rpc_generic *rpc_gen;
     int i;
 
     if (!xml->child) {
@@ -1212,22 +1213,20 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
     } else {
         switch (rpc->type) {
         case NC_RPC_GENERIC:
-            schema = ((struct nc_rpc_generic *)rpc)->data->schema;
-            if (!schema) {
-                ERR("%s: internal error (%s:%d).", __func__, __FILE__, __LINE__);
-                return NULL;
-            }
-            break;
+            rpc_gen = (struct nc_rpc_generic *)rpc;
 
-        case NC_RPC_GENERIC_XML:
-            data = lyd_parse_data(ctx, ((struct nc_rpc_generic_xml *)rpc)->xml_str, LYD_XML, 0);
-            if (!data) {
-                ERR("Failed to parse a generic RPC XML.");
-                return NULL;
+            if (rpc_gen->has_data) {
+                schema = rpc_gen->content.data->schema;
+            } else {
+                data = lyd_parse_data(ctx, rpc_gen->content.xml_str, LYD_XML, 0);
+                if (!data) {
+                    ERR("Failed to parse a generic RPC XML.");
+                    return NULL;
+                }
+                schema = data->schema;
+                lyd_free(data);
+                data = NULL;
             }
-            schema = data->schema;
-            lyd_free(data);
-            data = NULL;
             if (!schema) {
                 ERR("%s: internal error (%s:%d).", __func__, __FILE__, __LINE__);
                 return NULL;
@@ -1397,7 +1396,6 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uin
 {
     NC_MSG_TYPE r;
     struct nc_rpc_generic *rpc_gen;
-    struct nc_rpc_generic_xml *rpc_gen_xml;
     struct nc_rpc_getconfig *rpc_gc;
     struct nc_rpc_edit *rpc_e;
     struct nc_rpc_copy *rpc_cp;
@@ -1423,8 +1421,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uin
         return NC_MSG_ERROR;
     }
 
-    if ((rpc->type != NC_RPC_GETSCHEMA) && (rpc->type != NC_RPC_GENERIC)
-            && (rpc->type != NC_RPC_GENERIC_XML) && (rpc->type != NC_RPC_SUBSCRIBE)) {
+    if ((rpc->type != NC_RPC_GETSCHEMA) && (rpc->type != NC_RPC_GENERIC) && (rpc->type != NC_RPC_SUBSCRIBE)) {
         ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL);
         if (!ietfnc) {
             ERR("%s: Missing ietf-netconf schema in context (session %u).", __func__, session->id);
@@ -1436,13 +1433,11 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uin
     case NC_RPC_GENERIC:
         rpc_gen = (struct nc_rpc_generic *)rpc;
 
-        data = rpc_gen->data;
-        break;
-
-    case NC_RPC_GENERIC_XML:
-        rpc_gen_xml = (struct nc_rpc_generic_xml *)rpc;
-
-        data = lyd_parse_data(session->ctx, rpc_gen_xml->xml_str, LYD_XML, LYD_OPT_STRICT);
+        if (rpc_gen->has_data) {
+            data = rpc_gen->content.data;
+        } else {
+            data = lyd_parse_data(session->ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_STRICT);
+        }
         break;
 
     case NC_RPC_GETCONFIG:

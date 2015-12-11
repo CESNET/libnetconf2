@@ -50,10 +50,11 @@ nc_rpc_generic(const struct lyd_node *data, NC_RPC_PARAMTYPE paramtype)
     }
 
     rpc->type = NC_RPC_GENERIC;
+    rpc->has_data = 1;
     if (paramtype == NC_RPC_PARAMTYPE_DUP_AND_FREE) {
-        rpc->data = lyd_dup(data, 1);
+        rpc->content.data = lyd_dup(data, 1);
     } else {
-        rpc->data = (struct lyd_node *)data;
+        rpc->content.data = (struct lyd_node *)data;
     }
     rpc->free = (paramtype == NC_RPC_PARAMTYPE_CONST ? 0 : 1);
 
@@ -63,7 +64,7 @@ nc_rpc_generic(const struct lyd_node *data, NC_RPC_PARAMTYPE paramtype)
 API struct nc_rpc *
 nc_rpc_generic_xml(const char *xml_str, NC_RPC_PARAMTYPE paramtype)
 {
-    struct nc_rpc_generic_xml *rpc;
+    struct nc_rpc_generic *rpc;
 
     rpc = malloc(sizeof *rpc);
     if (!rpc) {
@@ -71,11 +72,12 @@ nc_rpc_generic_xml(const char *xml_str, NC_RPC_PARAMTYPE paramtype)
         return NULL;
     }
 
-    rpc->type = NC_RPC_GENERIC_XML;
+    rpc->type = NC_RPC_GENERIC;
+    rpc->has_data = 0;
     if (paramtype == NC_RPC_PARAMTYPE_DUP_AND_FREE) {
-        rpc->xml_str = strdup(xml_str);
+        rpc->content.xml_str = strdup(xml_str);
     } else {
-        rpc->xml_str = (char *)xml_str;
+        rpc->content.xml_str = (char *)xml_str;
     }
     rpc->free = (paramtype == NC_RPC_PARAMTYPE_CONST ? 0 : 1);
 
@@ -463,7 +465,6 @@ API void
 nc_rpc_free(struct nc_rpc *rpc)
 {
     struct nc_rpc_generic *rpc_generic;
-    struct nc_rpc_generic_xml *rpc_generic_xml;
     struct nc_rpc_getconfig *rpc_getconfig;
     struct nc_rpc_edit *rpc_edit;
     struct nc_rpc_copy *rpc_copy;
@@ -483,13 +484,11 @@ nc_rpc_free(struct nc_rpc *rpc)
     case NC_RPC_GENERIC:
         rpc_generic = (struct nc_rpc_generic *)rpc;
         if (rpc_generic->free) {
-            lyd_free(rpc_generic->data);
-        }
-        break;
-    case NC_RPC_GENERIC_XML:
-        rpc_generic_xml = (struct nc_rpc_generic_xml *)rpc;
-        if (rpc_generic_xml->free) {
-            free(rpc_generic_xml->xml_str);
+            if (rpc_generic->has_data) {
+                lyd_free(rpc_generic->content.data);
+            } else {
+                free(rpc_generic->content.xml_str);
+            }
         }
         break;
     case NC_RPC_GETCONFIG:

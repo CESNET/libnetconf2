@@ -89,15 +89,17 @@ struct nc_server_rpc {
     struct lyd_node *tree;   /**< libyang data tree of the message (NETCONF operation) */
 };
 
-struct nc_rpc_generic {
-    NC_RPC_TYPE type;       /**< NC_RPC_GENERIC */
-    struct lyd_node *data;  /**< RPC data */
-    char free;
+struct nc_rpc {
+    NC_RPC_TYPE type;
 };
 
-struct nc_rpc_generic_xml {
-    NC_RPC_TYPE type;       /**< NC_RPC_GENERIC_XML */
-    char *xml_str;
+struct nc_rpc_generic {
+    NC_RPC_TYPE type;       /**< NC_RPC_GENERIC */
+    int has_data;           /**< 1 for content.data, 0 for content.xml_str */
+    union {
+        struct lyd_node *data;  /**< parsed RPC data */
+        char *xml_str;          /**< raw XML string */
+    } content;
     char free;
 };
 
