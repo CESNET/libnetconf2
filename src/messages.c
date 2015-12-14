@@ -423,7 +423,7 @@ nc_rpc_subscribe(const char *stream_name, const char *filter, const char *start_
 {
     struct nc_rpc_subscribe *rpc;
 
-    if ((filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
+    if (filter && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
         ERR("Filter must either be an XML subtree or an XPath expression.");
         return NULL;
     }
