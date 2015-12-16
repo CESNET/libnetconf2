@@ -1793,14 +1793,15 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uin
         rpc_val = (struct nc_rpc_validate *)rpc;
 
         data = lyd_new(NULL, ietfnc, "validate");
+        node = lyd_new(data, ietfnc, "source");
         if (rpc_val->url_config_src) {
             if (rpc_val->url_config_src[0] == '<') {
-                node = lyd_new_anyxml(data, ietfnc, "config", rpc_val->url_config_src);
+                node = lyd_new_anyxml(node, ietfnc, "config", rpc_val->url_config_src);
             } else {
-                node = lyd_new_leaf(data, ietfnc, "url", rpc_val->url_config_src);
+                node = lyd_new_leaf(node, ietfnc, "url", rpc_val->url_config_src);
             }
         } else {
-            node = lyd_new_leaf(data, ietfnc, ncds2str[rpc_val->source], NULL);
+            node = lyd_new_leaf(node, ietfnc, ncds2str[rpc_val->source], NULL);
         }
         if (!node) {
             lyd_free(data);
