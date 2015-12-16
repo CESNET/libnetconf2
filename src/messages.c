@@ -641,6 +641,7 @@ nc_notif_free(struct nc_notif *notif)
         return;
     }
 
+    lydict_remove(notif->tree->schema->module->ctx, notif->datetime);
     lyd_free(notif->tree);
     free(notif);
 }

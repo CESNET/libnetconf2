@@ -168,6 +168,7 @@ struct nc_reply_data {
 
 struct nc_notif {
     NC_REPLY_TYPE type;      /**< NC_REPLY_NOTIF */
+    const char *datetime;    /**< eventTime of the notification */
     struct lyd_node *tree;   /**< libyang data tree of the message */
 };
 

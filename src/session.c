@@ -1332,29 +1332,56 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
 API NC_MSG_TYPE
 nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
 {
-    struct lyxml_elem *xml;
+    struct lyxml_elem *xml, *ev_time;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
 
     if (!session || !notif) {
         ERR("%s: Invalid parameter", __func__);
         return NC_MSG_ERROR;
     } else if (session->status != NC_STATUS_RUNNING || session->side != NC_CLIENT) {
-        ERR("%s: invalid session to receive Notifications.", __func__);
+        ERR("%s: Invalid session to receive Notifications.", __func__);
         return NC_MSG_ERROR;
     }
 
     msgtype = get_msg(session, timeout, 0, &xml);
-    if (msgtype == NC_MSG_WOULDBLOCK) {
-        return NC_MSG_WOULDBLOCK;
-    }
 
     if (msgtype == NC_MSG_NOTIF) {
-        *notif = malloc(sizeof **notif);
+        *notif = calloc(1, sizeof **notif);
+
+        /* eventTime */
+        LY_TREE_FOR(xml->child, ev_time) {
+            if (!strcmp(ev_time->name, "eventTime")) {
+                (*notif)->datetime = lydict_insert(session->ctx, ev_time->content, 0);
+                /* lyd_parse does not know this element */
+                lyxml_free(session->ctx, ev_time);
+                break;
+            }
+        }
+        if (!(*notif)->datetime) {
+            ERR("%s: Notification is missing the \"eventTime\" element.", __func__);
+            goto fail;
+        }
+
+        /* notification body */
         (*notif)->tree = lyd_parse_xml(session->ctx, xml, LYD_OPT_DESTRUCT);
         lyxml_free(session->ctx, xml);
+        xml = NULL;
+        if (!(*notif)->tree) {
+            ERR("%s: Failed to parse a new notification.", __func__);
+            goto fail;
+        }
     }
 
     return msgtype;
+
+fail:
+    lydict_remove(session->ctx, (*notif)->datetime);
+    lyd_free((*notif)->tree);
+    free(*notif);
+    *notif = NULL;
+    lyxml_free(session->ctx, xml);
+
+    return NC_MSG_ERROR;
 }
 
 static NC_MSG_TYPE
