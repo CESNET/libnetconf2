@@ -675,8 +675,9 @@ nc_ssh_get_auth_pref(NC_SSH_AUTH_TYPE auth_type)
 static int
 connect_ssh_session_netconf(struct nc_session *session)
 {
-    int i, j, ret_auth, userauthlist;
-    int auth = 0;
+    int j, ret_auth, userauthlist;
+    NC_SSH_AUTH_TYPE auth;
+    short int pref;
     const char* prompt;
     char *s, *answer, echo;
     ssh_key pubkey, privkey;
@@ -702,36 +703,47 @@ connect_ssh_session_netconf(struct nc_session *session)
 
     /* check what authentication methods are available */
     userauthlist = ssh_userauth_list(ssh_sess, NULL);
-    if (userauthlist & SSH_AUTH_METHOD_PASSWORD) {
-        auth |= NC_SSH_AUTH_PASSWORD;
+
+    /* remove those disabled */
+    if (ssh_opts.auth_pref[0].value < 0) {
+        VRB("Interactive SSH authentication method was disabled.");
+        userauthlist &= ~SSH_AUTH_METHOD_INTERACTIVE;
     }
-    if (userauthlist & SSH_AUTH_METHOD_PUBLICKEY) {
-        auth |= NC_SSH_AUTH_PUBLICKEY;
+    if (ssh_opts.auth_pref[1].value < 0) {
+        VRB("Password SSH authentication method was disabled.");
+        userauthlist &= ~SSH_AUTH_METHOD_PASSWORD;
     }
-    if (userauthlist & SSH_AUTH_METHOD_INTERACTIVE) {
-        auth |= NC_SSH_AUTH_INTERACTIVE;
-    }
-    if (!auth && (ret_auth != SSH_AUTH_SUCCESS)) {
-        ERR("Unable to authenticate to the remote server (Authentication methods not supported).");
-        return EXIT_FAILURE;
+    if (ssh_opts.auth_pref[2].value < 0) {
+        VRB("Publickey SSH authentication method was disabled.");
+        userauthlist &= ~SSH_AUTH_METHOD_PUBLICKEY;
     }
 
-    /* select authentication according to preferences */
-    for (i = 0; i < NC_SSH_AUTH_COUNT; i++) {
-        if (!(ssh_opts.auth_pref[i].type & auth)) {
-            /* method not supported by server, skip */
-            continue;
+    while (ret_auth != SSH_AUTH_SUCCESS) {
+        auth = 0;
+        pref = 0;
+        if (userauthlist & SSH_AUTH_METHOD_INTERACTIVE) {
+            auth = NC_SSH_AUTH_INTERACTIVE;
+            pref = ssh_opts.auth_pref[0].value;
+        }
+        if ((userauthlist & SSH_AUTH_METHOD_PASSWORD) && (ssh_opts.auth_pref[1].value > pref)) {
+            auth = NC_SSH_AUTH_PASSWORD;
+            pref = ssh_opts.auth_pref[1].value;
+        }
+        if ((userauthlist & SSH_AUTH_METHOD_PUBLICKEY) && (ssh_opts.auth_pref[2].value > pref)) {
+            auth = NC_SSH_AUTH_PUBLICKEY;
+            pref = ssh_opts.auth_pref[2].value;
         }
 
-        if (ssh_opts.auth_pref[i].value < 0) {
-            /* all following auth methods are disabled via negative preference value */
-            ERR("Unable to authenticate to the remote server (method disabled or permission denied).");
-            return EXIT_FAILURE;
+        if (!auth) {
+            ERR("Unable to authenticate to the remote server (No supported authentication methods left).");
+            break;
         }
 
         /* found common authentication method */
-        switch (ssh_opts.auth_pref[i].type) {
+        switch (auth) {
         case NC_SSH_AUTH_PASSWORD:
+            userauthlist &= ~SSH_AUTH_METHOD_PASSWORD;
+
             VRB("Password authentication (host %s, user %s)", session->host, session->username);
             s = sshauth_password(session->username, session->host);
             if ((ret_auth = ssh_userauth_password(ssh_sess, session->username, s)) != SSH_AUTH_SUCCESS) {
@@ -741,6 +753,8 @@ connect_ssh_session_netconf(struct nc_session *session)
             free(s);
             break;
         case NC_SSH_AUTH_INTERACTIVE:
+            userauthlist &= ~SSH_AUTH_METHOD_INTERACTIVE;
+
             VRB("Keyboard-interactive authentication");
             while ((ret_auth = ssh_userauth_kbdint(ssh_sess, NULL, NULL)) == SSH_AUTH_INFO) {
                 for (j = 0; j < ssh_userauth_kbdint_getnprompts(ssh_sess); ++j) {
@@ -765,6 +779,8 @@ connect_ssh_session_netconf(struct nc_session *session)
 
             break;
         case NC_SSH_AUTH_PUBLICKEY:
+            userauthlist &= ~SSH_AUTH_METHOD_PUBLICKEY;
+
             VRB("Publickey athentication");
 
             /* if publickeys path not provided, we cannot continue */
@@ -827,15 +843,10 @@ connect_ssh_session_netconf(struct nc_session *session)
             }
             break;
         }
-
-        if (ret_auth == SSH_AUTH_SUCCESS) {
-            break;
-        }
     }
 
     /* check a state of authentication */
     if (ret_auth != SSH_AUTH_SUCCESS) {
-        ERR("Authentication failed.");
         return EXIT_FAILURE;
     }
 
