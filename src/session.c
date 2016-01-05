@@ -856,7 +856,7 @@ nc_recv_rpc(struct nc_session *session, int32_t timeout, struct nc_server_rpc **
     switch(msgtype) {
     case NC_MSG_RPC:
         *rpc = malloc(sizeof **rpc);
-        (*rpc)->tree = lyd_parse_xml(session->ctx, xml, LYD_OPT_DESTRUCT);
+        (*rpc)->tree = lyd_parse_xml(session->ctx, &xml->child, LYD_OPT_DESTRUCT);
         lyxml_free(session->ctx, xml);
         break;
     case NC_MSG_HELLO:
@@ -1247,7 +1247,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
         case NC_RPC_GETCONFIG:
         case NC_RPC_GET:
             /* special treatment */
-            data = lyd_parse_xml(ctx, xml->child, LYD_OPT_DESTRUCT
+            data = lyd_parse_xml(ctx, &xml->child->child, LYD_OPT_DESTRUCT
                                  | (rpc->type == NC_RPC_GETCONFIG ? LYD_OPT_GETCONFIG : LYD_OPT_GET));
             if (!data) {
                 ERR("Failed to parse <%s> reply.", (rpc->type == NC_RPC_GETCONFIG ? "get-config" : "get"));
@@ -1282,7 +1282,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
         data_rpl = malloc(sizeof *data_rpl);
         data_rpl->type = NC_REPLY_DATA;
         if (!data) {
-            data_rpl->data = lyd_parse_output_xml(schema, xml, LYD_OPT_DESTRUCT);
+            data_rpl->data = lyd_parse_output_xml(schema, &xml->child, LYD_OPT_DESTRUCT);
         } else {
             /* <get>, <get-config> */
             data_rpl->data = data;
@@ -1363,7 +1363,7 @@ nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
         }
 
         /* notification body */
-        (*notif)->tree = lyd_parse_xml(session->ctx, xml, LYD_OPT_DESTRUCT);
+        (*notif)->tree = lyd_parse_xml(session->ctx, &xml->child, LYD_OPT_DESTRUCT);
         lyxml_free(session->ctx, xml);
         xml = NULL;
         if (!(*notif)->tree) {
