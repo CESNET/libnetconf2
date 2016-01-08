@@ -57,26 +57,6 @@ struct nc_ssh_client_opts {
     int key_count;
 };
 
-struct nc_server_opts {
-    struct ly_ctx *ctx;
-
-    NC_WD_MODE wd_basic_mode;
-    int wd_also_supported;
-    int interleave_capab;
-
-    uint16_t hello_timeout;
-    uint16_t idle_timeout;
-    uint16_t max_sessions;
-
-    struct nc_bind {
-        char *address;
-        uint16_t port;
-        int sock;
-        NC_TRANSPORT_IMPL ti;
-    } *binds;
-    uint16_t bind_count;
-};
-
 struct nc_ssh_server_opts {
     ssh_bind sshbind;
 
@@ -103,7 +83,50 @@ struct nc_tls_client_opts {
     X509_STORE *tls_store;
 };
 
+typedef enum {
+    CTN_MAP_TYPE_UNKNOWN,
+    CTN_MAP_TYPE_SPECIFIED,
+    CTN_MAP_TYPE_SAN_RFC822_NAME,
+    CTN_MAP_TYPE_SAN_DNS_NAME,
+    CTN_MAP_TYPE_SAN_IP_ADDRESS,
+    CTN_MAP_TYPE_SAN_ANY,
+    CTN_MAP_TYPE_COMMON_NAME
+} CTN_MAP_TYPE;
+
+struct nc_tls_server_opts {
+    SSL_CTX *tls_ctx;
+    X509_STORE *crl_store;
+
+    struct {
+        uint32_t id;
+        const char *fingerprint;
+        CTN_MAP_TYPE map_type;
+        const char *name;
+    } *ctn;
+    uint16_t ctn_count;
+};
+
 #endif /* ENABLE_TLS */
+
+struct nc_server_opts {
+    struct ly_ctx *ctx;
+
+    NC_WD_MODE wd_basic_mode;
+    int wd_also_supported;
+    int interleave_capab;
+
+    uint16_t hello_timeout;
+    uint16_t idle_timeout;
+    uint16_t max_sessions;
+
+    struct nc_bind {
+        char *address;
+        uint16_t port;
+        int sock;
+        NC_TRANSPORT_IMPL ti;
+    } *binds;
+    uint16_t bind_count;
+};
 
 /**
  * Sleep time in microseconds to wait between unsuccessful reading due to EAGAIN or EWOULDBLOCK.

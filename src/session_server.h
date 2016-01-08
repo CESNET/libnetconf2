@@ -88,9 +88,37 @@ struct nc_session *nc_accept_ssh_channel(struct nc_session *session, int timeout
 
 #ifdef ENABLE_TLS
 
-void nc_tls_server_init(void);
+/* SSL_CTX */
+int nc_tls_server_set_cert(const char *cert);
 
-void nc_tls_server_destroy(void);
+/* SSL_CTX */
+int nc_tls_server_set_key(const char *privkey);
+
+/* SSL_CTX, PEM only */
+int nc_tls_server_set_key_path(const char *privkey_path);
+
+/* SSL_CTX */
+int nc_tls_server_add_trusted_cacert(const char *cacert);
+
+/* SSL_CTX */
+int nc_tls_server_del_trusted_cacert(const char *cacert);
+
+/* SSL_CTX */
+int nc_tls_server_add_trusted_clientcert(const char *clientcert);
+
+/* SSL_CTX */
+int nc_tls_server_del_trusted_clientcert(const char *clientcert);
+
+/* X509_STORE */
+int nc_tls_server_set_crl_dir(const char *crl_path);
+
+/* struct */
+int nc_tls_server_add_ctn();
+
+/* struct */
+int nc_tls_server_del_ctn();
+
+void nc_tls_server_free_opts(void);
 
 #endif /* ENABLE_TLS */
 
