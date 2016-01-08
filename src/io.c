@@ -461,41 +461,94 @@ struct wclb_arg {
 };
 
 static ssize_t
-write_(struct nc_session *session, const void *buf, size_t count)
+write_text_(struct nc_session *session, const void *buf, size_t count)
 {
-    int c = 0;
-    char chunksize[20];
-
     switch (session->ti_type) {
     case NC_TI_NONE:
         return -1;
 
     case NC_TI_FD:
-        if (session->version == NC_VERSION_11) {
-            c = dprintf(session->ti.fd.out, "\n#%zu\n", count);
-        }
-        return write(session->ti.fd.out, buf, count) + c;
+        return write(session->ti.fd.out, buf, count);
 
 #ifdef ENABLE_SSH
     case NC_TI_LIBSSH:
-        if (session->version == NC_VERSION_11) {
-            c = snprintf(chunksize, 20, "\n#%zu\n", count);
-            ssh_channel_write(session->ti.libssh.channel, chunksize, c);
-        }
-        return ssh_channel_write(session->ti.libssh.channel, buf, count) + c;
+        return ssh_channel_write(session->ti.libssh.channel, buf, count);
 #endif
-
 #ifdef ENABLE_TLS
     case NC_TI_OPENSSL:
-        if (session->version == NC_VERSION_11) {
-            c = snprintf(chunksize, 20, "\n#%zu\n", count);
-            SSL_write(session->ti.tls, chunksize, c);
-        }
-        return SSL_write(session->ti.tls, buf, count) + c;
+        return SSL_write(session->ti.tls, buf, count);
 #endif
     }
 
     return -1;
+}
+
+/* handles special XML characters, it can happen that return > count!!! */
+static ssize_t
+write_xml_(struct nc_session *session, const char *buf, size_t count)
+{
+    const char *ptr, *ptr2;
+    ssize_t c = 0;
+
+    ptr = buf;
+    while (1) {
+        ptr2 = ptr;
+        while (1) {
+            /* end of buffer */
+            if ((unsigned)(ptr2 - buf) == count) {
+                ptr2 = NULL;
+                break;
+            }
+
+            /* special char */
+            if ((ptr2[0] == '&') || (ptr2[0] == '<') || (ptr2[0] == '>')) {
+                break;
+            }
+
+            ++ptr2;
+        }
+
+        /* no more special chars */
+        if (!ptr2) {
+            break;
+        }
+
+        c += write_text_(session, ptr, ptr2 - ptr);
+
+        switch (ptr2[0]) {
+        case '&':
+            c += write_text_(session, "&amp;", 5);
+            count += 4;
+            break;
+        case '<':
+            c += write_text_(session, "&lt;", 4);
+            count += 3;
+            break;
+        case '>':
+            c += write_text_(session, "&gt;", 4);
+            count += 3;
+            break;
+        }
+
+        ptr = ptr2 + 1;
+    }
+
+    c += write_text_(session, ptr, count - (ptr - buf));
+
+    return c;
+}
+
+static ssize_t
+write_starttag_and_msg(struct nc_session *session, const void *buf, size_t count)
+{
+    int c = 0;
+    char chunksize[20];
+
+    if (session->version == NC_VERSION_11) {
+        sprintf(chunksize, "\n#%zu\n", count);
+        c = write_text_(session, chunksize, strlen(chunksize));
+    }
+    return write_text_(session, buf, count) + c;
 }
 
 static int
@@ -542,7 +595,7 @@ write_clb_flush(struct wclb_arg *warg)
 {
     /* flush current buffer */
     if (warg->len) {
-        write_(warg->session, warg->buf, warg->len);
+        write_starttag_and_msg(warg->session, warg->buf, warg->len);
         warg->len = 0;
     }
 }
@@ -566,7 +619,7 @@ write_clb(void *arg, const void *buf, size_t count)
     }
     if (count > WRITE_BUFSIZE) {
         /* write directly */
-        write_(warg->session, buf, count);
+        write_starttag_and_msg(warg->session, buf, count);
     } else {
         /* keep in buffer and write later */
         memcpy(&warg->buf[warg->len], buf, count);
@@ -643,7 +696,7 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
             lyxml_dump_fd(session->ti.fd.out, rpc->root, LYXML_DUMP_ATTRS);
             write(session->ti.fd.out, ">", 1);
 
-            /* TODO content */
+            /* TODO content (handle special chars if not dumping using libyang) */
 
             write(session->ti.fd.out, "</rpc-reply>]]>]]>", 18);
             break;
@@ -658,7 +711,7 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
             write_clb((void *)&arg, "<rpc-reply", 10);
             lyxml_dump_clb(write_clb, (void *)&arg, rpc->root, LYXML_DUMP_ATTRS);
 
-            /* TODO content */
+            /* TODO content (handle special chars if not dumping using libyang) */
 
             write_clb((void *)&arg, "</rpc-reply>", 12);
 
@@ -677,7 +730,7 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
         case NC_TI_FD:
             write(session->ti.fd.out, "<notification xmlns=\""NC_NS_NOTIF"\"/>", 21 + 47 + 3);
 
-            /* TODO content */
+            /* TODO content (handle special chars if not dumping using libyang) */
 
             write(session->ti.fd.out, "</notification>]]>]]>", 18);
             break;
@@ -691,7 +744,7 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
 #if defined(ENABLE_SSH) || defined(ENABLE_TLS)
             write_clb((void *)&arg, "<notification xmlns=\""NC_NS_NOTIF"\"/>", 21 + 47 + 3);
 
-            /* TODO content */
+            /* TODO content (handle special chars if not dumping using libyang) */
 
             write_clb((void *)&arg, "</notification>", 12);
 
@@ -712,7 +765,9 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
         case NC_TI_FD:
             dprintf(session->ti.fd.out, "<hello xmlns=\"%s\"><capabilities>", NC_NS_BASE);
             for (i = 0; capabilities[i]; i++) {
-                dprintf(session->ti.fd.out, "<capability>%s</capability>", capabilities[i]);
+                write(session->ti.fd.out, "<capability>", 12);
+                write_xml_(session, capabilities[i], strlen(capabilities[i]));
+                write(session->ti.fd.out, "</capability>", 13);
             }
             if (sid) {
                 dprintf(session->ti.fd.out, "</capabilities><session-id>%u</session-id></hello>]]>]]>", *sid);
@@ -732,6 +787,7 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
             write_clb((void *)&arg, buf, count);
             free(buf);
             for (i = 0; capabilities[i]; i++) {
+                /* BUG special XML chars not encoded */
                 count = asprintf(&buf, "<capability>%s</capability>", capabilities[i]);
                 write_clb((void *)&arg, buf, count);
                 free(buf);

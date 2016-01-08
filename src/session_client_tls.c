@@ -1,8 +1,8 @@
 /**
- * \file session_tls.c
+ * \file session_client_tls.c
  * \author Radek Krejci <rkrejci@cesnet.cz>
  * \author Michal Vasko <mvasko@cesnet.cz>
- * \brief libnetconf2 - TLS specific session transport functions
+ * \brief libnetconf2 - TLS specific session client transport functions
  *
  * This source is compiled only with libssl.
  *
@@ -29,9 +29,10 @@
 #include <unistd.h>
 
 #include <libyang/libyang.h>
+#include <openssl/err.h>
 
 #include "libnetconf.h"
-#include "session.h"
+#include "session_client.h"
 #include "session_p.h"
 
 /* TLS certificate verification error messages */
@@ -71,7 +72,7 @@ static const char* verify_ret_msg[] = {
     "key usage does not include certificate signing"
 };
 
-static struct nc_tls_auth_opts tls_opts;
+static struct nc_tls_client_opts tls_opts;
 
 static int
 tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)

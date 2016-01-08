@@ -52,5 +52,6 @@ extern volatile uint8_t verbose_level;
 #define DBG(format,args...) if(verbose_level>=NC_VERB_DEBUG){prv_printf(NC_VERB_DEBUG,format,##args);}
 
 #define ERRMEM ERR("Memory reallocation failed (%s:%d).", __FILE__, __LINE__)
+#define ERRARG ERR("%s: invalid arguments.", __func__)
 
 #endif /* NC_LOG_PRIVATE_H_ */

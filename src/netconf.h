@@ -42,6 +42,9 @@ extern "C" {
 /** @brief Default NETCONF over TLS Call Home port */
 #define NC_PORT_CH_TLS 6667
 
+/** @brief Microseconds after which tasks are repeated until the full timeout elapses */
+#define NC_TIMEOUT_STEP 10
+
 /**
  * @brief Enumeration of reasons of the NETCONF session termination as defined in RFC 6470.
  */
@@ -113,16 +116,6 @@ char* nc_time2datetime(time_t time, const char* tz);
  * @return time_t value of the given string.
  */
 time_t nc_datetime2time(const char* datetime);
-
-/**
- * @brief Set \<hello\> timeout - how long libnetconf will wait for the \<hello\>
- * message from the other side. Default value is -1 (infinite timeout).
- *
- * TODO: not implemented
- *
- * @param[in] timeout Timeout in milliseconds, -1 for infinite timeout, 0 for non-blocking.
- */
-void nc_hello_timeout(int timeout);
 
 #ifdef __cplusplus
 }

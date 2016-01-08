@@ -1,7 +1,7 @@
 /**
- * \file nc_client.h
+ * \file nc_server.h
  * \author Radek Krejci <rkrejci@cesnet.cz>
- * \brief libnetconf2's main public header for NETCONF clients.
+ * \brief libnetconf2's main public header for NETCONF servers.
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
@@ -20,15 +20,14 @@
  *
  */
 
-#ifndef NC_CLIENT_H_
-#define NC_CLIENT_H_
+#ifndef NC_SERVER_H_
+#define NC_SERVER_H_
 
 @SSH_MACRO@
 @TLS_MACRO@
 
 #include <libnetconf2/netconf.h>
 #include <libnetconf2/log.h>
-#include <libnetconf2/messages.h>
-#include <libnetconf2/session_client.h>
+#include <libnetconf2/session_server.h>
 
-#endif /* NC_CLIENT_H_ */
+#endif /* NC_SERVER_H_ */

@@ -29,17 +29,19 @@
 #include <libyang/libyang.h>
 #include "libnetconf.h"
 #include "session.h"
+#include "messages.h"
 
 #ifdef ENABLE_SSH
 
 #   include <libssh/libssh.h>
 #   include <libssh/callbacks.h>
+#   include <libssh/server.h>
 
 /* seconds */
 #   define NC_SSH_TIMEOUT 10
 #   define NC_SSH_AUTH_COUNT 3
 
-struct nc_ssh_auth_opts {
+struct nc_ssh_client_opts {
     /* SSH authentication method preferences */
     struct {
         NC_SSH_AUTH_TYPE type;
@@ -55,6 +57,41 @@ struct nc_ssh_auth_opts {
     int key_count;
 };
 
+struct nc_server_opts {
+    struct ly_ctx *ctx;
+
+    NC_WD_MODE wd_basic_mode;
+    int wd_also_supported;
+    int interleave_capab;
+
+    uint16_t hello_timeout;
+    uint16_t idle_timeout;
+    uint16_t max_sessions;
+};
+
+struct nc_bind {
+    char *address;
+    uint16_t port;
+    int sock;
+};
+
+struct nc_ssh_server_opts {
+    struct nc_bind *binds;
+    uint16_t bind_count;
+
+    ssh_bind sshbind;
+
+    struct {
+        char *path;
+        char *username;
+    } *authkeys;
+    uint16_t authkey_count;
+
+    int auth_methods;
+    uint16_t auth_attempts;
+    uint16_t auth_timeout;
+};
+
 #endif /* ENABLE_SSH */
 
 #ifdef ENABLE_TLS
@@ -62,7 +99,7 @@ struct nc_ssh_auth_opts {
 #   include <openssl/bio.h>
 #   include <openssl/ssl.h>
 
-struct nc_tls_auth_opts {
+struct nc_tls_client_opts {
     SSL_CTX *tls_ctx;
     X509_STORE *tls_store;
 };
@@ -147,14 +184,25 @@ struct nc_session {
     /* other */
     struct ly_ctx *ctx;            /**< libyang context of the session */
     uint8_t flags;                 /**< various flags of the session - TODO combine with status and/or side */
-#define NC_SESSION_SHAREDCTX 0x1
+#define NC_SESSION_SHAREDCTX 0x01
+#define NC_SESSION_SSH_AUTHENTICATED 0x02
+#define NC_SESSION_SSH_SUBSYS_NETCONF 0x04
 
     /* client side only data */
     uint64_t msgid;
     const char **cpblts;           /**< list of server's capabilities on client side */
     struct nc_msg_cont *replies;   /**< queue for RPC replies received instead of notifications */
     struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
+
+    /* server side only data */
+    uint16_t auth_attempts;
 };
+
+NC_MSG_TYPE nc_send_msg(struct nc_session *session, struct lyd_node *op);
+
+int session_ti_lock(struct nc_session *session, int32_t timeout);
+
+int session_ti_unlock(struct nc_session *session);
 
 /**
  * @brief Fill libyang context in \p session. Context models are based on the stored session
@@ -234,5 +282,9 @@ NC_MSG_TYPE nc_read_msg(struct nc_session* session, int timeout, struct lyxml_el
  * @return 0 on success
  */
 int nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...);
+
+int nc_sock_listen(const char *address, uint32_t port);
+
+int nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host, uint16_t *port);
 
 #endif /* NC_SESSION_PRIVATE_H_ */

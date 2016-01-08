@@ -1,7 +1,7 @@
 /**
- * \file nc_client.h
- * \author Radek Krejci <rkrejci@cesnet.cz>
- * \brief libnetconf2's main public header for NETCONF clients.
+ * \file session_server_tls.c
+ * \author Michal Vasko <mvasko@cesnet.cz>
+ * \brief libnetconf2 TLS server session manipulation functions
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
@@ -20,15 +20,17 @@
  *
  */
 
-#ifndef NC_CLIENT_H_
-#define NC_CLIENT_H_
+#include "session_server.h"
+#include "config.h"
 
-@SSH_MACRO@
-@TLS_MACRO@
+API void
+nc_tls_server_init(void)
+{
 
-#include <libnetconf2/netconf.h>
-#include <libnetconf2/log.h>
-#include <libnetconf2/messages.h>
-#include <libnetconf2/session_client.h>
+}
 
-#endif /* NC_CLIENT_H_ */
+API void
+nc_tls_server_destroy(void)
+{
+
+}

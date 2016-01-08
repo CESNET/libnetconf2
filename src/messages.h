@@ -25,6 +25,8 @@
 
 #include <stdint.h>
 
+#include "netconf.h"
+
 typedef enum {
     NC_RPC_GENERIC,     /**< user-defined generic RPC. */
 
@@ -80,10 +82,10 @@ typedef enum {
 
 typedef enum {
     NC_WD_UNKNOWN = 0,
-    NC_WD_ALL,
-    NC_WD_ALL_TAG,
-    NC_WD_TRIM,
-    NC_WD_EXPLICIT
+    NC_WD_ALL = 0x01,
+    NC_WD_ALL_TAG = 0x02,
+    NC_WD_TRIM = 0x04,
+    NC_WD_EXPLICIT = 0x08
 } NC_WD_MODE;
 
 typedef enum {

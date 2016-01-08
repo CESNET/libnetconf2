@@ -1,7 +1,8 @@
 /**
- * \file session_ssh.c
+ * \file session_client_ssh.c
  * \author Radek Krejci <rkrejci@cesnet.cz>
- * \brief libnetconf2 - SSH specific session transport functions
+ * \author Michal Vasko <mvasko@cesnet.cz>
+ * \brief libnetconf2 - SSH specific client session transport functions
  *
  * This source is compiled only with libssh.
  *
@@ -46,19 +47,12 @@
 #include <libyang/libyang.h>
 
 #include "libnetconf.h"
-#include "session.h"
+#include "session_client.h"
 #include "session_p.h"
 
-static struct nc_ssh_auth_opts ssh_opts = {
+static struct nc_ssh_client_opts ssh_opts = {
     .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 1}}
 };
-
-API void
-nc_ssh_client_init(void)
-{
-    ssh_threads_set_callbacks(ssh_threads_get_pthread());
-    ssh_init();
-}
 
 API void
 nc_ssh_client_destroy(void)
@@ -456,14 +450,15 @@ sshauth_hostkey_check(const char *hostname, ssh_session session)
         goto fail;
 
     case SSH_SERVER_FOUND_OTHER:
-        ERR("The remote host key was not found but another type of key was, the connection will be terminated.");
-        goto fail;
+        WRN("Remote host key is not known, but a key of another type for this host is known. Continue with caution.");
+        goto hostkey_not_known;
 
     case SSH_SERVER_FILE_NOT_FOUND:
         WRN("Could not find the known hosts file.");
-        /* fallback to SSH_SERVER_NOT_KNOWN behavior */
+        goto hostkey_not_known;
 
     case SSH_SERVER_NOT_KNOWN:
+hostkey_not_known:
 #ifdef ENABLE_DNSSEC
         if ((srv_pubkey_type != SSH_KEYTYPE_UNKNOWN) || (srv_pubkey_type != SSH_KEYTYPE_RSA1)) {
             if (srv_pubkey_type == SSH_KEYTYPE_DSS) {
@@ -539,7 +534,7 @@ fail:
 }
 
 API int
-nc_ssh_add_keypair(const char *pub_key, const char *priv_key)
+nc_ssh_client_add_keypair(const char *pub_key, const char *priv_key)
 {
     int i;
     FILE *key;
@@ -597,7 +592,7 @@ nc_ssh_add_keypair(const char *pub_key, const char *priv_key)
 }
 
 API int
-nc_ssh_del_keypair(int idx)
+nc_ssh_client_del_keypair(int idx)
 {
     if (idx >= ssh_opts.key_count) {
         return EXIT_FAILURE;
@@ -615,13 +610,13 @@ nc_ssh_del_keypair(int idx)
 }
 
 API int
-nc_ssh_get_keypair_count(void)
+nc_ssh_client_get_keypair_count(void)
 {
     return ssh_opts.key_count;
 }
 
 API int
-nc_ssh_get_keypair(int idx, const char **pub_key, const char **priv_key)
+nc_ssh_client_get_keypair(int idx, const char **pub_key, const char **priv_key)
 {
     if (idx >= ssh_opts.key_count) {
         return EXIT_FAILURE;
@@ -638,7 +633,7 @@ nc_ssh_get_keypair(int idx, const char **pub_key, const char **priv_key)
 }
 
 API void
-nc_ssh_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, short int pref)
+nc_ssh_client_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, short int pref)
 {
     if (pref < 0) {
         pref = -1;
@@ -654,7 +649,7 @@ nc_ssh_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, short int pref)
 }
 
 API short int
-nc_ssh_get_auth_pref(NC_SSH_AUTH_TYPE auth_type)
+nc_ssh_client_get_auth_pref(NC_SSH_AUTH_TYPE auth_type)
 {
     short int pref = 0;
 
@@ -927,6 +922,12 @@ nc_connect_ssh(const char *host, uint16_t port, const char *username, struct ly_
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_PORT, &port);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_TIMEOUT, &timeout);
+    if (ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOSTKEYS,
+                        "ssh-ed25519,ecdsa-sha2-nistp521,ecdsa-sha2-nistp384,"
+                        "ecdsa-sha2-nistp256,ssh-rsa,ssh-dss,ssh-rsa1")) {
+        /* ecdsa is probably not supported... */
+        ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519,ssh-rsa,ssh-dss,ssh-rsa1");
+    }
 
     /* create and assign communication socket */
     sock = nc_connect_getsocket(host, port);
@@ -1196,6 +1197,12 @@ nc_callhome_accept_ssh(uint16_t port, const char *username, int32_t timeout, str
     ssh_options_set(sess, SSH_OPTIONS_TIMEOUT, &ssh_timeout);
     if (username) {
         ssh_options_set(sess, SSH_OPTIONS_USER, username);
+    }
+    if (ssh_options_set(sess, SSH_OPTIONS_HOSTKEYS,
+                        "ssh-ed25519,ecdsa-sha2-nistp521,ecdsa-sha2-nistp384,"
+                        "ecdsa-sha2-nistp256,ssh-rsa,ssh-dss,ssh-rsa1")) {
+        /* ecdsa is probably not supported... */
+        ssh_options_set(sess, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519,ssh-rsa,ssh-dss,ssh-rsa1");
     }
 
     free(server_host);

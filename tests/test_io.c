@@ -35,6 +35,7 @@
 #include <libyang/libyang.h>
 
 #include <session_p.h>
+#include <session_client.h>
 #include <messages_p.h>
 #include "config.h"
 

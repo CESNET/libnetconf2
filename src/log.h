@@ -31,10 +31,10 @@ extern "C" {
  * @brief Verbosity levels.
  */
 typedef enum NC_VERB_LEVEL {
-    NC_VERB_ERROR,   /**< Print only error messages. */
-    NC_VERB_WARNING, /**< Print error and warning messages. */
-    NC_VERB_VERBOSE, /**< Besides errors and warnings, print some other verbose messages. */
-    NC_VERB_DEBUG    /**< Print all messages including some development debug messages. */
+    NC_VERB_ERROR = 0,   /**< Print only error messages. */
+    NC_VERB_WARNING = 1, /**< Print error and warning messages. */
+    NC_VERB_VERBOSE = 2, /**< Besides errors and warnings, print some other verbose messages. */
+    NC_VERB_DEBUG = 3    /**< Print all messages including some development debug messages. */
 } NC_VERB_LEVEL;
 
 /**

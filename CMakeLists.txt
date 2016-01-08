@@ -37,24 +37,30 @@ set(libsrc
 	src/log.c
 	src/messages.c
 	src/session.c
+	src/session_client.c
+	src/session_server.c
 	src/time.c)
 
 if(ENABLE_SSH)
 	set(libsrc ${libsrc}
-		src/session_ssh.c)
-	set(LIBSSH_MACRO "#define ENABLE_SSH")
+		src/session_client_ssh.c
+		src/session_server_ssh.c)
+	set(SSH_MACRO "#ifndef ENABLE_SSH\n#define ENABLE_SSH\n#endif")
 endif()
 
 if(ENABLE_TLS)
 	set(libsrc ${libsrc}
-		src/session_tls.c)
-	set(TLS_MACRO "#define ENABLE_TLS")
+		src/session_client_tls.c
+		src/session_server_tls.c)
+	set(TLS_MACRO "#ifndef ENABLE_TLS\n#define ENABLE_TLS\n#endif")
 endif()
 
 set(headers
 	src/log.h
 	src/netconf.h
 	src/session.h
+	src/session_client.h
+	src/session_server.h
 	src/messages.h)
 
 # libnetconf2 target
@@ -73,7 +79,7 @@ endif()
 if(ENABLE_SSH)
 	find_package(LibSSH 0.6.4 REQUIRED)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_SSH ${LIBSSH_DEFINITIONS}")
-	target_link_libraries(netconf2 ${LIBSSH_LIBRARIES} -lssh_threads)
+	target_link_libraries(netconf2 ${LIBSSH_LIBRARIES} -lssh_threads -lcrypt)
 	include_directories(${LIBSSH_INCLUDE_DIRS})
 endif()
 
@@ -129,6 +135,7 @@ endif()
 
 configure_file(src/config.h.in src/config.h)
 configure_file(nc_client.h.in nc_client.h)
+configure_file(nc_server.h.in nc_server.h)
 
 # clean cmake cache
 add_custom_target(cleancache
