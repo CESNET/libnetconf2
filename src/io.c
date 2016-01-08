@@ -574,203 +574,20 @@ write_clb(void *arg, const void *buf, size_t count)
     return (ssize_t)count;
 }
 
-/*
- * NETCONF 1.0 format
- */
-static int
-write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
+int
+nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
 {
+    va_list ap;
     int count, i;
     const char *attrs;
     struct lyd_node *content;
     struct nc_server_rpc *rpc;
+    char *buf = NULL;
+    struct wclb_arg arg;
     const char **capabilities;
     uint32_t *sid = NULL;
-    char *buf = NULL;
-    struct wclb_arg arg;
 
-    arg.session = session;
-    arg.len = 0;
-
-    switch (type) {
-    case NC_MSG_RPC:
-        content = va_arg(ap, struct lyd_node *);
-        attrs = va_arg(ap, const char *);
-        switch (session->ti_type) {
-        case NC_TI_NONE:
-            return -1;
-
-        case NC_TI_FD:
-            dprintf(session->ti.fd.out, "<rpc xmlns=\"%s\" message-id=\"%"PRIu64"\"%s>",
-                    NC_NS_BASE, session->msgid + 1, attrs ? attrs : "");
-            lyd_print_fd(session->ti.fd.out, content, LYD_XML);
-            write(session->ti.fd.out, "</rpc>]]>]]>", 12);
-            break;
-
-#ifdef ENABLE_SSH
-        case NC_TI_LIBSSH:
-#endif
-#ifdef ENABLE_TLS
-        case NC_TI_OPENSSL:
-#endif
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
-            count = asprintf(&buf, "<rpc xmlns=\"%s\" message-id=\"%"PRIu64"\"%s>",
-                             NC_NS_BASE, session->msgid + 1, attrs ? attrs : "");
-            write_clb((void *)&arg, buf, count);
-            free(buf);
-            lyd_print_clb(write_clb, (void *)&arg, content, LYD_XML);
-            write_clb((void *)&arg, "</rpc>", 6);
-
-            /* flush message */
-            write_clb((void *)&arg, NULL, 0);
-            break;
-#endif
-        }
-
-        session->msgid++;
-        break;
-
-    case NC_MSG_REPLY:
-        rpc = va_arg(ap, struct nc_server_rpc *);
-        switch (session->ti_type) {
-        case NC_TI_NONE:
-            return -1;
-
-        case NC_TI_FD:
-            write(session->ti.fd.out, "<rpc-reply", 10);
-            lyxml_dump_fd(session->ti.fd.out, rpc->root, LYXML_DUMP_ATTRS);
-            write(session->ti.fd.out, ">", 1);
-
-            /* TODO content (handle special chars if not dumping using libyang) */
-
-            write(session->ti.fd.out, "</rpc-reply>]]>]]>", 18);
-            break;
-
-#ifdef ENABLE_SSH
-        case NC_TI_LIBSSH:
-#endif
-#ifdef ENABLE_TLS
-        case NC_TI_OPENSSL:
-#endif
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
-            write_clb((void *)&arg, "<rpc-reply", 10);
-            lyxml_dump_clb(write_clb, (void *)&arg, rpc->root, LYXML_DUMP_ATTRS);
-
-            /* TODO content (handle special chars if not dumping using libyang) */
-
-            write_clb((void *)&arg, "</rpc-reply>", 12);
-
-            /* flush message */
-            write_clb((void *)&arg, NULL, 0);
-            break;
-#endif
-        }
-        break;
-
-    case NC_MSG_NOTIF:
-        switch (session->ti_type) {
-        case NC_TI_NONE:
-            return -1;
-
-        case NC_TI_FD:
-            write(session->ti.fd.out, "<notification xmlns=\""NC_NS_NOTIF"\"/>", 21 + 47 + 3);
-
-            /* TODO content (handle special chars if not dumping using libyang) */
-
-            write(session->ti.fd.out, "</notification>]]>]]>", 18);
-            break;
-
-#ifdef ENABLE_SSH
-        case NC_TI_LIBSSH:
-#endif
-#ifdef ENABLE_TLS
-        case NC_TI_OPENSSL:
-#endif
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
-            write_clb((void *)&arg, "<notification xmlns=\""NC_NS_NOTIF"\"/>", 21 + 47 + 3);
-
-            /* TODO content (handle special chars if not dumping using libyang) */
-
-            write_clb((void *)&arg, "</notification>", 12);
-
-            /* flush message */
-            write_clb((void *)&arg, NULL, 0);
-            break;
-#endif
-        }
-        break;
-
-    case NC_MSG_HELLO:
-        capabilities = va_arg(ap, const char **);
-        sid = va_arg(ap, uint32_t*);
-        switch (session->ti_type) {
-        case NC_TI_NONE:
-            return -1;
-
-        case NC_TI_FD:
-            dprintf(session->ti.fd.out, "<hello xmlns=\"%s\"><capabilities>", NC_NS_BASE);
-            for (i = 0; capabilities[i]; i++) {
-                write(session->ti.fd.out, "<capability>", 12);
-                write(session->ti.fd.out, capabilities[i], strlen(capabilities[i]));
-                write(session->ti.fd.out, "</capability>", 13);
-            }
-            if (sid) {
-                dprintf(session->ti.fd.out, "</capabilities><session-id>%u</session-id></hello>]]>]]>", *sid);
-            } else {
-                write(session->ti.fd.out, "</capabilities></hello>]]>]]>", 29);
-            }
-            break;
-
-#ifdef ENABLE_SSH
-        case NC_TI_LIBSSH:
-#endif
-#ifdef ENABLE_TLS
-        case NC_TI_OPENSSL:
-#endif
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
-            count = asprintf(&buf, "<hello xmlns=\"%s\"><capabilities>", NC_NS_BASE);
-            write_clb((void *)&arg, buf, count);
-            free(buf);
-            for (i = 0; capabilities[i]; i++) {
-                /* BUG special XML chars not encoded */
-                count = asprintf(&buf, "<capability>%s</capability>", capabilities[i]);
-                write_clb((void *)&arg, buf, count);
-                free(buf);
-            }
-            if (sid) {
-                asprintf(&buf, "</capabilities><session-id>%u</session-id></hello>", *sid);
-                write_clb((void *)&arg, buf, count);
-                free(buf);
-            } else {
-                write_clb((void *)&arg, "</capabilities></hello>", 23);
-            }
-
-            /* flush message */
-            write_clb((void *)&arg, NULL, 0);
-            break;
-#endif
-        }
-        break;
-
-    default:
-        return -1;
-    }
-
-    return 0;
-}
-
-/*
- * NETCONF 1.1 format
- */
-static int
-write_msg_11(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
-{
-    int count;
-    const char *attrs;
-    struct lyd_node *content;
-    struct nc_server_rpc *rpc;
-    char *buf = NULL;
-    struct wclb_arg arg;
+    va_start(ap, type);
 
     arg.session = session;
     arg.len = 0;
@@ -801,31 +618,40 @@ write_msg_11(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
         /* TODO content */
         write_clb((void *)&arg, "</notification>", 12);
         break;
+    case NC_MSG_HELLO:
+        if (session->version != NC_VERSION_10) {
+            va_end(ap);
+            return -1;
+        }
+        capabilities = va_arg(ap, const char **);
+        sid = va_arg(ap, uint32_t*);
+        count = asprintf(&buf, "<hello xmlns=\"%s\"><capabilities>", NC_NS_BASE);
+        write_clb((void *)&arg, buf, count);
+        free(buf);
+        for (i = 0; capabilities[i]; i++) {
+            count = asprintf(&buf, "<capability>%s</capability>", capabilities[i]);
+            write_clb((void *)&arg, buf, count);
+            free(buf);
+        }
+        if (sid) {
+            asprintf(&buf, "</capabilities><session-id>%u</session-id></hello>", *sid);
+            write_clb((void *)&arg, buf, count);
+            free(buf);
+        } else {
+            write_clb((void *)&arg, "</capabilities></hello>", 23);
+        }
+
+        /* flush message */
+        write_clb((void *)&arg, NULL, 0);
+        break;
     default:
-        /* just to make compiler quiet */
+        va_end(ap);
         return -1;
     }
 
     /* flush message */
     write_clb((void *)&arg, NULL, 0);
-    return 0;
-}
-
-int
-nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
-{
-    va_list ap;
-    int r;
-
-    va_start(ap, type);
-
-    if (session->version == NC_VERSION_10) {
-        r = write_msg_10(session, type, ap);
-    } else {
-        r = write_msg_11(session, type, ap);
-    }
 
     va_end(ap);
-
-    return r;
+    return 0;
 }
