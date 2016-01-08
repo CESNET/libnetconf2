@@ -41,9 +41,9 @@ static struct nc_ssh_server_opts ssh_opts = {
 };
 
 API int
-nc_ssh_server_set_hostkeys(const char *dsakey, const char *rsakey, const char *ecdsakey)
+nc_ssh_server_set_hostkey(const char *key_path)
 {
-    if (!dsakey && !rsakey && !ecdsakey) {
+    if (!key_path) {
         ERRARG;
         return -1;
     }
@@ -51,20 +51,16 @@ nc_ssh_server_set_hostkeys(const char *dsakey, const char *rsakey, const char *e
     if (!ssh_opts.sshbind) {
         ssh_opts.sshbind = ssh_bind_new();
         if (!ssh_opts.sshbind) {
-            ERR("%s: failed to create a new ssh_bind", __func__);
+            ERR("%s: failed to create a new ssh_bind.", __func__);
             return -1;
         }
     }
 
-    if (dsakey) {
-        ssh_bind_options_set(ssh_opts.sshbind, SSH_BIND_OPTIONS_DSAKEY, dsakey);
+    if (ssh_bind_options_set(ssh_opts.sshbind, SSH_BIND_OPTIONS_HOSTKEY, key_path) != SSH_OK) {
+        ERR("%s: failed to set host key (%s).", __func__, ssh_get_error(ssh_opts.sshbind));
+        return -1;
     }
-    if (rsakey) {
-        ssh_bind_options_set(ssh_opts.sshbind, SSH_BIND_OPTIONS_RSAKEY, rsakey);
-    }
-    if (ecdsakey) {
-        ssh_bind_options_set(ssh_opts.sshbind, SSH_BIND_OPTIONS_ECDSAKEY, ecdsakey);
-    }
+
     return 0;
 }
 

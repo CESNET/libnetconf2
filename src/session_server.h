@@ -65,7 +65,8 @@ struct nc_session *nc_accept(int timeout);
 
 #ifdef ENABLE_SSH
 
-int nc_ssh_server_set_hostkeys(const char *dsakey, const char *rsakey, const char *ecdsakey);
+/* one for each key */
+int nc_ssh_server_set_hostkey(const char *key_path);
 
 int nc_ssh_server_set_banner(const char *banner);
 
