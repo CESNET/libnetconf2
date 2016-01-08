@@ -100,7 +100,7 @@ nc_sock_listen(const char *address, uint32_t port)
         }
     }
 
-    if (listen(sock, 5) == -1) {
+    if (listen(sock, NC_REVERSE_QUEUE) == -1) {
         ERR("%s: unable to start listening on \"%s\" port %d (%s)", __func__, address, port, strerror(errno));
         goto fail;
     }
@@ -443,6 +443,85 @@ fail:
     nc_session_free(session);
 
     return NULL;
+}
+
+API struct nc_pollsession *
+nc_pollsession_new(void)
+{
+    return calloc(1, sizeof(struct nc_pollsession));
+}
+
+API void
+nc_pollsession_free(struct nc_pollsession *ps)
+{
+    free(ps->sessions);
+    free(ps);
+}
+
+API int
+nc_pollsession_add_session(struct nc_pollsession *ps, struct nc_session *session)
+{
+    ++ps->session_count;
+    ps->sessions = realloc(ps->sessions, ps->session_count * sizeof *ps->sessions);
+
+    switch (session->ti_type) {
+    case NC_TI_FD:
+        ps->sessions[ps->session_count - 1].fd = session->ti.fd.in;
+        break;
+
+#ifdef ENABLE_SSH
+    case NC_TI_LIBSSH:
+        ps->sessions[ps->session_count - 1].fd = ssh_get_fd(session->ti.libssh.session);
+        break;
+#endif
+
+#ifdef ENABLE_TLS
+    case NC_TI_OPENSSL:
+        ps->sessions[ps->session_count - 1].fd = SSL_get_rfd(session->ti.tls);
+        break;
+#endif
+
+    default:
+        ERRINT;
+        return -1;
+    }
+    ps->sessions[ps->session_count - 1].events = POLLIN;
+    ps->sessions[ps->session_count - 1].revents = 0;
+    ps->sessions[ps->session_count - 1].session = session;
+
+    return 0;
+}
+
+API int
+nc_pollsession_poll(struct nc_pollsession *ps, int timeout)
+{
+    int ret;
+    uint16_t i;
+    struct nc_session *session;
+
+    ret = poll((struct pollfd *)ps->sessions, ps->session_count, timeout);
+    if (ret < 1) {
+        return ret;
+    }
+
+    /* find the first fd with POLLIN, we don't care if there are more */
+    for (i = 0; i < ps->session_count; ++i) {
+        if (ps->sessions[i].revents & POLLIN) {
+            break;
+        }
+    }
+
+    if (i == ps->session_count) {
+        ERRINT;
+        return -1;
+    }
+
+    /* this is the session with some data available for reading */
+    session = ps->sessions[i].session;
+
+    /* TODO */
+
+    return 1;
 }
 
 #endif /* ENABLE_SSH || ENABLE_TLS */

@@ -70,6 +70,8 @@ struct nc_session;
  */
 void nc_session_free(struct nc_session *session);
 
+#ifdef ENABLE_SSH
+
 /**
  * @brief Initialize libssh so that libnetconf2 can safely use it in a multi-threaded environment.
  *
@@ -84,5 +86,7 @@ void nc_ssh_init(void);
  * Must be called before nc_tls_destroy() as libssh uses libcrypto as well.
  */
 void nc_ssh_destroy(void);
+
+#endif /* ENABLE_SSH */
 
 #endif /* NC_SESSION_H_ */

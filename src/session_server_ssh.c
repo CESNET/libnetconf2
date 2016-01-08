@@ -717,22 +717,8 @@ nc_accept_ssh_channel(struct nc_session *session, int timeout)
     struct nc_session *new_session;
     int ret;
 
-    for (new_session = session; new_session->ti.libssh.next; new_session = new_session->ti.libssh.next);
-    new_session->ti.libssh.next = calloc(1, sizeof *new_session);
-    new_session = new_session->ti.libssh.next;
-
-    new_session->status = NC_STATUS_STARTING;
-    new_session->side = NC_SERVER;
-    new_session->ti_type = NC_TI_LIBSSH;
-    new_session->ti_lock = session->ti_lock;
+    new_session = calloc(1, sizeof *new_session);
     new_session->ti.libssh.session = session->ti.libssh.session;
-    new_session->flags = NC_SESSION_SSH_AUTHENTICATED | NC_SESSION_SHAREDCTX;
-    new_session->ctx = session->ctx;
-
-    new_session->username = lydict_insert(new_session->ctx, session->username, 0);
-    new_session->host = lydict_insert(new_session->ctx, session->host, 0);
-    new_session->port = session->port;
-
     ret = nc_open_netconf_channel(new_session, timeout);
     if (ret) {
         if (ret == -1) {
@@ -743,6 +729,21 @@ nc_accept_ssh_channel(struct nc_session *session, int timeout)
         }
         goto fail;
     }
+
+    /* new channel was requested and opened, fill in the whole session now */
+    for (; session->ti.libssh.next; session = session->ti.libssh.next);
+    session->ti.libssh.next = new_session;
+
+    new_session->status = NC_STATUS_STARTING;
+    new_session->side = NC_SERVER;
+    new_session->ti_type = NC_TI_LIBSSH;
+    new_session->ti_lock = session->ti_lock;
+    new_session->flags = NC_SESSION_SSH_AUTHENTICATED | NC_SESSION_SHAREDCTX;
+    new_session->ctx = session->ctx;
+
+    new_session->username = lydict_insert(new_session->ctx, session->username, 0);
+    new_session->host = lydict_insert(new_session->ctx, session->host, 0);
+    new_session->port = session->port;
 
     /* NETCONF handshake */
     if (nc_handshake(new_session)) {

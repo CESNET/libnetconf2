@@ -41,11 +41,15 @@ int nc_server_set_idle_timeout(uint16_t idle_timeout);
 
 int nc_server_set_max_sessions(uint16_t max_sessions);
 
-void nc_server_destroy_binds(void);
-
 struct nc_session *nc_accept_inout(int fdin, int fdout, const char *username);
 
-/* vlastna pollovacia struktura, ktoru naplnis sessnami a iba na tych sa polluje, s normalnym timeoutom, ktory sa preda priamo pollu */
+struct nc_pollsession *nc_pollsession_new(void);
+
+void nc_pollsession_free(struct nc_pollsession *ps);
+
+int nc_pollsession_add_session(struct nc_pollsession *ps, struct nc_session *session);
+
+int nc_pollsession_poll(struct nc_pollsession *ps, int timeout);
 
 #if defined(ENABLE_SSH) || defined(ENABLE_TLS)
 
@@ -53,9 +57,11 @@ int nc_server_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_I
 
 int nc_server_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
 
+void nc_server_destroy_binds(void);
+
 struct nc_session *nc_accept(int timeout);
 
-#endif
+#endif /* ENABLE_SSH || ENABLE_TLS */
 
 #ifdef ENABLE_SSH
 

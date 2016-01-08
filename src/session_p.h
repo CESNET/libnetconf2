@@ -197,6 +197,16 @@ struct nc_session {
     uint16_t auth_attempts;
 };
 
+struct nc_pollsession {
+    struct {
+        int fd;
+        short events;
+        short revents;
+        struct nc_session *session;
+    } *sessions;
+    uint16_t session_count;
+};
+
 NC_MSG_TYPE nc_send_msg(struct nc_session *session, struct lyd_node *op);
 
 int session_ti_lock(struct nc_session *session, int32_t timeout);
@@ -240,6 +250,10 @@ int nc_handshake(struct nc_session *session);
  * @return Connected socket with the new connection, -1 on error.
  */
 int nc_callhome_accept_connection(uint16_t port, int32_t timeout, uint16_t *server_port, char **server_host);
+
+int nc_sock_listen(const char *address, uint32_t port);
+
+int nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANSPORT_IMPL *ti, char **host, uint16_t *port);
 
 #ifdef ENABLE_SSH
 
@@ -293,9 +307,5 @@ NC_MSG_TYPE nc_read_msg(struct nc_session* session, int timeout, struct lyxml_el
  * @return 0 on success
  */
 int nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...);
-
-int nc_sock_listen(const char *address, uint32_t port);
-
-int nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANSPORT_IMPL *ti, char **host, uint16_t *port);
 
 #endif /* NC_SESSION_PRIVATE_H_ */
