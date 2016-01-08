@@ -483,61 +483,6 @@ write_text_(struct nc_session *session, const void *buf, size_t count)
     return -1;
 }
 
-/* handles special XML characters, it can happen that return > count!!! */
-static ssize_t
-write_xml_(struct nc_session *session, const char *buf, size_t count)
-{
-    const char *ptr, *ptr2;
-    ssize_t c = 0;
-
-    ptr = buf;
-    while (1) {
-        ptr2 = ptr;
-        while (1) {
-            /* end of buffer */
-            if ((unsigned)(ptr2 - buf) == count) {
-                ptr2 = NULL;
-                break;
-            }
-
-            /* special char */
-            if ((ptr2[0] == '&') || (ptr2[0] == '<') || (ptr2[0] == '>')) {
-                break;
-            }
-
-            ++ptr2;
-        }
-
-        /* no more special chars */
-        if (!ptr2) {
-            break;
-        }
-
-        c += write_text_(session, ptr, ptr2 - ptr);
-
-        switch (ptr2[0]) {
-        case '&':
-            c += write_text_(session, "&amp;", 5);
-            count += 4;
-            break;
-        case '<':
-            c += write_text_(session, "&lt;", 4);
-            count += 3;
-            break;
-        case '>':
-            c += write_text_(session, "&gt;", 4);
-            count += 3;
-            break;
-        }
-
-        ptr = ptr2 + 1;
-    }
-
-    c += write_text_(session, ptr, count - (ptr - buf));
-
-    return c;
-}
-
 static ssize_t
 write_starttag_and_msg(struct nc_session *session, const void *buf, size_t count)
 {
@@ -766,7 +711,7 @@ write_msg_10(struct nc_session *session, NC_MSG_TYPE type, va_list ap)
             dprintf(session->ti.fd.out, "<hello xmlns=\"%s\"><capabilities>", NC_NS_BASE);
             for (i = 0; capabilities[i]; i++) {
                 write(session->ti.fd.out, "<capability>", 12);
-                write_xml_(session, capabilities[i], strlen(capabilities[i]));
+                write(session->ti.fd.out, capabilities[i], strlen(capabilities[i]));
                 write(session->ti.fd.out, "</capability>", 13);
             }
             if (sid) {

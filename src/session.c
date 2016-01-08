@@ -352,7 +352,7 @@ create_cpblts(struct ly_ctx *ctx)
             }
 
             if (server_opts.wd_also_supported) {
-                strcat(str, "&also-supported=");
+                strcat(str, "&amp;also-supported=");
                 if (server_opts.wd_also_supported & NC_WD_ALL) {
                     strcat(str, "report-all,");
                 }
@@ -402,9 +402,9 @@ create_cpblts(struct ly_ctx *ctx)
                 continue;
             }
 
-            sprintf(str, "%s?module=%s&revision=%s", ns->value_str, name->value_str, rev->value_str);
+            sprintf(str, "%s?module=%s&amp;revision=%s", ns->value_str, name->value_str, rev->value_str);
             if (feat_count) {
-                strcat(str, "&features=");
+                strcat(str, "&amp;features=");
                 for (i = 0; i < feat_count; ++i) {
                     if (i) {
                         strcat(str, ",");
