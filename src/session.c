@@ -21,6 +21,7 @@
  */
 
 #include <errno.h>
+#include <stdlib.h>
 #include <pthread.h>
 #include <libyang/libyang.h>
 
