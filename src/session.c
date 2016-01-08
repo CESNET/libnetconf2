@@ -545,7 +545,7 @@ nc_recv_hello(struct nc_session *session)
                 }
                 flag = 1;
 
-                if ((ver = parse_cpblts(node, &session->cpblts)) < 0) {
+                if ((ver = parse_cpblts(node, NULL)) < 0) {
                     goto error;
                 }
                 session->version = ver;
