@@ -1168,7 +1168,7 @@ fail:
 }
 
 API struct nc_session *
-nc_callhome_accept_ssh(uint16_t port, const char *username, int32_t timeout, struct ly_ctx *ctx)
+nc_callhome_accept_ssh(uint16_t port, const char *username, int timeout, struct ly_ctx *ctx)
 {
     const int ssh_timeout = NC_SSH_TIMEOUT;
     int sock;

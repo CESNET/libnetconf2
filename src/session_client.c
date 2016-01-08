@@ -858,7 +858,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
                 data = NULL;
             }
             if (!schema) {
-                ERR("%s: internal error (%s:%d).", __func__, __FILE__, __LINE__);
+                ERRINT;
                 return NULL;
             }
             break;
@@ -877,7 +877,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
         case NC_RPC_GETSCHEMA:
             schema = ly_ctx_get_node(ctx, "/ietf-netconf-monitoring:get-schema");
             if (!schema) {
-                ERR("%s: internal error (%s:%d).", __func__, __FILE__, __LINE__);
+                ERRINT;
                 return NULL;
             }
             break;

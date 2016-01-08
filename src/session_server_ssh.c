@@ -164,64 +164,10 @@ nc_ssh_server_del_authkey(const char *keypath, const char *username)
     return ret;
 }
 
-API int
-nc_ssh_server_add_bind_listen(const char *address, uint16_t port)
-{
-    int sock;
-
-    if (!address || !port) {
-        ERRARG;
-        return -1;
-    }
-
-    sock = nc_sock_listen(address, port);
-    if (sock == -1) {
-        return -1;
-    }
-
-    ++ssh_opts.bind_count;
-    ssh_opts.binds = realloc(ssh_opts.binds, ssh_opts.bind_count * sizeof *ssh_opts.binds);
-
-    ssh_opts.binds[ssh_opts.bind_count - 1].address = strdup(address);
-    ssh_opts.binds[ssh_opts.bind_count - 1].port = port;
-    ssh_opts.binds[ssh_opts.bind_count - 1].sock = sock;
-
-    return 0;
-}
-
-API int
-nc_ssh_server_del_bind(const char *address, uint16_t port)
-{
-    uint32_t i;
-    int ret = -1;
-
-    for (i = 0; i < ssh_opts.bind_count; ++i) {
-        if ((!address || !strcmp(ssh_opts.binds[i].address, address)) && (!port || (ssh_opts.binds[i].port == port))) {
-            close(ssh_opts.binds[i].sock);
-            free(ssh_opts.binds[i].address);
-
-            --ssh_opts.bind_count;
-            memmove(&ssh_opts.binds[i], &ssh_opts.binds[i + 1], (ssh_opts.bind_count - i) * sizeof *ssh_opts.binds);
-
-            ret = 0;
-        }
-    }
-
-    return ret;
-}
-
 API void
-nc_ssh_server_destroy(void)
+nc_ssh_server_free_opts(void)
 {
     int i;
-
-    if (ssh_opts.binds) {
-        for (i = 0; i < ssh_opts.bind_count; ++i) {
-            free(ssh_opts.binds[i].address);
-            close(ssh_opts.binds[i].sock);
-        }
-        free(ssh_opts.binds);
-    }
 
     if (ssh_opts.sshbind) {
         ssh_bind_free(ssh_opts.sshbind);
@@ -422,14 +368,14 @@ nc_sshcb_channel_open(struct nc_session *session, ssh_channel channel)
 {
     while (session->ti.libssh.next) {
         if (session->status == NC_STATUS_STARTING) {
-            ERR("%s: internal error (%s:%d)", __FILE__, __LINE__);
+            ERRINT;
             return -1;
         }
         session = session->ti.libssh.next;
     }
 
     if ((session->status != NC_STATUS_STARTING) || session->ti.libssh.channel) {
-        ERR("%s: internal error (%s:%d)", __FILE__, __LINE__);
+        ERRINT;
         return -1;
     }
 
@@ -446,7 +392,7 @@ nc_sshcb_channel_subsystem(struct nc_session *session, ssh_channel channel, cons
     }
 
     if (!session) {
-        ERR("%s: internal error (%s:%d)", __FILE__, __LINE__);
+        ERRINT;
         return -1;
     }
 
@@ -696,49 +642,17 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
     return 1;
 }
 
-API struct nc_session *
-nc_accept_ssh(int timeout)
+int
+nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 {
-    int sock, elapsed = 0, libssh_auth_methods = 0;
-    char *host;
-    uint16_t port;
-    struct nc_session *session = NULL;
-
-    if (!server_opts.ctx || !ssh_opts.binds || !ssh_opts.sshbind) {
-        return NULL;
-    }
-
-    sock = nc_sock_accept(ssh_opts.binds, ssh_opts.bind_count, timeout, &host, &port);
-    if (sock == -1) {
-        return NULL;
-    }
-
-    session = calloc(1, sizeof *session);
-    if (!session) {
-        ERRMEM;
-        goto fail;
-    }
-    session->status = NC_STATUS_STARTING;
-    session->side = NC_SERVER;
-    session->ctx = server_opts.ctx;
-    session->flags = NC_SESSION_SHAREDCTX;
-    session->host = lydict_insert_zc(session->ctx, host);
-    session->port = port;
-
-    /* transport lock */
-    session->ti_lock = malloc(sizeof *session->ti_lock);
-    if (!session->ti_lock) {
-        ERRMEM;
-        goto fail;
-    }
-    pthread_mutex_init(session->ti_lock, NULL);
+    int libssh_auth_methods = 0, elapsed = 0;
 
     /* other transport-specific data */
     session->ti_type = NC_TI_LIBSSH;
     session->ti.libssh.session = ssh_new();
     if (!session->ti.libssh.session) {
         ERR("%s: failed to initialize SSH session", __func__);
-        goto fail;
+        return -1;
     }
 
     if (ssh_opts.auth_methods & NC_SSH_AUTH_PUBLICKEY) {
@@ -756,12 +670,12 @@ nc_accept_ssh(int timeout)
 
     if (ssh_bind_accept_fd(ssh_opts.sshbind, session->ti.libssh.session, sock) == SSH_ERROR) {
         ERR("%s: SSH failed to accept a new connection (%s)", __func__, ssh_get_error(ssh_opts.sshbind));
-        goto fail;
+        return -1;
     }
 
     if (ssh_handle_key_exchange(session->ti.libssh.session) != SSH_OK) {
         ERR("%s: SSH key exchange error (%s)", __func__, ssh_get_error(session->ti.libssh.session));
-        goto fail;
+        return -1;
     }
 
     /* authenticate */
@@ -769,7 +683,7 @@ nc_accept_ssh(int timeout)
         if (ssh_execute_message_callbacks(session->ti.libssh.session) != SSH_OK) {
             ERR("%s: failed to receive new messages on the SSH session (%s)",
                 __func__, ssh_get_error(session->ti.libssh.session));
-            goto fail;
+            return -1;
         }
 
         if (session->flags & NC_SESSION_SSH_AUTHENTICATED) {
@@ -782,7 +696,7 @@ nc_accept_ssh(int timeout)
 
     if (!(session->flags & NC_SESSION_SSH_AUTHENTICATED)) {
         /* timeout */
-        goto fail;
+        return -1;
     }
 
     if (timeout > 0) {
@@ -791,24 +705,10 @@ nc_accept_ssh(int timeout)
 
     /* open channel */
     if (nc_open_netconf_channel(session, timeout)) {
-        goto fail;
+        return -1;
     }
 
-    /* NETCONF handshake */
-    if (nc_handshake(session)) {
-        goto fail;
-    }
-    session->status = NC_STATUS_RUNNING;
-
-    return session;
-
-fail:
-    if (sock > -1) {
-        close(sock);
-    }
-    nc_session_free(session);
-
-    return NULL;
+    return 0;
 }
 
 API struct nc_session *

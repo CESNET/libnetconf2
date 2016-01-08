@@ -34,3 +34,9 @@ nc_tls_server_destroy(void)
 {
 
 }
+
+int
+nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
+{
+    return -1;
+}

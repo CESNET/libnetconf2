@@ -67,18 +67,17 @@ struct nc_server_opts {
     uint16_t hello_timeout;
     uint16_t idle_timeout;
     uint16_t max_sessions;
-};
 
-struct nc_bind {
-    char *address;
-    uint16_t port;
-    int sock;
+    struct nc_bind {
+        char *address;
+        uint16_t port;
+        int sock;
+        NC_TRANSPORT_IMPL ti;
+    } *binds;
+    uint16_t bind_count;
 };
 
 struct nc_ssh_server_opts {
-    struct nc_bind *binds;
-    uint16_t bind_count;
-
     ssh_bind sshbind;
 
     struct {
@@ -242,6 +241,18 @@ int nc_handshake(struct nc_session *session);
  */
 int nc_callhome_accept_connection(uint16_t port, int32_t timeout, uint16_t *server_port, char **server_host);
 
+#ifdef ENABLE_SSH
+
+int nc_accept_ssh_session(struct nc_session *session, int sock, int timeout);
+
+#endif
+
+#ifdef ENABLE_TLS
+
+int nc_accept_tls_session(struct nc_session *session, int sock, int timeout);
+
+#endif
+
 /**
  * Functions
  * - io.c
@@ -285,6 +296,6 @@ int nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...);
 
 int nc_sock_listen(const char *address, uint32_t port);
 
-int nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host, uint16_t *port);
+int nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANSPORT_IMPL *ti, char **host, uint16_t *port);
 
 #endif /* NC_SESSION_PRIVATE_H_ */

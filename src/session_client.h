@@ -242,7 +242,7 @@ struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_
  *                the session context will not include all the models supported by the server.
  * @return Created NETCONF session object or NULL on error.
  */
-struct nc_session *nc_callhome_accept_ssh(uint16_t port, const char *username, int32_t timeout, struct ly_ctx *ctx);
+struct nc_session *nc_callhome_accept_ssh(uint16_t port, const char *username, int timeout, struct ly_ctx *ctx);
 
 /**
  * @brief Add an SSH public and private key pair to be used for client authentication.

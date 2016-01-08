@@ -41,9 +41,21 @@ int nc_server_set_idle_timeout(uint16_t idle_timeout);
 
 int nc_server_set_max_sessions(uint16_t max_sessions);
 
+void nc_server_destroy_binds(void);
+
 struct nc_session *nc_accept_inout(int fdin, int fdout, const char *username);
 
 /* vlastna pollovacia struktura, ktoru naplnis sessnami a iba na tych sa polluje, s normalnym timeoutom, ktory sa preda priamo pollu */
+
+#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+
+int nc_server_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
+
+int nc_server_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
+
+struct nc_session *nc_accept(int timeout);
+
+#endif
 
 #ifdef ENABLE_SSH
 
@@ -61,14 +73,7 @@ int nc_ssh_server_add_authkey(const char *keypath, const char *username);
 
 int nc_ssh_server_del_authkey(const char *keypath, const char *username);
 
-int nc_ssh_server_add_bind_listen(const char *address, uint16_t port);
-
-int nc_ssh_server_del_bind(const char *address, uint16_t port);
-
-void nc_ssh_server_destroy(void);
-
-/* TODO make one accept for SSH, SSH channel and TLS */
-struct nc_session *nc_accept_ssh(int timeout);
+void nc_ssh_server_free_opts(void);
 
 struct nc_session *nc_accept_ssh_channel(struct nc_session *session, int timeout);
 

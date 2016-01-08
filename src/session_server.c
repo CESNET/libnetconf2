@@ -116,7 +116,7 @@ fail:
 }
 
 int
-nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host, uint16_t *port)
+nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANSPORT_IMPL *ti, char **host, uint16_t *port)
 {
     uint16_t i;
     struct pollfd *pfd;
@@ -161,6 +161,10 @@ nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, char **h
     if (ret == -1) {
         ERR("%s: accept failed (%s)", __func__, strerror(errno));
         return -1;
+    }
+
+    if (ti) {
+        *ti = binds[i].ti;
     }
 
     /* host was requested */
@@ -308,3 +312,137 @@ fail:
     nc_session_free(session);
     return NULL;
 }
+
+#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+
+API int
+nc_server_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
+{
+    int sock;
+
+    if (!address || !port || ((ti != NC_TI_LIBSSH) && (ti != NC_TI_OPENSSL))) {
+        ERRARG;
+        return -1;
+    }
+
+    sock = nc_sock_listen(address, port);
+    if (sock == -1) {
+        return -1;
+    }
+
+    ++server_opts.bind_count;
+    server_opts.binds = realloc(server_opts.binds, server_opts.bind_count * sizeof *server_opts.binds);
+
+    server_opts.binds[server_opts.bind_count - 1].address = strdup(address);
+    server_opts.binds[server_opts.bind_count - 1].port = port;
+    server_opts.binds[server_opts.bind_count - 1].sock = sock;
+    server_opts.binds[server_opts.bind_count - 1].ti = ti;
+
+    return 0;
+}
+
+API int
+nc_server_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
+{
+    uint32_t i;
+    int ret = -1;
+
+    for (i = 0; i < server_opts.bind_count; ++i) {
+        if ((!address || !strcmp(server_opts.binds[i].address, address))
+                && (!port || (server_opts.binds[i].port == port))
+                && (!ti || (server_opts.binds[i].ti == ti))) {
+            close(server_opts.binds[i].sock);
+            free(server_opts.binds[i].address);
+
+            --server_opts.bind_count;
+            memmove(&server_opts.binds[i], &server_opts.binds[i + 1], (server_opts.bind_count - i) * sizeof *server_opts.binds);
+
+            ret = 0;
+        }
+    }
+
+    return ret;
+}
+
+API void
+nc_server_destroy_binds(void)
+{
+    uint32_t i;
+
+    for (i = 0; i < server_opts.bind_count; ++i) {
+        close(server_opts.binds[i].sock);
+        free(server_opts.binds[i].address);
+    }
+    free(server_opts.binds);
+}
+
+API struct nc_session *
+nc_accept(int timeout)
+{
+    NC_TRANSPORT_IMPL ti;
+    int sock;
+    char *host;
+    uint16_t port;
+    struct nc_session *session = NULL;
+
+    if (!server_opts.ctx || !server_opts.binds) {
+        ERRARG;
+        return NULL;
+    }
+
+    sock = nc_sock_accept(server_opts.binds, server_opts.bind_count, timeout, &ti, &host, &port);
+    if (sock == -1) {
+        return NULL;
+    }
+
+    session = calloc(1, sizeof *session);
+    if (!session) {
+        ERRMEM;
+        goto fail;
+    }
+    session->status = NC_STATUS_STARTING;
+    session->side = NC_SERVER;
+    session->ctx = server_opts.ctx;
+    session->flags = NC_SESSION_SHAREDCTX;
+    session->host = lydict_insert_zc(session->ctx, host);
+    session->port = port;
+
+    /* transport lock */
+    session->ti_lock = malloc(sizeof *session->ti_lock);
+    if (!session->ti_lock) {
+        ERRMEM;
+        goto fail;
+    }
+    pthread_mutex_init(session->ti_lock, NULL);
+
+    if (ti == NC_TI_LIBSSH) {
+        if (nc_accept_ssh_session(session, sock, timeout)) {
+            goto fail;
+        }
+    } else if (ti == NC_TI_OPENSSL) {
+        if (nc_accept_tls_session(session, sock, timeout)) {
+            goto fail;
+        }
+    } else {
+        ERRINT;
+        goto fail;
+    }
+
+    /* NETCONF handshake */
+    if (nc_handshake(session)) {
+        goto fail;
+    }
+    session->status = NC_STATUS_RUNNING;
+
+    return session;
+
+fail:
+    if (sock > -1) {
+        close(sock);
+    }
+    nc_session_free(session);
+
+    return NULL;
+}
+
+#endif /* ENABLE_SSH || ENABLE_TLS */

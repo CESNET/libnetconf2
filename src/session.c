@@ -346,7 +346,7 @@ create_cpblts(struct ly_ctx *ctx)
                 strcat(str, "?basic-mode=explicit");
                 break;
             default:
-                ERR("%s: internal error (%s:%d)", __func__, __FILE__, __LINE__);
+                ERRINT;
                 break;
             }
 
@@ -397,7 +397,7 @@ create_cpblts(struct ly_ctx *ctx)
             }
 
             if (!ns || !name || !rev) {
-                ERR("%s: internal error (%s:%d)", __func__, __FILE__, __LINE__);
+                ERRINT;
                 continue;
             }
 
