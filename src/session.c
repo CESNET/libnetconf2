@@ -31,6 +31,12 @@
 
 #endif /* ENABLE_SSH */
 
+#ifdef ENABLE_TLS
+
+#   include <openssl/err.h>
+
+#endif /* ENABLE_TLS */
+
 #include "config.h"
 #include "log_p.h"
 #include "session.h"
@@ -239,6 +245,8 @@ nc_session_free(struct nc_session *session)
 
 #ifdef ENABLE_TLS
     case NC_TI_OPENSSL:
+        X509_free(session->cert);
+
         SSL_shutdown(session->ti.tls);
         SSL_free(session->ti.tls);
         break;
@@ -646,3 +654,67 @@ nc_ssh_destroy(void)
 }
 
 #endif /* ENABLE_SSH */
+
+#ifdef ENABLE_TLS
+
+static pthread_mutex_t *tls_locks;
+
+static void
+tls_thread_locking_func(int mode, int n, const char *file, int line)
+{
+    (void)file;
+    (void)line;
+
+    if (mode & CRYPTO_LOCK) {
+        pthread_mutex_lock(tls_locks + n);
+    } else {
+        pthread_mutex_unlock(tls_locks + n);
+    }
+}
+
+static unsigned long
+tls_thread_id_func(void)
+{
+    return (unsigned long)pthread_self();
+}
+
+API void
+nc_tls_init(void)
+{
+    int i;
+
+    SSL_load_error_strings();
+    SSL_library_init();
+
+    tls_locks = malloc(CRYPTO_num_locks() * sizeof *tls_locks);
+    for (i = 0; i < CRYPTO_num_locks(); ++i) {
+        pthread_mutex_init(tls_locks + i, NULL);
+    }
+
+    CRYPTO_set_id_callback(tls_thread_id_func);
+    CRYPTO_set_locking_callback(tls_thread_locking_func);
+}
+
+API void
+nc_tls_destroy(void)
+{
+    int i;
+
+    CRYPTO_THREADID crypto_tid;
+
+    EVP_cleanup();
+    CRYPTO_cleanup_all_ex_data();
+    ERR_free_strings();
+    sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
+    CRYPTO_THREADID_current(&crypto_tid);
+    ERR_remove_thread_state(&crypto_tid);
+
+    CRYPTO_set_id_callback(NULL);
+    CRYPTO_set_locking_callback(NULL);
+    for (i = 0; i < CRYPTO_num_locks(); ++i) {
+        pthread_mutex_destroy(tls_locks + i);
+    }
+    free(tls_locks);
+}
+
+#endif /* ENABLE_TLS */

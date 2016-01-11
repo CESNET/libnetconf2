@@ -258,8 +258,8 @@ nc_sshcb_auth_password(struct nc_session *session, ssh_message msg)
     }
 
     free(pass_hash);
-    ++session->auth_attempts;
-    VRB("Failed user '%s' authentication attempt (#%d).", session->username, session->auth_attempts);
+    ++session->ssh_auth_attempts;
+    VRB("Failed user '%s' authentication attempt (#%d).", session->username, session->ssh_auth_attempts);
     ssh_message_reply_default(msg);
 }
 
@@ -288,8 +288,8 @@ nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
             session->flags |= NC_SESSION_SSH_AUTHENTICATED;
             ssh_message_auth_reply_success(msg, 0);
         } else {
-            ++session->auth_attempts;
-            VRB("Failed user \"%s\" authentication attempt (#%d).", session->username, session->auth_attempts);
+            ++session->ssh_auth_attempts;
+            VRB("Failed user \"%s\" authentication attempt (#%d).", session->username, session->ssh_auth_attempts);
             ssh_message_reply_default(msg);
         }
     }
@@ -354,8 +354,8 @@ nc_sshcb_auth_pubkey(struct nc_session *session, ssh_message msg)
         }
     }
 
-    ++session->auth_attempts;
-    VRB("Failed user \"%s\" authentication attempt (#%d).", session->username, session->auth_attempts);
+    ++session->ssh_auth_attempts;
+    VRB("Failed user \"%s\" authentication attempt (#%d).", session->username, session->ssh_auth_attempts);
     ssh_message_reply_default(msg);
 }
 
@@ -537,7 +537,7 @@ nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data)
             return 0;
         }
 
-        if (session->auth_attempts >= ssh_opts.auth_attempts) {
+        if (session->ssh_auth_attempts >= ssh_opts.auth_attempts) {
             /* too many failed attempts */
             ssh_message_reply_default(msg);
             return 0;
@@ -648,6 +648,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     session->ti.libssh.session = ssh_new();
     if (!session->ti.libssh.session) {
         ERR("%s: failed to initialize SSH session", __func__);
+        close(sock);
         return -1;
     }
 
@@ -666,6 +667,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 
     if (ssh_bind_accept_fd(ssh_opts.sshbind, session->ti.libssh.session, sock) == SSH_ERROR) {
         ERR("%s: SSH failed to accept a new connection (%s)", __func__, ssh_get_error(ssh_opts.sshbind));
+        close(sock);
         return -1;
     }
 

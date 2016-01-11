@@ -83,16 +83,6 @@ struct nc_tls_client_opts {
     X509_STORE *tls_store;
 };
 
-typedef enum {
-    CTN_MAP_TYPE_UNKNOWN,
-    CTN_MAP_TYPE_SPECIFIED,
-    CTN_MAP_TYPE_SAN_RFC822_NAME,
-    CTN_MAP_TYPE_SAN_DNS_NAME,
-    CTN_MAP_TYPE_SAN_IP_ADDRESS,
-    CTN_MAP_TYPE_SAN_ANY,
-    CTN_MAP_TYPE_COMMON_NAME
-} CTN_MAP_TYPE;
-
 struct nc_tls_server_opts {
     SSL_CTX *tls_ctx;
     X509_STORE *crl_store;
@@ -100,7 +90,7 @@ struct nc_tls_server_opts {
     struct {
         uint32_t id;
         const char *fingerprint;
-        CTN_MAP_TYPE map_type;
+        NC_TLS_CTN_MAPTYPE map_type;
         const char *name;
     } *ctn;
     uint16_t ctn_count;
@@ -217,7 +207,12 @@ struct nc_session {
     struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
 
     /* server side only data */
-    uint16_t auth_attempts;
+#ifdef ENABLE_SSH
+    uint16_t ssh_auth_attempts;
+#endif
+#ifdef ENABLE_TLS
+    X509 *cert;
+#endif
 };
 
 struct nc_pollsession {

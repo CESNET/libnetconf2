@@ -33,6 +33,20 @@ typedef enum {
 
 #endif /* ENABLE_SSH */
 
+#ifdef ENABLE_TLS
+
+typedef enum {
+    NC_TLS_CTN_UNKNOWN,
+    NC_TLS_CTN_SPECIFIED,
+    NC_TLS_CTN_SAN_RFC822_NAME,
+    NC_TLS_CTN_SAN_DNS_NAME,
+    NC_TLS_CTN_SAN_IP_ADDRESS,
+    NC_TLS_CTN_SAN_ANY,
+    NC_TLS_CTN_COMMON_NAME
+} NC_TLS_CTN_MAPTYPE;
+
+#endif /* ENABLE_TLS */
+
 /**
  * @brief Enumeration of possible session statuses
  */
@@ -88,5 +102,13 @@ void nc_ssh_init(void);
 void nc_ssh_destroy(void);
 
 #endif /* ENABLE_SSH */
+
+#ifdef ENABLE_TLS
+
+void nc_tls_init(void);
+
+void nc_tls_destroy(void);
+
+#endif /* ENABLE_TLS */
 
 #endif /* NC_SESSION_H_ */

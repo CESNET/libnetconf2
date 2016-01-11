@@ -88,35 +88,29 @@ struct nc_session *nc_accept_ssh_channel(struct nc_session *session, int timeout
 
 #ifdef ENABLE_TLS
 
-/* SSL_CTX */
 int nc_tls_server_set_cert(const char *cert);
 
-/* SSL_CTX */
-int nc_tls_server_set_key(const char *privkey);
+int nc_tls_server_set_cert_path(const char *cert_path);
 
-/* SSL_CTX, PEM only */
+int nc_tls_server_set_key(const char *privkey, int is_rsa);
+
 int nc_tls_server_set_key_path(const char *privkey_path);
 
-/* SSL_CTX */
-int nc_tls_server_add_trusted_cacert(const char *cacert);
+int nc_tls_server_add_trusted_cert(const char *cert);
 
-/* SSL_CTX */
-int nc_tls_server_del_trusted_cacert(const char *cacert);
+int nc_tls_server_add_trusted_cert_path(const char *cert_path);
 
-/* SSL_CTX */
-int nc_tls_server_add_trusted_clientcert(const char *clientcert);
+int nc_tls_server_set_trusted_cacert_locations(const char *cacert_file_path, const char *cacert_dir_path);
 
-/* SSL_CTX */
-int nc_tls_server_del_trusted_clientcert(const char *clientcert);
+void nc_tls_server_destroy_certs(void);
 
-/* X509_STORE */
-int nc_tls_server_set_crl_dir(const char *crl_path);
+int nc_tls_server_set_crl_locations(const char *crl_file_path, const char *crl_dir_path);
 
-/* struct */
-int nc_tls_server_add_ctn();
+void nc_tls_server_destroy_crls(void);
 
-/* struct */
-int nc_tls_server_del_ctn();
+int nc_tls_server_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
+
+int nc_tls_server_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
 void nc_tls_server_free_opts(void);
 

@@ -398,7 +398,8 @@ nc_accept(int timeout)
     session = calloc(1, sizeof *session);
     if (!session) {
         ERRMEM;
-        goto fail;
+        close(sock);
+        return NULL;
     }
     session->status = NC_STATUS_STARTING;
     session->side = NC_SERVER;
@@ -411,10 +412,12 @@ nc_accept(int timeout)
     session->ti_lock = malloc(sizeof *session->ti_lock);
     if (!session->ti_lock) {
         ERRMEM;
+        close(sock);
         goto fail;
     }
     pthread_mutex_init(session->ti_lock, NULL);
 
+    /* sock gets assigned to session or closed */
     if (ti == NC_TI_LIBSSH) {
         if (nc_accept_ssh_session(session, sock, timeout)) {
             goto fail;
@@ -425,6 +428,7 @@ nc_accept(int timeout)
         }
     } else {
         ERRINT;
+        close(sock);
         goto fail;
     }
 
@@ -437,11 +441,7 @@ nc_accept(int timeout)
     return session;
 
 fail:
-    if (sock > -1) {
-        close(sock);
-    }
     nc_session_free(session);
-
     return NULL;
 }
 
