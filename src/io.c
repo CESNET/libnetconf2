@@ -640,10 +640,8 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
         } else {
             write_clb((void *)&arg, "</capabilities></hello>", 23);
         }
-
-        /* flush message */
-        write_clb((void *)&arg, NULL, 0);
         break;
+
     default:
         va_end(ap);
         return -1;
