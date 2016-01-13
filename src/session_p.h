@@ -304,7 +304,21 @@ int nc_accept_tls_session(struct nc_session *session, int sock, int timeout);
  * (or zero) value and it passed out without any data on the wire. #NC_MSG_ERROR is
  * returned on error and #NC_MSG_NONE is never returned by this function.
  */
-NC_MSG_TYPE nc_read_msg(struct nc_session* session, int timeout, struct lyxml_elem **data);
+NC_MSG_TYPE nc_read_msg_poll(struct nc_session* session, int timeout, struct lyxml_elem **data);
+
+/**
+ * @brief Read message from the wire.
+ *
+ * Accepts hello, rpc, rpc-reply and notification. Received string is transformed into
+ * libyang XML tree and the message type is detected from the top level element.
+ *
+ * @param[in] session NETCONF session from which the message is being read.
+ * @param[out] data XML tree built from the read data.
+ * @return Type of the read message. #NC_MSG_WOULDBLOCK is returned if timeout is positive
+ * (or zero) value and it passed out without any data on the wire. #NC_MSG_ERROR is
+ * returned on error and #NC_MSG_NONE is never returned by this function.
+ */
+NC_MSG_TYPE nc_read_msg(struct nc_session* session, struct lyxml_elem **data);
 
 /**
  * @brief Write message into wire.
@@ -315,11 +329,12 @@ NC_MSG_TYPE nc_read_msg(struct nc_session* session, int timeout, struct lyxml_el
  * - #NC_MSG_RPC
  *   - `struct lyd_node *op;` - operation (content of the \<rpc/\> to be sent. Required parameter.
  *   - `const char *attrs;` - additional attributes to be added into the \<rpc/\> element.
- *     `message-id` attribute is added automatically and default namespace is set to
- *     #NC_NS_BASE. Optional parameter.
+ *     Required parameter.
+ *     `message-id` attribute is added automatically and default namespace is set to #NC_NS_BASE.
+ *     Optional parameter.
  * - #NC_MSG_REPLY
- *   - `struct nc_rpc *rpc;` - RPC object to reply. Required parameter.
- *   - TODO: content
+ *   - `struct lyxml_node *rpc_elem;` - root of the RPC object to reply to. Required parameter.
+ *   - `struct nc_server_reply *reply;` - RPC reply. Required parameter.
  * - #NC_MSG_NOTIF
  *   - TODO: content
  * @return 0 on success

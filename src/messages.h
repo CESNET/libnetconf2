@@ -53,13 +53,6 @@ typedef enum {
 } NC_RPC_TYPE;
 
 typedef enum {
-    NC_REPLY_ERROR,
-    NC_REPLY_OK,
-    NC_REPLY_DATA,
-    NC_REPLY_NOTIF
-} NC_REPLY_TYPE;
-
-typedef enum {
     NC_RPC_EDIT_DFLTOP_UNKNOWN = 0,
     NC_RPC_EDIT_DFLTOP_MERGE,
     NC_RPC_EDIT_DFLTOP_REPLACE,
@@ -89,10 +82,48 @@ typedef enum {
 } NC_WD_MODE;
 
 typedef enum {
-    NC_RPC_PARAMTYPE_CONST,
-    NC_RPC_PARAMTYPE_FREE,
-    NC_RPC_PARAMTYPE_DUP_AND_FREE
-} NC_RPC_PARAMTYPE;
+    NC_PARAMTYPE_CONST,
+    NC_PARAMTYPE_FREE,
+    NC_PARAMTYPE_DUP_AND_FREE
+} NC_PARAMTYPE;
+
+typedef enum {
+    NC_ERR_UNKNOWN = 0,
+    NC_ERR_IN_USE,
+    NC_ERR_INVALID_VALUE,
+    NC_ERR_TOO_BIG,
+    NC_ERR_MISSING_ATTR,
+    NC_ERR_BAD_ATTR,
+    NC_ERR_UNKNOWN_ATTR,
+    NC_ERR_MISSING_ELEM,
+    NC_ERR_BAD_ELEM,
+    NC_ERR_UNKNOWN_ELEM,
+    NC_ERR_UNKNOWN_NS,
+    NC_ERR_ACCESS_DENIED,
+    NC_ERR_LOCK_DENIED,
+    NC_ERR_RES_DENIED,
+    NC_ERR_ROLLBACK_FAILED,
+    NC_ERR_DATA_EXISTS,
+    NC_ERR_DATA_MISSING,
+    NC_ERR_OP_NOT_SUPPORTED,
+    NC_ERR_OP_FAILED,
+    NC_ERR_MALFORMED_MSG
+} NC_ERR;
+
+typedef enum {
+    NC_ERR_TYPE_UNKNOWN = 0,
+    NC_ERR_TYPE_TRAN,
+    NC_ERR_TYPE_RPC,
+    NC_ERR_TYPE_PROT,
+    NC_ERR_TYPE_APP
+} NC_ERR_TYPE;
+
+typedef enum {
+    NC_RPL_OK,
+    NC_RPL_DATA,
+    NC_RPL_ERROR,
+    NC_RPL_NOTIF
+} NC_RPL;
 
 /**
  * @brief NETCONF error structure representation
@@ -134,50 +165,62 @@ struct nc_err {
      * @brief \<bad-attr\>, the name of the data-model-specific XML attribute that caused the error.
      */
     const char **attr;
-    int attr_count;
+    uint16_t attr_count;
     /**
      * @brief \<bad-element\>, the name of the data-model-specific XML element that caused the error.
      */
     const char **elem;
-    int elem_count;
+    uint16_t elem_count;
     /**
      * @brief \<bad-namespace\>, the name of the unexpected XML namespace that caused the error.
      */
     const char **ns;
-    int ns_count;
+    uint16_t ns_count;
     /**
      * @brief Remaining non-standard elements.
      */
     struct lyxml_elem **other;
-    int other_count;
-};
-
-struct nc_reply {
-    NC_REPLY_TYPE type;
-};
-
-struct nc_reply_error {
-    NC_REPLY_TYPE type;      /**< NC_REPLY_ERROR */
-    struct ly_ctx *ctx;
-    struct nc_err *err;      /**< errors, any of the values inside can be NULL */
-    int err_count;
-};
-
-struct nc_reply_data {
-    NC_REPLY_TYPE type;      /**< NC_REPLY_DATA */
-    struct lyd_node *data;   /**< libyang data tree */
-};
-
-struct nc_notif {
-    NC_REPLY_TYPE type;      /**< NC_REPLY_NOTIF */
-    const char *datetime;    /**< eventTime of the notification */
-    struct lyd_node *tree;   /**< libyang data tree of the message */
+    uint16_t other_count;
 };
 
 /**
- * @brief NETCONF RPC object
+ * @brief NETCONF client RPC object
  */
 struct nc_rpc;
+
+struct nc_reply {
+    NC_RPL type;
+};
+
+struct nc_reply_data {
+    NC_RPL type;           /**< NC_RPL_DATA */
+    struct lyd_node *data; /**< libyang data tree */
+};
+
+struct nc_reply_error {
+    NC_RPL type;        /**< NC_RPL_ERROR */
+    struct ly_ctx *ctx;
+    struct nc_err *err; /**< errors, any of the values inside can be NULL */
+    uint32_t count;
+};
+
+struct nc_notif {
+    NC_RPL type;           /**< NC_RPL_NOTIF */
+    const char *datetime;  /**< eventTime of the notification */
+    struct lyd_node *tree; /**< libyang data tree of the message */
+};
+
+/**
+ * @brief NETCONF server RPC reply object
+ */
+struct nc_server_reply;
+
+struct nc_server_error;
+
+/**
+ * @brief NETCONF notification object
+ */
+struct nc_notif;
 
 /**
  * @brief Get the type of the RPC
@@ -197,7 +240,7 @@ NC_RPC_TYPE nc_rpc_get_type(const struct nc_rpc *rpc);
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_generic(const struct lyd_node *data, NC_RPC_PARAMTYPE paramtype);
+struct nc_rpc *nc_rpc_generic(const struct lyd_node *data, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create a generic NETCONF RPC from an XML string
@@ -212,7 +255,7 @@ struct nc_rpc *nc_rpc_generic(const struct lyd_node *data, NC_RPC_PARAMTYPE para
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_generic_xml(const char *xml_str, NC_RPC_PARAMTYPE paramtype);
+struct nc_rpc *nc_rpc_generic_xml(const char *xml_str, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<get-config\>
@@ -230,7 +273,7 @@ struct nc_rpc *nc_rpc_generic_xml(const char *xml_str, NC_RPC_PARAMTYPE paramtyp
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_WD_MODE wd_mode,
-                                NC_RPC_PARAMTYPE paramtype);
+                                NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<edit-config\>
@@ -250,7 +293,7 @@ struct nc_rpc *nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_WD_M
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, NC_RPC_EDIT_TESTOPT test_opt,
-                           NC_RPC_EDIT_ERROPT error_opt, const char *edit_content, NC_RPC_PARAMTYPE paramtype);
+                           NC_RPC_EDIT_ERROPT error_opt, const char *edit_content, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<copy-config\>
@@ -270,7 +313,7 @@ struct nc_rpc *nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, N
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTORE source,
-                           const char *url_or_config_src, NC_WD_MODE wd_mode, NC_RPC_PARAMTYPE paramtype);
+                           const char *url_or_config_src, NC_WD_MODE wd_mode, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<delete-config\>
@@ -286,7 +329,7 @@ struct nc_rpc *nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTOR
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_delete(NC_DATASTORE target, const char *url, NC_RPC_PARAMTYPE paramtype);
+struct nc_rpc *nc_rpc_delete(NC_DATASTORE target, const char *url, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<lock\>
@@ -330,7 +373,7 @@ struct nc_rpc *nc_rpc_unlock(NC_DATASTORE target);
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_get(const char *filter, NC_WD_MODE wd_mode, NC_RPC_PARAMTYPE paramtype);
+struct nc_rpc *nc_rpc_get(const char *filter, NC_WD_MODE wd_mode, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<kill-session\>
@@ -363,7 +406,7 @@ struct nc_rpc *nc_rpc_kill(uint32_t session_id);
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_commit(int confirmed, uint32_t confirm_timeout, const char *persist, const char *persist_id,
-                             NC_RPC_PARAMTYPE paramtype);
+                             NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<discard-changes\>
@@ -391,7 +434,7 @@ struct nc_rpc *nc_rpc_discard(void);
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_cancel(const char *persist_id, NC_RPC_PARAMTYPE paramtype);
+struct nc_rpc *nc_rpc_cancel(const char *persist_id, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<validate\>
@@ -407,7 +450,7 @@ struct nc_rpc *nc_rpc_cancel(const char *persist_id, NC_RPC_PARAMTYPE paramtype)
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_validate(NC_DATASTORE source, const char *url_or_config, NC_RPC_PARAMTYPE paramtype);
+struct nc_rpc *nc_rpc_validate(NC_DATASTORE source, const char *url_or_config, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<get-schema\>
@@ -424,7 +467,7 @@ struct nc_rpc *nc_rpc_validate(NC_DATASTORE source, const char *url_or_config, N
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_getschema(const char *identifier, const char *version, const char *format, NC_RPC_PARAMTYPE paramtype);
+struct nc_rpc *nc_rpc_getschema(const char *identifier, const char *version, const char *format, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<create-subscription\>
@@ -443,7 +486,33 @@ struct nc_rpc *nc_rpc_getschema(const char *identifier, const char *version, con
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_subscribe(const char *stream_name, const char *filter, const char *start_time,
-								const char *stop_time, NC_RPC_PARAMTYPE paramtype);
+								const char *stop_time, NC_PARAMTYPE paramtype);
+
+struct nc_server_reply *nc_server_reply_ok(void);
+
+struct nc_server_reply *nc_server_reply_data(struct lyd_node *data, NC_PARAMTYPE paramtype);
+
+struct nc_server_reply *nc_server_reply_err(struct ly_ctx *ctx, struct nc_server_error *err);
+
+int nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_error *err);
+
+struct nc_server_error *nc_err(struct ly_ctx *ctx, NC_ERR tag, NC_ERR_TYPE type, ...);
+
+int nc_err_set_app_tag(struct ly_ctx *ctx, struct nc_server_error *err, const char *error_app_tag);
+
+int nc_err_set_path(struct ly_ctx *ctx, struct nc_server_error *err, const char *error_path);
+
+int nc_err_set_msg(struct ly_ctx *ctx, struct nc_server_error *err, const char *error_message, const char *lang);
+
+int nc_err_set_sid(struct nc_server_error *err, uint32_t session_id);
+
+int nc_err_add_bad_attr(struct ly_ctx *ctx, struct nc_server_error *err, const char *attr_name);
+
+int nc_err_add_bad_elem(struct ly_ctx *ctx, struct nc_server_error *err, const char *elem_name);
+
+int nc_err_add_bad_ns(struct ly_ctx *ctx, struct nc_server_error *err, const char *ns_name);
+
+int nc_err_add_info_other(struct nc_server_error *err, struct lyxml_elem *other);
 
 /**
  * @brief Free the NETCONF RPC object.
@@ -456,6 +525,10 @@ void nc_rpc_free(struct nc_rpc *rpc);
  * @param[in] rpc Object to free.
  */
 void nc_reply_free(struct nc_reply *reply);
+
+void nc_server_reply_free(struct nc_server_reply *reply);
+
+void nc_err_free(struct ly_ctx *ctx, struct nc_server_error *err);
 
 /**
  * @brief Free the NETCONF Notification object.

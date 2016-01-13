@@ -45,6 +45,9 @@
 /* in seconds */
 #define NC_CLIENT_HELLO_TIMEOUT 60
 
+/* in milliseconds */
+#define NC_CLOSE_REPLY_TIMEOUT 200
+
 extern struct nc_server_opts server_opts;
 
 NC_MSG_TYPE
@@ -170,7 +173,7 @@ nc_session_free(struct nc_session *session)
             close_rpc = lyd_new(NULL, ietfnc, "close-session");
             nc_send_msg(session, close_rpc);
             lyd_free(close_rpc);
-            switch (nc_read_msg(session, 200, &rpl)) {
+            switch (nc_read_msg_poll(session, NC_CLOSE_REPLY_TIMEOUT, &rpl)) {
             case NC_MSG_REPLY:
                 LY_TREE_FOR(rpl->child, child) {
                     if (!strcmp(child->name, "ok") && child->ns && !strcmp(child->ns->value, NC_NS_BASE)) {
@@ -504,11 +507,14 @@ nc_send_hello(struct nc_session *session)
         cpblts[0] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.0", 0);
         cpblts[1] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.1", 0);
         cpblts[2] = NULL;
+
+        r = nc_write_msg(session, NC_MSG_HELLO, cpblts, NULL);
     } else {
         cpblts = create_cpblts(session->ctx);
+
+        r = nc_write_msg(session, NC_MSG_HELLO, cpblts, &session->id);
     }
 
-    r = nc_write_msg(session, NC_MSG_HELLO, cpblts, NULL);
     for (i = 0; cpblts[i]; ++i) {
         lydict_remove(session->ctx, cpblts[i]);
     }
@@ -531,7 +537,7 @@ nc_recv_hello(struct nc_session *session)
     long long int id;
     int flag = 0;
 
-    msgtype = nc_read_msg(session, NC_CLIENT_HELLO_TIMEOUT * 1000, &xml);
+    msgtype = nc_read_msg_poll(session, NC_CLIENT_HELLO_TIMEOUT * 1000, &xml);
 
     switch(msgtype) {
     case NC_MSG_HELLO:

@@ -489,7 +489,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
                 if (cert_pubkey_match(session->cert, sk_X509_value(cert_stack, i))) {
                     /* we are just overriding the failed standard certificate verification (preverify_ok == 0),
                      * this callback will be called again with the same current certificate and preverify_ok == 1 */
-                    WRN("Cert verify: fail (%s), but the client certificate is trusted, continuing.",
+                    VRB("Cert verify: fail (%s), but the client certificate is trusted, continuing.",
                         X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
                     X509_STORE_CTX_set_error(x509_ctx, X509_V_OK);
                     sk_X509_pop_free(cert_stack, X509_free);

@@ -28,6 +28,12 @@
  */
 #define API __attribute__((visibility("default")))
 
+#ifdef __GNUC__
+#  define UNUSED(x) UNUSED_ ## x __attribute__((__unused__))
+#else
+#  define UNUSED(x) UNUSED_ ## x
+#endif
+
 /*
  * Location of installed basic YIN/YANG schemas
  */

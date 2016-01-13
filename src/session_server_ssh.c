@@ -551,7 +551,7 @@ nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data)
                 return 1;
             }
 
-            session->username = lydict_insert(session->ctx, username, 0);
+            session->username = lydict_insert(server_opts.ctx, username, 0);
         } else if (username) {
             if (strcmp(username, session->username)) {
                 ERR("User \"%s\" changed its username to \"%s\".", session->username, username);
@@ -737,10 +737,10 @@ nc_accept_ssh_channel(struct nc_session *session, int timeout)
     new_session->ti_type = NC_TI_LIBSSH;
     new_session->ti_lock = session->ti_lock;
     new_session->flags = NC_SESSION_SSH_AUTHENTICATED | NC_SESSION_SHAREDCTX;
-    new_session->ctx = session->ctx;
+    new_session->ctx = server_opts.ctx;
 
-    new_session->username = lydict_insert(new_session->ctx, session->username, 0);
-    new_session->host = lydict_insert(new_session->ctx, session->host, 0);
+    new_session->username = lydict_insert(server_opts.ctx, session->username, 0);
+    new_session->host = lydict_insert(server_opts.ctx, session->host, 0);
     new_session->port = session->port;
 
     /* NETCONF handshake */

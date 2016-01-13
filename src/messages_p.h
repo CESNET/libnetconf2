@@ -31,28 +31,43 @@ extern const char *rpcedit_dfltop2str[];
 extern const char *rpcedit_testopt2str[];
 extern const char *rpcedit_erropt2str[];
 
-typedef enum {
-    NC_ERR_EMPTY,
-    NC_ERR_IN_USE,
-    NC_ERR_INVALID_VALUE,
-    NC_ERR_TOO_BIG,
-    NC_ERR_MISSING_ATTR,
-    NC_ERR_BAD_ATTR,
-    NC_ERR_UNKNOWN_ATTR,
-    NC_ERR_MISSING_ELEM,
-    NC_ERR_BAD_ELEM,
-    NC_ERR_UNKNOWN_ELEM,
-    NC_ERR_UNKNOWN_NS,
-    NC_ERR_ACCESS_DENIED,
-    NC_ERR_LOCK_DENIED,
-    NC_ERR_RES_DENIED,
-    NC_ERR_ROLLBACK_FAILED,
-    NC_ERR_DATA_EXISTS,
-    NC_ERR_DATA_MISSING,
-    NC_ERR_OP_NOT_SUPPORTED,
-    NC_ERR_OP_FAILED,
-    NC_ERR_MALFORMED_MSG
-} NC_ERR;
+struct nc_server_error {
+    NC_ERR_TYPE type;
+    NC_ERR tag;
+    //NC_ERR_SEV severity;
+    const char *apptag;
+    const char *path;
+    const char *message;
+    const char *message_lang;
+
+    /* <error-info> */
+    uint32_t sid;
+    const char **attr;
+    uint16_t attr_count;
+    const char **elem;
+    uint16_t elem_count;
+    const char **ns;
+    uint16_t ns_count;
+    struct lyxml_elem **other;
+    uint16_t other_count;
+};
+
+struct nc_server_reply {
+    NC_RPL type;
+};
+
+struct nc_server_reply_data {
+    NC_RPL type;
+    struct lyd_node *data;
+    char free;
+};
+
+struct nc_server_reply_error {
+    NC_RPL type;
+    struct ly_ctx *ctx;
+    struct nc_server_error **err;
+    uint32_t count;
+};
 
 struct nc_server_rpc {
     struct lyxml_elem *root; /**< RPC element of the received XML message */
@@ -163,5 +178,7 @@ struct nc_rpc_subscribe {
     char *stop;
     char free;
 };
+
+void nc_server_rpc_free(struct nc_server_rpc *rpc);
 
 #endif /* NC_MESSAGES_P_H_ */

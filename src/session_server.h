@@ -24,10 +24,13 @@
 #define NC_SESSION_SERVER_H_
 
 #include <stdint.h>
+#include <libyang/libyang.h>
 
 #include "session.h"
 #include "messages.h"
 #include "netconf.h"
+
+typedef struct nc_server_reply *(*nc_rpc_clb)(struct lyd_node *rpc, struct nc_session *session);
 
 int nc_server_init(struct ly_ctx *ctx);
 
@@ -43,13 +46,15 @@ int nc_server_set_max_sessions(uint16_t max_sessions);
 
 struct nc_session *nc_accept_inout(int fdin, int fdout, const char *username);
 
-struct nc_pollsession *nc_pollsession_new(void);
+struct nc_pollsession *nc_ps_new(void);
 
-void nc_pollsession_free(struct nc_pollsession *ps);
+void nc_ps_free(struct nc_pollsession *ps);
 
-int nc_pollsession_add_session(struct nc_pollsession *ps, struct nc_session *session);
+int nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session);
 
-int nc_pollsession_poll(struct nc_pollsession *ps, int timeout);
+int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
+
+int nc_ps_poll(struct nc_pollsession *ps, int timeout);
 
 #if defined(ENABLE_SSH) || defined(ENABLE_TLS)
 
