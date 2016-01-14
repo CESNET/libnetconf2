@@ -556,6 +556,7 @@ nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data)
             if (strcmp(username, session->username)) {
                 ERR("User \"%s\" changed its username to \"%s\".", session->username, username);
                 session->status = NC_STATUS_INVALID;
+                session->term_reason = NC_SESSION_TERM_OTHER;
                 return 1;
             }
         }
@@ -719,12 +720,6 @@ nc_accept_ssh_channel(struct nc_session *session, int timeout)
     new_session->ti.libssh.session = session->ti.libssh.session;
     ret = nc_open_netconf_channel(new_session, timeout);
     if (ret) {
-        if (ret == -1) {
-            do {
-                session->status = NC_STATUS_INVALID;
-                session = session->ti.libssh.next;
-            } while (session);
-        }
         goto fail;
     }
 

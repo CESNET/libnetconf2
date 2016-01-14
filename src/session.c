@@ -97,7 +97,7 @@ session_ti_lock(struct nc_session *session, int32_t timeout)
                 /* lock acquired */
                 return 0;
             }
-        } while(timeout > 0);
+        } while (timeout > 0);
 
         /* timeout has passed */
         return -1;
@@ -117,6 +117,7 @@ API void
 nc_session_free(struct nc_session *session)
 {
     int r, i;
+    int connected; /* flag to indicate whether the transport socket is still connected */
     int multisession = 0; /* flag for more NETCONF session on a single SSH session */
     struct nc_session *siter;
     struct nc_msg_cont *contiter;
@@ -125,7 +126,7 @@ nc_session_free(struct nc_session *session)
     const struct lys_module *ietfnc;
     void *p;
 
-    if (!session || session->status == NC_STATUS_CLOSING) {
+    if (!session || (session->status == NC_STATUS_CLOSING)) {
         return;
     }
 
@@ -145,7 +146,7 @@ nc_session_free(struct nc_session *session)
         pthread_join(*session->notif, NULL);
     }
 
-    if (session->side == NC_CLIENT && session->status == NC_STATUS_RUNNING) {
+    if ((session->side == NC_CLIENT) && (session->status == NC_STATUS_RUNNING)) {
         /* cleanup message queues */
         /* notifications */
         for (contiter = session->notifs; contiter; ) {
@@ -168,7 +169,7 @@ nc_session_free(struct nc_session *session)
         /* send closing info to the other side */
         ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL);
         if (!ietfnc) {
-            WRN("%s: Missing ietf-netconf schema in context (session %u), unable to send <close-session\\>", __func__, session->id);
+            WRN("Session %u: missing ietf-netconf schema in context, unable to send <close-session>.", session->id);
         } else {
             close_rpc = lyd_new(NULL, ietfnc, "close-session");
             nc_send_msg(session, close_rpc);
@@ -181,15 +182,15 @@ nc_session_free(struct nc_session *session)
                     }
                 }
                 if (!child) {
-                    WRN("The reply to <close-session\\> was not <ok\\> as expected.");
+                    WRN("Session %u: the reply to <close-session> was not <ok> as expected.", session->id);
                 }
                 lyxml_free(session->ctx, rpl);
                 break;
             case NC_MSG_WOULDBLOCK:
-                WRN("Timeout for receiving a reply to <close-session\\> elapsed.");
+                WRN("Session %u: timeout for receiving a reply to <close-session> elapsed.", session->id);
                 break;
             case NC_MSG_ERROR:
-                ERR("Failed to receive a reply to <close-session\\>.");
+                ERR("%s: session %u: failed to receive a reply to <close-session>.", __func__, session->id);
                 break;
             default:
                 /* cannot happen */
@@ -207,12 +208,10 @@ nc_session_free(struct nc_session *session)
     }
 
     session->status = NC_STATUS_CLOSING;
+    connected = nc_session_is_connected(session);
 
     /* transport implementation cleanup */
     switch (session->ti_type) {
-    case NC_TI_NONE:
-        break;
-
     case NC_TI_FD:
         /* nothing needed - file descriptors were provided by caller,
          * so it is up to the caller to close them correctly
@@ -222,13 +221,17 @@ nc_session_free(struct nc_session *session)
 
 #ifdef ENABLE_SSH
     case NC_TI_LIBSSH:
-        ssh_channel_free(session->ti.libssh.channel);
+        if (connected) {
+            ssh_channel_free(session->ti.libssh.channel);
+        }
         /* There can be multiple NETCONF sessions on the same SSH session (NETCONF session maps to
          * SSH channel). So destroy the SSH session only if there is no other NETCONF session using
          * it.
          */
         if (!session->ti.libssh.next) {
-            ssh_disconnect(session->ti.libssh.session);
+            if (connected) {
+                ssh_disconnect(session->ti.libssh.session);
+            }
             ssh_free(session->ti.libssh.session);
         } else {
             /* multiple NETCONF sessions on a single SSH session */
@@ -250,11 +253,17 @@ nc_session_free(struct nc_session *session)
     case NC_TI_OPENSSL:
         X509_free(session->cert);
 
-        SSL_shutdown(session->ti.tls);
+        if (connected) {
+            SSL_shutdown(session->ti.tls);
+        }
         SSL_free(session->ti.tls);
         break;
 #endif
+    case NC_TI_NONE:
+        ERRINT;
+        break;
     }
+
     lydict_remove(session->ctx, session->username);
     lydict_remove(session->ctx, session->host);
 

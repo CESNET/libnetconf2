@@ -160,6 +160,7 @@ struct nc_msg_cont {
  */
 struct nc_session {
     NC_STATUS status;            /**< status of the session */
+    NC_SESSION_TERM_REASON term_reason; /**< reason of termination, if status is NC_STATUS_INVALID */
     NC_SIDE side;                /**< side of the session: client or server */
 
     /* NETCONF data */
@@ -340,5 +341,7 @@ NC_MSG_TYPE nc_read_msg(struct nc_session* session, struct lyxml_elem **data);
  * @return 0 on success
  */
 int nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...);
+
+int nc_session_is_connected(struct nc_session *session);
 
 #endif /* NC_SESSION_PRIVATE_H_ */

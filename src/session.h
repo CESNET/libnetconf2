@@ -53,7 +53,7 @@ typedef enum {
 typedef enum {
     NC_STATUS_STARTING = 0, /**< session is not yet fully initiated */
     NC_STATUS_CLOSING,      /**< session is being closed */
-    NC_STATUS_INVALID,      /**< session is corrupted and it is supposed to be closed (nc_session_free()) */
+    NC_STATUS_INVALID,      /**< session is not running and is supposed to be closed (nc_session_free()) */
     NC_STATUS_RUNNING       /**< up and running */
 } NC_STATUS;
 

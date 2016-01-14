@@ -54,6 +54,7 @@ int nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session);
 
 int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
 
+/* -1 error, 0 timeout, 1 rpcs, 2 session status change */
 int nc_ps_poll(struct nc_pollsession *ps, int timeout);
 
 #if defined(ENABLE_SSH) || defined(ENABLE_TLS)

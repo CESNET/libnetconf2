@@ -49,23 +49,14 @@ extern "C" {
  * @brief Enumeration of reasons of the NETCONF session termination as defined in RFC 6470.
  */
 typedef enum NC_SESSION_TERM_REASON {
-	NC_SESSION_TERM_CLOSED,       /**< closed by client in a normal fashion */
-	NC_SESSION_TERM_KILLED,       /**< session was terminated by \<kill-session\> operation */
-	NC_SESSION_TERM_DROPPED,      /**< transport layer connection was unexpectedly closed */
-	NC_SESSION_TERM_TIMEOUT,      /**< terminated because of inactivity */
-	NC_SESSION_TERM_BADHELLO,     /**< \<hello\> message was invalid */
-	NC_SESSION_TERM_OTHER         /**< terminated for some other reason */
+    NC_SESSION_TERM_NONE = 0,     /**< session still running */
+    NC_SESSION_TERM_CLOSED,       /**< closed by client in a normal fashion */
+    NC_SESSION_TERM_KILLED,       /**< session was terminated by \<kill-session\> operation */
+    NC_SESSION_TERM_DROPPED,      /**< transport layer connection was unexpectedly closed */
+    NC_SESSION_TERM_TIMEOUT,      /**< terminated because of inactivity */
+    NC_SESSION_TERM_BADHELLO,     /**< \<hello\> message was invalid */
+    NC_SESSION_TERM_OTHER         /**< terminated for some other reason */
 } NC_SESSION_TERM_REASON;
-
-/**
- * @brief Supported NETCONF transport protocols enumeration. To change currently
- * used transport protocol, call nc_transport().
- */
-typedef enum NC_TRANSPORT {
-	NC_OVER_ERROR = -1, /**< Used as an error return value, this is not acceptable as input value */
-	NC_OVER_SSH,        /**< NETCONF over SSH, default value */
-	NC_OVER_TLS         /**< NETCONF over TLS */
-} NC_TRANSPORT;
 
 /**
  * @brief Enumeration of NETCONF message types.
