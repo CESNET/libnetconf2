@@ -609,7 +609,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
 static int
 nc_write_starttag_and_msg(struct nc_session *session, const void *buf, size_t count)
 {
-    int ret, c;
+    int ret = 0, c;
     char chunksize[20];
 
     if (session->version == NC_VERSION_11) {
