@@ -50,6 +50,63 @@
 
 extern struct nc_server_opts server_opts;
 
+API NC_STATUS
+nc_session_get_status(const struct nc_session *session)
+{
+    return session->status;
+}
+
+API uint32_t
+nc_session_get_id(const struct nc_session *session)
+{
+    return session->id;
+}
+
+API NC_TRANSPORT_IMPL
+nc_session_get_ti(const struct nc_session *session)
+{
+    return session->ti_type;
+}
+
+API const char *
+nc_session_get_username(const struct nc_session *session)
+{
+    return session->username;
+}
+
+API const char *
+nc_session_get_host(const struct nc_session *session)
+{
+    return session->host;
+}
+
+API uint16_t
+nc_session_get_port(const struct nc_session *session)
+{
+    return session->port;
+}
+
+API const char **
+nc_session_get_cpblts(const struct nc_session *session)
+{
+    return session->cpblts;
+}
+
+API const char *
+nc_session_cpblt(const struct nc_session *session, const char *capab)
+{
+    int i, len;
+
+    len = strlen(capab);
+    for (i = 0; session->cpblts[i]; ++i) {
+        if (!strncmp(session->cpblts[i], capab, len)) {
+            return session->cpblts[i];
+        }
+    }
+
+    return NULL;
+}
+
 NC_MSG_TYPE
 nc_send_msg(struct nc_session *session, struct lyd_node *op)
 {
