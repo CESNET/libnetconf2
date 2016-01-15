@@ -39,6 +39,7 @@
 #include "session_client.h"
 #include "libnetconf.h"
 #include "messages_p.h"
+#include "messages_client.h"
 
 static char *schema_searchpath = NULL;
 

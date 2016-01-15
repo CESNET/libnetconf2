@@ -40,6 +40,7 @@
 #include "session.h"
 #include "netconf.h"
 #include "messages.h"
+#include "messages_client.h"
 
 /**
  * @brief Set location where libnetconf tries to search for YANG/YIN schemas.

@@ -27,7 +27,9 @@
 #include <pthread.h>
 
 #include <libyang/libyang.h>
+
 #include "libnetconf.h"
+#include "netconf.h"
 #include "session.h"
 #include "messages.h"
 

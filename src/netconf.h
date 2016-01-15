@@ -83,6 +83,14 @@ typedef enum NC_DATASTORE_TYPE {
     NC_DATASTORE_CANDIDATE /**< separated working datastore as defined in Candidate Configuration Capability */
 } NC_DATASTORE;
 
+typedef enum NC_WITHDEFAULTS_MODE {
+    NC_WD_UNKNOWN = 0,
+    NC_WD_ALL = 0x01,
+    NC_WD_ALL_TAG = 0x02,
+    NC_WD_TRIM = 0x04,
+    NC_WD_EXPLICIT = 0x08
+} NC_WD_MODE;
+
 /**
  * @brief Transform given time_t (seconds since the epoch) into the RFC 3339 format
  * accepted by NETCONF functions.
