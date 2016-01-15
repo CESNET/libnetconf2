@@ -27,7 +27,6 @@
 #include <libyang/libyang.h>
 
 #include "session.h"
-#include "messages.h"
 #include "netconf.h"
 
 typedef struct nc_server_reply *(*nc_rpc_clb)(struct lyd_node *rpc, struct nc_session *session);

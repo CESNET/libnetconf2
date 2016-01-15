@@ -627,3 +627,15 @@ nc_reply_free(struct nc_reply *reply)
 
     free(reply);
 }
+
+API void
+nc_notif_free(struct nc_notif *notif)
+{
+    if (!notif) {
+        return;
+    }
+
+    lydict_remove(notif->tree->schema->module->ctx, notif->datetime);
+    lyd_free(notif->tree);
+    free(notif);
+}

@@ -39,7 +39,6 @@
 
 #include "session.h"
 #include "netconf.h"
-#include "messages.h"
 #include "messages_client.h"
 
 /**

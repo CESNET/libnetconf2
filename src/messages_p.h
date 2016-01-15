@@ -25,7 +25,6 @@
 
 #include <libyang/libyang.h>
 
-#include "messages.h"
 #include "messages_server.h"
 #include "messages_client.h"
 

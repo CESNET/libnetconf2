@@ -35,7 +35,6 @@ set(libsrc
 	src/datastore.c
 	src/io.c
 	src/log.c
-	src/messages.c
 	src/messages_client.c
 	src/messages_server.c
 	src/session.c
@@ -61,11 +60,10 @@ set(headers
 	src/log.h
 	src/netconf.h
 	src/session.h
-	src/session_client.h
-	src/session_server.h
-	src/messages.h
 	src/messages_client.h
-	src/messages_server.h)
+	src/messages_server.h
+	src/session_client.h
+    src/session_server.h)
 
 # libnetconf2 target
 add_library(netconf2 SHARED ${libsrc})

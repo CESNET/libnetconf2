@@ -91,6 +91,19 @@ typedef enum NC_WITHDEFAULTS_MODE {
     NC_WD_EXPLICIT = 0x08
 } NC_WD_MODE;
 
+typedef enum NC_PARAMTYPE {
+    NC_PARAMTYPE_CONST,
+    NC_PARAMTYPE_FREE,
+    NC_PARAMTYPE_DUP_AND_FREE
+} NC_PARAMTYPE;
+
+typedef enum NC_REPLY {
+    NC_RPL_OK,
+    NC_RPL_DATA,
+    NC_RPL_ERROR,
+    NC_RPL_NOTIF
+} NC_RPL;
+
 /**
  * @brief Transform given time_t (seconds since the epoch) into the RFC 3339 format
  * accepted by NETCONF functions.

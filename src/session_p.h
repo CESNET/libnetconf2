@@ -31,7 +31,6 @@
 #include "libnetconf.h"
 #include "netconf.h"
 #include "session.h"
-#include "messages.h"
 
 #ifdef ENABLE_SSH
 

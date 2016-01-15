@@ -27,7 +27,7 @@
 
 #include "netconf.h"
 
-typedef enum {
+typedef enum NC_ERROR {
     NC_ERR_UNKNOWN = 0,
     NC_ERR_IN_USE,
     NC_ERR_INVALID_VALUE,
@@ -50,7 +50,7 @@ typedef enum {
     NC_ERR_MALFORMED_MSG
 } NC_ERR;
 
-typedef enum {
+typedef enum NC_ERROR_TYPE {
     NC_ERR_TYPE_UNKNOWN = 0,
     NC_ERR_TYPE_TRAN,
     NC_ERR_TYPE_RPC,
