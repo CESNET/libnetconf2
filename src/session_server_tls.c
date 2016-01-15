@@ -467,26 +467,26 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     session = glob_session;
 
     /* get the last certificate, that is the peer (client) certificate */
-    if (!session->cert) {
+    if (!session->tls_cert) {
         cert_stack = X509_STORE_CTX_get1_chain(x509_ctx);
         /* TODO all that is needed, but function X509_up_ref not present in older OpenSSL versions
         session->cert = sk_X509_value(cert_stack, sk_X509_num(cert_stack) - 1);
         X509_up_ref(session->cert);
         sk_X509_pop_free(cert_stack, X509_free); */
         while ((cert = sk_X509_pop(cert_stack))) {
-            X509_free(session->cert);
-            session->cert = cert;
+            X509_free(session->tls_cert);
+            session->tls_cert = cert;
         }
         sk_X509_pop_free(cert_stack, X509_free);
     }
 
     /* standard certificate verification failed, so a trusted client cert must match to continue */
     if (!preverify_ok) {
-        subject = X509_get_subject_name(session->cert);
+        subject = X509_get_subject_name(session->tls_cert);
         cert_stack = X509_STORE_get1_certs(x509_ctx, subject);
         if (cert_stack) {
             for (i = 0; i < sk_X509_num(cert_stack); ++i) {
-                if (cert_pubkey_match(session->cert, sk_X509_value(cert_stack, i))) {
+                if (cert_pubkey_match(session->tls_cert, sk_X509_value(cert_stack, i))) {
                     /* we are just overriding the failed standard certificate verification (preverify_ok == 0),
                      * this callback will be called again with the same current certificate and preverify_ok == 1 */
                     VRB("Cert verify: fail (%s), but the client certificate is trusted, continuing.",
@@ -618,7 +618,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     if (map_type == NC_TLS_CTN_SPECIFIED) {
         session->username = lydict_insert(server_opts.ctx, username, 0);
     } else {
-        rc = nc_tls_ctn_get_username_from_cert(session->cert, map_type, &cp);
+        rc = nc_tls_ctn_get_username_from_cert(session->tls_cert, map_type, &cp);
         if (rc) {
             if (rc == -1) {
                 depth = 0;

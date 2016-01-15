@@ -200,8 +200,6 @@ struct nc_session {
     struct ly_ctx *ctx;            /**< libyang context of the session */
     uint8_t flags;                 /**< various flags of the session - TODO combine with status and/or side */
 #define NC_SESSION_SHAREDCTX 0x01
-#define NC_SESSION_SSH_AUTHENTICATED 0x02
-#define NC_SESSION_SSH_SUBSYS_NETCONF 0x04
 
     /* client side only data */
     uint64_t msgid;
@@ -211,10 +209,14 @@ struct nc_session {
 
     /* server side only data */
 #ifdef ENABLE_SSH
+    /* additional flags */
+#   define NC_SESSION_SSH_AUTHENTICATED 0x02
+#   define NC_SESSION_SSH_SUBSYS_NETCONF 0x04
+
     uint16_t ssh_auth_attempts;
 #endif
 #ifdef ENABLE_TLS
-    X509 *cert;
+    X509 *tls_cert;
 #endif
 };
 

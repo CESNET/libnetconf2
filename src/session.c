@@ -308,12 +308,12 @@ nc_session_free(struct nc_session *session)
 
 #ifdef ENABLE_TLS
     case NC_TI_OPENSSL:
-        X509_free(session->cert);
-
         if (connected) {
             SSL_shutdown(session->ti.tls);
         }
         SSL_free(session->ti.tls);
+
+        X509_free(session->tls_cert);
         break;
 #endif
     case NC_TI_NONE:
