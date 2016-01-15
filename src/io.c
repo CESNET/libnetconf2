@@ -583,6 +583,9 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
 
     /* prevent SIGPIPE this way */
     if (!nc_session_is_connected(session)) {
+        ERR("%s: session %u: communication socket unexpectedly closed.", __func__, session->id);
+        session->status = NC_STATUS_INVALID;
+        session->term_reason = NC_SESSION_TERM_DROPPED;
         return -1;
     }
 

@@ -606,6 +606,11 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
     /* message callback is executed twice to give chance for the channel to be
      * created if timeout == 0 (it takes 2 messages, channel-open, subsystem-request) */
     do {
+        if (!nc_session_is_connected(session)) {
+            ERR("%s: communication channel unexpectedly closed (libssh).", __func__);
+            return -1;
+        }
+
         if (ssh_execute_message_callbacks(session->ti.libssh.session) != SSH_OK) {
             ERR("%s: failed to receive new messages on the SSH session (%s)",
                 __func__, ssh_get_error(session->ti.libssh.session));
@@ -648,7 +653,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     session->ti_type = NC_TI_LIBSSH;
     session->ti.libssh.session = ssh_new();
     if (!session->ti.libssh.session) {
-        ERR("%s: failed to initialize SSH session", __func__);
+        ERR("%s: failed to initialize an SSH session.", __func__);
         close(sock);
         return -1;
     }
@@ -667,20 +672,25 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, session);
 
     if (ssh_bind_accept_fd(ssh_opts.sshbind, session->ti.libssh.session, sock) == SSH_ERROR) {
-        ERR("%s: SSH failed to accept a new connection (%s)", __func__, ssh_get_error(ssh_opts.sshbind));
+        ERR("%s: SSH failed to accept a new connection (%s).", __func__, ssh_get_error(ssh_opts.sshbind));
         close(sock);
         return -1;
     }
 
     if (ssh_handle_key_exchange(session->ti.libssh.session) != SSH_OK) {
-        ERR("%s: SSH key exchange error (%s)", __func__, ssh_get_error(session->ti.libssh.session));
+        ERR("%s: SSH key exchange error (%s).", __func__, ssh_get_error(session->ti.libssh.session));
         return -1;
     }
 
     /* authenticate */
     do {
+        if (!nc_session_is_connected(session)) {
+            ERR("%s: communication channel unexpectedly closed (libssh).", __func__);
+            return -1;
+        }
+
         if (ssh_execute_message_callbacks(session->ti.libssh.session) != SSH_OK) {
-            ERR("%s: failed to receive new messages on the SSH session (%s)",
+            ERR("%s: failed to receive new messages on the SSH session (%s).",
                 __func__, ssh_get_error(session->ti.libssh.session));
             return -1;
         }
