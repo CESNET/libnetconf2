@@ -259,6 +259,7 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
     int ret;
     char *msg = NULL, *chunk, *aux;
     uint64_t chunk_len, len = 0;
+    struct nc_server_reply *reply;
 
     assert(session && data);
     *data = NULL;
@@ -364,30 +365,18 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
 
 malformed_msg:
     ERR("%s: session %u: malformed message received.", __func__, session->id);
-    if (session->side == NC_SERVER && session->version == NC_VERSION_11) {
-        /* NETCONF version 1.1 define sending error reply from the server */
-        /* TODO what about message id?
+    if ((session->side == NC_SERVER) && (session->version == NC_VERSION_11)) {
+        /* NETCONF version 1.1 defines sending error reply from the server (RFC 6241 sec. 3) */
+        reply = nc_server_reply_err(session->ctx, nc_err(session->ctx, NC_ERR_MALFORMED_MSG));
 
-        RFC 6241 text
-        If a peer receives an <rpc> message that is not well-
-        formed XML or not encoded in UTF-8, it SHOULD reply with a
-        "malformed-message" error.  If a reply cannot be sent for any reason,
-        the server MUST terminate the session.
-
-        reply = nc_reply_error(nc_err_new(NC_ERR_MALFORMED_MSG));
-        if (reply == NULL) {
-            ERROR("Unable to create the \'Malformed message\' reply");
-            nc_session_close(session, NC_SESSION_TERM_OTHER);
-            return (NC_MSG_UNKNOWN);
+        if (nc_write_msg(session, NC_MSG_REPLY, NULL, reply) == -1) {
+            ERR("%s: session %u: unable to send a \"Malformed message\" error reply, terminating session.", __func__, session->id);
+            if (session->status != NC_STATUS_INVALID) {
+                session->status = NC_STATUS_INVALID;
+                session->term_reason = NC_SESSION_TERM_OTHER;
+            }
         }
-
-        if (nc_session_send_reply(session, NULL, reply) == 0) {
-            ERROR("Unable to send the \'Malformed message\' reply");
-            nc_session_close(session, NC_SESSION_TERM_OTHER);
-            return (NC_MSG_UNKNOWN);
-        }
-        nc_reply_free(reply);
-        */
+        nc_server_reply_free(reply);
     }
 
 error:
@@ -914,7 +903,10 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
         reply = va_arg(ap, struct nc_server_reply *);
 
         nc_write_clb((void *)&arg, "<rpc-reply", 10);
-        lyxml_dump_clb(nc_write_clb, (void *)&arg, rpc_elem, LYXML_DUMP_ATTRS);
+        /* can be NULL if replying with a malformed-message error */
+        if (rpc_elem) {
+            lyxml_dump_clb(nc_write_clb, (void *)&arg, rpc_elem, LYXML_DUMP_ATTRS);
+        }
         nc_write_clb((void *)&arg, ">", 1);
         switch (reply->type) {
         case NC_RPL_OK:
