@@ -31,12 +31,22 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-#include "log_p.h"
-#include "session_p.h"
+#include "libnetconf.h"
 #include "session_server.h"
 
 struct nc_server_opts server_opts;
 uint32_t session_id = 1;
+
+API void
+nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REASON reason)
+{
+    if (!session || !reason) {
+        ERRARG;
+        return;
+    }
+
+    session->term_reason = reason;
+}
 
 int
 nc_sock_listen(const char *address, uint32_t port)
@@ -222,17 +232,17 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
 
     /* check version */
     if (version && (strlen(version) != 10) && strcmp(version, "1.0")) {
-        err = nc_err(server_opts.ctx, NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
-        nc_err_set_msg(server_opts.ctx, err, "The requested version is not supported.", "en");
-        return nc_server_reply_err(server_opts.ctx, err);
+        err = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
+        nc_err_set_msg(err, "The requested version is not supported.", "en");
+        return nc_server_reply_err(err);
     }
 
     /* check and get module with the name identifier */
     module = ly_ctx_get_module(server_opts.ctx, identifier, version);
     if (!module) {
-        err = nc_err(server_opts.ctx, NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
-        nc_err_set_msg(server_opts.ctx, err, "The requested schema was not found.", "en");
-        return nc_server_reply_err(server_opts.ctx, err);
+        err = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
+        nc_err_set_msg(err, "The requested schema was not found.", "en");
+        return nc_server_reply_err(err);
     }
 
     /* check format */
@@ -241,9 +251,9 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
     } else if (!strcmp(format, "yin")) {
         lys_print_mem(&model_data, module, LYS_OUT_YIN, NULL);
     } else {
-        err = nc_err(server_opts.ctx, NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
-        nc_err_set_msg(server_opts.ctx, err, "The requested format is not supported.", "en");
-        return nc_server_reply_err(server_opts.ctx, err);
+        err = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
+        nc_err_set_msg(err, "The requested format is not supported.", "en");
+        return nc_server_reply_err(err);
     }
 
     sdata = ly_ctx_get_node(server_opts.ctx, "/ietf-netconf-monitoring:get-schema/output/data");
@@ -306,7 +316,7 @@ nc_server_set_capab_withdefaults(NC_WD_MODE basic_mode, int also_supported)
     return 0;
 }
 
-API int
+API void
 nc_server_set_capab_interleave(int interleave_support)
 {
     if (interleave_support) {
@@ -314,85 +324,59 @@ nc_server_set_capab_interleave(int interleave_support)
     } else {
         server_opts.interleave_capab = 0;
     }
-
-    return 0;
 }
 
-API int
+API void
 nc_server_set_hello_timeout(uint16_t hello_timeout)
 {
-    if (!hello_timeout) {
-        ERRARG;
-        return -1;
-    }
-
     server_opts.hello_timeout = hello_timeout;
-    return 0;
 }
 
-API int
+API void
 nc_server_set_idle_timeout(uint16_t idle_timeout)
 {
-    if (!idle_timeout) {
-        ERRARG;
-        return -1;
-    }
-
     server_opts.idle_timeout = idle_timeout;
-    return 0;
 }
 
 API int
-nc_server_set_max_sessions(uint16_t max_sessions)
+nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **session)
 {
-    server_opts.max_sessions = max_sessions;
-    return 0;
-}
-
-API struct nc_session *
-nc_accept_inout(int fdin, int fdout, const char *username)
-{
-    struct nc_session *session = NULL;
-
-    if (fdin < 0 || fdout < 0 || !username) {
-        ERR("%s: Invalid parameter", __func__);
-        return NULL;
-    }
-
-    if (!server_opts.ctx) {
-        return NULL;
+    if (fdin < 0 || fdout < 0 || !username || !session) {
+        ERRARG;
+        return -1;
     }
 
     /* prepare session structure */
-    session = calloc(1, sizeof *session);
-    if (!session) {
+    *session = calloc(1, sizeof **session);
+    if (!(*session)) {
         ERRMEM;
-        return NULL;
+        return -1;
     }
-    session->status = NC_STATUS_STARTING;
-    session->side = NC_SERVER;
+    (*session)->status = NC_STATUS_STARTING;
+    (*session)->side = NC_SERVER;
 
     /* transport specific data */
-    session->ti_type = NC_TI_FD;
-    session->ti.fd.in = fdin;
-    session->ti.fd.out = fdout;
+    (*session)->ti_type = NC_TI_FD;
+    (*session)->ti.fd.in = fdin;
+    (*session)->ti.fd.out = fdout;
 
     /* assign context (dicionary needed for handshake) */
-    session->flags = NC_SESSION_SHAREDCTX;
-    session->ctx = server_opts.ctx;
+    (*session)->flags = NC_SESSION_SHAREDCTX;
+    (*session)->ctx = server_opts.ctx;
 
     /* NETCONF handshake */
-    session->id = session_id++;
-    if (nc_handshake(session)) {
+    (*session)->id = session_id++;
+    if (nc_handshake(*session)) {
         goto fail;
     }
-    session->status = NC_STATUS_RUNNING;
+    (*session)->status = NC_STATUS_RUNNING;
 
-    return session;
+    return 0;
 
 fail:
-    nc_session_free(session);
-    return NULL;
+    nc_session_free(*session);
+    *session = NULL;
+    return -1;
 }
 
 API struct nc_pollsession *
@@ -526,14 +510,14 @@ nc_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
 
     /* no callback, reply with a not-implemented error */
     if (!rpc->tree->schema->private) {
-        reply = nc_server_reply_err(server_opts.ctx, nc_err(server_opts.ctx, NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_PROT));
+        reply = nc_server_reply_err(nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_PROT));
     } else {
         clb = (nc_rpc_clb)rpc->tree->schema->private;
         reply = clb(rpc->tree, session);
     }
 
     if (!reply) {
-        reply = nc_server_reply_err(server_opts.ctx, nc_err(server_opts.ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP));
+        reply = nc_server_reply_err(nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP));
     }
 
     ret = nc_write_msg(session, NC_MSG_REPLY, rpc->root, reply);
@@ -729,103 +713,108 @@ nc_server_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
     uint32_t i;
     int ret = -1;
 
-    for (i = 0; i < server_opts.bind_count; ++i) {
-        if ((!address || !strcmp(server_opts.binds[i].address, address))
-                && (!port || (server_opts.binds[i].port == port))
-                && (!ti || (server_opts.binds[i].ti == ti))) {
+    if (!address && !port && !ti) {
+        for (i = 0; i < server_opts.bind_count; ++i) {
             close(server_opts.binds[i].sock);
             free(server_opts.binds[i].address);
 
-            --server_opts.bind_count;
-            memmove(&server_opts.binds[i], &server_opts.binds[i + 1], (server_opts.bind_count - i) * sizeof *server_opts.binds);
-
             ret = 0;
+        }
+        free(server_opts.binds);
+        server_opts.binds = NULL;
+        server_opts.bind_count = 0;
+    } else {
+        for (i = 0; i < server_opts.bind_count; ++i) {
+            if ((!address || !strcmp(server_opts.binds[i].address, address))
+                    && (!port || (server_opts.binds[i].port == port))
+                    && (!ti || (server_opts.binds[i].ti == ti))) {
+                close(server_opts.binds[i].sock);
+                free(server_opts.binds[i].address);
+
+                --server_opts.bind_count;
+                memmove(&server_opts.binds[i], &server_opts.binds[i + 1], (server_opts.bind_count - i) * sizeof *server_opts.binds);
+
+                ret = 0;
+            }
         }
     }
 
     return ret;
 }
 
-API void
-nc_server_destroy_binds(void)
-{
-    uint32_t i;
-
-    for (i = 0; i < server_opts.bind_count; ++i) {
-        close(server_opts.binds[i].sock);
-        free(server_opts.binds[i].address);
-    }
-    free(server_opts.binds);
-}
-
-API struct nc_session *
-nc_accept(int timeout)
+API int
+nc_accept(int timeout, struct nc_session **session)
 {
     NC_TRANSPORT_IMPL ti;
-    int sock;
+    int sock, ret;
     char *host;
     uint16_t port;
-    struct nc_session *session = NULL;
 
-    if (!server_opts.ctx || !server_opts.binds) {
+    if (!server_opts.ctx || !server_opts.binds || !session) {
         ERRARG;
-        return NULL;
+        return -1;
     }
 
     sock = nc_sock_accept(server_opts.binds, server_opts.bind_count, timeout, &ti, &host, &port);
-    if (sock == -1) {
-        return NULL;
+    if (sock < 1) {
+        return sock;
     }
 
-    session = calloc(1, sizeof *session);
+    *session = calloc(1, sizeof **session);
     if (!session) {
         ERRMEM;
         close(sock);
-        return NULL;
+        return -1;
     }
-    session->status = NC_STATUS_STARTING;
-    session->side = NC_SERVER;
-    session->ctx = server_opts.ctx;
-    session->flags = NC_SESSION_SHAREDCTX;
-    session->host = lydict_insert_zc(server_opts.ctx, host);
-    session->port = port;
+    (*session)->status = NC_STATUS_STARTING;
+    (*session)->side = NC_SERVER;
+    (*session)->ctx = server_opts.ctx;
+    (*session)->flags = NC_SESSION_SHAREDCTX;
+    (*session)->host = lydict_insert_zc(server_opts.ctx, host);
+    (*session)->port = port;
 
     /* transport lock */
-    session->ti_lock = malloc(sizeof *session->ti_lock);
-    if (!session->ti_lock) {
+    (*session)->ti_lock = malloc(sizeof *(*session)->ti_lock);
+    if (!(*session)->ti_lock) {
         ERRMEM;
         close(sock);
+        ret = -1;
         goto fail;
     }
-    pthread_mutex_init(session->ti_lock, NULL);
+    pthread_mutex_init((*session)->ti_lock, NULL);
 
     /* sock gets assigned to session or closed */
     if (ti == NC_TI_LIBSSH) {
-        if (nc_accept_ssh_session(session, sock, timeout)) {
+        ret = nc_accept_ssh_session(*session, sock, timeout);
+        if (ret < 1) {
             goto fail;
         }
     } else if (ti == NC_TI_OPENSSL) {
-        if (nc_accept_tls_session(session, sock, timeout)) {
+        ret = nc_accept_tls_session(*session, sock, timeout);
+        if (ret < 1) {
             goto fail;
         }
     } else {
         ERRINT;
         close(sock);
+        ret = -1;
         goto fail;
     }
 
     /* NETCONF handshake */
-    session->id = session_id++;
-    if (nc_handshake(session)) {
+    (*session)->id = session_id++;
+    if (nc_handshake(*session)) {
+        ret = -1;
         goto fail;
     }
-    session->status = NC_STATUS_RUNNING;
+    (*session)->status = NC_STATUS_RUNNING;
 
-    return session;
+    return 1;
 
 fail:
-    nc_session_free(session);
-    return NULL;
+    nc_session_free(*session);
+    *session = NULL;
+    return -1;
 }
 
 #endif /* ENABLE_SSH || ENABLE_TLS */

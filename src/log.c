@@ -25,8 +25,7 @@
 
 #include <libyang/libyang.h>
 
-#include "config.h"
-#include "log_p.h"
+#include "libnetconf.h"
 
 /**
  * @brief libnetconf verbose level variable

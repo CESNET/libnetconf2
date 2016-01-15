@@ -28,7 +28,6 @@
 #include <libyang/libyang.h>
 
 #include "libnetconf.h"
-#include "messages_p.h"
 
 const char *rpcedit_dfltop2str[] = {NULL, "merge", "replace", "none"};
 const char *rpcedit_testopt2str[] = {NULL, "test-then-set", "set", "test-only"};
@@ -571,7 +570,7 @@ nc_rpc_free(struct nc_rpc *rpc)
 API void
 nc_reply_free(struct nc_reply *reply)
 {
-    struct nc_reply_error *error;
+    struct nc_client_reply_error *error;
     struct nc_reply_data *data;
     uint32_t i, j;
 
@@ -590,7 +589,7 @@ nc_reply_free(struct nc_reply *reply)
         break;
 
     case NC_RPL_ERROR:
-        error = (struct nc_reply_error *)reply;
+        error = (struct nc_client_reply_error *)reply;
         for (i = 0; i < error->count; ++i) {
             lydict_remove(error->ctx, error->err[i].type);
             lydict_remove(error->ctx, error->err[i].tag);

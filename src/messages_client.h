@@ -137,22 +137,33 @@ struct nc_err {
  */
 struct nc_rpc;
 
+/**
+ * @brief NETCONF client rpc-reply object
+ */
 struct nc_reply {
     NC_RPL type;
 };
 
+/**
+ * @brief NETCONF client data rpc-reply object
+ */
 struct nc_reply_data {
     NC_RPL type;           /**< NC_RPL_DATA */
     struct lyd_node *data; /**< libyang data tree */
 };
 
+/**
+ * @brief NETCONF client error rpc-reply object
+ */
 struct nc_reply_error {
-    NC_RPL type;        /**< NC_RPL_ERROR */
-    struct ly_ctx *ctx;
-    struct nc_err *err; /**< errors, any of the values inside can be NULL */
-    uint32_t count;
+    NC_RPL type;              /**< NC_RPL_ERROR */
+    const struct nc_err *err; /**< errors, any of the values inside can be NULL */
+    uint32_t count;           /**< number of error structures */
 };
 
+/**
+ * @brief NETCONF client notification object
+ */
 struct nc_notif {
     NC_RPL type;           /**< NC_RPL_NOTIF */
     const char *datetime;  /**< eventTime of the notification */
@@ -436,5 +447,11 @@ void nc_rpc_free(struct nc_rpc *rpc);
  * @param[in] rpc Object to free.
  */
 void nc_reply_free(struct nc_reply *reply);
+
+/**
+ * @brief Free the NETCONF Notification object.
+ * @param[in] rpc Object to free.
+ */
+void nc_notif_free(struct nc_notif *notif);
 
 #endif /* NC_MESSAGES_CLIENT_H_ */

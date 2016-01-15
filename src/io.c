@@ -31,10 +31,7 @@
 
 #include <libyang/libyang.h>
 
-#include "config.h"
 #include "libnetconf.h"
-#include "session_p.h"
-#include "messages_p.h"
 
 #define BUFFERSIZE 512
 
@@ -367,7 +364,7 @@ malformed_msg:
     ERR("%s: session %u: malformed message received.", __func__, session->id);
     if ((session->side == NC_SERVER) && (session->version == NC_VERSION_11)) {
         /* NETCONF version 1.1 defines sending error reply from the server (RFC 6241 sec. 3) */
-        reply = nc_server_reply_err(session->ctx, nc_err(session->ctx, NC_ERR_MALFORMED_MSG));
+        reply = nc_server_reply_err(nc_err(NC_ERR_MALFORMED_MSG));
 
         if (nc_write_msg(session, NC_MSG_REPLY, NULL, reply) == -1) {
             ERR("%s: session %u: unable to send a \"Malformed message\" error reply, terminating session.", __func__, session->id);

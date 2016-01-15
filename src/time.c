@@ -28,7 +28,6 @@
 #include <unistd.h>
 
 #include "libnetconf.h"
-#include "netconf.h"
 
 API time_t
 nc_datetime2time(const char *datetime)

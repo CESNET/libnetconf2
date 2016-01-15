@@ -37,10 +37,7 @@
 
 #endif /* ENABLE_TLS */
 
-#include "config.h"
-#include "log_p.h"
-#include "session.h"
-#include "session_p.h"
+#include "libnetconf.h"
 
 /* in seconds */
 #define NC_CLIENT_HELLO_TIMEOUT 60
@@ -449,7 +446,7 @@ create_cpblts(struct ly_ctx *ctx)
         }
     }
 
-    mod = ly_ctx_get_module(ctx, "ietf-netconf-notifications", NULL);
+    mod = ly_ctx_get_module(ctx, "nc-notifications", NULL);
     if (mod) {
         add_cpblt(ctx, "urn:ietf:params:netconf:notification:1.0", &cpblts, &size, &count);
         if (server_opts.interleave_capab) {

@@ -75,6 +75,13 @@ struct nc_server_rpc {
     struct lyd_node *tree;   /**< libyang data tree of the message (NETCONF operation) */
 };
 
+struct nc_client_reply_error {
+    NC_RPL type;
+    struct nc_err *err;
+    uint32_t count;
+    struct ly_ctx *ctx;
+};
+
 struct nc_rpc {
     NC_RPC_TYPE type;
 };

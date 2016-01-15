@@ -47,8 +47,6 @@
 #include <libyang/libyang.h>
 
 #include "libnetconf.h"
-#include "session_client.h"
-#include "session_p.h"
 
 static struct nc_ssh_client_opts ssh_opts = {
     .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 1}}

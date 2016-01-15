@@ -30,8 +30,7 @@
 #include <crypt.h>
 #include <errno.h>
 
-#include "session_server.h"
-#include "session_p.h"
+#include "libnetconf.h"
 
 extern struct nc_server_opts server_opts;
 static struct nc_ssh_server_opts ssh_opts = {
@@ -41,9 +40,9 @@ static struct nc_ssh_server_opts ssh_opts = {
 };
 
 API int
-nc_ssh_server_set_hostkey(const char *key_path)
+nc_ssh_server_set_hostkey(const char *privkey_path)
 {
-    if (!key_path) {
+    if (!privkey_path) {
         ERRARG;
         return -1;
     }
@@ -56,7 +55,7 @@ nc_ssh_server_set_hostkey(const char *key_path)
         }
     }
 
-    if (ssh_bind_options_set(ssh_opts.sshbind, SSH_BIND_OPTIONS_HOSTKEY, key_path) != SSH_OK) {
+    if (ssh_bind_options_set(ssh_opts.sshbind, SSH_BIND_OPTIONS_HOSTKEY, privkey_path) != SSH_OK) {
         ERR("%s: failed to set host key (%s).", __func__, ssh_get_error(ssh_opts.sshbind));
         return -1;
     }
@@ -122,9 +121,9 @@ nc_ssh_server_set_auth_timeout(uint16_t auth_timeout)
 }
 
 API int
-nc_ssh_server_add_authkey(const char *keypath, const char *username)
+nc_ssh_server_add_authkey(const char *pubkey_path, const char *username)
 {
-    if (!keypath || !username) {
+    if (!pubkey_path || !username) {
         ERRARG;
         return -1;
     }
@@ -132,28 +131,40 @@ nc_ssh_server_add_authkey(const char *keypath, const char *username)
     ++ssh_opts.authkey_count;
     ssh_opts.authkeys = realloc(ssh_opts.authkeys, ssh_opts.authkey_count * sizeof *ssh_opts.authkeys);
 
-    ssh_opts.authkeys[ssh_opts.authkey_count - 1].path = strdup(keypath);
+    ssh_opts.authkeys[ssh_opts.authkey_count - 1].path = strdup(pubkey_path);
     ssh_opts.authkeys[ssh_opts.authkey_count - 1].username = strdup(username);
 
     return 0;
 }
 
 API int
-nc_ssh_server_del_authkey(const char *keypath, const char *username)
+nc_ssh_server_del_authkey(const char *pubkey_path, const char *username)
 {
     uint32_t i;
     int ret = -1;
 
-    for (i = 0; i < ssh_opts.authkey_count; ++i) {
-        if ((!keypath || !strcmp(ssh_opts.authkeys[i].path, keypath))
-                && (!username || !strcmp(ssh_opts.authkeys[i].username, username))) {
+    if (!pubkey_path && !username) {
+        for (i = 0; i < ssh_opts.authkey_count; ++i) {
             free(ssh_opts.authkeys[i].path);
             free(ssh_opts.authkeys[i].username);
 
-            --ssh_opts.authkey_count;
-            memmove(&ssh_opts.authkeys[i], &ssh_opts.authkeys[i + 1], (ssh_opts.authkey_count - i) * sizeof *ssh_opts.authkeys);
-
             ret = 0;
+        }
+        free(ssh_opts.authkeys);
+        ssh_opts.authkeys = NULL;
+        ssh_opts.authkey_count = 0;
+    } else {
+        for (i = 0; i < ssh_opts.authkey_count; ++i) {
+            if ((!pubkey_path || !strcmp(ssh_opts.authkeys[i].path, pubkey_path))
+                    && (!username || !strcmp(ssh_opts.authkeys[i].username, username))) {
+                free(ssh_opts.authkeys[i].path);
+                free(ssh_opts.authkeys[i].username);
+
+                --ssh_opts.authkey_count;
+                memmove(&ssh_opts.authkeys[i], &ssh_opts.authkeys[i + 1], (ssh_opts.authkey_count - i) * sizeof *ssh_opts.authkeys);
+
+                ret = 0;
+            }
         }
     }
 
@@ -163,19 +174,11 @@ nc_ssh_server_del_authkey(const char *keypath, const char *username)
 API void
 nc_ssh_server_free_opts(void)
 {
-    int i;
-
     if (ssh_opts.sshbind) {
         ssh_bind_free(ssh_opts.sshbind);
     }
 
-    if (ssh_opts.authkeys) {
-        for (i = 0; i < ssh_opts.authkey_count; ++i) {
-            free(ssh_opts.authkeys[i].path);
-            free(ssh_opts.authkeys[i].username);
-        }
-        free(ssh_opts.authkeys);
-    }
+    nc_ssh_server_del_authkey(NULL, NULL);
 }
 
 static char *
@@ -598,6 +601,7 @@ nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data)
     return 1;
 }
 
+/* ret 1 on success, 0 on timeout, -1 on error */
 static int
 nc_open_netconf_channel(struct nc_session *session, int timeout)
 {
@@ -618,7 +622,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
         }
 
         if (session->ti.libssh.channel && (session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
-            return 0;
+            return 1;
         }
 
         usleep(NC_TIMEOUT_STEP);
@@ -634,20 +638,20 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
         }
 
         if (session->ti.libssh.channel && (session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
-            return 0;
+            return 1;
         }
 
         usleep(NC_TIMEOUT_STEP);
         elapsed += NC_TIMEOUT_STEP;
     } while ((timeout == -1) || (timeout && (elapsed < timeout)));
 
-    return 1;
+    return 0;
 }
 
 int
 nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 {
-    int libssh_auth_methods = 0, elapsed = 0;
+    int libssh_auth_methods = 0, elapsed = 0, ret;
 
     /* other transport-specific data */
     session->ti_type = NC_TI_LIBSSH;
@@ -705,7 +709,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 
     if (!(session->flags & NC_SESSION_SSH_AUTHENTICATED)) {
         /* timeout */
-        return -1;
+        return 0;
     }
 
     if (timeout > 0) {
@@ -713,11 +717,12 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     }
 
     /* open channel */
-    if (nc_open_netconf_channel(session, timeout)) {
-        return -1;
+    ret =  nc_open_netconf_channel(session, timeout);
+    if (ret < 1) {
+        return ret;
     }
 
-    return 0;
+    return 1;
 }
 
 API struct nc_session *

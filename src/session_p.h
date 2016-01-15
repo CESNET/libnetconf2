@@ -108,7 +108,6 @@ struct nc_server_opts {
 
     uint16_t hello_timeout;
     uint16_t idle_timeout;
-    uint16_t max_sessions;
 
     struct nc_bind {
         char *address;
@@ -273,18 +272,52 @@ int nc_handshake(struct nc_session *session);
  */
 int nc_callhome_accept_connection(uint16_t port, int32_t timeout, uint16_t *server_port, char **server_host);
 
+/**
+ * @brief Create a listening socket.
+ *
+ * @param[in] address IP address to listen on.
+ * @param[in] port Port to listen on.
+ * @return Listening socket, -1 on error.
+ */
 int nc_sock_listen(const char *address, uint32_t port);
 
+/**
+ * @brief Accept a new connection on a listening socket.
+ *
+ * @param[in] binds Structure with the listening sockets.
+ * @param[in] bind_count Number of \p binds.
+ * @param[in] timeout Timeout for accepting.
+ * @param[out] ti Type of transport of the accepted connection. Can be NULL.
+ * @param[out] host Host of the remote peer. Can be NULL.
+ * @param[out] port Port of the new connection. Can be NULL.
+ * @return Accepted socket of the new connection, -1 on error.
+ */
 int nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANSPORT_IMPL *ti, char **host, uint16_t *port);
 
 #ifdef ENABLE_SSH
 
+/**
+ * @brief Establish SSH transport on a socket.
+ *
+ * @param[in] session Session structure of the new connection.
+ * @param[in] sock Socket of the new connection.
+ * @param[in] timeout Timeout for all the related tasks.
+ * @return 1 on success, 0 on timeout, -1 on error.
+ */
 int nc_accept_ssh_session(struct nc_session *session, int sock, int timeout);
 
 #endif
 
 #ifdef ENABLE_TLS
 
+/**
+ * @brief Establish TLS transport on a socket.
+ *
+ * @param[in] session Session structure of the new connection.
+ * @param[in] sock Socket of the new connection.
+ * @param[in] timeout Timeout for all the related tasks.
+ * @return 1 on success, 0 on timeout, -1 on error.
+ */
 int nc_accept_tls_session(struct nc_session *session, int sock, int timeout);
 
 #endif
@@ -345,6 +378,12 @@ NC_MSG_TYPE nc_read_msg(struct nc_session* session, struct lyxml_elem **data);
  */
 int nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...);
 
+/**
+ * @brief Check whether a session is still connected (on transport layer).
+ *
+ * @param[in] session Session to check.
+ * @return 1 if connected, 0 if not.
+ */
 int nc_session_is_connected(struct nc_session *session);
 
 #endif /* NC_SESSION_PRIVATE_H_ */

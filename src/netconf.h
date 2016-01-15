@@ -83,26 +83,35 @@ typedef enum NC_DATASTORE_TYPE {
     NC_DATASTORE_CANDIDATE /**< separated working datastore as defined in Candidate Configuration Capability */
 } NC_DATASTORE;
 
+/**
+ * @brief Enumeration of NETCONF with-defaults capability modes.
+ */
 typedef enum NC_WITHDEFAULTS_MODE {
-    NC_WD_UNKNOWN = 0,
-    NC_WD_ALL = 0x01,
-    NC_WD_ALL_TAG = 0x02,
-    NC_WD_TRIM = 0x04,
-    NC_WD_EXPLICIT = 0x08
+    NC_WD_UNKNOWN = 0,    /**< invalid mode */
+    NC_WD_ALL = 0x01,     /**< report-all mode */
+    NC_WD_ALL_TAG = 0x02, /**< report-all-tagged mode */
+    NC_WD_TRIM = 0x04,    /**< trim mode */
+    NC_WD_EXPLICIT = 0x08 /**< explicit mode */
 } NC_WD_MODE;
 
-typedef enum NC_PARAMTYPE {
-    NC_PARAMTYPE_CONST,
-    NC_PARAMTYPE_FREE,
-    NC_PARAMTYPE_DUP_AND_FREE
-} NC_PARAMTYPE;
-
+/**
+ * @brief Enumeration of NETCONF (both server and client) rpc-reply types.
+ */
 typedef enum NC_REPLY {
-    NC_RPL_OK,
-    NC_RPL_DATA,
-    NC_RPL_ERROR,
-    NC_RPL_NOTIF
+    NC_RPL_OK,    /**< OK rpc-reply */
+    NC_RPL_DATA,  /**< DATA rpc-reply */
+    NC_RPL_ERROR, /**< ERROR rpc-reply */
+    NC_RPL_NOTIF  /**< notification (client-only) */
 } NC_RPL;
+
+/**
+ * @brief Enumeration of function parameter treatments.
+ */
+typedef enum NC_PARAMTYPE {
+    NC_PARAMTYPE_CONST,       /**< use the parameter directly, do not free */
+    NC_PARAMTYPE_FREE,        /**< use the parameter directly, free afterwards */
+    NC_PARAMTYPE_DUP_AND_FREE /**< make a copy of the argument, free afterwards */
+} NC_PARAMTYPE;
 
 /**
  * @brief Transform given time_t (seconds since the epoch) into the RFC 3339 format

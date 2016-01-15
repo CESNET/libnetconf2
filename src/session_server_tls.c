@@ -30,9 +30,7 @@
 #include <openssl/err.h>
 #include <openssl/x509v3.h>
 
-#include "session_server.h"
-#include "config.h"
-#include "session_p.h"
+#include "libnetconf.h"
 
 extern struct nc_server_opts server_opts;
 struct nc_tls_server_opts tls_opts;
@@ -896,7 +894,6 @@ nc_tls_server_destroy_certs(void)
     tls_opts.tls_ctx = NULL;
 }
 
-/* PEM hash dir */
 API int
 nc_tls_server_set_crl_locations(const char *crl_file_path, const char *crl_dir_path)
 {
@@ -954,7 +951,8 @@ nc_tls_server_destroy_crls(void)
 API int
 nc_tls_server_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name)
 {
-    if (!fingerprint || !map_type || ((map_type == NC_TLS_CTN_SPECIFIED) && !name)) {
+    if (!fingerprint || !map_type || ((map_type == NC_TLS_CTN_SPECIFIED) && !name)
+            || ((map_type != NC_TLS_CTN_SPECIFIED) && name)) {
         ERRARG;
         return -1;
     }
@@ -976,18 +974,30 @@ nc_tls_server_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE ma
     uint16_t i;
     int ret = -1;
 
-    for (i = 0; i < tls_opts.ctn_count; ++i) {
-        if (((!id < 0) || (tls_opts.ctn[i].id == id))
-                && (!fingerprint || !strcmp(tls_opts.ctn[i].fingerprint, fingerprint))
-                && (!map_type || (tls_opts.ctn[i].map_type == map_type))
-                && (!name || (tls_opts.ctn[i].name && !strcmp(tls_opts.ctn[i].name, name)))) {
+    if ((id < 0) && !fingerprint && !map_type && !name) {
+        for (i = 0; i < tls_opts.ctn_count; ++i) {
             lydict_remove(server_opts.ctx, tls_opts.ctn[i].fingerprint);
             lydict_remove(server_opts.ctx, tls_opts.ctn[i].name);
 
-            --tls_opts.ctn_count;
-            memmove(&tls_opts.ctn[i], &tls_opts.ctn[i + 1], (tls_opts.ctn_count - i) * sizeof *tls_opts.ctn);
-
             ret = 0;
+        }
+        free(tls_opts.ctn);
+        tls_opts.ctn = NULL;
+        tls_opts.ctn_count = 0;
+    } else {
+        for (i = 0; i < tls_opts.ctn_count; ++i) {
+            if (((id < 0) || (tls_opts.ctn[i].id == id))
+                    && (!fingerprint || !strcmp(tls_opts.ctn[i].fingerprint, fingerprint))
+                    && (!map_type || (tls_opts.ctn[i].map_type == map_type))
+                    && (!name || (tls_opts.ctn[i].name && !strcmp(tls_opts.ctn[i].name, name)))) {
+                lydict_remove(server_opts.ctx, tls_opts.ctn[i].fingerprint);
+                lydict_remove(server_opts.ctx, tls_opts.ctn[i].name);
+
+                --tls_opts.ctn_count;
+                memmove(&tls_opts.ctn[i], &tls_opts.ctn[i + 1], (tls_opts.ctn_count - i) * sizeof *tls_opts.ctn);
+
+                ret = 0;
+            }
         }
     }
 
@@ -997,16 +1007,9 @@ nc_tls_server_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE ma
 API void
 nc_tls_server_free_opts(void)
 {
-    uint16_t i;
-
     nc_tls_server_destroy_certs();
     nc_tls_server_destroy_crls();
-
-    for (i = 0; i < tls_opts.ctn_count; ++i) {
-        lydict_remove(server_opts.ctx, tls_opts.ctn[i].fingerprint);
-        lydict_remove(server_opts.ctx, tls_opts.ctn[i].name);
-    }
-    free(tls_opts.ctn);
+    nc_tls_server_del_ctn(-1, NULL, 0, NULL);
 }
 
 int
@@ -1025,7 +1028,7 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     if (!ret) {
         /* we timeouted */
         close(sock);
-        return -1;
+        return 0;
     } else if (ret == -1) {
         ERR("%s: poll failed (%s).", __func__, strerror(errno));
         close(sock);
@@ -1065,5 +1068,5 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
         return -1;
     }
 
-    return 0;
+    return 1;
 }

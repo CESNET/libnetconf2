@@ -20,8 +20,6 @@
  *
  */
 
-#include "config.h"
 #include "libnetconf.h"
-#include "datastore_p.h"
 
 const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "candidate"};

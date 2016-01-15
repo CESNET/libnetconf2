@@ -36,7 +36,7 @@ typedef enum {
 #ifdef ENABLE_TLS
 
 typedef enum {
-    NC_TLS_CTN_UNKNOWN,
+    NC_TLS_CTN_UNKNOWN = 0,
     NC_TLS_CTN_SPECIFIED,
     NC_TLS_CTN_SAN_RFC822_NAME,
     NC_TLS_CTN_SAN_DNS_NAME,
@@ -160,9 +160,9 @@ void nc_session_free(struct nc_session *session);
 #ifdef ENABLE_SSH
 
 /**
- * @brief Initialize libssh so that libnetconf2 can safely use it in a multi-threaded environment.
+ * @brief Initialize libssh so that libnetconf2 can be safely used in a multi-threaded environment.
  *
- * Must be called before using any other functions. Afterwards can libssh be used in an application
+ * Must be called before using any other SSH functions. Afterwards can libssh be used in the application
  * as well.
  */
 void nc_ssh_init(void);
@@ -170,7 +170,7 @@ void nc_ssh_init(void);
 /**
  * @brief Free all the resources allocated by libssh.
  *
- * Must be called before nc_tls_destroy() as libssh uses libcrypto as well.
+ * Must be called before nc_tls_destroy() (if called) as libssh uses libcrypto as well.
  */
 void nc_ssh_destroy(void);
 
@@ -178,8 +178,17 @@ void nc_ssh_destroy(void);
 
 #ifdef ENABLE_TLS
 
+/**
+ * @brief Initialize libcrypto so that libnetconf2 can be safely used in a multi-threaded environment.
+ *
+ * Must be called before using any other TLS functions. Afterwards can libcrypto be used in the application
+ * as well.
+ */
 void nc_tls_init(void);
 
+/**
+ * @brief Free all the resources allocated by libcrypto and libssl.
+ */
 void nc_tls_destroy(void);
 
 #endif /* ENABLE_TLS */

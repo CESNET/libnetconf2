@@ -32,8 +32,6 @@
 #include <openssl/err.h>
 
 #include "libnetconf.h"
-#include "session_client.h"
-#include "session_p.h"
 
 /* TLS certificate verification error messages */
 static const char* verify_ret_msg[] = {

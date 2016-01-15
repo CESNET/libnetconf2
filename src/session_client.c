@@ -36,12 +36,10 @@
 
 #include <libyang/libyang.h>
 
-#include "session_client.h"
 #include "libnetconf.h"
-#include "messages_p.h"
-#include "messages_client.h"
+#include "session_client.h"
 
-static char *schema_searchpath = NULL;
+static char *schema_searchpath;
 
 API int
 nc_schema_searchpath(const char *path)
@@ -680,7 +678,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
     struct lyxml_elem *iter;
     const struct lys_node *schema;
     struct lyd_node *data = NULL;
-    struct nc_reply_error *error_rpl;
+    struct nc_client_reply_error *error_rpl;
     struct nc_reply_data *data_rpl;
     struct nc_reply *reply = NULL;
     struct nc_rpc_generic *rpc_gen;
@@ -711,9 +709,9 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
 
         error_rpl = malloc(sizeof *error_rpl);
         error_rpl->type = NC_RPL_ERROR;
-        error_rpl->ctx = ctx;
         error_rpl->err = calloc(i, sizeof *error_rpl->err);
         error_rpl->count = i;
+        error_rpl->ctx = ctx;
         reply = (struct nc_reply *)error_rpl;
 
         i = 0;
