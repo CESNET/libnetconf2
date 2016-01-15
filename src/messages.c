@@ -548,10 +548,11 @@ nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_error *e
 }
 
 API struct nc_server_error *
-nc_err(struct ly_ctx *ctx, NC_ERR tag, NC_ERR_TYPE type, ...)
+nc_err(struct ly_ctx *ctx, NC_ERR tag, ...)
 {
     va_list ap;
     struct nc_server_error *ret;
+    NC_ERR_TYPE type;
     const char *arg1, *arg2;
     uint32_t sid;
 
@@ -566,7 +567,7 @@ nc_err(struct ly_ctx *ctx, NC_ERR tag, NC_ERR_TYPE type, ...)
         return NULL;
     }
 
-    va_start(ap, type);
+    va_start(ap, tag);
 
     switch (tag) {
     case NC_ERR_IN_USE:
@@ -574,6 +575,7 @@ nc_err(struct ly_ctx *ctx, NC_ERR tag, NC_ERR_TYPE type, ...)
     case NC_ERR_ACCESS_DENIED:
     case NC_ERR_ROLLBACK_FAILED:
     case NC_ERR_OP_NOT_SUPPORTED:
+        type = va_arg(ap, NC_ERR_TYPE);
         if ((type != NC_ERR_TYPE_PROT) && (type == NC_ERR_TYPE_APP)) {
             goto fail;
         }
@@ -581,18 +583,20 @@ nc_err(struct ly_ctx *ctx, NC_ERR tag, NC_ERR_TYPE type, ...)
 
     case NC_ERR_TOO_BIG:
     case NC_ERR_RES_DENIED:
+        type = va_arg(ap, NC_ERR_TYPE);
         /* nothing to check */
         break;
 
     case NC_ERR_MISSING_ATTR:
     case NC_ERR_BAD_ATTR:
     case NC_ERR_UNKNOWN_ATTR:
-        if (type == NC_ERR_TYPE_TRAN) {
-            goto fail;
-        }
+        type = va_arg(ap, NC_ERR_TYPE);
         arg1 = va_arg(ap, const char *);
         arg2 = va_arg(ap, const char *);
 
+        if (type == NC_ERR_TYPE_TRAN) {
+            goto fail;
+        }
         nc_err_add_bad_attr(ctx, ret, arg1);
         nc_err_add_bad_elem(ctx, ret, arg2);
         break;
@@ -600,51 +604,51 @@ nc_err(struct ly_ctx *ctx, NC_ERR tag, NC_ERR_TYPE type, ...)
     case NC_ERR_MISSING_ELEM:
     case NC_ERR_BAD_ELEM:
     case NC_ERR_UNKNOWN_ELEM:
+        type = va_arg(ap, NC_ERR_TYPE);
+        arg1 = va_arg(ap, const char *);
+
         if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
             goto fail;
         }
-        arg1 = va_arg(ap, const char *);
         nc_err_add_bad_elem(ctx, ret, arg1);
         break;
 
     case NC_ERR_UNKNOWN_NS:
-        if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
-            goto fail;
-        }
+        type = va_arg(ap, NC_ERR_TYPE);
         arg1 = va_arg(ap, const char *);
         arg2 = va_arg(ap, const char *);
 
+        if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
+            goto fail;
+        }
         nc_err_add_bad_elem(ctx, ret, arg1);
         nc_err_add_bad_ns(ctx, ret, arg2);
         break;
 
     case NC_ERR_LOCK_DENIED:
-        if (type != NC_ERR_TYPE_PROT) {
-            goto fail;
-        }
         sid = va_arg(ap, uint32_t);
 
+        type = NC_ERR_TYPE_PROT;
         nc_err_set_sid(ret, sid);
         break;
 
     case NC_ERR_DATA_EXISTS:
     case NC_ERR_DATA_MISSING:
-        if (type != NC_ERR_TYPE_APP) {
-            goto fail;
-        }
+        type = NC_ERR_TYPE_APP;
         break;
 
     case NC_ERR_OP_FAILED:
+        type = va_arg(ap, NC_ERR_TYPE);
+
         if (type == NC_ERR_TYPE_TRAN) {
             goto fail;
         }
         break;
 
     case NC_ERR_MALFORMED_MSG:
-        if (type != NC_ERR_TYPE_RPC) {
-            goto fail;
-        }
+        type = NC_ERR_TYPE_RPC;
         break;
+
     default:
         goto fail;
     }

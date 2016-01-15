@@ -496,7 +496,7 @@ struct nc_server_reply *nc_server_reply_err(struct ly_ctx *ctx, struct nc_server
 
 int nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_error *err);
 
-struct nc_server_error *nc_err(struct ly_ctx *ctx, NC_ERR tag, NC_ERR_TYPE type, ...);
+struct nc_server_error *nc_err(struct ly_ctx *ctx, NC_ERR tag, ...);
 
 int nc_err_set_app_tag(struct ly_ctx *ctx, struct nc_server_error *err, const char *error_app_tag);
 
