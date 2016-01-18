@@ -33,7 +33,9 @@
 #include "libnetconf.h"
 
 extern struct nc_server_opts server_opts;
-struct nc_tls_server_opts tls_opts;
+struct nc_tls_server_opts tls_opts = {
+    .verify_once = PTHREAD_ONCE_INIT
+};
 
 static char *
 asn1time_to_str(ASN1_TIME *t)
@@ -438,9 +440,6 @@ cleanup:
     return ret;
 }
 
-/* TODO */
-struct nc_session *glob_session;
-
 static int
 nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
 {
@@ -461,8 +460,8 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     NC_TLS_CTN_MAPTYPE map_type = 0;
     ASN1_TIME *last_update = NULL, *next_update = NULL;
 
-    /* get the new client structure */
-    session = glob_session;
+    /* get the thread session */
+    session = pthread_getspecific(tls_opts.verify_key);
 
     /* get the last certificate, that is the peer (client) certificate */
     if (!session->tls_cert) {
@@ -1012,6 +1011,12 @@ nc_tls_server_free_opts(void)
     nc_tls_server_del_ctn(-1, NULL, 0, NULL);
 }
 
+static void
+nc_tls_make_verify_key(void)
+{
+    pthread_key_create(&tls_opts.verify_key, NULL);
+}
+
 int
 nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
 {
@@ -1047,10 +1052,9 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     SSL_set_fd(session->ti.tls, sock);
     SSL_set_mode(session->ti.tls, SSL_MODE_AUTO_RETRY);
 
-    /* generate new index for TLS-specific data, for the verify callback */
-    /*netopeer_state.tls_state->last_tls_idx = SSL_get_ex_new_index(0, NULL, NULL, NULL, NULL);
-    SSL_set_ex_data(new_client->tls, netopeer_state.tls_state->last_tls_idx, new_client);*/
-    glob_session = session;
+    /* store session on per-thread basis */
+    pthread_once(&tls_opts.verify_once, nc_tls_make_verify_key);
+    pthread_setspecific(tls_opts.verify_key, session);
 
     ret = SSL_accept(session->ti.tls);
     if (ret != 1) {

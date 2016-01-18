@@ -95,6 +95,9 @@ struct nc_tls_server_opts {
         const char *name;
     } *ctn;
     uint16_t ctn_count;
+
+    pthread_key_t verify_key;
+    pthread_once_t verify_once;
 };
 
 #endif /* ENABLE_TLS */
