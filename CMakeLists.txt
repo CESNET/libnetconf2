@@ -32,7 +32,6 @@ option(ENABLE_TLS "Enable NETCONF over TLS support (via OpenSSL)" OFF)
 
 # source files
 set(libsrc
-	src/datastore.c
 	src/io.c
 	src/log.c
 	src/messages_client.c

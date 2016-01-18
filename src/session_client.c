@@ -39,6 +39,8 @@
 #include "libnetconf.h"
 #include "session_client.h"
 
+static const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "candidate"};
+
 static char *schema_searchpath;
 
 API int
