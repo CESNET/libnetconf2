@@ -131,8 +131,8 @@ nc_ssh_server_add_authkey(const char *pubkey_path, const char *username)
     ++ssh_opts.authkey_count;
     ssh_opts.authkeys = realloc(ssh_opts.authkeys, ssh_opts.authkey_count * sizeof *ssh_opts.authkeys);
 
-    ssh_opts.authkeys[ssh_opts.authkey_count - 1].path = strdup(pubkey_path);
-    ssh_opts.authkeys[ssh_opts.authkey_count - 1].username = strdup(username);
+    ssh_opts.authkeys[ssh_opts.authkey_count - 1].path = lydict_insert(server_opts.ctx, pubkey_path, 0);
+    ssh_opts.authkeys[ssh_opts.authkey_count - 1].username = lydict_insert(server_opts.ctx, username, 0);
 
     return 0;
 }
@@ -145,8 +145,8 @@ nc_ssh_server_del_authkey(const char *pubkey_path, const char *username)
 
     if (!pubkey_path && !username) {
         for (i = 0; i < ssh_opts.authkey_count; ++i) {
-            free(ssh_opts.authkeys[i].path);
-            free(ssh_opts.authkeys[i].username);
+            lydict_remove(server_opts.ctx, ssh_opts.authkeys[i].path);
+            lydict_remove(server_opts.ctx, ssh_opts.authkeys[i].username);
 
             ret = 0;
         }
@@ -157,8 +157,8 @@ nc_ssh_server_del_authkey(const char *pubkey_path, const char *username)
         for (i = 0; i < ssh_opts.authkey_count; ++i) {
             if ((!pubkey_path || !strcmp(ssh_opts.authkeys[i].path, pubkey_path))
                     && (!username || !strcmp(ssh_opts.authkeys[i].username, username))) {
-                free(ssh_opts.authkeys[i].path);
-                free(ssh_opts.authkeys[i].username);
+                lydict_remove(server_opts.ctx, ssh_opts.authkeys[i].path);
+                lydict_remove(server_opts.ctx, ssh_opts.authkeys[i].username);
 
                 --ssh_opts.authkey_count;
                 memmove(&ssh_opts.authkeys[i], &ssh_opts.authkeys[i + 1], (ssh_opts.authkey_count - i) * sizeof *ssh_opts.authkeys);
@@ -303,7 +303,7 @@ auth_pubkey_compare_key(ssh_key key)
 {
     uint32_t i;
     ssh_key pub_key;
-    char *username = NULL;
+    const char *username = NULL;
 
     for (i = 0; i < ssh_opts.authkey_count; ++i) {
         if (ssh_pki_import_pubkey_file(ssh_opts.authkeys[i].path, &pub_key) != SSH_OK) {

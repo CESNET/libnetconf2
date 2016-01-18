@@ -62,8 +62,8 @@ struct nc_ssh_server_opts {
     ssh_bind sshbind;
 
     struct {
-        char *path;
-        char *username;
+        const char *path;
+        const char *username;
     } *authkeys;
     uint16_t authkey_count;
 
