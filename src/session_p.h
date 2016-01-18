@@ -1,6 +1,7 @@
 /**
  * \file session_p.h
  * \author Radek Krejci <rkrejci@cesnet.cz>
+ * \author Michal Vasko <mvasko@cesnet.cz>
  * \brief libnetconf2 session manipulation
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
@@ -40,6 +41,7 @@
 
 /* seconds */
 #   define NC_SSH_TIMEOUT 10
+
 #   define NC_SSH_AUTH_COUNT 3
 
 struct nc_ssh_client_opts {
@@ -60,12 +62,14 @@ struct nc_ssh_client_opts {
 
 struct nc_ssh_server_opts {
     ssh_bind sshbind;
+    pthread_mutex_t sshbind_lock;
 
     struct {
         const char *path;
         const char *username;
     } *authkeys;
     uint16_t authkey_count;
+    pthread_mutex_t authkey_lock;
 
     int auth_methods;
     uint16_t auth_attempts;
@@ -86,7 +90,10 @@ struct nc_tls_client_opts {
 
 struct nc_tls_server_opts {
     SSL_CTX *tls_ctx;
+    pthread_mutex_t tls_ctx_lock;
+
     X509_STORE *crl_store;
+    pthread_mutex_t crl_lock;
 
     struct {
         uint32_t id;
@@ -95,6 +102,7 @@ struct nc_tls_server_opts {
         const char *name;
     } *ctn;
     uint16_t ctn_count;
+    pthread_mutex_t ctn_lock;
 
     pthread_key_t verify_key;
     pthread_once_t verify_once;
@@ -119,6 +127,10 @@ struct nc_server_opts {
         NC_TRANSPORT_IMPL ti;
     } *binds;
     uint16_t bind_count;
+    pthread_mutex_t bind_lock;
+
+    uint32_t new_session_id;
+    pthread_spinlock_t sid_lock;
 };
 
 /**

@@ -33,43 +33,6 @@
 
 #include "libnetconf.h"
 
-/* TLS certificate verification error messages */
-static const char* verify_ret_msg[] = {
-    "ok",
-    "",
-    "unable to get issuer certificate",
-    "unable to get certificate CRL",
-    "unable to decrypt certificate's signature",
-    "unable to decrypt CRL's signature",
-    "unable to decode issuer public key",
-    "certificate signature failure",
-    "CRL signature failure",
-    "certificate is not yet valid",
-    "certificate has expired",
-    "CRL is not yet valid",
-    "CRL has expired",
-    "format error in certificate's notBefore field",
-    "format error in certificate's notAfter field",
-    "format error in CRL's lastUpdate field",
-    "format error in CRL's nextUpdate field",
-    "out of memory",
-    "self signed certificate",
-    "self signed certificate in certificate chain",
-    "unable to get local issuer certificate",
-    "unable to verify the first certificate",
-    "certificate chain too long",
-    "certificate revoked",
-    "invalid CA certificate",
-    "path length constraint exceeded",
-    "unsupported certificate purpose",
-    "certificate not trusted",
-    "certificate rejected",
-    "subject issuer mismatch",
-    "authority and subject key identifier mismatch",
-    "authority and issuer serial number mismatch",
-    "key usage does not include certificate signing"
-};
-
 static struct nc_tls_client_opts tls_opts;
 
 static int
@@ -326,7 +289,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
         VRB("Server certificate successfully verified.");
         break;
     default:
-        WRN("Server certificate verification problem (%s).", verify_ret_msg[verify]);
+        WRN("Server certificate verification problem (%s).", X509_verify_cert_error_string(verify));
     }
 
     /* assign context (dicionary needed for handshake) */
@@ -457,7 +420,7 @@ nc_callhome_accept_tls(uint16_t port, int32_t timeout, struct ly_ctx *ctx)
         VRB("Server certificate successfully verified.");
         break;
     default:
-        WRN("Server certificate verification problem (%s).", verify_ret_msg[verify]);
+        WRN("Server certificate verification problem (%s).", X509_verify_cert_error_string(verify));
     }
 
     session = nc_connect_libssl(tls, ctx);

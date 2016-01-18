@@ -34,6 +34,9 @@
 
 extern struct nc_server_opts server_opts;
 struct nc_tls_server_opts tls_opts = {
+    .tls_ctx_lock = PTHREAD_MUTEX_INITIALIZER,
+    .crl_lock = PTHREAD_MUTEX_INITIALIZER,
+    .ctn_lock = PTHREAD_MUTEX_INITIALIZER,
     .verify_once = PTHREAD_ONCE_INIT
 };
 
@@ -287,10 +290,13 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
     unsigned int buf_len = 64;
     int ret = 0;
 
-    if (cert == NULL || map_type == NULL || name == NULL) {
+    if (!cert || !map_type || !name) {
         free(buf);
         return -1;
     }
+
+    /* LOCK */
+    pthread_mutex_lock(&tls_opts.ctn_lock);
 
     for (i = 0; i < tls_opts.ctn_count; ++i) {
         /* MD5 */
@@ -430,6 +436,9 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
     }
 
 cleanup:
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.ctn_lock);
+
     free(digest_md5);
     free(digest_sha1);
     free(digest_sha224);
@@ -515,6 +524,9 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     VRB("Cert verify: issuer:  %s", cp);
     OPENSSL_free(cp);
 
+    /* LOCK */
+    pthread_mutex_lock(&tls_opts.crl_lock);
+
     /* check for revocation if set */
     if (tls_opts.crl_store) {
         /* try to retrieve a CRL corresponding to the _subject_ of
@@ -547,6 +559,8 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
                 if (pubkey) {
                     EVP_PKEY_free(pubkey);
                 }
+                /* UNLOCK */
+                pthread_mutex_unlock(&tls_opts.crl_lock);
                 return 0;
             }
             if (pubkey) {
@@ -558,19 +572,23 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
                 ERR("Cert verify CRL: invalid nextUpdate field.");
                 X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD);
                 X509_OBJECT_free_contents(&obj);
+                /* UNLOCK */
+                pthread_mutex_unlock(&tls_opts.crl_lock);
                 return 0;
             }
             if (X509_cmp_current_time(next_update) < 0) {
                 ERR("Cert verify CRL: expired - revoking all certificates.");
                 X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CRL_HAS_EXPIRED);
                 X509_OBJECT_free_contents(&obj);
+                /* UNLOCK */
+                pthread_mutex_unlock(&tls_opts.crl_lock);
                 return 0;
             }
             X509_OBJECT_free_contents(&obj);
         }
 
         /* try to retrieve a CRL corresponding to the _issuer_ of
-        * the current certificate in order to check for revocation */
+         * the current certificate in order to check for revocation */
         memset((char *)&obj, 0, sizeof(obj));
         X509_STORE_CTX_init(&store_ctx, tls_opts.crl_store, NULL, NULL);
         rc = X509_STORE_get_by_subject(&store_ctx, X509_LU_CRL, issuer, &obj);
@@ -588,12 +606,17 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
                     OPENSSL_free(cp);
                     X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CERT_REVOKED);
                     X509_OBJECT_free_contents(&obj);
+                    /* UNLOCK */
+                    pthread_mutex_unlock(&tls_opts.crl_lock);
                     return 0;
                 }
             }
             X509_OBJECT_free_contents(&obj);
         }
     }
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.crl_lock);
 
     /* cert-to-name already successful */
     if (session->username) {
@@ -649,11 +672,14 @@ nc_tls_server_set_cert(const char *cert)
         return -1;
     }
 
+    /* LOCK */
+    pthread_mutex_lock(&tls_opts.tls_ctx_lock);
+
     if (!tls_opts.tls_ctx) {
         tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
         if (!tls_opts.tls_ctx) {
            ERR("%s: failed to create TLS context.", __func__);
-           return -1;
+           goto fail;
         }
         SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
     }
@@ -662,14 +688,20 @@ nc_tls_server_set_cert(const char *cert)
     if (!x509_cert || (SSL_CTX_use_certificate(tls_opts.tls_ctx, x509_cert) != 1)) {
         ERR("%s: loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
         X509_free(x509_cert);
-        return -1;
+        goto fail;
     }
     X509_free(x509_cert);
 
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
     return 0;
+
+fail:
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
+    return -1;
 }
 
-/* PEM only */
 API int
 nc_tls_server_set_cert_path(const char *cert_path)
 {
@@ -678,21 +710,31 @@ nc_tls_server_set_cert_path(const char *cert_path)
         return -1;
     }
 
+    /* LOCK */
+    pthread_mutex_lock(&tls_opts.tls_ctx_lock);
+
     if (!tls_opts.tls_ctx) {
         tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
         if (!tls_opts.tls_ctx) {
            ERR("%s: failed to create TLS context.", __func__);
-           return -1;
+           goto fail;
         }
         SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
     }
 
     if (SSL_CTX_use_certificate_file(tls_opts.tls_ctx, cert_path, SSL_FILETYPE_PEM) != 1) {
         ERR("%s: loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        return -1;
+        goto fail;
     }
 
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
     return 0;
+
+fail:
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
+    return -1;
 }
 
 API int
@@ -705,11 +747,14 @@ nc_tls_server_set_key(const char *privkey, int is_rsa)
         return -1;
     }
 
+    /* LOCK */
+    pthread_mutex_lock(&tls_opts.tls_ctx_lock);
+
     if (!tls_opts.tls_ctx) {
         tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
         if (!tls_opts.tls_ctx) {
            ERR("%s: failed to create TLS context.", __func__);
-           return -1;
+           goto fail;
         }
         SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
     }
@@ -718,14 +763,20 @@ nc_tls_server_set_key(const char *privkey, int is_rsa)
     if (!key || (SSL_CTX_use_PrivateKey(tls_opts.tls_ctx, key) != 1)) {
         ERR("%s: loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
         EVP_PKEY_free(key);
-        return -1;
+        goto fail;
     }
     EVP_PKEY_free(key);
 
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
     return 0;
+
+fail:
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
+    return -1;
 }
 
-/* PEM only */
 API int
 nc_tls_server_set_key_path(const char *privkey_path)
 {
@@ -734,21 +785,31 @@ nc_tls_server_set_key_path(const char *privkey_path)
         return -1;
     }
 
+    /* LOCK */
+    pthread_mutex_lock(&tls_opts.tls_ctx_lock);
+
     if (!tls_opts.tls_ctx) {
         tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
         if (!tls_opts.tls_ctx) {
            ERR("%s: failed to create TLS context.", __func__);
-           return -1;
+           goto fail;
         }
         SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
     }
 
     if (SSL_CTX_use_PrivateKey_file(tls_opts.tls_ctx, privkey_path, SSL_FILETYPE_PEM) != 1) {
         ERR("%s: loading the server priavte key failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        return -1;
+        goto fail;
     }
 
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
     return 0;
+
+fail:
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
+    return -1;
 }
 
 API int
@@ -762,11 +823,14 @@ nc_tls_server_add_trusted_cert(const char *cert)
         return -1;
     }
 
+    /* LOCK */
+    pthread_mutex_lock(&tls_opts.tls_ctx_lock);
+
     if (!tls_opts.tls_ctx) {
         tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
         if (!tls_opts.tls_ctx) {
            ERR("%s: failed to create TLS context.", __func__);
-           return -1;
+           goto fail;
         }
         SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
     }
@@ -781,11 +845,18 @@ nc_tls_server_add_trusted_cert(const char *cert)
     if (!x509_cert || (X509_STORE_add_cert(cert_store, x509_cert) != 1)) {
         ERR("%s: adding a trusted certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
         X509_free(x509_cert);
-        return -1;
+        goto fail;
     }
     X509_free(x509_cert);
 
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
     return 0;
+
+fail:
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
+    return -1;
 }
 
 API int
@@ -799,11 +870,14 @@ nc_tls_server_add_trusted_cert_path(const char *cert_path)
         return -1;
     }
 
+    /* LOCK */
+    pthread_mutex_lock(&tls_opts.tls_ctx_lock);
+
     if (!tls_opts.tls_ctx) {
         tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
         if (!tls_opts.tls_ctx) {
            ERR("%s: failed to create TLS context.", __func__);
-           return -1;
+           goto fail;
         }
         SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
     }
@@ -820,11 +894,18 @@ nc_tls_server_add_trusted_cert_path(const char *cert_path)
         ERR("%s: adding a trusted certificate failed (%s).",
             (errno ? strerror(errno) : ERR_reason_error_string(ERR_get_error())));
         X509_free(x509_cert);
-        return -1;
+        goto fail;
     }
     X509_free(x509_cert);
 
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
     return 0;
+
+fail:
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
+    return -1;
 }
 
 API int
@@ -838,11 +919,14 @@ nc_tls_server_set_trusted_cacert_locations(const char *cacert_file_path, const c
         return -1;
     }
 
+    /* LOCK */
+    pthread_mutex_lock(&tls_opts.tls_ctx_lock);
+
     if (!tls_opts.tls_ctx) {
         tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
         if (!tls_opts.tls_ctx) {
            ERR("%s: failed to create TLS context.", __func__);
-           return -1;
+           goto fail;
         }
         SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
     }
@@ -857,12 +941,12 @@ nc_tls_server_set_trusted_cacert_locations(const char *cacert_file_path, const c
         lookup = X509_STORE_add_lookup(cert_store, X509_LOOKUP_file());
         if (!lookup) {
             ERR("%s: failed to add lookup method.", __func__);
-            return -1;
+            goto fail;
         }
 
         if (X509_LOOKUP_load_file(lookup, cacert_file_path, X509_FILETYPE_PEM) != 1) {
             ERR("%s: failed to add trusted cert file (%s).", __func__, ERR_reason_error_string(ERR_get_error()));
-            return -1;
+            goto fail;
         }
     }
 
@@ -870,27 +954,40 @@ nc_tls_server_set_trusted_cacert_locations(const char *cacert_file_path, const c
         lookup = X509_STORE_add_lookup(cert_store, X509_LOOKUP_hash_dir());
         if (!lookup) {
             ERR("%s: failed to add lookup method.", __func__);
-            return -1;
+            goto fail;
         }
 
         if (X509_LOOKUP_add_dir(lookup, cacert_dir_path, X509_FILETYPE_PEM) != 1) {
             ERR("%s: failed to add trusted cert directory (%s).", __func__, ERR_reason_error_string(ERR_get_error()));
-            return -1;
+            goto fail;
         }
     }
 
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
     return 0;
+
+fail:
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
+    return -1;
 }
 
 API void
 nc_tls_server_destroy_certs(void)
 {
+    /* LOCK */
+    pthread_mutex_lock(&tls_opts.tls_ctx_lock);
+
     if (!tls_opts.tls_ctx) {
         return;
     }
 
     SSL_CTX_free(tls_opts.tls_ctx);
     tls_opts.tls_ctx = NULL;
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
 }
 
 API int
@@ -903,6 +1000,9 @@ nc_tls_server_set_crl_locations(const char *crl_file_path, const char *crl_dir_p
         return -1;
     }
 
+    /* LOCK */
+    pthread_mutex_lock(&tls_opts.crl_lock);
+
     if (!tls_opts.crl_store) {
         tls_opts.crl_store = X509_STORE_new();
     }
@@ -911,12 +1011,12 @@ nc_tls_server_set_crl_locations(const char *crl_file_path, const char *crl_dir_p
         lookup = X509_STORE_add_lookup(tls_opts.crl_store, X509_LOOKUP_file());
         if (!lookup) {
             ERR("%s: failed to add lookup method.", __func__);
-            return -1;
+            goto fail;
         }
 
         if (X509_LOOKUP_load_file(lookup, crl_file_path, X509_FILETYPE_PEM) != 1) {
             ERR("%s: failed to add revocation lookup file (%s).", __func__, ERR_reason_error_string(ERR_get_error()));
-            return -1;
+            goto fail;
         }
     }
 
@@ -924,27 +1024,40 @@ nc_tls_server_set_crl_locations(const char *crl_file_path, const char *crl_dir_p
         lookup = X509_STORE_add_lookup(tls_opts.crl_store, X509_LOOKUP_hash_dir());
         if (!lookup) {
             ERR("%s: failed to add lookup method.", __func__);
-            return -1;
+            goto fail;
         }
 
         if (X509_LOOKUP_add_dir(lookup, crl_dir_path, X509_FILETYPE_PEM) != 1) {
             ERR("%s: failed to add revocation lookup directory (%s).", __func__, ERR_reason_error_string(ERR_get_error()));
-            return -1;
+            goto fail;
         }
     }
 
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.crl_lock);
     return 0;
+
+fail:
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.crl_lock);
+    return -1;
 }
 
 API void
 nc_tls_server_destroy_crls(void)
 {
+    /* LOCK */
+    pthread_mutex_lock(&tls_opts.crl_lock);
+
     if (!tls_opts.crl_store) {
         return;
     }
 
     X509_STORE_free(tls_opts.crl_store);
     tls_opts.crl_store = NULL;
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.crl_lock);
 }
 
 API int
@@ -956,6 +1069,9 @@ nc_tls_server_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE m
         return -1;
     }
 
+    /* LOCK */
+    pthread_mutex_lock(&tls_opts.ctn_lock);
+
     ++tls_opts.ctn_count;
     tls_opts.ctn = realloc(tls_opts.ctn, tls_opts.ctn_count * sizeof *tls_opts.ctn);
 
@@ -963,6 +1079,9 @@ nc_tls_server_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE m
     tls_opts.ctn[tls_opts.ctn_count - 1].fingerprint = lydict_insert(server_opts.ctx, fingerprint, 0);
     tls_opts.ctn[tls_opts.ctn_count - 1].map_type = map_type;
     tls_opts.ctn[tls_opts.ctn_count - 1].name = lydict_insert(server_opts.ctx, name, 0);
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.ctn_lock);
 
     return 0;
 }
@@ -972,6 +1091,9 @@ nc_tls_server_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE ma
 {
     uint16_t i;
     int ret = -1;
+
+    /* LOCK */
+    pthread_mutex_lock(&tls_opts.ctn_lock);
 
     if ((id < 0) && !fingerprint && !map_type && !name) {
         for (i = 0; i < tls_opts.ctn_count; ++i) {
@@ -999,6 +1121,9 @@ nc_tls_server_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE ma
             }
         }
     }
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.ctn_lock);
 
     return ret;
 }
@@ -1040,11 +1165,15 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
         return -1;
     }
 
-    /* data waiting */
+    /* data waiting, prepare session */
     session->ti_type = NC_TI_OPENSSL;
+    /* LOCK */
+    pthread_mutex_lock(&tls_opts.tls_ctx_lock);
     session->ti.tls = SSL_new(tls_opts.tls_ctx);
+    /* UNLOCK */
+    pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
     if (!session->ti.tls) {
-        ERRMEM;
+        ERR("%s: failed to create TLS structure from context.", __func__);
         close(sock);
         return -1;
     }
@@ -1057,6 +1186,7 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     pthread_setspecific(tls_opts.verify_key, session);
 
     ret = SSL_accept(session->ti.tls);
+
     if (ret != 1) {
         switch (SSL_get_error(session->ti.tls, ret)) {
         case SSL_ERROR_SYSCALL:

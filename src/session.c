@@ -25,6 +25,8 @@
 #include <pthread.h>
 #include <libyang/libyang.h>
 
+#include "libnetconf.h"
+
 #ifdef ENABLE_SSH
 
 #   include <libssh/libssh.h>
@@ -36,8 +38,6 @@
 #   include <openssl/err.h>
 
 #endif /* ENABLE_TLS */
-
-#include "libnetconf.h"
 
 /* in seconds */
 #define NC_CLIENT_HELLO_TIMEOUT 60
@@ -172,7 +172,7 @@ nc_session_free(struct nc_session *session)
 {
     int r, i;
     int connected; /* flag to indicate whether the transport socket is still connected */
-    int multisession = 0; /* flag for more NETCONF session on a single SSH session */
+    int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
     struct nc_session *siter;
     struct nc_msg_cont *contiter;
     struct lyxml_elem *rpl, *child;
@@ -323,9 +323,8 @@ nc_session_free(struct nc_session *session)
 
     /* final cleanup */
     if (session->ti_lock) {
-        if (multisession) {
-            session_ti_unlock(session);
-        } else {
+        session_ti_unlock(session);
+        if (!multisession) {
             pthread_mutex_destroy(session->ti_lock);
             free(session->ti_lock);
         }
@@ -729,11 +728,8 @@ nc_ssh_destroy(void)
 static pthread_mutex_t *tls_locks;
 
 static void
-tls_thread_locking_func(int mode, int n, const char *file, int line)
+tls_thread_locking_func(int mode, int n, const char *UNUSED(file), int UNUSED(line))
 {
-    (void)file;
-    (void)line;
-
     if (mode & CRYPTO_LOCK) {
         pthread_mutex_lock(tls_locks + n);
     } else {

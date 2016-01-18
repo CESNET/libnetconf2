@@ -78,6 +78,11 @@ void nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REAS
 int nc_server_init(struct ly_ctx *ctx);
 
 /**
+ * @brief Destroy any dynamically allocated server resources.
+ */
+void nc_server_destroy(void);
+
+/**
  * @brief Set the with-defaults capability extra parameters.
  *
  * For the capability to be actually advertised, the server context must also

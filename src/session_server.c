@@ -30,12 +30,14 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "libnetconf.h"
 #include "session_server.h"
 
-struct nc_server_opts server_opts;
-uint32_t session_id = 1;
+struct nc_server_opts server_opts = {
+    .bind_lock = PTHREAD_MUTEX_INITIALIZER
+};
 
 API void
 nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REASON reason)
@@ -68,12 +70,12 @@ nc_sock_listen(const char *address, uint32_t port)
 
     sock = socket((is_ipv4 ? AF_INET : AF_INET6), SOCK_STREAM, 0);
     if (sock == -1) {
-        ERR("%s: could not create socket (%s)", __func__, strerror(errno));
+        ERR("%s: could not create socket (%s).", __func__, strerror(errno));
         goto fail;
     }
 
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void *)&optVal, optLen)) {
-        ERR("%s: could not set socket SO_REUSEADDR option (%s)", __func__, strerror(errno));
+        ERR("%s: could not set socket SO_REUSEADDR option (%s).", __func__, strerror(errno));
         goto fail;
     }
 
@@ -85,12 +87,12 @@ nc_sock_listen(const char *address, uint32_t port)
         saddr4->sin_port = htons(port);
 
         if (inet_pton(AF_INET, address, &saddr4->sin_addr) != 1) {
-            ERR("%s: failed to convert IPv4 address \"%s\"", __func__, address);
+            ERR("%s: failed to convert IPv4 address \"%s\".", __func__, address);
             goto fail;
         }
 
         if (bind(sock, (struct sockaddr *)saddr4, sizeof(struct sockaddr_in)) == -1) {
-            ERR("%s: could not bind \"%s\" port %d (%s)", __func__, address, port, strerror(errno));
+            ERR("%s: could not bind \"%s\" port %d (%s).", __func__, address, port, strerror(errno));
             goto fail;
         }
 
@@ -101,18 +103,18 @@ nc_sock_listen(const char *address, uint32_t port)
         saddr6->sin6_port = htons(port);
 
         if (inet_pton(AF_INET6, address, &saddr6->sin6_addr) != 1) {
-            ERR("%s: failed to convert IPv6 address \"%s\"", __func__, address);
+            ERR("%s: failed to convert IPv6 address \"%s\".", __func__, address);
             goto fail;
         }
 
         if (bind(sock, (struct sockaddr *)saddr6, sizeof(struct sockaddr_in6)) == -1) {
-            ERR("%s: could not bind \"%s\" port %d (%s)", __func__, address, port, strerror(errno));
+            ERR("%s: could not bind \"%s\" port %d (%s).", __func__, address, port, strerror(errno));
             goto fail;
         }
     }
 
     if (listen(sock, NC_REVERSE_QUEUE) == -1) {
-        ERR("%s: unable to start listening on \"%s\" port %d (%s)", __func__, address, port, strerror(errno));
+        ERR("%s: unable to start listening on \"%s\" port %d (%s).", __func__, address, port, strerror(errno));
         goto fail;
     }
 
@@ -150,7 +152,7 @@ nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANS
         free(pfd);
         return 0;
     } else if (ret == -1) {
-        ERR("%s: poll failed (%s)", __func__, strerror(errno));
+        ERR("%s: poll failed (%s).", __func__, strerror(errno));
         free(pfd);
         return -1;
     }
@@ -164,13 +166,13 @@ nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANS
     free(pfd);
 
     if (sock == -1) {
-        ERR("%s: fatal error (%s:%d)", __func__, __FILE__, __LINE__);
+        ERR("%s: fatal error (%s:%d).", __func__, __FILE__, __LINE__);
         return -1;
     }
 
     ret = accept(sock, (struct sockaddr *)&saddr, &saddr_len);
     if (ret == -1) {
-        ERR("%s: accept failed (%s)", __func__, strerror(errno));
+        ERR("%s: accept failed (%s).", __func__, strerror(errno));
         return -1;
     }
 
@@ -183,7 +185,7 @@ nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANS
         if (saddr.ss_family == AF_INET) {
             *host = malloc(15);
             if (!inet_ntop(AF_INET, &((struct sockaddr_in *)&saddr)->sin_addr.s_addr, *host, 15)) {
-                ERR("%s: inet_ntop failed (%s)", __func__, strerror(errno));
+                ERR("%s: inet_ntop failed (%s).", __func__, strerror(errno));
                 free(*host);
                 *host = NULL;
             }
@@ -194,7 +196,7 @@ nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANS
         } else if (saddr.ss_family == AF_INET6) {
             *host = malloc(40);
             if (!inet_ntop(AF_INET6, ((struct sockaddr_in6 *)&saddr)->sin6_addr.s6_addr, *host, 40)) {
-                ERR("%s: inet_ntop failed (%s)", __func__, strerror(errno));
+                ERR("%s: inet_ntop failed (%s).", __func__, strerror(errno));
                 free(*host);
                 *host = NULL;
             }
@@ -203,7 +205,7 @@ nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANS
                 *port = ntohs(((struct sockaddr_in6 *)&saddr)->sin6_port);
             }
         } else {
-            ERR("%s: source host of an unknown protocol family", __func__);
+            ERR("%s: source host of an unknown protocol family.", __func__);
         }
     }
 
@@ -299,7 +301,21 @@ nc_server_init(struct ly_ctx *ctx)
     }
 
     server_opts.ctx = ctx;
+
+    server_opts.new_session_id = 1;
+    pthread_spin_init(&server_opts.sid_lock, PTHREAD_PROCESS_PRIVATE);
+
     return 0;
+}
+
+API void
+nc_server_destroy(void)
+{
+    pthread_spin_destroy(&server_opts.sid_lock);
+
+#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+    nc_server_del_bind(NULL, 0, 0);
+#endif
 }
 
 API int
@@ -364,8 +380,12 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
     (*session)->flags = NC_SESSION_SHAREDCTX;
     (*session)->ctx = server_opts.ctx;
 
+    /* assign new SID atomically */
+    pthread_spin_lock(&server_opts.sid_lock);
+    (*session)->id = server_opts.new_session_id++;
+    pthread_spin_unlock(&server_opts.sid_lock);
+
     /* NETCONF handshake */
-    (*session)->id = session_id++;
     if (nc_handshake(*session)) {
         goto fail;
     }
@@ -696,6 +716,9 @@ nc_server_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL 
         return -1;
     }
 
+    /* LOCK */
+    pthread_mutex_lock(&server_opts.bind_lock);
+
     ++server_opts.bind_count;
     server_opts.binds = realloc(server_opts.binds, server_opts.bind_count * sizeof *server_opts.binds);
 
@@ -703,6 +726,9 @@ nc_server_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL 
     server_opts.binds[server_opts.bind_count - 1].port = port;
     server_opts.binds[server_opts.bind_count - 1].sock = sock;
     server_opts.binds[server_opts.bind_count - 1].ti = ti;
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&server_opts.bind_lock);
 
     return 0;
 }
@@ -712,6 +738,9 @@ nc_server_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
 {
     uint32_t i;
     int ret = -1;
+
+    /* LOCK */
+    pthread_mutex_lock(&server_opts.bind_lock);
 
     if (!address && !port && !ti) {
         for (i = 0; i < server_opts.bind_count; ++i) {
@@ -739,6 +768,9 @@ nc_server_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
         }
     }
 
+    /* UNLOCK */
+    pthread_mutex_unlock(&server_opts.bind_lock);
+
     return ret;
 }
 
@@ -755,10 +787,18 @@ nc_accept(int timeout, struct nc_session **session)
         return -1;
     }
 
-    sock = nc_sock_accept(server_opts.binds, server_opts.bind_count, timeout, &ti, &host, &port);
-    if (sock < 1) {
-        return sock;
+    /* LOCK */
+    pthread_mutex_lock(&server_opts.bind_lock);
+
+    ret = nc_sock_accept(server_opts.binds, server_opts.bind_count, timeout, &ti, &host, &port);
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&server_opts.bind_lock);
+
+    if (ret < 1) {
+        return ret;
     }
+    sock = ret;
 
     *session = calloc(1, sizeof **session);
     if (!session) {
@@ -801,8 +841,14 @@ nc_accept(int timeout, struct nc_session **session)
         goto fail;
     }
 
+    /* assign new SID atomically */
+    /* LOCK */
+    pthread_spin_lock(&server_opts.sid_lock);
+    (*session)->id = server_opts.new_session_id++;
+    /* UNLOCK */
+    pthread_spin_unlock(&server_opts.sid_lock);
+
     /* NETCONF handshake */
-    (*session)->id = session_id++;
     if (nc_handshake(*session)) {
         ret = -1;
         goto fail;
