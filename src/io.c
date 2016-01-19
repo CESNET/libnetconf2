@@ -65,15 +65,15 @@ nc_read(struct nc_session *session, char *buf, size_t count)
                     usleep(NC_READ_SLEEP);
                     continue;
                 } else {
-                    ERR("%s: session %u: reading from file descriptor (%d) failed (%s).",
-                        __func__, session->id, session->ti.fd.in, strerror(errno));
+                    ERR("Session %u: reading from file descriptor (%d) failed (%s).",
+                        session->id, session->ti.fd.in, strerror(errno));
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_OTHER;
                     return -1;
                 }
             } else if (r == 0) {
-                ERR("%s: session %u: communication file descriptor (%d) unexpectedly closed.",
-                    __func__, session->id, session->ti.fd.in);
+                ERR("Session %u: communication file descriptor (%d) unexpectedly closed.",
+                    session->id, session->ti.fd.in);
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_DROPPED;
                 return -1;
@@ -93,14 +93,14 @@ nc_read(struct nc_session *session, char *buf, size_t count)
                 usleep(NC_READ_SLEEP);
                 continue;
             } else if (r == SSH_ERROR) {
-                ERR("%s: session %u: reading from the SSH channel failed (%zd: %s).", __func__, session->id,
+                ERR("Session %u: reading from the SSH channel failed (%zd: %s).", session->id,
                     ssh_get_error_code(session->ti.libssh.session), ssh_get_error(session->ti.libssh.session));
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_OTHER;
                 return -1;
             } else if (r == 0) {
                 if (ssh_channel_is_eof(session->ti.libssh.channel)) {
-                    ERR("%s: session %u: communication socket unexpectedly closed (libssh).", __func__, session->id);
+                    ERR("Session %u: communication channel unexpectedly closed (libssh).", session->id);
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_DROPPED;
                     return -1;
@@ -127,12 +127,12 @@ nc_read(struct nc_session *session, char *buf, size_t count)
                     usleep(NC_READ_SLEEP);
                     continue;
                 case SSL_ERROR_ZERO_RETURN:
-                    ERR("%s: session %u: communication socket unexpectedly closed (OpenSSL).", __func__, session->id);
+                    ERR("Session %u: communication socket unexpectedly closed (OpenSSL).", session->id);
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_DROPPED;
                     return -1;
                 default:
-                    ERR("%s: session %u: reading from the TLS session failed (SSL code %d).", __func__, session->id, x);
+                    ERR("Session %u: reading from the TLS session failed (SSL code %d).", session->id, x);
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_OTHER;
                     return -1;
@@ -202,8 +202,8 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, char
     while (1) {
         if (limit && count == limit) {
             free(chunk);
-            WRN("%s: session %u: reading limit (%d) reached.", __func__, session->id, limit);
-            ERR("%s: session %u: invalid input data (missing \"%s\" sequence).", __func__, session->id, endtag);
+            WRN("Session %u: reading limit (%d) reached.", session->id, limit);
+            ERR("Session %u: invalid input data (missing \"%s\" sequence).", session->id, endtag);
             return -1;
         }
 
@@ -262,7 +262,7 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
     *data = NULL;
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
-        ERR("%s: session %u: invalid session to read from to.", __func__, session->id);
+        ERR("Session %u: invalid session to read from.", session->id);
         return NC_MSG_ERROR;
     }
 
@@ -298,7 +298,7 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
             chunk_len = strtoul(chunk, (char **)NULL, 10);
             free(chunk);
             if (!chunk_len) {
-                ERR("%s: session %u: invalid frame chunk size detected, fatal error.", __func__, session->id);
+                ERR("Session %u: invalid frame chunk size detected, fatal error.", session->id);
                 goto malformed_msg;
             }
 
@@ -323,14 +323,14 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
 
         break;
     }
-    DBG("%s: session %u: received message:\n%s", __func__, session->id, msg);
+    DBG("Session %u: received message:\n%s", session->id, msg);
 
     /* build XML tree */
     *data = lyxml_read_data(session->ctx, msg, 0);
     if (!*data) {
         goto malformed_msg;
     } else if (!(*data)->ns) {
-        ERR("%s: session %u: invalid message root element (invalid namespace).", __func__, session->id);
+        ERR("Session %u: invalid message root element (invalid namespace).", session->id);
         goto malformed_msg;
     }
     free(msg);
@@ -345,29 +345,29 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
         } else if (!strcmp((*data)->name, "hello")) {
             return NC_MSG_HELLO;
         } else {
-            ERR("%s: session %u: invalid message root element (invalid name \"%s\").", __func__, session->id, (*data)->name);
+            ERR("Session %u: invalid message root element (invalid name \"%s\").", session->id, (*data)->name);
             goto malformed_msg;
         }
     } else if (!strcmp((*data)->ns->value, NC_NS_NOTIF)) {
         if (!strcmp((*data)->name, "notification")) {
             return NC_MSG_NOTIF;
         } else {
-            ERR("%s: session %u: invalid message root element (invalid name \"%s\").", __func__, session->id, (*data)->name);
+            ERR("Session %u: invalid message root element (invalid name \"%s\").", session->id, (*data)->name);
             goto malformed_msg;
         }
     } else {
-        ERR("%s: session %u: invalid message root element (invalid namespace \"%s\").", __func__, session->id, (*data)->ns->value);
+        ERR("Session %u: invalid message root element (invalid namespace \"%s\").", session->id, (*data)->ns->value);
         goto malformed_msg;
     }
 
 malformed_msg:
-    ERR("%s: session %u: malformed message received.", __func__, session->id);
+    ERR("Session %u: malformed message received.", session->id);
     if ((session->side == NC_SERVER) && (session->version == NC_VERSION_11)) {
         /* NETCONF version 1.1 defines sending error reply from the server (RFC 6241 sec. 3) */
         reply = nc_server_reply_err(nc_err(NC_ERR_MALFORMED_MSG));
 
         if (nc_write_msg(session, NC_MSG_REPLY, NULL, reply) == -1) {
-            ERR("%s: session %u: unable to send a \"Malformed message\" error reply, terminating session.", __func__, session->id);
+            ERR("Session %u: unable to send a \"Malformed message\" error reply, terminating session.", session->id);
             if (session->status != NC_STATUS_INVALID) {
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_OTHER;
@@ -394,7 +394,7 @@ nc_read_poll(struct nc_session *session, int timeout)
     struct timespec old_ts, new_ts;
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
-        ERR("%s: session %u: invalid session to poll.", __func__, session->id);
+        ERR("Session %u: invalid session to poll.", session->id);
         return -1;
     }
 
@@ -404,12 +404,12 @@ nc_read_poll(struct nc_session *session, int timeout)
         /* EINTR is handled, it resumes waiting */
         ret = ssh_channel_poll_timeout(session->ti.libssh.channel, timeout, 0);
         if (ret == SSH_ERROR) {
-            ERR("%s: session %u: SSH channel error (%s).", __func__, session->id, ssh_get_error(session->ti.libssh.session));
+            ERR("Session %u: SSH channel error (%s).", session->id, ssh_get_error(session->ti.libssh.session));
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_OTHER;
             return -1;
         } else if (ret == SSH_EOF) {
-            ERR("%s: session %u: communication channel unexpectedly closed (libssh).", __func__, session->id);
+            ERR("Session %u: communication channel unexpectedly closed (libssh).", session->id);
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_DROPPED;
             return -1;
@@ -463,20 +463,20 @@ nc_read_poll(struct nc_session *session, int timeout)
     /* process the poll result, unified ret meaning for poll and ssh_channel poll */
     if (ret < 0) {
         /* poll failed - something really bad happened, close the session */
-        ERR("%s: session %u: poll error (%s).", __func__, session->id, strerror(errno));
+        ERR("Session %u: poll error (%s).", session->id, strerror(errno));
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_OTHER;
         return -1;
     } else { /* status > 0 */
         /* in case of standard (non-libssh) poll, there still can be an error */
         if (fds.revents & POLLHUP) {
-            ERR("%s: session %u: communication channel unexpectedly closed.", __func__, session->id);
+            ERR("Session %u: communication channel unexpectedly closed.", session->id);
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_DROPPED;
             return -1;
         }
         if (fds.revents & POLLERR) {
-            ERR("%s: session %u: communication channel error.", __func__, session->id);
+            ERR("Session %u: communication channel error.", session->id);
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_OTHER;
             return -1;
@@ -496,7 +496,7 @@ nc_read_msg_poll(struct nc_session *session, int timeout, struct lyxml_elem **da
     *data = NULL;
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
-        ERR("%s: session %u: invalid session to read from.", __func__, session->id);
+        ERR("Session %u: invalid session to read from.", session->id);
         return NC_MSG_ERROR;
     }
 
@@ -544,7 +544,7 @@ nc_session_is_connected(struct nc_session *session)
     while (((ret = poll(&fds, 1, 0)) == -1) && (errno == EINTR));
 
     if (ret == -1) {
-        ERR("%s: session %u: poll failed (%s).", __func__, session->id, strerror(errno));
+        ERR("Session %u: poll failed (%s).", session->id, strerror(errno));
         return 0;
     } else if ((ret > 0) && (fds.revents & (POLLHUP | POLLERR))) {
         return 0;
@@ -569,7 +569,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
 
     /* prevent SIGPIPE this way */
     if (!nc_session_is_connected(session)) {
-        ERR("%s: session %u: communication socket unexpectedly closed.", __func__, session->id);
+        ERR("Session %u: communication socket unexpectedly closed.", session->id);
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_DROPPED;
         return -1;
@@ -871,7 +871,7 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
     assert(session);
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
-        ERR("%s: session %u: invalid session to write to.", __func__, session->id);
+        ERR("Session %u: invalid session to write to.", session->id);
         return -1;
     }
 

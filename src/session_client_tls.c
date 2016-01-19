@@ -139,7 +139,7 @@ nc_tls_client_init(const char *client_cert, const char *client_key, const char *
 
     /* prepare global SSL context, allow only mandatory TLS 1.2  */
     if (!(tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_client_method()))) {
-        ERR("Unable to create OpenSSL context (%s)", ERR_reason_error_string(ERR_get_error()));
+        ERR("Unable to create OpenSSL context (%s).", ERR_reason_error_string(ERR_get_error()));
         return -1;
     }
 
@@ -250,7 +250,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     /* fill the session */
     session->ti_type = NC_TI_OPENSSL;
     if (!(session->ti.tls = SSL_new(tls_opts.tls_ctx))) {
-        ERR("Failed to create new TLS session structure (%s)", ERR_reason_error_string(ERR_get_error()));
+        ERR("Failed to create a new TLS session structure (%s).", ERR_reason_error_string(ERR_get_error()));
         goto fail;
     }
 

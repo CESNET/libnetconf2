@@ -326,7 +326,7 @@ struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
  *                the session context will not include all the models supported by the server.
  * @return Created NETCONF session object or NULL on error.
  */
-struct nc_session *nc_callhome_accept_tls(uint16_t port, int32_t timeout, struct ly_ctx *ctx);
+struct nc_session *nc_callhome_accept_tls(uint16_t port, int timeout, struct ly_ctx *ctx);
 
 #endif /* ENABLE_TLS */
 
@@ -347,7 +347,7 @@ struct nc_session *nc_callhome_accept_tls(uint16_t port, int32_t timeout, struct
  * @return NC_MSG_REPLY for success, NC_MSG_WOULDBLOCK if timeout reached and NC_MSG_ERROR
  *         when reading has failed.
  */
-NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int32_t timeout,
+NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout,
                           struct nc_reply **reply);
 
 /**
@@ -361,7 +361,7 @@ NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64
  * @return NC_MSG_NOTIF for success, NC_MSG_WOULDBLOCK if timeout reached and NC_MSG_ERROR
  *         when reading has failed.
  */
-NC_MSG_TYPE nc_recv_notif(struct nc_session* session, int32_t timeout, struct nc_notif **notif);
+NC_MSG_TYPE nc_recv_notif(struct nc_session* session, int timeout, struct nc_notif **notif);
 
 /**
  * @brief Send NETCONF RPC message via the session.
@@ -375,6 +375,6 @@ NC_MSG_TYPE nc_recv_notif(struct nc_session* session, int32_t timeout, struct nc
  * @return #NC_MSG_RPC on success, #NC_MSG_WOULDBLOCK in case of busy session
  *         and #NC_MSG_ERROR on error.
  */
-NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uint64_t *msgid);
+NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_t *msgid);
 
 #endif /* NC_SESSION_CLIENT_H_ */

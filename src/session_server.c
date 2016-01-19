@@ -70,12 +70,12 @@ nc_sock_listen(const char *address, uint32_t port)
 
     sock = socket((is_ipv4 ? AF_INET : AF_INET6), SOCK_STREAM, 0);
     if (sock == -1) {
-        ERR("%s: could not create socket (%s).", __func__, strerror(errno));
+        ERR("Failed to create socket (%s).", strerror(errno));
         goto fail;
     }
 
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void *)&optVal, optLen)) {
-        ERR("%s: could not set socket SO_REUSEADDR option (%s).", __func__, strerror(errno));
+        ERR("Could not set socket SO_REUSEADDR socket option (%s).", strerror(errno));
         goto fail;
     }
 
@@ -87,12 +87,12 @@ nc_sock_listen(const char *address, uint32_t port)
         saddr4->sin_port = htons(port);
 
         if (inet_pton(AF_INET, address, &saddr4->sin_addr) != 1) {
-            ERR("%s: failed to convert IPv4 address \"%s\".", __func__, address);
+            ERR("Failed to convert IPv4 address \"%s\".", address);
             goto fail;
         }
 
         if (bind(sock, (struct sockaddr *)saddr4, sizeof(struct sockaddr_in)) == -1) {
-            ERR("%s: could not bind \"%s\" port %d (%s).", __func__, address, port, strerror(errno));
+            ERR("Could not bind \"%s\" port %d (%s).", address, port, strerror(errno));
             goto fail;
         }
 
@@ -103,18 +103,18 @@ nc_sock_listen(const char *address, uint32_t port)
         saddr6->sin6_port = htons(port);
 
         if (inet_pton(AF_INET6, address, &saddr6->sin6_addr) != 1) {
-            ERR("%s: failed to convert IPv6 address \"%s\".", __func__, address);
+            ERR("Failed to convert IPv6 address \"%s\".", address);
             goto fail;
         }
 
         if (bind(sock, (struct sockaddr *)saddr6, sizeof(struct sockaddr_in6)) == -1) {
-            ERR("%s: could not bind \"%s\" port %d (%s).", __func__, address, port, strerror(errno));
+            ERR("Could not bind \"%s\" port %d (%s).", address, port, strerror(errno));
             goto fail;
         }
     }
 
     if (listen(sock, NC_REVERSE_QUEUE) == -1) {
-        ERR("%s: unable to start listening on \"%s\" port %d (%s).", __func__, address, port, strerror(errno));
+        ERR("Unable to start listening on \"%s\" port %d (%s).", address, port, strerror(errno));
         goto fail;
     }
 
@@ -152,7 +152,7 @@ nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANS
         free(pfd);
         return 0;
     } else if (ret == -1) {
-        ERR("%s: poll failed (%s).", __func__, strerror(errno));
+        ERR("Poll failed (%s).", strerror(errno));
         free(pfd);
         return -1;
     }
@@ -166,13 +166,13 @@ nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANS
     free(pfd);
 
     if (sock == -1) {
-        ERR("%s: fatal error (%s:%d).", __func__, __FILE__, __LINE__);
+        ERRINT;
         return -1;
     }
 
     ret = accept(sock, (struct sockaddr *)&saddr, &saddr_len);
     if (ret == -1) {
-        ERR("%s: accept failed (%s).", __func__, strerror(errno));
+        ERR("Accept failed (%s).", strerror(errno));
         return -1;
     }
 
@@ -185,7 +185,7 @@ nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANS
         if (saddr.ss_family == AF_INET) {
             *host = malloc(15);
             if (!inet_ntop(AF_INET, &((struct sockaddr_in *)&saddr)->sin_addr.s_addr, *host, 15)) {
-                ERR("%s: inet_ntop failed (%s).", __func__, strerror(errno));
+                ERR("inet_ntop failed (%s).", strerror(errno));
                 free(*host);
                 *host = NULL;
             }
@@ -196,7 +196,7 @@ nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANS
         } else if (saddr.ss_family == AF_INET6) {
             *host = malloc(40);
             if (!inet_ntop(AF_INET6, ((struct sockaddr_in6 *)&saddr)->sin6_addr.s6_addr, *host, 40)) {
-                ERR("%s: inet_ntop failed (%s).", __func__, strerror(errno));
+                ERR("inet_ntop failed (%s).", strerror(errno));
                 free(*host);
                 *host = NULL;
             }
@@ -205,7 +205,7 @@ nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANS
                 *port = ntohs(((struct sockaddr_in6 *)&saddr)->sin6_port);
             }
         } else {
-            ERR("%s: source host of an unknown protocol family.", __func__);
+            ERR("Source host of an unknown protocol family.");
         }
     }
 
@@ -487,7 +487,7 @@ nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
         ERRARG;
         return NC_MSG_ERROR;
     } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_SERVER)) {
-        ERR("%s: invalid session to receive RPCs.", __func__);
+        ERR("Session %u: invalid session to receive RPCs.", session->id);
         return NC_MSG_ERROR;
     }
 
@@ -500,13 +500,13 @@ nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
         (*rpc)->root = xml;
         break;
     case NC_MSG_HELLO:
-        ERR("%s: session %u: received another <hello> message.", __func__, session->id);
+        ERR("Session %u: received another <hello> message.", session->id);
         goto error;
     case NC_MSG_REPLY:
-        ERR("%s: session %u: received <rpc-reply> from NETCONF client.", __func__, session->id);
+        ERR("Session %u: received <rpc-reply> from NETCONF client.", session->id);
         goto error;
     case NC_MSG_NOTIF:
-        ERR("%s: session %u: received <notification> from NETCONF client.", __func__, session->id);
+        ERR("Session %u: received <notification> from NETCONF client.", session->id);
         goto error;
     default:
         /* NC_MSG_ERROR - pass it out;
@@ -552,7 +552,7 @@ nc_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
     }
 
     if (ret == -1) {
-        ERR("%s: failed to write reply.", __func__);
+        ERR("Session %u: failed to write reply.", session->id);
         nc_server_reply_free(reply);
         return NC_MSG_ERROR;
     }
@@ -578,7 +578,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
 
     for (i = 0; i < ps->session_count; ++i) {
         if (ps->sessions[i].session->status != NC_STATUS_RUNNING) {
-            ERR("%s: session %u: session not running.", __func__, ps->sessions[i].session->id);
+            ERR("Session %u: session not running.", ps->sessions[i].session->id);
             return -1;
         }
     }
@@ -628,14 +628,14 @@ retry_poll:
                     /* check other sessions */
                     continue;
                 } else if (ret == SSH_ERROR) {
-                    ERR("%s: session %u: SSH channel error (%s).", __func__, ps->sessions[i].session->id,
+                    ERR("Session %u: SSH channel error (%s).", ps->sessions[i].session->id,
                         ssh_get_error(ps->sessions[i].session->ti.libssh.session));
                     ps->sessions[i].session->status = NC_STATUS_INVALID;
                     ps->sessions[i].session->term_reason = NC_SESSION_TERM_OTHER;
                     return 2;
                 } else if (ret == SSH_EOF) {
-                    ERR("%s: session %u: communication channel unexpectedly closed (libssh).",
-                        __func__, ps->sessions[i].session->id);
+                    ERR("Session %u: communication channel unexpectedly closed (libssh).",
+                        ps->sessions[i].session->id);
                     ps->sessions[i].session->status = NC_STATUS_INVALID;
                     ps->sessions[i].session->term_reason = NC_SESSION_TERM_DROPPED;
                     return 2;

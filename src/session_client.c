@@ -209,7 +209,7 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
         usleep(1000);
     }
     if (msg == NC_MSG_ERROR) {
-        ERR("Failed to send the <get-schema> RPC.");
+        ERR("Session %u: failed to send the <get-schema> RPC.", session->id);
         nc_rpc_free(rpc);
         return NULL;
     }
@@ -217,16 +217,16 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
     msg = nc_recv_reply(session, rpc, msgid, 250, &reply);
     nc_rpc_free(rpc);
     if (msg == NC_MSG_WOULDBLOCK) {
-        ERR("Timeout for receiving reply to a <get-schema> expired.");
+        ERR("Session %u: timeout for receiving reply to a <get-schema> expired.", session->id);
         return NULL;
     } else if (msg == NC_MSG_ERROR) {
-        ERR("Failed to receive a reply to <get-schema>.");
+        ERR("Session %u: failed to receive a reply to <get-schema>.", session->id);
         return NULL;
     }
 
     if (reply->type != NC_RPL_DATA) {
         /* TODO print the error, if error */
-        ERR("Unexpected reply type to a <get-schema> RPC.");
+        ERR("Session %u: unexpected reply type to a <get-schema> RPC.", session->id);
         nc_reply_free(reply);
         return NULL;
     }
@@ -305,10 +305,10 @@ nc_ctx_check_and_fill(struct nc_session *session)
 API struct nc_session *
 nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
 {
-    struct nc_session *session = NULL;
+    struct nc_session *session;
 
-    if (fdin < 0 || fdout < 0) {
-        ERR("%s: Invalid parameter", __func__);
+    if ((fdin < 0) || (fdout < 0)) {
+        ERRARG;
         return NULL;
     }
 
@@ -398,7 +398,7 @@ errloop:
     if (sock == -1) {
         ERR("Unable to connect to %s:%s.", host, port_s);
     } else {
-        VRB("Successfully connected to %s:%s over %s", host, port_s, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
+        VRB("Successfully connected to %s:%s over %s.", host, port_s, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
     }
     freeaddrinfo(res_list);
 
@@ -483,15 +483,15 @@ next_message:
         str_msgid = lyxml_get_attr(xml, "message-id", NULL);
         if (!str_msgid) {
             pthread_mutex_unlock(session->ti_lock);
-            ERR("%s: session %u: received a <rpc-reply> with no message-id, discarding.", __func__, session->id);
+            ERR("Session %u: received a <rpc-reply> with no message-id, discarding.", session->id);
             lyxml_free(session->ctx, xml);
             goto next_message;
         }
         cur_msgid = strtoul(str_msgid, &ptr, 10);
         if (ptr[0]) {
             pthread_mutex_unlock(session->ti_lock);
-            ERR("%s: session %u: received a <rpc-reply> with an invalid message-id (\"%s\"), discarding.",
-                __func__, session->id, str_msgid);
+            ERR("Session %u: received a <rpc-reply> with an invalid message-id (\"%s\"), discarding.",
+                session->id, str_msgid);
             lyxml_free(session->ctx, xml);
             goto next_message;
         }
@@ -509,7 +509,7 @@ next_message:
     if (msgid && (msgtype == NC_MSG_NOTIF)) {
         if (!session->notif) {
             pthread_mutex_unlock(session->ti_lock);
-            ERR("%s: session %u: received a <notification> but session is not subscribed.", __func__, session->id);
+            ERR("Session %u: received a <notification> but session is not subscribed.", session->id);
             lyxml_free(session->ctx, xml);
             goto next_message;
         }
@@ -543,12 +543,12 @@ next_message:
         break;
 
     case NC_MSG_HELLO:
-        ERR("%s: session %u: received another <hello> message.", __func__, session->id);
+        ERR("Session %u: received another <hello> message.", session->id);
         lyxml_free(session->ctx, xml);
         goto next_message;
 
     case NC_MSG_RPC:
-        ERR("%s: session %u: received <rpc> from NETCONF server.", __func__, session->id);
+        ERR("Session %u: received <rpc> from a NETCONF server.", session->id);
         lyxml_free(session->ctx, xml);
         goto next_message;
 
@@ -836,7 +836,7 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
         ERRARG;
         return NC_MSG_ERROR;
     } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
-        ERR("%s: invalid session to receive RPC replies.", __func__);
+        ERR("Session %u: invalid session to receive RPC replies.", session->id);
         return NC_MSG_ERROR;
     }
     *reply = NULL;
@@ -864,10 +864,10 @@ nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
 
     if (!session || !notif) {
-        ERR("%s: Invalid parameter", __func__);
+        ERRARG;
         return NC_MSG_ERROR;
     } else if (session->status != NC_STATUS_RUNNING || session->side != NC_CLIENT) {
-        ERR("%s: Invalid session to receive Notifications.", __func__);
+        ERR("Session %u: invalid session to receive Notifications.", session->id);
         return NC_MSG_ERROR;
     }
 
@@ -886,7 +886,7 @@ nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
             }
         }
         if (!(*notif)->datetime) {
-            ERR("%s: Notification is missing the \"eventTime\" element.", __func__);
+            ERR("Session %u: notification is missing the \"eventTime\" element.", session->id);
             goto fail;
         }
 
@@ -895,7 +895,7 @@ nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
         lyxml_free(session->ctx, xml);
         xml = NULL;
         if (!(*notif)->tree) {
-            ERR("%s: Failed to parse a new notification.", __func__);
+            ERR("Session %u: failed to parse a new notification.", session->id);
             goto fail;
         }
     }
@@ -939,14 +939,14 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         ERRARG;
         return NC_MSG_ERROR;
     } else if (session->status != NC_STATUS_RUNNING || session->side != NC_CLIENT) {
-        ERR("%s: invalid session to send RPCs.", __func__);
+        ERR("Session %u: invalid session to send RPCs.", session->id);
         return NC_MSG_ERROR;
     }
 
     if ((rpc->type != NC_RPC_GETSCHEMA) && (rpc->type != NC_RPC_GENERIC) && (rpc->type != NC_RPC_SUBSCRIBE)) {
         ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL);
         if (!ietfnc) {
-            ERR("%s: Missing ietf-netconf schema in context (session %u).", __func__, session->id);
+            ERR("Session %u: missing ietf-netconf schema in the context.", session->id);
             return NC_MSG_ERROR;
         }
     }
@@ -991,7 +991,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
             if (!ietfncwd) {
                 ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
                 if (!ietfncwd) {
-                    ERR("%s: Missing ietf-netconf-with-defaults schema in context (session %u).", __func__, session->id);
+                    ERR("Session %u: missing ietf-netconf-with-defaults schema in the context.", session->id);
                     return NC_MSG_ERROR;
                 }
             }
@@ -1099,7 +1099,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
             if (!ietfncwd) {
                 ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
                 if (!ietfncwd) {
-                    ERR("%s: Missing ietf-netconf-with-defaults schema in context (session %u).", __func__, session->id);
+                    ERR("Session %u: missing ietf-netconf-with-defaults schema in the context.", session->id);
                     return NC_MSG_ERROR;
                 }
             }
@@ -1190,7 +1190,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
             if (!ietfncwd) {
                 ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
                 if (!ietfncwd) {
-                    ERR("%s: Missing ietf-netconf-with-defaults schema in context (session %u).", __func__, session->id);
+                    ERR("Session %u: missing ietf-netconf-with-defaults schema in the context.", session->id);
                     return NC_MSG_ERROR;
                 }
             }
@@ -1296,7 +1296,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_GETSCHEMA:
         ietfncmon = ly_ctx_get_module(session->ctx, "ietf-netconf-monitoring", NULL);
         if (!ietfncmon) {
-            ERR("%s: Missing ietf-netconf-monitoring schema in context (session %u)", session->id);
+            ERR("Session %u: missing ietf-netconf-monitoring schema in the context.", session->id);
             return NC_MSG_ERROR;
         }
 
@@ -1327,7 +1327,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_SUBSCRIBE:
         notifs = ly_ctx_get_module(session->ctx, "notifications", NULL);
         if (!notifs) {
-            ERR("%s: Missing notifications schema in context (session %u)", session->id);
+            ERR("Session %u: missing notifications schema in the context.", session->id);
             return NC_MSG_ERROR;
         }
 
@@ -1481,14 +1481,14 @@ get_listen_socket(const char *address, uint16_t port)
         }
 
         if (bind(sock, (struct sockaddr*)saddr6, sizeof(struct sockaddr_in6)) == -1) {
-            ERR("Could not bind \"%s\" port %d (%s)", __func__, address, port, strerror(errno));
+            ERR("Could not bind \"%s\" port %d (%s)", address, port, strerror(errno));
             close(sock);
             return -1;
         }
     }
 
     if (listen(sock, NC_REVERSE_QUEUE)) {
-        ERR("Unable to start listening on \"%s\" port %d (%s)", __func__, address, port, strerror(errno));
+        ERR("Unable to start listening on \"%s\" port %d (%s)", address, port, strerror(errno));
         close(sock);
         return -1;
     }
@@ -1497,7 +1497,7 @@ get_listen_socket(const char *address, uint16_t port)
 }
 
 int
-nc_callhome_accept_connection(uint16_t port, int32_t timeout, uint16_t *server_port, char **server_host)
+nc_callhome_accept_connection(uint16_t port, int timeout, uint16_t *server_port, char **server_host)
 {
     struct pollfd reverse_listen_socket = {-1, POLLIN, 0};
     int sock;

@@ -150,8 +150,8 @@ nc_send_msg(struct nc_session *session, struct lyd_node *op)
     int r;
 
     if (session->ctx != op->schema->module->ctx) {
-        ERR("RPC \"%s\" was created in different context than that of \"%s\" session %u.",
-            op->schema->name, session->username, session->id);
+        ERR("Session %u: RPC \"%s\" was created in different context than that of the session.",
+            session->id, op->schema->name);
         return NC_MSG_ERROR;
     }
 
@@ -194,7 +194,7 @@ nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed)
         return 0;
     } else if (ret) {
         /* error */
-        ERR("%s: mutex lock failed (%s).", __func__, strerror(errno));
+        ERR("Mutex lock failed (%s).", strerror(errno));
         return -1;
     }
 
@@ -279,7 +279,7 @@ nc_session_free(struct nc_session *session)
                 WRN("Session %u: timeout for receiving a reply to <close-session> elapsed.", session->id);
                 break;
             case NC_MSG_ERROR:
-                ERR("%s: session %u: failed to receive a reply to <close-session>.", __func__, session->id);
+                ERR("Session %u: failed to receive a reply to <close-session>.", session->id);
                 break;
             default:
                 /* cannot happen */
@@ -586,7 +586,7 @@ parse_cpblts(struct lyxml_elem *xml, const char ***list)
     }
 
     if (ver == -1) {
-        ERR("Peer does not support compatible NETCONF version.");
+        ERR("Peer does not support a compatible NETCONF version.");
     }
 
     return ver;
@@ -651,7 +651,7 @@ nc_recv_hello(struct nc_session *session)
 
                 if (flag) {
                     /* multiple capabilities elements */
-                    ERR("Invalid <hello> message (multiple <capabilities> elements)");
+                    ERR("Invalid <hello> message (multiple <capabilities> elements).");
                     goto error;
                 }
                 flag = 1;
@@ -667,13 +667,13 @@ nc_recv_hello(struct nc_session *session)
                     continue;
                 } else if (!strcmp(node->name, "session-id")) {
                     if (!node->content || !strlen(node->content)) {
-                        ERR("No value of <session-id> element in server's <hello>");
+                        ERR("No value of <session-id> element in server's <hello>.");
                         goto error;
                     }
                     str = NULL;
                     id = strtoll(node->content, &str, 10);
                     if (*str || id < 1 || id > UINT32_MAX) {
-                        ERR("Invalid value of <session-id> element in server's <hello>");
+                        ERR("Invalid value of <session-id> element in server's <hello>.");
                         goto error;
                     }
                     session->id = (uint32_t)id;
@@ -685,7 +685,7 @@ nc_recv_hello(struct nc_session *session)
 
                 if (flag) {
                     /* multiple capabilities elements */
-                    ERR("Invalid <hello> message (multiple <capabilities> elements)");
+                    ERR("Invalid <hello> message (multiple <capabilities> elements).");
                     goto error;
                 }
                 flag = 1;
@@ -697,7 +697,7 @@ nc_recv_hello(struct nc_session *session)
             }
 
             if (!session->id) {
-                ERR("Missing <session-id> in server's <hello>");
+                ERR("Missing <session-id> in server's <hello>.");
                 goto error;
             }
         }

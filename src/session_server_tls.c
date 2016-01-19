@@ -191,7 +191,7 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
         subject = X509_NAME_oneline(X509_get_subject_name(client_cert), NULL, 0);
         common_name = strstr(subject, "CN=");
         if (!common_name) {
-            WRN("%s: cert does not include the commonName field", __func__);
+            WRN("Certificate does not include the commonName field.");
             free(subject);
             return 1;
         }
@@ -205,7 +205,7 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
         /* retrieve subjectAltName's rfc822Name (email), dNSName and iPAddress values */
         san_names = X509_get_ext_d2i(client_cert, NID_subject_alt_name, NULL, NULL);
         if (!san_names) {
-            WRN("%s: cert has no SANs or failed to retrieve them", __func__);
+            WRN("Certificate has no SANs or failed to retrieve them.");
             return 1;
         }
 
@@ -233,7 +233,7 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
                 ip = san_name->d.iPAddress;
                 if (ip->length == 4) {
                     if (asprintf(username, "%d.%d.%d.%d", ip->data[0], ip->data[1], ip->data[2], ip->data[3]) == -1) {
-                        ERR("%s: asprintf() failed", __func__);
+                        ERRMEM;
                         sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
                         return -1;
                     }
@@ -243,13 +243,13 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
                             ip->data[0], ip->data[1], ip->data[2], ip->data[3], ip->data[4], ip->data[5],
                             ip->data[6], ip->data[7], ip->data[8], ip->data[9], ip->data[10], ip->data[11],
                             ip->data[12], ip->data[13], ip->data[14], ip->data[15]) == -1) {
-                        ERR("%s: asprintf() failed", __func__);
+                        ERRMEM;
                         sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
                         return -1;
                     }
                     break;
                 } else {
-                    WRN("%s: SAN IP address in an unknown format (length is %d)", __func__, ip->length);
+                    WRN("SAN IP address in an unknown format (length is %d).", ip->length);
                 }
             }
         }
@@ -258,16 +258,16 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
         if (i < san_count) {
             switch (map_type) {
             case NC_TLS_CTN_SAN_RFC822_NAME:
-                WRN("%s: cert does not include the SAN rfc822Name field", __func__);
+                WRN("Certificate does not include the SAN rfc822Name field.");
                 break;
             case NC_TLS_CTN_SAN_DNS_NAME:
-                WRN("%s: cert does not include the SAN dNSName field", __func__);
+                WRN("Certificate does not include the SAN dNSName field.");
                 break;
             case NC_TLS_CTN_SAN_IP_ADDRESS:
-                WRN("%s: cert does not include the SAN iPAddress field", __func__);
+                WRN("Certificate does not include the SAN iPAddress field.");
                 break;
             case NC_TLS_CTN_SAN_ANY:
-                WRN("%s: cert does not include any relevant SAN fields", __func__);
+                WRN("Certificate does not include any relevant SAN fields.");
                 break;
             default:
                 break;
@@ -303,7 +303,7 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
         if (!strncmp(tls_opts.ctn[i].fingerprint, "01", 2)) {
             if (!digest_md5) {
                 if (X509_digest(cert, EVP_md5(), buf, &buf_len) != 1) {
-                    ERR("%s: calculating MD5 digest: %s", __func__, ERR_reason_error_string(ERR_get_error()));
+                    ERR("Calculating MD5 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -312,7 +312,7 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
 
             if (!strcasecmp(tls_opts.ctn[i].fingerprint + 3, digest_md5)) {
                 /* we got ourselves a winner! */
-                VRB("Cert verify CTN: entry with a matching fingerprint found");
+                VRB("Cert verify CTN: entry with a matching fingerprint found.");
                 *map_type = tls_opts.ctn[i].map_type;
                 if (tls_opts.ctn[i].map_type == NC_TLS_CTN_SPECIFIED) {
                     *name = tls_opts.ctn[i].name;
@@ -324,7 +324,7 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
         } else if (!strncmp(tls_opts.ctn[i].fingerprint, "02", 2)) {
             if (!digest_sha1) {
                 if (X509_digest(cert, EVP_sha1(), buf, &buf_len) != 1) {
-                    ERR("%s: calculating SHA-1 digest: %s", __func__, ERR_reason_error_string(ERR_get_error()));
+                    ERR("Calculating SHA-1 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -333,7 +333,7 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
 
             if (!strcasecmp(tls_opts.ctn[i].fingerprint + 3, digest_sha1)) {
                 /* we got ourselves a winner! */
-                VRB("Cert verify CTN: entry with a matching fingerprint found");
+                VRB("Cert verify CTN: entry with a matching fingerprint found.");
                 *map_type = tls_opts.ctn[i].map_type;
                 if (tls_opts.ctn[i].map_type == NC_TLS_CTN_SPECIFIED) {
                     *name = tls_opts.ctn[i].name;
@@ -345,7 +345,7 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
         } else if (!strncmp(tls_opts.ctn[i].fingerprint, "03", 2)) {
             if (!digest_sha224) {
                 if (X509_digest(cert, EVP_sha224(), buf, &buf_len) != 1) {
-                    ERR("%s: calculating SHA-224 digest: %s", __func__, ERR_reason_error_string(ERR_get_error()));
+                    ERR("Calculating SHA-224 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -354,7 +354,7 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
 
             if (!strcasecmp(tls_opts.ctn[i].fingerprint + 3, digest_sha224)) {
                 /* we got ourselves a winner! */
-                VRB("Cert verify CTN: entry with a matching fingerprint found");
+                VRB("Cert verify CTN: entry with a matching fingerprint found.");
                 *map_type = tls_opts.ctn[i].map_type;
                 if (tls_opts.ctn[i].map_type == NC_TLS_CTN_SPECIFIED) {
                     *name = tls_opts.ctn[i].name;
@@ -366,7 +366,7 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
         } else if (!strncmp(tls_opts.ctn[i].fingerprint, "04", 2)) {
             if (!digest_sha256) {
                 if (X509_digest(cert, EVP_sha256(), buf, &buf_len) != 1) {
-                    ERR("%s: calculating SHA-256 digest: %s", __func__, ERR_reason_error_string(ERR_get_error()));
+                    ERR("Calculating SHA-256 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -375,7 +375,7 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
 
             if (!strcasecmp(tls_opts.ctn[i].fingerprint + 3, digest_sha256)) {
                 /* we got ourselves a winner! */
-                VRB("Cert verify CTN: entry with a matching fingerprint found");
+                VRB("Cert verify CTN: entry with a matching fingerprint found.");
                 *map_type = tls_opts.ctn[i].map_type;
                 if (tls_opts.ctn[i].map_type == NC_TLS_CTN_SPECIFIED) {
                     *name = tls_opts.ctn[i].name;
@@ -387,7 +387,7 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
         } else if (!strncmp(tls_opts.ctn[i].fingerprint, "05", 2)) {
             if (!digest_sha384) {
                 if (X509_digest(cert, EVP_sha384(), buf, &buf_len) != 1) {
-                    ERR("%s: calculating SHA-384 digest: %s", __func__, ERR_reason_error_string(ERR_get_error()));
+                    ERR("Calculating SHA-384 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -396,7 +396,7 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
 
             if (!strcasecmp(tls_opts.ctn[i].fingerprint + 3, digest_sha384)) {
                 /* we got ourselves a winner! */
-                VRB("Cert verify CTN: entry with a matching fingerprint found");
+                VRB("Cert verify CTN: entry with a matching fingerprint found.");
                 *map_type = tls_opts.ctn[i].map_type;
                 if (tls_opts.ctn[i].map_type == NC_TLS_CTN_SPECIFIED) {
                     *name = tls_opts.ctn[i].name;
@@ -408,7 +408,7 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
         } else if (!strncmp(tls_opts.ctn[i].fingerprint, "06", 2)) {
             if (!digest_sha512) {
                 if (X509_digest(cert, EVP_sha512(), buf, &buf_len) != 1) {
-                    ERR("%s: calculating SHA-512 digest: %s", __func__, ERR_reason_error_string(ERR_get_error()));
+                    ERR("Calculating SHA-512 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -417,7 +417,7 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
 
             if (!strcasecmp(tls_opts.ctn[i].fingerprint + 3, digest_sha512)) {
                 /* we got ourselves a winner! */
-                VRB("Cert verify CTN: entry with a matching fingerprint found");
+                VRB("Cert verify CTN: entry with a matching fingerprint found.");
                 *map_type = tls_opts.ctn[i].map_type;
                 if (tls_opts.ctn[i].map_type == NC_TLS_CTN_SPECIFIED) {
                     *name = tls_opts.ctn[i].name;
@@ -427,7 +427,7 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
 
         /* unknown */
         } else {
-            WRN("%s: unknown fingerprint algorithm used (%s), skipping", __func__, tls_opts.ctn[i].fingerprint);
+            WRN("Unknown fingerprint algorithm used (%s), skipping.", tls_opts.ctn[i].fingerprint);
         }
     }
 
@@ -511,17 +511,17 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
 
     /* print cert verify info */
     depth = X509_STORE_CTX_get_error_depth(x509_ctx);
-    VRB("Cert verify: depth %d", depth);
+    VRB("Cert verify: depth %d.", depth);
 
     cert = X509_STORE_CTX_get_current_cert(x509_ctx);
     subject = X509_get_subject_name(cert);
     issuer = X509_get_issuer_name(cert);
 
     cp = X509_NAME_oneline(subject, NULL, 0);
-    VRB("Cert verify: subject: %s", cp);
+    VRB("Cert verify: subject: %s.", cp);
     OPENSSL_free(cp);
     cp = X509_NAME_oneline(issuer, NULL, 0);
-    VRB("Cert verify: issuer:  %s", cp);
+    VRB("Cert verify: issuer:  %s.", cp);
     OPENSSL_free(cp);
 
     /* LOCK */
@@ -538,16 +538,16 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         crl = obj.data.crl;
         if (rc > 0 && crl) {
             cp = X509_NAME_oneline(subject, NULL, 0);
-            VRB("Cert verify CRL: issuer: %s", cp);
+            VRB("Cert verify CRL: issuer: %s.", cp);
             OPENSSL_free(cp);
 
             last_update = X509_CRL_get_lastUpdate(crl);
             next_update = X509_CRL_get_nextUpdate(crl);
             cp = asn1time_to_str(last_update);
-            VRB("Cert verify CRL: last update: %s", cp);
+            VRB("Cert verify CRL: last update: %s.", cp);
             free(cp);
             cp = asn1time_to_str(next_update);
-            VRB("Cert verify CRL: next update: %s", cp);
+            VRB("Cert verify CRL: next update: %s.", cp);
             free(cp);
 
             /* verify the signature on this CRL */
@@ -602,7 +602,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
                 if (ASN1_INTEGER_cmp(revoked->serialNumber, X509_get_serialNumber(cert)) == 0) {
                     serial = ASN1_INTEGER_get(revoked->serialNumber);
                     cp = X509_NAME_oneline(issuer, NULL, 0);
-                    ERR("Cert verify CRL: certificate with serial %ld (0x%lX) revoked per CRL from issuer %s", serial, serial, cp);
+                    ERR("Cert verify CRL: certificate with serial %ld (0x%lX) revoked per CRL from issuer %s.", serial, serial, cp);
                     OPENSSL_free(cp);
                     X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CERT_REVOKED);
                     X509_OBJECT_free_contents(&obj);
@@ -678,7 +678,7 @@ nc_tls_server_set_cert(const char *cert)
     if (!tls_opts.tls_ctx) {
         tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
         if (!tls_opts.tls_ctx) {
-           ERR("%s: failed to create TLS context.", __func__);
+           ERR("Failed to create TLS context.");
            goto fail;
         }
         SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
@@ -686,7 +686,7 @@ nc_tls_server_set_cert(const char *cert)
 
     x509_cert = base64der_to_cert(cert);
     if (!x509_cert || (SSL_CTX_use_certificate(tls_opts.tls_ctx, x509_cert) != 1)) {
-        ERR("%s: loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ERR("Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
         X509_free(x509_cert);
         goto fail;
     }
@@ -716,14 +716,14 @@ nc_tls_server_set_cert_path(const char *cert_path)
     if (!tls_opts.tls_ctx) {
         tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
         if (!tls_opts.tls_ctx) {
-           ERR("%s: failed to create TLS context.", __func__);
+           ERR("Failed to create TLS context.");
            goto fail;
         }
         SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
     }
 
     if (SSL_CTX_use_certificate_file(tls_opts.tls_ctx, cert_path, SSL_FILETYPE_PEM) != 1) {
-        ERR("%s: loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ERR("Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
         goto fail;
     }
 
@@ -753,7 +753,7 @@ nc_tls_server_set_key(const char *privkey, int is_rsa)
     if (!tls_opts.tls_ctx) {
         tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
         if (!tls_opts.tls_ctx) {
-           ERR("%s: failed to create TLS context.", __func__);
+           ERR("Failed to create TLS context.");
            goto fail;
         }
         SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
@@ -761,7 +761,7 @@ nc_tls_server_set_key(const char *privkey, int is_rsa)
 
     key = base64der_to_privatekey(privkey, is_rsa);
     if (!key || (SSL_CTX_use_PrivateKey(tls_opts.tls_ctx, key) != 1)) {
-        ERR("%s: loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ERR("Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
         EVP_PKEY_free(key);
         goto fail;
     }
@@ -791,14 +791,14 @@ nc_tls_server_set_key_path(const char *privkey_path)
     if (!tls_opts.tls_ctx) {
         tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
         if (!tls_opts.tls_ctx) {
-           ERR("%s: failed to create TLS context.", __func__);
+           ERR("Failed to create TLS context.");
            goto fail;
         }
         SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
     }
 
     if (SSL_CTX_use_PrivateKey_file(tls_opts.tls_ctx, privkey_path, SSL_FILETYPE_PEM) != 1) {
-        ERR("%s: loading the server priavte key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ERR("Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
         goto fail;
     }
 
@@ -829,7 +829,7 @@ nc_tls_server_add_trusted_cert(const char *cert)
     if (!tls_opts.tls_ctx) {
         tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
         if (!tls_opts.tls_ctx) {
-           ERR("%s: failed to create TLS context.", __func__);
+           ERR("Failed to create TLS context.");
            goto fail;
         }
         SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
@@ -843,7 +843,7 @@ nc_tls_server_add_trusted_cert(const char *cert)
 
     x509_cert = base64der_to_cert(cert);
     if (!x509_cert || (X509_STORE_add_cert(cert_store, x509_cert) != 1)) {
-        ERR("%s: adding a trusted certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ERR("Adding a trusted certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
         X509_free(x509_cert);
         goto fail;
     }
@@ -876,7 +876,7 @@ nc_tls_server_add_trusted_cert_path(const char *cert_path)
     if (!tls_opts.tls_ctx) {
         tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
         if (!tls_opts.tls_ctx) {
-           ERR("%s: failed to create TLS context.", __func__);
+           ERR("Failed to create TLS context.");
            goto fail;
         }
         SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
@@ -891,7 +891,7 @@ nc_tls_server_add_trusted_cert_path(const char *cert_path)
     errno = 0;
     x509_cert = pem_to_cert(cert_path);
     if (!x509_cert || (X509_STORE_add_cert(cert_store, x509_cert) != 1)) {
-        ERR("%s: adding a trusted certificate failed (%s).",
+        ERR("Adding a trusted certificate failed (%s).",
             (errno ? strerror(errno) : ERR_reason_error_string(ERR_get_error())));
         X509_free(x509_cert);
         goto fail;
@@ -925,7 +925,7 @@ nc_tls_server_set_trusted_cacert_locations(const char *cacert_file_path, const c
     if (!tls_opts.tls_ctx) {
         tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
         if (!tls_opts.tls_ctx) {
-           ERR("%s: failed to create TLS context.", __func__);
+           ERR("Failed to create TLS context.");
            goto fail;
         }
         SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
@@ -940,12 +940,12 @@ nc_tls_server_set_trusted_cacert_locations(const char *cacert_file_path, const c
     if (cacert_file_path) {
         lookup = X509_STORE_add_lookup(cert_store, X509_LOOKUP_file());
         if (!lookup) {
-            ERR("%s: failed to add lookup method.", __func__);
+            ERR("Failed to add a lookup method.");
             goto fail;
         }
 
         if (X509_LOOKUP_load_file(lookup, cacert_file_path, X509_FILETYPE_PEM) != 1) {
-            ERR("%s: failed to add trusted cert file (%s).", __func__, ERR_reason_error_string(ERR_get_error()));
+            ERR("Failed to add a trusted cert file (%s).", ERR_reason_error_string(ERR_get_error()));
             goto fail;
         }
     }
@@ -953,12 +953,12 @@ nc_tls_server_set_trusted_cacert_locations(const char *cacert_file_path, const c
     if (cacert_dir_path) {
         lookup = X509_STORE_add_lookup(cert_store, X509_LOOKUP_hash_dir());
         if (!lookup) {
-            ERR("%s: failed to add lookup method.", __func__);
+            ERR("Failed to add a lookup method.");
             goto fail;
         }
 
         if (X509_LOOKUP_add_dir(lookup, cacert_dir_path, X509_FILETYPE_PEM) != 1) {
-            ERR("%s: failed to add trusted cert directory (%s).", __func__, ERR_reason_error_string(ERR_get_error()));
+            ERR("Failed to add a trusted cert directory (%s).", ERR_reason_error_string(ERR_get_error()));
             goto fail;
         }
     }
@@ -1010,12 +1010,12 @@ nc_tls_server_set_crl_locations(const char *crl_file_path, const char *crl_dir_p
     if (crl_file_path) {
         lookup = X509_STORE_add_lookup(tls_opts.crl_store, X509_LOOKUP_file());
         if (!lookup) {
-            ERR("%s: failed to add lookup method.", __func__);
+            ERR("Failed to add a lookup method.");
             goto fail;
         }
 
         if (X509_LOOKUP_load_file(lookup, crl_file_path, X509_FILETYPE_PEM) != 1) {
-            ERR("%s: failed to add revocation lookup file (%s).", __func__, ERR_reason_error_string(ERR_get_error()));
+            ERR("Failed to add a revocation lookup file (%s).", ERR_reason_error_string(ERR_get_error()));
             goto fail;
         }
     }
@@ -1023,12 +1023,12 @@ nc_tls_server_set_crl_locations(const char *crl_file_path, const char *crl_dir_p
     if (crl_dir_path) {
         lookup = X509_STORE_add_lookup(tls_opts.crl_store, X509_LOOKUP_hash_dir());
         if (!lookup) {
-            ERR("%s: failed to add lookup method.", __func__);
+            ERR("Failed to add a lookup method.");
             goto fail;
         }
 
         if (X509_LOOKUP_add_dir(lookup, crl_dir_path, X509_FILETYPE_PEM) != 1) {
-            ERR("%s: failed to add revocation lookup directory (%s).", __func__, ERR_reason_error_string(ERR_get_error()));
+            ERR("Failed to add a revocation lookup directory (%s).", ERR_reason_error_string(ERR_get_error()));
             goto fail;
         }
     }
@@ -1165,7 +1165,7 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
         close(sock);
         return 0;
     } else if (ret == -1) {
-        ERR("%s: poll failed (%s).", __func__, strerror(errno));
+        ERR("poll failed (%s).", strerror(errno));
         close(sock);
         return -1;
     }
@@ -1193,7 +1193,7 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
 
     if (!session->ti.tls) {
-        ERR("%s: failed to create TLS structure from context.", __func__);
+        ERR("Failed to create TLS structure from context.");
         close(sock);
         return -1;
     }
@@ -1210,13 +1210,13 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     if (ret != 1) {
         switch (SSL_get_error(session->ti.tls, ret)) {
         case SSL_ERROR_SYSCALL:
-            ERR("%s: SSL_accept failed (%s).", __func__, strerror(errno));
+            ERR("SSL_accept failed (%s).", strerror(errno));
             break;
         case SSL_ERROR_SSL:
-            ERR("%s: SSL_accept failed (%s).", __func__, ERR_reason_error_string(ERR_get_error()));
+            ERR("SSL_accept failed (%s).", ERR_reason_error_string(ERR_get_error()));
             break;
         default:
-            ERR("%s: SSL_accept failed.", __func__);
+            ERR("SSL_accept failed.");
             break;
         }
         return -1;

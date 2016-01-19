@@ -55,13 +55,13 @@ nc_ssh_server_set_hostkey(const char *privkey_path)
     if (!ssh_opts.sshbind) {
         ssh_opts.sshbind = ssh_bind_new();
         if (!ssh_opts.sshbind) {
-            ERR("%s: failed to create a new ssh_bind.", __func__);
+            ERR("Failed to create a new ssh_bind.");
             goto fail;
         }
     }
 
     if (ssh_bind_options_set(ssh_opts.sshbind, SSH_BIND_OPTIONS_HOSTKEY, privkey_path) != SSH_OK) {
-        ERR("%s: failed to set host key (%s).", __func__, ssh_get_error(ssh_opts.sshbind));
+        ERR("Failed to set host key (%s).", ssh_get_error(ssh_opts.sshbind));
         goto fail;
     }
 
@@ -89,7 +89,7 @@ nc_ssh_server_set_banner(const char *banner)
     if (!ssh_opts.sshbind) {
         ssh_opts.sshbind = ssh_bind_new();
         if (!ssh_opts.sshbind) {
-            ERR("%s: failed to create a new ssh_bind", __func__);
+            ERR("Failed to create a new ssh_bind.");
             goto fail;
         }
     }
@@ -249,7 +249,7 @@ auth_password_get_pwd_hash(const char *username)
     }
 
     if (!pass_hash) {
-        ERR("%s: no password could be retrieved for \"%s\".", __func__, username);
+        ERR("No password could be retrieved for \"%s\".", username);
         return NULL;
     }
 
@@ -295,7 +295,7 @@ nc_sshcb_auth_password(struct nc_session *session, ssh_message msg)
 
     pass_hash = auth_password_get_pwd_hash(session->username);
     if (pass_hash && !auth_password_compare_pwd(pass_hash, ssh_message_auth_password(msg))) {
-        VRB("User '%s' authenticated.", session->username);
+        VRB("User \"%s\" authenticated.", session->username);
         ssh_message_auth_reply_success(msg, 0);
         session->flags |= NC_SESSION_SSH_AUTHENTICATED;
         free(pass_hash);
@@ -304,7 +304,7 @@ nc_sshcb_auth_password(struct nc_session *session, ssh_message msg)
 
     free(pass_hash);
     ++session->ssh_auth_attempts;
-    VRB("Failed user '%s' authentication attempt (#%d).", session->username, session->ssh_auth_attempts);
+    VRB("Failed user \"'%s\" authentication attempt (#%d).", session->username, session->ssh_auth_attempts);
     ssh_message_reply_default(msg);
 }
 
@@ -353,9 +353,9 @@ auth_pubkey_compare_key(ssh_key key)
     for (i = 0; i < ssh_opts.authkey_count; ++i) {
         if (ssh_pki_import_pubkey_file(ssh_opts.authkeys[i].path, &pub_key) != SSH_OK) {
             if (eaccess(ssh_opts.authkeys[i].path, R_OK)) {
-                VRB("%s: failed to import the public key \"%s\" (%s)", __func__, ssh_opts.authkeys[i].path, strerror(errno));
+                WRN("Failed to import the public key \"%s\" (%s).", ssh_opts.authkeys[i].path, strerror(errno));
             } else {
-                VRB("%s: failed to import the public key \"%s\" (%s)", __func__, ssh_opts.authkeys[i].path, ssh_get_error(pub_key));
+                WRN("Failed to import the public key \"%s\" (%s).", __func__, ssh_opts.authkeys[i].path, ssh_get_error(pub_key));
             }
             continue;
         }
@@ -445,12 +445,12 @@ nc_sshcb_channel_subsystem(struct nc_session *session, ssh_channel channel, cons
 
     if (!strcmp(subsystem, "netconf")) {
         if (session->flags & NC_SESSION_SSH_SUBSYS_NETCONF) {
-            WRN("Client \"%s\" requested subsystem 'netconf' for the second time.", session->username);
+            WRN("Client \"%s\" requested subsystem \"netconf\" for the second time.", session->username);
         } else {
             session->flags |= NC_SESSION_SSH_SUBSYS_NETCONF;
         }
     } else {
-        WRN("Client \"%s\" requested an unknown subsystem '%s'.", session->username, subsystem);
+        WRN("Client \"%s\" requested an unknown subsystem \"%s\".", session->username, subsystem);
         return -1;
     }
 
@@ -658,7 +658,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
      * created if timeout == 0 (it takes 2 messages, channel-open, subsystem-request) */
     if (!timeout) {
         if (!nc_session_is_connected(session)) {
-            ERR("%s: communication channel unexpectedly closed (libssh).", __func__);
+            ERR("Communication socket unexpectedly closed (libssh).");
             return -1;
         }
 
@@ -669,8 +669,8 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
 
         ret = ssh_execute_message_callbacks(session->ti.libssh.session);
         if (ret != SSH_OK) {
-            ERR("%s: failed to receive new messages on the SSH session (%s)",
-                __func__, ssh_get_error(session->ti.libssh.session));
+            ERR("Failed to receive SSH messages on a session (%s).",
+                ssh_get_error(session->ti.libssh.session));
             return -1;
         }
 
@@ -682,8 +682,8 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
 
         ret = ssh_execute_message_callbacks(session->ti.libssh.session);
         if (ret != SSH_OK) {
-            ERR("%s: failed to receive new messages on the SSH session (%s)",
-                __func__, ssh_get_error(session->ti.libssh.session));
+            ERR("Failed to receive SSH messages on a session (%s).",
+                ssh_get_error(session->ti.libssh.session));
             pthread_mutex_unlock(session->ti_lock);
             return -1;
         }
@@ -699,7 +699,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
 
     while (1) {
         if (!nc_session_is_connected(session)) {
-            ERR("%s: communication channel unexpectedly closed (libssh).", __func__);
+            ERR("Communication socket unexpectedly closed (libssh).");
             return -1;
         }
 
@@ -710,8 +710,8 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
 
         ret = ssh_execute_message_callbacks(session->ti.libssh.session);
         if (ret != SSH_OK) {
-            ERR("%s: failed to receive new messages on the SSH session (%s)",
-                __func__, ssh_get_error(session->ti.libssh.session));
+            ERR("Failed to receive SSH messages on a session (%s).",
+                ssh_get_error(session->ti.libssh.session));
             pthread_mutex_unlock(session->ti_lock);
             return -1;
         }
@@ -743,7 +743,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     session->ti_type = NC_TI_LIBSSH;
     session->ti.libssh.session = ssh_new();
     if (!session->ti.libssh.session) {
-        ERR("%s: failed to initialize an SSH session.", __func__);
+        ERR("Failed to initialize a new SSH session.");
         close(sock);
         return -1;
     }
@@ -768,7 +768,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     }
 
     if (ssh_bind_accept_fd(ssh_opts.sshbind, session->ti.libssh.session, sock) == SSH_ERROR) {
-        ERR("%s: SSH failed to accept a new connection (%s).", __func__, ssh_get_error(ssh_opts.sshbind));
+        ERR("SSH failed to accept a new connection (%s).", ssh_get_error(ssh_opts.sshbind));
         close(sock);
         /* UNLOCK */
         pthread_mutex_unlock(&ssh_opts.sshbind_lock);
@@ -779,20 +779,20 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     pthread_mutex_unlock(&ssh_opts.sshbind_lock);
 
     if (ssh_handle_key_exchange(session->ti.libssh.session) != SSH_OK) {
-        ERR("%s: SSH key exchange error (%s).", __func__, ssh_get_error(session->ti.libssh.session));
+        ERR("SSH key exchange error (%s).", ssh_get_error(session->ti.libssh.session));
         return -1;
     }
 
     /* authenticate */
     do {
         if (!nc_session_is_connected(session)) {
-            ERR("%s: communication channel unexpectedly closed (libssh).", __func__);
+            ERR("Communication socket unexpectedly closed (libssh).");
             return -1;
         }
 
         if (ssh_execute_message_callbacks(session->ti.libssh.session) != SSH_OK) {
-            ERR("%s: failed to receive new messages on the SSH session (%s).",
-                __func__, ssh_get_error(session->ti.libssh.session));
+            ERR("Failed to receive SSH messages on a session (%s).",
+                ssh_get_error(session->ti.libssh.session));
             return -1;
         }
 
