@@ -480,7 +480,7 @@ nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
     for (i = 0; i < ps->session_count; ++i) {
         if (ps->sessions[i].session == session) {
             --ps->session_count;
-            memmove(&ps->sessions[i], &ps->sessions[i + 1], ps->session_count - i);
+            memcpy(&ps->sessions[i], &ps->sessions[ps->session_count], sizeof *ps->sessions);
             return 0;
         }
     }
@@ -774,7 +774,7 @@ nc_server_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
                 free(server_opts.binds[i].address);
 
                 --server_opts.bind_count;
-                memmove(&server_opts.binds[i], &server_opts.binds[i + 1], (server_opts.bind_count - i) * sizeof *server_opts.binds);
+                memcpy(&server_opts.binds[i], &server_opts.binds[server_opts.bind_count], sizeof *server_opts.binds);
 
                 ret = 0;
             }

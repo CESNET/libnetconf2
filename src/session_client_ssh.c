@@ -603,7 +603,7 @@ nc_ssh_client_del_keypair(int idx)
 
     --ssh_opts.key_count;
 
-    memmove(ssh_opts.keys + idx, ssh_opts.keys + idx + 1, (ssh_opts.key_count - idx) * sizeof *ssh_opts.keys);
+    memcpy(ssh_opts.keys + idx, ssh_opts.keys + ssh_opts.key_count, sizeof *ssh_opts.keys);
     ssh_opts.keys = realloc(ssh_opts.keys, ssh_opts.key_count * sizeof *ssh_opts.keys);
 
     return 0;

@@ -1115,7 +1115,7 @@ nc_tls_server_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE ma
                 lydict_remove(server_opts.ctx, tls_opts.ctn[i].name);
 
                 --tls_opts.ctn_count;
-                memmove(&tls_opts.ctn[i], &tls_opts.ctn[i + 1], (tls_opts.ctn_count - i) * sizeof *tls_opts.ctn);
+                memcpy(&tls_opts.ctn[i], &tls_opts.ctn[tls_opts.ctn_count], sizeof *tls_opts.ctn);
 
                 ret = 0;
             }

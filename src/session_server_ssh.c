@@ -193,7 +193,7 @@ nc_ssh_server_del_authkey(const char *pubkey_path, const char *username)
                 lydict_remove(server_opts.ctx, ssh_opts.authkeys[i].username);
 
                 --ssh_opts.authkey_count;
-                memmove(&ssh_opts.authkeys[i], &ssh_opts.authkeys[i + 1], (ssh_opts.authkey_count - i) * sizeof *ssh_opts.authkeys);
+                memcpy(&ssh_opts.authkeys[i], &ssh_opts.authkeys[ssh_opts.authkey_count], sizeof *ssh_opts.authkeys);
 
                 ret = 0;
             }
