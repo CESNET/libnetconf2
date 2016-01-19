@@ -2,6 +2,9 @@
 
 THIS IS A WORK IN PROGRESS, FOR WORKING SOLUTION, PLEASE, USE [LIBNETCONF](https://github.com/CESNET/libnetconf).
 
+TravisCI:
+[![Build Status](https://secure.travis-ci.org/CESNET/libnetconf.png?branch=master)](http://travis-ci.org/CESNET/libnetconf2)
+
 **libnetconf2** is a NETCONF library in C intended for building NETCONF clients
 and servers. It provides basic functions to connect NETCONF client and server
 to each other via SSH, to send and receive NETCONF messages and to store and
