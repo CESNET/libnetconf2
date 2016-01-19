@@ -157,40 +157,4 @@ const char *nc_session_cpblt(const struct nc_session *session, const char *capab
  */
 void nc_session_free(struct nc_session *session);
 
-#ifdef ENABLE_SSH
-
-/**
- * @brief Initialize libssh so that libnetconf2 can be safely used in a multi-threaded environment.
- *
- * Must be called before using any other SSH functions. Afterwards can libssh be used in the application
- * as well.
- */
-void nc_ssh_init(void);
-
-/**
- * @brief Free all the resources allocated by libssh.
- *
- * Must be called before nc_tls_destroy() (if called) as libssh uses libcrypto as well.
- */
-void nc_ssh_destroy(void);
-
-#endif /* ENABLE_SSH */
-
-#ifdef ENABLE_TLS
-
-/**
- * @brief Initialize libcrypto so that libnetconf2 can be safely used in a multi-threaded environment.
- *
- * Must be called before using any other TLS functions. Afterwards can libcrypto be used in the application
- * as well.
- */
-void nc_tls_init(void);
-
-/**
- * @brief Free all the resources allocated by libcrypto and libssl.
- */
-void nc_tls_destroy(void);
-
-#endif /* ENABLE_TLS */
-
 #endif /* NC_SESSION_H_ */

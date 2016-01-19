@@ -823,7 +823,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 }
 
 /* TODO remove */
-API struct nc_session *
+struct nc_session *
 nc_accept_ssh_channel(struct nc_session *session, int timeout)
 {
     struct nc_session *new_session;

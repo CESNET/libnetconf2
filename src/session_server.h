@@ -285,9 +285,6 @@ int nc_ssh_server_del_authkey(const char *pubkey_path, const char *username);
  */
 void nc_ssh_server_free_opts(void);
 
-/* TODO remove */
-struct nc_session *nc_accept_ssh_channel(struct nc_session *session, int timeout);
-
 #endif /* ENABLE_SSH */
 
 #ifdef ENABLE_TLS

@@ -113,6 +113,42 @@ typedef enum NC_PARAMTYPE {
     NC_PARAMTYPE_DUP_AND_FREE /**< make a copy of the argument, free afterwards */
 } NC_PARAMTYPE;
 
+#ifdef ENABLE_SSH
+
+/**
+ * @brief Initialize libssh so that libnetconf2 can be safely used in a multi-threaded environment.
+ *
+ * Must be called before using any other SSH functions. Afterwards can libssh be used in the application
+ * as well.
+ */
+void nc_ssh_init(void);
+
+/**
+ * @brief Free all the resources allocated by libssh.
+ *
+ * Must be called before nc_tls_destroy() (if called) as libssh uses libcrypto as well.
+ */
+void nc_ssh_destroy(void);
+
+#endif /* ENABLE_SSH */
+
+#ifdef ENABLE_TLS
+
+/**
+ * @brief Initialize libcrypto so that libnetconf2 can be safely used in a multi-threaded environment.
+ *
+ * Must be called before using any other TLS functions. Afterwards can libcrypto be used in the application
+ * as well.
+ */
+void nc_tls_init(void);
+
+/**
+ * @brief Free all the resources allocated by libcrypto and libssl.
+ */
+void nc_tls_destroy(void);
+
+#endif /* ENABLE_TLS */
+
 /**
  * @brief Transform given time_t (seconds since the epoch) into the RFC 3339 format
  * accepted by NETCONF functions.

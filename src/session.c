@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <time.h>
 #include <libyang/libyang.h>
 
 #include "libnetconf.h"
@@ -172,16 +173,22 @@ nc_send_msg(struct nc_session *session, struct lyd_node *op)
 int
 nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed)
 {
-    int ret, elap = 0;
+    int ret;
+    struct timespec ts_timeout, ts_old, ts_new;
 
     if (timeout > 0) {
-        while ((timeout > elap) && ((ret = pthread_mutex_trylock(lock)) == EBUSY)) {
-            usleep(NC_TIMEOUT_STEP);
-            elap += NC_TIMEOUT_STEP;
-        }
+        ts_timeout.tv_sec = timeout / 1000;
+        ts_timeout.tv_nsec = (timeout % 1000) * 1000000;
+
+        clock_gettime(CLOCK_REALTIME, &ts_old);
+
+        ret = pthread_mutex_timedlock(lock, &ts_timeout);
+
+        clock_gettime(CLOCK_REALTIME, &ts_new);
 
         if (elapsed) {
-            *elapsed += elap;
+            *elapsed += (ts_new.tv_sec - ts_old.tv_sec) * 1000;
+            *elapsed += (ts_new.tv_nsec - ts_old.tv_nsec) / 1000000;
         }
     } else if (!timeout) {
         ret = pthread_mutex_trylock(lock);
@@ -189,7 +196,7 @@ nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed)
         ret = pthread_mutex_lock(lock);
     }
 
-    if (ret == EBUSY) {
+    if (ret == ETIMEDOUT) {
         /* timeout */
         return 0;
     } else if (ret) {
