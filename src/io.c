@@ -889,7 +889,7 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
                          NC_NS_BASE, session->msgid + 1, attrs ? attrs : "");
         nc_write_clb((void *)&arg, buf, count);
         free(buf);
-        lyd_print_clb(nc_write_clb, (void *)&arg, content, LYD_XML);
+        lyd_print_clb(nc_write_clb, (void *)&arg, content, LYD_XML, 0);
         nc_write_clb((void *)&arg, "</rpc>", 6);
 
         session->msgid++;
@@ -911,7 +911,7 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
             break;
         case NC_RPL_DATA:
             nc_write_clb((void *)&arg, "<data>", 6);
-            lyd_print_clb(nc_write_clb, (void *)&arg, ((struct nc_reply_data *)reply)->data, LYD_XML);
+            lyd_print_clb(nc_write_clb, (void *)&arg, ((struct nc_reply_data *)reply)->data, LYD_XML, 0);
             nc_write_clb((void *)&arg, "<data/>", 7);
             break;
         case NC_RPL_ERROR:
