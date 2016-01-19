@@ -421,6 +421,10 @@ nc_err_add_info_other(struct nc_server_error *err, struct lyxml_elem *other)
 void
 nc_server_rpc_free(struct nc_server_rpc *rpc)
 {
+    if (!rpc) {
+        return;
+    }
+
     lyxml_free(rpc->tree->schema->module->ctx, rpc->root);
     lyd_free(rpc->tree);
     free(rpc);
@@ -466,7 +470,6 @@ nc_err_free(struct nc_server_error *err)
     uint32_t i;
 
     if (!err) {
-        ERRARG;
         return;
     }
 

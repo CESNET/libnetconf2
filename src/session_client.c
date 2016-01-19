@@ -49,9 +49,18 @@ nc_schema_searchpath(const char *path)
     if (schema_searchpath) {
         free(schema_searchpath);
     }
-    schema_searchpath = strdup(path);
 
-    return schema_searchpath ? 0 : 1;
+    if (path) {
+        schema_searchpath = strdup(path);
+        if (!schema_searchpath) {
+            ERRMEM;
+            return 1;
+        }
+    } else {
+        schema_searchpath = NULL;
+    }
+
+    return 0;
 }
 
 /* SCHEMAS_DIR not used */
@@ -397,9 +406,9 @@ errloop:
 }
 
 static NC_MSG_TYPE
-get_msg(struct nc_session *session, int32_t timeout, uint64_t msgid, struct lyxml_elem **msg)
+get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_elem **msg)
 {
-    int r;
+    int r, elapsed;
     char *ptr;
     const char *str_msgid;
     uint64_t cur_msgid;
@@ -411,15 +420,19 @@ next_message:
     if (msgtype) {
         /* second run, wait and give a chance to nc_recv_reply() */
         usleep(NC_TIMEOUT_STEP);
-        timeout = timeout - (NC_TIMEOUT_STEP);
+        timeout -= NC_TIMEOUT_STEP;
     }
-    r = session_ti_lock(session, timeout);
-    if (r > 0) {
+    elapsed = 0;
+    r = nc_timedlock(session->ti_lock, timeout, &elapsed);
+    if (r == -1) {
         /* error */
         return NC_MSG_ERROR;
-    } else if (r < 0) {
+    } else if (!r) {
         /* timeout */
         return NC_MSG_WOULDBLOCK;
+    }
+    if (timeout > 0) {
+        timeout -= elapsed;
     }
 
     /* try to get notification from the session's queue */
@@ -427,7 +440,7 @@ next_message:
         cont = session->notifs;
         session->notifs = cont->next;
 
-        session_ti_unlock(session);
+        pthread_mutex_unlock(session->ti_lock);
 
         *msg = cont->msg;
         free(cont);
@@ -449,7 +462,7 @@ next_message:
                 } else {
                     prev_cont->next = cont->next;
                 }
-                session_ti_unlock(session);
+                pthread_mutex_unlock(session->ti_lock);
 
                 *msg = cont->msg;
                 free(cont);
@@ -469,15 +482,16 @@ next_message:
         /* just check that message-id is fine */
         str_msgid = lyxml_get_attr(xml, "message-id", NULL);
         if (!str_msgid) {
-            session_ti_unlock(session);
-            ERR("SESSION %u: Received a <rpc-reply> with no message-id, discarding.", session->id);
+            pthread_mutex_unlock(session->ti_lock);
+            ERR("%s: session %u: received a <rpc-reply> with no message-id, discarding.", __func__, session->id);
             lyxml_free(session->ctx, xml);
             goto next_message;
         }
         cur_msgid = strtoul(str_msgid, &ptr, 10);
         if (ptr[0]) {
-            session_ti_unlock(session);
-            ERR("SESSION %u: Received a <rpc-reply> with an invalid message-id (\"%s\"), discarding.", session->id, str_msgid);
+            pthread_mutex_unlock(session->ti_lock);
+            ERR("%s: session %u: received a <rpc-reply> with an invalid message-id (\"%s\"), discarding.",
+                __func__, session->id, str_msgid);
             lyxml_free(session->ctx, xml);
             goto next_message;
         }
@@ -494,8 +508,8 @@ next_message:
     /* we read notif, want a rpc-reply */
     if (msgid && (msgtype == NC_MSG_NOTIF)) {
         if (!session->notif) {
-            session_ti_unlock(session);
-            ERR("SESSION %u: Received a <notification> but session is not subscribed.", session->id);
+            pthread_mutex_unlock(session->ti_lock);
+            ERR("%s: session %u: received a <notification> but session is not subscribed.", __func__, session->id);
             lyxml_free(session->ctx, xml);
             goto next_message;
         }
@@ -509,7 +523,7 @@ next_message:
         (*cont_ptr)->next = NULL;
     }
 
-    session_ti_unlock(session);
+    pthread_mutex_unlock(session->ti_lock);
 
     switch (msgtype) {
     case NC_MSG_NOTIF:
@@ -529,12 +543,12 @@ next_message:
         break;
 
     case NC_MSG_HELLO:
-        ERR("SESSION %u: Received another <hello> message.", session->id);
+        ERR("%s: session %u: received another <hello> message.", __func__, session->id);
         lyxml_free(session->ctx, xml);
         goto next_message;
 
     case NC_MSG_RPC:
-        ERR("SESSION %u: Received <rpc> from NETCONF server.", session->id);
+        ERR("%s: session %u: received <rpc> from NETCONF server.", __func__, session->id);
         lyxml_free(session->ctx, xml);
         goto next_message;
 
@@ -788,6 +802,9 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
             /* there is no output defined */
             ERR("Unexpected data reply (root elem \"%s\").", xml->child->name);
             return NULL;
+        default:
+            ERRINT;
+            return NULL;
         }
 
         data_rpl = malloc(sizeof *data_rpl);
@@ -810,15 +827,15 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
 }
 
 API NC_MSG_TYPE
-nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int32_t timeout, struct nc_reply **reply)
+nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout, struct nc_reply **reply)
 {
     struct lyxml_elem *xml;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
 
-    if (!session || !reply) {
-        ERR("%s: Invalid parameter", __func__);
+    if (!session || !rpc || !reply) {
+        ERRARG;
         return NC_MSG_ERROR;
-    } else if (session->status != NC_STATUS_RUNNING || session->side != NC_CLIENT) {
+    } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR("%s: invalid session to receive RPC replies.", __func__);
         return NC_MSG_ERROR;
     }
@@ -896,9 +913,10 @@ fail:
 }
 
 API NC_MSG_TYPE
-nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uint64_t *msgid)
+nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_t *msgid)
 {
     NC_MSG_TYPE r;
+    int ret;
     struct nc_rpc_generic *rpc_gen;
     struct nc_rpc_getconfig *rpc_gc;
     struct nc_rpc_edit *rpc_e;
@@ -917,8 +935,8 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uin
     char str[11];
     uint64_t cur_msgid;
 
-    if (!session || !rpc) {
-        ERR("%s: Invalid parameter", __func__);
+    if (!session || !rpc || !msgid) {
+        ERRARG;
         return NC_MSG_ERROR;
     } else if (session->status != NC_STATUS_RUNNING || session->side != NC_CLIENT) {
         ERR("%s: invalid session to send RPCs.", __func__);
@@ -1355,6 +1373,9 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uin
             }
         }
         break;
+    default:
+        ERRINT;
+        return NC_MSG_ERROR;
     }
 
     if (lyd_validate(data, LYD_OPT_STRICT)) {
@@ -1362,16 +1383,19 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int32_t timeout, uin
         return NC_MSG_ERROR;
     }
 
-    r = session_ti_lock(session, timeout);
-    if (r != 0) {
-        /* error or blocking */
+    ret = nc_timedlock(session->ti_lock, timeout, NULL);
+    if (ret == -1) {
+        /* error */
+        r = NC_MSG_ERROR;
+    } else if (!ret) {
+        /* blocking */
         r = NC_MSG_WOULDBLOCK;
     } else {
         /* send RPC, store its message ID */
         r = nc_send_msg(session, data);
         cur_msgid = session->msgid;
     }
-    session_ti_unlock(session);
+    pthread_mutex_unlock(session->ti_lock);
 
     lyd_free(data);
 

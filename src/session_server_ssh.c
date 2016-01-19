@@ -652,45 +652,84 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
 static int
 nc_open_netconf_channel(struct nc_session *session, int timeout)
 {
-    int elapsed = 0;
+    int elapsed = 0, ret;
 
     /* message callback is executed twice to give chance for the channel to be
      * created if timeout == 0 (it takes 2 messages, channel-open, subsystem-request) */
-    do {
+    if (!timeout) {
         if (!nc_session_is_connected(session)) {
             ERR("%s: communication channel unexpectedly closed (libssh).", __func__);
             return -1;
         }
 
-        if (ssh_execute_message_callbacks(session->ti.libssh.session) != SSH_OK) {
+        ret = nc_timedlock(session->ti_lock, timeout, NULL);
+        if (ret != 1) {
+            return ret;
+        }
+
+        ret = ssh_execute_message_callbacks(session->ti.libssh.session);
+        if (ret != SSH_OK) {
             ERR("%s: failed to receive new messages on the SSH session (%s)",
                 __func__, ssh_get_error(session->ti.libssh.session));
             return -1;
         }
 
+        if (!session->ti.libssh.channel) {
+            /* we did not receive channel-open, timeout */
+            pthread_mutex_unlock(session->ti_lock);
+            return 0;
+        }
+
+        ret = ssh_execute_message_callbacks(session->ti.libssh.session);
+        if (ret != SSH_OK) {
+            ERR("%s: failed to receive new messages on the SSH session (%s)",
+                __func__, ssh_get_error(session->ti.libssh.session));
+            pthread_mutex_unlock(session->ti_lock);
+            return -1;
+        }
+        pthread_mutex_unlock(session->ti_lock);
+
+        if (!(session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
+            /* we did not receive subsystem-request, timeout */
+            return 0;
+        }
+
+        return 1;
+    }
+
+    while (1) {
+        if (!nc_session_is_connected(session)) {
+            ERR("%s: communication channel unexpectedly closed (libssh).", __func__);
+            return -1;
+        }
+
+        ret = nc_timedlock(session->ti_lock, timeout, &elapsed);
+        if (ret != 1) {
+            return ret;
+        }
+
+        ret = ssh_execute_message_callbacks(session->ti.libssh.session);
+        if (ret != SSH_OK) {
+            ERR("%s: failed to receive new messages on the SSH session (%s)",
+                __func__, ssh_get_error(session->ti.libssh.session));
+            pthread_mutex_unlock(session->ti_lock);
+            return -1;
+        }
+
+        pthread_mutex_unlock(session->ti_lock);
+
         if (session->ti.libssh.channel && (session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
             return 1;
         }
 
-        usleep(NC_TIMEOUT_STEP);
-        elapsed += NC_TIMEOUT_STEP;
-        if ((timeout > NC_TIMEOUT_STEP) && (elapsed >= timeout)) {
+        if ((timeout != -1) && (timeout >= elapsed)) {
+            /* timeout */
             break;
         }
 
-        if (ssh_execute_message_callbacks(session->ti.libssh.session) != SSH_OK) {
-            ERR("%s: failed to receive new messages on the SSH session (%s)",
-                __func__, ssh_get_error(session->ti.libssh.session));
-            return -1;
-        }
-
-        if (session->ti.libssh.channel && (session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
-            return 1;
-        }
-
         usleep(NC_TIMEOUT_STEP);
         elapsed += NC_TIMEOUT_STEP;
-    } while ((timeout == -1) || (timeout && (elapsed < timeout)));
+    }
 
     return 0;
 }
@@ -723,7 +762,10 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, session);
 
     /* LOCK */
-    pthread_mutex_lock(&ssh_opts.sshbind_lock);
+    ret = nc_timedlock(&ssh_opts.sshbind_lock, timeout, &elapsed);
+    if (ret < 1) {
+        return ret;
+    }
 
     if (ssh_bind_accept_fd(ssh_opts.sshbind, session->ti.libssh.session, sock) == SSH_ERROR) {
         ERR("%s: SSH failed to accept a new connection (%s).", __func__, ssh_get_error(ssh_opts.sshbind));
@@ -772,7 +814,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     }
 
     /* open channel */
-    ret =  nc_open_netconf_channel(session, timeout);
+    ret = nc_open_netconf_channel(session, timeout);
     if (ret < 1) {
         return ret;
     }
@@ -780,6 +822,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     return 1;
 }
 
+/* TODO remove */
 API struct nc_session *
 nc_accept_ssh_channel(struct nc_session *session, int timeout)
 {

@@ -50,42 +50,77 @@ extern struct nc_server_opts server_opts;
 API NC_STATUS
 nc_session_get_status(const struct nc_session *session)
 {
+    if (!session) {
+        ERRARG;
+        return 0;
+    }
+
     return session->status;
 }
 
 API uint32_t
 nc_session_get_id(const struct nc_session *session)
 {
+    if (!session) {
+        ERRARG;
+        return 0;
+    }
+
     return session->id;
 }
 
 API NC_TRANSPORT_IMPL
 nc_session_get_ti(const struct nc_session *session)
 {
+    if (!session) {
+        ERRARG;
+        return 0;
+    }
+
     return session->ti_type;
 }
 
 API const char *
 nc_session_get_username(const struct nc_session *session)
 {
+    if (!session) {
+        ERRARG;
+        return NULL;
+    }
+
     return session->username;
 }
 
 API const char *
 nc_session_get_host(const struct nc_session *session)
 {
+    if (!session) {
+        ERRARG;
+        return NULL;
+    }
+
     return session->host;
 }
 
 API uint16_t
 nc_session_get_port(const struct nc_session *session)
 {
+    if (!session) {
+        ERRARG;
+        return 0;
+    }
+
     return session->port;
 }
 
 API const char **
 nc_session_get_cpblts(const struct nc_session *session)
 {
+    if (!session) {
+        ERRARG;
+        return NULL;
+    }
+
     return session->cpblts;
 }
 
@@ -93,6 +128,11 @@ API const char *
 nc_session_cpblt(const struct nc_session *session, const char *capab)
 {
     int i, len;
+
+    if (!session || !capab) {
+        ERRARG;
+        return NULL;
+    }
 
     len = strlen(capab);
     for (i = 0; session->cpblts[i]; ++i) {
@@ -125,46 +165,41 @@ nc_send_msg(struct nc_session *session, struct lyd_node *op)
 }
 
 /*
- * @return 0 - success
- *        -1 - timeout
- *        >0 - error
+ * @return 1 - success
+ *         0 - timeout
+ *        -1 - error
  */
 int
-session_ti_lock(struct nc_session *session, int32_t timeout)
+nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed)
 {
-    int r;
+    int ret, elap = 0;
 
-    if (timeout >= 0) {
-        /* limited waiting for lock */
-        do {
-            r = pthread_mutex_trylock(session->ti_lock);
-            if (r == EBUSY) {
-                /* try later until timeout passes */
-                usleep(NC_TIMEOUT_STEP);
-                timeout = timeout - NC_TIMEOUT_STEP;
-                continue;
-            } else if (r) {
-                /* error */
-                ERR("Acquiring session (%u) TI lock failed (%s).", session->id, strerror(r));
-                return r;
-            } else {
-                /* lock acquired */
-                return 0;
-            }
-        } while (timeout > 0);
+    if (timeout > 0) {
+        while ((timeout > elap) && ((ret = pthread_mutex_trylock(lock)) == EBUSY)) {
+            usleep(NC_TIMEOUT_STEP);
+            elap += NC_TIMEOUT_STEP;
+        }
 
-        /* timeout has passed */
-        return -1;
-    } else {
-        /* infinite waiting for lock */
-        return pthread_mutex_lock(session->ti_lock);
+        if (elapsed) {
+            *elapsed += elap;
+        }
+    } else if (!timeout) {
+        ret = pthread_mutex_trylock(lock);
+    } else { /* timeout == -1 */
+        ret = pthread_mutex_lock(lock);
     }
-}
 
-int
-session_ti_unlock(struct nc_session *session)
-{
-    return pthread_mutex_unlock(session->ti_lock);
+    if (ret == EBUSY) {
+        /* timeout */
+        return 0;
+    } else if (ret) {
+        /* error */
+        ERR("%s: mutex lock failed (%s).", __func__, strerror(errno));
+        return -1;
+    }
+
+    /* ok */
+    return 1;
 }
 
 API void
@@ -187,9 +222,9 @@ nc_session_free(struct nc_session *session)
     /* mark session for closing */
     if (session->ti_lock) {
         do {
-            r = session_ti_lock(session, 0);
-        } while (r < 0);
-        if (r) {
+            r = nc_timedlock(session->ti_lock, 0, NULL);
+        } while (!r);
+        if (r == -1) {
             return;
         }
     }
@@ -323,7 +358,7 @@ nc_session_free(struct nc_session *session)
 
     /* final cleanup */
     if (session->ti_lock) {
-        session_ti_unlock(session);
+        pthread_mutex_unlock(session->ti_lock);
         if (!multisession) {
             pthread_mutex_destroy(session->ti_lock);
             free(session->ti_lock);
@@ -749,6 +784,7 @@ nc_tls_init(void)
     int i;
 
     SSL_load_error_strings();
+    ERR_load_BIO_strings();
     SSL_library_init();
 
     tls_locks = malloc(CRYPTO_num_locks() * sizeof *tls_locks);

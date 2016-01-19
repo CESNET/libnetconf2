@@ -539,7 +539,8 @@ nc_ssh_client_add_keypair(const char *pub_key, const char *priv_key)
     char line[128];
 
     if (!pub_key || !priv_key) {
-        return EXIT_FAILURE;
+        ERRARG;
+        return -1;
     }
 
     for (i = 0; i < ssh_opts.key_count; ++i) {
@@ -555,7 +556,7 @@ nc_ssh_client_add_keypair(const char *pub_key, const char *priv_key)
             }
 
             ERR("SSH key pair already set.");
-            return EXIT_FAILURE;
+            return -1;
         }
     }
 
@@ -572,13 +573,13 @@ nc_ssh_client_add_keypair(const char *pub_key, const char *priv_key)
         if (!fgets(line, sizeof line, key)) {
             fclose(key);
             ERR("fgets() on %s failed.", priv_key);
-            return EXIT_FAILURE;
+            return -1;
         }
         /* 2nd line - encryption information or key */
         if (!fgets(line, sizeof line, key)) {
             fclose(key);
             ERR("fgets() on %s failed.", priv_key);
-            return EXIT_FAILURE;
+            return -1;
         }
         fclose(key);
         if (strcasestr(line, "encrypted")) {
@@ -586,14 +587,15 @@ nc_ssh_client_add_keypair(const char *pub_key, const char *priv_key)
         }
     }
 
-    return EXIT_SUCCESS;
+    return 0;
 }
 
 API int
 nc_ssh_client_del_keypair(int idx)
 {
     if (idx >= ssh_opts.key_count) {
-        return EXIT_FAILURE;
+        ERRARG;
+        return -1;
     }
 
     free(ssh_opts.keys[idx].pubkey_path);
@@ -604,7 +606,7 @@ nc_ssh_client_del_keypair(int idx)
     memmove(ssh_opts.keys + idx, ssh_opts.keys + idx + 1, (ssh_opts.key_count - idx) * sizeof *ssh_opts.keys);
     ssh_opts.keys = realloc(ssh_opts.keys, ssh_opts.key_count * sizeof *ssh_opts.keys);
 
-    return EXIT_SUCCESS;
+    return 0;
 }
 
 API int
@@ -616,8 +618,9 @@ nc_ssh_client_get_keypair_count(void)
 API int
 nc_ssh_client_get_keypair(int idx, const char **pub_key, const char **priv_key)
 {
-    if (idx >= ssh_opts.key_count) {
-        return EXIT_FAILURE;
+    if ((idx >= ssh_opts.key_count) || (!pub_key && !priv_key)) {
+        ERRARG;
+        return -1;
     }
 
     if (pub_key) {
@@ -627,7 +630,7 @@ nc_ssh_client_get_keypair(int idx, const char **pub_key, const char **priv_key)
         *priv_key = ssh_opts.keys[idx].privkey_path;
     }
 
-    return EXIT_SUCCESS;
+    return 0;
 }
 
 API void

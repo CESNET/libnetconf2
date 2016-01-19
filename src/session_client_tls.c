@@ -130,21 +130,17 @@ nc_tls_client_init(const char *client_cert, const char *client_key, const char *
         VRB("TLS context reinitialization.");
         SSL_CTX_free(tls_opts.tls_ctx);
         tls_opts.tls_ctx = NULL;
-    } else {
-        /* init libssl */
-        SSL_load_error_strings();
-        ERR_load_BIO_strings();
-        SSL_library_init();
     }
 
     if (!client_cert) {
-        return EXIT_SUCCESS;
+        ERRARG;
+        return -1;
     }
 
     /* prepare global SSL context, allow only mandatory TLS 1.2  */
     if (!(tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_client_method()))) {
         ERR("Unable to create OpenSSL context (%s)", ERR_reason_error_string(ERR_get_error()));
-        return EXIT_FAILURE;
+        return -1;
     }
 
     if (crl_file || crl_dir) {
@@ -155,22 +151,22 @@ nc_tls_client_init(const char *client_cert, const char *client_key, const char *
         if (crl_file) {
             if (!(lookup = X509_STORE_add_lookup(tls_opts.tls_store, X509_LOOKUP_file()))) {
                 ERR("Failed to add lookup method to CRL checking.");
-                return EXIT_FAILURE;
+                return -1;
             }
             if (X509_LOOKUP_add_dir(lookup, crl_file, X509_FILETYPE_PEM) != 1) {
                 ERR("Failed to add the revocation lookup file \"%s\".", crl_file);
-                return EXIT_FAILURE;
+                return -1;
             }
         }
 
         if (crl_dir) {
             if (!(lookup = X509_STORE_add_lookup(tls_opts.tls_store, X509_LOOKUP_hash_dir()))) {
                 ERR("Failed to add lookup method to CRL checking.");
-                return EXIT_FAILURE;
+                return -1;
             }
             if (X509_LOOKUP_add_dir(lookup, crl_dir, X509_FILETYPE_PEM) != 1) {
                 ERR("Failed to add the revocation lookup directory \"%s\".", crl_dir);
-                return EXIT_FAILURE;
+                return -1;
             }
         }
 
@@ -183,7 +179,7 @@ nc_tls_client_init(const char *client_cert, const char *client_key, const char *
     /* get peer certificate */
     if (SSL_CTX_use_certificate_file(tls_opts.tls_ctx, client_cert, SSL_FILETYPE_PEM) != 1) {
         ERR("Loading a peer certificate from \'%s\' failed (%s).", client_cert, ERR_reason_error_string(ERR_get_error()));
-        return EXIT_FAILURE;
+        return -1;
     }
 
     if (!key_) {
@@ -195,30 +191,22 @@ nc_tls_client_init(const char *client_cert, const char *client_key, const char *
     }
     if (SSL_CTX_use_PrivateKey_file(tls_opts.tls_ctx, key_, SSL_FILETYPE_PEM) != 1) {
         ERR("Loading the client certificate from \'%s\' failed (%s).", key_, ERR_reason_error_string(ERR_get_error()));
-        return EXIT_FAILURE;
+        return -1;
     }
 
     if (!SSL_CTX_load_verify_locations(tls_opts.tls_ctx, ca_file, ca_dir)) {
         ERR("Failed to load the locations of trusted CA certificates (%s).", ERR_reason_error_string(ERR_get_error()));
-        return EXIT_FAILURE;
+        return -1;
     }
 
-    return EXIT_SUCCESS;
+    return 0;
 }
 
 API void
-nc_tls_client_destroy()
+nc_tls_client_destroy(void)
 {
-    CRYPTO_THREADID crypto_tid;
-
     SSL_CTX_free(tls_opts.tls_ctx);
-
-    EVP_cleanup();
-    CRYPTO_cleanup_all_ex_data();
-    ERR_free_strings();
-    sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
-    CRYPTO_THREADID_current(&crypto_tid);
-    ERR_remove_thread_state(&crypto_tid);
+    tls_opts.tls_ctx = NULL;
 }
 
 API struct nc_session *
@@ -229,7 +217,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
 
     /* was init called? */
     if (!tls_opts.tls_ctx) {
-        ERR("TLS context was not initialized!");
+        ERRARG;
         return NULL;
     }
 
@@ -379,7 +367,7 @@ fail:
 }
 
 API struct nc_session *
-nc_callhome_accept_tls(uint16_t port, int32_t timeout, struct ly_ctx *ctx)
+nc_callhome_accept_tls(uint16_t port, int timeout, struct ly_ctx *ctx)
 {
     int sock, verify;
     char *server_host;

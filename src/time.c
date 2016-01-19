@@ -38,11 +38,12 @@ nc_datetime2time(const char *datetime)
     long int shift, shift_m;
     time_t retval;
 
-    if (datetime == NULL) {
-        return (-1);
-    } else {
-        dt = strdup(datetime);
+    if (!datetime) {
+        ERRARG;
+        return -1;
     }
+
+    dt = strdup(datetime);
 
     if (strlen(dt) < 20 || dt[4] != '-' || dt[7] != '-' || dt[13] != ':' || dt[16] != ':') {
         ERR("Wrong date time format not compliant to RFC 3339.");
@@ -89,7 +90,7 @@ nc_datetime2time(const char *datetime)
     retval -= shift;
 
     free(dt);
-    return (retval);
+    return retval;
 }
 
 API char *
@@ -107,12 +108,12 @@ nc_time2datetime(time_t time, const char *tz)
         tm_ret = localtime_r(&time, &tm);
         setenv("TZ", tz_origin, 1);
 
-        if (tm_ret == NULL) {
-            return (NULL);
+        if (!tm_ret) {
+            return NULL;
         }
     } else {
-        if (gmtime_r(&time, &tm) == NULL) {
-            return (NULL);
+        if (!gmtime_r(&time, &tm)) {
+            return NULL;
         }
     }
 
@@ -122,16 +123,16 @@ nc_time2datetime(time_t time, const char *tz)
         if (tm.tm_gmtoff == 0) {
             /* time is Zulu (UTC) */
             if (asprintf(&zoneshift, "Z") == -1) {
-                ERR("asprintf() failed (%s:%d).", __FILE__, __LINE__);
-                return (NULL);
+                ERRMEM;
+                return NULL;
             }
         } else {
             zonediff = tm.tm_gmtoff;
             zonediff_h = zonediff / 60 / 60;
             zonediff_m = zonediff / 60 % 60;
             if (asprintf(&zoneshift, "%s%02d:%02d", (zonediff < 0) ? "-" : "+", zonediff_h, zonediff_m) == -1) {
-                ERR("asprintf() failed (%s:%d).", __FILE__, __LINE__);
-                return (NULL);
+                ERRMEM;
+                return NULL;
             }
         }
     }
@@ -144,10 +145,10 @@ nc_time2datetime(time_t time, const char *tz)
                  tm.tm_sec,
                  (zoneshift == NULL) ? "" : zoneshift) == -1) {
         free(zoneshift);
-        ERR("asprintf() failed (%s:%d).", __FILE__, __LINE__);
-        return (NULL);
+        ERRMEM;
+        return NULL;
     }
     free(zoneshift);
 
-    return (date);
+    return date;
 }

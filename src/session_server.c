@@ -357,7 +357,7 @@ nc_server_set_idle_timeout(uint16_t idle_timeout)
 API int
 nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **session)
 {
-    if (fdin < 0 || fdout < 0 || !username || !session) {
+    if (!server_opts.ctx || (fdin < 0) || (fdout < 0) || !username || !session) {
         ERRARG;
         return -1;
     }
@@ -408,6 +408,10 @@ nc_ps_new(void)
 API void
 nc_ps_free(struct nc_pollsession *ps)
 {
+    if (!ps) {
+        return;
+    }
+
     free(ps->sessions);
     free(ps);
 }
@@ -664,18 +668,15 @@ retry_poll:
     }
 
     /* reading an RPC and sending a reply must be atomic */
-    ret = session_ti_lock(session, timeout);
-    if (ret > 0) {
-        /* error */
-        return -1;
-    } else if (ret < 0) {
-        /* timeout */
-        return 0;
+    ret = nc_timedlock(session->ti_lock, timeout, NULL);
+    if (ret != 1) {
+        /* error or timeout */
+        return ret;
     }
 
     msgtype = nc_recv_rpc(session, &rpc);
     if (msgtype == NC_MSG_ERROR) {
-        session_ti_unlock(session);
+        pthread_mutex_unlock(session->ti_lock);
         if (session->status != NC_STATUS_RUNNING) {
             return 2;
         }
@@ -685,7 +686,7 @@ retry_poll:
     /* process RPC */
     msgtype = nc_send_reply(session, rpc);
 
-    session_ti_unlock(session);
+    pthread_mutex_unlock(session->ti_lock);
 
     if (msgtype == NC_MSG_ERROR) {
         nc_server_rpc_free(rpc);

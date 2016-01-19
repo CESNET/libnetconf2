@@ -245,9 +245,7 @@ struct nc_pollsession {
 
 NC_MSG_TYPE nc_send_msg(struct nc_session *session, struct lyd_node *op);
 
-int session_ti_lock(struct nc_session *session, int32_t timeout);
-
-int session_ti_unlock(struct nc_session *session);
+int nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed);
 
 /**
  * @brief Fill libyang context in \p session. Context models are based on the stored session

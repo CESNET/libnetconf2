@@ -36,6 +36,11 @@ const char *rpcedit_erropt2str[] = {NULL, "stop-on-error", "continue-on-error", 
 API NC_RPC_TYPE
 nc_rpc_get_type(const struct nc_rpc *rpc)
 {
+    if (!rpc) {
+        ERRARG;
+        return 0;
+    }
+
     return rpc->type;
 }
 
@@ -43,6 +48,11 @@ API struct nc_rpc *
 nc_rpc_generic(const struct lyd_node *data, NC_PARAMTYPE paramtype)
 {
     struct nc_rpc_generic *rpc;
+
+    if (!data) {
+        ERRARG;
+        return NULL;
+    }
 
     if (data->next || (data->prev != data)) {
         ERR("Generic RPC must have a single root node.");
@@ -72,6 +82,11 @@ nc_rpc_generic_xml(const char *xml_str, NC_PARAMTYPE paramtype)
 {
     struct nc_rpc_generic *rpc;
 
+    if (!xml_str) {
+        ERRARG;
+        return NULL;
+    }
+
     rpc = malloc(sizeof *rpc);
     if (!rpc) {
         ERRMEM;
@@ -94,6 +109,11 @@ API struct nc_rpc *
 nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_WD_MODE wd_mode, NC_PARAMTYPE paramtype)
 {
     struct nc_rpc_getconfig *rpc;
+
+    if (!source) {
+        ERRARG;
+        return NULL;
+    }
 
     if (filter && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
         ERR("Filter must either be an XML subtree or an XPath expression.");
@@ -124,6 +144,11 @@ nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, NC_RPC_EDIT_TEST
             NC_RPC_EDIT_ERROPT error_opt, const char *edit_content, NC_PARAMTYPE paramtype)
 {
     struct nc_rpc_edit *rpc;
+
+    if (!target || !edit_content) {
+        ERRARG;
+        return NULL;
+    }
 
     if ((edit_content[0] != '<') && !isalpha(edit_content[0])) {
         ERR("<edit-config> content must either be a URL or a config (XML).");
@@ -156,6 +181,11 @@ nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTORE source, const
             NC_WD_MODE wd_mode, NC_PARAMTYPE paramtype)
 {
     struct nc_rpc_copy *rpc;
+
+    if (!target || !source) {
+        ERRARG;
+        return NULL;
+    }
 
     if (url_or_config_src && (url_or_config_src[0] != '<') && !isalpha(url_or_config_src[0])) {
         ERR("<copy-config> source is neither a URL nor a config (XML).");
@@ -192,6 +222,11 @@ nc_rpc_delete(NC_DATASTORE target, const char *url, NC_PARAMTYPE paramtype)
 {
     struct nc_rpc_delete *rpc;
 
+    if (!target) {
+        ERRARG;
+        return NULL;
+    }
+
     rpc = malloc(sizeof *rpc);
     if (!rpc) {
         ERRMEM;
@@ -215,6 +250,11 @@ nc_rpc_lock(NC_DATASTORE target)
 {
     struct nc_rpc_lock *rpc;
 
+    if (!target) {
+        ERRARG;
+        return NULL;
+    }
+
     rpc = malloc(sizeof *rpc);
     if (!rpc) {
         ERRMEM;
@@ -231,6 +271,11 @@ API struct nc_rpc *
 nc_rpc_unlock(NC_DATASTORE target)
 {
     struct nc_rpc_lock *rpc;
+
+    if (!target) {
+        ERRARG;
+        return NULL;
+    }
 
     rpc = malloc(sizeof *rpc);
     if (!rpc) {
@@ -276,6 +321,11 @@ API struct nc_rpc *
 nc_rpc_kill(uint32_t session_id)
 {
     struct nc_rpc_kill *rpc;
+
+    if (!session_id) {
+        ERRARG;
+        return NULL;
+    }
 
     rpc = malloc(sizeof *rpc);
     if (!rpc) {
@@ -362,6 +412,11 @@ nc_rpc_validate(NC_DATASTORE source, const char *url_or_config, NC_PARAMTYPE par
 {
     struct nc_rpc_validate *rpc;
 
+    if (!source) {
+        ERRARG;
+        return NULL;
+    }
+
     if (url_or_config && (url_or_config[0] != '<') && !isalpha(url_or_config[0])) {
         ERR("<validate> source is neither a URL nor a config (XML).");
         return NULL;
@@ -389,6 +444,11 @@ API struct nc_rpc *
 nc_rpc_getschema(const char *identifier, const char *version, const char *format, NC_PARAMTYPE paramtype)
 {
     struct nc_rpc_getschema *rpc;
+
+    if (!identifier) {
+        ERRARG;
+        return NULL;
+    }
 
     rpc = malloc(sizeof *rpc);
     if (!rpc) {
@@ -556,10 +616,7 @@ nc_rpc_free(struct nc_rpc *rpc)
             free(rpc_subscribe->stop);
         }
         break;
-    case NC_RPC_KILL:
-    case NC_RPC_DISCARD:
-    case NC_RPC_LOCK:
-    case NC_RPC_UNLOCK:
+    default:
         /* nothing special needed */
         break;
     }

@@ -1145,12 +1145,17 @@ nc_tls_make_verify_key(void)
 int
 nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
 {
-    int ret;
+    int ret, elapsed = 0;
     struct pollfd pfd;
+    struct timespec old_ts, new_ts;
 
     pfd.fd = sock;
     pfd.events = POLLIN;
     pfd.revents = 0;
+
+    if (timeout > 0) {
+        clock_gettime(CLOCK_MONOTONIC_RAW, &old_ts);
+    }
 
     /* poll for a new connection */
     errno = 0;
@@ -1165,13 +1170,28 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
         return -1;
     }
 
+    if (timeout > 0) {
+        /* decrease timeout */
+        clock_gettime(CLOCK_MONOTONIC_RAW, &new_ts);
+
+        elapsed = (new_ts.tv_sec - old_ts.tv_sec) * 1000;
+        elapsed += (new_ts.tv_nsec - old_ts.tv_nsec) / 1000000;
+    }
+
     /* data waiting, prepare session */
     session->ti_type = NC_TI_OPENSSL;
+
     /* LOCK */
-    pthread_mutex_lock(&tls_opts.tls_ctx_lock);
+    ret = nc_timedlock(&tls_opts.tls_ctx_lock, timeout, &elapsed);
+    if (ret < 1) {
+        return ret;
+    }
+
     session->ti.tls = SSL_new(tls_opts.tls_ctx);
+
     /* UNLOCK */
     pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
+
     if (!session->ti.tls) {
         ERR("%s: failed to create TLS structure from context.", __func__);
         close(sock);

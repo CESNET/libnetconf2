@@ -192,14 +192,14 @@ int nc_ssh_client_add_keypair(const char *pub_key, const char *priv_key);
  *
  * @param[in] idx Index of the keypair starting with 0.
  *
- * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
+ * @return 0 on success, -1 on error.
  */
 int nc_ssh_client_del_keypair(int idx);
 
 /**
  * @brief Get the number of public an private key pairs set to be used for client authentication.
  *
- * @return Set keypair count.
+ * @return Keypair count.
  */
 int nc_ssh_client_get_keypair_count(void);
 
@@ -210,7 +210,7 @@ int nc_ssh_client_get_keypair_count(void);
  * @param[out] pub_key Path to the public key.
  * @param[out] priv_key Path to the private key.
  *
- * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
+ * @return 0 on success, -1 on error.
  */
 int nc_ssh_client_get_keypair(int idx, const char **pub_key, const char **priv_key);
 
@@ -242,8 +242,7 @@ short int nc_ssh_client_get_auth_pref(NC_SSH_AUTH_TYPE auth_type);
 /**
  * @brief Initialize libssl context with certificates.
  *
- * Must be called before calling nc_connect_tls() or nc_connect_libssl()! This also initializes libssl, if your application
- * uses it, do not initialize it again.
+ * Must be called before calling nc_connect_tls() or nc_connect_libssl()!
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  *
@@ -257,15 +256,13 @@ short int nc_ssh_client_get_auth_pref(NC_SSH_AUTH_TYPE auth_type);
  * @param[in] crl_file Location of the CRL certificate file used to check for revocated certificates.
  * @param[in] crl_dir Location of the CRL certificate directory used to check for revocated certificates.
  *
- * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
+ * @return 0 on success, -1 on error.
  */
 int nc_tls_client_init(const char *client_cert, const char *client_key, const char *ca_file, const char *ca_dir,
                        const char *crl_file, const char *crl_dir);
 
 /**
- * @brief Destroy any dynamically allocated TLS-specific and libssl/librypto context.
- *
- * nc_connect_tls(), nc_connect_libssl() or any libssl/librypto functions cannnot be called after this.
+ * @brief Destroy any dynamically allocated TLS-specific client data.
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  */

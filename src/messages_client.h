@@ -29,6 +29,7 @@
 #include "netconf.h"
 
 typedef enum {
+    NC_RPC_UNKNOWN = 0, /**< invalid RPC. */
     NC_RPC_GENERIC,     /**< user-defined generic RPC. */
 
     /* ietf-netconf */
