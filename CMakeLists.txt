@@ -134,7 +134,7 @@ if(ENABLE_BUILD_TESTS)
 	add_subdirectory(tests)
 endif()
 
-configure_file(src/config.h.in src/config.h)
+configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_SOURCE_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)
 configure_file(nc_client.h.in nc_client.h)
 configure_file(nc_server.h.in nc_server.h)
 
