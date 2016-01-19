@@ -15,4 +15,4 @@ if(ENABLE_VALGRIND_TESTS)
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/src)
-configure_file(config.h.in config.h)
+configure_file("${PROJECT_SOURCE_DIR}/tests/config.h.in" "${PROJECT_SOURCE_DIR}/tests/config.h" ESCAPE_QUOTES @ONLY)
