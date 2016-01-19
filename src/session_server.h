@@ -53,7 +53,9 @@ void nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REAS
  * @brief Initialize the server using a libyang context.
  *
  * The context is not modified internally, only its dictionary is used for holding
- * all the strings.
+ * all the strings. When the dictionary is being written to or removed from,
+ * libnetconf2 always holds ctx lock using nc_ctx_lock(). Reading models is considered
+ * thread-safe as models cannot be removed and are rarely modified.
  *
  * Server capabilities are generated based on its content. Changing the context
  * in ways that result in changed capabilities (adding models, changing features)
@@ -177,11 +179,30 @@ int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
  * new SSH channel request) on one session is handled in one function call.
  *
  * @param[in] ps Pollsession structure to use.
- * @param[in] timeout Poll timeout. 0 for non-blocking call, -1 for infinite waiting.
+ * @param[in] timeout Poll timeout in milliseconds. 0 for non-blocking call, -1 for
+ * infinite waiting.
  * @return 0 on elapsed timeout, 1 if some RPC were processed, 2 if a session from
  * \p ps changed its status (was invalidated), -1 on error.
  */
 int nc_ps_poll(struct nc_pollsession *ps, int timeout);
+
+/**
+ * @brief Lock server context.
+ *
+ * @param[in] timeout Timeout in milliseconds. 0 for non-blocking call, -1 for
+ * infinite waiting.
+ * @param[out] elapsed Elapsed milliseconds will be added to this variable.
+ * Can be NULL.
+ * @return 0 on elapsed timeout, 1 on success, -1 on error.
+ */
+int nc_ctx_lock(int timeout, int *elapsed);
+
+/**
+ * @brief Unlock server context.
+ *
+ * @return 0 on success, -1 on error.
+ */
+int nc_ctx_unlock(void);
 
 #if defined(ENABLE_SSH) || defined(ENABLE_TLS)
 
@@ -208,8 +229,8 @@ int nc_server_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
 /**
  * @brief Accept new sessions on all the listening binds.
  *
- * @param[in] timeout Timeout for receiving a new connection, 0 for non-blocking call,
- * -1 for infinite waiting.
+ * @param[in] timeout Timeout for receiving a new connection in milliseconds, 0 for
+ * non-blocking call, -1 for infinite waiting.
  * @param[out] session New session on success.
  * @return 1 on success, 0 on timeout, -1 or error.
  */

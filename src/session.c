@@ -27,6 +27,7 @@
 #include <libyang/libyang.h>
 
 #include "libnetconf.h"
+#include "session_server.h"
 
 #ifdef ENABLE_SSH
 
@@ -177,16 +178,20 @@ nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed)
     struct timespec ts_timeout, ts_old, ts_new;
 
     if (timeout > 0) {
-        ts_timeout.tv_sec = timeout / 1000;
-        ts_timeout.tv_nsec = (timeout % 1000) * 1000000;
+        clock_gettime(CLOCK_REALTIME, &ts_timeout);
 
-        clock_gettime(CLOCK_REALTIME, &ts_old);
+        if (elapsed) {
+            ts_old = ts_timeout;
+        }
+
+        ts_timeout.tv_sec += timeout / 1000;
+        ts_timeout.tv_nsec += (timeout % 1000) * 1000000;
 
         ret = pthread_mutex_timedlock(lock, &ts_timeout);
 
-        clock_gettime(CLOCK_REALTIME, &ts_new);
-
         if (elapsed) {
+            clock_gettime(CLOCK_REALTIME, &ts_new);
+
             *elapsed += (ts_new.tv_sec - ts_old.tv_sec) * 1000;
             *elapsed += (ts_new.tv_nsec - ts_old.tv_nsec) / 1000000;
         }
@@ -360,8 +365,14 @@ nc_session_free(struct nc_session *session)
         break;
     }
 
+    if (session->side == NC_SERVER) {
+        nc_ctx_lock(-1, NULL);
+    }
     lydict_remove(session->ctx, session->username);
     lydict_remove(session->ctx, session->host);
+    if (session->side == NC_SERVER) {
+        nc_ctx_unlock();
+    }
 
     /* final cleanup */
     if (session->ti_lock) {
@@ -402,11 +413,14 @@ create_cpblts(struct ly_ctx *ctx)
     struct lyd_node_leaf_list **features = NULL, *ns = NULL, *rev = NULL, *name = NULL;
     const char **cpblts;
     const struct lys_module *mod;
-    int size = 10, count, feat_count = 0, i;
+    int size = 10, count, feat_count = 0, i, str_len;
     char str[512];
+
+    nc_ctx_lock(-1, NULL);
 
     yanglib = ly_ctx_info(ctx);
     if (!yanglib) {
+        nc_ctx_unlock();
         return NULL;
     }
 
@@ -517,14 +531,21 @@ create_cpblts(struct ly_ctx *ctx)
                 continue;
             }
 
-            sprintf(str, "%s?module=%s&amp;revision=%s", ns->value_str, name->value_str, rev->value_str);
+            str_len = sprintf(str, "%s?module=%s&amp;revision=%s", ns->value_str, name->value_str, rev->value_str);
             if (feat_count) {
                 strcat(str, "&amp;features=");
+                str_len += 14;
                 for (i = 0; i < feat_count; ++i) {
+                    if (str_len + 1 + strlen(features[i]->value_str) >= 512) {
+                        ERRINT;
+                        break;
+                    }
                     if (i) {
                         strcat(str, ",");
+                        ++str_len;
                     }
                     strcat(str, features[i]->value_str);
+                    str_len += strlen(features[i]->value_str);
                 }
             }
 
@@ -540,6 +561,8 @@ create_cpblts(struct ly_ctx *ctx)
     }
 
     lyd_free(yanglib);
+
+    nc_ctx_unlock();
 
     /* ending NULL capability */
     add_cpblt(ctx, NULL, &cpblts, &size, &count);
@@ -600,24 +623,18 @@ parse_cpblts(struct lyxml_elem *xml, const char ***list)
 }
 
 static NC_MSG_TYPE
-nc_send_hello(struct nc_session *session)
+nc_send_client_hello(struct nc_session *session)
 {
     int r, i;
     const char **cpblts;
 
-    if (session->side == NC_CLIENT) {
-        /* client side hello - send only NETCONF base capabilities */
-        cpblts = malloc(3 * sizeof *cpblts);
-        cpblts[0] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.0", 0);
-        cpblts[1] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.1", 0);
-        cpblts[2] = NULL;
+    /* client side hello - send only NETCONF base capabilities */
+    cpblts = malloc(3 * sizeof *cpblts);
+    cpblts[0] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.0", 0);
+    cpblts[1] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.1", 0);
+    cpblts[2] = NULL;
 
-        r = nc_write_msg(session, NC_MSG_HELLO, cpblts, NULL);
-    } else {
-        cpblts = create_cpblts(session->ctx);
-
-        r = nc_write_msg(session, NC_MSG_HELLO, cpblts, &session->id);
-    }
+    r = nc_write_msg(session, NC_MSG_HELLO, cpblts, NULL);
 
     for (i = 0; cpblts[i]; ++i) {
         lydict_remove(session->ctx, cpblts[i]);
@@ -626,13 +643,37 @@ nc_send_hello(struct nc_session *session)
 
     if (r) {
         return NC_MSG_ERROR;
-    } else {
-        return NC_MSG_HELLO;
     }
+
+    return NC_MSG_HELLO;
 }
 
 static NC_MSG_TYPE
-nc_recv_hello(struct nc_session *session)
+nc_send_server_hello(struct nc_session *session)
+{
+    int r, i;
+    const char **cpblts;
+
+    cpblts = create_cpblts(session->ctx);
+
+    r = nc_write_msg(session, NC_MSG_HELLO, cpblts, &session->id);
+
+    nc_ctx_lock(-1, NULL);
+    for (i = 0; cpblts[i]; ++i) {
+        lydict_remove(session->ctx, cpblts[i]);
+    }
+    nc_ctx_unlock();
+    free(cpblts);
+
+    if (r) {
+        return NC_MSG_ERROR;
+    }
+
+    return NC_MSG_HELLO;
+}
+
+static NC_MSG_TYPE
+nc_recv_client_hello(struct nc_session *session)
 {
     struct lyxml_elem *xml = NULL, *node;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
@@ -646,67 +687,43 @@ nc_recv_hello(struct nc_session *session)
     switch(msgtype) {
     case NC_MSG_HELLO:
         /* parse <hello> data */
-        if (session->side == NC_SERVER) {
-            /* get know NETCONF version */
-            LY_TREE_FOR(xml->child, node) {
-                if (!node->ns || !node->ns->value || strcmp(node->ns->value, NC_NS_BASE)) {
-                    continue;
-                } else if (strcmp(node->name, "capabilities")) {
-                    ERR("Unexpected <%s> element in client's <hello>.", node->name);
+        LY_TREE_FOR(xml->child, node) {
+            if (!node->ns || !node->ns->value || strcmp(node->ns->value, NC_NS_BASE)) {
+                continue;
+            } else if (!strcmp(node->name, "session-id")) {
+                if (!node->content || !strlen(node->content)) {
+                    ERR("No value of <session-id> element in server's <hello>.");
                     goto error;
                 }
-
-                if (flag) {
-                    /* multiple capabilities elements */
-                    ERR("Invalid <hello> message (multiple <capabilities> elements).");
+                str = NULL;
+                id = strtoll(node->content, &str, 10);
+                if (*str || id < 1 || id > UINT32_MAX) {
+                    ERR("Invalid value of <session-id> element in server's <hello>.");
                     goto error;
                 }
-                flag = 1;
-
-                if ((ver = parse_cpblts(node, NULL)) < 0) {
-                    goto error;
-                }
-                session->version = ver;
-            }
-        } else { /* NC_CLIENT */
-            LY_TREE_FOR(xml->child, node) {
-                if (!node->ns || !node->ns->value || strcmp(node->ns->value, NC_NS_BASE)) {
-                    continue;
-                } else if (!strcmp(node->name, "session-id")) {
-                    if (!node->content || !strlen(node->content)) {
-                        ERR("No value of <session-id> element in server's <hello>.");
-                        goto error;
-                    }
-                    str = NULL;
-                    id = strtoll(node->content, &str, 10);
-                    if (*str || id < 1 || id > UINT32_MAX) {
-                        ERR("Invalid value of <session-id> element in server's <hello>.");
-                        goto error;
-                    }
-                    session->id = (uint32_t)id;
-                    continue;
-                } else if (strcmp(node->name, "capabilities")) {
-                    ERR("Unexpected <%s> element in client's <hello>.", node->name);
-                    goto error;
-                }
-
-                if (flag) {
-                    /* multiple capabilities elements */
-                    ERR("Invalid <hello> message (multiple <capabilities> elements).");
-                    goto error;
-                }
-                flag = 1;
-
-                if ((ver = parse_cpblts(node, &session->cpblts)) < 0) {
-                    goto error;
-                }
-                session->version = ver;
-            }
-
-            if (!session->id) {
-                ERR("Missing <session-id> in server's <hello>.");
+                session->id = (uint32_t)id;
+                continue;
+            } else if (strcmp(node->name, "capabilities")) {
+                ERR("Unexpected <%s> element in client's <hello>.", node->name);
                 goto error;
             }
+
+            if (flag) {
+                /* multiple capabilities elements */
+                ERR("Invalid <hello> message (multiple <capabilities> elements).");
+                goto error;
+            }
+            flag = 1;
+
+            if ((ver = parse_cpblts(node, &session->cpblts)) < 0) {
+                goto error;
+            }
+            session->version = ver;
+        }
+
+        if (!session->id) {
+            ERR("Missing <session-id> in server's <hello>.");
+            goto error;
         }
         break;
     case NC_MSG_ERROR:
@@ -729,17 +746,81 @@ error:
     return NC_MSG_ERROR;
 }
 
+static NC_MSG_TYPE
+nc_recv_server_hello(struct nc_session *session)
+{
+    struct lyxml_elem *xml = NULL, *node;
+    NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
+    int ver = -1;
+    int flag = 0;
+
+    /* TODO */
+    msgtype = nc_read_msg_poll(session, NC_CLIENT_HELLO_TIMEOUT * 1000, &xml);
+
+    switch(msgtype) {
+    case NC_MSG_HELLO:
+        /* get know NETCONF version */
+        LY_TREE_FOR(xml->child, node) {
+            if (!node->ns || !node->ns->value || strcmp(node->ns->value, NC_NS_BASE)) {
+                continue;
+            } else if (strcmp(node->name, "capabilities")) {
+                ERR("Unexpected <%s> element in client's <hello>.", node->name);
+                msgtype = NC_MSG_ERROR;
+                goto cleanup;
+            }
+
+            if (flag) {
+                /* multiple capabilities elements */
+                ERR("Invalid <hello> message (multiple <capabilities> elements).");
+                msgtype = NC_MSG_ERROR;
+                goto cleanup;
+            }
+            flag = 1;
+
+            if ((ver = parse_cpblts(node, NULL)) < 0) {
+                msgtype = NC_MSG_ERROR;
+                goto cleanup;
+            }
+            session->version = ver;
+        }
+        break;
+    case NC_MSG_ERROR:
+        /* nothing special, just pass it out */
+        break;
+    default:
+        ERR("Unexpected message received instead of <hello>.");
+        msgtype = NC_MSG_ERROR;
+    }
+
+cleanup:
+    nc_ctx_lock(-1, NULL);
+    lyxml_free(session->ctx, xml);
+    nc_ctx_unlock();
+
+    return msgtype;
+}
+
 int
 nc_handshake(struct nc_session *session)
 {
     NC_MSG_TYPE type;
 
-    type = nc_send_hello(session);
+    if (session->side == NC_CLIENT) {
+        type = nc_send_client_hello(session);
+    } else {
+        type = nc_send_server_hello(session);
+    }
+
     if (type != NC_MSG_HELLO) {
         return 1;
     }
 
-    type = nc_recv_hello(session);
+    if (session->side == NC_CLIENT) {
+        type = nc_recv_client_hello(session);
+    } else {
+        type = nc_recv_server_hello(session);
+    }
+
     if (type != NC_MSG_HELLO) {
         return 1;
     }

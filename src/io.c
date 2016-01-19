@@ -20,7 +20,8 @@
  *
  */
 
-#define _GNU_SOURCE /* asprintf */
+#define _GNU_SOURCE /* asprintf, ppoll */
+#define _POSIX_SOUCE /* signals */
 #include <assert.h>
 #include <errno.h>
 #include <poll.h>
@@ -28,6 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include <libyang/libyang.h>
 
@@ -389,9 +391,10 @@ error:
 static int
 nc_read_poll(struct nc_session *session, int timeout)
 {
+    sigset_t sigmask;
     int ret = -2;
     struct pollfd fds;
-    struct timespec old_ts, new_ts;
+    struct timespec ts_timeout;
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
         ERR("Session %u: invalid session to poll.", session->id);
@@ -435,22 +438,17 @@ nc_read_poll(struct nc_session *session, int timeout)
         /* poll only if it is not an SSH session */
         if (ret == -2) {
             fds.events = POLLIN;
+            fds.revents = 0;
 
-            errno = 0;
-            while (((ret = poll(&fds, 1, timeout)) == -1) && (errno == EINTR)) {
-                /* poll was interrupted */
+            if (timeout > -1) {
+                clock_gettime(CLOCK_REALTIME, &ts_timeout);
                 if (timeout > 0) {
-                    clock_gettime(CLOCK_MONOTONIC_RAW, &new_ts);
-
-                    timeout -= (new_ts.tv_sec - old_ts.tv_sec) * 1000;
-                    timeout -= (new_ts.tv_nsec - old_ts.tv_nsec) / 1000000;
-                    if (timeout < 0) {
-                        ERRINT;
-                        return -1;
-                    }
-                    old_ts = new_ts;
+                    ts_timeout.tv_sec += timeout / 1000;
+                    ts_timeout.tv_nsec += (timeout % 1000) * 1000000;
                 }
             }
+            sigfillset(&sigmask);
+            ret = ppoll(&fds, 1, (timeout == -1 ? NULL : &ts_timeout), &sigmask);
         }
 
         break;
@@ -463,7 +461,7 @@ nc_read_poll(struct nc_session *session, int timeout)
     /* process the poll result, unified ret meaning for poll and ssh_channel poll */
     if (ret < 0) {
         /* poll failed - something really bad happened, close the session */
-        ERR("Session %u: poll error (%s).", session->id, strerror(errno));
+        ERR("Session %u: ppoll error (%s).", session->id, strerror(errno));
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_OTHER;
         return -1;
@@ -814,7 +812,7 @@ nc_write_error(struct wclb_arg *arg, struct nc_server_error *err)
         nc_write_clb((void *)arg, "</error-message>", 16);
     }
 
-    if (err->sid || err->attr || err->elem || err->ns || err->other) {
+    if (err->sid || err->attr_count || err->elem_count || err->ns_count || err->other_count) {
         nc_write_clb((void *)arg, "<error-info>", 12);
 
         if (err->sid) {

@@ -76,12 +76,6 @@ sshauth_password(const char *username, const char *hostname)
     struct termios newterm, oldterm;
     FILE *tty;
 
-    buf = malloc(buflen * sizeof *buf);
-    if (!buf) {
-        ERRMEM;
-        return NULL;
-    }
-
     if (!(tty = fopen("/dev/tty", "r+"))) {
         ERR("Unable to open the current terminal (%s).", strerror(errno));
         return NULL;
@@ -89,6 +83,7 @@ sshauth_password(const char *username, const char *hostname)
 
     if (tcgetattr(fileno(tty), &oldterm)) {
         ERR("Unable to get terminal settings (%s).", strerror(errno));
+        fclose(tty);
         return NULL;
     }
 
@@ -102,6 +97,14 @@ sshauth_password(const char *username, const char *hostname)
     tcflush(fileno(tty), TCIFLUSH);
     if (tcsetattr(fileno(tty), TCSANOW, &newterm)) {
         ERR("Unable to change terminal settings for hiding password (%s).", strerror(errno));
+        fclose(tty);
+        return NULL;
+    }
+
+    buf = malloc(buflen * sizeof *buf);
+    if (!buf) {
+        ERRMEM;
+        fclose(tty);
         return NULL;
     }
 
@@ -120,6 +123,7 @@ sshauth_password(const char *username, const char *hostname)
                 if (tcsetattr(fileno(tty), TCSANOW, &oldterm) != 0) {
                     ERR("Unable to restore terminal settings (%s).", strerror(errno));
                 }
+                fclose(tty);
                 return NULL;
             } else {
                 buf = newbuf;
@@ -160,23 +164,27 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
 
     if (tcgetattr(fileno(tty), &oldterm) != 0) {
         ERR("Unable to get terminal settings (%s).", strerror(errno));
+        fclose(tty);
         return NULL;
     }
 
     if (auth_name && (!fwrite(auth_name, sizeof(char), strlen(auth_name), tty)
             || !fwrite("\n", sizeof(char), 1, tty))) {
         ERR("Writing the auth method name into stdout failed.");
+        fclose(tty);
         return NULL;
     }
 
     if (instruction && (!fwrite(instruction, sizeof(char), strlen(instruction), tty)
             || !fwrite("\n", sizeof(char), 1, tty))) {
         ERR("Writing the instruction into stdout failed.");
+        fclose(tty);
         return NULL;
     }
 
     if (!fwrite(prompt, sizeof(char), strlen(prompt), tty)) {
         ERR("Writing the authentication prompt into stdout failed.");
+        fclose(tty);
         return NULL;
     }
     fflush(tty);
@@ -187,6 +195,7 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
         tcflush(fileno(tty), TCIFLUSH);
         if (tcsetattr(fileno(tty), TCSANOW, &newterm)) {
             ERR("Unable to change terminal settings for hiding password (%s).", strerror(errno));
+            fclose(tty);
             return NULL;
         }
     }
@@ -199,6 +208,7 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
         if (tcsetattr(fileno(tty), TCSANOW, &oldterm)) {
             ERR("Unable to restore terminal settings (%s).", strerror(errno));
         }
+        fclose(tty);
         return NULL;
     }
 
@@ -214,6 +224,7 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
                 if (tcsetattr(fileno(tty), TCSANOW, &oldterm)) {
                     ERR("Unable to restore terminal settings (%s).", strerror(errno));
                 }
+                fclose(tty);
                 return NULL;
             } else {
                 response = newtext;
@@ -260,6 +271,7 @@ sshauth_passphrase(const char* privkey_path)
 
     if (tcgetattr(fileno(tty), &oldterm)) {
         ERR("Unable to get terminal settings (%s).", strerror(errno));
+        fclose(tty);
         return NULL;
     }
 
@@ -273,6 +285,7 @@ sshauth_passphrase(const char* privkey_path)
     tcflush(fileno(tty), TCIFLUSH);
     if (tcsetattr(fileno(tty), TCSANOW, &newterm)) {
         ERR("Unable to change terminal settings for hiding password (%s).", strerror(errno));
+        fclose(tty);
         return NULL;
     }
 
@@ -290,7 +303,7 @@ sshauth_passphrase(const char* privkey_path)
                 if (tcsetattr(fileno(tty), TCSANOW, &oldterm)) {
                     ERR("Unable to restore terminal settings (%s).", strerror(errno));
                 }
-
+                fclose(tty);
                 return NULL;
             }
             buf = newbuf;
@@ -727,7 +740,6 @@ connect_ssh_session_netconf(struct nc_session *session)
         }
         if ((userauthlist & SSH_AUTH_METHOD_PUBLICKEY) && (ssh_opts.auth_pref[2].value > pref)) {
             auth = NC_SSH_AUTH_PUBLICKEY;
-            pref = ssh_opts.auth_pref[2].value;
         }
 
         if (!auth) {

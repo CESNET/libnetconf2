@@ -172,6 +172,7 @@ setup_write(void **state)
     /* ietf-netconf */
     fd = open(TESTS_DIR"../schemas/ietf-netconf.yin", O_RDONLY);
     if (fd == -1) {
+        free(w);
         return -1;
     }
 
@@ -189,7 +190,6 @@ setup_write(void **state)
     w->rpc = nc_rpc_lock(NC_DATASTORE_RUNNING);
     assert_non_null(w->rpc);
 
-    close(fd);
     w->session->ti.fd.in = -1;
 
     *state = w;

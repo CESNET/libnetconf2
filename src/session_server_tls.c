@@ -31,6 +31,7 @@
 #include <openssl/x509v3.h>
 
 #include "libnetconf.h"
+#include "session_server.h"
 
 extern struct nc_server_opts server_opts;
 struct nc_tls_server_opts tls_opts = {
@@ -635,6 +636,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     }
 
     /* cert-to-name match, now to extract the specific field from the peer cert */
+    nc_ctx_lock(-1, NULL);
     if (map_type == NC_TLS_CTN_SPECIFIED) {
         session->username = lydict_insert(server_opts.ctx, username, 0);
     } else {
@@ -647,6 +649,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         }
         session->username = lydict_insert_zc(server_opts.ctx, cp);
     }
+    nc_ctx_unlock();
 
     VRB("Cert verify CTN: new client username recognized as \"%s\".", session->username);
     return 1;
@@ -980,6 +983,8 @@ nc_tls_server_destroy_certs(void)
     pthread_mutex_lock(&tls_opts.tls_ctx_lock);
 
     if (!tls_opts.tls_ctx) {
+        /* UNLOCK */
+        pthread_mutex_unlock(&tls_opts.tls_ctx_lock);
         return;
     }
 
@@ -1050,6 +1055,8 @@ nc_tls_server_destroy_crls(void)
     pthread_mutex_lock(&tls_opts.crl_lock);
 
     if (!tls_opts.crl_store) {
+        /* UNLOCK */
+        pthread_mutex_unlock(&tls_opts.crl_lock);
         return;
     }
 
@@ -1075,10 +1082,12 @@ nc_tls_server_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE m
     ++tls_opts.ctn_count;
     tls_opts.ctn = realloc(tls_opts.ctn, tls_opts.ctn_count * sizeof *tls_opts.ctn);
 
+    nc_ctx_lock(-1, NULL);
     tls_opts.ctn[tls_opts.ctn_count - 1].id = id;
     tls_opts.ctn[tls_opts.ctn_count - 1].fingerprint = lydict_insert(server_opts.ctx, fingerprint, 0);
     tls_opts.ctn[tls_opts.ctn_count - 1].map_type = map_type;
     tls_opts.ctn[tls_opts.ctn_count - 1].name = lydict_insert(server_opts.ctx, name, 0);
+    nc_ctx_unlock();
 
     /* UNLOCK */
     pthread_mutex_unlock(&tls_opts.ctn_lock);
@@ -1096,12 +1105,14 @@ nc_tls_server_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE ma
     pthread_mutex_lock(&tls_opts.ctn_lock);
 
     if ((id < 0) && !fingerprint && !map_type && !name) {
+        nc_ctx_lock(-1, NULL);
         for (i = 0; i < tls_opts.ctn_count; ++i) {
             lydict_remove(server_opts.ctx, tls_opts.ctn[i].fingerprint);
             lydict_remove(server_opts.ctx, tls_opts.ctn[i].name);
 
             ret = 0;
         }
+        nc_ctx_unlock();
         free(tls_opts.ctn);
         tls_opts.ctn = NULL;
         tls_opts.ctn_count = 0;
@@ -1111,8 +1122,10 @@ nc_tls_server_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE ma
                     && (!fingerprint || !strcmp(tls_opts.ctn[i].fingerprint, fingerprint))
                     && (!map_type || (tls_opts.ctn[i].map_type == map_type))
                     && (!name || (tls_opts.ctn[i].name && !strcmp(tls_opts.ctn[i].name, name)))) {
+                nc_ctx_lock(-1, NULL);
                 lydict_remove(server_opts.ctx, tls_opts.ctn[i].fingerprint);
                 lydict_remove(server_opts.ctx, tls_opts.ctn[i].name);
+                nc_ctx_unlock();
 
                 --tls_opts.ctn_count;
                 memcpy(&tls_opts.ctn[i], &tls_opts.ctn[tls_opts.ctn_count], sizeof *tls_opts.ctn);

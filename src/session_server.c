@@ -31,11 +31,13 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <time.h>
 
 #include "libnetconf.h"
 #include "session_server.h"
 
 struct nc_server_opts server_opts = {
+    .ctx_lock = PTHREAD_MUTEX_INITIALIZER,
     .bind_lock = PTHREAD_MUTEX_INITIALIZER
 };
 
@@ -220,7 +222,7 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
     const struct lys_module *module;
     struct nc_server_error *err;
     struct lyd_node *child, *data = NULL;
-    const struct lys_node *sdata;
+    const struct lys_node *sdata = NULL;
 
     LY_TREE_FOR(rpc->child, child) {
         if (!strcmp(child->schema->name, "identifier")) {
@@ -263,7 +265,9 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
         sdata = lys_get_node(module, "/get-schema/output/data");
     }
     if (model_data && sdata) {
+        nc_ctx_lock(-1, NULL);
         data = lyd_output_new_anyxml(sdata, model_data);
+        nc_ctx_unlock();
     }
     free(model_data);
     if (!data) {
@@ -508,7 +512,9 @@ nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
     switch (msgtype) {
     case NC_MSG_RPC:
         *rpc = malloc(sizeof **rpc);
+        nc_ctx_lock(-1, NULL);
         (*rpc)->tree = lyd_parse_xml(server_opts.ctx, &xml->child, LYD_OPT_DESTRUCT | LYD_OPT_RPC);
+        nc_ctx_unlock();
         (*rpc)->root = xml;
         break;
     case NC_MSG_HELLO:
@@ -712,6 +718,27 @@ retry_poll:
     return 1;
 }
 
+API int
+nc_ctx_lock(int timeout, int *elapsed)
+{
+    return nc_timedlock(&server_opts.ctx_lock, timeout, elapsed);
+}
+
+API int
+nc_ctx_unlock(void)
+{
+    int ret;
+
+    ret = pthread_mutex_unlock(&server_opts.ctx_lock);
+
+    if (ret) {
+        ERR("Mutex unlock failed (%s).", strerror(ret));
+        return -1;
+    }
+
+    return 0;
+}
+
 #if defined(ENABLE_SSH) || defined(ENABLE_TLS)
 
 API int
@@ -735,7 +762,9 @@ nc_server_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL 
     ++server_opts.bind_count;
     server_opts.binds = realloc(server_opts.binds, server_opts.bind_count * sizeof *server_opts.binds);
 
-    server_opts.binds[server_opts.bind_count - 1].address = strdup(address);
+    nc_ctx_lock(-1, NULL);
+    server_opts.binds[server_opts.bind_count - 1].address = lydict_insert(server_opts.ctx, address, 0);
+    nc_ctx_unlock();
     server_opts.binds[server_opts.bind_count - 1].port = port;
     server_opts.binds[server_opts.bind_count - 1].sock = sock;
     server_opts.binds[server_opts.bind_count - 1].ti = ti;
@@ -756,12 +785,14 @@ nc_server_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
     pthread_mutex_lock(&server_opts.bind_lock);
 
     if (!address && !port && !ti) {
+        nc_ctx_lock(-1, NULL);
         for (i = 0; i < server_opts.bind_count; ++i) {
             close(server_opts.binds[i].sock);
-            free(server_opts.binds[i].address);
+            lydict_remove(server_opts.ctx, server_opts.binds[i].address);
 
             ret = 0;
         }
+        nc_ctx_unlock();
         free(server_opts.binds);
         server_opts.binds = NULL;
         server_opts.bind_count = 0;
@@ -771,7 +802,9 @@ nc_server_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
                     && (!port || (server_opts.binds[i].port == port))
                     && (!ti || (server_opts.binds[i].ti == ti))) {
                 close(server_opts.binds[i].sock);
-                free(server_opts.binds[i].address);
+                nc_ctx_lock(-1, NULL);
+                lydict_remove(server_opts.ctx, server_opts.binds[i].address);
+                nc_ctx_unlock();
 
                 --server_opts.bind_count;
                 memcpy(&server_opts.binds[i], &server_opts.binds[server_opts.bind_count], sizeof *server_opts.binds);
@@ -808,7 +841,7 @@ nc_accept(int timeout, struct nc_session **session)
     /* UNLOCK */
     pthread_mutex_unlock(&server_opts.bind_lock);
 
-    if (ret < 1) {
+    if (ret < 0) {
         return ret;
     }
     sock = ret;
@@ -823,7 +856,9 @@ nc_accept(int timeout, struct nc_session **session)
     (*session)->side = NC_SERVER;
     (*session)->ctx = server_opts.ctx;
     (*session)->flags = NC_SESSION_SHAREDCTX;
+    nc_ctx_lock(-1, NULL);
     (*session)->host = lydict_insert_zc(server_opts.ctx, host);
+    nc_ctx_unlock();
     (*session)->port = port;
 
     /* transport lock */

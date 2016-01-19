@@ -479,19 +479,11 @@ next_message:
 
     /* we read rpc-reply, want a notif */
     if (!msgid && (msgtype == NC_MSG_REPLY)) {
-        /* just check that message-id is fine */
+        /* just check that there is a message-id */
         str_msgid = lyxml_get_attr(xml, "message-id", NULL);
         if (!str_msgid) {
             pthread_mutex_unlock(session->ti_lock);
             ERR("Session %u: received a <rpc-reply> with no message-id, discarding.", session->id);
-            lyxml_free(session->ctx, xml);
-            goto next_message;
-        }
-        cur_msgid = strtoul(str_msgid, &ptr, 10);
-        if (ptr[0]) {
-            pthread_mutex_unlock(session->ti_lock);
-            ERR("Session %u: received a <rpc-reply> with an invalid message-id (\"%s\"), discarding.",
-                session->id, str_msgid);
             lyxml_free(session->ctx, xml);
             goto next_message;
         }

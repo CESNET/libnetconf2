@@ -112,6 +112,7 @@ struct nc_tls_server_opts {
 
 struct nc_server_opts {
     struct ly_ctx *ctx;
+    pthread_mutex_t ctx_lock;
 
     NC_WD_MODE wd_basic_mode;
     int wd_also_supported;
@@ -121,7 +122,7 @@ struct nc_server_opts {
     uint16_t idle_timeout;
 
     struct nc_bind {
-        char *address;
+        const char *address;
         uint16_t port;
         int sock;
         NC_TRANSPORT_IMPL ti;

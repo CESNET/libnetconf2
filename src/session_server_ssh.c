@@ -31,6 +31,7 @@
 #include <errno.h>
 
 #include "libnetconf.h"
+#include "session_server.h"
 
 extern struct nc_server_opts server_opts;
 struct nc_ssh_server_opts ssh_opts = {
@@ -157,8 +158,10 @@ nc_ssh_server_add_authkey(const char *pubkey_path, const char *username)
     ++ssh_opts.authkey_count;
     ssh_opts.authkeys = realloc(ssh_opts.authkeys, ssh_opts.authkey_count * sizeof *ssh_opts.authkeys);
 
+    nc_ctx_lock(-1, NULL);
     ssh_opts.authkeys[ssh_opts.authkey_count - 1].path = lydict_insert(server_opts.ctx, pubkey_path, 0);
     ssh_opts.authkeys[ssh_opts.authkey_count - 1].username = lydict_insert(server_opts.ctx, username, 0);
+    nc_ctx_unlock();
 
     /* UNLOCK */
     pthread_mutex_unlock(&ssh_opts.authkey_lock);
@@ -176,12 +179,14 @@ nc_ssh_server_del_authkey(const char *pubkey_path, const char *username)
     pthread_mutex_lock(&ssh_opts.authkey_lock);
 
     if (!pubkey_path && !username) {
+        nc_ctx_lock(-1, NULL);
         for (i = 0; i < ssh_opts.authkey_count; ++i) {
             lydict_remove(server_opts.ctx, ssh_opts.authkeys[i].path);
             lydict_remove(server_opts.ctx, ssh_opts.authkeys[i].username);
 
             ret = 0;
         }
+        nc_ctx_unlock();
         free(ssh_opts.authkeys);
         ssh_opts.authkeys = NULL;
         ssh_opts.authkey_count = 0;
@@ -189,8 +194,10 @@ nc_ssh_server_del_authkey(const char *pubkey_path, const char *username)
         for (i = 0; i < ssh_opts.authkey_count; ++i) {
             if ((!pubkey_path || !strcmp(ssh_opts.authkeys[i].path, pubkey_path))
                     && (!username || !strcmp(ssh_opts.authkeys[i].username, username))) {
+                nc_ctx_lock(-1, NULL);
                 lydict_remove(server_opts.ctx, ssh_opts.authkeys[i].path);
                 lydict_remove(server_opts.ctx, ssh_opts.authkeys[i].username);
+                nc_ctx_unlock();
 
                 --ssh_opts.authkey_count;
                 memcpy(&ssh_opts.authkeys[i], &ssh_opts.authkeys[ssh_opts.authkey_count], sizeof *ssh_opts.authkeys);
@@ -232,7 +239,7 @@ auth_password_get_pwd_hash(const char *username)
 
     getpwnam_r(username, &pwd_buf, buf, 256, &pwd);
     if (!pwd) {
-        VRB("User '%s' not found locally.", username);
+        VRB("User \"%s\" not found locally.", username);
         return NULL;
     }
 
@@ -671,6 +678,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
         if (ret != SSH_OK) {
             ERR("Failed to receive SSH messages on a session (%s).",
                 ssh_get_error(session->ti.libssh.session));
+            pthread_mutex_unlock(session->ti_lock);
             return -1;
         }
 
