@@ -1117,12 +1117,12 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     /* open a channel */
     new_session->ti.libssh.channel = ssh_channel_new(new_session->ti.libssh.session);
     if (ssh_channel_open_session(new_session->ti.libssh.channel) != SSH_OK) {
-        ERR("Opening an SSH channel failed (%s).", ssh_get_error(session->ti.libssh.session));
+        ERR("Opening an SSH channel failed (%s).", ssh_get_error(new_session->ti.libssh.session));
         goto fail;
     }
     /* execute the NETCONF subsystem on the channel */
     if (ssh_channel_request_subsystem(new_session->ti.libssh.channel, "netconf") != SSH_OK) {
-        ERR("Starting the \"netconf\" SSH subsystem failed (%s).", ssh_get_error(session->ti.libssh.session));
+        ERR("Starting the \"netconf\" SSH subsystem failed (%s).", ssh_get_error(new_session->ti.libssh.session));
         goto fail;
     }
 
@@ -1130,9 +1130,9 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     if (!ctx) {
         ctx = ly_ctx_new(SCHEMAS_DIR);
     } else {
-        session->flags |= NC_SESSION_SHAREDCTX;
+        new_session->flags |= NC_SESSION_SHAREDCTX;
     }
-    session->ctx = ctx;
+    new_session->ctx = ctx;
 
     /* NETCONF handshake */
     if (nc_handshake(new_session)) {
@@ -1140,16 +1140,16 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     }
     new_session->status = NC_STATUS_RUNNING;
 
-    if (nc_ctx_check_and_fill(session)) {
+    pthread_mutex_unlock(new_session->ti_lock);
+
+    if (nc_ctx_check_and_fill(new_session)) {
         goto fail;
     }
 
     /* store information into session and the dictionary */
-    session->host = lydict_insert(ctx, session->host, 0);
-    session->port = session->port;
-    session->username = lydict_insert(ctx, session->username, 0);
-
-    pthread_mutex_unlock(new_session->ti_lock);
+    new_session->host = lydict_insert(ctx, session->host, 0);
+    new_session->port = session->port;
+    new_session->username = lydict_insert(ctx, session->username, 0);
 
     /* append to the session ring list */
     if (!session->ti.libssh.next) {
