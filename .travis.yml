@@ -49,5 +49,5 @@ before_install:
 #    branch_pattern: coverity
 
 script: 
-  - mkdir build && cd build ; cmake .. && make -j2 && make test
+  - mkdir build && cd build ; cmake -DENABLE_TLS=ON -DENABLE_SSH=ON .. && make -j2 && make test
 
