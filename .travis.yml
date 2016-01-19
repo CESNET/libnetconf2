@@ -27,7 +27,6 @@ before_install:
   - cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
   - cd ../..
 
-  - sudo apt-get install -y libpcre-dev
   - git clone https://github.com/CESNET/libyang.git
   - mkdir libyang/build && cd libyang/build
   - git checkout devel
