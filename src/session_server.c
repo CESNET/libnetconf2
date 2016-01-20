@@ -599,21 +599,39 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
             ERR("Session %u: session not running.", ps->sessions[i].session->id);
             return -1;
         }
+
+        if (ps->sessions[i].revents) {
+            break;
+        }
     }
 
     if (timeout > 0) {
         clock_gettime(CLOCK_MONOTONIC_RAW, &old_ts);
     }
 
+    if (i == ps->session_count) {
+        /* no leftover event */
+        i = 0;
 retry_poll:
-    ret = poll((struct pollfd *)ps->sessions, ps->session_count, timeout);
-    if (ret < 1) {
-        return ret;
+        ret = poll((struct pollfd *)ps->sessions, ps->session_count, timeout);
+        if (ret < 1) {
+            return ret;
+        }
     }
 
-    /* find the first fd with POLLIN, we don't care if there are more */
-    for (i = 0; i < ps->session_count; ++i) {
-        if (ps->sessions[i].revents & POLLIN) {
+    /* find the first fd with POLLIN, we don't care if there are more now */
+    for (; i < ps->session_count; ++i) {
+        if (ps->sessions[i].revents & POLLHUP) {
+            ERR("Session %u: communication socket unexpectedly closed.", ps->sessions[i].session->id);
+            ps->sessions[i].session->status = NC_STATUS_INVALID;
+            ps->sessions[i].session->term_reason = NC_SESSION_TERM_DROPPED;
+            return 3;
+        } else if (ps->sessions[i].revents & POLLERR) {
+            ERR("Session %u: communication socket error.", ps->sessions[i].session->id);
+            ps->sessions[i].session->status = NC_STATUS_INVALID;
+            ps->sessions[i].session->term_reason = NC_SESSION_TERM_OTHER;
+            return 3;
+        } else if (ps->sessions[i].revents & POLLIN) {
 #ifdef ENABLE_SSH
             if (ps->sessions[i].session->ti_type == NC_TI_LIBSSH) {
                 /* things are not that simple with SSH, we need to check the channel */
@@ -644,23 +662,26 @@ retry_poll:
                         }
                     }
                     /* check other sessions */
+                    ps->sessions[i].revents = 0;
                     continue;
                 } else if (ret == SSH_ERROR) {
                     ERR("Session %u: SSH channel error (%s).", ps->sessions[i].session->id,
                         ssh_get_error(ps->sessions[i].session->ti.libssh.session));
                     ps->sessions[i].session->status = NC_STATUS_INVALID;
                     ps->sessions[i].session->term_reason = NC_SESSION_TERM_OTHER;
-                    return 2;
+                    return 3;
                 } else if (ret == SSH_EOF) {
                     ERR("Session %u: communication channel unexpectedly closed (libssh).",
                         ps->sessions[i].session->id);
                     ps->sessions[i].session->status = NC_STATUS_INVALID;
                     ps->sessions[i].session->term_reason = NC_SESSION_TERM_DROPPED;
-                    return 2;
+                    return 3;
                 }
             }
 #endif /* ENABLE_SSH */
 
+            /* we are going to process it now */
+            ps->sessions[i].revents = 0;
             break;
         }
     }
@@ -685,7 +706,7 @@ retry_poll:
         }
     }
 
-    /* reading an RPC and sending a reply must be atomic */
+    /* reading an RPC and sending a reply must be atomic (no other RPC should be read) */
     ret = nc_timedlock(session->ti_lock, timeout, NULL);
     if (ret != 1) {
         /* error or timeout */
@@ -696,7 +717,7 @@ retry_poll:
     if (msgtype == NC_MSG_ERROR) {
         pthread_mutex_unlock(session->ti_lock);
         if (session->status != NC_STATUS_RUNNING) {
-            return 2;
+            return 3;
         }
         return -1;
     }
@@ -709,12 +730,20 @@ retry_poll:
     if (msgtype == NC_MSG_ERROR) {
         nc_server_rpc_free(rpc);
         if (session->status != NC_STATUS_RUNNING) {
-            return 2;
+            return 3;
         }
         return -1;
     }
 
     nc_server_rpc_free(rpc);
+
+    /* is there some other socket waiting? */
+    for (++i; i < ps->session_count; ++i) {
+        if (ps->sessions[i].revents) {
+            return 2;
+        }
+    }
+
     return 1;
 }
 
