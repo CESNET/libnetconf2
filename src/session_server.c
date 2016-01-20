@@ -406,6 +406,7 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
         goto fail;
     }
     (*session)->status = NC_STATUS_RUNNING;
+    (*session)->last_rpc = time(NULL);
 
     return 0;
 
@@ -584,6 +585,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
 {
     int ret;
     uint16_t i;
+    time_t cur_time;
     NC_MSG_TYPE msgtype;
     struct nc_session *session;
     struct nc_server_rpc *rpc;
@@ -594,10 +596,20 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
         return -1;
     }
 
+    cur_time = time(NULL);
+
     for (i = 0; i < ps->session_count; ++i) {
         if (ps->sessions[i].session->status != NC_STATUS_RUNNING) {
             ERR("Session %u: session not running.", ps->sessions[i].session->id);
             return -1;
+        }
+
+        /* TODO invalidate only sessions without subscription */
+        if (ps->sessions[i].session->last_rpc + server_opts.idle_timeout >= cur_time) {
+            ERR("Session %u: session idle timeout elapsed.", ps->sessions[i].session->id);
+            ps->sessions[i].session->status = NC_STATUS_INVALID;
+            ps->sessions[i].session->term_reason = NC_SESSION_TERM_TIMEOUT;
+            return 3;
         }
 
         if (ps->sessions[i].revents) {
@@ -723,6 +735,7 @@ retry_poll:
     }
 
     /* process RPC */
+    session->last_rpc = time(NULL);
     msgtype = nc_send_reply(session, rpc);
 
     pthread_mutex_unlock(session->ti_lock);

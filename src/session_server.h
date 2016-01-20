@@ -272,7 +272,7 @@ int nc_ssh_server_set_auth_methods(int auth_methods);
 /**
  * @brief Set SSH authentication attempts of every client. 3 by default.
  *
- * @param[in] auth_attempts Failed authentication attepmts before a client is dropped.
+ * @param[in] auth_attempts Failed authentication attempts before a client is dropped.
  * @return 0 on success, -1 on error.
  */
 int nc_ssh_server_set_auth_attempts(uint16_t auth_attempts);

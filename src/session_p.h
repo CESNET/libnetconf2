@@ -222,6 +222,7 @@ struct nc_session {
     struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
 
     /* server side only data */
+    time_t last_rpc;
 #ifdef ENABLE_SSH
     /* additional flags */
 #   define NC_SESSION_SSH_AUTHENTICATED 0x02
