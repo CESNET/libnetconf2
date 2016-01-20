@@ -754,7 +754,7 @@ nc_recv_server_hello(struct nc_session *session)
     int ver = -1;
     int flag = 0;
 
-    msgtype = nc_read_msg_poll(session, server_opts.hello_timeout * 1000, &xml);
+    msgtype = nc_read_msg_poll(session, (server_opts.hello_timeout ? server_opts.hello_timeout * 1000 : -1), &xml);
 
     switch (msgtype) {
     case NC_MSG_HELLO:
