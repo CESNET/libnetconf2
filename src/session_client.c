@@ -352,7 +352,7 @@ fail:
 }
 
 int
-nc_connect_getsocket(const char* host, uint16_t port)
+nc_sock_connect(const char* host, uint16_t port)
 {
     int i, sock = -1;
     struct addrinfo hints, *res_list, *res;
@@ -1405,95 +1405,8 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
 /* CALL HOME */
 
-static int
-get_listen_socket(const char *address, uint16_t port)
-{
-    int sock;
-    const int optVal = 1;
-    const socklen_t optLen = sizeof(optVal);
-    char is_ipv4;
-    struct sockaddr_storage saddr;
-
-    struct sockaddr_in* saddr4;
-    struct sockaddr_in6* saddr6;
-
-    if (!address || !port) {
-        return -1;
-    }
-
-    if (strchr(address, ':') == NULL) {
-        is_ipv4 = 1;
-    } else {
-        is_ipv4 = 0;
-    }
-
-    sock = socket((is_ipv4 ? AF_INET : AF_INET6), SOCK_STREAM, 0);
-    if (sock == -1) {
-        ERR("Could not create socket (%s)", strerror(errno));
-        return -1;
-    }
-
-    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void *)&optVal, optLen)) {
-        ERR("Could not set socket SO_REUSEADDR option (%s)", strerror(errno));
-        close(sock);
-        return -1;
-    }
-
-    /* TODO may be needed
-    if (fcntl(sock, F_SETFD, FD_CLOEXEC) != 0) {
-        nc_verb_error("%s: fcntl failed (%s)", __func__, strerror(errno));
-        continue;
-    }*/
-
-    bzero(&saddr, sizeof(struct sockaddr_storage));
-    if (is_ipv4) {
-        saddr4 = (struct sockaddr_in *)&saddr;
-
-        saddr4->sin_family = AF_INET;
-        saddr4->sin_port = htons(port);
-
-        if (inet_pton(AF_INET, address, &saddr4->sin_addr) != 1) {
-            ERR("Failed to convert \"%s\" to IPv4 address.", address);
-            close(sock);
-            return -1;
-        }
-
-        if (bind(sock, (struct sockaddr*)saddr4, sizeof(struct sockaddr_in)) == -1) {
-            ERR("Could not bind \"%s\" port %d (%s).", address, port, strerror(errno));
-            close(sock);
-            return -1;
-        }
-
-    } else {
-        saddr6 = (struct sockaddr_in6 *)&saddr;
-
-        saddr6->sin6_family = AF_INET6;
-        saddr6->sin6_port = htons(port);
-
-        if (inet_pton(AF_INET6, address, &saddr6->sin6_addr) != 1) {
-            ERR("Failed to convert \"%s\" to IPv6 address.", address);
-            close(sock);
-            return -1;
-        }
-
-        if (bind(sock, (struct sockaddr*)saddr6, sizeof(struct sockaddr_in6)) == -1) {
-            ERR("Could not bind \"%s\" port %d (%s)", address, port, strerror(errno));
-            close(sock);
-            return -1;
-        }
-    }
-
-    if (listen(sock, NC_REVERSE_QUEUE)) {
-        ERR("Unable to start listening on \"%s\" port %d (%s)", address, port, strerror(errno));
-        close(sock);
-        return -1;
-    }
-
-    return sock;
-}
-
 int
-nc_callhome_accept_connection(uint16_t port, int timeout, uint16_t *server_port, char **server_host)
+nc_sock_accept(uint16_t port, int timeout, char **peer_host, uint16_t *peer_port)
 {
     struct pollfd reverse_listen_socket = {-1, POLLIN, 0};
     int sock;
@@ -1501,7 +1414,7 @@ nc_callhome_accept_connection(uint16_t port, int timeout, uint16_t *server_port,
     socklen_t addr_size = sizeof(remote);
     int status;
 
-    reverse_listen_socket.fd = get_listen_socket("::0", port);
+    reverse_listen_socket.fd = nc_sock_listen("::0", port);
     if (reverse_listen_socket.fd == -1) {
         goto fail;
     }
@@ -1541,21 +1454,21 @@ nc_callhome_accept_connection(uint16_t port, int timeout, uint16_t *server_port,
     /* fill some server info, if interested */
     if (remote.ss_family == AF_INET) {
         struct sockaddr_in *remote_in = (struct sockaddr_in *)&remote;
-        if (server_port) {
-            *server_port = ntohs(remote_in->sin_port);
+        if (peer_port) {
+            *peer_port = ntohs(remote_in->sin_port);
         }
-        if (server_host) {
-            *server_host = malloc(INET6_ADDRSTRLEN);
-            inet_ntop(AF_INET, &(remote_in->sin_addr), *server_host, INET6_ADDRSTRLEN);
+        if (peer_host) {
+            *peer_host = malloc(INET6_ADDRSTRLEN);
+            inet_ntop(AF_INET, &(remote_in->sin_addr), *peer_host, INET6_ADDRSTRLEN);
         }
     } else if (remote.ss_family == AF_INET6) {
         struct sockaddr_in6 *remote_in = (struct sockaddr_in6 *)&remote;
-        if (server_port) {
-            *server_port = ntohs(remote_in->sin6_port);
+        if (peer_port) {
+            *peer_port = ntohs(remote_in->sin6_port);
         }
-        if (server_host) {
-            *server_host = malloc(INET6_ADDRSTRLEN);
-            inet_ntop(AF_INET6, &(remote_in->sin6_addr), *server_host, INET6_ADDRSTRLEN);
+        if (peer_host) {
+            *peer_host = malloc(INET6_ADDRSTRLEN);
+            inet_ntop(AF_INET6, &(remote_in->sin6_addr), *peer_host, INET6_ADDRSTRLEN);
         }
     }
 

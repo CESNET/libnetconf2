@@ -53,7 +53,7 @@ nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REASON re
 }
 
 int
-nc_sock_listen(const char *address, uint32_t port)
+nc_sock_listen(const char *address, uint16_t port)
 {
     const int optVal = 1;
     const socklen_t optLen = sizeof(optVal);
@@ -131,7 +131,7 @@ fail:
 }
 
 int
-nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANSPORT_IMPL *ti, char **host, uint16_t *port)
+nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANSPORT_IMPL *ti, char **host, uint16_t *port)
 {
     uint16_t i;
     struct pollfd *pfd;
@@ -865,7 +865,7 @@ nc_accept(int timeout, struct nc_session **session)
     /* LOCK */
     pthread_mutex_lock(&server_opts.bind_lock);
 
-    ret = nc_sock_accept(server_opts.binds, server_opts.bind_count, timeout, &ti, &host, &port);
+    ret = nc_sock_accept_binds(server_opts.binds, server_opts.bind_count, timeout, &ti, &host, &port);
 
     /* UNLOCK */
     pthread_mutex_unlock(&server_opts.bind_lock);

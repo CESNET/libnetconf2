@@ -255,7 +255,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     }
 
     /* create and assign socket */
-    sock = nc_connect_getsocket(host, port);
+    sock = nc_sock_connect(host, port);
     if (sock == -1) {
         goto fail;
     }
@@ -378,7 +378,7 @@ nc_callhome_accept_tls(uint16_t port, int timeout, struct ly_ctx *ctx)
         port = NC_PORT_CH_TLS;
     }
 
-    sock = nc_callhome_accept_connection(port, timeout, NULL, &server_host);
+    sock = nc_sock_accept(port, timeout, &server_host, NULL);
     if (sock == -1) {
         return NULL;
     }
