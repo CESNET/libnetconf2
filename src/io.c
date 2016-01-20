@@ -441,10 +441,12 @@ nc_read_poll(struct nc_session *session, int timeout)
             fds.revents = 0;
 
             if (timeout > -1) {
-                clock_gettime(CLOCK_REALTIME, &ts_timeout);
-                if (timeout > 0) {
-                    ts_timeout.tv_sec += timeout / 1000;
-                    ts_timeout.tv_nsec += (timeout % 1000) * 1000000;
+                if (!timeout) {
+                    ts_timeout.tv_sec = 0;
+                    ts_timeout.tv_nsec = 0;
+                } else if (timeout > 0) {
+                    ts_timeout.tv_sec = timeout / 1000;
+                    ts_timeout.tv_nsec = (timeout % 1000) * 1000000;
                 }
             }
             sigfillset(&sigmask);
