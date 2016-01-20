@@ -95,13 +95,13 @@ struct nc_tls_server_opts {
     X509_STORE *crl_store;
     pthread_mutex_t crl_lock;
 
-    struct {
+    struct nc_ctn {
         uint32_t id;
         const char *fingerprint;
         NC_TLS_CTN_MAPTYPE map_type;
         const char *name;
+        struct nc_ctn *next;
     } *ctn;
-    uint16_t ctn_count;
     pthread_mutex_t ctn_lock;
 
     pthread_key_t verify_key;

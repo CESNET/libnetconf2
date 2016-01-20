@@ -286,10 +286,10 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
 {
     char *digest_md5 = NULL, *digest_sha1 = NULL, *digest_sha224 = NULL;
     char *digest_sha256 = NULL, *digest_sha384 = NULL, *digest_sha512 = NULL;
-    uint16_t i;
     unsigned char *buf = malloc(64);
     unsigned int buf_len = 64;
     int ret = 0;
+    struct nc_ctn *ctn;
 
     if (!cert || !map_type || !name) {
         free(buf);
@@ -299,9 +299,9 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
     /* LOCK */
     pthread_mutex_lock(&tls_opts.ctn_lock);
 
-    for (i = 0; i < tls_opts.ctn_count; ++i) {
+    for (ctn = tls_opts.ctn; ctn; ctn = ctn->next) {
         /* MD5 */
-        if (!strncmp(tls_opts.ctn[i].fingerprint, "01", 2)) {
+        if (!strncmp(ctn->fingerprint, "01", 2)) {
             if (!digest_md5) {
                 if (X509_digest(cert, EVP_md5(), buf, &buf_len) != 1) {
                     ERR("Calculating MD5 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
@@ -311,18 +311,18 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
                 digest_to_str(buf, buf_len, &digest_md5);
             }
 
-            if (!strcasecmp(tls_opts.ctn[i].fingerprint + 3, digest_md5)) {
+            if (!strcasecmp(ctn->fingerprint + 3, digest_md5)) {
                 /* we got ourselves a winner! */
                 VRB("Cert verify CTN: entry with a matching fingerprint found.");
-                *map_type = tls_opts.ctn[i].map_type;
-                if (tls_opts.ctn[i].map_type == NC_TLS_CTN_SPECIFIED) {
-                    *name = tls_opts.ctn[i].name;
+                *map_type = ctn->map_type;
+                if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
+                    *name = ctn->name;
                 }
                 break;
             }
 
         /* SHA-1 */
-        } else if (!strncmp(tls_opts.ctn[i].fingerprint, "02", 2)) {
+        } else if (!strncmp(ctn->fingerprint, "02", 2)) {
             if (!digest_sha1) {
                 if (X509_digest(cert, EVP_sha1(), buf, &buf_len) != 1) {
                     ERR("Calculating SHA-1 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
@@ -332,18 +332,18 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
                 digest_to_str(buf, buf_len, &digest_sha1);
             }
 
-            if (!strcasecmp(tls_opts.ctn[i].fingerprint + 3, digest_sha1)) {
+            if (!strcasecmp(ctn->fingerprint + 3, digest_sha1)) {
                 /* we got ourselves a winner! */
                 VRB("Cert verify CTN: entry with a matching fingerprint found.");
-                *map_type = tls_opts.ctn[i].map_type;
-                if (tls_opts.ctn[i].map_type == NC_TLS_CTN_SPECIFIED) {
-                    *name = tls_opts.ctn[i].name;
+                *map_type = ctn->map_type;
+                if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
+                    *name = ctn->name;
                 }
                 break;
             }
 
         /* SHA-224 */
-        } else if (!strncmp(tls_opts.ctn[i].fingerprint, "03", 2)) {
+        } else if (!strncmp(ctn->fingerprint, "03", 2)) {
             if (!digest_sha224) {
                 if (X509_digest(cert, EVP_sha224(), buf, &buf_len) != 1) {
                     ERR("Calculating SHA-224 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
@@ -353,18 +353,18 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
                 digest_to_str(buf, buf_len, &digest_sha224);
             }
 
-            if (!strcasecmp(tls_opts.ctn[i].fingerprint + 3, digest_sha224)) {
+            if (!strcasecmp(ctn->fingerprint + 3, digest_sha224)) {
                 /* we got ourselves a winner! */
                 VRB("Cert verify CTN: entry with a matching fingerprint found.");
-                *map_type = tls_opts.ctn[i].map_type;
-                if (tls_opts.ctn[i].map_type == NC_TLS_CTN_SPECIFIED) {
-                    *name = tls_opts.ctn[i].name;
+                *map_type = ctn->map_type;
+                if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
+                    *name = ctn->name;
                 }
                 break;
             }
 
         /* SHA-256 */
-        } else if (!strncmp(tls_opts.ctn[i].fingerprint, "04", 2)) {
+        } else if (!strncmp(ctn->fingerprint, "04", 2)) {
             if (!digest_sha256) {
                 if (X509_digest(cert, EVP_sha256(), buf, &buf_len) != 1) {
                     ERR("Calculating SHA-256 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
@@ -374,18 +374,18 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
                 digest_to_str(buf, buf_len, &digest_sha256);
             }
 
-            if (!strcasecmp(tls_opts.ctn[i].fingerprint + 3, digest_sha256)) {
+            if (!strcasecmp(ctn->fingerprint + 3, digest_sha256)) {
                 /* we got ourselves a winner! */
                 VRB("Cert verify CTN: entry with a matching fingerprint found.");
-                *map_type = tls_opts.ctn[i].map_type;
-                if (tls_opts.ctn[i].map_type == NC_TLS_CTN_SPECIFIED) {
-                    *name = tls_opts.ctn[i].name;
+                *map_type = ctn->map_type;
+                if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
+                    *name = ctn->name;
                 }
                 break;
             }
 
         /* SHA-384 */
-        } else if (!strncmp(tls_opts.ctn[i].fingerprint, "05", 2)) {
+        } else if (!strncmp(ctn->fingerprint, "05", 2)) {
             if (!digest_sha384) {
                 if (X509_digest(cert, EVP_sha384(), buf, &buf_len) != 1) {
                     ERR("Calculating SHA-384 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
@@ -395,18 +395,18 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
                 digest_to_str(buf, buf_len, &digest_sha384);
             }
 
-            if (!strcasecmp(tls_opts.ctn[i].fingerprint + 3, digest_sha384)) {
+            if (!strcasecmp(ctn->fingerprint + 3, digest_sha384)) {
                 /* we got ourselves a winner! */
                 VRB("Cert verify CTN: entry with a matching fingerprint found.");
-                *map_type = tls_opts.ctn[i].map_type;
-                if (tls_opts.ctn[i].map_type == NC_TLS_CTN_SPECIFIED) {
-                    *name = tls_opts.ctn[i].name;
+                *map_type = ctn->map_type;
+                if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
+                    *name = ctn->name;
                 }
                 break;
             }
 
         /* SHA-512 */
-        } else if (!strncmp(tls_opts.ctn[i].fingerprint, "06", 2)) {
+        } else if (!strncmp(ctn->fingerprint, "06", 2)) {
             if (!digest_sha512) {
                 if (X509_digest(cert, EVP_sha512(), buf, &buf_len) != 1) {
                     ERR("Calculating SHA-512 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
@@ -416,23 +416,23 @@ nc_tls_cert_to_name(X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
                 digest_to_str(buf, buf_len, &digest_sha512);
             }
 
-            if (!strcasecmp(tls_opts.ctn[i].fingerprint + 3, digest_sha512)) {
+            if (!strcasecmp(ctn->fingerprint + 3, digest_sha512)) {
                 /* we got ourselves a winner! */
                 VRB("Cert verify CTN: entry with a matching fingerprint found.");
-                *map_type = tls_opts.ctn[i].map_type;
-                if (tls_opts.ctn[i].map_type == NC_TLS_CTN_SPECIFIED) {
-                    *name = tls_opts.ctn[i].name;
+                *map_type = ctn->map_type;
+                if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
+                    *name = ctn->name;
                 }
                 break;
             }
 
         /* unknown */
         } else {
-            WRN("Unknown fingerprint algorithm used (%s), skipping.", tls_opts.ctn[i].fingerprint);
+            WRN("Unknown fingerprint algorithm used (%s), skipping.", ctn->fingerprint);
         }
     }
 
-    if (i == tls_opts.ctn_count) {
+    if (!ctn) {
         ret = 1;
     }
 
@@ -636,9 +636,10 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     }
 
     /* cert-to-name match, now to extract the specific field from the peer cert */
-    nc_ctx_lock(-1, NULL);
     if (map_type == NC_TLS_CTN_SPECIFIED) {
+        nc_ctx_lock(-1, NULL);
         session->username = lydict_insert(server_opts.ctx, username, 0);
+        nc_ctx_unlock();
     } else {
         rc = nc_tls_ctn_get_username_from_cert(session->tls_cert, map_type, &cp);
         if (rc) {
@@ -647,9 +648,10 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
             }
             goto fail;
         }
+        nc_ctx_lock(-1, NULL);
         session->username = lydict_insert_zc(server_opts.ctx, cp);
+        nc_ctx_unlock();
     }
-    nc_ctx_unlock();
 
     VRB("Cert verify CTN: new client username recognized as \"%s\".", session->username);
     return 1;
@@ -1070,24 +1072,40 @@ nc_tls_server_destroy_crls(void)
 API int
 nc_tls_server_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name)
 {
+    struct nc_ctn *ctn, *new;
+
     if (!fingerprint || !map_type || ((map_type == NC_TLS_CTN_SPECIFIED) && !name)
             || ((map_type != NC_TLS_CTN_SPECIFIED) && name)) {
         ERRARG;
         return -1;
     }
 
+    new = malloc(sizeof *new);
+
+    nc_ctx_lock(-1, NULL);
+    new->fingerprint = lydict_insert(server_opts.ctx, fingerprint, 0);
+    new->name = lydict_insert(server_opts.ctx, name, 0);
+    nc_ctx_unlock();
+    new->id = id;
+    new->map_type = map_type;
+    new->next = NULL;
+
     /* LOCK */
     pthread_mutex_lock(&tls_opts.ctn_lock);
 
-    ++tls_opts.ctn_count;
-    tls_opts.ctn = realloc(tls_opts.ctn, tls_opts.ctn_count * sizeof *tls_opts.ctn);
-
-    nc_ctx_lock(-1, NULL);
-    tls_opts.ctn[tls_opts.ctn_count - 1].id = id;
-    tls_opts.ctn[tls_opts.ctn_count - 1].fingerprint = lydict_insert(server_opts.ctx, fingerprint, 0);
-    tls_opts.ctn[tls_opts.ctn_count - 1].map_type = map_type;
-    tls_opts.ctn[tls_opts.ctn_count - 1].name = lydict_insert(server_opts.ctx, name, 0);
-    nc_ctx_unlock();
+    if (!tls_opts.ctn) {
+        /* the first item */
+        tls_opts.ctn = new;
+    } else if (tls_opts.ctn->id > id) {
+        /* insert at the beginning */
+        new->next = tls_opts.ctn;
+        tls_opts.ctn = new;
+    } else {
+        for (ctn = tls_opts.ctn; ctn->next && ctn->next->id <= id; ctn = ctn->next);
+        /* insert after ctn */
+        new->next = ctn->next;
+        ctn->next = new;
+    }
 
     /* UNLOCK */
     pthread_mutex_unlock(&tls_opts.ctn_lock);
@@ -1098,39 +1116,54 @@ nc_tls_server_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE m
 API int
 nc_tls_server_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name)
 {
-    uint16_t i;
     int ret = -1;
+    struct nc_ctn *ctn, *next, *prev;
 
     /* LOCK */
     pthread_mutex_lock(&tls_opts.ctn_lock);
 
     if ((id < 0) && !fingerprint && !map_type && !name) {
+        ctn = tls_opts.ctn;
         nc_ctx_lock(-1, NULL);
-        for (i = 0; i < tls_opts.ctn_count; ++i) {
-            lydict_remove(server_opts.ctx, tls_opts.ctn[i].fingerprint);
-            lydict_remove(server_opts.ctx, tls_opts.ctn[i].name);
+        while (ctn) {
+            lydict_remove(server_opts.ctx, ctn->fingerprint);
+            lydict_remove(server_opts.ctx, ctn->name);
+
+            next = ctn->next;
+            free(ctn);
+            ctn = next;
 
             ret = 0;
         }
         nc_ctx_unlock();
-        free(tls_opts.ctn);
         tls_opts.ctn = NULL;
-        tls_opts.ctn_count = 0;
     } else {
-        for (i = 0; i < tls_opts.ctn_count; ++i) {
-            if (((id < 0) || (tls_opts.ctn[i].id == id))
-                    && (!fingerprint || !strcmp(tls_opts.ctn[i].fingerprint, fingerprint))
-                    && (!map_type || (tls_opts.ctn[i].map_type == map_type))
-                    && (!name || (tls_opts.ctn[i].name && !strcmp(tls_opts.ctn[i].name, name)))) {
+        prev = NULL;
+        ctn = tls_opts.ctn;
+        while (ctn) {
+            if (((id < 0) || (ctn->id == id))
+                    && (!fingerprint || !strcmp(ctn->fingerprint, fingerprint))
+                    && (!map_type || (ctn->map_type == map_type))
+                    && (!name || (ctn->name && !strcmp(ctn->name, name)))) {
                 nc_ctx_lock(-1, NULL);
-                lydict_remove(server_opts.ctx, tls_opts.ctn[i].fingerprint);
-                lydict_remove(server_opts.ctx, tls_opts.ctn[i].name);
+                lydict_remove(server_opts.ctx, ctn->fingerprint);
+                lydict_remove(server_opts.ctx, ctn->name);
                 nc_ctx_unlock();
 
-                --tls_opts.ctn_count;
-                memcpy(&tls_opts.ctn[i], &tls_opts.ctn[tls_opts.ctn_count], sizeof *tls_opts.ctn);
+                if (prev) {
+                    prev->next = ctn->next;
+                    next = ctn->next;
+                } else {
+                    tls_opts.ctn = ctn->next;
+                    next = ctn->next;
+                }
+                free(ctn);
+                ctn = next;
 
                 ret = 0;
+            } else {
+                prev = ctn;
+                ctn = ctn->next;
             }
         }
     }
