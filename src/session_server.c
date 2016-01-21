@@ -173,7 +173,7 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, NC
     }
 
     ret = accept(sock, (struct sockaddr *)&saddr, &saddr_len);
-    if (ret == -1) {
+    if (ret < 0) {
         ERR("Accept failed (%s).", strerror(errno));
         return -1;
     }
