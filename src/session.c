@@ -49,6 +49,67 @@
 
 extern struct nc_server_opts server_opts;
 
+/*
+ * @return 1 - success
+ *         0 - timeout
+ *        -1 - error
+ */
+int
+nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed)
+{
+    int ret;
+    struct timespec ts_timeout, ts_old, ts_new;
+
+    if (timeout > 0) {
+        clock_gettime(CLOCK_REALTIME, &ts_timeout);
+
+        if (elapsed) {
+            ts_old = ts_timeout;
+        }
+
+        ts_timeout.tv_sec += timeout / 1000;
+        ts_timeout.tv_nsec += (timeout % 1000) * 1000000;
+
+        ret = pthread_mutex_timedlock(lock, &ts_timeout);
+
+        if (elapsed) {
+            clock_gettime(CLOCK_REALTIME, &ts_new);
+
+            *elapsed += (ts_new.tv_sec - ts_old.tv_sec) * 1000;
+            *elapsed += (ts_new.tv_nsec - ts_old.tv_nsec) / 1000000;
+        }
+    } else if (!timeout) {
+        ret = pthread_mutex_trylock(lock);
+    } else { /* timeout == -1 */
+        ret = pthread_mutex_lock(lock);
+    }
+
+    if (ret == ETIMEDOUT) {
+        /* timeout */
+        return 0;
+    } else if (ret) {
+        /* error */
+        ERR("Mutex lock failed (%s).", strerror(errno));
+        return -1;
+    }
+
+    /* ok */
+    return 1;
+}
+
+void
+nc_subtract_elapsed(int *timeout, struct timespec *old_ts)
+{
+    struct timespec new_ts;
+
+    clock_gettime(CLOCK_MONOTONIC_RAW, &new_ts);
+
+    *timeout -= (new_ts.tv_sec - old_ts->tv_sec) * 1000;
+    *timeout -= (new_ts.tv_nsec - old_ts->tv_nsec) / 1000000;
+
+    *old_ts = new_ts;
+}
+
 API NC_STATUS
 nc_session_get_status(const struct nc_session *session)
 {
@@ -166,54 +227,6 @@ nc_send_msg(struct nc_session *session, struct lyd_node *op)
     return NC_MSG_RPC;
 }
 
-/*
- * @return 1 - success
- *         0 - timeout
- *        -1 - error
- */
-int
-nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed)
-{
-    int ret;
-    struct timespec ts_timeout, ts_old, ts_new;
-
-    if (timeout > 0) {
-        clock_gettime(CLOCK_REALTIME, &ts_timeout);
-
-        if (elapsed) {
-            ts_old = ts_timeout;
-        }
-
-        ts_timeout.tv_sec += timeout / 1000;
-        ts_timeout.tv_nsec += (timeout % 1000) * 1000000;
-
-        ret = pthread_mutex_timedlock(lock, &ts_timeout);
-
-        if (elapsed) {
-            clock_gettime(CLOCK_REALTIME, &ts_new);
-
-            *elapsed += (ts_new.tv_sec - ts_old.tv_sec) * 1000;
-            *elapsed += (ts_new.tv_nsec - ts_old.tv_nsec) / 1000000;
-        }
-    } else if (!timeout) {
-        ret = pthread_mutex_trylock(lock);
-    } else { /* timeout == -1 */
-        ret = pthread_mutex_lock(lock);
-    }
-
-    if (ret == ETIMEDOUT) {
-        /* timeout */
-        return 0;
-    } else if (ret) {
-        /* error */
-        ERR("Mutex lock failed (%s).", strerror(errno));
-        return -1;
-    }
-
-    /* ok */
-    return 1;
-}
-
 API void
 nc_session_free(struct nc_session *session)
 {
@@ -329,14 +342,44 @@ nc_session_free(struct nc_session *session)
          * SSH channel). So destroy the SSH session only if there is no other NETCONF session using
          * it.
          */
-        if (!session->ti.libssh.next) {
+        multisession = 0;
+        if (session->ti.libssh.next) {
+            for (siter = session->ti.libssh.next; siter != session; siter = siter->ti.libssh.next) {
+                if (siter->status != NC_STATUS_STARTING) {
+                    multisession = 1;
+                    break;
+                }
+            }
+        }
+
+        if (!multisession) {
+            /* it's not multisession yet, but we still need to free the starting sessions */
+            if (session->ti.libssh.next) {
+                do {
+                    siter = session->ti.libssh.next;
+                    session->ti.libssh.next = siter->ti.libssh.next;
+
+                    /* free starting SSH NETCONF session (channel will be freed in ssh_free()) */
+                    if (session->side == NC_SERVER) {
+                        nc_ctx_lock(-1, NULL);
+                    }
+                    lydict_remove(session->ctx, session->username);
+                    lydict_remove(session->ctx, session->host);
+                    if (session->side == NC_SERVER) {
+                        nc_ctx_unlock();
+                    }
+                    if (!(session->flags & NC_SESSION_SHAREDCTX)) {
+                        ly_ctx_destroy(session->ctx);
+                    }
+
+                    free(siter);
+                } while (session->ti.libssh.next != session);
+            }
             if (connected) {
                 ssh_disconnect(session->ti.libssh.session);
             }
             ssh_free(session->ti.libssh.session);
         } else {
-            /* multiple NETCONF sessions on a single SSH session */
-            multisession = 1;
             /* remove the session from the list */
             for (siter = session->ti.libssh.next; siter->ti.libssh.next != session; siter = siter->ti.libssh.next);
             if (session->ti.libssh.next == siter) {
@@ -345,6 +388,17 @@ nc_session_free(struct nc_session *session)
             } else {
                 /* there are still multiple sessions, keep the ring list */
                 siter->ti.libssh.next = session->ti.libssh.next;
+            }
+            /* change nc_sshcb_msg() argument, we need a RUNNING session and this one will be freed */
+            if (session->flags & NC_SESSION_SSH_MSG_CB) {
+                for (siter = session->ti.libssh.next; siter->status != NC_STATUS_RUNNING; siter = siter->ti.libssh.next) {
+                    if (siter->ti.libssh.next == session) {
+                        ERRINT;
+                        break;
+                    }
+                }
+                ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, siter);
+                siter->flags |= NC_SESSION_SSH_MSG_CB;
             }
         }
         break;

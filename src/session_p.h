@@ -224,9 +224,14 @@ struct nc_session {
     /* server side only data */
     time_t last_rpc;
 #ifdef ENABLE_SSH
-    /* additional flags */
+    /* SSH session authenticated */
 #   define NC_SESSION_SSH_AUTHENTICATED 0x02
+    /* netconf subsystem requested */
 #   define NC_SESSION_SSH_SUBSYS_NETCONF 0x04
+    /* new SSH message arrived */
+#   define NC_SESSION_SSH_NEW_MSG 0x08
+    /* this session is passed to nc_sshcb_msg() */
+#   define NC_SESSION_SSH_MSG_CB 0x10
 
     uint16_t ssh_auth_attempts;
 #endif
@@ -244,6 +249,8 @@ struct nc_pollsession {
 NC_MSG_TYPE nc_send_msg(struct nc_session *session, struct lyd_node *op);
 
 int nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed);
+
+void nc_subtract_elapsed(int *timeout, struct timespec *old_ts);
 
 /**
  * @brief Fill libyang context in \p session. Context models are based on the stored session
@@ -316,6 +323,32 @@ int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout
  * @return 1 on success, 0 on timeout, -1 on error.
  */
 int nc_accept_ssh_session(struct nc_session *session, int sock, int timeout);
+
+/**
+ * @brief Callback called when a new SSH message is received.
+ *
+ * @param[in] sshsession SSH session the message arrived on.
+ * @param[in] msg SSH message itself.
+ * @param[in] data NETCONF session running on \p sshsession.
+ * @return 0 if the message was handled, 1 if it is left up to libssh.
+ */
+int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
+
+/**
+ * @brief Inspect what exactly happened if a SSH session socket poll
+ * returned POLLIN.
+ *
+ * @param[in] session NETCONF session communicating on the socket.
+ * @param[in,out] timeout Timeout for locking ti_lock, gets updated.
+ * @return 0 - timeout,
+ *         1 if \p session channel has data,
+ *         2 if some other channel has data,
+ *         3 on \p session status change,
+ *         4 on new SSH message,
+ *         5 on new NETCONF SSH channel,
+ *        -1 on error.
+ */
+int nc_ssh_pollin(struct nc_session *session, int *timeout);
 
 #endif
 

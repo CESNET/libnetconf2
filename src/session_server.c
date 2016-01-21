@@ -587,12 +587,12 @@ API int
 nc_ps_poll(struct nc_pollsession *ps, int timeout)
 {
     int ret;
-    uint16_t i;
+    uint16_t i, j;
     time_t cur_time;
     NC_MSG_TYPE msgtype;
     struct nc_session *session;
     struct nc_server_rpc *rpc;
-    struct timespec old_ts, new_ts;
+    struct timespec old_ts;
 
     if (!ps || !ps->session_count) {
         ERRARG;
@@ -648,25 +648,35 @@ retry_poll:
             return 3;
         } else if (ps->pfds[i].revents & POLLIN) {
 #ifdef ENABLE_SSH
-            if (ps->sessions[i].session->ti_type == NC_TI_LIBSSH) {
-                /* things are not that simple with SSH, we need to check the channel */
-                ret = ssh_channel_poll_timeout(ps->sessions[i].session->ti.libssh.channel, 0, 0);
-                /* not this one */
-                if (!ret) {
+            if (ps->sessions[i]->ti_type == NC_TI_LIBSSH) {
+                /* things are not that simple with SSH... */
+                ret = nc_ssh_pollin(ps->sessions[i], &timeout);
+
+                /* clear POLLIN on sessions sharing this session's SSH session */
+                if ((ret == 1) || (ret >= 4)) {
+                    for (j = i + 1; j < ps->session_count; ++j) {
+                        if (ps->pfds[j].fd == ps->pfds[i].fd) {
+                            ps->pfds[j].revents = 0;
+                        }
+                    }
+                }
+
+                /* actual event happened */
+                if ((ret <= 0) || (ret >= 3)) {
+                    ps->pfds[i].revents = 0;
+                    return ret;
+
+                /* event occurred on some other channel */
+                } else if (ret == 2) {
+                    ps->pfds[i].revents = 0;
                     if (i == ps->session_count - 1) {
                         /* last session and it is not the right channel, ... */
                         if (timeout > 0) {
                             /* ... decrease timeout, wait it all out and try again, last time */
-                            clock_gettime(CLOCK_MONOTONIC_RAW, &new_ts);
-
-                            timeout -= (new_ts.tv_sec - old_ts.tv_sec) * 1000;
-                            timeout -= (new_ts.tv_nsec - old_ts.tv_nsec) / 1000000;
-                            if (timeout < 0) {
-                                ERRINT;
-                                return -1;
-                            }
-
-                            old_ts = new_ts;
+                            nc_subtract_elapsed(&timeout, &old_ts);
+                            usleep(timeout * 1000);
+                            timeout = 0;
+                            goto retry_poll;
                         } else if (!timeout) {
                             /* ... timeout is 0, so that is it */
                             return 0;
@@ -677,20 +687,7 @@ retry_poll:
                         }
                     }
                     /* check other sessions */
-                    ps->sessions[i].revents = 0;
                     continue;
-                } else if (ret == SSH_ERROR) {
-                    ERR("Session %u: SSH channel error (%s).", ps->sessions[i].session->id,
-                        ssh_get_error(ps->sessions[i].session->ti.libssh.session));
-                    ps->sessions[i].session->status = NC_STATUS_INVALID;
-                    ps->sessions[i].session->term_reason = NC_SESSION_TERM_OTHER;
-                    return 3;
-                } else if (ret == SSH_EOF) {
-                    ERR("Session %u: communication channel unexpectedly closed (libssh).",
-                        ps->sessions[i].session->id);
-                    ps->sessions[i].session->status = NC_STATUS_INVALID;
-                    ps->sessions[i].session->term_reason = NC_SESSION_TERM_DROPPED;
-                    return 3;
                 }
             }
 #endif /* ENABLE_SSH */
@@ -710,15 +707,7 @@ retry_poll:
     session = ps->sessions[i];
 
     if (timeout > 0) {
-        clock_gettime(CLOCK_MONOTONIC_RAW, &new_ts);
-
-        /* subtract elapsed time */
-        timeout -= (new_ts.tv_sec - old_ts.tv_sec) * 1000;
-        timeout -= (new_ts.tv_nsec - old_ts.tv_nsec) / 1000000;
-        if (timeout < 0) {
-            ERRINT;
-            return -1;
-        }
+        nc_subtract_elapsed(&timeout, &old_ts);
     }
 
     /* reading an RPC and sending a reply must be atomic (no other RPC should be read) */

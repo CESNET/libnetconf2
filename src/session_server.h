@@ -175,8 +175,8 @@ int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
  * @brief Poll sessions and process any received RPCs.
  *
  * All the sessions must be running. If a session fails causing it to change its
- * status, it can be learnt from the return value. Only one event (new RPC, TODO
- * new SSH channel request) on one session is handled in one function call.
+ * status, it can be learnt from the return value. Only one event on one session
+ * is handled in one function call.
  *
  * @param[in] ps Pollsession structure to use.
  * @param[in] timeout Poll timeout in milliseconds. 0 for non-blocking call, -1 for
@@ -186,6 +186,11 @@ int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
  *         2 if an RPC was processed and there are unhandled events on other sessions,
  *         3 if a session from \p ps changed its status (was invalidated),
  *         -1 on error.
+ *
+ *         Only with SSH support:
+ *         4 if an SSH message was processed,
+ *         5 if a new NETCONF SSH channel was created; call nc_ssh_ps_accept_channel()
+ *           to establish a new NETCONF session.
  */
 int nc_ps_poll(struct nc_pollsession *ps, int timeout);
 
@@ -234,7 +239,7 @@ int nc_server_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
  *
  * @param[in] timeout Timeout for receiving a new connection in milliseconds, 0 for
  * non-blocking call, -1 for infinite waiting.
- * @param[out] session New session on success.
+ * @param[out] session New session.
  * @return 1 on success, 0 on timeout, -1 or error.
  */
 int nc_accept(int timeout, struct nc_session **session);
@@ -242,6 +247,16 @@ int nc_accept(int timeout, struct nc_session **session);
 #endif /* ENABLE_SSH || ENABLE_TLS */
 
 #ifdef ENABLE_SSH
+
+/**
+ * @brief Accept a new NETCONF session on an SSH session of a running NETCONF session
+ * that was polled in \p ps. Call this function only when nc_ps_poll() on \p ps returns 5.
+ *
+ * @param[in] ps Unmodified pollsession structure from the previous nc_ps_poll() call.
+ * @param[out] session New session.
+ * @return 1 on success, -1 on error.
+ */
+int nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session);
 
 /**
  * @brief Set SSH host keys the server will identify itself with. Each of RSA, DSA, and

@@ -418,22 +418,32 @@ nc_sshcb_auth_pubkey(struct nc_session *session, ssh_message msg)
 }
 
 static int
-nc_sshcb_channel_open(struct nc_session *session, ssh_channel channel)
+nc_sshcb_channel_open(struct nc_session *session, ssh_message msg)
 {
-    while (session->ti.libssh.next) {
-        if (session->status == NC_STATUS_STARTING) {
+    ssh_channel chan;
+
+    /* first channel request */
+    if (!session->ti.libssh.channel) {
+        if (session->status != NC_STATUS_STARTING) {
             ERRINT;
             return -1;
         }
-        session = session->ti.libssh.next;
-    }
+        chan = ssh_message_channel_request_open_reply_accept(msg);
+        if (!chan) {
+            ERR("Failed to create a new SSH channel.");
+            return -1;
+        }
+        session->ti.libssh.channel = chan;
 
-    if ((session->status != NC_STATUS_STARTING) || session->ti.libssh.channel) {
-        ERRINT;
-        return -1;
+    /* additional channel request */
+    } else {
+        chan = ssh_message_channel_request_open_reply_accept(msg);
+        if (!chan) {
+            ERR("Session %u: failed to create a new SSH channel.", session->id);
+            return -1;
+        }
+        /* channel was created and libssh stored it internally in the ssh_session structure, good enough */
     }
-
-    session->ti.libssh.channel = channel;
 
     return 0;
 }
@@ -441,30 +451,54 @@ nc_sshcb_channel_open(struct nc_session *session, ssh_channel channel)
 static int
 nc_sshcb_channel_subsystem(struct nc_session *session, ssh_channel channel, const char *subsystem)
 {
-    while (session && (session->ti.libssh.channel != channel)) {
-        session = session->ti.libssh.next;
-    }
+    struct nc_session *new_session;
 
-    if (!session) {
-        ERRINT;
+    if (strcmp(subsystem, "netconf")) {
+        WRN("Received an unknown subsystem \"%s\" request.", subsystem);
         return -1;
     }
 
-    if (!strcmp(subsystem, "netconf")) {
-        if (session->flags & NC_SESSION_SSH_SUBSYS_NETCONF) {
-            WRN("Client \"%s\" requested subsystem \"netconf\" for the second time.", session->username);
-        } else {
-            session->flags |= NC_SESSION_SSH_SUBSYS_NETCONF;
+    if (session->ti.libssh.channel == channel) {
+        /* first channel requested */
+        if (session->ti.libssh.next || (session->status != NC_STATUS_STARTING)) {
+            ERRINT;
+            return -1;
         }
+        if (session->flags & NC_SESSION_SSH_SUBSYS_NETCONF) {
+            ERR("Session %u: subsystem \"netconf\" requested for the second time.", session->id);
+            return -1;
+        }
+
+        session->flags |= NC_SESSION_SSH_SUBSYS_NETCONF;
     } else {
-        WRN("Client \"%s\" requested an unknown subsystem \"%s\".", session->username, subsystem);
-        return -1;
+        /* additional channel subsystem request, new session is ready as far as SSH is concerned */
+        new_session = calloc(1, sizeof *new_session);
+
+        /* insert the new session */
+        if (!session->ti.libssh.next) {
+            new_session->ti.libssh.next = session;
+        } else {
+            new_session->ti.libssh.next = session->ti.libssh.next;
+        }
+        session->ti.libssh.next = new_session;
+
+        new_session->status = NC_STATUS_STARTING;
+        new_session->side = NC_SERVER;
+        new_session->ti_type = NC_TI_LIBSSH;
+        new_session->ti_lock = session->ti_lock;
+        new_session->ti.libssh.channel = channel;
+        new_session->ti.libssh.session = session->ti.libssh.session;
+        new_session->username = lydict_insert(server_opts.ctx, session->username, 0);
+        new_session->host = lydict_insert(server_opts.ctx, session->host, 0);
+        new_session->port = session->port;
+        new_session->ctx = server_opts.ctx;
+        new_session->flags = NC_SESSION_SSH_AUTHENTICATED | NC_SESSION_SSH_SUBSYS_NETCONF | NC_SESSION_SHAREDCTX;
     }
 
     return 0;
 }
 
-static int
+int
 nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
 {
     const char *str_type, *str_subtype = NULL, *username;
@@ -583,6 +617,7 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
     }
 
     VRB("Received an SSH message \"%s\" of subtype \"%s\".", str_type, str_subtype);
+    session->flags |= NC_SESSION_SSH_NEW_MSG;
 
     /*
      * process known messages
@@ -633,19 +668,17 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
         }
     } else if (session->flags & NC_SESSION_SSH_AUTHENTICATED) {
         if ((type == SSH_REQUEST_CHANNEL_OPEN) && (subtype == (int)SSH_CHANNEL_SESSION)) {
-            ssh_channel chan;
-            if ((chan = ssh_message_channel_request_open_reply_accept(msg)) == NULL) {
+            if (nc_sshcb_channel_open(session, msg)) {
                 ssh_message_reply_default(msg);
-                return 0;
             }
-            nc_sshcb_channel_open(session, chan);
             return 0;
+
         } else if ((type == SSH_REQUEST_CHANNEL) && (subtype == (int)SSH_CHANNEL_REQUEST_SUBSYSTEM)) {
-            if (!nc_sshcb_channel_subsystem(session, ssh_message_channel_request_channel(msg),
-                                            ssh_message_channel_request_subsystem(msg))) {
-                ssh_message_channel_request_reply_success(msg);
-            } else {
+            if (nc_sshcb_channel_subsystem(session, ssh_message_channel_request_channel(msg),
+                    ssh_message_channel_request_subsystem(msg))) {
                 ssh_message_reply_default(msg);
+            } else {
+                ssh_message_channel_request_reply_success(msg);
             }
             return 0;
         }
@@ -742,6 +775,73 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
     return 0;
 }
 
+/* ret 0 - timeout, 1 channel has data, 2 some other channel has data,
+ * 3 status change, 4 new SSH message, 5 new NETCONF SSH channel, -1 error */
+int
+nc_ssh_pollin(struct nc_session *session, int *timeout)
+{
+    int ret, elapsed = 0;
+    struct nc_session *new;
+
+    ret = nc_timedlock(session->ti_lock, *timeout, &elapsed);
+    if (*timeout > 0) {
+        *timeout -= elapsed;
+    }
+
+    if (ret != 1) {
+        return ret;
+    }
+
+    ret = ssh_execute_message_callbacks(session->ti.libssh.session);
+    pthread_mutex_unlock(session->ti_lock);
+
+    if (ret != SSH_OK) {
+        ERR("Session %u: failed to receive SSH messages (%s).", session->id,
+            ssh_get_error(session->ti.libssh.session));
+        session->status = NC_STATUS_INVALID;
+        session->term_reason = NC_SESSION_TERM_OTHER;
+        return 3;
+    }
+
+    /* new SSH message */
+    if (session->flags & NC_SESSION_SSH_NEW_MSG) {
+        session->flags &= ~NC_SESSION_SSH_NEW_MSG;
+        if (session->ti.libssh.next) {
+            for (new = session->ti.libssh.next; new != session; new = new->ti.libssh.next) {
+                if ((new->status == NC_STATUS_STARTING) && new->ti.libssh.channel
+                        && (new->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
+                    /* new NETCONF SSH channel */
+                    return 5;
+                }
+            }
+        }
+
+        /* just some SSH message */
+        return 4;
+    }
+
+    /* no new SSH message, maybe NETCONF data? */
+    ret = ssh_channel_poll_timeout(session->ti.libssh.channel, 0, 0);
+    /* not this one */
+    if (!ret) {
+        return 2;
+    } else if (ret == SSH_ERROR) {
+        ERR("Session %u: SSH channel error (%s).", session->id,
+            ssh_get_error(session->ti.libssh.session));
+        session->status = NC_STATUS_INVALID;
+        session->term_reason = NC_SESSION_TERM_OTHER;
+        return 3;
+    } else if (ret == SSH_EOF) {
+        ERR("Session %u: communication channel unexpectedly closed (libssh).",
+            session->id);
+        session->status = NC_STATUS_INVALID;
+        session->term_reason = NC_SESSION_TERM_DROPPED;
+        return 3;
+    }
+
+    return 1;
+}
+
 int
 nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 {
@@ -768,6 +868,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     ssh_set_auth_methods(session->ti.libssh.session, libssh_auth_methods);
 
     ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, session);
+    session->flags |= NC_SESSION_SSH_MSG_CB;
 
     /* LOCK */
     ret = nc_timedlock(&ssh_opts.sshbind_lock, timeout, &elapsed);
@@ -827,48 +928,59 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         return ret;
     }
 
+    session->flags &= ~NC_SESSION_SSH_NEW_MSG;
+
     return 1;
 }
 
-/* TODO remove */
-struct nc_session *
-nc_accept_ssh_channel(struct nc_session *session, int timeout)
+API int
+nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
 {
-    struct nc_session *new_session;
-    int ret;
+    uint16_t i;
+    struct nc_session *new_session = NULL;
 
-    new_session = calloc(1, sizeof *new_session);
-    new_session->ti.libssh.session = session->ti.libssh.session;
-    ret = nc_open_netconf_channel(new_session, timeout);
-    if (ret) {
-        goto fail;
+    if (!ps || !session) {
+        ERRARG;
+        return -1;
     }
 
-    /* new channel was requested and opened, fill in the whole session now */
-    for (; session->ti.libssh.next; session = session->ti.libssh.next);
-    session->ti.libssh.next = new_session;
+    for (i = 0; i < ps->session_count; ++i) {
+        if ((ps->sessions[i]->status == NC_STATUS_RUNNING) && (ps->sessions[i]->ti_type == NC_TI_LIBSSH)
+                && ps->sessions[i]->ti.libssh.next) {
+            /* an SSH session with more channels */
+            for (new_session = ps->sessions[i]->ti.libssh.next;
+                    new_session != ps->sessions[i];
+                    new_session = new_session->ti.libssh.next) {
+                if ((new_session->status == NC_STATUS_STARTING) && new_session->ti.libssh.channel
+                        && (new_session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
+                    /* we found our session */
+                    break;
+                }
+            }
+            if (new_session != ps->sessions[i]) {
+                break;
+            }
 
-    new_session->status = NC_STATUS_STARTING;
-    new_session->side = NC_SERVER;
-    new_session->ti_type = NC_TI_LIBSSH;
-    new_session->ti_lock = session->ti_lock;
-    new_session->flags = NC_SESSION_SSH_AUTHENTICATED | NC_SESSION_SHAREDCTX;
-    new_session->ctx = server_opts.ctx;
+            new_session = NULL;
+        }
+    }
 
-    new_session->username = lydict_insert(server_opts.ctx, session->username, 0);
-    new_session->host = lydict_insert(server_opts.ctx, session->host, 0);
-    new_session->port = session->port;
+    if (!new_session) {
+        ERR("No session with a NETCONF SSH channel ready was found.");
+        return -1;
+    }
+
+    /* assign new SID atomically */
+    pthread_spin_lock(&server_opts.sid_lock);
+    new_session->id = server_opts.new_session_id++;
+    pthread_spin_unlock(&server_opts.sid_lock);
 
     /* NETCONF handshake */
     if (nc_handshake(new_session)) {
-        goto fail;
+        return -1;
     }
     new_session->status = NC_STATUS_RUNNING;
+    *session = new_session;
 
-    return new_session;
-
-fail:
-    nc_session_free(new_session);
-
-    return NULL;
+    return 0;
 }
