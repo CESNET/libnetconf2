@@ -667,13 +667,13 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
             return 0;
         }
     } else if (session->flags & NC_SESSION_SSH_AUTHENTICATED) {
-        if ((type == SSH_REQUEST_CHANNEL_OPEN) && (subtype == (int)SSH_CHANNEL_SESSION)) {
+        if ((type == SSH_REQUEST_CHANNEL_OPEN) && ((enum ssh_channel_type_e)subtype == SSH_CHANNEL_SESSION)) {
             if (nc_sshcb_channel_open(session, msg)) {
                 ssh_message_reply_default(msg);
             }
             return 0;
 
-        } else if ((type == SSH_REQUEST_CHANNEL) && (subtype == (int)SSH_CHANNEL_REQUEST_SUBSYSTEM)) {
+        } else if ((type == SSH_REQUEST_CHANNEL) && ((enum ssh_channel_requests_e)subtype == SSH_CHANNEL_REQUEST_SUBSYSTEM)) {
             if (nc_sshcb_channel_subsystem(session, ssh_message_channel_request_channel(msg),
                     ssh_message_channel_request_subsystem(msg))) {
                 ssh_message_reply_default(msg);
