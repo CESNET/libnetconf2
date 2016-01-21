@@ -881,7 +881,7 @@ nc_accept(int timeout, struct nc_session **session)
     sock = ret;
 
     *session = calloc(1, sizeof **session);
-    if (!session) {
+    if (!(*session)) {
         ERRMEM;
         close(sock);
         return -1;
