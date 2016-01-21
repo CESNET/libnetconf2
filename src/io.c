@@ -102,7 +102,7 @@ nc_read(struct nc_session *session, char *buf, size_t count)
                 return -1;
             } else if (r == 0) {
                 if (ssh_channel_is_eof(session->ti.libssh.channel)) {
-                    ERR("Session %u: communication channel unexpectedly closed (libssh).", session->id);
+                    ERR("Session %u: SSH channel unexpected EOF.", session->id);
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_DROPPED;
                     return -1;
@@ -584,6 +584,16 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
 
 #ifdef ENABLE_SSH
     case NC_TI_LIBSSH:
+        if (ssh_channel_is_closed(session->ti.libssh.channel) || ssh_channel_is_eof(session->ti.libssh.channel)) {
+            if (ssh_channel_is_closed(session->ti.libssh.channel)) {
+                ERR("Session %u: SSH channel unexpectedly closed.", session->id);
+            } else {
+                ERR("Session %u: SSH channel unexpected EOF.", session->id);
+            }
+            session->status = NC_STATUS_INVALID;
+            session->term_reason = NC_SESSION_TERM_DROPPED;
+            return -1;
+        }
         return ssh_channel_write(session->ti.libssh.channel, buf, count);
 #endif
 #ifdef ENABLE_TLS
