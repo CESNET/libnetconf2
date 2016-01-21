@@ -754,10 +754,9 @@ nc_recv_server_hello(struct nc_session *session)
     int ver = -1;
     int flag = 0;
 
-    /* TODO */
-    msgtype = nc_read_msg_poll(session, NC_CLIENT_HELLO_TIMEOUT * 1000, &xml);
+    msgtype = nc_read_msg_poll(session, (server_opts.hello_timeout ? server_opts.hello_timeout * 1000 : -1), &xml);
 
-    switch(msgtype) {
+    switch (msgtype) {
     case NC_MSG_HELLO:
         /* get know NETCONF version */
         LY_TREE_FOR(xml->child, node) {
@@ -786,6 +785,10 @@ nc_recv_server_hello(struct nc_session *session)
         break;
     case NC_MSG_ERROR:
         /* nothing special, just pass it out */
+        break;
+    case NC_MSG_WOULDBLOCK:
+        ERR("Client's <hello> timeout elapsed.");
+        msgtype = NC_MSG_ERROR;
         break;
     default:
         ERR("Unexpected message received instead of <hello>.");

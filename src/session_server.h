@@ -181,8 +181,11 @@ int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
  * @param[in] ps Pollsession structure to use.
  * @param[in] timeout Poll timeout in milliseconds. 0 for non-blocking call, -1 for
  * infinite waiting.
- * @return 0 on elapsed timeout, 1 if some RPC were processed, 2 if a session from
- * \p ps changed its status (was invalidated), -1 on error.
+ * @return 0 on elapsed timeout,
+ *         1 if an RPC was processed,
+ *         2 if an RPC was processed and there are unhandled events on other sessions,
+ *         3 if a session from \p ps changed its status (was invalidated),
+ *         -1 on error.
  */
 int nc_ps_poll(struct nc_pollsession *ps, int timeout);
 
@@ -269,7 +272,7 @@ int nc_ssh_server_set_auth_methods(int auth_methods);
 /**
  * @brief Set SSH authentication attempts of every client. 3 by default.
  *
- * @param[in] auth_attempts Failed authentication attepmts before a client is dropped.
+ * @param[in] auth_attempts Failed authentication attempts before a client is dropped.
  * @return 0 on success, -1 on error.
  */
 int nc_ssh_server_set_auth_attempts(uint16_t auth_attempts);

@@ -943,7 +943,7 @@ nc_connect_ssh(const char *host, uint16_t port, const char *username, struct ly_
     }
 
     /* create and assign communication socket */
-    sock = nc_connect_getsocket(host, port);
+    sock = nc_sock_connect(host, port);
     if (sock == -1) {
         goto fail;
     }
@@ -1029,7 +1029,7 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
         ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
 
         /* create and connect socket */
-        sock = nc_connect_getsocket(host, port);
+        sock = nc_sock_connect(host, port);
         if (sock == -1) {
             goto fail;
         }
@@ -1192,7 +1192,7 @@ nc_callhome_accept_ssh(uint16_t port, const char *username, int timeout, struct 
         port = NC_PORT_CH_SSH;
     }
 
-    sock = nc_callhome_accept_connection(port, timeout, NULL, &server_host);
+    sock = nc_sock_accept(port, timeout, &server_host, NULL);
     if (sock == -1) {
         return NULL;
     }

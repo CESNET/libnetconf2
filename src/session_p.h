@@ -95,13 +95,13 @@ struct nc_tls_server_opts {
     X509_STORE *crl_store;
     pthread_mutex_t crl_lock;
 
-    struct {
+    struct nc_ctn {
         uint32_t id;
         const char *fingerprint;
         NC_TLS_CTN_MAPTYPE map_type;
         const char *name;
+        struct nc_ctn *next;
     } *ctn;
-    uint16_t ctn_count;
     pthread_mutex_t ctn_lock;
 
     pthread_key_t verify_key;
@@ -222,6 +222,7 @@ struct nc_session {
     struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
 
     /* server side only data */
+    time_t last_rpc;
 #ifdef ENABLE_SSH
     /* additional flags */
 #   define NC_SESSION_SSH_AUTHENTICATED 0x02
@@ -259,15 +260,6 @@ int nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed);
 int nc_ctx_check_and_fill(struct nc_session *session);
 
 /**
- * @brief Create and connect a socket.
- *
- * @param[in] host Hostname to connect to.
- * @param[in] port Port to connect on.
- * @return Connected socket or -1 on error.
- */
-int nc_connect_getsocket(const char *host, unsigned short port);
-
-/**
  * @brief Perform NETCONF handshake on \p session.
  *
  * @param[in] session NETCONF session to use.
@@ -276,15 +268,24 @@ int nc_connect_getsocket(const char *host, unsigned short port);
 int nc_handshake(struct nc_session *session);
 
 /**
- * @brief Accept a new (Call Home) connection.
+ * @brief Create a socket connection.
+ *
+ * @param[in] host Hostname to connect to.
+ * @param[in] port Port to connect on.
+ * @return Connected socket or -1 on error.
+ */
+int nc_sock_connect(const char *host, uint16_t port);
+
+/**
+ * @brief Accept a new socket connection.
  *
  * @param[in] port Port to listen on.
- * @param[in] timeout Timeout in msec.
- * @param[out] server_port Port the new connection is connected on. Can be NULL.
- * @param[out] server_host Host the new connection was initiated from. Can be NULL.
+ * @param[in] timeout Timeout in milliseconds.
+ * @param[out] peer_host Host the new connection was initiated from. Can be NULL.
+ * @param[out] peer_port Port the new connection is connected on. Can be NULL.
  * @return Connected socket with the new connection, -1 on error.
  */
-int nc_callhome_accept_connection(uint16_t port, int32_t timeout, uint16_t *server_port, char **server_host);
+int nc_sock_accept(uint16_t port, int timeout, char **peer_host, uint16_t *peer_port);
 
 /**
  * @brief Create a listening socket.
@@ -293,7 +294,7 @@ int nc_callhome_accept_connection(uint16_t port, int32_t timeout, uint16_t *serv
  * @param[in] port Port to listen on.
  * @return Listening socket, -1 on error.
  */
-int nc_sock_listen(const char *address, uint32_t port);
+int nc_sock_listen(const char *address, uint16_t port);
 
 /**
  * @brief Accept a new connection on a listening socket.
@@ -306,7 +307,7 @@ int nc_sock_listen(const char *address, uint32_t port);
  * @param[out] port Port of the new connection. Can be NULL.
  * @return Accepted socket of the new connection, -1 on error.
  */
-int nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANSPORT_IMPL *ti, char **host, uint16_t *port);
+int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANSPORT_IMPL *ti, char **host, uint16_t *port);
 
 #ifdef ENABLE_SSH
 

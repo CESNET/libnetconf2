@@ -53,7 +53,7 @@ nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REASON re
 }
 
 int
-nc_sock_listen(const char *address, uint32_t port)
+nc_sock_listen(const char *address, uint16_t port)
 {
     const int optVal = 1;
     const socklen_t optLen = sizeof(optVal);
@@ -131,7 +131,7 @@ fail:
 }
 
 int
-nc_sock_accept(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANSPORT_IMPL *ti, char **host, uint16_t *port)
+nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANSPORT_IMPL *ti, char **host, uint16_t *port)
 {
     uint16_t i;
     struct pollfd *pfd;
@@ -406,6 +406,7 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
         goto fail;
     }
     (*session)->status = NC_STATUS_RUNNING;
+    (*session)->last_rpc = time(NULL);
 
     return 0;
 
@@ -584,6 +585,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
 {
     int ret;
     uint16_t i;
+    time_t cur_time;
     NC_MSG_TYPE msgtype;
     struct nc_session *session;
     struct nc_server_rpc *rpc;
@@ -594,10 +596,24 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
         return -1;
     }
 
+    cur_time = time(NULL);
+
     for (i = 0; i < ps->session_count; ++i) {
         if (ps->sessions[i].session->status != NC_STATUS_RUNNING) {
             ERR("Session %u: session not running.", ps->sessions[i].session->id);
             return -1;
+        }
+
+        /* TODO invalidate only sessions without subscription */
+        if (server_opts.idle_timeout && (ps->sessions[i].session->last_rpc + server_opts.idle_timeout >= cur_time)) {
+            ERR("Session %u: session idle timeout elapsed.", ps->sessions[i].session->id);
+            ps->sessions[i].session->status = NC_STATUS_INVALID;
+            ps->sessions[i].session->term_reason = NC_SESSION_TERM_TIMEOUT;
+            return 3;
+        }
+
+        if (ps->sessions[i].revents) {
+            break;
         }
     }
 
@@ -605,15 +621,29 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
         clock_gettime(CLOCK_MONOTONIC_RAW, &old_ts);
     }
 
+    if (i == ps->session_count) {
+        /* no leftover event */
+        i = 0;
 retry_poll:
-    ret = poll((struct pollfd *)ps->sessions, ps->session_count, timeout);
-    if (ret < 1) {
-        return ret;
+        ret = poll((struct pollfd *)ps->sessions, ps->session_count, timeout);
+        if (ret < 1) {
+            return ret;
+        }
     }
 
-    /* find the first fd with POLLIN, we don't care if there are more */
-    for (i = 0; i < ps->session_count; ++i) {
-        if (ps->sessions[i].revents & POLLIN) {
+    /* find the first fd with POLLIN, we don't care if there are more now */
+    for (; i < ps->session_count; ++i) {
+        if (ps->sessions[i].revents & POLLHUP) {
+            ERR("Session %u: communication socket unexpectedly closed.", ps->sessions[i].session->id);
+            ps->sessions[i].session->status = NC_STATUS_INVALID;
+            ps->sessions[i].session->term_reason = NC_SESSION_TERM_DROPPED;
+            return 3;
+        } else if (ps->sessions[i].revents & POLLERR) {
+            ERR("Session %u: communication socket error.", ps->sessions[i].session->id);
+            ps->sessions[i].session->status = NC_STATUS_INVALID;
+            ps->sessions[i].session->term_reason = NC_SESSION_TERM_OTHER;
+            return 3;
+        } else if (ps->sessions[i].revents & POLLIN) {
 #ifdef ENABLE_SSH
             if (ps->sessions[i].session->ti_type == NC_TI_LIBSSH) {
                 /* things are not that simple with SSH, we need to check the channel */
@@ -644,23 +674,26 @@ retry_poll:
                         }
                     }
                     /* check other sessions */
+                    ps->sessions[i].revents = 0;
                     continue;
                 } else if (ret == SSH_ERROR) {
                     ERR("Session %u: SSH channel error (%s).", ps->sessions[i].session->id,
                         ssh_get_error(ps->sessions[i].session->ti.libssh.session));
                     ps->sessions[i].session->status = NC_STATUS_INVALID;
                     ps->sessions[i].session->term_reason = NC_SESSION_TERM_OTHER;
-                    return 2;
+                    return 3;
                 } else if (ret == SSH_EOF) {
                     ERR("Session %u: communication channel unexpectedly closed (libssh).",
                         ps->sessions[i].session->id);
                     ps->sessions[i].session->status = NC_STATUS_INVALID;
                     ps->sessions[i].session->term_reason = NC_SESSION_TERM_DROPPED;
-                    return 2;
+                    return 3;
                 }
             }
 #endif /* ENABLE_SSH */
 
+            /* we are going to process it now */
+            ps->sessions[i].revents = 0;
             break;
         }
     }
@@ -685,7 +718,7 @@ retry_poll:
         }
     }
 
-    /* reading an RPC and sending a reply must be atomic */
+    /* reading an RPC and sending a reply must be atomic (no other RPC should be read) */
     ret = nc_timedlock(session->ti_lock, timeout, NULL);
     if (ret != 1) {
         /* error or timeout */
@@ -696,12 +729,13 @@ retry_poll:
     if (msgtype == NC_MSG_ERROR) {
         pthread_mutex_unlock(session->ti_lock);
         if (session->status != NC_STATUS_RUNNING) {
-            return 2;
+            return 3;
         }
         return -1;
     }
 
     /* process RPC */
+    session->last_rpc = time(NULL);
     msgtype = nc_send_reply(session, rpc);
 
     pthread_mutex_unlock(session->ti_lock);
@@ -709,12 +743,20 @@ retry_poll:
     if (msgtype == NC_MSG_ERROR) {
         nc_server_rpc_free(rpc);
         if (session->status != NC_STATUS_RUNNING) {
-            return 2;
+            return 3;
         }
         return -1;
     }
 
     nc_server_rpc_free(rpc);
+
+    /* is there some other socket waiting? */
+    for (++i; i < ps->session_count; ++i) {
+        if (ps->sessions[i].revents) {
+            return 2;
+        }
+    }
+
     return 1;
 }
 
@@ -836,7 +878,7 @@ nc_accept(int timeout, struct nc_session **session)
     /* LOCK */
     pthread_mutex_lock(&server_opts.bind_lock);
 
-    ret = nc_sock_accept(server_opts.binds, server_opts.bind_count, timeout, &ti, &host, &port);
+    ret = nc_sock_accept_binds(server_opts.binds, server_opts.bind_count, timeout, &ti, &host, &port);
 
     /* UNLOCK */
     pthread_mutex_unlock(&server_opts.bind_lock);
