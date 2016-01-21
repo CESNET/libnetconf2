@@ -266,13 +266,12 @@ sshauth_passphrase(const char* privkey_path)
 
     if (!(tty = fopen("/dev/tty", "r+"))) {
         ERR("Unable to open the current terminal (%s).", strerror(errno));
-        return NULL;
+        goto fail;
     }
 
     if (tcgetattr(fileno(tty), &oldterm)) {
         ERR("Unable to get terminal settings (%s).", strerror(errno));
-        fclose(tty);
-        return NULL;
+        goto fail;
     }
 
     fprintf(tty, "Enter passphrase for the key '%s':", privkey_path);
@@ -285,8 +284,7 @@ sshauth_passphrase(const char* privkey_path)
     tcflush(fileno(tty), TCIFLUSH);
     if (tcsetattr(fileno(tty), TCSANOW, &newterm)) {
         ERR("Unable to change terminal settings for hiding password (%s).", strerror(errno));
-        fclose(tty);
-        return NULL;
+        goto fail;
     }
 
     while ((fread(&c, 1, 1, tty) == 1) && (c != '\n')) {
@@ -295,16 +293,11 @@ sshauth_passphrase(const char* privkey_path)
             newbuf = realloc(buf, buflen * sizeof *newbuf);
             if (!newbuf) {
                 ERRMEM;
-                /* remove content of the buffer */
-                memset(buf, 0, len);
-                free(buf);
-
                 /* restore terminal settings */
                 if (tcsetattr(fileno(tty), TCSANOW, &oldterm)) {
                     ERR("Unable to restore terminal settings (%s).", strerror(errno));
                 }
-                fclose(tty);
-                return NULL;
+                goto fail;
             }
             buf = newbuf;
         }
@@ -325,6 +318,11 @@ sshauth_passphrase(const char* privkey_path)
 
     fclose(tty);
     return buf;
+
+fail:
+    free(buf);
+    fclose(tty);
+    return NULL;
 }
 
 /* TODO define this switch */
