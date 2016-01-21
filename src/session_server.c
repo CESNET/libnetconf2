@@ -429,6 +429,7 @@ nc_ps_free(struct nc_pollsession *ps)
         return;
     }
 
+    free(ps->pfds);
     free(ps->sessions);
     free(ps);
 }
@@ -442,22 +443,23 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
     }
 
     ++ps->session_count;
+    ps->pfds = realloc(ps->pfds, ps->session_count * sizeof *ps->pfds);
     ps->sessions = realloc(ps->sessions, ps->session_count * sizeof *ps->sessions);
 
     switch (session->ti_type) {
     case NC_TI_FD:
-        ps->sessions[ps->session_count - 1].fd = session->ti.fd.in;
+        ps->pfds[ps->session_count - 1].fd = session->ti.fd.in;
         break;
 
 #ifdef ENABLE_SSH
     case NC_TI_LIBSSH:
-        ps->sessions[ps->session_count - 1].fd = ssh_get_fd(session->ti.libssh.session);
+        ps->pfds[ps->session_count - 1].fd = ssh_get_fd(session->ti.libssh.session);
         break;
 #endif
 
 #ifdef ENABLE_TLS
     case NC_TI_OPENSSL:
-        ps->sessions[ps->session_count - 1].fd = SSL_get_rfd(session->ti.tls);
+        ps->pfds[ps->session_count - 1].fd = SSL_get_rfd(session->ti.tls);
         break;
 #endif
 
@@ -465,9 +467,9 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
         ERRINT;
         return -1;
     }
-    ps->sessions[ps->session_count - 1].events = POLLIN;
-    ps->sessions[ps->session_count - 1].revents = 0;
-    ps->sessions[ps->session_count - 1].session = session;
+    ps->pfds[ps->session_count - 1].events = POLLIN;
+    ps->pfds[ps->session_count - 1].revents = 0;
+    ps->sessions[ps->session_count - 1] = session;
 
     return 0;
 }
@@ -483,9 +485,10 @@ nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
     }
 
     for (i = 0; i < ps->session_count; ++i) {
-        if (ps->sessions[i].session == session) {
+        if (ps->sessions[i] == session) {
             --ps->session_count;
-            memcpy(&ps->sessions[i], &ps->sessions[ps->session_count], sizeof *ps->sessions);
+            ps->sessions[i] = ps->sessions[ps->session_count];
+            memcpy(&ps->pfds[i], &ps->pfds[ps->session_count], sizeof *ps->pfds);
             return 0;
         }
     }
@@ -599,20 +602,20 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
     cur_time = time(NULL);
 
     for (i = 0; i < ps->session_count; ++i) {
-        if (ps->sessions[i].session->status != NC_STATUS_RUNNING) {
-            ERR("Session %u: session not running.", ps->sessions[i].session->id);
+        if (ps->sessions[i]->status != NC_STATUS_RUNNING) {
+            ERR("Session %u: session not running.", ps->sessions[i]->id);
             return -1;
         }
 
         /* TODO invalidate only sessions without subscription */
-        if (server_opts.idle_timeout && (ps->sessions[i].session->last_rpc + server_opts.idle_timeout >= cur_time)) {
-            ERR("Session %u: session idle timeout elapsed.", ps->sessions[i].session->id);
-            ps->sessions[i].session->status = NC_STATUS_INVALID;
-            ps->sessions[i].session->term_reason = NC_SESSION_TERM_TIMEOUT;
+        if (server_opts.idle_timeout && (ps->sessions[i]->last_rpc + server_opts.idle_timeout >= cur_time)) {
+            ERR("Session %u: session idle timeout elapsed.", ps->sessions[i]->id);
+            ps->sessions[i]->status = NC_STATUS_INVALID;
+            ps->sessions[i]->term_reason = NC_SESSION_TERM_TIMEOUT;
             return 3;
         }
 
-        if (ps->sessions[i].revents) {
+        if (ps->pfds[i].revents) {
             break;
         }
     }
@@ -622,10 +625,10 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
     }
 
     if (i == ps->session_count) {
+retry_poll:
         /* no leftover event */
         i = 0;
-retry_poll:
-        ret = poll((struct pollfd *)ps->sessions, ps->session_count, timeout);
+        ret = poll(ps->pfds, ps->session_count, timeout);
         if (ret < 1) {
             return ret;
         }
@@ -633,17 +636,17 @@ retry_poll:
 
     /* find the first fd with POLLIN, we don't care if there are more now */
     for (; i < ps->session_count; ++i) {
-        if (ps->sessions[i].revents & POLLHUP) {
-            ERR("Session %u: communication socket unexpectedly closed.", ps->sessions[i].session->id);
-            ps->sessions[i].session->status = NC_STATUS_INVALID;
-            ps->sessions[i].session->term_reason = NC_SESSION_TERM_DROPPED;
+        if (ps->pfds[i].revents & POLLHUP) {
+            ERR("Session %u: communication socket unexpectedly closed.", ps->sessions[i]->id);
+            ps->sessions[i]->status = NC_STATUS_INVALID;
+            ps->sessions[i]->term_reason = NC_SESSION_TERM_DROPPED;
             return 3;
-        } else if (ps->sessions[i].revents & POLLERR) {
-            ERR("Session %u: communication socket error.", ps->sessions[i].session->id);
-            ps->sessions[i].session->status = NC_STATUS_INVALID;
-            ps->sessions[i].session->term_reason = NC_SESSION_TERM_OTHER;
+        } else if (ps->pfds[i].revents & POLLERR) {
+            ERR("Session %u: communication socket error.", ps->sessions[i]->id);
+            ps->sessions[i]->status = NC_STATUS_INVALID;
+            ps->sessions[i]->term_reason = NC_SESSION_TERM_OTHER;
             return 3;
-        } else if (ps->sessions[i].revents & POLLIN) {
+        } else if (ps->pfds[i].revents & POLLIN) {
 #ifdef ENABLE_SSH
             if (ps->sessions[i].session->ti_type == NC_TI_LIBSSH) {
                 /* things are not that simple with SSH, we need to check the channel */
@@ -693,7 +696,7 @@ retry_poll:
 #endif /* ENABLE_SSH */
 
             /* we are going to process it now */
-            ps->sessions[i].revents = 0;
+            ps->pfds[i].revents = 0;
             break;
         }
     }
@@ -704,7 +707,7 @@ retry_poll:
     }
 
     /* this is the session with some data available for reading */
-    session = ps->sessions[i].session;
+    session = ps->sessions[i];
 
     if (timeout > 0) {
         clock_gettime(CLOCK_MONOTONIC_RAW, &new_ts);
@@ -752,7 +755,7 @@ retry_poll:
 
     /* is there some other socket waiting? */
     for (++i; i < ps->session_count; ++i) {
-        if (ps->sessions[i].revents) {
+        if (ps->pfds[i].revents) {
             return 2;
         }
     }

@@ -236,12 +236,8 @@ struct nc_session {
 };
 
 struct nc_pollsession {
-    struct {
-        int fd;
-        short events;
-        short revents;
-        struct nc_session *session;
-    } *sessions;
+    struct pollfd *pfds;
+    struct nc_session **sessions;
     uint16_t session_count;
 };
 
