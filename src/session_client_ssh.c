@@ -995,6 +995,11 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
     struct passwd *pw;
     struct nc_session *session = NULL;
 
+    if (!ssh_session) {
+        ERRARG;
+        return NULL;
+    }
+
     /* prepare session structure */
     session = calloc(1, sizeof *session);
     if (!session) {
@@ -1108,6 +1113,11 @@ API struct nc_session *
 nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
 {
     struct nc_session *new_session, *ptr;
+
+    if (!session) {
+        ERRARG;
+        return NULL;
+    }
 
     /* prepare session structure */
     new_session = calloc(1, sizeof *new_session);
