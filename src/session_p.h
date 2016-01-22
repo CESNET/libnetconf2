@@ -211,6 +211,7 @@ struct nc_session {
     struct ly_ctx *ctx;            /**< libyang context of the session */
     uint8_t flags;                 /**< various flags of the session - TODO combine with status and/or side */
 #define NC_SESSION_SHAREDCTX 0x01
+#define NC_SESSION_CALLHOME 0x02
 
     /* client side only data */
     uint64_t msgid;
@@ -222,13 +223,13 @@ struct nc_session {
     time_t last_rpc;               /**< time the last RPC was received on this session */
 #ifdef ENABLE_SSH
     /* SSH session authenticated */
-#   define NC_SESSION_SSH_AUTHENTICATED 0x02
+#   define NC_SESSION_SSH_AUTHENTICATED 0x04
     /* netconf subsystem requested */
-#   define NC_SESSION_SSH_SUBSYS_NETCONF 0x04
+#   define NC_SESSION_SSH_SUBSYS_NETCONF 0x08
     /* new SSH message arrived */
-#   define NC_SESSION_SSH_NEW_MSG 0x08
+#   define NC_SESSION_SSH_NEW_MSG 0x10
     /* this session is passed to nc_sshcb_msg() */
-#   define NC_SESSION_SSH_MSG_CB 0x10
+#   define NC_SESSION_SSH_MSG_CB 0x20
 
     uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
 #endif

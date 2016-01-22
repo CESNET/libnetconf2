@@ -947,4 +947,79 @@ fail:
     return -1;
 }
 
+API int
+nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int timeout, struct nc_session **session)
+{
+    int sock, ret;
+
+    sock = nc_sock_connect(host, port);
+    if (sock == -1) {
+        goto fail;
+    }
+
+    *session = calloc(1, sizeof **session);
+    if (!(*session)) {
+        ERRMEM;
+        close(sock);
+        return -1;
+    }
+    (*session)->status = NC_STATUS_STARTING;
+    (*session)->side = NC_SERVER;
+    (*session)->ctx = server_opts.ctx;
+    (*session)->flags = NC_SESSION_SHAREDCTX | NC_SESSION_CALLHOME;
+    nc_ctx_lock(-1, NULL);
+    (*session)->host = lydict_insert(server_opts.ctx, host, 0);
+    nc_ctx_unlock();
+    (*session)->port = port;
+
+    /* transport lock */
+    (*session)->ti_lock = malloc(sizeof *(*session)->ti_lock);
+    if (!(*session)->ti_lock) {
+        ERRMEM;
+        close(sock);
+        ret = -1;
+        goto fail;
+    }
+    pthread_mutex_init((*session)->ti_lock, NULL);
+
+    /* sock gets assigned to session or closed */
+    if (ti == NC_TI_LIBSSH) {
+        ret = nc_accept_ssh_session(*session, sock, timeout);
+        if (ret < 1) {
+            goto fail;
+        }
+    } else if (ti == NC_TI_OPENSSL) {
+        ret = nc_accept_tls_session(*session, sock, timeout);
+        if (ret < 1) {
+            goto fail;
+        }
+    } else {
+        ERRINT;
+        close(sock);
+        ret = -1;
+        goto fail;
+    }
+
+    /* assign new SID atomically */
+    /* LOCK */
+    pthread_spin_lock(&server_opts.sid_lock);
+    (*session)->id = server_opts.new_session_id++;
+    /* UNLOCK */
+    pthread_spin_unlock(&server_opts.sid_lock);
+
+    /* NETCONF handshake */
+    if (nc_handshake(*session)) {
+        ret = -1;
+        goto fail;
+    }
+    (*session)->status = NC_STATUS_RUNNING;
+
+    return 1;
+
+fail:
+    nc_session_free(*session);
+    *session = NULL;
+    return -1;
+}
+
 #endif /* ENABLE_SSH || ENABLE_TLS */
