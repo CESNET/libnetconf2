@@ -321,7 +321,9 @@ sshauth_passphrase(const char* privkey_path)
 
 fail:
     free(buf);
-    fclose(tty);
+    if (tty) {
+        fclose(tty);
+    }
     return NULL;
 }
 
