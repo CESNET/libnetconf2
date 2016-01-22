@@ -260,7 +260,7 @@ int nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **sess
 
 /**
  * @brief Set SSH host keys the server will identify itself with. Each of RSA, DSA, and
- * ECDSA key can be set. If the particular type was already set, it is replaced.
+ * ECDSA keys can be set. If the particular type was already set, it is replaced.
  *
  * @param[in] privkey_path Path to a private key.
  * @return 0 on success, -1 on error.

@@ -859,7 +859,7 @@ nc_accept(int timeout, struct nc_session **session)
 {
     NC_TRANSPORT_IMPL ti;
     int sock, ret;
-    char *host;
+    char *host = NULL;
     uint16_t port;
 
     if (!server_opts.ctx || !server_opts.binds || !session) {
@@ -884,6 +884,7 @@ nc_accept(int timeout, struct nc_session **session)
     if (!(*session)) {
         ERRMEM;
         close(sock);
+        free(host);
         return -1;
     }
     (*session)->status = NC_STATUS_STARTING;

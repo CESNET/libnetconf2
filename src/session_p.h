@@ -41,7 +41,7 @@
 
 /* seconds */
 #   define NC_SSH_TIMEOUT 10
-
+/* number of all supported authentication methods */
 #   define NC_SSH_AUTH_COUNT 3
 
 struct nc_ssh_client_opts {
@@ -103,9 +103,6 @@ struct nc_tls_server_opts {
         struct nc_ctn *next;
     } *ctn;
     pthread_mutex_t ctn_lock;
-
-    pthread_key_t verify_key;
-    pthread_once_t verify_once;
 };
 
 #endif /* ENABLE_TLS */
@@ -145,7 +142,7 @@ struct nc_server_opts {
 #define NC_REVERSE_QUEUE 1
 
 /**
- * @brief type of the session
+ * @brief Type of the session
  */
 typedef enum {
     NC_CLIENT,        /**< client side */
@@ -156,7 +153,7 @@ typedef enum {
  * @brief Enumeration of the supported NETCONF protocol versions
  */
 typedef enum {
-    NC_VERSION_10 = 0,  /**< NETCONV 1.0 - RFC 4741, 4742 */
+    NC_VERSION_10 = 0,  /**< NETCONF 1.0 - RFC 4741, 4742 */
     NC_VERSION_11 = 1   /**< NETCONF 1.1 - RFC 6241, 6242 */
 } NC_VERSION;
 
@@ -222,7 +219,7 @@ struct nc_session {
     struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
 
     /* server side only data */
-    time_t last_rpc;
+    time_t last_rpc;               /**< time the last RPC was received on this session */
 #ifdef ENABLE_SSH
     /* SSH session authenticated */
 #   define NC_SESSION_SSH_AUTHENTICATED 0x02
@@ -233,10 +230,10 @@ struct nc_session {
     /* this session is passed to nc_sshcb_msg() */
 #   define NC_SESSION_SSH_MSG_CB 0x10
 
-    uint16_t ssh_auth_attempts;
+    uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
 #endif
 #ifdef ENABLE_TLS
-    X509 *tls_cert;
+    X509 *tls_cert;                /**< TLS client certificate it used for authentication */
 #endif
 };
 

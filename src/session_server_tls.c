@@ -37,9 +37,11 @@ extern struct nc_server_opts server_opts;
 struct nc_tls_server_opts tls_opts = {
     .tls_ctx_lock = PTHREAD_MUTEX_INITIALIZER,
     .crl_lock = PTHREAD_MUTEX_INITIALIZER,
-    .ctn_lock = PTHREAD_MUTEX_INITIALIZER,
-    .verify_once = PTHREAD_ONCE_INIT
+    .ctn_lock = PTHREAD_MUTEX_INITIALIZER
 };
+
+static pthread_key_t verify_key;
+static pthread_once_t verify_once = PTHREAD_ONCE_INIT;
 
 static char *
 asn1time_to_str(ASN1_TIME *t)
@@ -471,7 +473,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     ASN1_TIME *last_update = NULL, *next_update = NULL;
 
     /* get the thread session */
-    session = pthread_getspecific(tls_opts.verify_key);
+    session = pthread_getspecific(verify_key);
 
     /* get the last certificate, that is the peer (client) certificate */
     if (!session->tls_cert) {
@@ -1185,7 +1187,7 @@ nc_tls_server_free_opts(void)
 static void
 nc_tls_make_verify_key(void)
 {
-    pthread_key_create(&tls_opts.verify_key, NULL);
+    pthread_key_create(&verify_key, NULL);
 }
 
 int
@@ -1248,8 +1250,8 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     SSL_set_mode(session->ti.tls, SSL_MODE_AUTO_RETRY);
 
     /* store session on per-thread basis */
-    pthread_once(&tls_opts.verify_once, nc_tls_make_verify_key);
-    pthread_setspecific(tls_opts.verify_key, session);
+    pthread_once(&verify_once, nc_tls_make_verify_key);
+    pthread_setspecific(verify_key, session);
 
     ret = SSL_accept(session->ti.tls);
 
