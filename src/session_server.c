@@ -734,13 +734,14 @@ retry_poll:
 
     if (msgtype == NC_MSG_ERROR) {
         nc_server_rpc_free(rpc);
-        if (session->status != NC_STATUS_RUNNING) {
-            return 3;
-        }
         return -1;
     }
-
     nc_server_rpc_free(rpc);
+
+    /* status change takes precedence over leftover events (return 2) */
+    if (session->status != NC_STATUS_RUNNING) {
+        return 3;
+    }
 
     /* is there some other socket waiting? */
     for (++i; i < ps->session_count; ++i) {
