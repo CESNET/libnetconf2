@@ -27,8 +27,7 @@ The library is connected with YANG, so for example data validation according to 
 schemas is done internally instead of using external DSDL tools in the first generation of libnetconf.
 
 **libnetconf2** is currently being developed, but client-side functions are completely finished
-and should be working with possibly some minor problems. Server-side is functioning with these
-features missing: notifications, timeouts (setters are there, but timeouts are not checked anywhere),
-Call Home, and creating more SSH channels and NETCONF sessions on existing SSH sessions. Also,
-compiling without either SSH or TLS support will result in errors. Generally, anything may not work
-yet and feedback and bug reports concerning problems not mentioned here are appreciated.
+and should be working with possibly some minor problems. Server-side is functioning with only
+notifications missing. Also, compiling without either SSH or TLS support will result in errors.
+Generally, anything may not work yet and feedback and bug reports concerning problems not mentioned
+here are appreciated.
