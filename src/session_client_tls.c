@@ -294,7 +294,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     }
     session->status = NC_STATUS_RUNNING;
 
-    if (nc_ctx_check_and_fill(session)) {
+    if (nc_ctx_check_and_fill(session) == -1) {
         goto fail;
     }
 
@@ -355,7 +355,7 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     }
     session->status = NC_STATUS_RUNNING;
 
-    if (nc_ctx_check_and_fill(session)) {
+    if (nc_ctx_check_and_fill(session) == -1) {
         goto fail;
     }
 

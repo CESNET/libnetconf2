@@ -256,7 +256,7 @@ void nc_subtract_elapsed(int *timeout, struct timespec *old_ts);
  *        for in the directory set using nc_schema_searchpath().
  *
  * @param[in] session Session to create the context for.
- * @return 0 on success, non-zero on failure.
+ * @return 0 on success, 1 on some missing schemas, -1 on error.
  */
 int nc_ctx_check_and_fill(struct nc_session *session);
 

@@ -752,7 +752,7 @@ connect_ssh_session_netconf(struct nc_session *session)
         case NC_SSH_AUTH_PASSWORD:
             userauthlist &= ~SSH_AUTH_METHOD_PASSWORD;
 
-            VRB("Password authentication (host %s, user %s).", session->host, session->username);
+            VRB("Password authentication (host \"%s\", user \"%s\").", session->host, session->username);
             s = sshauth_password(session->username, session->host);
             if ((ret_auth = ssh_userauth_password(ssh_sess, session->username, s)) != SSH_AUTH_SUCCESS) {
                 memset(s, 0, strlen(s));
@@ -798,7 +798,7 @@ connect_ssh_session_netconf(struct nc_session *session)
             }
 
             for (j = 0; j < ssh_opts.key_count; j++) {
-                VRB("Trying to authenticate using %spair %s %s.",
+                VRB("Trying to authenticate using %spair \"%s\" \"%s\".",
                      ssh_opts.keys[j].privkey_crypt ? "password-protected " : "", ssh_opts.keys[j].privkey_path,
                      ssh_opts.keys[j].pubkey_path);
 
@@ -970,7 +970,7 @@ nc_connect_ssh(const char *host, uint16_t port, const char *username, struct ly_
     }
     session->status = NC_STATUS_RUNNING;
 
-    if (nc_ctx_check_and_fill(session)) {
+    if (nc_ctx_check_and_fill(session) == -1) {
         goto fail;
     }
 
@@ -1087,7 +1087,7 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
     }
     session->status = NC_STATUS_RUNNING;
 
-    if (nc_ctx_check_and_fill(session)) {
+    if (nc_ctx_check_and_fill(session) == -1) {
         goto fail;
     }
 
@@ -1164,7 +1164,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
 
     pthread_mutex_unlock(new_session->ti_lock);
 
-    if (nc_ctx_check_and_fill(new_session)) {
+    if (nc_ctx_check_and_fill(new_session) == -1) {
         goto fail;
     }
 

@@ -74,8 +74,8 @@ ctx_check_and_load_model(struct nc_session *session, const char *cpblt)
     /* parse module */
     ptr = strstr(cpblt, "module=");
     if (!ptr) {
-        WRN("Unknown capability \"%s\" could not be parsed.", cpblt);
-        return 1;
+        ERR("Unknown capability \"%s\" could not be parsed.", cpblt);
+        return -1;
     }
     ptr += 7;
     ptr2 = strchr(ptr, '&');
@@ -101,11 +101,13 @@ ctx_check_and_load_model(struct nc_session *session, const char *cpblt)
         module = ly_ctx_load_module(session->ctx, model_name, revision);
     }
 
-    free(model_name);
     free(revision);
     if (!module) {
+        WRN("Failed to load model \"%s\".", model_name);
+        free(model_name);
         return 1;
     }
+    free(model_name);
 
     /* parse features */
     ptr = strstr(cpblt, "features=");
@@ -250,10 +252,11 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
     return model_data;
 }
 
+/* return 0 - ok, 1 - some models failed to load, -1 - error */
 int
 nc_ctx_check_and_fill(struct nc_session *session)
 {
-    int i, get_schema_support = 0;
+    int i, get_schema_support = 0, ret = 0, r;
     ly_module_clb old_clb = NULL;
     void *old_data = NULL;
 
@@ -283,7 +286,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
         if (old_clb) {
             ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
         }
-        return 1;
+        return -1;
     }
 
     /* load all other models */
@@ -293,13 +296,39 @@ nc_ctx_check_and_fill(struct nc_session *session)
             continue;
         }
 
-        ctx_check_and_load_model(session, session->cpblts[i]);
+        r = ctx_check_and_load_model(session, session->cpblts[i]);
+        if (r == -1) {
+            ret = -1;
+            break;
+        }
+
+        /* failed to load schema, but let's try to find it using user callback (or locally, if not set),
+         * if it was using get-schema */
+        if (r == 1) {
+            if (get_schema_support) {
+                VRB("Trying to load the schema from a different source.");
+                /* works even if old_clb is NULL */
+                ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
+                r = ctx_check_and_load_model(session, session->cpblts[i]);
+            }
+
+            /* fail again (or no other way to try), too bad */
+            if (r) {
+                ret = 1;
+            }
+
+            /* set get-schema callback back */
+            ly_ctx_set_module_clb(session->ctx, &libyang_module_clb, session);
+        }
     }
 
     if (old_clb) {
         ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
     }
-    return 0;
+    if (ret == 1) {
+        WRN("Some models failed to be loaded, any data from these models will be ignored.");
+    }
+    return ret;
 }
 
 API struct nc_session *
@@ -340,7 +369,7 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     }
     session->status = NC_STATUS_RUNNING;
 
-    if (nc_ctx_check_and_fill(session)) {
+    if (nc_ctx_check_and_fill(session) == -1) {
         goto fail;
     }
 
