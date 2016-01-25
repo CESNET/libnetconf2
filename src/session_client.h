@@ -155,6 +155,7 @@ struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  *
+ * @param[in] host Host the NETCONF client will listen on.
  * @param[in] port Port the NETCONF client will listen on.
  * @param[in] username Name of the user to login to the server. The user running the application (detected from the
  *                     effective UID) is used if NULL is specified.
@@ -169,7 +170,7 @@ struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_
  *                the session context will not include all the models supported by the server.
  * @return Created NETCONF session object or NULL on error.
  */
-struct nc_session *nc_callhome_accept_ssh(uint16_t port, const char *username, int timeout, struct ly_ctx *ctx);
+struct nc_session *nc_callhome_accept_ssh(const char *host, uint16_t port, const char *username, int timeout, struct ly_ctx *ctx);
 
 /**
  * @brief Add an SSH public and private key pair to be used for client authentication.
@@ -314,6 +315,7 @@ struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  *
+ * @param[in] host Host the NETCONF client will listen on.
  * @param[in] port Port the NETCONF client will listen on.
  * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite
  *                    waiting and 0 for immediate return if data are not available on wire.
@@ -326,7 +328,7 @@ struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
  *                the session context will not include all the models supported by the server.
  * @return Created NETCONF session object or NULL on error.
  */
-struct nc_session *nc_callhome_accept_tls(uint16_t port, int timeout, struct ly_ctx *ctx);
+struct nc_session *nc_callhome_accept_tls(const char *host, uint16_t port, int timeout, struct ly_ctx *ctx);
 
 #endif /* ENABLE_TLS */
 

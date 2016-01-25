@@ -280,13 +280,13 @@ int nc_sock_connect(const char *host, uint16_t port);
 /**
  * @brief Accept a new socket connection.
  *
- * @param[in] port Port to listen on.
+ * @param[in] sock Listening socket.
  * @param[in] timeout Timeout in milliseconds.
  * @param[out] peer_host Host the new connection was initiated from. Can be NULL.
  * @param[out] peer_port Port the new connection is connected on. Can be NULL.
  * @return Connected socket with the new connection, -1 on error.
  */
-int nc_sock_accept(uint16_t port, int timeout, char **peer_host, uint16_t *peer_port);
+int nc_sock_accept(int sock, int timeout, char **peer_host, uint16_t *peer_port);
 
 /**
  * @brief Create a listening socket.
@@ -318,9 +318,10 @@ int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout
  * @param[in] session Session structure of the new connection.
  * @param[in] sock Socket of the new connection.
  * @param[in] timeout Timeout for all the related tasks.
+ * @param[in] ch Whether to accept a Call Home session or a standard one.
  * @return 1 on success, 0 on timeout, -1 on error.
  */
-int nc_accept_ssh_session(struct nc_session *session, int sock, int timeout);
+int nc_accept_ssh_session(struct nc_session *session, int sock, int timeout, int ch);
 
 /**
  * @brief Callback called when a new SSH message is received.
@@ -358,9 +359,10 @@ int nc_ssh_pollin(struct nc_session *session, int *timeout);
  * @param[in] session Session structure of the new connection.
  * @param[in] sock Socket of the new connection.
  * @param[in] timeout Timeout for all the related tasks.
+ * @param[in] ch Whether to accept a Call Home session or a standard one.
  * @return 1 on success, 0 on timeout, -1 on error.
  */
-int nc_accept_tls_session(struct nc_session *session, int sock, int timeout);
+int nc_accept_tls_session(struct nc_session *session, int sock, int timeout, int ch);
 
 #endif
 

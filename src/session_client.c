@@ -1406,50 +1406,42 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 /* CALL HOME */
 
 int
-nc_sock_accept(uint16_t port, int timeout, char **peer_host, uint16_t *peer_port)
+nc_sock_accept(int sock, int timeout, char **peer_host, uint16_t *peer_port)
 {
-    struct pollfd reverse_listen_socket = {-1, POLLIN, 0};
-    int sock;
+    struct pollfd pfd = {-1, POLLIN, 0};
     struct sockaddr_storage remote;
     socklen_t addr_size = sizeof(remote);
-    int status;
+    int ret, status;
 
-    reverse_listen_socket.fd = nc_sock_listen("::0", port);
-    if (reverse_listen_socket.fd == -1) {
-        goto fail;
-    }
-
-    reverse_listen_socket.revents = 0;
+    pfd.fd = sock;
+    pfd.revents = 0;
     while (1) {
         DBG("Waiting %ums for incoming Call Home connections.", timeout);
-        status = poll(&reverse_listen_socket, 1, timeout);
+        status = poll(&pfd, 1, timeout);
 
         if (status == 0) {
             /* timeout */
             ERR("Timeout for Call Home listen expired.");
-            goto fail;
+            return -1;
         } else if ((status == -1) && (errno == EINTR)) {
             /* poll was interrupted - try it again */
             continue;
         } else if (status < 0) {
             /* poll failed - something wrong happened */
             ERR("Call Home poll failed (%s).", strerror(errno));
-            goto fail;
+            return -1;
         } else if (status > 0) {
-            if (reverse_listen_socket.revents & (POLLHUP | POLLERR)) {
+            if (pfd.revents & (POLLHUP | POLLERR)) {
                 /* close pipe/fd - other side already did it */
                 ERR("Call Home listening socket was closed.");
-                goto fail;
-            } else if (reverse_listen_socket.revents & POLLIN) {
+                return -1;
+            } else if (pfd.revents & POLLIN) {
                 /* accept call home */
-                sock = accept(reverse_listen_socket.fd, (struct sockaddr *)&remote, &addr_size);
+                ret = accept(pfd.fd, (struct sockaddr *)&remote, &addr_size);
                 break;
             }
         }
     }
-
-    /* we accepted a connection, that's it */
-    close(reverse_listen_socket.fd);
 
     /* fill some server info, if interested */
     if (remote.ss_family == AF_INET) {
@@ -1472,12 +1464,5 @@ nc_sock_accept(uint16_t port, int timeout, char **peer_host, uint16_t *peer_port
         }
     }
 
-    return sock;
-
-fail:
-    if (reverse_listen_socket.fd != -1) {
-        close(reverse_listen_socket.fd);
-    }
-
-    return -1;
+    return ret;
 }

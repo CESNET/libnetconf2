@@ -367,9 +367,9 @@ fail:
 }
 
 API struct nc_session *
-nc_callhome_accept_tls(uint16_t port, int timeout, struct ly_ctx *ctx)
+nc_callhome_accept_tls(const char *host, uint16_t port, int timeout, struct ly_ctx *ctx)
 {
-    int sock, verify;
+    int listen_sock, sock, verify;
     char *server_host;
     SSL *tls;
     struct nc_session *session;
@@ -378,8 +378,15 @@ nc_callhome_accept_tls(uint16_t port, int timeout, struct ly_ctx *ctx)
         port = NC_PORT_CH_TLS;
     }
 
-    sock = nc_sock_accept(port, timeout, &server_host, NULL);
-    if (sock == -1) {
+    listen_sock = nc_sock_listen(host, port);
+    if (listen_sock < 0) {
+        return NULL;
+    }
+
+    sock = nc_sock_accept(listen_sock, timeout, &server_host, NULL);
+    close(listen_sock);
+
+    if (sock < 0) {
         return NULL;
     }
 

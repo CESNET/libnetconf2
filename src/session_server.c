@@ -909,12 +909,12 @@ nc_accept(int timeout, struct nc_session **session)
 
     /* sock gets assigned to session or closed */
     if (ti == NC_TI_LIBSSH) {
-        ret = nc_accept_ssh_session(*session, sock, timeout);
+        ret = nc_accept_ssh_session(*session, sock, timeout, 0);
         if (ret < 1) {
             goto fail;
         }
     } else if (ti == NC_TI_OPENSSL) {
-        ret = nc_accept_tls_session(*session, sock, timeout);
+        ret = nc_accept_tls_session(*session, sock, timeout, 0);
         if (ret < 1) {
             goto fail;
         }
@@ -944,7 +944,7 @@ nc_accept(int timeout, struct nc_session **session)
 fail:
     nc_session_free(*session);
     *session = NULL;
-    return -1;
+    return ret;
 }
 
 API int
@@ -952,9 +952,14 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int t
 {
     int sock, ret;
 
+    if (!host || !port || !ti || !session) {
+        ERRARG;
+        return -1;
+    }
+
     sock = nc_sock_connect(host, port);
-    if (sock == -1) {
-        goto fail;
+    if (sock < 0) {
+        return -1;
     }
 
     *session = calloc(1, sizeof **session);
@@ -984,12 +989,12 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int t
 
     /* sock gets assigned to session or closed */
     if (ti == NC_TI_LIBSSH) {
-        ret = nc_accept_ssh_session(*session, sock, timeout);
+        ret = nc_accept_ssh_session(*session, sock, timeout, 1);
         if (ret < 1) {
             goto fail;
         }
     } else if (ti == NC_TI_OPENSSL) {
-        ret = nc_accept_tls_session(*session, sock, timeout);
+        ret = nc_accept_tls_session(*session, sock, timeout, 1);
         if (ret < 1) {
             goto fail;
         }
@@ -1019,7 +1024,7 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int t
 fail:
     nc_session_free(*session);
     *session = NULL;
-    return -1;
+    return ret;
 }
 
 #endif /* ENABLE_SSH || ENABLE_TLS */

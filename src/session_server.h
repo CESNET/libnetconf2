@@ -240,10 +240,21 @@ int nc_server_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
  * @param[in] timeout Timeout for receiving a new connection in milliseconds, 0 for
  * non-blocking call, -1 for infinite waiting.
  * @param[out] session New session.
- * @return 1 on success, 0 on timeout, -1 or error.
+ * @return 1 on success, 0 on timeout, -1 on error.
  */
 int nc_accept(int timeout, struct nc_session **session);
 
+/**
+ * @brief Establish a Call Home connection with a listening NETCONF client.
+ *
+ * @param[in] host Host the client is listening on.
+ * @param[in] port Port the client is listening on.
+ * @param[in] ti Transport protocol to use.
+ * @param[in] timeout Timeout for transport-related operations, 0 for non-blocking
+ * call, -1 for infinite waiting.
+ * @param[out] session New Call Home session.
+ * @return 1 on success, 0 on timeout, -1 on error.
+ */
 int nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int timeout, struct nc_session **session);
 
 #endif /* ENABLE_SSH || ENABLE_TLS */

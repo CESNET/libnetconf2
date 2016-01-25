@@ -421,7 +421,7 @@ finish:
     return ret;
 }
 
-#endif
+#endif /* ENABLE_DNSSEC */
 
 static int
 sshauth_hostkey_check(const char *hostname, ssh_session session)
@@ -1191,10 +1191,10 @@ fail:
 }
 
 API struct nc_session *
-nc_callhome_accept_ssh(uint16_t port, const char *username, int timeout, struct ly_ctx *ctx)
+nc_callhome_accept_ssh(const char *host, uint16_t port, const char *username, int timeout, struct ly_ctx *ctx)
 {
     const int ssh_timeout = NC_SSH_TIMEOUT;
-    int sock;
+    int sock, listen_sock;
     char *server_host;
     ssh_session sess;
 
@@ -1202,7 +1202,14 @@ nc_callhome_accept_ssh(uint16_t port, const char *username, int timeout, struct 
         port = NC_PORT_CH_SSH;
     }
 
-    sock = nc_sock_accept(port, timeout, &server_host, NULL);
+    listen_sock = nc_sock_listen(host, port);
+    if (listen_sock < 0) {
+        return NULL;
+    }
+
+    sock = nc_sock_accept(listen_sock, timeout, &server_host, NULL);
+    close(listen_sock);
+
     if (sock == -1) {
         return NULL;
     }
