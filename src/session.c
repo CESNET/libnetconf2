@@ -488,28 +488,28 @@ create_cpblts(struct ly_ctx *ctx)
     mod = ly_ctx_get_module(ctx, "ietf-netconf", NULL);
     if (mod) {
         if (lys_features_state(mod, "writable-running") == 1) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:writable-running:1.0", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:writable-running:1.0", &cpblts, &size, &count);
         }
         if (lys_features_state(mod, "candidate") == 1) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:candidate:1.0", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:candidate:1.0", &cpblts, &size, &count);
             if (lys_features_state(mod, "confirmed-commit") == 1) {
-                add_cpblt(ctx, "urn:ietf:params:netconf:confirmed-commit:1.1", &cpblts, &size, &count);
+                add_cpblt(ctx, "urn:ietf:params:netconf:capability:confirmed-commit:1.1", &cpblts, &size, &count);
             }
         }
         if (lys_features_state(mod, "rollback-on-error") == 1) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:rollback-on-error:1.0", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:rollback-on-error:1.0", &cpblts, &size, &count);
         }
         if (lys_features_state(mod, "validate") == 1) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:validate:1.1", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:validate:1.1", &cpblts, &size, &count);
         }
         if (lys_features_state(mod, "startup") == 1) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:startup:1.0", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:startup:1.0", &cpblts, &size, &count);
         }
         if (lys_features_state(mod, "url") == 1) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:url:1.0", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:url:1.0", &cpblts, &size, &count);
         }
         if (lys_features_state(mod, "xpath") == 1) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:xpath:1.0", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:xpath:1.0", &cpblts, &size, &count);
         }
     }
 
@@ -518,7 +518,7 @@ create_cpblts(struct ly_ctx *ctx)
         if (!server_opts.wd_basic_mode) {
             VRB("with-defaults capability will not be advertised even though \"ietf-netconf-with-defaults\" model is present, unknown basic-mode.");
         } else {
-            strcpy(str, "urn:ietf:params:netconf:with-defaults:1.0");
+            strcpy(str, "urn:ietf:params:netconf:capability:with-defaults:1.0");
             switch (server_opts.wd_basic_mode) {
             case NC_WD_ALL:
                 strcat(str, "?basic-mode=report-all");
@@ -557,9 +557,9 @@ create_cpblts(struct ly_ctx *ctx)
 
     mod = ly_ctx_get_module(ctx, "nc-notifications", NULL);
     if (mod) {
-        add_cpblt(ctx, "urn:ietf:params:netconf:notification:1.0", &cpblts, &size, &count);
+        add_cpblt(ctx, "urn:ietf:params:netconf:capability:notification:1.0", &cpblts, &size, &count);
         if (server_opts.interleave_capab) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:interleave:1.0", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:interleave:1.0", &cpblts, &size, &count);
         }
     }
 

@@ -215,27 +215,7 @@ int nc_ctx_unlock(void);
 #if defined(ENABLE_SSH) || defined(ENABLE_TLS)
 
 /**
- * @brief Add a new server bind and start listening on it.
- *
- * @param[in] address IP address to bind to.
- * @param[in] port Port to bind to.
- * @param[in] ti Expected transport protocol of incoming connections.
- * @return 0 on success, -1 on error.
- */
-int nc_server_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
-
-/**
- * @brief Stop listening on and remove a server bind.
- *
- * @param[in] address IP address the bind was bound to. NULL matches all the addresses.
- * @param[in] port Port the bind was bound to. NULL matches all the ports.
- * @param[in] ti Expected transport. 0 matches all.
- * @return 0 on success, -1 on not finding any match.
- */
-int nc_server_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
-
-/**
- * @brief Accept new sessions on all the listening binds.
+ * @brief Accept new sessions on all the listening endpoints.
  *
  * @param[in] timeout Timeout for receiving a new connection in milliseconds, 0 for
  * non-blocking call, -1 for infinite waiting.
@@ -243,19 +223,6 @@ int nc_server_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
  * @return 1 on success, 0 on timeout, -1 on error.
  */
 int nc_accept(int timeout, struct nc_session **session);
-
-/**
- * @brief Establish a Call Home connection with a listening NETCONF client.
- *
- * @param[in] host Host the client is listening on.
- * @param[in] port Port the client is listening on.
- * @param[in] ti Transport protocol to use.
- * @param[in] timeout Timeout for transport-related operations, 0 for non-blocking
- * call, -1 for infinite waiting.
- * @param[out] session New Call Home session.
- * @return 1 on success, 0 on timeout, -1 on error.
- */
-int nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int timeout, struct nc_session **session);
 
 #endif /* ENABLE_SSH || ENABLE_TLS */
 
@@ -272,69 +239,105 @@ int nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, i
 int nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session);
 
 /**
- * @brief Set SSH host keys the server will identify itself with. Each of RSA, DSA, and
+ * @brief Add a new SSH endpoint and start listening on it.
+ *
+ * @param[in] name Arbitrary unique endpoint name. There can be a TLS endpoint with
+ * the same name.
+ * @param[in] address IP address to listen on.
+ * @param[in] port Port to listen on.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_ssh_add_endpt_listen(const char *name, const char *address, uint16_t port);
+
+/**
+ * @brief Stop listening on and remove an SSH endpoint.
+ *
+ * @param[in] name Endpoint name. NULL matches all (SSH) endpoints.
+ * @return 0 on success, -1 on not finding any match.
+ */
+int nc_server_ssh_del_endpt(const char *name);
+
+/**
+ * @brief Set endpoint SSH host keys the server will identify itself with. Each of RSA, DSA, and
  * ECDSA keys can be set. If the particular type was already set, it is replaced.
  *
  * @param[in] privkey_path Path to a private key.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_set_hostkey(const char *privkey_path);
+int nc_server_ssh_endpt_set_hostkey(const char *endpt_name, const char *privkey_path);
 
 /**
- * @brief Set SSH banner the server will send to every client.
+ * @brief Set endpoint SSH banner the server will send to every client.
  *
  * @param[in] banner SSH banner.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_set_banner(const char *banner);
+int nc_server_ssh_endpt_set_banner(const char *endpt_name, const char *banner);
 
 /**
- * @brief Set accepted SSH authentication methods. All (publickey, password, interactive)
+ * @brief Set endpoint accepted SSH authentication methods. All (publickey, password, interactive)
  * are supported by default.
  *
  * @param[in] auth_methods Accepted authentication methods bit field of NC_SSH_AUTH_TYPE.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_set_auth_methods(int auth_methods);
+int nc_server_ssh_endpt_set_auth_methods(const char *endpt_name, int auth_methods);
 
 /**
- * @brief Set SSH authentication attempts of every client. 3 by default.
+ * @brief Set endpoint SSH authentication attempts of every client. 3 by default.
  *
  * @param[in] auth_attempts Failed authentication attempts before a client is dropped.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_set_auth_attempts(uint16_t auth_attempts);
+int nc_server_ssh_endpt_set_auth_attempts(const char *endpt_name, uint16_t auth_attempts);
 
 /**
- * @brief Set SSH authentication timeout. 10 seconds by default.
+ * @brief Set endpoint SSH authentication timeout. 10 seconds by default.
  *
  * @param[in] auth_timeout Number of seconds before an unauthenticated client is dropped.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_set_auth_timeout(uint16_t auth_timeout);
+int nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_timeout);
 
 /**
- * @brief Add an authorized client SSH public key. This public key can be used for
+ * @brief Add an endpoint authorized client SSH public key. This public key can be used for
  * publickey authentication afterwards.
  *
  * @param[in] pubkey_path Path to the public key.
  * @param[in] username Username that the client with the public key must use.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_add_authkey(const char *pubkey_path, const char *username);
+int nc_server_ssh_endpt_add_authkey(const char *endpt_name, const char *pubkey_path, const char *username);
 
 /**
- * @brief Remove an authorized client SSH public key.
+ * @brief Remove an endpoint authorized client SSH public key.
  *
  * @param[in] pubkey_path Path to an authorized public key. NULL matches all the keys.
  * @param[in] username Username for an authorized public key. NULL matches all the usernames.
  * @return 0 on success, -1 on not finding any match.
  */
-int nc_ssh_server_del_authkey(const char *pubkey_path, const char *username);
+int nc_server_ssh_endpt_del_authkey(const char *endpt_name, const char *pubkey_path, const char *username);
+
+/**
+ * @brief Free all the various SSH server options (excluding Call Home).
+ */
+void nc_server_ssh_opts_free(void);
 
 /*
  * Call Home
  */
+
+/**
+ * @brief Establish an SSH Call Home connection with a listening NETCONF client.
+ *
+ * @param[in] host Host the client is listening on.
+ * @param[in] port Port the client is listening on.
+ * @param[in] timeout Timeout for transport-related operations, 0 for non-blocking
+ * call, -1 for infinite waiting.
+ * @param[out] session New Call Home session.
+ * @return 1 on success, 0 on timeout, -1 on error.
+ */
+int nc_connect_callhome_ssh(const char *host, uint16_t port, int timeout, struct nc_session **session);
 
 /**
  * @brief Set Call Home SSH host keys the server will identify itself with. Each of RSA, DSA, and
@@ -343,7 +346,7 @@ int nc_ssh_server_del_authkey(const char *pubkey_path, const char *username);
  * @param[in] privkey_path Path to a private key.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_ch_set_hostkey(const char *privkey_path);
+int nc_server_ssh_ch_set_hostkey(const char *privkey_path);
 
 /**
  * @brief Set Call Home SSH banner the server will send to every client.
@@ -351,7 +354,7 @@ int nc_ssh_server_ch_set_hostkey(const char *privkey_path);
  * @param[in] banner SSH banner.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_ch_set_banner(const char *banner);
+int nc_server_ssh_ch_set_banner(const char *banner);
 
 /**
  * @brief Set accepted Call Home SSH authentication methods. All (publickey, password, interactive)
@@ -360,7 +363,7 @@ int nc_ssh_server_ch_set_banner(const char *banner);
  * @param[in] auth_methods Accepted authentication methods bit field of NC_SSH_AUTH_TYPE.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_ch_set_auth_methods(int auth_methods);
+int nc_server_ssh_ch_set_auth_methods(int auth_methods);
 
 /**
  * @brief Set Call Home SSH authentication attempts of every client. 3 by default.
@@ -368,7 +371,7 @@ int nc_ssh_server_ch_set_auth_methods(int auth_methods);
  * @param[in] auth_attempts Failed authentication attempts before a client is dropped.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_ch_set_auth_attempts(uint16_t auth_attempts);
+int nc_server_ssh_ch_set_auth_attempts(uint16_t auth_attempts);
 
 /**
  * @brief Set Call Home SSH authentication timeout. 10 seconds by default.
@@ -376,7 +379,7 @@ int nc_ssh_server_ch_set_auth_attempts(uint16_t auth_attempts);
  * @param[in] auth_timeout Number of seconds before an unauthenticated client is dropped.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_ch_set_auth_timeout(uint16_t auth_timeout);
+int nc_server_ssh_ch_set_auth_timeout(uint16_t auth_timeout);
 
 /**
  * @brief Add an authorized Call Home client SSH public key. This public key can be used for
@@ -386,7 +389,7 @@ int nc_ssh_server_ch_set_auth_timeout(uint16_t auth_timeout);
  * @param[in] username Username that the client with the public key must use.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_ch_add_authkey(const char *pubkey_path, const char *username);
+int nc_server_ssh_ch_add_authkey(const char *pubkey_path, const char *username);
 
 /**
  * @brief Remove an authorized Call Home client SSH public key.
@@ -395,16 +398,33 @@ int nc_ssh_server_ch_add_authkey(const char *pubkey_path, const char *username);
  * @param[in] username Username for an authorized public key. NULL matches all the usernames.
  * @return 0 on success, -1 on not finding any match.
  */
-int nc_ssh_server_ch_del_authkey(const char *pubkey_path, const char *username);
+int nc_server_ssh_ch_del_authkey(const char *pubkey_path, const char *username);
 
-/**
- * @brief Free all the various SSH server options (including Call Home ones).
- */
-void nc_ssh_server_free_opts(void);
+/* TODO */
+void nc_server_ssh_ch_opts_clear(void);
 
 #endif /* ENABLE_SSH */
 
 #ifdef ENABLE_TLS
+
+/**
+ * @brief Add a new TLS endpoint and start listening on it.
+ *
+ * @param[in] name Arbitrary unique endpoint name. There can be an SSH endpoint with
+ * the same name.
+ * @param[in] address IP address to listen on.
+ * @param[in] port Port to listen on.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_tls_add_endpt_listen(const char *name, const char *address, uint16_t port);
+
+/**
+ * @brief Stop listening on and remove a TLS endpoint.
+ *
+ * @param[in] name Endpoint name. NULL matches all (TLS) endpoints.
+ * @return 0 on success, -1 on not finding any match.
+ */
+int nc_server_tls_del_endpt(const char *name);
 
 /**
  * @brief Set server TLS certificate. Alternative to nc_tls_server_set_cert_path().
@@ -413,7 +433,7 @@ void nc_ssh_server_free_opts(void);
  * @param[in] cert Base64-encoded certificate in ASN.1 DER encoding.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_set_cert(const char *cert);
+int nc_server_tls_endpt_set_cert(const char *endpt_name, const char *cert);
 
 /**
  * @brief Set server TLS certificate. Alternative to nc_tls_server_set_cert().
@@ -422,7 +442,7 @@ int nc_tls_server_set_cert(const char *cert);
  * @param[in] cert_path Path to a certificate file in PEM format.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_set_cert_path(const char *cert_path);
+int nc_server_tls_endpt_set_cert_path(const char *endpt_name, const char *cert_path);
 
 /**
  * @brief Set server TLS private key matching the certificate.
@@ -433,7 +453,7 @@ int nc_tls_server_set_cert_path(const char *cert_path);
  * @param[in] is_rsa Whether \p privkey are the data of an RSA (1) or DSA (0) key.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_set_key(const char *privkey, int is_rsa);
+int nc_server_tls_endpt_set_key(const char *endpt_name, const char *privkey, int is_rsa);
 
 /**
  * @brief Set server TLS private key matching the certificate.
@@ -443,7 +463,7 @@ int nc_tls_server_set_key(const char *privkey, int is_rsa);
  * @param[in] privkey_path Path to a private key file in PEM format.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_set_key_path(const char *privkey_path);
+int nc_server_tls_endpt_set_key_path(const char *endpt_name, const char *privkey_path);
 
 /**
  * @brief Add a trusted certificate. Can be both a CA or a client one.
@@ -451,7 +471,7 @@ int nc_tls_server_set_key_path(const char *privkey_path);
  * @param[in] cert Base64-enocded certificate in ASN.1DER encoding.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_add_trusted_cert(const char *cert);
+int nc_server_tls_endpt_add_trusted_cert(const char *endpt_name, const char *cert);
 
 /**
  * @brief Add a trusted certificate. Can be both a CA or a client one.
@@ -459,7 +479,7 @@ int nc_tls_server_add_trusted_cert(const char *cert);
  * @param[in] cert_path Path to a trusted certificate file in PEM format.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_add_trusted_cert_path(const char *cert_path);
+int nc_server_tls_endpt_add_trusted_cert_path(const char *endpt_name, const char *cert_path);
 
 /**
  * @brief Set trusted Certificate Authority certificate locations. There can only be
@@ -471,13 +491,13 @@ int nc_tls_server_add_trusted_cert_path(const char *cert_path);
  * (c_rehash utility can be used to create hashes) with PEM files. Can be NULL.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_set_trusted_cacert_locations(const char *cacert_file_path, const char *cacert_dir_path);
+int nc_server_tls_endpt_set_trusted_cacert_locations(const char *endpt_name, const char *cacert_file_path, const char *cacert_dir_path);
 
 /**
  * @brief Destroy and clean all the set certificates and private keys. CRLs and
  * CTN entries are not affected.
  */
-void nc_tls_server_destroy_certs(void);
+void nc_server_tls_endpt_destroy_certs(const char *endpt_name);
 
 /**
  * @brief Set Certificate Revocation List locations. There can only be one file
@@ -488,13 +508,13 @@ void nc_tls_server_destroy_certs(void);
  * can be used to create hashes) with PEM files. Can be NULL.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_set_crl_locations(const char *crl_file_path, const char *crl_dir_path);
+int nc_server_tls_endpt_set_crl_locations(const char *endpt_name, const char *crl_file_path, const char *crl_dir_path);
 
 /**
  * @brief Destroy and clean CRLs. Certificates, priavte keys, and CTN entries are
  * not affected.
  */
-void nc_tls_server_destroy_crls(void);
+void nc_server_tls_endpt_destroy_crls(const char *endpt_name);
 
 /**
  * @brief Add a Cert-to-name entry.
@@ -505,7 +525,7 @@ void nc_tls_server_destroy_crls(void);
  * @param[in] name Specific username if \p map_type == NC_TLS_CTN_SPECIFED. Must be NULL otherwise.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
+int nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
 /**
  * @brief Remove a Cert-to-name entry.
@@ -516,11 +536,23 @@ int nc_tls_server_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTY
  * @param[in] name Specific username for the entry. NULL matches all the usernames.
  * @return 0 on success, -1 on not finding any match.
  */
-int nc_tls_server_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
+int nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
 /*
  * Call Home
  */
+
+/**
+ * @brief Establish a TLS Call Home connection with a listening NETCONF client.
+ *
+ * @param[in] host Host the client is listening on.
+ * @param[in] port Port the client is listening on.
+ * @param[in] timeout Timeout for transport-related operations, 0 for non-blocking
+ * call, -1 for infinite waiting.
+ * @param[out] session New Call Home session.
+ * @return 1 on success, 0 on timeout, -1 on error.
+ */
+int nc_connect_callhome_tls(const char *host, uint16_t port, int timeout, struct nc_session **session);
 
 /**
  * @brief Set server Call Home TLS certificate. Alternative to nc_tls_server_set_cert_path().
@@ -529,7 +561,7 @@ int nc_tls_server_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYP
  * @param[in] cert Base64-encoded certificate in ASN.1 DER encoding.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_ch_set_cert(const char *cert);
+int nc_server_tls_ch_set_cert(const char *cert);
 
 /**
  * @brief Set server Call Home TLS certificate. Alternative to nc_tls_server_set_cert().
@@ -538,7 +570,7 @@ int nc_tls_server_ch_set_cert(const char *cert);
  * @param[in] cert_path Path to a certificate file in PEM format.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_ch_set_cert_path(const char *cert_path);
+int nc_server_tls_ch_set_cert_path(const char *cert_path);
 
 /**
  * @brief Set server Call Home TLS private key matching the certificate.
@@ -549,7 +581,7 @@ int nc_tls_server_ch_set_cert_path(const char *cert_path);
  * @param[in] is_rsa Whether \p privkey are the data of an RSA (1) or DSA (0) key.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_ch_set_key(const char *privkey, int is_rsa);
+int nc_server_tls_ch_set_key(const char *privkey, int is_rsa);
 
 /**
  * @brief Set server Call Home TLS private key matching the certificate.
@@ -559,7 +591,7 @@ int nc_tls_server_ch_set_key(const char *privkey, int is_rsa);
  * @param[in] privkey_path Path to a private key file in PEM format.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_ch_set_key_path(const char *privkey_path);
+int nc_server_tls_ch_set_key_path(const char *privkey_path);
 
 /**
  * @brief Add a Call Home trusted certificate. Can be both a CA or a client one.
@@ -567,7 +599,7 @@ int nc_tls_server_ch_set_key_path(const char *privkey_path);
  * @param[in] cert Base64-enocded certificate in ASN.1DER encoding.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_ch_add_trusted_cert(const char *cert);
+int nc_server_tls_ch_add_trusted_cert(const char *cert);
 
 /**
  * @brief Add a Call Home trusted certificate. Can be both a CA or a client one.
@@ -575,7 +607,7 @@ int nc_tls_server_ch_add_trusted_cert(const char *cert);
  * @param[in] cert_path Path to a trusted certificate file in PEM format.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_ch_add_trusted_cert_path(const char *cert_path);
+int nc_server_tls_ch_add_trusted_cert_path(const char *cert_path);
 
 /**
  * @brief Set trusted Call Home Certificate Authority certificate locations. There
@@ -587,13 +619,13 @@ int nc_tls_server_ch_add_trusted_cert_path(const char *cert_path);
  * (c_rehash utility can be used to create hashes) with PEM files. Can be NULL.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_ch_set_trusted_cacert_locations(const char *cacert_file_path, const char *cacert_dir_path);
+int nc_server_tls_ch_set_trusted_cacert_locations(const char *cacert_file_path, const char *cacert_dir_path);
 
 /**
  * @brief Destroy and clean all the set Call Home certificates and private keys.
  * CRLs and CTN entries are not affected.
  */
-void nc_tls_server_ch_destroy_certs(void);
+void nc_server_tls_ch_destroy_certs(void);
 
 /**
  * @brief Set Call Home Certificate Revocation List locations. There can only be
@@ -604,13 +636,13 @@ void nc_tls_server_ch_destroy_certs(void);
  * can be used to create hashes) with PEM files. Can be NULL.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_ch_set_crl_locations(const char *crl_file_path, const char *crl_dir_path);
+int nc_server_tls_ch_set_crl_locations(const char *crl_file_path, const char *crl_dir_path);
 
 /**
  * @brief Destroy and clean Call Home CRLs. Call Home certificates, private keys,
  * and CTN entries are not affected.
  */
-void nc_tls_server_ch_destroy_crls(void);
+void nc_server_tls_ch_destroy_crls(void);
 
 /**
  * @brief Add a Call Home Cert-to-name entry.
@@ -621,7 +653,7 @@ void nc_tls_server_ch_destroy_crls(void);
  * @param[in] name Specific username if \p map_type == NC_TLS_CTN_SPECIFED. Must be NULL otherwise.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_ch_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
+int nc_server_tls_ch_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
 /**
  * @brief Remove a Call Home Cert-to-name entry.
@@ -632,12 +664,10 @@ int nc_tls_server_ch_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MA
  * @param[in] name Specific username for the entry. NULL matches all the usernames.
  * @return 0 on success, -1 on not finding any match.
  */
-int nc_tls_server_ch_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
+int nc_server_tls_ch_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
-/**
- * @brief Free all the various TLS server options (including Call Home ones).
- */
-void nc_tls_server_free_opts(void);
+/* TODO */
+void nc_server_tls_ch_opts_clear(void);
 
 #endif /* ENABLE_TLS */
 

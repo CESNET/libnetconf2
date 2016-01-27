@@ -44,32 +44,32 @@
 /* number of all supported authentication methods */
 #   define NC_SSH_AUTH_COUNT 3
 
-struct nc_ssh_client_opts {
+struct nc_client_ssh_opts {
     /* SSH authentication method preferences */
     struct {
         NC_SSH_AUTH_TYPE type;
-        short int value;
+        int16_t value;
     } auth_pref[NC_SSH_AUTH_COUNT];
 
     /* SSH key pairs */
     struct {
         char *pubkey_path;
         char *privkey_path;
-        int privkey_crypt;
+        int8_t privkey_crypt;
     } *keys;
-    int key_count;
+    uint16_t key_count;
+
+    char *username;
 };
 
-struct nc_ssh_server_opts {
+struct nc_server_ssh_opts {
     ssh_bind sshbind;
-    pthread_mutex_t sshbind_lock;
 
     struct {
         const char *path;
         const char *username;
     } *authkeys;
     uint16_t authkey_count;
-    pthread_mutex_t authkey_lock;
 
     int auth_methods;
     uint16_t auth_attempts;
@@ -83,17 +83,23 @@ struct nc_ssh_server_opts {
 #   include <openssl/bio.h>
 #   include <openssl/ssl.h>
 
-struct nc_tls_client_opts {
+struct nc_client_tls_opts {
+    char *cert_path;
+    char *key_path;
+    char *ca_file;
+    char *ca_dir;
+    int8_t tls_ctx_change;
     SSL_CTX *tls_ctx;
-    X509_STORE *tls_store;
+
+    char *crl_file;
+    char *crl_dir;
+    int8_t crl_store_change;
+    X509_STORE *crl_store;
 };
 
-struct nc_tls_server_opts {
+struct nc_server_tls_opts {
     SSL_CTX *tls_ctx;
-    pthread_mutex_t tls_ctx_lock;
-
     X509_STORE *crl_store;
-    pthread_mutex_t crl_lock;
 
     struct nc_ctn {
         uint32_t id;
@@ -102,10 +108,21 @@ struct nc_tls_server_opts {
         const char *name;
         struct nc_ctn *next;
     } *ctn;
-    pthread_mutex_t ctn_lock;
 };
 
 #endif /* ENABLE_TLS */
+
+struct nc_client_opts {
+    char *schema_searchpath;
+
+    struct nc_bind {
+        const char *address;
+        uint16_t port;
+        int sock;
+        NC_TRANSPORT_IMPL ti;
+    } *ch_binds;
+    uint16_t ch_bind_count;
+};
 
 struct nc_server_opts {
     struct ly_ctx *ctx;
@@ -118,14 +135,15 @@ struct nc_server_opts {
     uint16_t hello_timeout;
     uint16_t idle_timeout;
 
-    struct nc_bind {
-        const char *address;
-        uint16_t port;
-        int sock;
-        NC_TRANSPORT_IMPL ti;
-    } *binds;
-    uint16_t bind_count;
-    pthread_mutex_t bind_lock;
+    struct nc_bind *binds;
+    struct nc_endpt {
+        const char *name;
+        void *ti_opts;
+        pthread_mutex_t endpt_lock;
+    } *endpts;
+    uint16_t endpt_count;
+    /* WRITE - working with binds/endpoints, READ - modifying a specific bind/endpoint, holding that endpt_lock too */
+    pthread_rwlock_t endpt_array_lock;
 
     uint32_t new_session_id;
     pthread_spinlock_t sid_lock;
@@ -220,6 +238,7 @@ struct nc_session {
     struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
 
     /* server side only data */
+    void *ti_opts;
     time_t last_rpc;               /**< time the last RPC was received on this session */
 #ifdef ENABLE_SSH
     /* SSH session authenticated */
@@ -303,14 +322,57 @@ int nc_sock_listen(const char *address, uint16_t port);
  * @param[in] binds Structure with the listening sockets.
  * @param[in] bind_count Number of \p binds.
  * @param[in] timeout Timeout for accepting.
- * @param[out] ti Type of transport of the accepted connection. Can be NULL.
  * @param[out] host Host of the remote peer. Can be NULL.
  * @param[out] port Port of the new connection. Can be NULL.
+ * @param[out] idx Index of the bind that was accepted. Can be NULL.
  * @return Accepted socket of the new connection, -1 on error.
  */
-int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, NC_TRANSPORT_IMPL *ti, char **host, uint16_t *port);
+int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host, uint16_t *port, uint16_t *idx);
+
+/**
+ * @brief Add a new endpoint and start listening on it.
+ *
+ * @param[in] name Unique arbitrary name.
+ * @param[in] address IP address to bind to.
+ * @param[in] port Port to bind to.
+ * @param[in] ti Expected transport protocol of incoming connections.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_add_endpt_listen(const char *name, const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
+
+/**
+ * @brief Stop listening on and remove an endpoint.
+ *
+ * @param[in] address Name of the endpoint. NULL matches all the names.
+ * @param[in] ti Expected transport. 0 matches all.
+ * @return 0 on success, -1 on not finding any match.
+ */
+int nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti);
+
+/**
+ * @brief Find an endpoint.
+ *
+ * Caller must hold endpt_array_lock for reading.
+ *
+ * @param[in] name Endpoint name.
+ * @param[in] ti Endpoind transport.
+ * @return Endpoint, NULL on error.
+ */
+struct nc_endpt *nc_server_get_endpt(const char *name, NC_TRANSPORT_IMPL ti);
+
+/* TODO */
+int nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
+
+/* TODO */
+int nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
+
+/* TODO */
+int nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int timeout, struct nc_session **session);
 
 #ifdef ENABLE_SSH
+
+/* TODO */
+struct nc_session *nc_accept_callhome_sock_ssh(int sock, const char *host, uint16_t port, struct ly_ctx *ctx);
 
 /**
  * @brief Establish SSH transport on a socket.
@@ -321,7 +383,7 @@ int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout
  * @param[in] ch Whether to accept a Call Home session or a standard one.
  * @return 1 on success, 0 on timeout, -1 on error.
  */
-int nc_accept_ssh_session(struct nc_session *session, int sock, int timeout, int ch);
+int nc_accept_ssh_session(struct nc_session *session, int sock, int timeout);
 
 /**
  * @brief Callback called when a new SSH message is received.
@@ -349,9 +411,15 @@ int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
  */
 int nc_ssh_pollin(struct nc_session *session, int *timeout);
 
-#endif
+/* TODO */
+void nc_server_ssh_opts_clear(struct nc_server_ssh_opts *opts);
+
+#endif /* ENABLE_SSH */
 
 #ifdef ENABLE_TLS
+
+/* TODO */
+struct nc_session *nc_accept_callhome_sock_tls(int sock, const char *host, uint16_t port, struct ly_ctx *ctx);
 
 /**
  * @brief Establish TLS transport on a socket.
@@ -362,9 +430,12 @@ int nc_ssh_pollin(struct nc_session *session, int *timeout);
  * @param[in] ch Whether to accept a Call Home session or a standard one.
  * @return 1 on success, 0 on timeout, -1 on error.
  */
-int nc_accept_tls_session(struct nc_session *session, int sock, int timeout, int ch);
+int nc_accept_tls_session(struct nc_session *session, int sock, int timeout);
 
-#endif
+/* TODO */
+void nc_server_tls_opts_clear(struct nc_server_tls_opts *opts);
+
+#endif /* ENABLE_TLS */
 
 /**
  * Functions

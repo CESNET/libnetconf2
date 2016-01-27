@@ -41,29 +41,29 @@
 
 static const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "candidate"};
 
-static char *schema_searchpath;
+static struct nc_client_opts client_opts;
 
 API int
-nc_schema_searchpath(const char *path)
+nc_client_schema_searchpath(const char *path)
 {
-    if (schema_searchpath) {
-        free(schema_searchpath);
+    if (client_opts.schema_searchpath) {
+        free(client_opts.schema_searchpath);
     }
 
     if (path) {
-        schema_searchpath = strdup(path);
-        if (!schema_searchpath) {
+        client_opts.schema_searchpath = strdup(path);
+        if (!client_opts.schema_searchpath) {
             ERRMEM;
             return 1;
         }
     } else {
-        schema_searchpath = NULL;
+        client_opts.schema_searchpath = NULL;
     }
 
     return 0;
 }
 
-/* SCHEMAS_DIR not used */
+/* SCHEMAS_DIR not used (implicitly) */
 static int
 ctx_check_and_load_model(struct nc_session *session, const char *cpblt)
 {
@@ -851,6 +851,102 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
     return reply;
 }
 
+int
+nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
+{
+    int sock;
+
+    if (!address || !port) {
+        ERRARG;
+        return -1;
+    }
+
+    sock = nc_sock_listen(address, port);
+    if (sock == -1) {
+        return -1;
+    }
+
+    ++client_opts.ch_bind_count;
+    client_opts.ch_binds = realloc(client_opts.ch_binds, client_opts.ch_bind_count * sizeof *client_opts.ch_binds);
+
+    client_opts.ch_binds[client_opts.ch_bind_count - 1].address = strdup(address);
+    client_opts.ch_binds[client_opts.ch_bind_count - 1].port = port;
+    client_opts.ch_binds[client_opts.ch_bind_count - 1].sock = sock;
+    client_opts.ch_binds[client_opts.ch_bind_count - 1].ti = ti;
+
+    return 0;
+}
+
+int
+nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
+{
+    uint32_t i;
+    int ret = -1;
+
+    if (!address && !port && !ti) {
+        for (i = 0; i < client_opts.ch_bind_count; ++i) {
+            close(client_opts.ch_binds[i].sock);
+            free((char *)client_opts.ch_binds[i].address);
+
+            ret = 0;
+        }
+        free(client_opts.ch_binds);
+        client_opts.ch_binds = NULL;
+        client_opts.ch_bind_count = 0;
+    } else {
+        for (i = 0; i < client_opts.ch_bind_count; ++i) {
+            if ((!address || !strcmp(client_opts.ch_binds[i].address, address))
+                    && (!port || (client_opts.ch_binds[i].port == port))
+                    && (!ti || (client_opts.ch_binds[i].ti == ti))) {
+                close(client_opts.ch_binds[i].sock);
+                free((char *)client_opts.ch_binds[i].address);
+
+                --client_opts.ch_bind_count;
+                memcpy(&client_opts.ch_binds[i], &client_opts.ch_binds[client_opts.ch_bind_count], sizeof *client_opts.ch_binds);
+
+                ret = 0;
+            }
+        }
+    }
+
+    return ret;
+}
+
+API int
+nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
+{
+    int sock;
+    char *host = NULL;
+    uint16_t port, idx;
+
+    if (!client_opts.ch_binds || !session) {
+        ERRARG;
+        return -1;
+    }
+
+    sock = nc_sock_accept_binds(client_opts.ch_binds, client_opts.ch_bind_count, timeout, &host, &port, &idx);
+
+    if (sock < 1) {
+        return sock;
+    }
+
+    if (client_opts.ch_binds[idx].ti == NC_TI_LIBSSH) {
+        *session = nc_accept_callhome_sock_ssh(sock, host, port, ctx);
+    } else if (client_opts.ch_binds[idx].ti == NC_TI_OPENSSL) {
+        *session = nc_accept_callhome_sock_tls(sock, host, port, ctx);
+    } else {
+        *session = NULL;
+    }
+
+    free(host);
+
+    if (!(*session)) {
+        return -1;
+    }
+
+    return 1;
+}
+
 API NC_MSG_TYPE
 nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout, struct nc_reply **reply)
 {
@@ -1430,68 +1526,4 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
     *msgid = cur_msgid;
     return NC_MSG_RPC;
-}
-
-/* CALL HOME */
-
-int
-nc_sock_accept(int sock, int timeout, char **peer_host, uint16_t *peer_port)
-{
-    struct pollfd pfd = {-1, POLLIN, 0};
-    struct sockaddr_storage remote;
-    socklen_t addr_size = sizeof(remote);
-    int ret, status;
-
-    pfd.fd = sock;
-    pfd.revents = 0;
-    while (1) {
-        DBG("Waiting %ums for incoming Call Home connections.", timeout);
-        status = poll(&pfd, 1, timeout);
-
-        if (status == 0) {
-            /* timeout */
-            ERR("Timeout for Call Home listen expired.");
-            return -1;
-        } else if ((status == -1) && (errno == EINTR)) {
-            /* poll was interrupted - try it again */
-            continue;
-        } else if (status < 0) {
-            /* poll failed - something wrong happened */
-            ERR("Call Home poll failed (%s).", strerror(errno));
-            return -1;
-        } else if (status > 0) {
-            if (pfd.revents & (POLLHUP | POLLERR)) {
-                /* close pipe/fd - other side already did it */
-                ERR("Call Home listening socket was closed.");
-                return -1;
-            } else if (pfd.revents & POLLIN) {
-                /* accept call home */
-                ret = accept(pfd.fd, (struct sockaddr *)&remote, &addr_size);
-                break;
-            }
-        }
-    }
-
-    /* fill some server info, if interested */
-    if (remote.ss_family == AF_INET) {
-        struct sockaddr_in *remote_in = (struct sockaddr_in *)&remote;
-        if (peer_port) {
-            *peer_port = ntohs(remote_in->sin_port);
-        }
-        if (peer_host) {
-            *peer_host = malloc(INET6_ADDRSTRLEN);
-            inet_ntop(AF_INET, &(remote_in->sin_addr), *peer_host, INET6_ADDRSTRLEN);
-        }
-    } else if (remote.ss_family == AF_INET6) {
-        struct sockaddr_in6 *remote_in = (struct sockaddr_in6 *)&remote;
-        if (peer_port) {
-            *peer_port = ntohs(remote_in->sin6_port);
-        }
-        if (peer_host) {
-            *peer_host = malloc(INET6_ADDRSTRLEN);
-            inet_ntop(AF_INET6, &(remote_in->sin6_addr), *peer_host, INET6_ADDRSTRLEN);
-        }
-    }
-
-    return ret;
 }

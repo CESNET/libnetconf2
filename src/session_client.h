@@ -52,7 +52,7 @@
  * @param[in] path Directory where to search for YANG/YIN schemas.
  * @return 0 on success, 1 on (memory allocation) failure.
  */
-int nc_schema_searchpath(const char *path);
+int nc_client_schema_searchpath(const char *path);
 
 /**
  * @brief Connect to the NETCONF server via proviaded input/output file descriptors.
@@ -76,14 +76,185 @@ int nc_schema_searchpath(const char *path);
  */
 struct nc_session *nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx);
 
+#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+
+/* TODO */
+int nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session);
+
+#endif /* ENABLE_SSH || ENABLE_TLS */
+
 #ifdef ENABLE_SSH
 
 /**
- * @brief Destroy any dynamically allocated SSH-specific client context.
+ * @brief Add an SSH public and private key pair to be used for client authentication.
+ *
+ * Private key can be encrypted, the passphrase will be asked for before using it.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
+ *
+ * @param[in] pub_key Path to the public key.
+ * @param[in] priv_key Path to the private key.
+ *
+ * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
+ */
+int nc_client_ssh_add_keypair(const char *pub_key, const char *priv_key);
+
+/**
+ * @brief Remove an SSH public and private key pair that was used for client authentication.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
+ *
+ * @param[in] idx Index of the keypair starting with 0.
+ *
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_ssh_del_keypair(int idx);
+
+/**
+ * @brief Get the number of public an private key pairs set to be used for client authentication.
+ *
+ * @return Keypair count.
+ */
+int nc_client_ssh_get_keypair_count(void);
+
+/**
+ * @brief Get a specific keypair set to be used for client authentication.
+ *
+ * @param[in] idx Index of the specific keypair.
+ * @param[out] pub_key Path to the public key.
+ * @param[out] priv_key Path to the private key.
+ *
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_ssh_get_keypair(int idx, const char **pub_key, const char **priv_key);
+
+/**
+ * @brief Set SSH authentication method preference.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
+ *
+ * @param[in] auth_type Authentication method to modify the prefrence of.
+ * @param[in] pref Preference of \p auth_type. Negative values disable the method.
+ */
+void nc_client_ssh_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref);
+
+/**
+ * @brief Get SSH authentication method preference.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
+ *
+ * @param[in] auth_type Authentication method to retrieve the prefrence of.
+ *
+ * @return Preference of the \p auth_type.
+ */
+int16_t nc_client_ssh_get_auth_pref(NC_SSH_AUTH_TYPE auth_type);
+
+/**
+ * @brief Set client SSH username used for authentication.
+ *
+ * @param[in] username Username to use.
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_ssh_set_username(const char *username);
+
+/* Call Home */
+
+/**
+ * @brief Add a new client bind and start listening on it for SSH Call Home connections.
+ *
+ * @param[in] address IP address to bind to.
+ * @param[in] port Port to bind to.
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_ssh_ch_add_bind_listen(const char *address, uint16_t port);
+
+/**
+ * @brief Remove an SSH listening client bind.
+ *
+ * @param[in] address IP address the socket was bound to. NULL matches all.
+ * @param[in] port Port the socket was bound to. 0 matches all.
+ * @return 0 on success, -1 on not found.
+ */
+int nc_client_ssh_ch_del_bind(const char *address, uint16_t port);
+
+/**
+ * @brief Add an SSH public and private key pair to be used for Call Home client authentication.
+ *
+ * Private key can be encrypted, the passphrase will be asked for before using it.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
+ *
+ * @param[in] pub_key Path to the public key.
+ * @param[in] priv_key Path to the private key.
+ *
+ * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
+ */
+int nc_client_ssh_ch_add_keypair(const char *pub_key, const char *priv_key);
+
+/**
+ * @brief Remove an SSH public and private key pair that was used for Call Home client authentication.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
+ *
+ * @param[in] idx Index of the keypair starting with 0.
+ *
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_ssh_ch_del_keypair(int idx);
+
+/**
+ * @brief Get the number of public an private key pairs set to be used for Call Home client authentication.
+ *
+ * @return Keypair count.
+ */
+int nc_client_ssh_ch_get_keypair_count(void);
+
+/**
+ * @brief Get a specific keypair set to be used for Call Home client authentication.
+ *
+ * @param[in] idx Index of the specific keypair.
+ * @param[out] pub_key Path to the public key.
+ * @param[out] priv_key Path to the private key.
+ *
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_ssh_ch_get_keypair(int idx, const char **pub_key, const char **priv_key);
+
+/**
+ * @brief Set SSH Call Home authentication method preference.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
+ *
+ * @param[in] auth_type Authentication method to modify the prefrence of.
+ * @param[in] pref Preference of \p auth_type. Negative values disable the method.
+ */
+void nc_client_ssh_ch_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref);
+
+/**
+ * @brief Get SSH Call Home authentication method preference.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
+ *
+ * @param[in] auth_type Authentication method to retrieve the prefrence of.
+ *
+ * @return Preference of the \p auth_type.
+ */
+int16_t nc_client_ssh_ch_get_auth_pref(NC_SSH_AUTH_TYPE auth_type);
+
+/**
+ * @brief Set client Call Home SSH username used for authentication.
+ *
+ * @param[in] username Username to use.
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_ssh_ch_set_username(const char *username);
+
+/**
+ * @brief Destroy any dynamically allocated SSH-specific client context (including Call Home).
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  */
-void nc_ssh_client_destroy(void);
+void nc_client_ssh_destroy(void);
 
 /**
  * @brief Connect to the NETCONF server using SSH transport (via libssh).
@@ -96,8 +267,6 @@ void nc_ssh_client_destroy(void);
  * @param[in] host Hostname or address (both Ipv4 and IPv6 are accepted) of the target server.
  *                 'localhost' is used by default if NULL is specified.
  * @param[in] port Port number of the target server. Default value 830 is used if 0 is specified.
- * @param[in] username Name of the user to login to the server. The user running the application (detected from the
- *                     effective UID) is used if NULL is specified.
  * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
  *                (ignoring what is actually supported by the server side). If not set,
  *                YANG context is created for the session using \<get-schema\> (if supported
@@ -107,7 +276,7 @@ void nc_ssh_client_destroy(void);
  *                the session context will not include all the models supported by the server.
  * @return Created NETCONF session object or NULL on error.
  */
-struct nc_session *nc_connect_ssh(const char *host, uint16_t port, const char* username, struct ly_ctx *ctx);
+struct nc_session *nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx);
 
 /**
  * @brief Connect to the NETCONF server using the provided SSH (libssh) session.
@@ -150,124 +319,102 @@ struct nc_session *nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx
  */
 struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx);
 
-/**
- * @brief Accept a Call Home SSH connection from a NETCONF server.
- *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
- *
- * @param[in] host Host the NETCONF client will listen on.
- * @param[in] port Port the NETCONF client will listen on.
- * @param[in] username Name of the user to login to the server. The user running the application (detected from the
- *                     effective UID) is used if NULL is specified.
- * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite
- *                    waiting and 0 for immediate return if data are not available on wire.
- * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
- *                (ignoring what is actually supported by the server side). If not set,
- *                YANG context is created for the session using \<get-schema\> (if supported
- *                by the server side) or/and by searching for YANG schemas in the searchpath
- *                (see nc_schema_searchpath()). In every case except not providing context
- *                to connect to a server supporting \<get-schema\> it is possible that
- *                the session context will not include all the models supported by the server.
- * @return Created NETCONF session object or NULL on error.
- */
-struct nc_session *nc_callhome_accept_ssh(const char *host, uint16_t port, const char *username, int timeout, struct ly_ctx *ctx);
-
-/**
- * @brief Add an SSH public and private key pair to be used for client authentication.
- *
- * Private key can be encrypted, the passphrase will be asked for before using it.
- *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
- *
- * @param[in] pub_key Path to the public key.
- * @param[in] priv_key Path to the private key.
- *
- * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
- */
-int nc_ssh_client_add_keypair(const char *pub_key, const char *priv_key);
-
-/**
- * @brief Remove an SSH public and private key pair that was used for client authentication.
- *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
- *
- * @param[in] idx Index of the keypair starting with 0.
- *
- * @return 0 on success, -1 on error.
- */
-int nc_ssh_client_del_keypair(int idx);
-
-/**
- * @brief Get the number of public an private key pairs set to be used for client authentication.
- *
- * @return Keypair count.
- */
-int nc_ssh_client_get_keypair_count(void);
-
-/**
- * @brief Get a specific keypair set to be used for client authentication.
- *
- * @param[in] idx Index of the specific keypair.
- * @param[out] pub_key Path to the public key.
- * @param[out] priv_key Path to the private key.
- *
- * @return 0 on success, -1 on error.
- */
-int nc_ssh_client_get_keypair(int idx, const char **pub_key, const char **priv_key);
-
-/**
- * @brief Set SSH authentication method preference.
- *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
- *
- * @param[in] auth_type Authentication method to modify the prefrence of.
- * @param[in] pref Preference of \p auth_type. Negative values disable the method.
- */
-void nc_ssh_client_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, short int pref);
-
-/**
- * @brief Get SSH authentication method preference.
- *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
- *
- * @param[in] auth_type Authentication method to retrieve the prefrence of.
- *
- * @return Preference of the \p auth_type.
- */
-short int nc_ssh_client_get_auth_pref(NC_SSH_AUTH_TYPE auth_type);
-
 #endif /* ENABLE_SSH */
 
 #ifdef ENABLE_TLS
 
 /**
- * @brief Initialize libssl context with certificates.
- *
- * Must be called before calling nc_connect_tls() or nc_connect_libssl()!
+ * @brief Set client authentication identity - a certificate and a private key.
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  *
  * @param[in] client_cert Path to the file containing the client certificate. If NULL, only initializes libssl/libcrypto.
  * @param[in] client_key Path to the file containing the private key for the \p client_cert.
  *                       If NULL, key is expected to be stored with \p client_cert.
+ *
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_tls_set_cert_key(const char *client_cert, const char *client_key);
+
+/**
+ * @brief Set client trusted CA certificates.
+ *
  * @param[in] ca_file Location of the CA certificate file used to verify server certificates.
  *                    For more info, see the documentation for SSL_CTX_load_verify_locations() from OpenSSL.
  * @param[in] ca_dir Location of the CA certificates directory used to verify the server certificates.
  *                   For more info, see the documentation for SSL_CTX_load_verify_locations() from OpenSSL.
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_tls_set_trusted_ca_certs(const char *ca_file, const char *ca_dir);
+
+/**
+ * @brief Set client Certificate Revocation Lists.
+ *
  * @param[in] crl_file Location of the CRL certificate file used to check for revocated certificates.
  * @param[in] crl_dir Location of the CRL certificate directory used to check for revocated certificates.
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_tls_set_crl(const char *crl_file, const char *crl_dir);
+
+/* Call Home */
+
+/**
+ * @brief Add a new client bind and start listening on it for TLS Call Home connections.
+ *
+ * @param[in] address IP address to bind to.
+ * @param[in] port Port to bind to.
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_tls_ch_add_bind_listen(const char *address, uint16_t port);
+
+/**
+ * @brief Remove a TLS listening client bind.
+ *
+ * @param[in] address IP address the socket was bound to. NULL matches all.
+ * @param[in] port Port the socket was bound to. 0 matches all.
+ * @return 0 on success, -1 on not found.
+ */
+int nc_client_tls_ch_del_bind(const char *address, uint16_t port);
+
+/**
+ * @brief Set client Call Home authentication identity - a certificate and a private key.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
+ *
+ * @param[in] client_cert Path to the file containing the client certificate. If NULL, only initializes libssl/libcrypto.
+ * @param[in] client_key Path to the file containing the private key for the \p client_cert.
+ *                       If NULL, key is expected to be stored with \p client_cert.
  *
  * @return 0 on success, -1 on error.
  */
-int nc_tls_client_init(const char *client_cert, const char *client_key, const char *ca_file, const char *ca_dir,
-                       const char *crl_file, const char *crl_dir);
+int nc_client_tls_ch_set_cert_key(const char *client_cert, const char *client_key);
 
 /**
- * @brief Destroy any dynamically allocated TLS-specific client data.
+ * @brief Set client Call Home trusted CA certificates.
+ *
+ * @param[in] ca_file Location of the CA certificate file used to verify server certificates.
+ *                    For more info, see the documentation for SSL_CTX_load_verify_locations() from OpenSSL.
+ * @param[in] ca_dir Location of the CA certificates directory used to verify the server certificates.
+ *                   For more info, see the documentation for SSL_CTX_load_verify_locations() from OpenSSL.
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_tls_ch_set_trusted_ca_certs(const char *ca_file, const char *ca_dir);
+
+/**
+ * @brief Set client Call Home Certificate Revocation Lists.
+ *
+ * @param[in] crl_file Location of the CRL certificate file used to check for revocated certificates.
+ * @param[in] crl_dir Location of the CRL certificate directory used to check for revocated certificates.
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_tls_ch_set_crl(const char *crl_file, const char *crl_dir);
+
+/**
+ * @brief Destroy any dynamically allocated TLS-specific client data (including Call Home).
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  */
-void nc_tls_client_destroy(void);
+void nc_client_tls_destroy(void);
 
 /**
  * @brief Connect to the NETCONF server using TLS transport (via libssl)
@@ -309,26 +456,6 @@ struct nc_session *nc_connect_tls(const char *host, uint16_t port, struct ly_ctx
  * @return Created NETCONF session object or NULL on error.
  */
 struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
-
-/**
- * @brief Accept a Call Home TLS connection from a NETCONF server.
- *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
- *
- * @param[in] host Host the NETCONF client will listen on.
- * @param[in] port Port the NETCONF client will listen on.
- * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite
- *                    waiting and 0 for immediate return if data are not available on wire.
- * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
- *                (ignoring what is actually supported by the server side). If not set,
- *                YANG context is created for the session using \<get-schema\> (if supported
- *                by the server side) or/and by searching for YANG schemas in the searchpath
- *                (see nc_schema_searchpath()). In every case except not providing context
- *                to connect to a server supporting \<get-schema\> it is possible that
- *                the session context will not include all the models supported by the server.
- * @return Created NETCONF session object or NULL on error.
- */
-struct nc_session *nc_callhome_accept_tls(const char *host, uint16_t port, int timeout, struct ly_ctx *ctx);
 
 #endif /* ENABLE_TLS */
 
