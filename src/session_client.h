@@ -495,6 +495,19 @@ NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64
 NC_MSG_TYPE nc_recv_notif(struct nc_session* session, int timeout, struct nc_notif **notif);
 
 /**
+ * @brief Receive NETCONF Notifications in a separate thread until the session is terminated
+ *        or \<notificationComplete\> is received.
+ *
+ * @param[in] session Netconf session to read notifications from.
+ * @param[in] notif_clb Function that is called for every received notification (including
+ *            \<notificationComplete\>). Parameters are the session the notification was received on
+ *            and the notification itself.
+ * @return 0 if the thread was successfully created, -1 on error.
+ */
+int nc_recv_notif_dispatch(struct nc_session *session,
+                           void (*notif_clb)(struct nc_session *session, const struct nc_notif *notif));
+
+/**
  * @brief Send NETCONF RPC message via the session.
  *
  * @param[in] session NETCONF session where the RPC will be written.

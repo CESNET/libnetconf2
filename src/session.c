@@ -233,6 +233,7 @@ nc_session_free(struct nc_session *session)
     int r, i;
     int connected; /* flag to indicate whether the transport socket is still connected */
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
+    pthread_t tid;
     struct nc_session *siter;
     struct nc_msg_cont *contiter;
     struct lyxml_elem *rpl, *child;
@@ -255,9 +256,13 @@ nc_session_free(struct nc_session *session)
     }
 
     /* stop notifications loop if any */
-    if (session->notif) {
-        pthread_cancel(*session->notif);
-        pthread_join(*session->notif, NULL);
+    if (session->ntf_tid) {
+        tid = *session->ntf_tid;
+        free((pthread_t *)session->ntf_tid);
+        session->ntf_tid = NULL;
+        /* the thread now knows it should quit */
+
+        pthread_join(tid, NULL);
     }
 
     if ((session->side == NC_CLIENT) && (session->status == NC_STATUS_RUNNING)) {

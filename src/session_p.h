@@ -32,6 +32,7 @@
 #include "libnetconf.h"
 #include "netconf.h"
 #include "session.h"
+#include "messages_client.h"
 
 #ifdef ENABLE_SSH
 
@@ -155,6 +156,11 @@ struct nc_server_opts {
 #define NC_READ_SLEEP 100
 
 /**
+ * Sleep time in microseconds to wait between nc_recv_notif() calls.
+ */
+#define NC_CLIENT_NOTIF_THREAD_SLEEP 10000
+
+/**
  * Number of sockets kept waiting to be accepted.
  */
 #define NC_REVERSE_QUEUE 1
@@ -197,7 +203,7 @@ struct nc_session {
     /* NETCONF data */
     uint32_t id;                 /**< NETCONF session ID (session-id-type) */
     NC_VERSION version;          /**< NETCONF protocol version */
-    pthread_t *notif;            /**< running notifications thread - TODO server-side only? */
+    volatile pthread_t *ntf_tid; /**< running notifications thread - TODO client-side only for now */
 
     /* Transport implementation */
     NC_TRANSPORT_IMPL ti_type;   /**< transport implementation type to select items from ti union */
@@ -261,6 +267,11 @@ struct nc_pollsession {
     struct pollfd *pfds;
     struct nc_session **sessions;
     uint16_t session_count;
+};
+
+struct nc_ntf_thread_arg {
+    struct nc_session *session;
+    void (*notif_clb)(struct nc_session *session, const struct nc_notif *notif);
 };
 
 NC_MSG_TYPE nc_send_msg(struct nc_session *session, struct lyd_node *op);

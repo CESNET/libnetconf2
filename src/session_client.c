@@ -38,6 +38,7 @@
 
 #include "libnetconf.h"
 #include "session_client.h"
+#include "messages_client.h"
 
 static const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "candidate"};
 
@@ -520,13 +521,13 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
 
     /* we read notif, want a rpc-reply */
     if (msgid && (msgtype == NC_MSG_NOTIF)) {
-        /* TODO invalid check for a subscription */
-        if (!session->notif) {
+        /* TODO check whether the session is even subscribed */
+        /*if (!session->notif) {
             pthread_mutex_unlock(session->ti_lock);
             ERR("Session %u: received a <notification> but session is not subscribed.", session->id);
             lyxml_free(session->ctx, xml);
             return NC_MSG_ERROR;
-        }
+        }*/
 
         cont_ptr = &session->notifs;
         while (*cont_ptr) {
@@ -1017,6 +1018,69 @@ fail:
     lyxml_free(session->ctx, xml);
 
     return NC_MSG_ERROR;
+}
+
+static void *
+nc_recv_notif_thread(void *arg)
+{
+    struct nc_ntf_thread_arg *ntarg;
+    struct nc_session *session;
+    void (*notif_clb)(struct nc_session *session, const struct nc_notif *notif);
+    struct nc_notif *notif;
+    NC_MSG_TYPE msgtype;
+
+    ntarg = (struct nc_ntf_thread_arg *)arg;
+    session = ntarg->session;
+    notif_clb = ntarg->notif_clb;
+    free(ntarg);
+
+    while (session->ntf_tid) {
+        msgtype = nc_recv_notif(session, 0, &notif);
+        if (msgtype == NC_MSG_NOTIF) {
+            notif_clb(session, notif);
+            nc_notif_free(notif);
+        }
+
+        usleep(NC_CLIENT_NOTIF_THREAD_SLEEP);
+    }
+
+    return NULL;
+}
+
+API int
+nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_session *session, const struct nc_notif *notif))
+{
+    struct nc_ntf_thread_arg *ntarg;
+    int ret;
+
+    if (!session || !notif_clb) {
+        ERRARG;
+        return -1;
+    } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
+        ERR("Session %u: invalid session to receive Notifications.", session->id);
+        return -1;
+    } else if (session->ntf_tid) {
+        ERR("Session %u: separate notification thread is already running.", session->id);
+        return -1;
+    }
+
+    ntarg = malloc(sizeof *ntarg);
+    ntarg->session = session;
+    ntarg->notif_clb = notif_clb;
+
+    /* just so that nc_recv_notif_thread() does not immediately exit, the value does not matter */
+    session->ntf_tid = malloc(sizeof *session->ntf_tid);
+
+    ret = pthread_create((pthread_t *)session->ntf_tid, NULL, nc_recv_notif_thread, ntarg);
+    if (ret) {
+        ERR("Session %u: failed to create a new thread (%s).", strerror(errno));
+        free(ntarg);
+        free((pthread_t *)session->ntf_tid);
+        session->ntf_tid = NULL;
+        return -1;
+    }
+
+    return 0;
 }
 
 API NC_MSG_TYPE
