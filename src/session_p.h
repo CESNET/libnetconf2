@@ -367,7 +367,7 @@ int nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, i
 #ifdef ENABLE_SSH
 
 /* TODO */
-struct nc_session *nc_accept_callhome_sock_ssh(int sock, const char *host, uint16_t port, struct ly_ctx *ctx);
+struct nc_session *nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx);
 
 /**
  * @brief Establish SSH transport on a socket.
@@ -414,7 +414,7 @@ void nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts);
 #ifdef ENABLE_TLS
 
 /* TODO */
-struct nc_session *nc_accept_callhome_sock_tls(int sock, const char *host, uint16_t port, struct ly_ctx *ctx);
+struct nc_session *nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx);
 
 /**
  * @brief Establish TLS transport on a socket.

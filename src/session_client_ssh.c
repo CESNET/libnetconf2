@@ -1316,7 +1316,7 @@ fail:
 }
 
 struct nc_session *
-nc_accept_callhome_sock_ssh(int sock, const char *host, uint16_t port, struct ly_ctx *ctx)
+nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx)
 {
     const int ssh_timeout = NC_SSH_TIMEOUT;
     struct passwd *pw;

@@ -131,16 +131,12 @@ tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
 }
 
 static int
-_nc_client_tls_set_cert_key(const char *client_cert, const char *client_key, int ch)
+_nc_client_tls_set_cert_key(const char *client_cert, const char *client_key, struct nc_client_tls_opts *opts)
 {
-    struct nc_client_tls_opts *opts;
-
     if (!client_cert) {
         ERRARG;
         return -1;
     }
-
-    opts = (ch ? &tls_ch_opts : &tls_opts);
 
     free(opts->cert_path);
     free(opts->key_path);
@@ -173,26 +169,22 @@ _nc_client_tls_set_cert_key(const char *client_cert, const char *client_key, int
 API int
 nc_client_tls_set_cert_key(const char *client_cert, const char *client_key)
 {
-    return _nc_client_tls_set_cert_key(client_cert, client_key, 0);
+    return _nc_client_tls_set_cert_key(client_cert, client_key, &tls_opts);
 }
 
 API int
 nc_client_tls_ch_set_cert_key(const char *client_cert, const char *client_key)
 {
-    return _nc_client_tls_set_cert_key(client_cert, client_key, 1);
+    return _nc_client_tls_set_cert_key(client_cert, client_key, &tls_ch_opts);
 }
 
 static int
-_nc_client_tls_set_trusted_ca_certs(const char *ca_file, const char *ca_dir, int ch)
+_nc_client_tls_set_trusted_ca_certs(const char *ca_file, const char *ca_dir, struct nc_client_tls_opts *opts)
 {
-    struct nc_client_tls_opts *opts;
-
     if (!ca_file && !ca_dir) {
         ERRARG;
         return -1;
     }
-
-    opts = (ch ? &tls_ch_opts : &tls_opts);
 
     free(opts->ca_file);
     free(opts->ca_dir);
@@ -225,26 +217,22 @@ _nc_client_tls_set_trusted_ca_certs(const char *ca_file, const char *ca_dir, int
 API int
 nc_client_tls_set_trusted_ca_certs(const char *ca_file, const char *ca_dir)
 {
-    return _nc_client_tls_set_trusted_ca_certs(ca_file, ca_dir, 0);
+    return _nc_client_tls_set_trusted_ca_certs(ca_file, ca_dir, &tls_opts);
 }
 
 API int
 nc_client_tls_ch_set_trusted_ca_certs(const char *ca_file, const char *ca_dir)
 {
-    return _nc_client_tls_set_trusted_ca_certs(ca_file, ca_dir, 1);
+    return _nc_client_tls_set_trusted_ca_certs(ca_file, ca_dir, &tls_ch_opts);
 }
 
 static int
-_nc_client_tls_set_crl(const char *crl_file, const char *crl_dir, int ch)
+_nc_client_tls_set_crl(const char *crl_file, const char *crl_dir, struct nc_client_tls_opts *opts)
 {
-    struct nc_client_tls_opts *opts;
-
     if (!crl_file && !crl_dir) {
         ERRARG;
         return -1;
     }
-
-    opts = (ch ? &tls_ch_opts : &tls_opts);
 
     free(opts->crl_file);
     free(opts->crl_dir);
@@ -277,13 +265,13 @@ _nc_client_tls_set_crl(const char *crl_file, const char *crl_dir, int ch)
 API int
 nc_client_tls_set_crl(const char *crl_file, const char *crl_dir)
 {
-    return _nc_client_tls_set_crl(crl_file, crl_dir, 0);
+    return _nc_client_tls_set_crl(crl_file, crl_dir, &tls_opts);
 }
 
 API int
 nc_client_tls_ch_set_crl(const char *crl_file, const char *crl_dir)
 {
-    return _nc_client_tls_set_crl(crl_file, crl_dir, 1);
+    return _nc_client_tls_set_crl(crl_file, crl_dir, &tls_ch_opts);
 }
 
 API int
@@ -328,13 +316,10 @@ repeat:
 }
 
 static int
-nc_client_tls_opts_update(int ch)
+nc_client_tls_update_opts(struct nc_client_tls_opts *opts)
 {
     char *key;
     X509_LOOKUP *lookup;
-    struct nc_client_tls_opts *opts;
-
-    opts = (ch ? &tls_ch_opts : &tls_opts);
 
     if (!opts->tls_ctx || opts->tls_ctx_change) {
         SSL_CTX_free(tls_opts.tls_ctx);
@@ -427,7 +412,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     }
 
     /* create/update TLS structures */
-    if (nc_client_tls_opts_update(0)) {
+    if (nc_client_tls_update_opts(&tls_opts)) {
         return NULL;
     }
 
@@ -569,13 +554,13 @@ fail:
 }
 
 struct nc_session *
-nc_accept_callhome_sock_tls(int sock, const char *host, uint16_t port, struct ly_ctx *ctx)
+nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx)
 {
     int verify;
     SSL *tls;
     struct nc_session *session;
 
-    if (nc_client_tls_opts_update(1)) {
+    if (nc_client_tls_update_opts(&tls_ch_opts)) {
         close(sock);
         return NULL;
     }
