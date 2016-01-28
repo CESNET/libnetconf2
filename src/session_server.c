@@ -1035,17 +1035,23 @@ nc_accept(int timeout, struct nc_session **session)
     (*session)->ti_opts = server_opts.endpts[idx].ti_opts;
 
     /* sock gets assigned to session or closed */
+#ifdef ENABLE_SSH
     if (server_opts.binds[idx].ti == NC_TI_LIBSSH) {
         ret = nc_accept_ssh_session(*session, sock, timeout);
         if (ret < 1) {
             goto fail;
         }
-    } else if (server_opts.binds[idx].ti == NC_TI_OPENSSL) {
+    } else
+#endif
+#ifdef ENABLE_TLS
+    if (server_opts.binds[idx].ti == NC_TI_OPENSSL) {
         ret = nc_accept_tls_session(*session, sock, timeout);
         if (ret < 1) {
             goto fail;
         }
-    } else {
+    } else
+#endif
+    {
         ERRINT;
         close(sock);
         ret = -1;
@@ -1127,6 +1133,7 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int t
     pthread_mutex_init((*session)->ti_lock, NULL);
 
     /* sock gets assigned to session or closed */
+#ifdef ENABLE_SSH
     if (ti == NC_TI_LIBSSH) {
         /* OPTS LOCK */
         pthread_mutex_lock(&ssh_ch_opts_lock);
@@ -1141,7 +1148,10 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int t
         if (ret < 1) {
             goto fail;
         }
-    } else if (ti == NC_TI_OPENSSL) {
+    } else
+#endif
+#ifdef ENABLE_TLS
+    if (ti == NC_TI_OPENSSL) {
         /* OPTS LOCK */
         pthread_mutex_lock(&tls_ch_opts_lock);
 
@@ -1155,7 +1165,9 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int t
         if (ret < 1) {
             goto fail;
         }
-    } else {
+    } else
+#endif
+    {
         ERRINT;
         close(sock);
         ret = -1;
