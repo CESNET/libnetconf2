@@ -631,7 +631,7 @@ API int
 nc_ps_poll(struct nc_pollsession *ps, int timeout)
 {
     int ret;
-    uint16_t i, j;
+    uint16_t i;
     time_t cur_time;
     NC_MSG_TYPE msgtype;
     struct nc_session *session;
@@ -669,7 +669,9 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
     }
 
     if (i == ps->session_count) {
+#ifdef ENABLE_SSH
 retry_poll:
+#endif
         /* no leftover event */
         i = 0;
         ret = poll(ps->pfds, ps->session_count, timeout);
@@ -693,6 +695,8 @@ retry_poll:
         } else if (ps->pfds[i].revents & POLLIN) {
 #ifdef ENABLE_SSH
             if (ps->sessions[i]->ti_type == NC_TI_LIBSSH) {
+                uint16_t j;
+
                 /* things are not that simple with SSH... */
                 ret = nc_ssh_pollin(ps->sessions[i], &timeout);
 

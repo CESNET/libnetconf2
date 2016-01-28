@@ -25,6 +25,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <poll.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>

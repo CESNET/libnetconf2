@@ -22,6 +22,7 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <pthread.h>
 #include <time.h>
 #include <libyang/libyang.h>
@@ -234,7 +235,6 @@ nc_session_free(struct nc_session *session)
     int connected; /* flag to indicate whether the transport socket is still connected */
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
     pthread_t tid;
-    struct nc_session *siter;
     struct nc_msg_cont *contiter;
     struct lyxml_elem *rpl, *child;
     struct lyd_node *close_rpc;
@@ -336,10 +336,14 @@ nc_session_free(struct nc_session *session)
          * so it is up to the caller to close them correctly
          * TODO use callbacks
          */
+        /* just to avoid compiler warning */
+        (void)connected;
         break;
 
 #ifdef ENABLE_SSH
     case NC_TI_LIBSSH:
+        struct nc_session *siter;
+
         if (connected) {
             ssh_channel_free(session->ti.libssh.channel);
         }
