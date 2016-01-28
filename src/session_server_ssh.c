@@ -38,6 +38,7 @@ struct nc_server_ssh_opts ssh_ch_opts = {
     .auth_attempts = 3,
     .auth_timeout = 10
 };
+pthread_mutex_t ssh_ch_opts_lock = PTHREAD_MUTEX_INITIALIZER;
 extern struct nc_server_opts server_opts;
 
 API int
@@ -84,21 +85,31 @@ fail:
 API int
 nc_server_ssh_endpt_set_hostkey(const char *endpt_name, const char *privkey_path)
 {
+    int ret;
     struct nc_endpt *endpt;
 
-    endpt = nc_server_get_endpt(endpt_name, NC_TI_LIBSSH);
+    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
     if (!endpt) {
-        ERR("Endpoint \"%s\" was not found.", endpt_name);
         return -1;
     }
+    ret = nc_server_ssh_set_hostkey(privkey_path, endpt->ti_opts);
+    nc_server_endpt_unlock(endpt);
 
-    return nc_server_ssh_set_hostkey(privkey_path, endpt->ti_opts);
+    return ret;
 }
 
 API int
 nc_server_ssh_ch_set_hostkey(const char *privkey_path)
 {
-    return nc_server_ssh_set_hostkey(privkey_path, &ssh_ch_opts);
+    int ret;
+
+    /* OPTS LOCK */
+    pthread_mutex_lock(&ssh_ch_opts_lock);
+    ret = nc_server_ssh_set_hostkey(privkey_path, &ssh_ch_opts);
+    /* OPTS UNLOCK */
+    pthread_mutex_unlock(&ssh_ch_opts_lock);
+
+    return ret;
 }
 
 static int
@@ -128,21 +139,31 @@ fail:
 API int
 nc_server_ssh_endpt_set_banner(const char *endpt_name, const char *banner)
 {
+    int ret;
     struct nc_endpt *endpt;
 
-    endpt = nc_server_get_endpt(endpt_name, NC_TI_LIBSSH);
+    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
     if (!endpt) {
-        ERR("Endpoint \"%s\" was not found.", endpt_name);
         return -1;
     }
+    ret = nc_server_ssh_set_banner(banner, endpt->ti_opts);
+    nc_server_endpt_unlock(endpt);
 
-    return nc_server_ssh_set_banner(banner, endpt->ti_opts);
+    return ret;
 }
 
 API int
 nc_server_ssh_ch_set_banner(const char *banner)
 {
-    return nc_server_ssh_set_banner(banner, &ssh_ch_opts);
+    int ret;
+
+    /* OPTS LOCK */
+    pthread_mutex_lock(&ssh_ch_opts_lock);
+    ret = nc_server_ssh_set_banner(banner, &ssh_ch_opts);
+    /* OPTS UNLOCK */
+    pthread_mutex_unlock(&ssh_ch_opts_lock);
+
+    return ret;
 }
 
 static int
@@ -161,21 +182,31 @@ nc_server_ssh_set_auth_methods(int auth_methods, struct nc_server_ssh_opts *opts
 API int
 nc_server_ssh_endpt_set_auth_methods(const char *endpt_name, int auth_methods)
 {
+    int ret;
     struct nc_endpt *endpt;
 
-    endpt = nc_server_get_endpt(endpt_name, NC_TI_LIBSSH);
+    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
     if (!endpt) {
-        ERR("Endpoint \"%s\" was not found.", endpt_name);
         return -1;
     }
+    ret = nc_server_ssh_set_auth_methods(auth_methods, endpt->ti_opts);
+    nc_server_endpt_unlock(endpt);
 
-    return nc_server_ssh_set_auth_methods(auth_methods, endpt->ti_opts);
+    return ret;
 }
 
 API int
 nc_server_ssh_ch_set_auth_methods(int auth_methods)
 {
-    return nc_server_ssh_set_auth_methods(auth_methods, &ssh_ch_opts);
+    int ret;
+
+    /* OPTS LOCK */
+    pthread_mutex_lock(&ssh_ch_opts_lock);
+    ret = nc_server_ssh_set_auth_methods(auth_methods, &ssh_ch_opts);
+    /* OPTS UNLOCK */
+    pthread_mutex_unlock(&ssh_ch_opts_lock);
+
+    return ret;
 }
 
 static int
@@ -193,21 +224,31 @@ nc_server_ssh_set_auth_attempts(uint16_t auth_attempts, struct nc_server_ssh_opt
 API int
 nc_server_ssh_endpt_set_auth_attempts(const char *endpt_name, uint16_t auth_attempts)
 {
+    int ret;
     struct nc_endpt *endpt;
 
-    endpt = nc_server_get_endpt(endpt_name, NC_TI_LIBSSH);
+    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
     if (!endpt) {
-        ERR("Endpoint \"%s\" was not found.", endpt_name);
         return -1;
     }
+    ret = nc_server_ssh_set_auth_attempts(auth_attempts, endpt->ti_opts);
+    nc_server_endpt_unlock(endpt);
 
-    return nc_server_ssh_set_auth_attempts(auth_attempts, endpt->ti_opts);
+    return ret;
 }
 
 API int
 nc_server_ssh_set_ch_auth_attempts(uint16_t auth_attempts)
 {
-    return nc_server_ssh_set_auth_attempts(auth_attempts, &ssh_ch_opts);
+    int ret;
+
+    /* OPTS LOCK */
+    pthread_mutex_lock(&ssh_ch_opts_lock);
+    ret = nc_server_ssh_set_auth_attempts(auth_attempts, &ssh_ch_opts);
+    /* OPTS UNLOCK */
+    pthread_mutex_unlock(&ssh_ch_opts_lock);
+
+    return ret;
 }
 
 static int
@@ -225,21 +266,31 @@ nc_server_ssh_set_auth_timeout(uint16_t auth_timeout, struct nc_server_ssh_opts 
 API int
 nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_timeout)
 {
+    int ret;
     struct nc_endpt *endpt;
 
-    endpt = nc_server_get_endpt(endpt_name, NC_TI_LIBSSH);
+    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
     if (!endpt) {
-        ERR("Endpoint \"%s\" was not found.", endpt_name);
         return -1;
     }
+    ret = nc_server_ssh_set_auth_timeout(auth_timeout, endpt->ti_opts);
+    nc_server_endpt_unlock(endpt);
 
-    return nc_server_ssh_set_auth_timeout(auth_timeout, endpt->ti_opts);
+    return ret;
 }
 
 API int
 nc_server_ssh_ch_set_auth_timeout(uint16_t auth_timeout)
 {
-    return nc_server_ssh_set_auth_timeout(auth_timeout, &ssh_ch_opts);
+    int ret;
+
+    /* OPTS LOCK */
+    pthread_mutex_lock(&ssh_ch_opts_lock);
+    ret = nc_server_ssh_set_auth_timeout(auth_timeout, &ssh_ch_opts);
+    /* OPTS UNLOCK */
+    pthread_mutex_unlock(&ssh_ch_opts_lock);
+
+    return ret;
 }
 
 static int
@@ -264,21 +315,31 @@ nc_server_ssh_add_authkey(const char *pubkey_path, const char *username, struct 
 API int
 nc_server_ssh_endpt_add_authkey(const char *endpt_name, const char *pubkey_path, const char *username)
 {
+    int ret;
     struct nc_endpt *endpt;
 
-    endpt = nc_server_get_endpt(endpt_name, NC_TI_LIBSSH);
+    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
     if (!endpt) {
-        ERR("Endpoint \"%s\" was not found.", endpt_name);
         return -1;
     }
+    ret = nc_server_ssh_add_authkey(pubkey_path, username, endpt->ti_opts);
+    nc_server_endpt_unlock(endpt);
 
-    return nc_server_ssh_add_authkey(pubkey_path, username, endpt->ti_opts);
+    return ret;
 }
 
 API int
 nc_server_ssh_ch_add_authkey(const char *pubkey_path, const char *username)
 {
-    return nc_server_ssh_add_authkey(pubkey_path, username, &ssh_ch_opts);
+    int ret;
+
+    /* OPTS LOCK */
+    pthread_mutex_lock(&ssh_ch_opts_lock);
+    ret = nc_server_ssh_add_authkey(pubkey_path, username, &ssh_ch_opts);
+    /* OPTS UNLOCK */
+    pthread_mutex_unlock(&ssh_ch_opts_lock);
+
+    return ret;
 }
 
 static int
@@ -322,25 +383,35 @@ nc_server_ssh_del_authkey(const char *pubkey_path, const char *username, struct 
 API int
 nc_server_ssh_endpt_del_authkey(const char *endpt_name, const char *pubkey_path, const char *username)
 {
+    int ret;
     struct nc_endpt *endpt;
 
-    endpt = nc_server_get_endpt(endpt_name, NC_TI_LIBSSH);
+    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
     if (!endpt) {
-        ERR("Endpoint \"%s\" was not found.", endpt_name);
         return -1;
     }
+    ret = nc_server_ssh_del_authkey(pubkey_path, username, endpt->ti_opts);
+    nc_server_endpt_unlock(endpt);
 
-    return nc_server_ssh_del_authkey(pubkey_path, username, endpt->ti_opts);
+    return ret;
 }
 
 API int
 nc_server_ssh_ch_del_authkey(const char *pubkey_path, const char *username)
 {
-    return nc_server_ssh_del_authkey(pubkey_path, username, &ssh_ch_opts);
+    int ret;
+
+    /* OPTS LOCK */
+    pthread_mutex_lock(&ssh_ch_opts_lock);
+    ret = nc_server_ssh_del_authkey(pubkey_path, username, &ssh_ch_opts);
+    /* OPTS UNLOCK */
+    pthread_mutex_unlock(&ssh_ch_opts_lock);
+
+    return ret;
 }
 
 void
-nc_server_ssh_opts_clear(struct nc_server_ssh_opts *opts)
+nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts)
 {
     if (opts->sshbind) {
         ssh_bind_free(opts->sshbind);
@@ -351,9 +422,13 @@ nc_server_ssh_opts_clear(struct nc_server_ssh_opts *opts)
 }
 
 API void
-nc_server_ssh_ch_opts_clear(void)
+nc_server_ssh_ch_clear_opts(void)
 {
-    nc_server_ssh_opts_clear(&ssh_ch_opts);
+    /* OPTS LOCK */
+    pthread_mutex_lock(&ssh_ch_opts_lock);
+    nc_server_ssh_clear_opts(&ssh_ch_opts);
+    /* OPTS UNLOCK */
+    pthread_mutex_unlock(&ssh_ch_opts_lock);
 }
 
 static char *

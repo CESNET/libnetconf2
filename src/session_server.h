@@ -321,7 +321,7 @@ int nc_server_ssh_endpt_del_authkey(const char *endpt_name, const char *pubkey_p
 /**
  * @brief Free all the various SSH server options (excluding Call Home).
  */
-void nc_server_ssh_opts_free(void);
+void nc_server_ssh_destroy_opts(void);
 
 /*
  * Call Home
@@ -401,7 +401,7 @@ int nc_server_ssh_ch_add_authkey(const char *pubkey_path, const char *username);
 int nc_server_ssh_ch_del_authkey(const char *pubkey_path, const char *username);
 
 /* TODO */
-void nc_server_ssh_ch_opts_clear(void);
+void nc_server_ssh_ch_clear_opts(void);
 
 #endif /* ENABLE_SSH */
 
@@ -497,7 +497,7 @@ int nc_server_tls_endpt_set_trusted_cacert_locations(const char *endpt_name, con
  * @brief Destroy and clean all the set certificates and private keys. CRLs and
  * CTN entries are not affected.
  */
-void nc_server_tls_endpt_destroy_certs(const char *endpt_name);
+void nc_server_tls_endpt_clear_certs(const char *endpt_name);
 
 /**
  * @brief Set Certificate Revocation List locations. There can only be one file
@@ -514,7 +514,7 @@ int nc_server_tls_endpt_set_crl_locations(const char *endpt_name, const char *cr
  * @brief Destroy and clean CRLs. Certificates, priavte keys, and CTN entries are
  * not affected.
  */
-void nc_server_tls_endpt_destroy_crls(const char *endpt_name);
+void nc_server_tls_endpt_clear_crls(const char *endpt_name);
 
 /**
  * @brief Add a Cert-to-name entry.
@@ -625,7 +625,7 @@ int nc_server_tls_ch_set_trusted_cacert_locations(const char *cacert_file_path, 
  * @brief Destroy and clean all the set Call Home certificates and private keys.
  * CRLs and CTN entries are not affected.
  */
-void nc_server_tls_ch_destroy_certs(void);
+void nc_server_tls_ch_clear_certs(void);
 
 /**
  * @brief Set Call Home Certificate Revocation List locations. There can only be
@@ -642,7 +642,7 @@ int nc_server_tls_ch_set_crl_locations(const char *crl_file_path, const char *cr
  * @brief Destroy and clean Call Home CRLs. Call Home certificates, private keys,
  * and CTN entries are not affected.
  */
-void nc_server_tls_ch_destroy_crls(void);
+void nc_server_tls_ch_clear_crls(void);
 
 /**
  * @brief Add a Call Home Cert-to-name entry.
@@ -667,7 +667,7 @@ int nc_server_tls_ch_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MA
 int nc_server_tls_ch_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
 /* TODO */
-void nc_server_tls_ch_opts_clear(void);
+void nc_server_tls_ch_clear_opts(void);
 
 #endif /* ENABLE_TLS */
 

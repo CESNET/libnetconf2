@@ -142,7 +142,7 @@ struct nc_server_opts {
         pthread_mutex_t endpt_lock;
     } *endpts;
     uint16_t endpt_count;
-    /* WRITE - working with binds/endpoints, READ - modifying a specific bind/endpoint, holding that endpt_lock too */
+    /* WRITE - working with binds/endpoints, READ - reading/modifying a specific bind/endpoint, holding that endpt_lock too */
     pthread_rwlock_t endpt_array_lock;
 
     uint32_t new_session_id;
@@ -349,16 +349,11 @@ int nc_server_add_endpt_listen(const char *name, const char *address, uint16_t p
  */
 int nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti);
 
-/**
- * @brief Find an endpoint.
- *
- * Caller must hold endpt_array_lock for reading.
- *
- * @param[in] name Endpoint name.
- * @param[in] ti Endpoind transport.
- * @return Endpoint, NULL on error.
- */
-struct nc_endpt *nc_server_get_endpt(const char *name, NC_TRANSPORT_IMPL ti);
+/* TODO */
+struct nc_endpt *nc_server_endpt_lock(const char *name, NC_TRANSPORT_IMPL ti);
+
+/* TODO */
+void nc_server_endpt_unlock(struct nc_endpt *endpt);
 
 /* TODO */
 int nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
@@ -412,7 +407,7 @@ int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
 int nc_ssh_pollin(struct nc_session *session, int *timeout);
 
 /* TODO */
-void nc_server_ssh_opts_clear(struct nc_server_ssh_opts *opts);
+void nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts);
 
 #endif /* ENABLE_SSH */
 
@@ -433,7 +428,7 @@ struct nc_session *nc_accept_callhome_sock_tls(int sock, const char *host, uint1
 int nc_accept_tls_session(struct nc_session *session, int sock, int timeout);
 
 /* TODO */
-void nc_server_tls_opts_clear(struct nc_server_tls_opts *opts);
+void nc_server_tls_clear_opts(struct nc_server_tls_opts *opts);
 
 #endif /* ENABLE_TLS */
 
