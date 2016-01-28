@@ -473,8 +473,9 @@ struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
  * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite
  *            waiting and 0 for immediate return if data are not available on wire.
  * @param[out] reply Resulting object of NETCONF RPC reply.
- * @return NC_MSG_REPLY for success, NC_MSG_WOULDBLOCK if timeout reached and NC_MSG_ERROR
- *         when reading has failed.
+ * @return #NC_MSG_REPLY for success, #NC_MSG_WOULDBLOCK if timeout has elapsed, #NC_MSG_ERROR if
+ *         reading has failed, and #NC_MSG_NOTIF if a notification was read instead (call this
+ *         function again to get the reply).
  */
 NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout,
                           struct nc_reply **reply);
@@ -487,8 +488,9 @@ NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64
  * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite
  *            waiting and 0 for immediate return if data are not available on wire.
  * @param[out] notif Resulting object of NETCONF Notification.
- * @return NC_MSG_NOTIF for success, NC_MSG_WOULDBLOCK if timeout reached and NC_MSG_ERROR
- *         when reading has failed.
+ * @return #NC_MSG_NOTIF for success, #NC_MSG_WOULDBLOCK if timeout has elapsed, #NC_MSG_ERROR if
+ *         reading has failed, and #NC_MSG_REPLY if a reply was read instead (call this function
+ *         again to get a notification).
  */
 NC_MSG_TYPE nc_recv_notif(struct nc_session* session, int timeout, struct nc_notif **notif);
 

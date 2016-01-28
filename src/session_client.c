@@ -437,21 +437,14 @@ errloop:
 static NC_MSG_TYPE
 get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_elem **msg)
 {
-    int r, elapsed;
+    int r, elapsed = 0;
     char *ptr;
     const char *str_msgid;
     uint64_t cur_msgid;
     struct lyxml_elem *xml;
-    struct nc_msg_cont *cont, *prev_cont, **cont_ptr;
+    struct nc_msg_cont *cont, **cont_ptr;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
 
-next_message:
-    if (msgtype) {
-        /* second run, wait and give a chance to nc_recv_reply() */
-        usleep(NC_TIMEOUT_STEP);
-        timeout -= NC_TIMEOUT_STEP;
-    }
-    elapsed = 0;
     r = nc_timedlock(session->ti_lock, timeout, &elapsed);
     if (r == -1) {
         /* error */
@@ -479,18 +472,15 @@ next_message:
 
     /* try to get rpc-reply from the session's queue */
     if (msgid && session->replies) {
-        prev_cont = NULL;
-        for (cont = session->replies; cont; cont = cont->next) {
-            /* errors checked in the condition below */
+        while (session->replies) {
+            cont = session->replies;
+            session->replies = cont->next;
+
             str_msgid = lyxml_get_attr(cont->msg, "message-id", NULL);
             cur_msgid = strtoul(str_msgid, &ptr, 10);
 
             if (cur_msgid == msgid) {
-                if (!prev_cont) {
-                    session->replies = cont->next;
-                } else {
-                    prev_cont->next = cont->next;
-                }
+                session->replies = cont->next;
                 pthread_mutex_unlock(session->ti_lock);
 
                 *msg = cont->msg;
@@ -499,7 +489,9 @@ next_message:
                 return NC_MSG_REPLY;
             }
 
-            prev_cont = cont;
+            ERR("Session %u: discarding a <rpc-reply> with an unexpected message-id \"%s\".", str_msgid);
+            lyxml_free(session->ctx, cont->msg);
+            free(msg);
         }
     }
 
@@ -514,7 +506,7 @@ next_message:
             pthread_mutex_unlock(session->ti_lock);
             ERR("Session %u: received a <rpc-reply> with no message-id, discarding.", session->id);
             lyxml_free(session->ctx, xml);
-            goto next_message;
+            return NC_MSG_ERROR;
         }
 
         cont_ptr = &session->replies;
@@ -528,11 +520,12 @@ next_message:
 
     /* we read notif, want a rpc-reply */
     if (msgid && (msgtype == NC_MSG_NOTIF)) {
+        /* TODO invalid check for a subscription */
         if (!session->notif) {
             pthread_mutex_unlock(session->ti_lock);
             ERR("Session %u: received a <notification> but session is not subscribed.", session->id);
             lyxml_free(session->ctx, xml);
-            goto next_message;
+            return NC_MSG_ERROR;
         }
 
         cont_ptr = &session->notifs;
@@ -548,30 +541,26 @@ next_message:
 
     switch (msgtype) {
     case NC_MSG_NOTIF:
-        /* we want a rpc-reply */
-        if (msgid) {
-            goto next_message;
+        if (!msgid) {
+            *msg = xml;
         }
-        *msg = xml;
         break;
 
     case NC_MSG_REPLY:
-        /* we want a notif */
-        if (!msgid) {
-            goto next_message;
+        if (msgid) {
+            *msg = xml;
         }
-        *msg = xml;
         break;
 
     case NC_MSG_HELLO:
         ERR("Session %u: received another <hello> message.", session->id);
         lyxml_free(session->ctx, xml);
-        goto next_message;
+        return NC_MSG_ERROR;
 
     case NC_MSG_RPC:
         ERR("Session %u: received <rpc> from a NETCONF server.", session->id);
         lyxml_free(session->ctx, xml);
-        goto next_message;
+        return NC_MSG_ERROR;
 
     default:
         /* NC_MSG_WOULDBLOCK and NC_MSG_ERROR - pass it out;
@@ -963,9 +952,6 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
     *reply = NULL;
 
     msgtype = get_msg(session, timeout, msgid, &xml);
-    if (msgtype == NC_MSG_WOULDBLOCK) {
-        return NC_MSG_WOULDBLOCK;
-    }
 
     if (msgtype == NC_MSG_REPLY) {
         *reply = parse_reply(session->ctx, xml, rpc);
