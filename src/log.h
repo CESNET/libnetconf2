@@ -57,32 +57,6 @@ void nc_verbosity(NC_VERB_LEVEL level);
  */
 void nc_set_print_clb(void (*clb)(NC_VERB_LEVEL, const char *));
 
-#ifdef NC_TRANSAPI_H_
-/* Allow the following functions only in transAPI modules (via #include <transapi.h> */
-
-/**
- * @brief Function for logging error messages.
- * @param[in] format	printf's format string
- * @param[in] ...	list of arguments specified in format
- */
-void nc_verb_error(const char *format, ...);
-
-/**
- * @brief Function for logging warning messages.
- * @param[in] format	printf's format string
- * @param[in] ...	list of arguments specified in format
- */
-void nc_verb_warning(const char *format, ...);
-
-/**
- * @brief Function for logging verbose messages.
- * @param[in] format	printf's format string
- * @param[in] ...	list of arguments specified in format
- */
-void nc_verb_verbose(const char *format, ...);
-
-#endif
-
 #ifdef __cplusplus
 }
 #endif
