@@ -40,118 +40,6 @@
 #include <messages_p.h>
 #include "config.h"
 
-/*static int
-setup_read(void **state)
-{
-    int fd;
-    struct nc_session *session;
-
-    session = calloc(1, sizeof *session);
-    * test IO with standard file descriptors *
-    session->ti_type = NC_TI_FD;
-
-    session->status = NC_STATUS_RUNNING;
-    session->ctx = ly_ctx_new(TESTS_DIR"../schemas");
-    session->ti_lock = malloc(sizeof *session->ti_lock);
-    pthread_mutex_init(session->ti_lock, NULL);
-
-    * ietf-netconf *
-    fd = open(TESTS_DIR"../schemas/ietf-netconf.yin", O_RDONLY);
-    if (fd == -1) {
-        return -1;
-    }
-
-    lys_parse_fd(session->ctx, fd, LYS_IN_YIN);
-    close(fd);
-
-    *state = session;
-    return 0;
-}
-
-static int
-teardown_read(void **state)
-{
-    struct nc_session *session = (struct nc_session *)*state;
-
-    nc_session_free(session);
-    *state = NULL;
-
-    return 0;
-}
-
-static void
-test_read_rpc_10(void **state)
-{
-    struct nc_session *session = (struct nc_session *)*state;
-    struct nc_rpc_server *rpc = NULL;
-    NC_MSG_TYPE type;
-
-    session->ti.fd.in = open(TESTS_DIR"/data/nc10/rpc-lock", O_RDONLY);
-    session->version = NC_VERSION_10;
-    session->side = NC_SERVER;
-
-    type = nc_recv_rpc(session, 1000, &rpc);
-    assert_int_equal(type, NC_MSG_RPC);
-    assert_non_null(rpc);
-
-    nc_rpc_free((struct nc_rpc *)rpc);
-}
-
-static void
-test_read_rpc_10_bad(void **state)
-{
-    struct nc_session *session = (struct nc_session *)*state;
-    struct nc_rpc_server *rpc = NULL;
-    NC_MSG_TYPE type;
-
-    session->ti.fd.in = open(TESTS_DIR"/data/nc10/rpc-lock", O_RDONLY);
-    session->version = NC_VERSION_10;
-    session->side = NC_CLIENT;
-
-    type = nc_recv_rpc(session, 1000, &rpc);
-    assert_int_equal(type, NC_MSG_ERROR);
-    assert_null(rpc);
-
-    nc_rpc_free((struct nc_rpc *)rpc);
-}
-
-static void
-test_read_rpc_11(void **state)
-{
-    struct nc_session *session = (struct nc_session *)*state;
-    struct nc_rpc_server *rpc = NULL;
-    NC_MSG_TYPE type;
-
-    session->ti.fd.in = open(TESTS_DIR"/data/nc11/rpc-lock", O_RDONLY);
-    session->version = NC_VERSION_11;
-    session->side = NC_SERVER;
-
-    type = nc_recv_rpc(session, 1000, &rpc);
-    assert_int_equal(type, NC_MSG_RPC);
-    assert_non_null(rpc);
-
-    nc_rpc_free((struct nc_rpc *)rpc);
-}
-
-static void
-test_read_rpc_11_bad(void **state)
-{
-    struct nc_session *session = (struct nc_session *)*state;
-    struct nc_rpc_server *rpc = NULL;
-    NC_MSG_TYPE type;
-
-    session->ti.fd.in = open(TESTS_DIR"/data/nc11/rpc-lock", O_RDONLY);
-    session->version = NC_VERSION_11;
-    session->side = NC_CLIENT;
-
-    type = nc_recv_rpc(session, 1000, &rpc);
-    assert_int_equal(type, NC_MSG_ERROR);
-    assert_null(rpc);
-
-    nc_rpc_free((struct nc_rpc *)rpc);
-}*/
-
-
 struct wr {
     struct nc_session *session;
     struct nc_rpc *rpc;
@@ -289,10 +177,6 @@ test_write_rpc_11_bad(void **state)
 int main(void)
 {
     const struct CMUnitTest io[] = {
-        /*cmocka_unit_test_setup_teardown(test_read_rpc_10, setup_read, teardown_read),
-        cmocka_unit_test_setup_teardown(test_read_rpc_10_bad, setup_read, teardown_read),
-        cmocka_unit_test_setup_teardown(test_read_rpc_11, setup_read, teardown_read),
-        cmocka_unit_test_setup_teardown(test_read_rpc_11_bad, setup_read, teardown_read),*/
         cmocka_unit_test_setup_teardown(test_write_rpc_10, setup_write, teardown_write),
         cmocka_unit_test_setup_teardown(test_write_rpc_10_bad, setup_write, teardown_write),
         cmocka_unit_test_setup_teardown(test_write_rpc_11, setup_write, teardown_write),
