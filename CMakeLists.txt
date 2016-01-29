@@ -84,6 +84,11 @@ else()
     option(ENABLE_VALGRIND_TESTS "Build tests with valgrind" OFF)
 endif()
 
+#dependencies - pthread
+set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+find_package(Threads REQUIRED)
+target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
+
 # dependencies - libssh
 if(ENABLE_SSH)
     find_package(LibSSH 0.6.4 REQUIRED)
@@ -102,6 +107,7 @@ if(ENABLE_TLS OR ENABLE_DNSSEC)
     include_directories(${OPENSSL_INCLUDE_DIR})
 endif()
 
+# dependencies - libval
 if (ENABLE_DNSSEC)
     find_package(LibVAL REQUIRED)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_DNSSEC")
