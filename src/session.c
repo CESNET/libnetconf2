@@ -914,6 +914,10 @@ nc_ssh_destroy(void)
 
 static pthread_mutex_t *tls_locks;
 
+struct CRYPTO_dynlock_value {
+    pthread_mutex_t lock;
+};
+
 static void
 tls_thread_locking_func(int mode, int n, const char *UNUSED(file), int UNUSED(line))
 {
@@ -924,10 +928,44 @@ tls_thread_locking_func(int mode, int n, const char *UNUSED(file), int UNUSED(li
     }
 }
 
-static unsigned long
-tls_thread_id_func(void)
+static void
+tls_thread_id_func(CRYPTO_THREADID *tid)
 {
-    return (unsigned long)pthread_self();
+    CRYPTO_THREADID_set_numeric(tid, (unsigned long)pthread_self());
+}
+
+static struct CRYPTO_dynlock_value *
+tls_dyn_create_func(const char *UNUSED(file), int UNUSED(line))
+{
+    struct CRYPTO_dynlock_value *value;
+
+    value = malloc(sizeof *value);
+    if (!value) {
+        ERRMEM;
+        return NULL;
+    }
+    pthread_mutex_init(&value->lock, NULL);
+
+    return value;
+}
+
+static void
+tls_dyn_lock_func(int mode, struct CRYPTO_dynlock_value *l, const char *UNUSED(file), int UNUSED(line))
+{
+    /* mode can also be CRYPTO_READ or CRYPTO_WRITE, but all the examples
+     * I found ignored this fact, what do I know... */
+    if (mode & CRYPTO_LOCK) {
+        pthread_mutex_lock(&l->lock);
+    } else {
+        pthread_mutex_unlock(&l->lock);
+    }
+}
+
+static void
+tls_dyn_destroy_func(struct CRYPTO_dynlock_value *l, const char *UNUSED(file), int UNUSED(line))
+{
+    pthread_mutex_destroy(&l->lock);
+    free(l);
 }
 
 API void
@@ -944,15 +982,18 @@ nc_tls_init(void)
         pthread_mutex_init(tls_locks + i, NULL);
     }
 
-    CRYPTO_set_id_callback(tls_thread_id_func);
+    CRYPTO_THREADID_set_callback(tls_thread_id_func);
     CRYPTO_set_locking_callback(tls_thread_locking_func);
+
+    CRYPTO_set_dynlock_create_callback(tls_dyn_create_func);
+    CRYPTO_set_dynlock_lock_callback(tls_dyn_lock_func);
+    CRYPTO_set_dynlock_destroy_callback(tls_dyn_destroy_func);
 }
 
 API void
 nc_tls_destroy(void)
 {
     int i;
-
     CRYPTO_THREADID crypto_tid;
 
     EVP_cleanup();
@@ -968,6 +1009,10 @@ nc_tls_destroy(void)
         pthread_mutex_destroy(tls_locks + i);
     }
     free(tls_locks);
+
+    CRYPTO_set_dynlock_create_callback(NULL);
+    CRYPTO_set_dynlock_lock_callback(NULL);
+    CRYPTO_set_dynlock_destroy_callback(NULL);
 }
 
 #endif /* ENABLE_TLS */
