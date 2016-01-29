@@ -31,6 +31,8 @@
 #include <libyang/libyang.h>
 #include <openssl/err.h>
 
+#include "session_client.h"
+#include "session_client_ch.h"
 #include "libnetconf.h"
 
 static struct nc_client_tls_opts tls_opts;
@@ -130,8 +132,29 @@ tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
     return 1; /* success */
 }
 
+static void
+_nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts)
+{
+    free(opts->cert_path);
+    free(opts->key_path);
+    free(opts->ca_file);
+    free(opts->ca_dir);
+    SSL_CTX_free(opts->tls_ctx);
+
+    free(opts->crl_file);
+    free(opts->crl_dir);
+    X509_STORE_free(opts->crl_store);
+}
+
+API void
+nc_client_tls_destroy_opts(void)
+{
+    _nc_client_tls_destroy_opts(&tls_opts);
+    _nc_client_tls_destroy_opts(&tls_ch_opts);
+}
+
 static int
-_nc_client_tls_set_cert_key(const char *client_cert, const char *client_key, struct nc_client_tls_opts *opts)
+_nc_client_tls_set_cert_key_paths(const char *client_cert, const char *client_key, struct nc_client_tls_opts *opts)
 {
     if (!client_cert) {
         ERRARG;
@@ -167,19 +190,47 @@ _nc_client_tls_set_cert_key(const char *client_cert, const char *client_key, str
 }
 
 API int
-nc_client_tls_set_cert_key(const char *client_cert, const char *client_key)
+nc_client_tls_set_cert_key_paths(const char *client_cert, const char *client_key)
 {
-    return _nc_client_tls_set_cert_key(client_cert, client_key, &tls_opts);
+    return _nc_client_tls_set_cert_key_paths(client_cert, client_key, &tls_opts);
 }
 
 API int
-nc_client_tls_ch_set_cert_key(const char *client_cert, const char *client_key)
+nc_client_tls_ch_set_cert_key_paths(const char *client_cert, const char *client_key)
 {
-    return _nc_client_tls_set_cert_key(client_cert, client_key, &tls_ch_opts);
+    return _nc_client_tls_set_cert_key_paths(client_cert, client_key, &tls_ch_opts);
+}
+
+static void
+_nc_client_tls_get_cert_key_paths(const char **client_cert, const char **client_key, struct nc_client_tls_opts *opts)
+{
+    if (!client_cert && !client_key) {
+        ERRARG;
+        return;
+    }
+
+    if (client_cert) {
+        *client_cert = opts->cert_path;
+    }
+    if (client_key) {
+        *client_key = opts->key_path;
+    }
+}
+
+API void
+nc_client_tls_get_cert_key_paths(const char **client_cert, const char **client_key)
+{
+    _nc_client_tls_get_cert_key_paths(client_cert, client_key, &tls_opts);
+}
+
+API void
+nc_client_tls_ch_get_cert_key_paths(const char **client_cert, const char **client_key)
+{
+    _nc_client_tls_get_cert_key_paths(client_cert, client_key, &tls_ch_opts);
 }
 
 static int
-_nc_client_tls_set_trusted_ca_certs(const char *ca_file, const char *ca_dir, struct nc_client_tls_opts *opts)
+_nc_client_tls_set_trusted_ca_paths(const char *ca_file, const char *ca_dir, struct nc_client_tls_opts *opts)
 {
     if (!ca_file && !ca_dir) {
         ERRARG;
@@ -215,19 +266,47 @@ _nc_client_tls_set_trusted_ca_certs(const char *ca_file, const char *ca_dir, str
 }
 
 API int
-nc_client_tls_set_trusted_ca_certs(const char *ca_file, const char *ca_dir)
+nc_client_tls_set_trusted_ca_paths(const char *ca_file, const char *ca_dir)
 {
-    return _nc_client_tls_set_trusted_ca_certs(ca_file, ca_dir, &tls_opts);
+    return _nc_client_tls_set_trusted_ca_paths(ca_file, ca_dir, &tls_opts);
 }
 
 API int
-nc_client_tls_ch_set_trusted_ca_certs(const char *ca_file, const char *ca_dir)
+nc_client_tls_ch_set_trusted_ca_paths(const char *ca_file, const char *ca_dir)
 {
-    return _nc_client_tls_set_trusted_ca_certs(ca_file, ca_dir, &tls_ch_opts);
+    return _nc_client_tls_set_trusted_ca_paths(ca_file, ca_dir, &tls_ch_opts);
+}
+
+static void
+_nc_client_tls_get_trusted_ca_paths(const char **ca_file, const char **ca_dir, struct nc_client_tls_opts *opts)
+{
+    if (!ca_file && !ca_dir) {
+        ERRARG;
+        return;
+    }
+
+    if (ca_file) {
+        *ca_file = opts->ca_file;
+    }
+    if (ca_dir) {
+        *ca_dir = opts->ca_dir;
+    }
+}
+
+API void
+nc_client_tls_get_trusted_ca_paths(const char **ca_file, const char **ca_dir)
+{
+    _nc_client_tls_get_trusted_ca_paths(ca_file, ca_dir, &tls_opts);
+}
+
+API void
+nc_client_tls_ch_get_trusted_ca_paths(const char **ca_file, const char **ca_dir)
+{
+    _nc_client_tls_get_trusted_ca_paths(ca_file, ca_dir, &tls_ch_opts);
 }
 
 static int
-_nc_client_tls_set_crl(const char *crl_file, const char *crl_dir, struct nc_client_tls_opts *opts)
+_nc_client_tls_set_crl_paths(const char *crl_file, const char *crl_dir, struct nc_client_tls_opts *opts)
 {
     if (!crl_file && !crl_dir) {
         ERRARG;
@@ -263,15 +342,43 @@ _nc_client_tls_set_crl(const char *crl_file, const char *crl_dir, struct nc_clie
 }
 
 API int
-nc_client_tls_set_crl(const char *crl_file, const char *crl_dir)
+nc_client_tls_set_crl_paths(const char *crl_file, const char *crl_dir)
 {
-    return _nc_client_tls_set_crl(crl_file, crl_dir, &tls_opts);
+    return _nc_client_tls_set_crl_paths(crl_file, crl_dir, &tls_opts);
 }
 
 API int
-nc_client_tls_ch_set_crl(const char *crl_file, const char *crl_dir)
+nc_client_tls_ch_set_crl_paths(const char *crl_file, const char *crl_dir)
 {
-    return _nc_client_tls_set_crl(crl_file, crl_dir, &tls_ch_opts);
+    return _nc_client_tls_set_crl_paths(crl_file, crl_dir, &tls_ch_opts);
+}
+
+static void
+_nc_client_tls_get_crl_paths(const char **crl_file, const char **crl_dir, struct nc_client_tls_opts *opts)
+{
+    if (!crl_file && !crl_dir) {
+        ERRARG;
+        return;
+    }
+
+    if (crl_file) {
+        *crl_file = opts->crl_file;
+    }
+    if (crl_dir) {
+        *crl_dir = opts->crl_dir;
+    }
+}
+
+API void
+nc_client_tls_get_crl_paths(const char **crl_file, const char **crl_dir)
+{
+    _nc_client_tls_get_crl_paths(crl_file, crl_dir, &tls_opts);
+}
+
+API void
+nc_client_tls_ch_get_crl_paths(const char **crl_file, const char **crl_dir)
+{
+    _nc_client_tls_get_crl_paths(crl_file, crl_dir, &tls_ch_opts);
 }
 
 API int
@@ -286,35 +393,6 @@ nc_client_tls_ch_del_bind(const char *address, uint16_t port)
     return nc_client_ch_del_bind(address, port, NC_TI_OPENSSL);
 }
 
-API void
-nc_client_tls_destroy(void)
-{
-    int count = 0;
-    struct nc_client_tls_opts *opts;
-
-repeat:
-    if (count == 0) {
-        opts = &tls_ch_opts;
-    } else if (count == 1) {
-        opts = &tls_opts;
-    } else {
-        return;
-    }
-
-    free(opts->cert_path);
-    free(opts->key_path);
-    free(opts->ca_file);
-    free(opts->ca_dir);
-    SSL_CTX_free(opts->tls_ctx);
-
-    free(opts->crl_file);
-    free(opts->crl_dir);
-    X509_STORE_free(opts->crl_store);
-
-    ++count;
-    goto repeat;
-}
-
 static int
 nc_client_tls_update_opts(struct nc_client_tls_opts *opts)
 {
@@ -322,7 +400,7 @@ nc_client_tls_update_opts(struct nc_client_tls_opts *opts)
     X509_LOOKUP *lookup;
 
     if (!opts->tls_ctx || opts->tls_ctx_change) {
-        SSL_CTX_free(tls_opts.tls_ctx);
+        SSL_CTX_free(opts->tls_ctx);
 
         /* prepare global SSL context, allow only mandatory TLS 1.2  */
         if (!(opts->tls_ctx = SSL_CTX_new(TLSv1_2_client_method()))) {

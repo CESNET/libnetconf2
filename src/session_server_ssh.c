@@ -30,8 +30,9 @@
 #include <crypt.h>
 #include <errno.h>
 
-#include "libnetconf.h"
 #include "session_server.h"
+#include "session_server_ch.h"
+#include "libnetconf.h"
 
 struct nc_server_ssh_opts ssh_ch_opts = {
     .auth_methods = NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD | NC_SSH_AUTH_INTERACTIVE,

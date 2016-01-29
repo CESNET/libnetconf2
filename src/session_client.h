@@ -151,11 +151,18 @@ int16_t nc_client_ssh_get_auth_pref(NC_SSH_AUTH_TYPE auth_type);
 int nc_client_ssh_set_username(const char *username);
 
 /**
+ * @brief Get client SSH username used for authentication.
+ *
+ * @return Username used.
+ */
+const char *nc_client_ssh_get_username(void);
+
+/**
  * @brief Destroy any dynamically allocated SSH-specific client context (including Call Home).
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  */
-void nc_client_ssh_destroy(void);
+void nc_client_ssh_destroy_opts(void);
 
 /**
  * @brief Connect to the NETCONF server using SSH transport (via libssh).
@@ -229,16 +236,25 @@ struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  *
- * @param[in] client_cert Path to the file containing the client certificate. If NULL, only initializes libssl/libcrypto.
+ * @param[in] client_cert Path to the file containing the client certificate.
  * @param[in] client_key Path to the file containing the private key for the \p client_cert.
  *                       If NULL, key is expected to be stored with \p client_cert.
- *
  * @return 0 on success, -1 on error.
  */
-int nc_client_tls_set_cert_key(const char *client_cert, const char *client_key);
+int nc_client_tls_set_cert_key_paths(const char *client_cert, const char *client_key);
 
 /**
- * @brief Set client trusted CA certificates.
+ * @brief Get client authentication identity - a certificate and a private key.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
+ *
+ * @param[out] client_cert Path to the file containing the client certificate. Can be NULL.
+ * @param[out] client_key Path to the file containing the private key for the \p client_cert. Can be NULL.
+ */
+void nc_client_tls_get_cert_key_paths(const char **client_cert, const char **client_key);
+
+/**
+ * @brief Set client trusted CA certificates paths.
  *
  * @param[in] ca_file Location of the CA certificate file used to verify server certificates.
  *                    For more info, see the documentation for SSL_CTX_load_verify_locations() from OpenSSL.
@@ -246,23 +262,41 @@ int nc_client_tls_set_cert_key(const char *client_cert, const char *client_key);
  *                   For more info, see the documentation for SSL_CTX_load_verify_locations() from OpenSSL.
  * @return 0 on success, -1 on error.
  */
-int nc_client_tls_set_trusted_ca_certs(const char *ca_file, const char *ca_dir);
+int nc_client_tls_set_trusted_ca_paths(const char *ca_file, const char *ca_dir);
 
 /**
- * @brief Set client Certificate Revocation Lists.
+ * @brief Get client trusted CA certificates paths.
+ *
+ * @param[out] ca_file Location of the CA certificate file used to verify server certificates.
+ *                     Can be NULL.
+ * @param[out] ca_dir Location of the CA certificates directory used to verify the server certificates.
+ *                    Can be NULL.
+ */
+void nc_client_tls_get_trusted_ca_paths(const char **ca_file, const char **ca_dir);
+
+/**
+ * @brief Set client Certificate Revocation List paths.
  *
  * @param[in] crl_file Location of the CRL certificate file used to check for revocated certificates.
  * @param[in] crl_dir Location of the CRL certificate directory used to check for revocated certificates.
  * @return 0 on success, -1 on error.
  */
-int nc_client_tls_set_crl(const char *crl_file, const char *crl_dir);
+int nc_client_tls_set_crl_paths(const char *crl_file, const char *crl_dir);
+
+/**
+ * @brief Get client Certificate Revocation List paths.
+ *
+ * @param[out] crl_file Location of the CRL certificate file used to check for revocated certificates.
+ * @param[out] crl_dir Location of the CRL certificate directory used to check for revocated certificates.
+ */
+void nc_client_tls_get_crl_paths(const char **crl_file, const char **crl_dir);
 
 /**
  * @brief Destroy any dynamically allocated TLS-specific client data (including Call Home).
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  */
-void nc_client_tls_destroy(void);
+void nc_client_tls_destroy_opts(void);
 
 /**
  * @brief Connect to the NETCONF server using TLS transport (via libssl)

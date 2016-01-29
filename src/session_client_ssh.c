@@ -46,6 +46,8 @@
 #include <libssh/libssh.h>
 #include <libyang/libyang.h>
 
+#include "session_client.h"
+#include "session_client_ch.h"
 #include "libnetconf.h"
 
 static struct nc_client_ssh_opts ssh_opts = {
@@ -56,19 +58,24 @@ static struct nc_client_ssh_opts ssh_ch_opts = {
     .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}}
 };
 
-API void
-nc_client_ssh_destroy(void)
+static void
+_nc_client_ssh_destroy_opts(struct nc_client_ssh_opts *opts)
 {
     int i;
 
-    for (i = 0; i < ssh_opts.key_count; ++i) {
-        free(ssh_opts.keys[i].pubkey_path);
-        free(ssh_opts.keys[i].privkey_path);
+    for (i = 0; i < opts->key_count; ++i) {
+        free(opts->keys[i].pubkey_path);
+        free(opts->keys[i].privkey_path);
     }
+    free(opts->keys);
+    free(opts->username);
+}
 
-    free(ssh_opts.keys);
-    ssh_opts.keys = NULL;
-    ssh_opts.key_count = 0;
+API void
+nc_client_ssh_destroy_opts(void)
+{
+    _nc_client_ssh_destroy_opts(&ssh_opts);
+    _nc_client_ssh_destroy_opts(&ssh_ch_opts);
 }
 
 static char *
@@ -331,7 +338,6 @@ fail:
     return NULL;
 }
 
-/* TODO define this switch */
 #ifdef ENABLE_DNSSEC
 
 /* return 0 (DNSSEC + key valid), 1 (unsecure DNS + key valid), 2 (key not found or an error) */
@@ -783,6 +789,24 @@ API int
 nc_client_ssh_ch_set_username(const char *username)
 {
     return _nc_client_ssh_set_username(username, &ssh_ch_opts);
+}
+
+static const char *
+_nc_client_ssh_get_username(struct nc_client_ssh_opts *opts)
+{
+    return opts->username;
+}
+
+API const char *
+nc_client_ssh_get_username(void)
+{
+    return _nc_client_ssh_get_username(&ssh_opts);
+}
+
+API const char *
+nc_client_ssh_ch_get_username(void)
+{
+    return _nc_client_ssh_get_username(&ssh_ch_opts);
 }
 
 API int

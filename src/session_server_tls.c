@@ -30,8 +30,9 @@
 #include <openssl/err.h>
 #include <openssl/x509v3.h>
 
-#include "libnetconf.h"
 #include "session_server.h"
+#include "session_server_ch.h"
+#include "libnetconf.h"
 
 struct nc_server_tls_opts tls_ch_opts;
 pthread_mutex_t tls_ch_opts_lock = PTHREAD_MUTEX_INITIALIZER;

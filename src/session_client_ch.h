@@ -136,6 +136,13 @@ int16_t nc_client_ssh_ch_get_auth_pref(NC_SSH_AUTH_TYPE auth_type);
  */
 int nc_client_ssh_ch_set_username(const char *username);
 
+/**
+ * @brief Get client Call Home SSH username used for authentication.
+ *
+ * @return Username used.
+ */
+const char *nc_client_ssh_ch_get_username(void);
+
 #endif /* ENABLE_SSH */
 
 #ifdef ENABLE_TLS
@@ -163,13 +170,24 @@ int nc_client_tls_ch_del_bind(const char *address, uint16_t port);
  *
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  *
- * @param[in] client_cert Path to the file containing the client certificate. If NULL, only initializes libssl/libcrypto.
+ * @param[in] client_cert Path to the file containing the client certificate.
  * @param[in] client_key Path to the file containing the private key for the \p client_cert.
  *                       If NULL, key is expected to be stored with \p client_cert.
  *
  * @return 0 on success, -1 on error.
  */
-int nc_client_tls_ch_set_cert_key(const char *client_cert, const char *client_key);
+int nc_client_tls_ch_set_cert_key_paths(const char *client_cert, const char *client_key);
+
+/**
+ * @brief Get client Call Home authentication identity - a certificate and a private key.
+ *
+ * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
+ *
+ * @param[out] client_cert Path to the file containing the client certificate. Can be NULL.
+ * @param[out] client_key Path to the file containing the private key for the \p client_cert.
+ *                        Can be NULL.
+ */
+void nc_client_tls_ch_get_cert_key_paths(const char **client_cert, const char **client_key);
 
 /**
  * @brief Set client Call Home trusted CA certificates.
@@ -180,7 +198,17 @@ int nc_client_tls_ch_set_cert_key(const char *client_cert, const char *client_ke
  *                   For more info, see the documentation for SSL_CTX_load_verify_locations() from OpenSSL.
  * @return 0 on success, -1 on error.
  */
-int nc_client_tls_ch_set_trusted_ca_certs(const char *ca_file, const char *ca_dir);
+int nc_client_tls_ch_set_trusted_ca_paths(const char *ca_file, const char *ca_dir);
+
+/**
+ * @brief Get client Call Home trusted CA certificates.
+ *
+ * @param[out] ca_file Location of the CA certificate file used to verify server certificates.
+ *                     Can be NULL.
+ * @param[out] ca_dir Location of the CA certificates directory used to verify the server certificates.
+ *                    Can be NULL.
+ */
+void nc_client_tls_ch_get_trusted_ca_paths(const char **ca_file, const char **ca_dir);
 
 /**
  * @brief Set client Call Home Certificate Revocation Lists.
@@ -189,7 +217,17 @@ int nc_client_tls_ch_set_trusted_ca_certs(const char *ca_file, const char *ca_di
  * @param[in] crl_dir Location of the CRL certificate directory used to check for revocated certificates.
  * @return 0 on success, -1 on error.
  */
-int nc_client_tls_ch_set_crl(const char *crl_file, const char *crl_dir);
+int nc_client_tls_ch_set_crl_paths(const char *crl_file, const char *crl_dir);
+
+/**
+ * @brief Get client Call Home Certificate Revocation Lists.
+ *
+ * @param[out] crl_file Location of the CRL certificate file used to check for revocated certificates.
+ *                      Can be NULL.
+ * @param[out] crl_dir Location of the CRL certificate directory used to check for revocated certificates.
+ *                     Can be NULL.
+ */
+void nc_client_tls_ch_get_crl_paths(const char **crl_file, const char **crl_dir);
 
 #endif /* ENABLE_TLS */
 
