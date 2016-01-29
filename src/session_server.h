@@ -42,7 +42,7 @@
 typedef struct nc_server_reply *(*nc_rpc_clb)(struct lyd_node *rpc, struct nc_session *session);
 
 /**
- * @brief Set the termination reason for a session.
+ * @brief Set the termination reason for a session. Use only in #nc_rpc_clb callbacks.
  *
  * @param[in] session Session to modify.
  * @param[in] reason Reason of termination.
