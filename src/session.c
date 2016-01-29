@@ -235,6 +235,7 @@ nc_session_free(struct nc_session *session)
     int connected; /* flag to indicate whether the transport socket is still connected */
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
     pthread_t tid;
+    struct nc_session *siter;
     struct nc_msg_cont *contiter;
     struct lyxml_elem *rpl, *child;
     struct lyd_node *close_rpc;
@@ -247,9 +248,7 @@ nc_session_free(struct nc_session *session)
 
     /* mark session for closing */
     if (session->ti_lock) {
-        do {
-            r = nc_timedlock(session->ti_lock, 0, NULL);
-        } while (!r);
+        r = nc_timedlock(session->ti_lock, -1, NULL);
         if (r == -1) {
             return;
         }
@@ -338,12 +337,11 @@ nc_session_free(struct nc_session *session)
          */
         /* just to avoid compiler warning */
         (void)connected;
+        (void)siter;
         break;
 
 #ifdef ENABLE_SSH
     case NC_TI_LIBSSH:
-        struct nc_session *siter;
-
         if (connected) {
             ssh_channel_free(session->ti.libssh.channel);
         }
