@@ -68,7 +68,9 @@ set(headers
     src/messages_client.h
     src/messages_server.h
     src/session_client.h
-    src/session_server.h)
+    src/session_client_ch.h
+    src/session_server.h
+    src/session_server_ch.h)
 
 # libnetconf2 target
 add_library(netconf2 SHARED ${libsrc})
