@@ -120,6 +120,16 @@ find_package(LibYANG REQUIRED)
 target_link_libraries(netconf2 ${LIBYANG_LIBRARIES})
 include_directories(${LIBYANG_INCLUDE_DIRS})
 
+# generate doxygen documentation for libnetconf2 API
+find_package(Doxygen)
+if(DOXYGEN_FOUND)
+    set(DOXYGEN_SKIP_DOT TRUE)
+    add_custom_target(doc
+            COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_BINARY_DIR}/Doxyfile
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    configure_file(Doxyfile.in Doxyfile)
+endif()
+
 if(NOT LIB_INSTALL_DIR)
     set(LIB_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/lib)
 endif()
