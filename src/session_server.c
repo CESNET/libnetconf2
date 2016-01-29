@@ -537,7 +537,7 @@ nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
         }
     }
 
-    return 1;
+    return -1;
 }
 
 /* must be called holding the session lock! */

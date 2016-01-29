@@ -24,6 +24,7 @@
 
 #include <string.h>
 #include <poll.h>
+#include <unistd.h>
 
 #include <openssl/ssl.h>
 #include <openssl/evp.h>

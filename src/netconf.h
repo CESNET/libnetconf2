@@ -126,7 +126,7 @@ void nc_ssh_init(void);
 /**
  * @brief Free all the resources allocated by libssh.
  *
- * Must be called before nc_tls_destroy() (if called) as libssh uses libcrypto as well.
+ * Must be called before #nc_tls_destroy() (if called) as libssh uses libcrypto as well.
  */
 void nc_ssh_destroy(void);
 

@@ -1048,6 +1048,11 @@ nc_recv_notif_thread(void *arg)
         msgtype = nc_recv_notif(session, 0, &notif);
         if (msgtype == NC_MSG_NOTIF) {
             notif_clb(session, notif);
+            if (!strcmp(notif->tree->schema->name, "notificationComplete")
+                    && !strcmp(notif->tree->schema->module->name, "nc-notifications")) {
+                nc_notif_free(notif);
+                break;
+            }
             nc_notif_free(notif);
         }
 

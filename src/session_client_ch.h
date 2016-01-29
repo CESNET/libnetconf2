@@ -38,7 +38,7 @@
  *            non-blocking call, -1 for infinite waiting.
  * @param[in] ctx Session context to use. Can be NULL.
  * @param[out] session New session.
- * @return 0 on timeout, 1 on success, -1 on error.
+ * @return 1 on success, 0 on timeout, -1 on error.
  */
 int nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session);
 
@@ -73,8 +73,7 @@ int nc_client_ssh_ch_del_bind(const char *address, uint16_t port);
  *
  * @param[in] pub_key Path to the public key.
  * @param[in] priv_key Path to the private key.
- *
- * @return EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
+ * @return 0 on success, -1 on error.
  */
 int nc_client_ssh_ch_add_keypair(const char *pub_key, const char *priv_key);
 
@@ -84,7 +83,6 @@ int nc_client_ssh_ch_add_keypair(const char *pub_key, const char *priv_key);
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  *
  * @param[in] idx Index of the keypair starting with 0.
- *
  * @return 0 on success, -1 on error.
  */
 int nc_client_ssh_ch_del_keypair(int idx);
@@ -102,7 +100,6 @@ int nc_client_ssh_ch_get_keypair_count(void);
  * @param[in] idx Index of the specific keypair.
  * @param[out] pub_key Path to the public key.
  * @param[out] priv_key Path to the private key.
- *
  * @return 0 on success, -1 on error.
  */
 int nc_client_ssh_ch_get_keypair(int idx, const char **pub_key, const char **priv_key);
@@ -123,7 +120,6 @@ void nc_client_ssh_ch_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref);
  * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  *
  * @param[in] auth_type Authentication method to retrieve the prefrence of.
- *
  * @return Preference of the \p auth_type.
  */
 int16_t nc_client_ssh_ch_get_auth_pref(NC_SSH_AUTH_TYPE auth_type);
@@ -173,7 +169,6 @@ int nc_client_tls_ch_del_bind(const char *address, uint16_t port);
  * @param[in] client_cert Path to the file containing the client certificate.
  * @param[in] client_key Path to the file containing the private key for the \p client_cert.
  *                       If NULL, key is expected to be stored with \p client_cert.
- *
  * @return 0 on success, -1 on error.
  */
 int nc_client_tls_ch_set_cert_key_paths(const char *client_cert, const char *client_key);

@@ -124,7 +124,7 @@ void nc_server_set_hello_timeout(uint16_t hello_timeout);
  * @brief Set server timeout for dropping an idle session.
  *
  * @param[in] idle_timeout Idle session timeout. 0 to never drop a session
- * because of inactivity.
+ *                         because of inactivity.
  */
 void nc_server_set_idle_timeout(uint16_t idle_timeout);
 
@@ -167,7 +167,7 @@ int nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session);
  *
  * @param[in] ps Pollsession structure to modify.
  * @param[in] session Session to remove from \p ps.
- * @return 0 on success, 1 if not found, -1 on error.
+ * @return 0 on success, -1 on not found.
  */
 int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
 
@@ -198,10 +198,10 @@ int nc_ps_poll(struct nc_pollsession *ps, int timeout);
  * @brief Lock server context.
  *
  * @param[in] timeout Timeout in milliseconds. 0 for non-blocking call, -1 for
- * infinite waiting.
+ *                    infinite waiting.
  * @param[out] elapsed Elapsed milliseconds will be added to this variable.
- * Can be NULL.
- * @return 0 on elapsed timeout, 1 on success, -1 on error.
+ *                     Can be NULL.
+ * @return 1 on success, 0 on elapsed timeout, -1 on error.
  */
 int nc_ctx_lock(int timeout, int *elapsed);
 
@@ -230,11 +230,11 @@ int nc_accept(int timeout, struct nc_session **session);
 
 /**
  * @brief Accept a new NETCONF session on an SSH session of a running NETCONF session
- * that was polled in \p ps. Call this function only when nc_ps_poll() on \p ps returns 5.
+ *        that was polled in \p ps. Call this function only when nc_ps_poll() on \p ps returns 5.
  *
  * @param[in] ps Unmodified pollsession structure from the previous nc_ps_poll() call.
  * @param[out] session New session.
- * @return 1 on success, -1 on error.
+ * @return 0 on success, -1 on error.
  */
 int nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session);
 
@@ -242,7 +242,7 @@ int nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **sess
  * @brief Add a new SSH endpoint and start listening on it.
  *
  * @param[in] name Arbitrary unique endpoint name. There can be a TLS endpoint with
- * the same name.
+ *                 the same name.
  * @param[in] address IP address to listen on.
  * @param[in] port Port to listen on.
  * @return 0 on success, -1 on error.
@@ -259,7 +259,7 @@ int nc_server_ssh_del_endpt(const char *name);
 
 /**
  * @brief Set endpoint SSH host keys the server will identify itself with. Each of RSA, DSA, and
- * ECDSA keys can be set. If the particular type was already set, it is replaced.
+ *        ECDSA keys can be set. If the particular type was already set, it is replaced.
  *
  * @param[in] privkey_path Path to a private key.
  * @return 0 on success, -1 on error.
@@ -276,7 +276,7 @@ int nc_server_ssh_endpt_set_banner(const char *endpt_name, const char *banner);
 
 /**
  * @brief Set endpoint accepted SSH authentication methods. All (publickey, password, interactive)
- * are supported by default.
+ *        are supported by default.
  *
  * @param[in] auth_methods Accepted authentication methods bit field of NC_SSH_AUTH_TYPE.
  * @return 0 on success, -1 on error.
@@ -301,7 +301,7 @@ int nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_t
 
 /**
  * @brief Add an endpoint authorized client SSH public key. This public key can be used for
- * publickey authentication afterwards.
+ *        publickey authentication afterwards.
  *
  * @param[in] pubkey_path Path to the public key.
  * @param[in] username Username that the client with the public key must use.
@@ -318,11 +318,6 @@ int nc_server_ssh_endpt_add_authkey(const char *endpt_name, const char *pubkey_p
  */
 int nc_server_ssh_endpt_del_authkey(const char *endpt_name, const char *pubkey_path, const char *username);
 
-/**
- * @brief Free all the various SSH server options (excluding Call Home).
- */
-void nc_server_ssh_destroy_opts(void);
-
 #endif /* ENABLE_SSH */
 
 #ifdef ENABLE_TLS
@@ -331,7 +326,7 @@ void nc_server_ssh_destroy_opts(void);
  * @brief Add a new TLS endpoint and start listening on it.
  *
  * @param[in] name Arbitrary unique endpoint name. There can be an SSH endpoint with
- * the same name.
+ *                 the same name.
  * @param[in] address IP address to listen on.
  * @param[in] port Port to listen on.
  * @return 0 on success, -1 on error.
@@ -348,7 +343,8 @@ int nc_server_tls_del_endpt(const char *name);
 
 /**
  * @brief Set server TLS certificate. Alternative to nc_tls_server_set_cert_path().
- * There can only be one certificate for each key type, it is replaced if already set.
+ *        There can only be one certificate for each key type, it is replaced if
+ *        already set.
  *
  * @param[in] cert Base64-encoded certificate in ASN.1 DER encoding.
  * @return 0 on success, -1 on error.
@@ -357,7 +353,8 @@ int nc_server_tls_endpt_set_cert(const char *endpt_name, const char *cert);
 
 /**
  * @brief Set server TLS certificate. Alternative to nc_tls_server_set_cert().
- * There can only be one certificate for each key type, it is replaced if already set.
+ *        There can only be one certificate for each key type, it is replaced if
+ *        already set.
  *
  * @param[in] cert_path Path to a certificate file in PEM format.
  * @return 0 on success, -1 on error.
@@ -366,8 +363,8 @@ int nc_server_tls_endpt_set_cert_path(const char *endpt_name, const char *cert_p
 
 /**
  * @brief Set server TLS private key matching the certificate.
- * Alternative to nc_tls_server_set_key_path(). There can only be one of every key
- * type, it is replaced if already set.
+ *        Alternative to nc_tls_server_set_key_path(). There can only be one of
+ *        every key type, it is replaced if already set.
  *
  * @param[in] privkey Base64-encoded certificate in ASN.1 DER encoding.
  * @param[in] is_rsa Whether \p privkey are the data of an RSA (1) or DSA (0) key.
@@ -377,8 +374,8 @@ int nc_server_tls_endpt_set_key(const char *endpt_name, const char *privkey, int
 
 /**
  * @brief Set server TLS private key matching the certificate.
- * Alternative to nc_tls_server_set_key_path(). There can only be one of every key
- * type, it is replaced if already set.
+ *        Alternative to nc_tls_server_set_key_path(). There can only be one of
+ *        every key type, it is replaced if already set.
  *
  * @param[in] privkey_path Path to a private key file in PEM format.
  * @return 0 on success, -1 on error.
@@ -388,7 +385,7 @@ int nc_server_tls_endpt_set_key_path(const char *endpt_name, const char *privkey
 /**
  * @brief Add a trusted certificate. Can be both a CA or a client one.
  *
- * @param[in] cert Base64-enocded certificate in ASN.1DER encoding.
+ * @param[in] cert Base64-enocded certificate in ASN.1 DER encoding.
  * @return 0 on success, -1 on error.
  */
 int nc_server_tls_endpt_add_trusted_cert(const char *endpt_name, const char *cert);
@@ -403,36 +400,37 @@ int nc_server_tls_endpt_add_trusted_cert_path(const char *endpt_name, const char
 
 /**
  * @brief Set trusted Certificate Authority certificate locations. There can only be
- * one file and one directory, they are replaced if already set.
+ *        one file and one directory, they are replaced if already set.
  *
  * @param[in] cacert_file_path Path to a trusted CA cert store file in PEM format.
- * Can be NULL.
+ *                             Can be NULL.
  * @param[in] cacert_dir_path Path to a trusted CA cert store hashed directory
- * (c_rehash utility can be used to create hashes) with PEM files. Can be NULL.
+ *                            (c_rehash utility can be used to create hashes) with PEM files.
+ *                            Can be NULL.
  * @return 0 on success, -1 on error.
  */
 int nc_server_tls_endpt_set_trusted_cacert_locations(const char *endpt_name, const char *cacert_file_path, const char *cacert_dir_path);
 
 /**
  * @brief Destroy and clean all the set certificates and private keys. CRLs and
- * CTN entries are not affected.
+ *        CTN entries are not affected.
  */
 void nc_server_tls_endpt_clear_certs(const char *endpt_name);
 
 /**
  * @brief Set Certificate Revocation List locations. There can only be one file
- * and one directory, they are replaced if already set.
+ *        and one directory, they are replaced if already set.
  *
  * @param[in] crl_file_path Path to a CRL store file in PEM format. Can be NULL.
  * @param[in] crl_dir_path Path to a CRL store hashed directory (c_rehash utility
- * can be used to create hashes) with PEM files. Can be NULL.
+ *                         can be used to create hashes) with PEM files. Can be NULL.
  * @return 0 on success, -1 on error.
  */
 int nc_server_tls_endpt_set_crl_locations(const char *endpt_name, const char *crl_file_path, const char *crl_dir_path);
 
 /**
  * @brief Destroy and clean CRLs. Certificates, priavte keys, and CTN entries are
- * not affected.
+ *        not affected.
  */
 void nc_server_tls_endpt_clear_crls(const char *endpt_name);
 
