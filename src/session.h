@@ -132,6 +132,14 @@ const char *nc_session_get_host(const struct nc_session *session);
 uint16_t nc_session_get_port(const struct nc_session *session);
 
 /**
+ * @brief Get session context.
+ *
+ * @param[in] session Session to get the information from.
+ * @return Session context.
+ */
+struct ly_ctx *nc_session_get_ctx(const struct nc_session *session);
+
+/**
  * @brief Get session capabilities.
  *
  * @param[in] session Session to get the information from.

@@ -177,6 +177,17 @@ nc_session_get_port(const struct nc_session *session)
     return session->port;
 }
 
+API struct ly_ctx *
+nc_session_get_ctx(const struct nc_session *session)
+{
+    if (!session) {
+        ERRARG;
+        return NULL;
+    }
+
+    return session->ctx;
+}
+
 API const char **
 nc_session_get_cpblts(const struct nc_session *session)
 {

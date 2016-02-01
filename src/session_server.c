@@ -807,6 +807,11 @@ nc_ps_clear(struct nc_pollsession *ps)
     uint16_t i;
     struct nc_session *session;
 
+    if (!ps) {
+        ERRARG;
+        return;
+    }
+
     for (i = 0; i < ps->session_count; ) {
         if (ps->sessions[i]->status != NC_STATUS_RUNNING) {
             session = ps->sessions[i];
