@@ -475,6 +475,7 @@ nc_server_reply_free(struct nc_server_reply *reply)
         if (data_rpl->free) {
             nc_ctx_lock(-1, NULL);
             lyd_free_withsiblings(data_rpl->data);
+            nc_ctx_unlock();
         }
         break;
     case NC_RPL_OK:
