@@ -918,7 +918,7 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
 
     sock = nc_sock_accept_binds(client_opts.ch_binds, client_opts.ch_bind_count, timeout, &host, &port, &idx);
 
-    if (sock < 1) {
+    if (sock < 0) {
         return sock;
     }
 
@@ -933,6 +933,7 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
     } else
 #endif
     {
+        close(sock);
         *session = NULL;
     }
 
