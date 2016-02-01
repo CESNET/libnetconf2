@@ -189,10 +189,20 @@ int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
  *
  *         Only with SSH support:
  *         4 if an SSH message was processed,
- *         5 if a new NETCONF SSH channel was created; call nc_ssh_ps_accept_channel()
+ *         5 if a new NETCONF SSH channel was created; call #nc_ssh_ps_accept_channel()
  *           to establish a new NETCONF session.
  */
 int nc_ps_poll(struct nc_pollsession *ps, int timeout);
+
+/**
+ * @brief Remove invalid sessions from a pollsession structure and
+ *        call #nc_session_free() on them.
+ *
+ * Calling this function makes sense if #nc_ps_poll() returned 3.
+ *
+ * @param[in] ps Pollsession structure to clear.
+ */
+void nc_ps_clear(struct nc_pollsession *ps);
 
 /**
  * @brief Lock server context.

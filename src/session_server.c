@@ -801,6 +801,24 @@ retry_poll:
     return 1;
 }
 
+API void
+nc_ps_clear(struct nc_pollsession *ps)
+{
+    uint16_t i;
+    struct nc_session *session;
+
+    for (i = 0; i < ps->session_count; ) {
+        if (ps->sessions[i]->status != NC_STATUS_RUNNING) {
+            session = ps->sessions[i];
+            nc_ps_del_session(ps, session);
+            nc_session_free(session);
+            continue;
+        }
+
+        ++i;
+    }
+}
+
 API int
 nc_ctx_lock(int timeout, int *elapsed)
 {
