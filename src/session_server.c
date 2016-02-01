@@ -1142,7 +1142,7 @@ nc_accept(int timeout, struct nc_session **session)
     }
 
     /* ENDPT UNLOCK */
-    pthread_mutex_lock(&server_opts.endpts[idx].endpt_lock);
+    pthread_mutex_unlock(&server_opts.endpts[idx].endpt_lock);
 
     /* READ UNLOCK */
     pthread_rwlock_unlock(&server_opts.endpt_array_lock);
