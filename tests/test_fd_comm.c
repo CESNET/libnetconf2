@@ -112,7 +112,6 @@ setup_sessions(void **state)
     server_session->status = NC_STATUS_RUNNING;
     server_session->side = NC_SERVER;
     server_session->id = 1;
-    server_session->version = NC_VERSION_11;
     server_session->ti_type = NC_TI_FD;
     server_session->ti_lock = malloc(sizeof *server_session->ti_lock);
     pthread_mutex_init(server_session->ti_lock, NULL);
@@ -126,7 +125,6 @@ setup_sessions(void **state)
     client_session->status = NC_STATUS_RUNNING;
     client_session->side = NC_CLIENT;
     client_session->id = 1;
-    client_session->version = NC_VERSION_11;
     client_session->ti_type = NC_TI_FD;
     client_session->ti_lock = malloc(sizeof *client_session->ti_lock);
     pthread_mutex_init(client_session->ti_lock, NULL);
@@ -162,9 +160,8 @@ teardown_sessions(void **state)
 }
 
 static void
-test_send_recv_ok(void **state)
+test_send_recv_ok(void)
 {
-    (void)state;
     int ret;
     uint64_t msgid;
     NC_MSG_TYPE msgtype;
@@ -200,9 +197,30 @@ test_send_recv_ok(void **state)
 }
 
 static void
-test_send_recv_error(void **state)
+test_send_recv_ok_10(void **state)
 {
     (void)state;
+
+    server_session->version = NC_VERSION_10;
+    client_session->version = NC_VERSION_10;
+
+    test_send_recv_ok();
+}
+
+static void
+test_send_recv_ok_11(void **state)
+{
+    (void)state;
+
+    server_session->version = NC_VERSION_11;
+    client_session->version = NC_VERSION_11;
+
+    test_send_recv_ok();
+}
+
+static void
+test_send_recv_error(void)
+{
     int ret;
     uint64_t msgid;
     NC_MSG_TYPE msgtype;
@@ -239,9 +257,30 @@ test_send_recv_error(void **state)
 }
 
 static void
-test_send_recv_data(void **state)
+test_send_recv_error_10(void **state)
 {
     (void)state;
+
+    server_session->version = NC_VERSION_10;
+    client_session->version = NC_VERSION_10;
+
+    test_send_recv_error();
+}
+
+static void
+test_send_recv_error_11(void **state)
+{
+    (void)state;
+
+    server_session->version = NC_VERSION_11;
+    client_session->version = NC_VERSION_11;
+
+    test_send_recv_error();
+}
+
+static void
+test_send_recv_data(void)
+{
     int ret;
     uint64_t msgid;
     NC_MSG_TYPE msgtype;
@@ -276,9 +315,31 @@ test_send_recv_data(void **state)
     nc_reply_free(reply);
 }
 
+static void
+test_send_recv_data_10(void **state)
+{
+    (void)state;
+
+    server_session->version = NC_VERSION_10;
+    client_session->version = NC_VERSION_10;
+
+    test_send_recv_data();
+}
+
+static void
+test_send_recv_data_11(void **state)
+{
+    (void)state;
+
+    server_session->version = NC_VERSION_11;
+    client_session->version = NC_VERSION_11;
+
+    test_send_recv_data();
+}
+
 /* TODO
 static void
-test_send_recv_notif(void **state)
+test_send_recv_notif(void)
 {
 
 }*/
@@ -287,9 +348,12 @@ int
 main(void)
 {
     const struct CMUnitTest comm[] = {
-        cmocka_unit_test_setup_teardown(test_send_recv_ok, setup_sessions, teardown_sessions),
-        cmocka_unit_test_setup_teardown(test_send_recv_error, setup_sessions, teardown_sessions),
-        cmocka_unit_test_setup_teardown(test_send_recv_data, setup_sessions, teardown_sessions)
+        cmocka_unit_test_setup_teardown(test_send_recv_ok_10, setup_sessions, teardown_sessions),
+        cmocka_unit_test_setup_teardown(test_send_recv_error_10, setup_sessions, teardown_sessions),
+        cmocka_unit_test_setup_teardown(test_send_recv_data_10, setup_sessions, teardown_sessions),
+        cmocka_unit_test_setup_teardown(test_send_recv_ok_11, setup_sessions, teardown_sessions),
+        cmocka_unit_test_setup_teardown(test_send_recv_error_11, setup_sessions, teardown_sessions),
+        cmocka_unit_test_setup_teardown(test_send_recv_data_11, setup_sessions, teardown_sessions)
     };
 
     return cmocka_run_group_tests(comm, NULL, NULL);
