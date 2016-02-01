@@ -492,7 +492,7 @@ hostkey_not_known:
 
             /* DNSSEC SSHFP check successful, that's enough */
             if (!ret) {
-                DBG("DNSSEC SSHFP check successful");
+                VRB("DNSSEC SSHFP check successful.");
                 ssh_write_knownhost(session);
                 ssh_clean_pubkey_hash(&hash_sha1);
                 ssh_string_free_char(hexa);
@@ -507,9 +507,9 @@ hostkey_not_known:
 
 #ifdef ENABLE_DNSSEC
         if (ret == 2) {
-            fprintf(stdout, "No matching host key fingerprint found in DNS.\n");
+            fprintf(stdout, "No matching host key fingerprint found using DNS.\n");
         } else if (ret == 1) {
-            fprintf(stdout, "Matching host key fingerprint found in DNS.\n");
+            fprintf(stdout, "Matching host key fingerprint found using DNS.\n");
         }
 #endif
 
@@ -526,8 +526,8 @@ hostkey_not_known:
             if (!strcmp("yes", answer)) {
                 /* store the key into the host file */
                 ret = ssh_write_knownhost(session);
-                if (ret < 0) {
-                    WRN("Adding the known host %s failed (%s).", hostname, ssh_get_error(session));
+                if (ret != SSH_OK) {
+                    WRN("Adding the known host \"%s\" failed (%s).", hostname, ssh_get_error(session));
                 }
             } else if (!strcmp("no", answer)) {
                 goto fail;
