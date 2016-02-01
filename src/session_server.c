@@ -943,6 +943,7 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
     }
     if (!bind) {
         ERRINT;
+        nc_server_endpt_unlock(endpt);
         return -1;
     }
 
@@ -952,6 +953,7 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
         sock = nc_sock_listen(bind->address, port);
     }
     if (sock == -1) {
+        nc_server_endpt_unlock(endpt);
         return -1;
     }
 
@@ -965,6 +967,7 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
         bind->port = port;
     }
 
+    nc_server_endpt_unlock(endpt);
     return 0;
 }
 
