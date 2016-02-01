@@ -49,6 +49,18 @@ nc_server_ssh_add_endpt_listen(const char *name, const char *address, uint16_t p
 }
 
 API int
+nc_server_ssh_endpt_set_address(const char *endpt_name, const char *address)
+{
+    return nc_server_endpt_set_address_port(endpt_name, address, 0, NC_TI_LIBSSH);
+}
+
+API int
+nc_server_ssh_endpt_set_port(const char *endpt_name, uint16_t port)
+{
+    return nc_server_endpt_set_address_port(endpt_name, NULL, port, NC_TI_LIBSSH);
+}
+
+API int
 nc_server_ssh_del_endpt(const char *name)
 {
     return nc_server_del_endpt(name, NC_TI_LIBSSH);

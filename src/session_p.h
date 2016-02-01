@@ -352,6 +352,19 @@ int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout
 int nc_server_add_endpt_listen(const char *name, const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
 
 /**
+ * @brief Change an existing endpoint bind.
+ *
+ * On error the listening socket is left untouched.
+ *
+ * @param[in] endpt_name Name of the endpoint.
+ * @param[in] address New address. NULL if \p port.
+ * @param[in] port New port. NULL if \p address.
+ * @param[in] ti Expected transport.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_endpt_set_address_port(const char *endpt_name, const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
+
+/**
  * @brief Stop listening on and remove an endpoint.
  *
  * @param[in] address Name of the endpoint. NULL matches all the names.
@@ -360,24 +373,65 @@ int nc_server_add_endpt_listen(const char *name, const char *address, uint16_t p
  */
 int nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti);
 
-/* TODO */
+/**
+ * @brief Lock endpoint structures for reading and the specific endpoint.
+ *
+ * @param[in] name Name of the endpoint.
+ * @param[in] ti Endpoint transport.
+ * @return Endpoint structure.
+ */
 struct nc_endpt *nc_server_endpt_lock(const char *name, NC_TRANSPORT_IMPL ti);
 
-/* TODO */
+/**
+ * @brief Unlock endpoint strcutures and the specific endpoint.
+ *
+ * @param[in] endpt Locked endpoint structure.
+ */
 void nc_server_endpt_unlock(struct nc_endpt *endpt);
 
-/* TODO */
+/**
+ * @brief Add a client Call Home bind, listen on it.
+ *
+ * @param[in] address Address to bind to.
+ * @param[in] port to bind to.
+ * @param[in] ti Expected transport.
+ * @return 0 on success, -1 on error.
+ */
 int nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
 
-/* TODO */
+/**
+ * @brief Remove a client Call Home bind, stop listening on it.
+ *
+ * @param[in] address Address of the bind. NULL matches any address.
+ * @param[in] port Port of the bind. 0 matches all ports.
+ * @param[in] ti Expected transport of the bind. 0 matches any.
+ * @return 0 on success, -1 on no matches found.
+ */
 int nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
 
-/* TODO */
+/**
+ * @brief Connect to a listening NETCONF client using Call Home.
+ *
+ * @param[in] host Hostname to connect to.
+ * @param[in] port Port to connect to.
+ * @param[in] ti Transport fo the connection.
+ * @param[in] timeout Timeout.
+ * @param[out] session New Call Home session.
+ * @return 0 on success, -1 on error.
+ */
 int nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int timeout, struct nc_session **session);
 
 #ifdef ENABLE_SSH
 
-/* TODO */
+/**
+ * @brief Accept a server Call Home connection on a socket.
+ *
+ * @param[in] sock Socket with a new connection.
+ * @param[in] host Hostname of the server.
+ * @param[in] port Port of the server.
+ * @param[in] ctx Context for the session. Can be NULL.
+ * @return New session, NULL on error.
+ */
 struct nc_session *nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx);
 
 /**

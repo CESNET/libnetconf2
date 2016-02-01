@@ -916,6 +916,57 @@ nc_server_add_endpt_listen(const char *name, const char *address, uint16_t port,
 }
 
 int
+nc_server_endpt_set_address_port(const char *endpt_name, const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
+{
+    struct nc_endpt *endpt;
+    struct nc_bind *bind = NULL;
+    uint16_t i;
+    int sock;
+
+    if (!endpt_name || (!address && !port) || (address && port) || !ti) {
+        ERRARG;
+        return -1;
+    }
+
+    endpt = nc_server_endpt_lock(endpt_name, ti);
+    if (!endpt) {
+        return -1;
+    }
+
+    /* we need to learn the index, to get the bind :-/ */
+    for (i = 0; i < server_opts.endpt_count; ++i) {
+        if (&server_opts.endpts[i] == endpt) {
+            bind = &server_opts.binds[i];
+        }
+    }
+    if (!bind) {
+        ERRINT;
+        return -1;
+    }
+
+    if (address) {
+        sock = nc_sock_listen(address, bind->port);
+    } else {
+        sock = nc_sock_listen(bind->address, port);
+    }
+    if (sock == -1) {
+        return -1;
+    }
+
+    /* close old socket, update parameters */
+    close(bind->sock);
+    bind->sock = sock;
+    if (address) {
+        lydict_remove(server_opts.ctx, bind->address);
+        bind->address = lydict_insert(server_opts.ctx, address, 0);
+    } else {
+        bind->port = port;
+    }
+
+    return 0;
+}
+
+int
 nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti)
 {
     uint32_t i;
