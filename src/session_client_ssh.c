@@ -821,11 +821,11 @@ nc_client_ssh_ch_del_bind(const char *address, uint16_t port)
     return nc_client_ch_del_bind(address, port, NC_TI_LIBSSH);
 }
 
-/* Establish a secure SSH connection, authenticate, and create a channel with the 'netconf' subsystem.
+/* Establish a secure SSH connection and authenticate.
  * Host, port, username, and a connected socket is expected to be set.
  */
 static int
-connect_ssh_session_netconf(struct nc_session *session)
+connect_ssh_session(struct nc_session *session)
 {
     int j, ret_auth, userauthlist;
     NC_SSH_AUTH_TYPE auth;
@@ -1001,6 +1001,29 @@ connect_ssh_session_netconf(struct nc_session *session)
         return -1;
     }
 
+    return 0;
+}
+
+/* Open new SSH channel and request the 'netconf' subsystem.
+ * SSH connection is expected to be established.
+ */
+static int
+open_netconf_channel(struct nc_session *session)
+{
+    ssh_session ssh_sess;
+
+    ssh_sess = session->ti.libssh.session;
+
+    if (!ssh_is_connected(ssh_sess)) {
+        ERR("SSH session not connected.");
+        return -1;
+    }
+
+    if (session->ti.libssh.channel) {
+        ERR("SSH channel already created.");
+        return -1;
+    }
+
     /* open a channel */
     session->ti.libssh.channel = ssh_channel_new(ssh_sess);
     if (ssh_channel_open_session(session->ti.libssh.channel) != SSH_OK) {
@@ -1018,7 +1041,7 @@ connect_ssh_session_netconf(struct nc_session *session)
         return -1;
     }
 
-    return EXIT_SUCCESS;
+    return 0;
 }
 
 API struct nc_session *
@@ -1098,7 +1121,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     /* temporarily, for session connection */
     session->host = host;
     session->username = username;
-    if (connect_ssh_session_netconf(session)) {
+    if (connect_ssh_session(session) || open_netconf_channel(session)) {
         goto fail;
     }
 
@@ -1213,13 +1236,20 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
         /* authenticate SSH session */
         session->host = host;
         session->username = username;
-        if (connect_ssh_session_netconf(session)) {
+        if (connect_ssh_session(session)) {
             goto fail;
         }
     }
 
     /*
-     * SSH session is established, create NETCONF session. (Application layer)
+     * Almost done, open a netconf channel. (Transport layer / application layer)
+     */
+    if (open_netconf_channel(session)) {
+        goto fail;
+    }
+
+    /*
+     * SSH session is established and netconf channel opened, create a NETCONF session. (Application layer)
      */
 
     /* assign context (dicionary needed for handshake) */
@@ -1286,14 +1316,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     pthread_mutex_lock(new_session->ti_lock);
 
     /* open a channel */
-    new_session->ti.libssh.channel = ssh_channel_new(new_session->ti.libssh.session);
-    if (ssh_channel_open_session(new_session->ti.libssh.channel) != SSH_OK) {
-        ERR("Opening an SSH channel failed (%s).", ssh_get_error(new_session->ti.libssh.session));
-        goto fail;
-    }
-    /* execute the NETCONF subsystem on the channel */
-    if (ssh_channel_request_subsystem(new_session->ti.libssh.channel, "netconf") != SSH_OK) {
-        ERR("Starting the \"netconf\" SSH subsystem failed (%s).", ssh_get_error(new_session->ti.libssh.session));
+    if (open_netconf_channel(new_session)) {
         goto fail;
     }
 
