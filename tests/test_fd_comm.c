@@ -1,7 +1,7 @@
 /**
- * \file test_full_session.c
+ * \file test_fd_comm.c
  * \author Michal Vasko <mvasko@cesnet.cz>
- * \brief libnetconf2 tests - session creation, communication, and termination
+ * \brief libnetconf2 tests - file descriptor basic RPC communication
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *

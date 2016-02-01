@@ -45,6 +45,7 @@
 /* number of all supported authentication methods */
 #   define NC_SSH_AUTH_COUNT 3
 
+/* ACCESS unlocked */
 struct nc_client_ssh_opts {
     /* SSH authentication method preferences */
     struct {
@@ -63,6 +64,7 @@ struct nc_client_ssh_opts {
     char *username;
 };
 
+/* ACCESS locked, separate locks */
 struct nc_server_ssh_opts {
     ssh_bind sshbind;
 
@@ -84,6 +86,7 @@ struct nc_server_ssh_opts {
 #   include <openssl/bio.h>
 #   include <openssl/ssl.h>
 
+/* ACCESS unlocked */
 struct nc_client_tls_opts {
     char *cert_path;
     char *key_path;
@@ -98,6 +101,7 @@ struct nc_client_tls_opts {
     X509_STORE *crl_store;
 };
 
+/* ACCESS locked, separate locks */
 struct nc_server_tls_opts {
     SSL_CTX *tls_ctx;
     X509_STORE *crl_store;
@@ -113,6 +117,7 @@ struct nc_server_tls_opts {
 
 #endif /* ENABLE_TLS */
 
+/* ACCESS unlocked */
 struct nc_client_opts {
     char *schema_searchpath;
 
@@ -126,16 +131,21 @@ struct nc_client_opts {
 };
 
 struct nc_server_opts {
+    /* ACCESS locked with ctx_lock */
     struct ly_ctx *ctx;
     pthread_mutex_t ctx_lock;
 
+    /* ACCESS unlocked */
     NC_WD_MODE wd_basic_mode;
     int wd_also_supported;
     int interleave_capab;
 
+    /* ACCESS unlocked */
     uint16_t hello_timeout;
     uint16_t idle_timeout;
 
+    /* ACCESS locked, add/remove binds/endpts - WRITE lock endpt_array_lock
+     *                modify binds/endpts - READ lock endpt_array_lock + endpt_lock */
     struct nc_bind *binds;
     struct nc_endpt {
         const char *name;
@@ -146,6 +156,7 @@ struct nc_server_opts {
     /* WRITE - working with binds/endpoints, READ - reading/modifying a specific bind/endpoint, holding that endpt_lock too */
     pthread_rwlock_t endpt_array_lock;
 
+    /* ACCESS locked with sid_lock */
     uint32_t new_session_id;
     pthread_spinlock_t sid_lock;
 };
