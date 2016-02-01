@@ -1053,12 +1053,12 @@ nc_server_tls_ch_add_trusted_cert_path(const char *cert_path)
 }
 
 static int
-nc_server_tls_set_trusted_cacert_locations(const char *cacert_file_path, const char *cacert_dir_path, struct nc_server_tls_opts *opts)
+nc_server_tls_set_trusted_ca_paths(const char *ca_file, const char *ca_dir, struct nc_server_tls_opts *opts)
 {
     X509_STORE *cert_store;
     X509_LOOKUP *lookup;
 
-    if (!cacert_file_path && !cacert_dir_path) {
+    if (!ca_file && !ca_dir) {
         ERRARG;
         return -1;
     }
@@ -1078,27 +1078,27 @@ nc_server_tls_set_trusted_cacert_locations(const char *cacert_file_path, const c
         SSL_CTX_set_cert_store(opts->tls_ctx, cert_store);
     }
 
-    if (cacert_file_path) {
+    if (ca_file) {
         lookup = X509_STORE_add_lookup(cert_store, X509_LOOKUP_file());
         if (!lookup) {
             ERR("Failed to add a lookup method.");
             goto fail;
         }
 
-        if (X509_LOOKUP_load_file(lookup, cacert_file_path, X509_FILETYPE_PEM) != 1) {
+        if (X509_LOOKUP_load_file(lookup, ca_file, X509_FILETYPE_PEM) != 1) {
             ERR("Failed to add a trusted cert file (%s).", ERR_reason_error_string(ERR_get_error()));
             goto fail;
         }
     }
 
-    if (cacert_dir_path) {
+    if (ca_dir) {
         lookup = X509_STORE_add_lookup(cert_store, X509_LOOKUP_hash_dir());
         if (!lookup) {
             ERR("Failed to add a lookup method.");
             goto fail;
         }
 
-        if (X509_LOOKUP_add_dir(lookup, cacert_dir_path, X509_FILETYPE_PEM) != 1) {
+        if (X509_LOOKUP_add_dir(lookup, ca_dir, X509_FILETYPE_PEM) != 1) {
             ERR("Failed to add a trusted cert directory (%s).", ERR_reason_error_string(ERR_get_error()));
             goto fail;
         }
@@ -1111,7 +1111,7 @@ fail:
 }
 
 API int
-nc_server_tls_endpt_set_trusted_cacert_locations(const char *endpt_name, const char *cacert_file_path, const char *cacert_dir_path)
+nc_server_tls_endpt_set_trusted_ca_paths(const char *endpt_name, const char *ca_file, const char *ca_dir)
 {
     int ret;
     struct nc_endpt *endpt;
@@ -1120,20 +1120,20 @@ nc_server_tls_endpt_set_trusted_cacert_locations(const char *endpt_name, const c
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_tls_set_trusted_cacert_locations(cacert_file_path, cacert_dir_path, endpt->ti_opts);
+    ret = nc_server_tls_set_trusted_ca_paths(ca_file, ca_dir, endpt->ti_opts);
     nc_server_endpt_unlock(endpt);
 
     return ret;
 }
 
 API int
-nc_server_tls_ch_set_trusted_cacert_locations(const char *cacert_file_path, const char *cacert_dir_path)
+nc_server_tls_ch_set_trusted_ca_paths(const char *ca_file, const char *ca_dir)
 {
     int ret;
 
     /* OPTS LOCK */
     pthread_mutex_lock(&tls_ch_opts_lock);
-    ret = nc_server_tls_set_trusted_cacert_locations(cacert_file_path, cacert_dir_path, &tls_ch_opts);
+    ret = nc_server_tls_set_trusted_ca_paths(ca_file, ca_dir, &tls_ch_opts);
     /* OPTS UNLOCK */
     pthread_mutex_unlock(&tls_ch_opts_lock);
 
@@ -1175,11 +1175,11 @@ nc_server_tls_ch_clear_certs(void)
 }
 
 static int
-nc_server_tls_set_crl_locations(const char *crl_file_path, const char *crl_dir_path, struct nc_server_tls_opts *opts)
+nc_server_tls_set_crl_paths(const char *crl_file, const char *crl_dir, struct nc_server_tls_opts *opts)
 {
     X509_LOOKUP *lookup;
 
-    if (!crl_file_path && !crl_dir_path) {
+    if (!crl_file && !crl_dir) {
         ERRARG;
         return -1;
     }
@@ -1188,27 +1188,27 @@ nc_server_tls_set_crl_locations(const char *crl_file_path, const char *crl_dir_p
         opts->crl_store = X509_STORE_new();
     }
 
-    if (crl_file_path) {
+    if (crl_file) {
         lookup = X509_STORE_add_lookup(opts->crl_store, X509_LOOKUP_file());
         if (!lookup) {
             ERR("Failed to add a lookup method.");
             goto fail;
         }
 
-        if (X509_LOOKUP_load_file(lookup, crl_file_path, X509_FILETYPE_PEM) != 1) {
+        if (X509_LOOKUP_load_file(lookup, crl_file, X509_FILETYPE_PEM) != 1) {
             ERR("Failed to add a revocation lookup file (%s).", ERR_reason_error_string(ERR_get_error()));
             goto fail;
         }
     }
 
-    if (crl_dir_path) {
+    if (crl_dir) {
         lookup = X509_STORE_add_lookup(opts->crl_store, X509_LOOKUP_hash_dir());
         if (!lookup) {
             ERR("Failed to add a lookup method.");
             goto fail;
         }
 
-        if (X509_LOOKUP_add_dir(lookup, crl_dir_path, X509_FILETYPE_PEM) != 1) {
+        if (X509_LOOKUP_add_dir(lookup, crl_dir, X509_FILETYPE_PEM) != 1) {
             ERR("Failed to add a revocation lookup directory (%s).", ERR_reason_error_string(ERR_get_error()));
             goto fail;
         }
@@ -1221,7 +1221,7 @@ fail:
 }
 
 API int
-nc_server_tls_endpt_set_crl_locations(const char *endpt_name, const char *crl_file_path, const char *crl_dir_path)
+nc_server_tls_endpt_set_crl_paths(const char *endpt_name, const char *crl_file, const char *crl_dir)
 {
     int ret;
     struct nc_endpt *endpt;
@@ -1230,20 +1230,20 @@ nc_server_tls_endpt_set_crl_locations(const char *endpt_name, const char *crl_fi
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_tls_set_crl_locations(crl_file_path, crl_dir_path, endpt->ti_opts);
+    ret = nc_server_tls_set_crl_paths(crl_file, crl_dir, endpt->ti_opts);
     nc_server_endpt_unlock(endpt);
 
     return ret;
 }
 
 API int
-nc_server_tls_ch_set_crl_locations(const char *crl_file_path, const char *crl_dir_path)
+nc_server_tls_ch_set_crl_paths(const char *crl_file, const char *crl_dir)
 {
     int ret;
 
     /* OPTS LOCK */
     pthread_mutex_lock(&tls_ch_opts_lock);
-    ret = nc_server_tls_set_crl_locations(crl_file_path, crl_dir_path, &tls_ch_opts);
+    ret = nc_server_tls_set_crl_paths(crl_file, crl_dir, &tls_ch_opts);
     /* OPTS UNLOCK */
     pthread_mutex_unlock(&tls_ch_opts_lock);
 

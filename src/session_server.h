@@ -180,7 +180,7 @@ int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
  *
  * @param[in] ps Pollsession structure to use.
  * @param[in] timeout Poll timeout in milliseconds. 0 for non-blocking call, -1 for
- * infinite waiting.
+ *                    infinite waiting.
  * @return 0 on elapsed timeout,
  *         1 if an RPC was processed,
  *         2 if an RPC was processed and there are unhandled events on other sessions,
@@ -412,14 +412,12 @@ int nc_server_tls_endpt_add_trusted_cert_path(const char *endpt_name, const char
  * @brief Set trusted Certificate Authority certificate locations. There can only be
  *        one file and one directory, they are replaced if already set.
  *
- * @param[in] cacert_file_path Path to a trusted CA cert store file in PEM format.
- *                             Can be NULL.
- * @param[in] cacert_dir_path Path to a trusted CA cert store hashed directory
- *                            (c_rehash utility can be used to create hashes) with PEM files.
- *                            Can be NULL.
+ * @param[in] ca_file Path to a trusted CA cert store file in PEM format. Can be NULL.
+ * @param[in] ca_dir Path to a trusted CA cert store hashed directory (c_rehash utility
+ *                   can be used to create hashes) with PEM files. Can be NULL.
  * @return 0 on success, -1 on error.
  */
-int nc_server_tls_endpt_set_trusted_cacert_locations(const char *endpt_name, const char *cacert_file_path, const char *cacert_dir_path);
+int nc_server_tls_endpt_set_trusted_ca_paths(const char *endpt_name, const char *ca_file, const char *ca_dir);
 
 /**
  * @brief Destroy and clean all the set certificates and private keys. CRLs and
@@ -431,15 +429,15 @@ void nc_server_tls_endpt_clear_certs(const char *endpt_name);
  * @brief Set Certificate Revocation List locations. There can only be one file
  *        and one directory, they are replaced if already set.
  *
- * @param[in] crl_file_path Path to a CRL store file in PEM format. Can be NULL.
- * @param[in] crl_dir_path Path to a CRL store hashed directory (c_rehash utility
- *                         can be used to create hashes) with PEM files. Can be NULL.
+ * @param[in] crl_file Path to a CRL store file in PEM format. Can be NULL.
+ * @param[in] crl_dir Path to a CRL store hashed directory (c_rehash utility
+ *                    can be used to create hashes) with PEM files. Can be NULL.
  * @return 0 on success, -1 on error.
  */
-int nc_server_tls_endpt_set_crl_locations(const char *endpt_name, const char *crl_file_path, const char *crl_dir_path);
+int nc_server_tls_endpt_set_crl_paths(const char *endpt_name, const char *crl_file, const char *crl_dir);
 
 /**
- * @brief Destroy and clean CRLs. Certificates, priavte keys, and CTN entries are
+ * @brief Destroy and clean CRLs. Certificates, private keys, and CTN entries are
  *        not affected.
  */
 void nc_server_tls_endpt_clear_crls(const char *endpt_name);
