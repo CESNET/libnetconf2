@@ -164,19 +164,15 @@ _nc_client_tls_set_cert_key_paths(const char *client_cert, const char *client_ke
     free(opts->cert_path);
     free(opts->key_path);
 
-    if (client_cert) {
-        opts->cert_path = strdup(client_cert);
-        if (!opts->cert_path) {
-            ERRMEM;
-            return -1;
-        }
-    } else {
-        opts->cert_path = NULL;
+    opts->cert_path = strdup(client_cert);
+    if (!opts->cert_path) {
+        ERRMEM;
+        return -1;
     }
 
     if (client_key) {
         opts->key_path = strdup(client_key);
-        if (!opts->cert_path) {
+        if (!opts->key_path) {
             ERRMEM;
             return -1;
         }
