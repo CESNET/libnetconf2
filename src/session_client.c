@@ -492,7 +492,7 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
 
             ERR("Session %u: discarding a <rpc-reply> with an unexpected message-id \"%s\".", str_msgid);
             lyxml_free(session->ctx, cont->msg);
-            free(msg);
+            free(cont);
         }
     }
 
