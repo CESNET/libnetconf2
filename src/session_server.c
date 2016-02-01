@@ -865,6 +865,8 @@ nc_server_add_endpt_listen(const char *name, const char *address, uint16_t port,
     for (i = 0; i < server_opts.endpt_count; ++i) {
         if (!strcmp(server_opts.endpts[i].name, name)) {
             ERR("Endpoint \"%s\" already exists.", name);
+            /* READ UNLOCK */
+            pthread_rwlock_unlock(&server_opts.endpt_array_lock);
             return -1;
         }
     }
@@ -1161,7 +1163,7 @@ nc_accept(int timeout, struct nc_session **session)
 
 fail:
     /* ENDPT UNLOCK */
-    pthread_mutex_lock(&server_opts.endpts[idx].endpt_lock);
+    pthread_mutex_unlock(&server_opts.endpts[idx].endpt_lock);
     /* WRITE UNLOCK */
     pthread_rwlock_unlock(&server_opts.endpt_array_lock);
 
