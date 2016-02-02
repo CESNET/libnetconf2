@@ -100,11 +100,13 @@ nc_server_ssh_endpt_set_hostkey(const char *endpt_name, const char *privkey_path
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_ssh_set_hostkey(privkey_path, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
@@ -151,11 +153,13 @@ nc_server_ssh_endpt_set_banner(const char *endpt_name, const char *banner)
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_ssh_set_banner(banner, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
@@ -194,11 +198,13 @@ nc_server_ssh_endpt_set_auth_methods(const char *endpt_name, int auth_methods)
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_ssh_set_auth_methods(auth_methods, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
@@ -236,11 +242,13 @@ nc_server_ssh_endpt_set_auth_attempts(const char *endpt_name, uint16_t auth_atte
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_ssh_set_auth_attempts(auth_attempts, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
@@ -278,11 +286,13 @@ nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_timeo
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_ssh_set_auth_timeout(auth_timeout, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
@@ -327,11 +337,13 @@ nc_server_ssh_endpt_add_authkey(const char *endpt_name, const char *pubkey_path,
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_ssh_add_authkey(pubkey_path, username, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
@@ -400,11 +412,13 @@ nc_server_ssh_endpt_del_authkey(const char *endpt_name, const char *pubkey_path,
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_ssh_del_authkey(pubkey_path, username, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;

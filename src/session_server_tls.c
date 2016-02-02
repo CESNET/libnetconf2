@@ -719,11 +719,13 @@ nc_server_tls_endpt_set_cert(const char *endpt_name, const char *cert)
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_tls_set_cert(cert, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
@@ -777,11 +779,13 @@ nc_server_tls_endpt_set_cert_path(const char *endpt_name, const char *cert_path)
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_tls_set_cert_path(cert_path, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
@@ -840,11 +844,13 @@ nc_server_tls_endpt_set_key(const char *endpt_name, const char *privkey, int is_
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_tls_set_key(privkey, is_rsa, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
@@ -898,11 +904,13 @@ nc_server_tls_endpt_set_key_path(const char *endpt_name, const char *privkey_pat
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_tls_set_key_path(privkey_path, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
@@ -968,11 +976,13 @@ nc_server_tls_endpt_add_trusted_cert(const char *endpt_name, const char *cert)
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_tls_add_trusted_cert(cert, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
@@ -1040,11 +1050,13 @@ nc_server_tls_endpt_add_trusted_cert_path(const char *endpt_name, const char *ce
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_tls_add_trusted_cert_path(cert_path, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
@@ -1128,11 +1140,13 @@ nc_server_tls_endpt_set_trusted_ca_paths(const char *endpt_name, const char *ca_
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_tls_set_trusted_ca_paths(ca_file, ca_dir, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
@@ -1168,11 +1182,13 @@ nc_server_tls_endpt_clear_certs(const char *endpt_name)
 {
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL);
     if (!endpt) {
         return;
     }
     nc_server_tls_clear_certs(endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 }
 
@@ -1238,11 +1254,13 @@ nc_server_tls_endpt_set_crl_paths(const char *endpt_name, const char *crl_file, 
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_tls_set_crl_paths(crl_file, crl_dir, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
@@ -1278,11 +1296,13 @@ nc_server_tls_endpt_clear_crls(const char *endpt_name)
 {
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL);
     if (!endpt) {
         return;
     }
     nc_server_tls_clear_crls(endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 }
 
@@ -1340,11 +1360,13 @@ nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char *fin
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_tls_add_ctn(id, fingerprint, map_type, name, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
@@ -1425,11 +1447,13 @@ nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *fing
     int ret;
     struct nc_endpt *endpt;
 
+    /* LOCK */
     endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL);
     if (!endpt) {
         return -1;
     }
     ret = nc_server_tls_del_ctn(id, fingerprint, map_type, name, endpt->ti_opts);
+    /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
     return ret;
