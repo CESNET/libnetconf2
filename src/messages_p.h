@@ -187,6 +187,6 @@ struct nc_rpc_subscribe {
     char free;
 };
 
-void nc_server_rpc_free(struct nc_server_rpc *rpc);
+void nc_server_rpc_free(struct nc_server_rpc *rpc, struct ly_ctx *ctx);
 
 #endif /* NC_MESSAGES_P_H_ */

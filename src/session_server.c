@@ -560,9 +560,15 @@ nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
     switch (msgtype) {
     case NC_MSG_RPC:
         *rpc = malloc(sizeof **rpc);
+
         nc_ctx_lock(-1, NULL);
         (*rpc)->tree = lyd_parse_xml(server_opts.ctx, &xml->child, LYD_OPT_DESTRUCT | LYD_OPT_RPC);
+        if (!(*rpc)->tree) {
+            ERR("Session %u: received message failed to be parsed into a known RPC.", session->id);
+            msgtype = NC_MSG_NONE;
+        }
         nc_ctx_unlock();
+
         (*rpc)->root = xml;
         break;
     case NC_MSG_HELLO:
@@ -599,7 +605,7 @@ nc_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
     int ret;
 
     /* no callback, reply with a not-implemented error */
-    if (!rpc->tree->schema->private) {
+    if (!rpc->tree || !rpc->tree->schema->private) {
         reply = nc_server_reply_err(nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_PROT));
     } else {
         clb = (nc_rpc_clb)rpc->tree->schema->private;
@@ -774,17 +780,21 @@ retry_poll:
         return -1;
     }
 
+    /* NC_MSG_NONE is not a real (known) RPC */
+    if (msgtype == NC_MSG_RPC) {
+        session->last_rpc = time(NULL);
+    }
+
     /* process RPC */
-    session->last_rpc = time(NULL);
     msgtype = nc_send_reply(session, rpc);
 
     pthread_mutex_unlock(session->ti_lock);
 
     if (msgtype == NC_MSG_ERROR) {
-        nc_server_rpc_free(rpc);
+        nc_server_rpc_free(rpc, server_opts.ctx);
         return -1;
     }
-    nc_server_rpc_free(rpc);
+    nc_server_rpc_free(rpc, server_opts.ctx);
 
     /* status change takes precedence over leftover events (return 2) */
     if (session->status != NC_STATUS_RUNNING) {

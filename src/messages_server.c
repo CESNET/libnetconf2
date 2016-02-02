@@ -444,14 +444,14 @@ nc_err_add_info_other(struct nc_server_error *err, struct lyxml_elem *other)
 }
 
 void
-nc_server_rpc_free(struct nc_server_rpc *rpc)
+nc_server_rpc_free(struct nc_server_rpc *rpc, struct ly_ctx *ctx)
 {
     if (!rpc) {
         return;
     }
 
     nc_ctx_lock(-1, NULL);
-    lyxml_free(rpc->tree->schema->module->ctx, rpc->root);
+    lyxml_free(ctx, rpc->root);
     lyd_free(rpc->tree);
     nc_ctx_unlock();
 
