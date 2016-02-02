@@ -1078,7 +1078,7 @@ nc_accept(int timeout, struct nc_session **session)
 
     ret = nc_sock_accept_binds(server_opts.binds, server_opts.endpt_count, timeout, &host, &port, &idx);
 
-    if (ret < 0) {
+    if (ret < 1) {
         /* READ UNLOCK */
         pthread_rwlock_unlock(&server_opts.endpt_array_lock);
         return ret;
