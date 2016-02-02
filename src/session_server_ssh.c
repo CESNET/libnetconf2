@@ -973,7 +973,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
             return 1;
         }
 
-        if ((timeout != -1) && (timeout >= elapsed)) {
+        if ((timeout != -1) && (elapsed >= timeout)) {
             /* timeout */
             break;
         }
