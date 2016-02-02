@@ -1055,6 +1055,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
 {
     const int timeout = NC_SSH_TIMEOUT;
     int sock;
+    uint32_t port_uint;
     char *username;
     struct passwd *pw;
     struct nc_session *session = NULL;
@@ -1067,6 +1068,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     if (!port) {
         port = NC_PORT_SSH;
     }
+    port_uint = port;
 
     if (!ssh_opts.username) {
         pw = getpwuid(getuid());
@@ -1107,7 +1109,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
 
     /* set some basic SSH session options */
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
-    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_PORT, &port);
+    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_PORT, &port_uint);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_TIMEOUT, &timeout);
     if (ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOSTKEYS,
