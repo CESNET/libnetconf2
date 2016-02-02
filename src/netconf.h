@@ -43,7 +43,7 @@ extern "C" {
 #define NC_PORT_CH_TLS 6667
 
 /** @brief Microseconds after which tasks are repeated until the full timeout elapses */
-#define NC_TIMEOUT_STEP 10
+#define NC_TIMEOUT_STEP 100
 
 /**
  * @brief Enumeration of reasons of the NETCONF session termination as defined in RFC 6470.
