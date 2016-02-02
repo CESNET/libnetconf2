@@ -862,6 +862,9 @@ nc_server_add_endpt_listen(const char *name, const char *address, uint16_t port,
 {
     int sock;
     uint16_t i;
+#ifdef ENABLE_SSH
+    struct nc_server_ssh_opts *ssh_opts;
+#endif
 
     if (!name || !address || !port) {
         ERRARG;
@@ -906,7 +909,13 @@ nc_server_add_endpt_listen(const char *name, const char *address, uint16_t port,
     switch (ti) {
 #ifdef ENABLE_SSH
     case NC_TI_LIBSSH:
-        server_opts.endpts[server_opts.endpt_count - 1].ti_opts = calloc(1, sizeof(struct nc_server_ssh_opts));
+        ssh_opts = calloc(1, sizeof *ssh_opts);
+        /* set default values */
+        ssh_opts->auth_methods = NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD | NC_SSH_AUTH_INTERACTIVE;
+        ssh_opts->auth_attempts = 3;
+        ssh_opts->auth_timeout = 10;
+
+        server_opts.endpts[server_opts.endpt_count - 1].ti_opts = ssh_opts;
         break;
 #endif
 #ifdef ENABLE_TLS
