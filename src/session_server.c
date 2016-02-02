@@ -575,10 +575,10 @@ nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
         ERR("Session %u: received another <hello> message.", session->id);
         goto error;
     case NC_MSG_REPLY:
-        ERR("Session %u: received <rpc-reply> from NETCONF client.", session->id);
+        ERR("Session %u: received <rpc-reply> from a NETCONF client.", session->id);
         goto error;
     case NC_MSG_NOTIF:
-        ERR("Session %u: received <notification> from NETCONF client.", session->id);
+        ERR("Session %u: received <notification> from a NETCONF client.", session->id);
         goto error;
     default:
         /* NC_MSG_ERROR - pass it out;
