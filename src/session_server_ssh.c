@@ -1076,7 +1076,7 @@ int
 nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 {
     struct nc_server_ssh_opts *opts;
-    int libssh_auth_methods = 0, elapsed = 0, ret;
+    int libssh_auth_methods = 0, elapsed_usec = 0, ret;
 
     opts = session->ti_opts;
 
@@ -1133,8 +1133,8 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         }
 
         usleep(NC_TIMEOUT_STEP);
-        elapsed += NC_TIMEOUT_STEP;
-    } while ((timeout == -1) || (timeout && (elapsed < timeout)));
+        elapsed_usec += NC_TIMEOUT_STEP;
+    } while ((timeout == -1) || (timeout && (elapsed_usec / 1000 < timeout)));
 
     if (!(session->flags & NC_SESSION_SSH_AUTHENTICATED)) {
         /* timeout */
@@ -1142,7 +1142,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     }
 
     if (timeout > 0) {
-        timeout -= elapsed;
+        timeout -= elapsed_usec / 1000;
     }
 
     /* open channel */
