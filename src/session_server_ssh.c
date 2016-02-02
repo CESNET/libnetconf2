@@ -78,7 +78,7 @@ nc_server_ssh_set_hostkey(const char *privkey_path, struct nc_server_ssh_opts *o
         opts->sshbind = ssh_bind_new();
         if (!opts->sshbind) {
             ERR("Failed to create a new ssh_bind.");
-            goto fail;
+            return -1;
         }
     }
 
@@ -88,11 +88,10 @@ nc_server_ssh_set_hostkey(const char *privkey_path, struct nc_server_ssh_opts *o
         } else {
             ERR("Failed to set host key (%s).", ssh_get_error(opts->sshbind));
         }
-        goto fail;
+        return -1;
     }
 
-fail:
-    return -1;
+    return 0;
 }
 
 API int
@@ -137,16 +136,13 @@ nc_server_ssh_set_banner(const char *banner, struct nc_server_ssh_opts *opts)
         opts->sshbind = ssh_bind_new();
         if (!opts->sshbind) {
             ERR("Failed to create a new ssh_bind.");
-            goto fail;
+            return -1;
         }
     }
 
     ssh_bind_options_set(opts->sshbind, SSH_BIND_OPTIONS_BANNER, banner);
 
     return 0;
-
-fail:
-    return -1;
 }
 
 API int
