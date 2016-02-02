@@ -588,7 +588,7 @@ auth_pubkey_compare_key(struct nc_server_ssh_opts *opts, ssh_key key)
             if (eaccess(opts->authkeys[i].path, R_OK)) {
                 WRN("Failed to import the public key \"%s\" (%s).", opts->authkeys[i].path, strerror(errno));
             } else {
-                WRN("Failed to import the public key \"%s\" (%s).", __func__, opts->authkeys[i].path, ssh_get_error(pub_key));
+                WRN("Failed to import the public key \"%s\" (%s).", opts->authkeys[i].path, ssh_get_error(pub_key));
             }
             continue;
         }
