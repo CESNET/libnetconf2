@@ -637,9 +637,15 @@ _nc_client_ssh_del_keypair(int idx, struct nc_client_ssh_opts *opts)
     free(opts->keys[idx].privkey_path);
 
     --opts->key_count;
-
-    memcpy(opts->keys + idx, opts->keys + opts->key_count, sizeof *opts->keys);
-    opts->keys = realloc(opts->keys, opts->key_count * sizeof *opts->keys);
+    if (idx < opts->key_count) {
+        memcpy(&opts->keys[idx], &opts->keys[opts->key_count], sizeof *opts->keys);
+    }
+    if (opts->key_count) {
+        opts->keys = realloc(opts->keys, opts->key_count * sizeof *opts->keys);
+    } else {
+        free(opts->keys);
+        opts->keys = NULL;
+    }
 
     return 0;
 }

@@ -383,7 +383,12 @@ nc_server_ssh_del_authkey(const char *pubkey_path, const char *username, struct 
                 nc_ctx_unlock();
 
                 --opts->authkey_count;
-                memcpy(&opts->authkeys[i], &opts->authkeys[opts->authkey_count], sizeof *opts->authkeys);
+                if (i < opts->authkey_count) {
+                    memcpy(&opts->authkeys[i], &opts->authkeys[opts->authkey_count], sizeof *opts->authkeys);
+                } else if (!opts->authkey_count) {
+                    free(opts->authkeys);
+                    opts->authkeys = NULL;
+                }
 
                 ret = 0;
             }
