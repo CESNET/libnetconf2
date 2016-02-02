@@ -531,8 +531,15 @@ nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
     for (i = 0; i < ps->session_count; ++i) {
         if (ps->sessions[i] == session) {
             --ps->session_count;
-            ps->sessions[i] = ps->sessions[ps->session_count];
-            memcpy(&ps->pfds[i], &ps->pfds[ps->session_count], sizeof *ps->pfds);
+            if (i < ps->session_count) {
+                ps->sessions[i] = ps->sessions[ps->session_count];
+                memcpy(&ps->pfds[i], &ps->pfds[ps->session_count], sizeof *ps->pfds);
+            } else if (!ps->session_count) {
+                free(ps->sessions);
+                ps->sessions = NULL;
+                free(ps->pfds);
+                ps->pfds = NULL;
+            }
             return 0;
         }
     }
