@@ -82,7 +82,7 @@ nc_server_endpt_unlock(struct nc_endpt *endpt)
     pthread_mutex_unlock(&endpt->endpt_lock);
 
     /* READ UNLOCK */
-    pthread_rwlock_rdlock(&server_opts.endpt_array_lock);
+    pthread_rwlock_unlock(&server_opts.endpt_array_lock);
 }
 
 API void
