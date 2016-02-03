@@ -96,8 +96,8 @@ nc_read(struct nc_session *session, char *buf, size_t count)
                 usleep(NC_READ_SLEEP);
                 continue;
             } else if (r == SSH_ERROR) {
-                ERR("Session %u: reading from the SSH channel failed (%zd: %s).", session->id,
-                    ssh_get_error_code(session->ti.libssh.session), ssh_get_error(session->ti.libssh.session));
+                ERR("Session %u: reading from the SSH channel failed (%s).", session->id,
+                    ssh_get_error(session->ti.libssh.session));
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_OTHER;
                 return -1;
@@ -408,12 +408,13 @@ nc_read_poll(struct nc_session *session, int timeout)
         /* EINTR is handled, it resumes waiting */
         ret = ssh_channel_poll_timeout(session->ti.libssh.channel, timeout, 0);
         if (ret == SSH_ERROR) {
-            ERR("Session %u: SSH channel error (%s).", session->id, ssh_get_error(session->ti.libssh.session));
+            ERR("Session %u: polling on the SSH channel failed (%s).", session->id,
+                ssh_get_error(session->ti.libssh.session));
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_OTHER;
             return -1;
         } else if (ret == SSH_EOF) {
-            ERR("Session %u: communication channel unexpectedly closed (libssh).", session->id);
+            ERR("Session %u: SSH channel unexpected EOF.", session->id);
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_DROPPED;
             return -1;
