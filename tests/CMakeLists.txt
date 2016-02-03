@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.6)
 find_package(CMocka 1.0.0 REQUIRED)
 
 # list of all the tests
-set(tests test_io test_fd_comm)
+set(tests test_io test_fd_comm test_init_destroy_ssh test_init_destroy_tls test_init_destroy_ssh_tls)
 
 foreach(test_name IN LISTS tests)
     add_executable(${test_name} ${test_name}.c)
