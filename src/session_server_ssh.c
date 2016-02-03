@@ -841,6 +841,14 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
     }
 
     VRB("Received an SSH message \"%s\" of subtype \"%s\".", str_type, str_subtype);
+    if ((session->status == NC_STATUS_CLOSING) || (session->status == NC_STATUS_INVALID)) {
+        /* "valid" situation if, for example, receiving some auth or channel request timeouted,
+         * but we got it now, during session free */
+        VRB("SSH message arrived on a %s session, the request will be denied.",
+            (session->status == NC_STATUS_CLOSING ? "closing" : "invalid"));
+        ssh_message_reply_default(msg);
+        return 0;
+    }
     session->flags |= NC_SESSION_SSH_NEW_MSG;
 
     /*
