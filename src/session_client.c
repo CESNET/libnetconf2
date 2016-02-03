@@ -201,7 +201,7 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
     struct nc_reply *reply;
     struct nc_reply_data *data_rpl;
     NC_MSG_TYPE msg;
-    char *model_data = NULL, *ptr, *ptr2, *anyxml;
+    char *model_data = NULL, *ptr, *ptr2, *anyxml = NULL;
     uint64_t msgid;
 
     /* TODO later replace with yang to reduce model size? */
@@ -235,7 +235,7 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
     }
 
     data_rpl = (struct nc_reply_data *)reply;
-    anyxml = lyxml_serialize(((struct lyd_node_anyxml *)data_rpl->data)->value);
+    lyxml_print_mem(&anyxml, ((struct lyd_node_anyxml *)data_rpl->data)->value, 0);
     nc_reply_free(reply);
     *free_model_data = NULL;
 
@@ -766,7 +766,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
             if (rpc_gen->has_data) {
                 schema = rpc_gen->content.data->schema;
             } else {
-                data = lyd_parse_data(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC);
+                data = lyd_parse_mem(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC);
                 if (!data) {
                     ERR("Failed to parse a generic RPC XML.");
                     return NULL;
@@ -1145,7 +1145,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         if (rpc_gen->has_data) {
             data = rpc_gen->content.data;
         } else {
-            data = lyd_parse_data(session->ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_STRICT);
+            data = lyd_parse_mem(session->ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_STRICT);
         }
         break;
 

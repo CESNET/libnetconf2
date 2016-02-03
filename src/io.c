@@ -329,7 +329,7 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
     DBG("Session %u: received message:\n%s", session->id, msg);
 
     /* build XML tree */
-    *data = lyxml_read_data(session->ctx, msg, 0);
+    *data = lyxml_parse_mem(session->ctx, msg, 0);
     if (!*data) {
         goto malformed_msg;
     } else if (!(*data)->ns) {
@@ -857,7 +857,7 @@ nc_write_error(struct wclb_arg *arg, struct nc_server_error *err)
         }
 
         for (i = 0; i < err->other_count; ++i) {
-            lyxml_dump_clb(nc_write_clb, (void *)arg, err->other[i], 0);
+            lyxml_print_clb(nc_write_clb, (void *)arg, err->other[i], 0);
         }
 
         nc_write_clb((void *)arg, "</error-info>", 13);
@@ -916,7 +916,7 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
         nc_write_clb((void *)&arg, "<rpc-reply", 10);
         /* can be NULL if replying with a malformed-message error */
         if (rpc_elem) {
-            lyxml_dump_clb(nc_write_clb, (void *)&arg, rpc_elem, LYXML_DUMP_ATTRS);
+            lyxml_print_clb(nc_write_clb, (void *)&arg, rpc_elem, LYXML_PRINT_ATTRS);
         }
         nc_write_clb((void *)&arg, ">", 1);
         switch (reply->type) {
