@@ -422,6 +422,8 @@ nc_read_poll(struct nc_session *session, int timeout)
             /* fake it */
             ret = 1;
             fds.revents = POLLIN;
+        } else { /* ret == 0 */
+            fds.revents = 0;
         }
         /* fallthrough */
 #endif
