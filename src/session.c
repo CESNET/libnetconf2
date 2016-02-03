@@ -27,6 +27,7 @@
 #include <time.h>
 #include <libyang/libyang.h>
 
+#include "session.h"
 #include "libnetconf.h"
 #include "session_server.h"
 
@@ -36,11 +37,13 @@
 
 #endif /* ENABLE_SSH */
 
-#ifdef ENABLE_TLS
+#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
 
+#   include <openssl/engine.h>
+#   include <openssl/conf.h>
 #   include <openssl/err.h>
 
-#endif /* ENABLE_TLS */
+#endif /* ENABLE_SSH || ENABLE_TLS */
 
 /* in seconds */
 #define NC_CLIENT_HELLO_TIMEOUT 60
@@ -916,6 +919,9 @@ nc_ssh_init(void)
 API void
 nc_ssh_destroy(void)
 {
+    ENGINE_cleanup();
+    CONF_modules_unload(1);
+    ERR_remove_state(0);
     ssh_finalize();
 }
 
@@ -1005,14 +1011,12 @@ API void
 nc_tls_destroy(void)
 {
     int i;
-    CRYPTO_THREADID crypto_tid;
 
-    EVP_cleanup();
     CRYPTO_cleanup_all_ex_data();
+    ERR_remove_state(0);
+    EVP_cleanup();
     ERR_free_strings();
     sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
-    CRYPTO_THREADID_current(&crypto_tid);
-    ERR_remove_thread_state(&crypto_tid);
 
     CRYPTO_set_id_callback(NULL);
     CRYPTO_set_locking_callback(NULL);
@@ -1027,3 +1031,48 @@ nc_tls_destroy(void)
 }
 
 #endif /* ENABLE_TLS */
+
+#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+
+API void
+nc_thread_destroy(void) {
+    CRYPTO_THREADID crypto_tid;
+
+    CRYPTO_cleanup_all_ex_data();
+
+    CRYPTO_THREADID_current(&crypto_tid);
+    ERR_remove_thread_state(&crypto_tid);
+}
+
+#endif /* ENABLE_SSH || ENABLE_TLS */
+
+#if defined(ENABLE_SSH) && defined(ENABLE_TLS)
+
+API void
+nc_ssh_tls_init(void)
+{
+    SSL_load_error_strings();
+    ERR_load_BIO_strings();
+    SSL_library_init();
+
+    nc_ssh_init();
+
+    CRYPTO_set_dynlock_create_callback(tls_dyn_create_func);
+    CRYPTO_set_dynlock_lock_callback(tls_dyn_lock_func);
+    CRYPTO_set_dynlock_destroy_callback(tls_dyn_destroy_func);
+}
+
+API void
+nc_ssh_tls_destroy(void)
+{
+    ERR_free_strings();
+    sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
+
+    nc_ssh_destroy();
+
+    CRYPTO_set_dynlock_create_callback(NULL);
+    CRYPTO_set_dynlock_lock_callback(NULL);
+    CRYPTO_set_dynlock_destroy_callback(NULL);
+}
+
+#endif /* ENABLE_SSH && ENABLE_TLS */
