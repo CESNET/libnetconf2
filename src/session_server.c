@@ -732,20 +732,17 @@ retry_poll:
                     ps->pfds[i].revents = 0;
                     if (i == ps->session_count - 1) {
                         /* last session and it is not the right channel, ... */
-                        if (timeout > 0) {
-                            /* ... decrease timeout, wait it all out and try again, last time */
-                            nc_subtract_elapsed(&timeout, &old_ts);
-                            usleep(timeout * 1000);
-                            timeout = 0;
-                            goto retry_poll;
-                        } else if (!timeout) {
+                        if (!timeout) {
                             /* ... timeout is 0, so that is it */
                             return 0;
-                        } else {
-                            /* ... retry polling reasonable time apart */
-                            usleep(NC_TIMEOUT_STEP);
-                            goto retry_poll;
                         }
+                        /* ... retry polling reasonable time apart ... */
+                        usleep(NC_TIMEOUT_STEP);
+                        if (timeout > 0) {
+                            /* ... and decrease timeout, if not -1 */
+                            nc_subtract_elapsed(&timeout, &old_ts);
+                        }
+                        goto retry_poll;
                     }
                     /* check other sessions */
                     continue;
