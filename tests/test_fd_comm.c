@@ -144,7 +144,7 @@ teardown_sessions(void **state)
 
     nc_server_destroy();
 
-    ly_ctx_destroy(server_session->ctx);
+    ly_ctx_destroy(server_session->ctx, NULL);
 
     close(server_session->ti.fd.in);
     pthread_mutex_destroy(server_session->ti_lock);

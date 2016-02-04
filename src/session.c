@@ -390,7 +390,7 @@ nc_session_free(struct nc_session *session)
                         nc_ctx_unlock();
                     }
                     if (!(session->flags & NC_SESSION_SHAREDCTX)) {
-                        ly_ctx_destroy(session->ctx);
+                        ly_ctx_destroy(session->ctx, NULL);
                     }
 
                     free(siter);
@@ -459,7 +459,7 @@ nc_session_free(struct nc_session *session)
     }
 
     if (!(session->flags & NC_SESSION_SHAREDCTX)) {
-        ly_ctx_destroy(session->ctx);
+        ly_ctx_destroy(session->ctx, NULL);
     }
 
     free(session);
