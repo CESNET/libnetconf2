@@ -33,6 +33,11 @@ before_install:
   - cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
   - cd ../..
 
+  - if [ "${CC}" = "gcc" ]; then pip install --user codecov; fi
+
 script: 
   - mkdir build && cd build ; cmake -DENABLE_TLS=ON -DENABLE_SSH=ON .. && make -j2 && make test
+
+after_success:
+  - if [ "${CC}" = "gcc" ]; then codecov; fi
 
