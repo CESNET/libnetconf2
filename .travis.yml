@@ -39,5 +39,5 @@ script:
   - mkdir build && cd build ; cmake -DENABLE_TLS=ON -DENABLE_SSH=ON .. && make -j2 && make test
 
 after_success:
-  - if [ "${CC}" = "gcc" ]; then cd build && codecov; fi
+  - if [ "${CC}" = "gcc" ]; then codecov; fi
 
