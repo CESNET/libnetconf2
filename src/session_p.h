@@ -153,7 +153,6 @@ struct nc_server_opts {
         pthread_mutex_t endpt_lock;
     } *endpts;
     uint16_t endpt_count;
-    /* WRITE - working with binds/endpoints, READ - reading/modifying a specific bind/endpoint, holding that endpt_lock too */
     pthread_rwlock_t endpt_array_lock;
 
     /* ACCESS locked with sid_lock */
