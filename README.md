@@ -28,5 +28,4 @@ schemas is done internally instead of using external DSDL tools in the first gen
 
 **libnetconf2** is currently being developed, but client-side functions are completely finished
 and should be working with possibly some minor problems. Server-side is functioning with only
-notifications missing. Generally, anything may not work yet and feedback and bug reports concerning
-problems not mentioned here are appreciated.
+notifications missing. Feedback and bug reports concerning problems not mentioned here are appreciated.
