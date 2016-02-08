@@ -1,0 +1,5 @@
+{
+   <false_positive_custom_malloc_func_check>
+   Helgrind:Race
+   fun:CRYPTO_malloc
+}
