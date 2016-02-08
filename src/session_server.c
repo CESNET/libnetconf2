@@ -1033,6 +1033,8 @@ nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti)
 
             ret = 0;
         }
+        free(server_opts.binds);
+        server_opts.binds = NULL;
         free(server_opts.endpts);
         server_opts.endpts = NULL;
         server_opts.endpt_count = 0;
