@@ -880,7 +880,7 @@ nc_server_add_endpt_listen(const char *name, const char *address, uint16_t port,
 
     /* check name uniqueness */
     for (i = 0; i < server_opts.endpt_count; ++i) {
-        if (!strcmp(server_opts.endpts[i].name, name)) {
+        if ((server_opts.binds[i].ti == ti) && !strcmp(server_opts.endpts[i].name, name)) {
             ERR("Endpoint \"%s\" already exists.", name);
             /* WRITE UNLOCK */
             pthread_rwlock_unlock(&server_opts.endpt_array_lock);
