@@ -1038,7 +1038,8 @@ API void
 nc_thread_destroy(void) {
     CRYPTO_THREADID crypto_tid;
 
-    CRYPTO_cleanup_all_ex_data();
+    /* caused data-races and seems not neccessary for avoiding valgrind reachable memory */
+    //CRYPTO_cleanup_all_ex_data();
 
     CRYPTO_THREADID_current(&crypto_tid);
     ERR_remove_thread_state(&crypto_tid);
