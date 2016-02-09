@@ -27,6 +27,7 @@
 
 #include <libyang/libyang.h>
 
+#include "session_server.h"
 #include "libnetconf.h"
 
 extern struct nc_server_opts server_opts;
@@ -64,7 +65,9 @@ nc_server_reply_data(struct lyd_node *data, NC_PARAMTYPE paramtype)
 
     ret->type = NC_RPL_DATA;
     if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
+        nc_ctx_lock(-1, NULL);
         ret->data = lyd_dup(data, 1);
+        nc_ctx_unlock();
     } else {
         ret->data = data;
     }
@@ -292,6 +295,7 @@ nc_err(NC_ERR tag, ...)
 
 fail:
     ERRARG;
+    va_end(ap);
     free(ret);
     return NULL;
 }
@@ -304,10 +308,13 @@ nc_err_set_app_tag(struct nc_server_error *err, const char *error_app_tag)
         return -1;
     }
 
+    nc_ctx_lock(-1, NULL);
     if (err->apptag) {
         lydict_remove(server_opts.ctx, err->apptag);
     }
     err->apptag = lydict_insert(server_opts.ctx, error_app_tag, 0);
+    nc_ctx_unlock();
+
     return 0;
 }
 
@@ -319,10 +326,13 @@ nc_err_set_path(struct nc_server_error *err, const char *error_path)
         return -1;
     }
 
+    nc_ctx_lock(-1, NULL);
     if (err->path) {
         lydict_remove(server_opts.ctx, err->path);
     }
     err->path = lydict_insert(server_opts.ctx, error_path, 0);
+    nc_ctx_unlock();
+
     return 0;
 }
 
@@ -334,6 +344,7 @@ nc_err_set_msg(struct nc_server_error *err, const char *error_message, const cha
         return -1;
     }
 
+    nc_ctx_lock(-1, NULL);
     if (err->message) {
         lydict_remove(server_opts.ctx, err->apptag);
     }
@@ -347,6 +358,8 @@ nc_err_set_msg(struct nc_server_error *err, const char *error_message, const cha
     } else {
         lang = NULL;
     }
+    nc_ctx_unlock();
+
     return 0;
 }
 
@@ -372,7 +385,11 @@ nc_err_add_bad_attr(struct nc_server_error *err, const char *attr_name)
 
     ++err->attr_count;
     err->attr = realloc(err->attr, err->attr_count * sizeof *err->attr);
+
+    nc_ctx_lock(-1, NULL);
     err->attr[err->attr_count - 1] = lydict_insert(server_opts.ctx, attr_name, 0);
+    nc_ctx_unlock();
+
     return 0;
 }
 
@@ -386,7 +403,11 @@ nc_err_add_bad_elem(struct nc_server_error *err, const char *elem_name)
 
     ++err->elem_count;
     err->elem = realloc(err->elem, err->elem_count * sizeof *err->elem);
+
+    nc_ctx_lock(-1, NULL);
     err->elem[err->elem_count - 1] = lydict_insert(server_opts.ctx, elem_name, 0);
+    nc_ctx_unlock();
+
     return 0;
 }
 
@@ -400,7 +421,11 @@ nc_err_add_bad_ns(struct nc_server_error *err, const char *ns_name)
 
     ++err->ns_count;
     err->ns = realloc(err->ns, err->ns_count * sizeof *err->ns);
+
+    nc_ctx_lock(-1, NULL);
     err->ns[err->ns_count - 1] = lydict_insert(server_opts.ctx, ns_name, 0);
+    nc_ctx_unlock();
+
     return 0;
 }
 
@@ -419,14 +444,17 @@ nc_err_add_info_other(struct nc_server_error *err, struct lyxml_elem *other)
 }
 
 void
-nc_server_rpc_free(struct nc_server_rpc *rpc)
+nc_server_rpc_free(struct nc_server_rpc *rpc, struct ly_ctx *ctx)
 {
     if (!rpc) {
         return;
     }
 
-    lyxml_free(rpc->tree->schema->module->ctx, rpc->root);
+    nc_ctx_lock(-1, NULL);
+    lyxml_free(ctx, rpc->root);
     lyd_free(rpc->tree);
+    nc_ctx_unlock();
+
     free(rpc);
 }
 
@@ -445,7 +473,9 @@ nc_server_reply_free(struct nc_server_reply *reply)
     case NC_RPL_DATA:
         data_rpl = (struct nc_server_reply_data *)reply;
         if (data_rpl->free) {
+            nc_ctx_lock(-1, NULL);
             lyd_free_withsiblings(data_rpl->data);
+            nc_ctx_unlock();
         }
         break;
     case NC_RPL_OK:
@@ -473,6 +503,7 @@ nc_err_free(struct nc_server_error *err)
         return;
     }
 
+    nc_ctx_lock(-1, NULL);
     lydict_remove(server_opts.ctx, err->apptag);
     lydict_remove(server_opts.ctx, err->path);
     lydict_remove(server_opts.ctx, err->message);
@@ -492,6 +523,7 @@ nc_err_free(struct nc_server_error *err)
     for (i = 0; i < err->other_count; ++i) {
         lyxml_free(server_opts.ctx, err->other[i]);
     }
+    nc_ctx_unlock();
     free(err->other);
     free(err);
 }

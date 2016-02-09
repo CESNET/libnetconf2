@@ -42,7 +42,7 @@
 typedef struct nc_server_reply *(*nc_rpc_clb)(struct lyd_node *rpc, struct nc_session *session);
 
 /**
- * @brief Set the termination reason for a session.
+ * @brief Set the termination reason for a session. Use only in #nc_rpc_clb callbacks.
  *
  * @param[in] session Session to modify.
  * @param[in] reason Reason of termination.
@@ -53,7 +53,9 @@ void nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REAS
  * @brief Initialize the server using a libyang context.
  *
  * The context is not modified internally, only its dictionary is used for holding
- * all the strings.
+ * all the strings. When the dictionary is being written to or removed from,
+ * libnetconf2 always holds ctx lock using nc_ctx_lock(). Reading models is considered
+ * thread-safe as models cannot be removed and are rarely modified.
  *
  * Server capabilities are generated based on its content. Changing the context
  * in ways that result in changed capabilities (adding models, changing features)
@@ -122,7 +124,7 @@ void nc_server_set_hello_timeout(uint16_t hello_timeout);
  * @brief Set server timeout for dropping an idle session.
  *
  * @param[in] idle_timeout Idle session timeout. 0 to never drop a session
- * because of inactivity.
+ *                         because of inactivity.
  */
 void nc_server_set_idle_timeout(uint16_t idle_timeout);
 
@@ -165,7 +167,7 @@ int nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session);
  *
  * @param[in] ps Pollsession structure to modify.
  * @param[in] session Session to remove from \p ps.
- * @return 0 on success, 1 if not found, -1 on error.
+ * @return 0 on success, -1 on not found.
  */
 int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
 
@@ -173,45 +175,63 @@ int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
  * @brief Poll sessions and process any received RPCs.
  *
  * All the sessions must be running. If a session fails causing it to change its
- * status, it can be learnt from the return value. Only one event (new RPC, TODO
- * new SSH channel request) on one session is handled in one function call.
+ * status, it can be learnt from the return value. Only one event on one session
+ * is handled in one function call.
  *
  * @param[in] ps Pollsession structure to use.
- * @param[in] timeout Poll timeout. 0 for non-blocking call, -1 for infinite waiting.
- * @return 0 on elapsed timeout, 1 if some RPC were processed, 2 if a session from
- * \p ps changed its status (was invalidated), -1 on error.
+ * @param[in] timeout Poll timeout in milliseconds. 0 for non-blocking call, -1 for
+ *                    infinite waiting.
+ * @return 0 on elapsed timeout,
+ *         1 if an RPC was processed (even if it was not known - it failed to be
+ *           parsed into session ctx),
+ *         2 if an RPC was processed and there are unhandled events on other sessions,
+ *         3 if a session from \p ps changed its status (was invalidated),
+ *         -1 on error (a session likely changed its status as well).
+ *
+ *         Only with SSH support:
+ *         4 if an SSH message was processed,
+ *         5 if a new NETCONF SSH channel was created; call #nc_ssh_ps_accept_channel()
+ *           to establish a new NETCONF session.
  */
 int nc_ps_poll(struct nc_pollsession *ps, int timeout);
+
+/**
+ * @brief Remove invalid sessions from a pollsession structure and
+ *        call #nc_session_free() on them.
+ *
+ * Calling this function makes sense if #nc_ps_poll() returned 3.
+ *
+ * @param[in] ps Pollsession structure to clear.
+ */
+void nc_ps_clear(struct nc_pollsession *ps);
+
+/**
+ * @brief Lock server context.
+ *
+ * @param[in] timeout Timeout in milliseconds. 0 for non-blocking call, -1 for
+ *                    infinite waiting.
+ * @param[out] elapsed Elapsed milliseconds will be added to this variable.
+ *                     Can be NULL.
+ * @return 1 on success, 0 on elapsed timeout, -1 on error.
+ */
+int nc_ctx_lock(int timeout, int *elapsed);
+
+/**
+ * @brief Unlock server context.
+ *
+ * @return 0 on success, -1 on error.
+ */
+int nc_ctx_unlock(void);
 
 #if defined(ENABLE_SSH) || defined(ENABLE_TLS)
 
 /**
- * @brief Add a new server bind and start listening on it.
+ * @brief Accept new sessions on all the listening endpoints.
  *
- * @param[in] address IP address to bind to.
- * @param[in] port Port to bind to.
- * @param[in] ti Expected transport protocol of incoming connections.
- * @return 0 on success, -1 on error.
- */
-int nc_server_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
-
-/**
- * @brief Stop listening on and remove a server bind.
- *
- * @param[in] address IP address the bind was bound to. NULL matches all the addresses.
- * @param[in] port Port the bind was bound to. NULL matches all the ports.
- * @param[in] ti Expected transport. 0 matches all.
- * @return 0 on success, -1 on not finding any match.
- */
-int nc_server_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
-
-/**
- * @brief Accept new sessions on all the listening binds.
- *
- * @param[in] timeout Timeout for receiving a new connection, 0 for non-blocking call,
- * -1 for infinite waiting.
- * @param[out] session New session on success.
- * @return 1 on success, 0 on timeout, -1 or error.
+ * @param[in] timeout Timeout for receiving a new connection in milliseconds, 0 for
+ * non-blocking call, -1 for infinite waiting.
+ * @param[out] session New session.
+ * @return 1 on success, 0 on timeout, -1 on error.
  */
 int nc_accept(int timeout, struct nc_session **session);
 
@@ -220,191 +240,298 @@ int nc_accept(int timeout, struct nc_session **session);
 #ifdef ENABLE_SSH
 
 /**
- * @brief Set SSH host keys the server will identify itself with. Each of RSA, DSA, and
- * ECDSA key can be set. If the particular type was already set, it is replaced.
+ * @brief Accept a new NETCONF session on an SSH session of a running NETCONF session
+ *        that was polled in \p ps. Call this function only when nc_ps_poll() on \p ps returns 5.
  *
+ * @param[in] ps Unmodified pollsession structure from the previous nc_ps_poll() call.
+ * @param[out] session New session.
+ * @return 0 on success, -1 on error.
+ */
+int nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session);
+
+/**
+ * @brief Add a new SSH endpoint and start listening on it.
+ *
+ * @param[in] name Arbitrary unique endpoint name. There can be a TLS endpoint with
+ *                 the same name.
+ * @param[in] address IP address to listen on.
+ * @param[in] port Port to listen on.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_ssh_add_endpt_listen(const char *name, const char *address, uint16_t port);
+
+/**
+ * @brief Change SSH endpoint listening address.
+ *
+ * On error the previous listening socket is left untouched.
+ *
+ * @param[in] endpt_name Existing endpoint name.
+ * @param[in] address New listening address.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_ssh_endpt_set_address(const char *endpt_name, const char *address);
+
+/**
+ * @brief Change SSH endpoint listening port.
+ *
+ * On error the previous listening socket is left untouched.
+ *
+ * @param[in] endpt_name Existing endpoint name.
+ * @param[in] port New listening port.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_ssh_endpt_set_port(const char *endpt_name, uint16_t port);
+
+/**
+ * @brief Stop listening on and remove an SSH endpoint.
+ *
+ * @param[in] name Endpoint name. NULL matches all (SSH) endpoints.
+ * @return 0 on success, -1 on not finding any match.
+ */
+int nc_server_ssh_del_endpt(const char *name);
+
+/**
+ * @brief Set endpoint SSH host keys the server will identify itself with. Each of RSA, DSA, and
+ *        ECDSA keys can be set. If the particular type was already set, it is replaced.
+ *
+ * @param[in] endpt_name Existing endpoint name.
  * @param[in] privkey_path Path to a private key.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_set_hostkey(const char *privkey_path);
+int nc_server_ssh_endpt_set_hostkey(const char *endpt_name, const char *privkey_path);
 
 /**
- * @brief Set SSH banner the server will send to every client.
+ * @brief Set endpoint SSH banner the server will send to every client.
  *
+ * @param[in] endpt_name Existing endpoint name.
  * @param[in] banner SSH banner.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_set_banner(const char *banner);
+int nc_server_ssh_endpt_set_banner(const char *endpt_name, const char *banner);
 
 /**
- * @brief Set accepted SSH authentication methods. All (publickey, password, interactive)
- * are supported by default.
+ * @brief Set endpoint accepted SSH authentication methods. All (publickey, password, interactive)
+ *        are supported by default.
  *
+ * @param[in] endpt_name Existing endpoint name.
  * @param[in] auth_methods Accepted authentication methods bit field of NC_SSH_AUTH_TYPE.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_set_auth_methods(int auth_methods);
+int nc_server_ssh_endpt_set_auth_methods(const char *endpt_name, int auth_methods);
 
 /**
- * @brief Set SSH authentication attempts of every client. 3 by default.
+ * @brief Set endpoint SSH authentication attempts of every client. 3 by default.
  *
- * @param[in] auth_attempts Failed authentication attepmts before a client is dropped.
+ * @param[in] endpt_name Existing endpoint name.
+ * @param[in] auth_attempts Failed authentication attempts before a client is dropped.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_set_auth_attempts(uint16_t auth_attempts);
+int nc_server_ssh_endpt_set_auth_attempts(const char *endpt_name, uint16_t auth_attempts);
 
 /**
- * @brief Set SSH authentication timeout. 10 seconds by default.
+ * @brief Set endpoint SSH authentication timeout. 10 seconds by default.
  *
+ * @param[in] endpt_name Existing endpoint name.
  * @param[in] auth_timeout Number of seconds before an unauthenticated client is dropped.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_set_auth_timeout(uint16_t auth_timeout);
+int nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_timeout);
 
 /**
- * @brief Add an authorized client SSH public key. This public key can be used for
- * publickey authentication afterwards.
+ * @brief Add an endpoint authorized client SSH public key. This public key can be used for
+ *        publickey authentication afterwards.
  *
+ * @param[in] endpt_name Existing endpoint name.
  * @param[in] pubkey_path Path to the public key.
  * @param[in] username Username that the client with the public key must use.
  * @return 0 on success, -1 on error.
  */
-int nc_ssh_server_add_authkey(const char *pubkey_path, const char *username);
+int nc_server_ssh_endpt_add_authkey(const char *endpt_name, const char *pubkey_path, const char *username);
 
 /**
- * @brief Remove an authorized client SSH public key.
+ * @brief Remove an endpoint authorized client SSH public key.
  *
+ * @param[in] endpt_name Existing endpoint name.
  * @param[in] pubkey_path Path to an authorized public key. NULL matches all the keys.
  * @param[in] username Username for an authorized public key. NULL matches all the usernames.
  * @return 0 on success, -1 on not finding any match.
  */
-int nc_ssh_server_del_authkey(const char *pubkey_path, const char *username);
-
-/**
- * @brief Free all the various SSH server options.
- */
-void nc_ssh_server_free_opts(void);
+int nc_server_ssh_endpt_del_authkey(const char *endpt_name, const char *pubkey_path, const char *username);
 
 #endif /* ENABLE_SSH */
 
 #ifdef ENABLE_TLS
 
 /**
- * @brief Set server TLS certificate. Alternative to nc_tls_server_set_cert_path().
- * There can only be one certificate for each key type, it is replaced if already set.
+ * @brief Add a new TLS endpoint and start listening on it.
  *
+ * @param[in] name Arbitrary unique endpoint name. There can be an SSH endpoint with
+ *                 the same name.
+ * @param[in] address IP address to listen on.
+ * @param[in] port Port to listen on.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_tls_add_endpt_listen(const char *name, const char *address, uint16_t port);
+
+/**
+ * @brief Change TLS endpoint listening address.
+ *
+ * On error the previous listening socket is left untouched.
+ *
+ * @param[in] endpt_name Existing endpoint name.
+ * @param[in] address New listening address.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_tls_endpt_set_address(const char *endpt_name, const char *address);
+
+/**
+ * @brief Change TLS endpoint listening port.
+ *
+ * On error the previous listening socket is left untouched.
+ *
+ * @param[in] endpt_name Existing endpoint name.
+ * @param[in] port New listening port.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_tls_endpt_set_port(const char *endpt_name, uint16_t port);
+
+/**
+ * @brief Stop listening on and remove a TLS endpoint.
+ *
+ * @param[in] name Endpoint name. NULL matches all (TLS) endpoints.
+ * @return 0 on success, -1 on not finding any match.
+ */
+int nc_server_tls_del_endpt(const char *name);
+
+/**
+ * @brief Set server TLS certificate. Alternative to nc_tls_server_set_cert_path().
+ *        There can only be one certificate for each key type, it is replaced if
+ *        already set.
+ *
+ * @param[in] endpt_name Existing endpoint name.
  * @param[in] cert Base64-encoded certificate in ASN.1 DER encoding.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_set_cert(const char *cert);
+int nc_server_tls_endpt_set_cert(const char *endpt_name, const char *cert);
 
 /**
  * @brief Set server TLS certificate. Alternative to nc_tls_server_set_cert().
- * There can only be one certificate for each key type, it is replaced if already set.
+ *        There can only be one certificate for each key type, it is replaced if
+ *        already set.
  *
+ * @param[in] endpt_name Existing endpoint name.
  * @param[in] cert_path Path to a certificate file in PEM format.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_set_cert_path(const char *cert_path);
+int nc_server_tls_endpt_set_cert_path(const char *endpt_name, const char *cert_path);
 
 /**
  * @brief Set server TLS private key matching the certificate.
- * Alternative to nc_tls_server_set_key_path(). There can only be one of every key
- * type, it is replaced if already set.
+ *        Alternative to nc_tls_server_set_key_path(). There can only be one of
+ *        every key type, it is replaced if already set.
  *
+ * @param[in] endpt_name Existing endpoint name.
  * @param[in] privkey Base64-encoded certificate in ASN.1 DER encoding.
  * @param[in] is_rsa Whether \p privkey are the data of an RSA (1) or DSA (0) key.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_set_key(const char *privkey, int is_rsa);
+int nc_server_tls_endpt_set_key(const char *endpt_name, const char *privkey, int is_rsa);
 
 /**
  * @brief Set server TLS private key matching the certificate.
- * Alternative to nc_tls_server_set_key_path(). There can only be one of every key
- * type, it is replaced if already set.
+ *        Alternative to nc_tls_server_set_key_path(). There can only be one of
+ *        every key type, it is replaced if already set.
  *
+ * @param[in] endpt_name Existing endpoint name.
  * @param[in] privkey_path Path to a private key file in PEM format.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_set_key_path(const char *privkey_path);
+int nc_server_tls_endpt_set_key_path(const char *endpt_name, const char *privkey_path);
 
 /**
- * @brief Add a trusted certificate. Can be both a CA or a client one.
+ * @brief Add a trusted certificate. Can be both a CA or a client one. Can be
+ *        safely used together with #nc_server_tls_endpt_set_trusted_ca_paths().
  *
- * @param[in] cert Base64-enocded certificate in ASN.1DER encoding.
+ * @param[in] endpt_name Existing endpoint name.
+ * @param[in] cert Base64-enocded certificate in ASN.1 DER encoding.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_add_trusted_cert(const char *cert);
+int nc_server_tls_endpt_add_trusted_cert(const char *endpt_name, const char *cert);
 
 /**
- * @brief Add a trusted certificate. Can be both a CA or a client one.
+ * @brief Add a trusted certificate. Can be both a CA or a client one. Can be
+ *        safely used together with #nc_server_tls_endpt_set_trusted_ca_paths().
  *
+ * @param[in] endpt_name Existing endpoint name.
  * @param[in] cert_path Path to a trusted certificate file in PEM format.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_add_trusted_cert_path(const char *cert_path);
+int nc_server_tls_endpt_add_trusted_cert_path(const char *endpt_name, const char *cert_path);
 
 /**
  * @brief Set trusted Certificate Authority certificate locations. There can only be
- * one file and one directory, they are replaced if already set.
+ *        one file and one directory, they are replaced if already set. Can be safely
+ *        used with #nc_server_tls_endpt_add_trusted_cert() or its _path variant.
  *
- * @param[in] cacert_file_path Path to a trusted CA cert store file in PEM format.
- * Can be NULL.
- * @param[in] cacert_dir_path Path to a trusted CA cert store hashed directory
- * (c_rehash utility can be used to create hashes) with PEM files. Can be NULL.
+ * @param[in] endpt_name Existing endpoint name.
+ * @param[in] ca_file Path to a trusted CA cert store file in PEM format. Can be NULL.
+ * @param[in] ca_dir Path to a trusted CA cert store hashed directory (c_rehash utility
+ *                   can be used to create hashes) with PEM files. Can be NULL.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_set_trusted_cacert_locations(const char *cacert_file_path, const char *cacert_dir_path);
+int nc_server_tls_endpt_set_trusted_ca_paths(const char *endpt_name, const char *ca_file, const char *ca_dir);
 
 /**
  * @brief Destroy and clean all the set certificates and private keys. CRLs and
- * CTN entries are not affected.
+ *        CTN entries are not affected.
+ *
+ * @param[in] endpt_name Existing endpoint name.
  */
-void nc_tls_server_destroy_certs(void);
+void nc_server_tls_endpt_clear_certs(const char *endpt_name);
 
 /**
  * @brief Set Certificate Revocation List locations. There can only be one file
- * and one directory, they are replaced if already set.
+ *        and one directory, they are replaced if already set.
  *
- * @param[in] crl_file_path Path to a CRL store file in PEM format. Can be NULL.
- * @param[in] crl_dir_path Path to a CRL store hashed directory (c_rehash utility
- * can be used to create hashes) with PEM files. Can be NULL.
+ * @param[in] endpt_name Existing endpoint name.
+ * @param[in] crl_file Path to a CRL store file in PEM format. Can be NULL.
+ * @param[in] crl_dir Path to a CRL store hashed directory (c_rehash utility
+ *                    can be used to create hashes) with PEM files. Can be NULL.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_set_crl_locations(const char *crl_file_path, const char *crl_dir_path);
+int nc_server_tls_endpt_set_crl_paths(const char *endpt_name, const char *crl_file, const char *crl_dir);
 
 /**
- * @brief Destroy and clean CRLs. Certificates, priavte keys, and CTN entries are
- * not affected.
+ * @brief Destroy and clean CRLs. Certificates, private keys, and CTN entries are
+ *        not affected.
+ *
+ * @param[in] endpt_name Existing endpoint name.
  */
-void nc_tls_server_destroy_crls(void);
+void nc_server_tls_endpt_clear_crls(const char *endpt_name);
 
 /**
  * @brief Add a Cert-to-name entry.
  *
+ * @param[in] endpt_name Existing endpoint name.
  * @param[in] id Priority of the entry.
  * @param[in] fingerprint Matching certificate fingerprint.
  * @param[in] map_type Type of username-certificate mapping.
  * @param[in] name Specific username if \p map_type == NC_TLS_CTN_SPECIFED. Must be NULL otherwise.
  * @return 0 on success, -1 on error.
  */
-int nc_tls_server_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
+int nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
 /**
  * @brief Remove a Cert-to-name entry.
  *
+ * @param[in] endpt_name Existing endpoint name.
  * @param[in] id Priority of the entry. -1 matches all the priorities.
  * @param[in] fingerprint Fingerprint fo the entry. NULL matches all the fingerprints.
  * @param[in] map_type Mapping type of the entry. 0 matches all the mapping types.
  * @param[in] name Specific username for the entry. NULL matches all the usernames.
  * @return 0 on success, -1 on not finding any match.
  */
-int nc_tls_server_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
-
-/**
- * @brief Free all the various TLS server options.
- */
-void nc_tls_server_free_opts(void);
+int nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
 #endif /* ENABLE_TLS */
 

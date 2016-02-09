@@ -20,14 +20,17 @@
  *
  */
 
-#define _GNU_SOURCE /* asprintf */
+#define _GNU_SOURCE /* asprintf, ppoll */
+#define _POSIX_SOUCE /* signals */
 #include <assert.h>
 #include <errno.h>
 #include <poll.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include <libyang/libyang.h>
 
@@ -93,14 +96,14 @@ nc_read(struct nc_session *session, char *buf, size_t count)
                 usleep(NC_READ_SLEEP);
                 continue;
             } else if (r == SSH_ERROR) {
-                ERR("Session %u: reading from the SSH channel failed (%zd: %s).", session->id,
-                    ssh_get_error_code(session->ti.libssh.session), ssh_get_error(session->ti.libssh.session));
+                ERR("Session %u: reading from the SSH channel failed (%s).", session->id,
+                    ssh_get_error(session->ti.libssh.session));
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_OTHER;
                 return -1;
             } else if (r == 0) {
                 if (ssh_channel_is_eof(session->ti.libssh.channel)) {
-                    ERR("Session %u: communication channel unexpectedly closed (libssh).", session->id);
+                    ERR("Session %u: SSH channel unexpected EOF.", session->id);
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_DROPPED;
                     return -1;
@@ -326,7 +329,7 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
     DBG("Session %u: received message:\n%s", session->id, msg);
 
     /* build XML tree */
-    *data = lyxml_read_data(session->ctx, msg, 0);
+    *data = lyxml_parse_mem(session->ctx, msg, 0);
     if (!*data) {
         goto malformed_msg;
     } else if (!(*data)->ns) {
@@ -389,9 +392,10 @@ error:
 static int
 nc_read_poll(struct nc_session *session, int timeout)
 {
+    sigset_t sigmask;
     int ret = -2;
     struct pollfd fds;
-    struct timespec old_ts, new_ts;
+    struct timespec ts_timeout;
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
         ERR("Session %u: invalid session to poll.", session->id);
@@ -404,12 +408,13 @@ nc_read_poll(struct nc_session *session, int timeout)
         /* EINTR is handled, it resumes waiting */
         ret = ssh_channel_poll_timeout(session->ti.libssh.channel, timeout, 0);
         if (ret == SSH_ERROR) {
-            ERR("Session %u: SSH channel error (%s).", session->id, ssh_get_error(session->ti.libssh.session));
+            ERR("Session %u: polling on the SSH channel failed (%s).", session->id,
+                ssh_get_error(session->ti.libssh.session));
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_OTHER;
             return -1;
         } else if (ret == SSH_EOF) {
-            ERR("Session %u: communication channel unexpectedly closed (libssh).", session->id);
+            ERR("Session %u: SSH channel unexpected EOF.", session->id);
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_DROPPED;
             return -1;
@@ -417,6 +422,8 @@ nc_read_poll(struct nc_session *session, int timeout)
             /* fake it */
             ret = 1;
             fds.revents = POLLIN;
+        } else { /* ret == 0 */
+            fds.revents = 0;
         }
         /* fallthrough */
 #endif
@@ -435,22 +442,19 @@ nc_read_poll(struct nc_session *session, int timeout)
         /* poll only if it is not an SSH session */
         if (ret == -2) {
             fds.events = POLLIN;
+            fds.revents = 0;
 
-            errno = 0;
-            while (((ret = poll(&fds, 1, timeout)) == -1) && (errno == EINTR)) {
-                /* poll was interrupted */
-                if (timeout > 0) {
-                    clock_gettime(CLOCK_MONOTONIC_RAW, &new_ts);
-
-                    timeout -= (new_ts.tv_sec - old_ts.tv_sec) * 1000;
-                    timeout -= (new_ts.tv_nsec - old_ts.tv_nsec) / 1000000;
-                    if (timeout < 0) {
-                        ERRINT;
-                        return -1;
-                    }
-                    old_ts = new_ts;
+            if (timeout > -1) {
+                if (!timeout) {
+                    ts_timeout.tv_sec = 0;
+                    ts_timeout.tv_nsec = 0;
+                } else if (timeout > 0) {
+                    ts_timeout.tv_sec = timeout / 1000;
+                    ts_timeout.tv_nsec = (timeout % 1000) * 1000000;
                 }
             }
+            sigfillset(&sigmask);
+            ret = ppoll(&fds, 1, (timeout == -1 ? NULL : &ts_timeout), &sigmask);
         }
 
         break;
@@ -463,7 +467,7 @@ nc_read_poll(struct nc_session *session, int timeout)
     /* process the poll result, unified ret meaning for poll and ssh_channel poll */
     if (ret < 0) {
         /* poll failed - something really bad happened, close the session */
-        ERR("Session %u: poll error (%s).", session->id, strerror(errno));
+        ERR("Session %u: ppoll error (%s).", session->id, strerror(errno));
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_OTHER;
         return -1;
@@ -584,6 +588,16 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
 
 #ifdef ENABLE_SSH
     case NC_TI_LIBSSH:
+        if (ssh_channel_is_closed(session->ti.libssh.channel) || ssh_channel_is_eof(session->ti.libssh.channel)) {
+            if (ssh_channel_is_closed(session->ti.libssh.channel)) {
+                ERR("Session %u: SSH channel unexpectedly closed.", session->id);
+            } else {
+                ERR("Session %u: SSH channel unexpected EOF.", session->id);
+            }
+            session->status = NC_STATUS_INVALID;
+            session->term_reason = NC_SESSION_TERM_DROPPED;
+            return -1;
+        }
         return ssh_channel_write(session->ti.libssh.channel, buf, count);
 #endif
 #ifdef ENABLE_TLS
@@ -814,7 +828,7 @@ nc_write_error(struct wclb_arg *arg, struct nc_server_error *err)
         nc_write_clb((void *)arg, "</error-message>", 16);
     }
 
-    if (err->sid || err->attr || err->elem || err->ns || err->other) {
+    if (err->sid || err->attr_count || err->elem_count || err->ns_count || err->other_count) {
         nc_write_clb((void *)arg, "<error-info>", 12);
 
         if (err->sid) {
@@ -843,7 +857,7 @@ nc_write_error(struct wclb_arg *arg, struct nc_server_error *err)
         }
 
         for (i = 0; i < err->other_count; ++i) {
-            lyxml_dump_clb(nc_write_clb, (void *)arg, err->other[i], 0);
+            lyxml_print_clb(nc_write_clb, (void *)arg, err->other[i], 0);
         }
 
         nc_write_clb((void *)arg, "</error-info>", 13);
@@ -902,7 +916,7 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
         nc_write_clb((void *)&arg, "<rpc-reply", 10);
         /* can be NULL if replying with a malformed-message error */
         if (rpc_elem) {
-            lyxml_dump_clb(nc_write_clb, (void *)&arg, rpc_elem, LYXML_DUMP_ATTRS);
+            lyxml_print_clb(nc_write_clb, (void *)&arg, rpc_elem, LYXML_PRINT_ATTRS);
         }
         nc_write_clb((void *)&arg, ">", 1);
         switch (reply->type) {
@@ -912,7 +926,7 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
         case NC_RPL_DATA:
             nc_write_clb((void *)&arg, "<data>", 6);
             lyd_print_clb(nc_write_clb, (void *)&arg, ((struct nc_reply_data *)reply)->data, LYD_XML, 0);
-            nc_write_clb((void *)&arg, "<data/>", 7);
+            nc_write_clb((void *)&arg, "</data>", 7);
             break;
         case NC_RPL_ERROR:
             error_rpl = (struct nc_server_reply_error *)reply;

@@ -31,9 +31,15 @@
 #include <libyang/libyang.h>
 #include <openssl/err.h>
 
+#include "session_client.h"
+#include "session_client_ch.h"
 #include "libnetconf.h"
 
-static struct nc_tls_client_opts tls_opts;
+extern struct nc_client_opts client_opts;
+static struct nc_client_tls_opts tls_opts;
+static struct nc_client_tls_opts tls_ch_opts;
+
+static int tlsauth_ch;
 
 static int
 tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
@@ -47,9 +53,17 @@ tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
     EVP_PKEY *pubkey;
     int i, n, rc;
     ASN1_TIME *next_update = NULL;
+    struct nc_client_tls_opts *opts;
 
     if (!preverify_ok) {
         return 0;
+    }
+
+    opts = (tlsauth_ch ? &tls_ch_opts : &tls_opts);
+
+    if (!opts->crl_store) {
+        /* nothing to check */
+        return 1;
     }
 
     cert = X509_STORE_CTX_get_current_cert(x509_ctx);
@@ -59,7 +73,7 @@ tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
     /* try to retrieve a CRL corresponding to the _subject_ of
      * the current certificate in order to verify it's integrity */
     memset((char *)&obj, 0, sizeof obj);
-    X509_STORE_CTX_init(&store_ctx, tls_opts.tls_store, NULL, NULL);
+    X509_STORE_CTX_init(&store_ctx, opts->crl_store, NULL, NULL);
     rc = X509_STORE_get_by_subject(&store_ctx, X509_LU_CRL, subject, &obj);
     X509_STORE_CTX_cleanup(&store_ctx);
     crl = obj.data.crl;
@@ -97,7 +111,7 @@ tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
     /* try to retrieve a CRL corresponding to the _issuer_ of
      * the current certificate in order to check for revocation */
     memset((char *)&obj, 0, sizeof obj);
-    X509_STORE_CTX_init(&store_ctx, tls_opts.tls_store, NULL, NULL);
+    X509_STORE_CTX_init(&store_ctx, opts->crl_store, NULL, NULL);
     rc = X509_STORE_get_by_subject(&store_ctx, X509_LU_CRL, issuer, &obj);
     X509_STORE_CTX_cleanup(&store_ctx);
     crl = obj.data.crl;
@@ -119,94 +133,337 @@ tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
     return 1; /* success */
 }
 
-API int
-nc_tls_client_init(const char *client_cert, const char *client_key, const char *ca_file, const char *ca_dir,
-                   const char *crl_file, const char *crl_dir)
+static void
+_nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts)
 {
-    const char *key_ = client_key;
-    X509_LOOKUP *lookup;
+    free(opts->cert_path);
+    free(opts->key_path);
+    free(opts->ca_file);
+    free(opts->ca_dir);
+    SSL_CTX_free(opts->tls_ctx);
 
-    if (tls_opts.tls_ctx) {
-        VRB("TLS context reinitialization.");
-        SSL_CTX_free(tls_opts.tls_ctx);
-        tls_opts.tls_ctx = NULL;
-    }
+    free(opts->crl_file);
+    free(opts->crl_dir);
+    X509_STORE_free(opts->crl_store);
+}
 
+API void
+nc_client_tls_destroy_opts(void)
+{
+    _nc_client_tls_destroy_opts(&tls_opts);
+    _nc_client_tls_destroy_opts(&tls_ch_opts);
+}
+
+static int
+_nc_client_tls_set_cert_key_paths(const char *client_cert, const char *client_key, struct nc_client_tls_opts *opts)
+{
     if (!client_cert) {
         ERRARG;
         return -1;
     }
 
-    /* prepare global SSL context, allow only mandatory TLS 1.2  */
-    if (!(tls_opts.tls_ctx = SSL_CTX_new(TLSv1_2_client_method()))) {
-        ERR("Unable to create OpenSSL context (%s).", ERR_reason_error_string(ERR_get_error()));
+    free(opts->cert_path);
+    free(opts->key_path);
+
+    opts->cert_path = strdup(client_cert);
+    if (!opts->cert_path) {
+        ERRMEM;
         return -1;
     }
 
-    if (crl_file || crl_dir) {
-        /* set the revocation store with the correct paths for the callback */
-        tls_opts.tls_store = X509_STORE_new();
-        tls_opts.tls_store->cache = 0;
-
-        if (crl_file) {
-            if (!(lookup = X509_STORE_add_lookup(tls_opts.tls_store, X509_LOOKUP_file()))) {
-                ERR("Failed to add lookup method to CRL checking.");
-                return -1;
-            }
-            if (X509_LOOKUP_add_dir(lookup, crl_file, X509_FILETYPE_PEM) != 1) {
-                ERR("Failed to add the revocation lookup file \"%s\".", crl_file);
-                return -1;
-            }
+    if (client_key) {
+        opts->key_path = strdup(client_key);
+        if (!opts->key_path) {
+            ERRMEM;
+            return -1;
         }
-
-        if (crl_dir) {
-            if (!(lookup = X509_STORE_add_lookup(tls_opts.tls_store, X509_LOOKUP_hash_dir()))) {
-                ERR("Failed to add lookup method to CRL checking.");
-                return -1;
-            }
-            if (X509_LOOKUP_add_dir(lookup, crl_dir, X509_FILETYPE_PEM) != 1) {
-                ERR("Failed to add the revocation lookup directory \"%s\".", crl_dir);
-                return -1;
-            }
-        }
-
-        SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER, tlsauth_verify_callback);
     } else {
-        /* CRL checking will be skipped */
-        SSL_CTX_set_verify(tls_opts.tls_ctx, SSL_VERIFY_PEER, NULL);
+        opts->key_path = NULL;
     }
 
-    /* get peer certificate */
-    if (SSL_CTX_use_certificate_file(tls_opts.tls_ctx, client_cert, SSL_FILETYPE_PEM) != 1) {
-        ERR("Loading a peer certificate from \'%s\' failed (%s).", client_cert, ERR_reason_error_string(ERR_get_error()));
-        return -1;
-    }
-
-    if (!key_) {
-        /*
-         * if the file with private key not specified, expect that the private
-         * key is stored altogether with the certificate
-         */
-        key_ = client_cert;
-    }
-    if (SSL_CTX_use_PrivateKey_file(tls_opts.tls_ctx, key_, SSL_FILETYPE_PEM) != 1) {
-        ERR("Loading the client certificate from \'%s\' failed (%s).", key_, ERR_reason_error_string(ERR_get_error()));
-        return -1;
-    }
-
-    if (!SSL_CTX_load_verify_locations(tls_opts.tls_ctx, ca_file, ca_dir)) {
-        ERR("Failed to load the locations of trusted CA certificates (%s).", ERR_reason_error_string(ERR_get_error()));
-        return -1;
-    }
+    opts->tls_ctx_change = 1;
 
     return 0;
 }
 
-API void
-nc_tls_client_destroy(void)
+API int
+nc_client_tls_set_cert_key_paths(const char *client_cert, const char *client_key)
 {
-    SSL_CTX_free(tls_opts.tls_ctx);
-    tls_opts.tls_ctx = NULL;
+    return _nc_client_tls_set_cert_key_paths(client_cert, client_key, &tls_opts);
+}
+
+API int
+nc_client_tls_ch_set_cert_key_paths(const char *client_cert, const char *client_key)
+{
+    return _nc_client_tls_set_cert_key_paths(client_cert, client_key, &tls_ch_opts);
+}
+
+static void
+_nc_client_tls_get_cert_key_paths(const char **client_cert, const char **client_key, struct nc_client_tls_opts *opts)
+{
+    if (!client_cert && !client_key) {
+        ERRARG;
+        return;
+    }
+
+    if (client_cert) {
+        *client_cert = opts->cert_path;
+    }
+    if (client_key) {
+        *client_key = opts->key_path;
+    }
+}
+
+API void
+nc_client_tls_get_cert_key_paths(const char **client_cert, const char **client_key)
+{
+    _nc_client_tls_get_cert_key_paths(client_cert, client_key, &tls_opts);
+}
+
+API void
+nc_client_tls_ch_get_cert_key_paths(const char **client_cert, const char **client_key)
+{
+    _nc_client_tls_get_cert_key_paths(client_cert, client_key, &tls_ch_opts);
+}
+
+static int
+_nc_client_tls_set_trusted_ca_paths(const char *ca_file, const char *ca_dir, struct nc_client_tls_opts *opts)
+{
+    if (!ca_file && !ca_dir) {
+        ERRARG;
+        return -1;
+    }
+
+    free(opts->ca_file);
+    free(opts->ca_dir);
+
+    if (ca_file) {
+        opts->ca_file = strdup(ca_file);
+        if (!opts->ca_file) {
+            ERRMEM;
+            return -1;
+        }
+    } else {
+        opts->ca_file = NULL;
+    }
+
+    if (ca_dir) {
+        opts->ca_dir = strdup(ca_dir);
+        if (!opts->ca_dir) {
+            ERRMEM;
+            return -1;
+        }
+    } else {
+        opts->ca_dir = NULL;
+    }
+
+    opts->tls_ctx_change = 1;
+
+    return 0;
+}
+
+API int
+nc_client_tls_set_trusted_ca_paths(const char *ca_file, const char *ca_dir)
+{
+    return _nc_client_tls_set_trusted_ca_paths(ca_file, ca_dir, &tls_opts);
+}
+
+API int
+nc_client_tls_ch_set_trusted_ca_paths(const char *ca_file, const char *ca_dir)
+{
+    return _nc_client_tls_set_trusted_ca_paths(ca_file, ca_dir, &tls_ch_opts);
+}
+
+static void
+_nc_client_tls_get_trusted_ca_paths(const char **ca_file, const char **ca_dir, struct nc_client_tls_opts *opts)
+{
+    if (!ca_file && !ca_dir) {
+        ERRARG;
+        return;
+    }
+
+    if (ca_file) {
+        *ca_file = opts->ca_file;
+    }
+    if (ca_dir) {
+        *ca_dir = opts->ca_dir;
+    }
+}
+
+API void
+nc_client_tls_get_trusted_ca_paths(const char **ca_file, const char **ca_dir)
+{
+    _nc_client_tls_get_trusted_ca_paths(ca_file, ca_dir, &tls_opts);
+}
+
+API void
+nc_client_tls_ch_get_trusted_ca_paths(const char **ca_file, const char **ca_dir)
+{
+    _nc_client_tls_get_trusted_ca_paths(ca_file, ca_dir, &tls_ch_opts);
+}
+
+static int
+_nc_client_tls_set_crl_paths(const char *crl_file, const char *crl_dir, struct nc_client_tls_opts *opts)
+{
+    if (!crl_file && !crl_dir) {
+        ERRARG;
+        return -1;
+    }
+
+    free(opts->crl_file);
+    free(opts->crl_dir);
+
+    if (crl_file) {
+        opts->crl_file = strdup(crl_file);
+        if (!opts->crl_file) {
+            ERRMEM;
+            return -1;
+        }
+    } else {
+        opts->crl_file = NULL;
+    }
+
+    if (crl_dir) {
+        opts->crl_dir = strdup(crl_dir);
+        if (!opts->crl_dir) {
+            ERRMEM;
+            return -1;
+        }
+    } else {
+        opts->crl_dir = NULL;
+    }
+
+    opts->crl_store_change = 1;
+
+    return 0;
+}
+
+API int
+nc_client_tls_set_crl_paths(const char *crl_file, const char *crl_dir)
+{
+    return _nc_client_tls_set_crl_paths(crl_file, crl_dir, &tls_opts);
+}
+
+API int
+nc_client_tls_ch_set_crl_paths(const char *crl_file, const char *crl_dir)
+{
+    return _nc_client_tls_set_crl_paths(crl_file, crl_dir, &tls_ch_opts);
+}
+
+static void
+_nc_client_tls_get_crl_paths(const char **crl_file, const char **crl_dir, struct nc_client_tls_opts *opts)
+{
+    if (!crl_file && !crl_dir) {
+        ERRARG;
+        return;
+    }
+
+    if (crl_file) {
+        *crl_file = opts->crl_file;
+    }
+    if (crl_dir) {
+        *crl_dir = opts->crl_dir;
+    }
+}
+
+API void
+nc_client_tls_get_crl_paths(const char **crl_file, const char **crl_dir)
+{
+    _nc_client_tls_get_crl_paths(crl_file, crl_dir, &tls_opts);
+}
+
+API void
+nc_client_tls_ch_get_crl_paths(const char **crl_file, const char **crl_dir)
+{
+    _nc_client_tls_get_crl_paths(crl_file, crl_dir, &tls_ch_opts);
+}
+
+API int
+nc_client_tls_ch_add_bind_listen(const char *address, uint16_t port)
+{
+    return nc_client_ch_add_bind_listen(address, port, NC_TI_OPENSSL);
+}
+
+API int
+nc_client_tls_ch_del_bind(const char *address, uint16_t port)
+{
+    return nc_client_ch_del_bind(address, port, NC_TI_OPENSSL);
+}
+
+static int
+nc_client_tls_update_opts(struct nc_client_tls_opts *opts)
+{
+    char *key;
+    X509_LOOKUP *lookup;
+
+    if (!opts->tls_ctx || opts->tls_ctx_change) {
+        SSL_CTX_free(opts->tls_ctx);
+
+        /* prepare global SSL context, allow only mandatory TLS 1.2  */
+        if (!(opts->tls_ctx = SSL_CTX_new(TLSv1_2_client_method()))) {
+            ERR("Unable to create OpenSSL context (%s).", ERR_reason_error_string(ERR_get_error()));
+            return -1;
+        }
+        SSL_CTX_set_verify(opts->tls_ctx, SSL_VERIFY_PEER, tlsauth_verify_callback);
+
+        /* get peer certificate */
+        if (SSL_CTX_use_certificate_file(opts->tls_ctx, opts->cert_path, SSL_FILETYPE_PEM) != 1) {
+            ERR("Loading the client certificate from \'%s\' failed (%s).", opts->cert_path, ERR_reason_error_string(ERR_get_error()));
+            return -1;
+        }
+
+        /* if the file with private key not specified, expect that the private key is stored with the certificate */
+        if (!opts->key_path) {
+            key = opts->cert_path;
+        } else {
+            key = opts->key_path;
+        }
+        if (SSL_CTX_use_PrivateKey_file(opts->tls_ctx, key, SSL_FILETYPE_PEM) != 1) {
+            ERR("Loading the client priavte key from \'%s\' failed (%s).", key, ERR_reason_error_string(ERR_get_error()));
+            return -1;
+        }
+
+        if (!SSL_CTX_load_verify_locations(opts->tls_ctx, opts->ca_file, opts->ca_dir)) {
+            ERR("Failed to load the locations of trusted CA certificates (%s).", ERR_reason_error_string(ERR_get_error()));
+            return -1;
+        }
+    }
+
+    if (opts->crl_store_change || (!opts->crl_store && (opts->crl_file || opts->crl_dir))) {
+        /* set the revocation store with the correct paths for the callback */
+        X509_STORE_free(opts->crl_store);
+
+        opts->crl_store = X509_STORE_new();
+        if (!opts->crl_store) {
+            ERR("Unable to create a certificate store (%s).", ERR_reason_error_string(ERR_get_error()));
+            return -1;
+        }
+        opts->crl_store->cache = 0;
+
+        if (opts->crl_file) {
+            if (!(lookup = X509_STORE_add_lookup(opts->crl_store, X509_LOOKUP_file()))) {
+                ERR("Failed to add lookup method to CRL checking.");
+                return -1;
+            }
+            if (X509_LOOKUP_add_dir(lookup, opts->crl_file, X509_FILETYPE_PEM) != 1) {
+                ERR("Failed to add the revocation lookup file \"%s\".", opts->crl_file);
+                return -1;
+            }
+        }
+
+        if (opts->crl_dir) {
+            if (!(lookup = X509_STORE_add_lookup(opts->crl_store, X509_LOOKUP_hash_dir()))) {
+                ERR("Failed to add lookup method to CRL checking.");
+                return -1;
+            }
+            if (X509_LOOKUP_add_dir(lookup, opts->crl_dir, X509_FILETYPE_PEM) != 1) {
+                ERR("Failed to add the revocation lookup directory \"%s\".", opts->crl_dir);
+                return -1;
+            }
+        }
+    }
+
+    return 0;
 }
 
 API struct nc_session *
@@ -215,8 +472,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     struct nc_session *session = NULL;
     int sock, verify;
 
-    /* was init called? */
-    if (!tls_opts.tls_ctx) {
+    if (!tls_opts.cert_path || (!tls_opts.ca_file && !tls_opts.ca_dir)) {
         ERRARG;
         return NULL;
     }
@@ -228,6 +484,11 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
 
     if (!port) {
         port = NC_PORT_TLS;
+    }
+
+    /* create/update TLS structures */
+    if (nc_client_tls_update_opts(&tls_opts)) {
+        return NULL;
     }
 
     /* prepare session structure */
@@ -255,7 +516,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     }
 
     /* create and assign socket */
-    sock = nc_connect_getsocket(host, port);
+    sock = nc_sock_connect(host, port);
     if (sock == -1) {
         goto fail;
     }
@@ -265,6 +526,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     SSL_set_mode(session->ti.tls, SSL_MODE_AUTO_RETRY);
 
     /* connect and perform the handshake */
+    tlsauth_ch = 0;
     if (SSL_connect(session->ti.tls) != 1) {
         ERR("Connecting over TLS failed (%s).", ERR_reason_error_string(ERR_get_error()));
         goto fail;
@@ -282,7 +544,11 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
 
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = ly_ctx_new(SCHEMAS_DIR);
+        if (client_opts.schema_searchpath) {
+            ctx = ly_ctx_new(client_opts.schema_searchpath);
+        } else {
+            ctx = ly_ctx_new(SCHEMAS_DIR);
+        }
     } else {
         session->flags |= NC_SESSION_SHAREDCTX;
     }
@@ -294,7 +560,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     }
     session->status = NC_STATUS_RUNNING;
 
-    if (nc_ctx_check_and_fill(session)) {
+    if (nc_ctx_check_and_fill(session) == -1) {
         goto fail;
     }
 
@@ -343,7 +609,11 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
 
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = ly_ctx_new(SCHEMAS_DIR);
+        if (client_opts.schema_searchpath) {
+            ctx = ly_ctx_new(client_opts.schema_searchpath);
+        } else {
+            ctx = ly_ctx_new(SCHEMAS_DIR);
+        }
     } else {
         session->flags |= NC_SESSION_SHAREDCTX;
     }
@@ -355,7 +625,7 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     }
     session->status = NC_STATUS_RUNNING;
 
-    if (nc_ctx_check_and_fill(session)) {
+    if (nc_ctx_check_and_fill(session) == -1) {
         goto fail;
     }
 
@@ -366,24 +636,19 @@ fail:
     return NULL;
 }
 
-API struct nc_session *
-nc_callhome_accept_tls(uint16_t port, int timeout, struct ly_ctx *ctx)
+struct nc_session *
+nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx)
 {
-    int sock, verify;
-    char *server_host;
+    int verify;
     SSL *tls;
     struct nc_session *session;
 
-    if (!port) {
-        port = NC_PORT_CH_TLS;
-    }
-
-    sock = nc_callhome_accept_connection(port, timeout, NULL, &server_host);
-    if (sock == -1) {
+    if (nc_client_tls_update_opts(&tls_ch_opts)) {
+        close(sock);
         return NULL;
     }
 
-    if (!(tls = SSL_new(tls_opts.tls_ctx))) {
+    if (!(tls = SSL_new(tls_ch_opts.tls_ctx))) {
         ERR("Failed to create new TLS session structure (%s).", ERR_reason_error_string(ERR_get_error()));
         close(sock);
         return NULL;
@@ -395,6 +660,7 @@ nc_callhome_accept_tls(uint16_t port, int timeout, struct ly_ctx *ctx)
     SSL_set_mode(tls, SSL_MODE_AUTO_RETRY);
 
     /* connect and perform the handshake */
+    tlsauth_ch = 1;
     if (SSL_connect(tls) != 1) {
         ERR("Connecting over TLS failed (%s).", ERR_reason_error_string(ERR_get_error()));
         SSL_free(tls);
@@ -414,7 +680,7 @@ nc_callhome_accept_tls(uint16_t port, int timeout, struct ly_ctx *ctx)
     session = nc_connect_libssl(tls, ctx);
     if (session) {
         /* store information into session and the dictionary */
-        session->host = lydict_insert_zc(session->ctx, server_host);
+        session->host = lydict_insert(session->ctx, host, 0);
         session->port = port;
         session->username = lydict_insert(session->ctx, "certificate-based", 0);
     }

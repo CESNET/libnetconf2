@@ -25,24 +25,30 @@
 
 #ifdef ENABLE_SSH
 
+/**
+ * @brief Enumeration of NETCONF SSH authentication methods
+ */
 typedef enum {
-    NC_SSH_AUTH_PUBLICKEY = 0x01,
-    NC_SSH_AUTH_PASSWORD = 0x02,
-    NC_SSH_AUTH_INTERACTIVE = 0x04
+    NC_SSH_AUTH_PUBLICKEY = 0x01,  /**< publickey SSH authentication */
+    NC_SSH_AUTH_PASSWORD = 0x02,   /**< password SSH authentication */
+    NC_SSH_AUTH_INTERACTIVE = 0x04 /**< interactive SSH authentication */
 } NC_SSH_AUTH_TYPE;
 
 #endif /* ENABLE_SSH */
 
 #ifdef ENABLE_TLS
 
+/**
+ * @brief Enumeration of cert-to-name mapping types
+ */
 typedef enum {
-    NC_TLS_CTN_UNKNOWN = 0,
-    NC_TLS_CTN_SPECIFIED,
-    NC_TLS_CTN_SAN_RFC822_NAME,
-    NC_TLS_CTN_SAN_DNS_NAME,
-    NC_TLS_CTN_SAN_IP_ADDRESS,
-    NC_TLS_CTN_SAN_ANY,
-    NC_TLS_CTN_COMMON_NAME
+    NC_TLS_CTN_UNKNOWN = 0,     /**< unknown mapping */
+    NC_TLS_CTN_SPECIFIED,       /**< username explicitly specified */
+    NC_TLS_CTN_SAN_RFC822_NAME, /**< email address as username */
+    NC_TLS_CTN_SAN_DNS_NAME,    /**< DNS name as username */
+    NC_TLS_CTN_SAN_IP_ADDRESS,  /**< IP address as username */
+    NC_TLS_CTN_SAN_ANY,         /**< any certificate Subject Alternative Name as username */
+    NC_TLS_CTN_COMMON_NAME      /**< common name as username */
 } NC_TLS_CTN_MAPTYPE;
 
 #endif /* ENABLE_TLS */
@@ -81,7 +87,6 @@ struct nc_session;
  * @brief Get session status.
  *
  * @param[in] session Session to get the information from.
- *
  * @return Session status.
  */
 NC_STATUS nc_session_get_status(const struct nc_session *session);
@@ -90,7 +95,6 @@ NC_STATUS nc_session_get_status(const struct nc_session *session);
  * @brief Get session ID.
  *
  * @param[in] session Session to get the information from.
- *
  * @return Session ID.
  */
 uint32_t nc_session_get_id(const struct nc_session *session);
@@ -99,7 +103,6 @@ uint32_t nc_session_get_id(const struct nc_session *session);
  * @brief Get session transport used.
  *
  * @param[in] session Session to get the information from.
- *
  * @return Session transport.
  */
 NC_TRANSPORT_IMPL nc_session_get_ti(const struct nc_session *session);
@@ -108,7 +111,6 @@ NC_TRANSPORT_IMPL nc_session_get_ti(const struct nc_session *session);
  * @brief Get session username.
  *
  * @param[in] session Session to get the information from.
- *
  * @return Session username.
  */
 const char *nc_session_get_username(const struct nc_session *session);
@@ -117,7 +119,6 @@ const char *nc_session_get_username(const struct nc_session *session);
  * @brief Get session host.
  *
  * @param[in] session Session to get the information from.
- *
  * @return Session host.
  */
 const char *nc_session_get_host(const struct nc_session *session);
@@ -126,16 +127,22 @@ const char *nc_session_get_host(const struct nc_session *session);
  * @brief Get session port.
  *
  * @param[in] session Session to get the information from.
- *
  * @return Session port.
  */
 uint16_t nc_session_get_port(const struct nc_session *session);
 
 /**
+ * @brief Get session context.
+ *
+ * @param[in] session Session to get the information from.
+ * @return Session context.
+ */
+struct ly_ctx *nc_session_get_ctx(const struct nc_session *session);
+
+/**
  * @brief Get session capabilities.
  *
  * @param[in] session Session to get the information from.
- *
  * @return Session capabilities.
  */
 const char **nc_session_get_cpblts(const struct nc_session *session);
@@ -145,7 +152,6 @@ const char **nc_session_get_cpblts(const struct nc_session *session);
  *
  * @param[in] session Session to check.
  * @param[in] capab Capability to look for, capability with any additional suffix will match.
- *
  * @return Matching capability, NULL if none found.
  */
 const char *nc_session_cpblt(const struct nc_session *session, const char *capab);

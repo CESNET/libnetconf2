@@ -15,9 +15,9 @@ branches:
 before_install:
   - sudo apt-get install -y zlib1g-dev
   - sudo apt-get install -y libssl-dev
-  - wget https://red.libssh.org/attachments/download/121/libssh-0.6.5.tar.xz
-  - tar -xJf libssh-0.6.5.tar.xz
-  - mkdir libssh-0.6.5/build && cd libssh-0.6.5/build
+  - wget https://red.libssh.org/attachments/download/177/libssh-0.7.2.tar.xz
+  - tar -xJf libssh-0.7.2.tar.xz
+  - mkdir libssh-0.7.2/build && cd libssh-0.7.2/build
   - cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
   - cd ../..
 
@@ -33,21 +33,11 @@ before_install:
   - cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
   - cd ../..
 
-#env:
-#  global:
-#   # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
-#   #   via the "travis encrypt" command using the project repo's public key
-#   - secure: ""
-
-#addons:
-#  coverity_scan:
-#    project:
-#      name: "CESNET/libnetconf2"
-#    notification_email: rkrejci@cesnet.cz
-#    build_command_prepend: "mkdir build ; cd build ; cmake .. ; make clean"
-#    build_command: "make"
-#    branch_pattern: coverity
+  - if [ "${CC}" = "gcc" ]; then pip install --user codecov; fi
 
 script: 
   - mkdir build && cd build ; cmake -DENABLE_TLS=ON -DENABLE_SSH=ON .. && make -j2 && make test
+
+after_success:
+  - if [ "${CC}" = "gcc" ]; then codecov; fi
 

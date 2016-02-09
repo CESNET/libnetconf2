@@ -28,6 +28,9 @@
 
 #include "netconf.h"
 
+/**
+ * @brief Enumeration of RPC types
+ */
 typedef enum {
     NC_RPC_UNKNOWN = 0, /**< invalid RPC. */
     NC_RPC_GENERIC,     /**< user-defined generic RPC. */
@@ -54,25 +57,34 @@ typedef enum {
     NC_RPC_SUBSCRIBE    /**< \<create-subscription\> RPC. */
 } NC_RPC_TYPE;
 
+/**
+ * @brief Enumeration of \<edit-config\> default operation
+ */
 typedef enum {
-    NC_RPC_EDIT_DFLTOP_UNKNOWN = 0,
-    NC_RPC_EDIT_DFLTOP_MERGE,
-    NC_RPC_EDIT_DFLTOP_REPLACE,
-    NC_RPC_EDIT_DFLTOP_NONE
+    NC_RPC_EDIT_DFLTOP_UNKNOWN = 0, /**< unknown default operation */
+    NC_RPC_EDIT_DFLTOP_MERGE,       /**< default operation merge */
+    NC_RPC_EDIT_DFLTOP_REPLACE,     /**< default operation replace */
+    NC_RPC_EDIT_DFLTOP_NONE         /**< default operation none */
 } NC_RPC_EDIT_DFLTOP;
 
+/**
+ * @brief Enumeration of \<edit-config\> test option
+ */
 typedef enum {
-    NC_RPC_EDIT_TESTOPT_UNKNOWN = 0,
-    NC_RPC_EDIT_TESTOPT_TESTSET,
-    NC_RPC_EDIT_TESTOPT_SET,
-    NC_RPC_EDIT_TESTOPT_TEST
+    NC_RPC_EDIT_TESTOPT_UNKNOWN = 0, /**< unknown test option */
+    NC_RPC_EDIT_TESTOPT_TESTSET,     /**< test-then-set option */
+    NC_RPC_EDIT_TESTOPT_SET,         /**< set option */
+    NC_RPC_EDIT_TESTOPT_TEST         /**< test-only option */
 } NC_RPC_EDIT_TESTOPT;
 
+/**
+ * @brief Enumeration of \<edit-config\> error option
+ */
 typedef enum {
-    NC_RPC_EDIT_ERROPT_UNKNOWN = 0,
-    NC_RPC_EDIT_ERROPT_STOP,
-    NC_RPC_EDIT_ERROPT_CONTINUE,
-    NC_RPC_EDIT_ERROPT_ROLLBACK
+    NC_RPC_EDIT_ERROPT_UNKNOWN = 0, /**< unknown error option */
+    NC_RPC_EDIT_ERROPT_STOP,        /**< stop-on-error option */
+    NC_RPC_EDIT_ERROPT_CONTINUE,    /**< continue-on-error option */
+    NC_RPC_EDIT_ERROPT_ROLLBACK     /**< rollback-on-error option */
 } NC_RPC_EDIT_ERROPT;
 
 /**
@@ -142,7 +154,7 @@ struct nc_rpc;
  * @brief NETCONF client rpc-reply object
  */
 struct nc_reply {
-    NC_RPL type;
+    NC_RPL type; /**< reply type */
 };
 
 /**
@@ -196,7 +208,7 @@ struct nc_rpc *nc_rpc_generic(const struct lyd_node *data, NC_PARAMTYPE paramtyp
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
@@ -211,7 +223,7 @@ struct nc_rpc *nc_rpc_generic_xml(const char *xml_str, NC_PARAMTYPE paramtype);
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
@@ -229,7 +241,7 @@ struct nc_rpc *nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_WD_M
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
@@ -249,7 +261,7 @@ struct nc_rpc *nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, N
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
@@ -269,7 +281,7 @@ struct nc_rpc *nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTOR
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
@@ -285,7 +297,7 @@ struct nc_rpc *nc_rpc_delete(NC_DATASTORE target, const char *url, NC_PARAMTYPE 
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
@@ -299,7 +311,7 @@ struct nc_rpc *nc_rpc_lock(NC_DATASTORE target);
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
@@ -313,7 +325,7 @@ struct nc_rpc *nc_rpc_unlock(NC_DATASTORE target);
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
@@ -329,7 +341,7 @@ struct nc_rpc *nc_rpc_get(const char *filter, NC_WD_MODE wd_mode, NC_PARAMTYPE p
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
@@ -343,7 +355,7 @@ struct nc_rpc *nc_rpc_kill(uint32_t session_id);
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
@@ -362,7 +374,7 @@ struct nc_rpc *nc_rpc_commit(int confirmed, uint32_t confirm_timeout, const char
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
@@ -375,7 +387,7 @@ struct nc_rpc *nc_rpc_discard(void);
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
@@ -390,7 +402,7 @@ struct nc_rpc *nc_rpc_cancel(const char *persist_id, NC_PARAMTYPE paramtype);
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
@@ -406,7 +418,7 @@ struct nc_rpc *nc_rpc_validate(NC_DATASTORE source, const char *url_or_config, N
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
@@ -423,7 +435,7 @@ struct nc_rpc *nc_rpc_getschema(const char *identifier, const char *version, con
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
@@ -439,19 +451,22 @@ struct nc_rpc *nc_rpc_subscribe(const char *stream_name, const char *filter, con
 
 /**
  * @brief Free the NETCONF RPC object.
+ *
  * @param[in] rpc Object to free.
  */
 void nc_rpc_free(struct nc_rpc *rpc);
 
 /**
  * @brief Free the NETCONF RPC reply object.
- * @param[in] rpc Object to free.
+ *
+ * @param[in] reply Object to free.
  */
 void nc_reply_free(struct nc_reply *reply);
 
 /**
  * @brief Free the NETCONF Notification object.
- * @param[in] rpc Object to free.
+ *
+ * @param[in] notif Object to free.
  */
 void nc_notif_free(struct nc_notif *notif);
 

@@ -103,7 +103,7 @@ nc_time2datetime(time_t time, const char *tz)
     char *tz_origin;
 
     if (tz) {
-        tz_origin = getenv("TZ");
+        tz_origin = secure_getenv("TZ");
         setenv("TZ", tz, 1);
         tm_ret = localtime_r(&time, &tm);
         setenv("TZ", tz_origin, 1);

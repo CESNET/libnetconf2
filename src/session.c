@@ -22,11 +22,14 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <pthread.h>
 #include <time.h>
 #include <libyang/libyang.h>
 
+#include "session.h"
 #include "libnetconf.h"
+#include "session_server.h"
 
 #ifdef ENABLE_SSH
 
@@ -34,11 +37,13 @@
 
 #endif /* ENABLE_SSH */
 
-#ifdef ENABLE_TLS
+#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
 
+#   include <openssl/engine.h>
+#   include <openssl/conf.h>
 #   include <openssl/err.h>
 
-#endif /* ENABLE_TLS */
+#endif /* ENABLE_SSH || ENABLE_TLS */
 
 /* in seconds */
 #define NC_CLIENT_HELLO_TIMEOUT 60
@@ -47,6 +52,67 @@
 #define NC_CLOSE_REPLY_TIMEOUT 200
 
 extern struct nc_server_opts server_opts;
+
+/*
+ * @return 1 - success
+ *         0 - timeout
+ *        -1 - error
+ */
+int
+nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed)
+{
+    int ret;
+    struct timespec ts_timeout, ts_old, ts_new;
+
+    if (timeout > 0) {
+        clock_gettime(CLOCK_REALTIME, &ts_timeout);
+
+        if (elapsed) {
+            ts_old = ts_timeout;
+        }
+
+        ts_timeout.tv_sec += timeout / 1000;
+        ts_timeout.tv_nsec += (timeout % 1000) * 1000000;
+
+        ret = pthread_mutex_timedlock(lock, &ts_timeout);
+
+        if (elapsed) {
+            clock_gettime(CLOCK_REALTIME, &ts_new);
+
+            *elapsed += (ts_new.tv_sec - ts_old.tv_sec) * 1000;
+            *elapsed += (ts_new.tv_nsec - ts_old.tv_nsec) / 1000000;
+        }
+    } else if (!timeout) {
+        ret = pthread_mutex_trylock(lock);
+    } else { /* timeout == -1 */
+        ret = pthread_mutex_lock(lock);
+    }
+
+    if (ret == ETIMEDOUT) {
+        /* timeout */
+        return 0;
+    } else if (ret) {
+        /* error */
+        ERR("Mutex lock failed (%s).", strerror(errno));
+        return -1;
+    }
+
+    /* ok */
+    return 1;
+}
+
+void
+nc_subtract_elapsed(int *timeout, struct timespec *old_ts)
+{
+    struct timespec new_ts;
+
+    clock_gettime(CLOCK_MONOTONIC_RAW, &new_ts);
+
+    *timeout -= (new_ts.tv_sec - old_ts->tv_sec) * 1000;
+    *timeout -= (new_ts.tv_nsec - old_ts->tv_nsec) / 1000000;
+
+    *old_ts = new_ts;
+}
 
 API NC_STATUS
 nc_session_get_status(const struct nc_session *session)
@@ -114,6 +180,17 @@ nc_session_get_port(const struct nc_session *session)
     return session->port;
 }
 
+API struct ly_ctx *
+nc_session_get_ctx(const struct nc_session *session)
+{
+    if (!session) {
+        ERRARG;
+        return NULL;
+    }
+
+    return session->ctx;
+}
+
 API const char **
 nc_session_get_cpblts(const struct nc_session *session)
 {
@@ -165,56 +242,13 @@ nc_send_msg(struct nc_session *session, struct lyd_node *op)
     return NC_MSG_RPC;
 }
 
-/*
- * @return 1 - success
- *         0 - timeout
- *        -1 - error
- */
-int
-nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed)
-{
-    int ret;
-    struct timespec ts_timeout, ts_old, ts_new;
-
-    if (timeout > 0) {
-        ts_timeout.tv_sec = timeout / 1000;
-        ts_timeout.tv_nsec = (timeout % 1000) * 1000000;
-
-        clock_gettime(CLOCK_REALTIME, &ts_old);
-
-        ret = pthread_mutex_timedlock(lock, &ts_timeout);
-
-        clock_gettime(CLOCK_REALTIME, &ts_new);
-
-        if (elapsed) {
-            *elapsed += (ts_new.tv_sec - ts_old.tv_sec) * 1000;
-            *elapsed += (ts_new.tv_nsec - ts_old.tv_nsec) / 1000000;
-        }
-    } else if (!timeout) {
-        ret = pthread_mutex_trylock(lock);
-    } else { /* timeout == -1 */
-        ret = pthread_mutex_lock(lock);
-    }
-
-    if (ret == ETIMEDOUT) {
-        /* timeout */
-        return 0;
-    } else if (ret) {
-        /* error */
-        ERR("Mutex lock failed (%s).", strerror(errno));
-        return -1;
-    }
-
-    /* ok */
-    return 1;
-}
-
 API void
 nc_session_free(struct nc_session *session)
 {
     int r, i;
     int connected; /* flag to indicate whether the transport socket is still connected */
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
+    pthread_t tid;
     struct nc_session *siter;
     struct nc_msg_cont *contiter;
     struct lyxml_elem *rpl, *child;
@@ -228,18 +262,20 @@ nc_session_free(struct nc_session *session)
 
     /* mark session for closing */
     if (session->ti_lock) {
-        do {
-            r = nc_timedlock(session->ti_lock, 0, NULL);
-        } while (!r);
+        r = nc_timedlock(session->ti_lock, -1, NULL);
         if (r == -1) {
             return;
         }
     }
 
     /* stop notifications loop if any */
-    if (session->notif) {
-        pthread_cancel(*session->notif);
-        pthread_join(*session->notif, NULL);
+    if (session->ntf_tid) {
+        tid = *session->ntf_tid;
+        free((pthread_t *)session->ntf_tid);
+        session->ntf_tid = NULL;
+        /* the thread now knows it should quit */
+
+        pthread_join(tid, NULL);
     }
 
     if ((session->side == NC_CLIENT) && (session->status == NC_STATUS_RUNNING)) {
@@ -313,6 +349,9 @@ nc_session_free(struct nc_session *session)
          * so it is up to the caller to close them correctly
          * TODO use callbacks
          */
+        /* just to avoid compiler warning */
+        (void)connected;
+        (void)siter;
         break;
 
 #ifdef ENABLE_SSH
@@ -324,14 +363,44 @@ nc_session_free(struct nc_session *session)
          * SSH channel). So destroy the SSH session only if there is no other NETCONF session using
          * it.
          */
-        if (!session->ti.libssh.next) {
+        multisession = 0;
+        if (session->ti.libssh.next) {
+            for (siter = session->ti.libssh.next; siter != session; siter = siter->ti.libssh.next) {
+                if (siter->status != NC_STATUS_STARTING) {
+                    multisession = 1;
+                    break;
+                }
+            }
+        }
+
+        if (!multisession) {
+            /* it's not multisession yet, but we still need to free the starting sessions */
+            if (session->ti.libssh.next) {
+                do {
+                    siter = session->ti.libssh.next;
+                    session->ti.libssh.next = siter->ti.libssh.next;
+
+                    /* free starting SSH NETCONF session (channel will be freed in ssh_free()) */
+                    if (session->side == NC_SERVER) {
+                        nc_ctx_lock(-1, NULL);
+                    }
+                    lydict_remove(session->ctx, session->username);
+                    lydict_remove(session->ctx, session->host);
+                    if (session->side == NC_SERVER) {
+                        nc_ctx_unlock();
+                    }
+                    if (!(session->flags & NC_SESSION_SHAREDCTX)) {
+                        ly_ctx_destroy(session->ctx, NULL);
+                    }
+
+                    free(siter);
+                } while (session->ti.libssh.next != session);
+            }
             if (connected) {
                 ssh_disconnect(session->ti.libssh.session);
             }
             ssh_free(session->ti.libssh.session);
         } else {
-            /* multiple NETCONF sessions on a single SSH session */
-            multisession = 1;
             /* remove the session from the list */
             for (siter = session->ti.libssh.next; siter->ti.libssh.next != session; siter = siter->ti.libssh.next);
             if (session->ti.libssh.next == siter) {
@@ -340,6 +409,17 @@ nc_session_free(struct nc_session *session)
             } else {
                 /* there are still multiple sessions, keep the ring list */
                 siter->ti.libssh.next = session->ti.libssh.next;
+            }
+            /* change nc_sshcb_msg() argument, we need a RUNNING session and this one will be freed */
+            if (session->flags & NC_SESSION_SSH_MSG_CB) {
+                for (siter = session->ti.libssh.next; siter->status != NC_STATUS_RUNNING; siter = siter->ti.libssh.next) {
+                    if (siter->ti.libssh.next == session) {
+                        ERRINT;
+                        break;
+                    }
+                }
+                ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, siter);
+                siter->flags |= NC_SESSION_SSH_MSG_CB;
             }
         }
         break;
@@ -360,8 +440,14 @@ nc_session_free(struct nc_session *session)
         break;
     }
 
+    if (session->side == NC_SERVER) {
+        nc_ctx_lock(-1, NULL);
+    }
     lydict_remove(session->ctx, session->username);
     lydict_remove(session->ctx, session->host);
+    if (session->side == NC_SERVER) {
+        nc_ctx_unlock();
+    }
 
     /* final cleanup */
     if (session->ti_lock) {
@@ -373,7 +459,7 @@ nc_session_free(struct nc_session *session)
     }
 
     if (!(session->flags & NC_SESSION_SHAREDCTX)) {
-        ly_ctx_destroy(session->ctx);
+        ly_ctx_destroy(session->ctx, NULL);
     }
 
     free(session);
@@ -402,11 +488,14 @@ create_cpblts(struct ly_ctx *ctx)
     struct lyd_node_leaf_list **features = NULL, *ns = NULL, *rev = NULL, *name = NULL;
     const char **cpblts;
     const struct lys_module *mod;
-    int size = 10, count, feat_count = 0, i;
+    int size = 10, count, feat_count = 0, i, str_len;
     char str[512];
+
+    nc_ctx_lock(-1, NULL);
 
     yanglib = ly_ctx_info(ctx);
     if (!yanglib) {
+        nc_ctx_unlock();
         return NULL;
     }
 
@@ -420,28 +509,28 @@ create_cpblts(struct ly_ctx *ctx)
     mod = ly_ctx_get_module(ctx, "ietf-netconf", NULL);
     if (mod) {
         if (lys_features_state(mod, "writable-running") == 1) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:writable-running:1.0", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:writable-running:1.0", &cpblts, &size, &count);
         }
         if (lys_features_state(mod, "candidate") == 1) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:candidate:1.0", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:candidate:1.0", &cpblts, &size, &count);
             if (lys_features_state(mod, "confirmed-commit") == 1) {
-                add_cpblt(ctx, "urn:ietf:params:netconf:confirmed-commit:1.1", &cpblts, &size, &count);
+                add_cpblt(ctx, "urn:ietf:params:netconf:capability:confirmed-commit:1.1", &cpblts, &size, &count);
             }
         }
         if (lys_features_state(mod, "rollback-on-error") == 1) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:rollback-on-error:1.0", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:rollback-on-error:1.0", &cpblts, &size, &count);
         }
         if (lys_features_state(mod, "validate") == 1) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:validate:1.1", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:validate:1.1", &cpblts, &size, &count);
         }
         if (lys_features_state(mod, "startup") == 1) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:startup:1.0", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:startup:1.0", &cpblts, &size, &count);
         }
         if (lys_features_state(mod, "url") == 1) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:url:1.0", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:url:1.0", &cpblts, &size, &count);
         }
         if (lys_features_state(mod, "xpath") == 1) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:xpath:1.0", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:xpath:1.0", &cpblts, &size, &count);
         }
     }
 
@@ -450,7 +539,7 @@ create_cpblts(struct ly_ctx *ctx)
         if (!server_opts.wd_basic_mode) {
             VRB("with-defaults capability will not be advertised even though \"ietf-netconf-with-defaults\" model is present, unknown basic-mode.");
         } else {
-            strcpy(str, "urn:ietf:params:netconf:with-defaults:1.0");
+            strcpy(str, "urn:ietf:params:netconf:capability:with-defaults:1.0");
             switch (server_opts.wd_basic_mode) {
             case NC_WD_ALL:
                 strcat(str, "?basic-mode=report-all");
@@ -489,9 +578,9 @@ create_cpblts(struct ly_ctx *ctx)
 
     mod = ly_ctx_get_module(ctx, "nc-notifications", NULL);
     if (mod) {
-        add_cpblt(ctx, "urn:ietf:params:netconf:notification:1.0", &cpblts, &size, &count);
+        add_cpblt(ctx, "urn:ietf:params:netconf:capability:notification:1.0", &cpblts, &size, &count);
         if (server_opts.interleave_capab) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:interleave:1.0", &cpblts, &size, &count);
+            add_cpblt(ctx, "urn:ietf:params:netconf:capability:interleave:1.0", &cpblts, &size, &count);
         }
     }
 
@@ -517,14 +606,21 @@ create_cpblts(struct ly_ctx *ctx)
                 continue;
             }
 
-            sprintf(str, "%s?module=%s&amp;revision=%s", ns->value_str, name->value_str, rev->value_str);
+            str_len = sprintf(str, "%s?module=%s&amp;revision=%s", ns->value_str, name->value_str, rev->value_str);
             if (feat_count) {
                 strcat(str, "&amp;features=");
+                str_len += 14;
                 for (i = 0; i < feat_count; ++i) {
+                    if (str_len + 1 + strlen(features[i]->value_str) >= 512) {
+                        ERRINT;
+                        break;
+                    }
                     if (i) {
                         strcat(str, ",");
+                        ++str_len;
                     }
                     strcat(str, features[i]->value_str);
+                    str_len += strlen(features[i]->value_str);
                 }
             }
 
@@ -540,6 +636,8 @@ create_cpblts(struct ly_ctx *ctx)
     }
 
     lyd_free(yanglib);
+
+    nc_ctx_unlock();
 
     /* ending NULL capability */
     add_cpblt(ctx, NULL, &cpblts, &size, &count);
@@ -600,24 +698,18 @@ parse_cpblts(struct lyxml_elem *xml, const char ***list)
 }
 
 static NC_MSG_TYPE
-nc_send_hello(struct nc_session *session)
+nc_send_client_hello(struct nc_session *session)
 {
     int r, i;
     const char **cpblts;
 
-    if (session->side == NC_CLIENT) {
-        /* client side hello - send only NETCONF base capabilities */
-        cpblts = malloc(3 * sizeof *cpblts);
-        cpblts[0] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.0", 0);
-        cpblts[1] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.1", 0);
-        cpblts[2] = NULL;
+    /* client side hello - send only NETCONF base capabilities */
+    cpblts = malloc(3 * sizeof *cpblts);
+    cpblts[0] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.0", 0);
+    cpblts[1] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.1", 0);
+    cpblts[2] = NULL;
 
-        r = nc_write_msg(session, NC_MSG_HELLO, cpblts, NULL);
-    } else {
-        cpblts = create_cpblts(session->ctx);
-
-        r = nc_write_msg(session, NC_MSG_HELLO, cpblts, &session->id);
-    }
+    r = nc_write_msg(session, NC_MSG_HELLO, cpblts, NULL);
 
     for (i = 0; cpblts[i]; ++i) {
         lydict_remove(session->ctx, cpblts[i]);
@@ -626,13 +718,37 @@ nc_send_hello(struct nc_session *session)
 
     if (r) {
         return NC_MSG_ERROR;
-    } else {
-        return NC_MSG_HELLO;
     }
+
+    return NC_MSG_HELLO;
 }
 
 static NC_MSG_TYPE
-nc_recv_hello(struct nc_session *session)
+nc_send_server_hello(struct nc_session *session)
+{
+    int r, i;
+    const char **cpblts;
+
+    cpblts = create_cpblts(session->ctx);
+
+    r = nc_write_msg(session, NC_MSG_HELLO, cpblts, &session->id);
+
+    nc_ctx_lock(-1, NULL);
+    for (i = 0; cpblts[i]; ++i) {
+        lydict_remove(session->ctx, cpblts[i]);
+    }
+    nc_ctx_unlock();
+    free(cpblts);
+
+    if (r) {
+        return NC_MSG_ERROR;
+    }
+
+    return NC_MSG_HELLO;
+}
+
+static NC_MSG_TYPE
+nc_recv_client_hello(struct nc_session *session)
 {
     struct lyxml_elem *xml = NULL, *node;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
@@ -646,67 +762,43 @@ nc_recv_hello(struct nc_session *session)
     switch(msgtype) {
     case NC_MSG_HELLO:
         /* parse <hello> data */
-        if (session->side == NC_SERVER) {
-            /* get know NETCONF version */
-            LY_TREE_FOR(xml->child, node) {
-                if (!node->ns || !node->ns->value || strcmp(node->ns->value, NC_NS_BASE)) {
-                    continue;
-                } else if (strcmp(node->name, "capabilities")) {
-                    ERR("Unexpected <%s> element in client's <hello>.", node->name);
+        LY_TREE_FOR(xml->child, node) {
+            if (!node->ns || !node->ns->value || strcmp(node->ns->value, NC_NS_BASE)) {
+                continue;
+            } else if (!strcmp(node->name, "session-id")) {
+                if (!node->content || !strlen(node->content)) {
+                    ERR("No value of <session-id> element in server's <hello>.");
                     goto error;
                 }
-
-                if (flag) {
-                    /* multiple capabilities elements */
-                    ERR("Invalid <hello> message (multiple <capabilities> elements).");
+                str = NULL;
+                id = strtoll(node->content, &str, 10);
+                if (*str || id < 1 || id > UINT32_MAX) {
+                    ERR("Invalid value of <session-id> element in server's <hello>.");
                     goto error;
                 }
-                flag = 1;
-
-                if ((ver = parse_cpblts(node, NULL)) < 0) {
-                    goto error;
-                }
-                session->version = ver;
-            }
-        } else { /* NC_CLIENT */
-            LY_TREE_FOR(xml->child, node) {
-                if (!node->ns || !node->ns->value || strcmp(node->ns->value, NC_NS_BASE)) {
-                    continue;
-                } else if (!strcmp(node->name, "session-id")) {
-                    if (!node->content || !strlen(node->content)) {
-                        ERR("No value of <session-id> element in server's <hello>.");
-                        goto error;
-                    }
-                    str = NULL;
-                    id = strtoll(node->content, &str, 10);
-                    if (*str || id < 1 || id > UINT32_MAX) {
-                        ERR("Invalid value of <session-id> element in server's <hello>.");
-                        goto error;
-                    }
-                    session->id = (uint32_t)id;
-                    continue;
-                } else if (strcmp(node->name, "capabilities")) {
-                    ERR("Unexpected <%s> element in client's <hello>.", node->name);
-                    goto error;
-                }
-
-                if (flag) {
-                    /* multiple capabilities elements */
-                    ERR("Invalid <hello> message (multiple <capabilities> elements).");
-                    goto error;
-                }
-                flag = 1;
-
-                if ((ver = parse_cpblts(node, &session->cpblts)) < 0) {
-                    goto error;
-                }
-                session->version = ver;
-            }
-
-            if (!session->id) {
-                ERR("Missing <session-id> in server's <hello>.");
+                session->id = (uint32_t)id;
+                continue;
+            } else if (strcmp(node->name, "capabilities")) {
+                ERR("Unexpected <%s> element in client's <hello>.", node->name);
                 goto error;
             }
+
+            if (flag) {
+                /* multiple capabilities elements */
+                ERR("Invalid <hello> message (multiple <capabilities> elements).");
+                goto error;
+            }
+            flag = 1;
+
+            if ((ver = parse_cpblts(node, &session->cpblts)) < 0) {
+                goto error;
+            }
+            session->version = ver;
+        }
+
+        if (!session->id) {
+            ERR("Missing <session-id> in server's <hello>.");
+            goto error;
         }
         break;
     case NC_MSG_ERROR:
@@ -729,17 +821,84 @@ error:
     return NC_MSG_ERROR;
 }
 
+static NC_MSG_TYPE
+nc_recv_server_hello(struct nc_session *session)
+{
+    struct lyxml_elem *xml = NULL, *node;
+    NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
+    int ver = -1;
+    int flag = 0;
+
+    msgtype = nc_read_msg_poll(session, (server_opts.hello_timeout ? server_opts.hello_timeout * 1000 : -1), &xml);
+
+    switch (msgtype) {
+    case NC_MSG_HELLO:
+        /* get know NETCONF version */
+        LY_TREE_FOR(xml->child, node) {
+            if (!node->ns || !node->ns->value || strcmp(node->ns->value, NC_NS_BASE)) {
+                continue;
+            } else if (strcmp(node->name, "capabilities")) {
+                ERR("Unexpected <%s> element in client's <hello>.", node->name);
+                msgtype = NC_MSG_ERROR;
+                goto cleanup;
+            }
+
+            if (flag) {
+                /* multiple capabilities elements */
+                ERR("Invalid <hello> message (multiple <capabilities> elements).");
+                msgtype = NC_MSG_ERROR;
+                goto cleanup;
+            }
+            flag = 1;
+
+            if ((ver = parse_cpblts(node, NULL)) < 0) {
+                msgtype = NC_MSG_ERROR;
+                goto cleanup;
+            }
+            session->version = ver;
+        }
+        break;
+    case NC_MSG_ERROR:
+        /* nothing special, just pass it out */
+        break;
+    case NC_MSG_WOULDBLOCK:
+        ERR("Client's <hello> timeout elapsed.");
+        msgtype = NC_MSG_ERROR;
+        break;
+    default:
+        ERR("Unexpected message received instead of <hello>.");
+        msgtype = NC_MSG_ERROR;
+    }
+
+cleanup:
+    nc_ctx_lock(-1, NULL);
+    lyxml_free(session->ctx, xml);
+    nc_ctx_unlock();
+
+    return msgtype;
+}
+
 int
 nc_handshake(struct nc_session *session)
 {
     NC_MSG_TYPE type;
 
-    type = nc_send_hello(session);
+    if (session->side == NC_CLIENT) {
+        type = nc_send_client_hello(session);
+    } else {
+        type = nc_send_server_hello(session);
+    }
+
     if (type != NC_MSG_HELLO) {
         return 1;
     }
 
-    type = nc_recv_hello(session);
+    if (session->side == NC_CLIENT) {
+        type = nc_recv_client_hello(session);
+    } else {
+        type = nc_recv_server_hello(session);
+    }
+
     if (type != NC_MSG_HELLO) {
         return 1;
     }
@@ -760,6 +919,9 @@ nc_ssh_init(void)
 API void
 nc_ssh_destroy(void)
 {
+    ENGINE_cleanup();
+    CONF_modules_unload(1);
+    ERR_remove_state(0);
     ssh_finalize();
 }
 
@@ -768,6 +930,10 @@ nc_ssh_destroy(void)
 #ifdef ENABLE_TLS
 
 static pthread_mutex_t *tls_locks;
+
+struct CRYPTO_dynlock_value {
+    pthread_mutex_t lock;
+};
 
 static void
 tls_thread_locking_func(int mode, int n, const char *UNUSED(file), int UNUSED(line))
@@ -779,10 +945,44 @@ tls_thread_locking_func(int mode, int n, const char *UNUSED(file), int UNUSED(li
     }
 }
 
-static unsigned long
-tls_thread_id_func(void)
+static void
+tls_thread_id_func(CRYPTO_THREADID *tid)
 {
-    return (unsigned long)pthread_self();
+    CRYPTO_THREADID_set_numeric(tid, (unsigned long)pthread_self());
+}
+
+static struct CRYPTO_dynlock_value *
+tls_dyn_create_func(const char *UNUSED(file), int UNUSED(line))
+{
+    struct CRYPTO_dynlock_value *value;
+
+    value = malloc(sizeof *value);
+    if (!value) {
+        ERRMEM;
+        return NULL;
+    }
+    pthread_mutex_init(&value->lock, NULL);
+
+    return value;
+}
+
+static void
+tls_dyn_lock_func(int mode, struct CRYPTO_dynlock_value *l, const char *UNUSED(file), int UNUSED(line))
+{
+    /* mode can also be CRYPTO_READ or CRYPTO_WRITE, but all the examples
+     * I found ignored this fact, what do I know... */
+    if (mode & CRYPTO_LOCK) {
+        pthread_mutex_lock(&l->lock);
+    } else {
+        pthread_mutex_unlock(&l->lock);
+    }
+}
+
+static void
+tls_dyn_destroy_func(struct CRYPTO_dynlock_value *l, const char *UNUSED(file), int UNUSED(line))
+{
+    pthread_mutex_destroy(&l->lock);
+    free(l);
 }
 
 API void
@@ -799,8 +999,12 @@ nc_tls_init(void)
         pthread_mutex_init(tls_locks + i, NULL);
     }
 
-    CRYPTO_set_id_callback(tls_thread_id_func);
+    CRYPTO_THREADID_set_callback(tls_thread_id_func);
     CRYPTO_set_locking_callback(tls_thread_locking_func);
+
+    CRYPTO_set_dynlock_create_callback(tls_dyn_create_func);
+    CRYPTO_set_dynlock_lock_callback(tls_dyn_lock_func);
+    CRYPTO_set_dynlock_destroy_callback(tls_dyn_destroy_func);
 }
 
 API void
@@ -808,14 +1012,11 @@ nc_tls_destroy(void)
 {
     int i;
 
-    CRYPTO_THREADID crypto_tid;
-
-    EVP_cleanup();
     CRYPTO_cleanup_all_ex_data();
+    ERR_remove_state(0);
+    EVP_cleanup();
     ERR_free_strings();
     sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
-    CRYPTO_THREADID_current(&crypto_tid);
-    ERR_remove_thread_state(&crypto_tid);
 
     CRYPTO_set_id_callback(NULL);
     CRYPTO_set_locking_callback(NULL);
@@ -823,6 +1024,56 @@ nc_tls_destroy(void)
         pthread_mutex_destroy(tls_locks + i);
     }
     free(tls_locks);
+
+    CRYPTO_set_dynlock_create_callback(NULL);
+    CRYPTO_set_dynlock_lock_callback(NULL);
+    CRYPTO_set_dynlock_destroy_callback(NULL);
 }
 
 #endif /* ENABLE_TLS */
+
+#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+
+API void
+nc_thread_destroy(void) {
+    CRYPTO_THREADID crypto_tid;
+
+    /* caused data-races and seems not neccessary for avoiding valgrind reachable memory */
+    //CRYPTO_cleanup_all_ex_data();
+
+    CRYPTO_THREADID_current(&crypto_tid);
+    ERR_remove_thread_state(&crypto_tid);
+}
+
+#endif /* ENABLE_SSH || ENABLE_TLS */
+
+#if defined(ENABLE_SSH) && defined(ENABLE_TLS)
+
+API void
+nc_ssh_tls_init(void)
+{
+    SSL_load_error_strings();
+    ERR_load_BIO_strings();
+    SSL_library_init();
+
+    nc_ssh_init();
+
+    CRYPTO_set_dynlock_create_callback(tls_dyn_create_func);
+    CRYPTO_set_dynlock_lock_callback(tls_dyn_lock_func);
+    CRYPTO_set_dynlock_destroy_callback(tls_dyn_destroy_func);
+}
+
+API void
+nc_ssh_tls_destroy(void)
+{
+    ERR_free_strings();
+    sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
+
+    nc_ssh_destroy();
+
+    CRYPTO_set_dynlock_create_callback(NULL);
+    CRYPTO_set_dynlock_lock_callback(NULL);
+    CRYPTO_set_dynlock_destroy_callback(NULL);
+}
+
+#endif /* ENABLE_SSH && ENABLE_TLS */

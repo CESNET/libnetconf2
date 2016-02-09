@@ -27,35 +27,41 @@
 
 #include "netconf.h"
 
+/**
+ * @brief Enumeration of NETCONF errors
+ */
 typedef enum NC_ERROR {
-    NC_ERR_UNKNOWN = 0,
-    NC_ERR_IN_USE,
-    NC_ERR_INVALID_VALUE,
-    NC_ERR_TOO_BIG,
-    NC_ERR_MISSING_ATTR,
-    NC_ERR_BAD_ATTR,
-    NC_ERR_UNKNOWN_ATTR,
-    NC_ERR_MISSING_ELEM,
-    NC_ERR_BAD_ELEM,
-    NC_ERR_UNKNOWN_ELEM,
-    NC_ERR_UNKNOWN_NS,
-    NC_ERR_ACCESS_DENIED,
-    NC_ERR_LOCK_DENIED,
-    NC_ERR_RES_DENIED,
-    NC_ERR_ROLLBACK_FAILED,
-    NC_ERR_DATA_EXISTS,
-    NC_ERR_DATA_MISSING,
-    NC_ERR_OP_NOT_SUPPORTED,
-    NC_ERR_OP_FAILED,
-    NC_ERR_MALFORMED_MSG
+    NC_ERR_UNKNOWN = 0,      /**< unknown error */
+    NC_ERR_IN_USE,           /**< in-use error */
+    NC_ERR_INVALID_VALUE,    /**< invalid-value error */
+    NC_ERR_TOO_BIG,          /**< too-big error */
+    NC_ERR_MISSING_ATTR,     /**< missing-attribute error */
+    NC_ERR_BAD_ATTR,         /**< bad-attribute error */
+    NC_ERR_UNKNOWN_ATTR,     /**< unknown-attribute error */
+    NC_ERR_MISSING_ELEM,     /**< missing-element error */
+    NC_ERR_BAD_ELEM,         /**< bad-element error */
+    NC_ERR_UNKNOWN_ELEM,     /**< unknown-element error */
+    NC_ERR_UNKNOWN_NS,       /**< unknown-namespace error */
+    NC_ERR_ACCESS_DENIED,    /**< access-denied error */
+    NC_ERR_LOCK_DENIED,      /**< lock-denied error */
+    NC_ERR_RES_DENIED,       /**< resource-denied error */
+    NC_ERR_ROLLBACK_FAILED,  /**< rollback-failed error */
+    NC_ERR_DATA_EXISTS,      /**< data-exists error */
+    NC_ERR_DATA_MISSING,     /**< data-missing error */
+    NC_ERR_OP_NOT_SUPPORTED, /**< operation-not-supported error */
+    NC_ERR_OP_FAILED,        /**< operation-failed error */
+    NC_ERR_MALFORMED_MSG     /**< malformed-message error */
 } NC_ERR;
 
+/**
+ * @brief Enumeration of NETCONF error type (layer)
+ */
 typedef enum NC_ERROR_TYPE {
-    NC_ERR_TYPE_UNKNOWN = 0,
-    NC_ERR_TYPE_TRAN,
-    NC_ERR_TYPE_RPC,
-    NC_ERR_TYPE_PROT,
-    NC_ERR_TYPE_APP
+    NC_ERR_TYPE_UNKNOWN = 0, /**< unknown layer */
+    NC_ERR_TYPE_TRAN,        /**< transport layer */
+    NC_ERR_TYPE_RPC,         /**< RPC layer */
+    NC_ERR_TYPE_PROT,        /**< protocol layer */
+    NC_ERR_TYPE_APP          /**< application layer */
 } NC_ERR_TYPE;
 
 /**
@@ -111,7 +117,7 @@ int nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_erro
  * - #NC_ERR_INVALID_VALUE
  * - #NC_ERR_ACCESS_DENIED
  * - #NC_ERR_ROLLBACK_FAILED
- * - #NC_ERR_NOT_SUPPORTED
+ * - #NC_ERR_OP_NOT_SUPPORTED
  * - #NC_ERR_TOO_BIG
  * - #NC_ERR_RES_DENIED
  * - #NC_ERR_OP_FAILED
@@ -135,7 +141,7 @@ int nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_erro
  *   - `uint32_t session_id;` - error \<session-id\> value.
  * - #NC_ERR_DATA_EXISTS
  * - #NC_ERR_DATA_MISSING
- * - #NC_ERR_MALFORMED_MESSAGE
+ * - #NC_ERR_MALFORMED_MSG
  *   - no additional arguments
  * @return Server error structure, NULL on error.
  */
@@ -164,7 +170,7 @@ int nc_err_set_path(struct nc_server_error *err, const char *error_path);
  *
  * @param[in] err Error to modify.
  * @param[in] error_message New value of \<error-message\>.
- * @param[in] lang Optional language of \p error-message.
+ * @param[in] lang Optional language of \p error_message.
  * @return 0 on success, -1 on error.
  */
 int nc_err_set_msg(struct nc_server_error *err, const char *error_message, const char *lang);
@@ -173,7 +179,7 @@ int nc_err_set_msg(struct nc_server_error *err, const char *error_message, const
  * @brief Set the \<session-id\> element of an error. Any previous value will be overwritten.
  *
  * @param[in] err Error to modify.
- * @param[in] session-id New value of \<session-id\>.
+ * @param[in] session_id New value of \<session-id\>.
  * @return 0 on success, -1 on error.
  */
 int nc_err_set_sid(struct nc_server_error *err, uint32_t session_id);

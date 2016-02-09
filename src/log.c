@@ -38,7 +38,10 @@ API void
 nc_verbosity(NC_VERB_LEVEL level)
 {
     verbose_level = level;
-    ly_verb(level);
+    ly_verb((LY_LOG_LEVEL)level);
+#ifdef ENABLE_SSH
+    ssh_set_log_level(level);
+#endif
 }
 
 struct {
@@ -84,37 +87,4 @@ nc_set_print_clb(void (*clb)(NC_VERB_LEVEL, const char *))
 {
     print_clb = clb;
     ly_set_log_clb((void (*)(LY_LOG_LEVEL, const char *))clb);
-}
-
-API void
-nc_verb_verbose(const char *format, ...)
-{
-    va_list argptr;
-    if (verbose_level >= NC_VERB_VERBOSE) {
-        va_start(argptr, format);
-        prv_vprintf(NC_VERB_VERBOSE, format, argptr);
-        va_end(argptr);
-    }
-}
-
-API void
-nc_verb_warning(const char *format, ...)
-{
-    va_list argptr;
-
-    if (verbose_level >= NC_VERB_WARNING) {
-        va_start(argptr, format);
-        prv_vprintf(NC_VERB_WARNING, format, argptr);
-        va_end(argptr);
-    }
-}
-
-API void
-nc_verb_error(const char *format, ...)
-{
-    va_list argptr;
-
-    va_start(argptr, format);
-    prv_vprintf(NC_VERB_ERROR, format, argptr);
-    va_end(argptr);
 }

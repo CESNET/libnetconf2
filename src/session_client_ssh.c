@@ -46,25 +46,38 @@
 #include <libssh/libssh.h>
 #include <libyang/libyang.h>
 
+#include "session_client.h"
+#include "session_client_ch.h"
 #include "libnetconf.h"
 
-static struct nc_ssh_client_opts ssh_opts = {
+extern struct nc_client_opts client_opts;
+
+static struct nc_client_ssh_opts ssh_opts = {
     .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 1}}
 };
 
-API void
-nc_ssh_client_destroy(void)
+static struct nc_client_ssh_opts ssh_ch_opts = {
+    .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}}
+};
+
+static void
+_nc_client_ssh_destroy_opts(struct nc_client_ssh_opts *opts)
 {
     int i;
 
-    for (i = 0; i < ssh_opts.key_count; ++i) {
-        free(ssh_opts.keys[i].pubkey_path);
-        free(ssh_opts.keys[i].privkey_path);
+    for (i = 0; i < opts->key_count; ++i) {
+        free(opts->keys[i].pubkey_path);
+        free(opts->keys[i].privkey_path);
     }
+    free(opts->keys);
+    free(opts->username);
+}
 
-    free(ssh_opts.keys);
-    ssh_opts.keys = NULL;
-    ssh_opts.key_count = 0;
+API void
+nc_client_ssh_destroy_opts(void)
+{
+    _nc_client_ssh_destroy_opts(&ssh_opts);
+    _nc_client_ssh_destroy_opts(&ssh_ch_opts);
 }
 
 static char *
@@ -76,12 +89,6 @@ sshauth_password(const char *username, const char *hostname)
     struct termios newterm, oldterm;
     FILE *tty;
 
-    buf = malloc(buflen * sizeof *buf);
-    if (!buf) {
-        ERRMEM;
-        return NULL;
-    }
-
     if (!(tty = fopen("/dev/tty", "r+"))) {
         ERR("Unable to open the current terminal (%s).", strerror(errno));
         return NULL;
@@ -89,6 +96,7 @@ sshauth_password(const char *username, const char *hostname)
 
     if (tcgetattr(fileno(tty), &oldterm)) {
         ERR("Unable to get terminal settings (%s).", strerror(errno));
+        fclose(tty);
         return NULL;
     }
 
@@ -102,6 +110,14 @@ sshauth_password(const char *username, const char *hostname)
     tcflush(fileno(tty), TCIFLUSH);
     if (tcsetattr(fileno(tty), TCSANOW, &newterm)) {
         ERR("Unable to change terminal settings for hiding password (%s).", strerror(errno));
+        fclose(tty);
+        return NULL;
+    }
+
+    buf = malloc(buflen * sizeof *buf);
+    if (!buf) {
+        ERRMEM;
+        fclose(tty);
         return NULL;
     }
 
@@ -120,6 +136,7 @@ sshauth_password(const char *username, const char *hostname)
                 if (tcsetattr(fileno(tty), TCSANOW, &oldterm) != 0) {
                     ERR("Unable to restore terminal settings (%s).", strerror(errno));
                 }
+                fclose(tty);
                 return NULL;
             } else {
                 buf = newbuf;
@@ -160,23 +177,27 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
 
     if (tcgetattr(fileno(tty), &oldterm) != 0) {
         ERR("Unable to get terminal settings (%s).", strerror(errno));
+        fclose(tty);
         return NULL;
     }
 
     if (auth_name && (!fwrite(auth_name, sizeof(char), strlen(auth_name), tty)
             || !fwrite("\n", sizeof(char), 1, tty))) {
         ERR("Writing the auth method name into stdout failed.");
+        fclose(tty);
         return NULL;
     }
 
     if (instruction && (!fwrite(instruction, sizeof(char), strlen(instruction), tty)
             || !fwrite("\n", sizeof(char), 1, tty))) {
         ERR("Writing the instruction into stdout failed.");
+        fclose(tty);
         return NULL;
     }
 
     if (!fwrite(prompt, sizeof(char), strlen(prompt), tty)) {
         ERR("Writing the authentication prompt into stdout failed.");
+        fclose(tty);
         return NULL;
     }
     fflush(tty);
@@ -187,6 +208,7 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
         tcflush(fileno(tty), TCIFLUSH);
         if (tcsetattr(fileno(tty), TCSANOW, &newterm)) {
             ERR("Unable to change terminal settings for hiding password (%s).", strerror(errno));
+            fclose(tty);
             return NULL;
         }
     }
@@ -199,6 +221,7 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
         if (tcsetattr(fileno(tty), TCSANOW, &oldterm)) {
             ERR("Unable to restore terminal settings (%s).", strerror(errno));
         }
+        fclose(tty);
         return NULL;
     }
 
@@ -214,6 +237,7 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
                 if (tcsetattr(fileno(tty), TCSANOW, &oldterm)) {
                     ERR("Unable to restore terminal settings (%s).", strerror(errno));
                 }
+                fclose(tty);
                 return NULL;
             } else {
                 response = newtext;
@@ -255,12 +279,12 @@ sshauth_passphrase(const char* privkey_path)
 
     if (!(tty = fopen("/dev/tty", "r+"))) {
         ERR("Unable to open the current terminal (%s).", strerror(errno));
-        return NULL;
+        goto fail;
     }
 
     if (tcgetattr(fileno(tty), &oldterm)) {
         ERR("Unable to get terminal settings (%s).", strerror(errno));
-        return NULL;
+        goto fail;
     }
 
     fprintf(tty, "Enter passphrase for the key '%s':", privkey_path);
@@ -273,7 +297,7 @@ sshauth_passphrase(const char* privkey_path)
     tcflush(fileno(tty), TCIFLUSH);
     if (tcsetattr(fileno(tty), TCSANOW, &newterm)) {
         ERR("Unable to change terminal settings for hiding password (%s).", strerror(errno));
-        return NULL;
+        goto fail;
     }
 
     while ((fread(&c, 1, 1, tty) == 1) && (c != '\n')) {
@@ -282,16 +306,11 @@ sshauth_passphrase(const char* privkey_path)
             newbuf = realloc(buf, buflen * sizeof *newbuf);
             if (!newbuf) {
                 ERRMEM;
-                /* remove content of the buffer */
-                memset(buf, 0, len);
-                free(buf);
-
                 /* restore terminal settings */
                 if (tcsetattr(fileno(tty), TCSANOW, &oldterm)) {
                     ERR("Unable to restore terminal settings (%s).", strerror(errno));
                 }
-
-                return NULL;
+                goto fail;
             }
             buf = newbuf;
         }
@@ -312,9 +331,15 @@ sshauth_passphrase(const char* privkey_path)
 
     fclose(tty);
     return buf;
+
+fail:
+    free(buf);
+    if (tty) {
+        fclose(tty);
+    }
+    return NULL;
 }
 
-/* TODO define this switch */
 #ifdef ENABLE_DNSSEC
 
 /* return 0 (DNSSEC + key valid), 1 (unsecure DNS + key valid), 2 (key not found or an error) */
@@ -408,7 +433,7 @@ finish:
     return ret;
 }
 
-#endif
+#endif /* ENABLE_DNSSEC */
 
 static int
 sshauth_hostkey_check(const char *hostname, ssh_session session)
@@ -469,7 +494,7 @@ hostkey_not_known:
 
             /* DNSSEC SSHFP check successful, that's enough */
             if (!ret) {
-                DBG("DNSSEC SSHFP check successful");
+                VRB("DNSSEC SSHFP check successful.");
                 ssh_write_knownhost(session);
                 ssh_clean_pubkey_hash(&hash_sha1);
                 ssh_string_free_char(hexa);
@@ -484,9 +509,9 @@ hostkey_not_known:
 
 #ifdef ENABLE_DNSSEC
         if (ret == 2) {
-            fprintf(stdout, "No matching host key fingerprint found in DNS.\n");
+            fprintf(stdout, "No matching host key fingerprint found using DNS.\n");
         } else if (ret == 1) {
-            fprintf(stdout, "Matching host key fingerprint found in DNS.\n");
+            fprintf(stdout, "Matching host key fingerprint found using DNS.\n");
         }
 #endif
 
@@ -503,8 +528,8 @@ hostkey_not_known:
             if (!strcmp("yes", answer)) {
                 /* store the key into the host file */
                 ret = ssh_write_knownhost(session);
-                if (ret < 0) {
-                    WRN("Adding the known host %s failed (%s).", hostname, ssh_get_error(session));
+                if (ret != SSH_OK) {
+                    WRN("Adding the known host \"%s\" failed (%s).", hostname, ssh_get_error(session));
                 }
             } else if (!strcmp("no", answer)) {
                 goto fail;
@@ -531,8 +556,8 @@ fail:
     return -1;
 }
 
-API int
-nc_ssh_client_add_keypair(const char *pub_key, const char *priv_key)
+static int
+_nc_client_ssh_add_keypair(const char *pub_key, const char *priv_key, struct nc_client_ssh_opts *opts)
 {
     int i;
     FILE *key;
@@ -543,15 +568,15 @@ nc_ssh_client_add_keypair(const char *pub_key, const char *priv_key)
         return -1;
     }
 
-    for (i = 0; i < ssh_opts.key_count; ++i) {
-        if (!strcmp(ssh_opts.keys[i].pubkey_path, pub_key) || !strcmp(ssh_opts.keys[i].privkey_path, priv_key)) {
-            if (strcmp(ssh_opts.keys[i].pubkey_path, pub_key)) {
+    for (i = 0; i < opts->key_count; ++i) {
+        if (!strcmp(opts->keys[i].pubkey_path, pub_key) || !strcmp(opts->keys[i].privkey_path, priv_key)) {
+            if (strcmp(opts->keys[i].pubkey_path, pub_key)) {
                 WRN("Private key \"%s\" found with another public key \"%s\".",
-                    priv_key, ssh_opts.keys[i].pubkey_path);
+                    priv_key, opts->keys[i].pubkey_path);
                 continue;
-            } else if (strcmp(ssh_opts.keys[i].privkey_path, priv_key)) {
+            } else if (strcmp(opts->keys[i].privkey_path, priv_key)) {
                 WRN("Public key \"%s\" found with another private key \"%s\".",
-                    pub_key, ssh_opts.keys[i].privkey_path);
+                    pub_key, opts->keys[i].privkey_path);
                 continue;
             }
 
@@ -560,12 +585,12 @@ nc_ssh_client_add_keypair(const char *pub_key, const char *priv_key)
         }
     }
 
-    /* add the keys safely */
-    ++ssh_opts.key_count;
-    ssh_opts.keys = realloc(ssh_opts.keys, ssh_opts.key_count * sizeof *ssh_opts.keys);
-    ssh_opts.keys[ssh_opts.key_count - 1].pubkey_path = strdup(pub_key);
-    ssh_opts.keys[ssh_opts.key_count - 1].privkey_path = strdup(priv_key);
-    ssh_opts.keys[ssh_opts.key_count - 1].privkey_crypt = 0;
+    /* add the keys */
+    ++opts->key_count;
+    opts->keys = realloc(opts->keys, opts->key_count * sizeof *opts->keys);
+    opts->keys[opts->key_count - 1].pubkey_path = strdup(pub_key);
+    opts->keys[opts->key_count - 1].privkey_path = strdup(priv_key);
+    opts->keys[opts->key_count - 1].privkey_crypt = 0;
 
     /* check encryption */
     if ((key = fopen(priv_key, "r"))) {
@@ -583,7 +608,7 @@ nc_ssh_client_add_keypair(const char *pub_key, const char *priv_key)
         }
         fclose(key);
         if (strcasestr(line, "encrypted")) {
-            ssh_opts.keys[ssh_opts.key_count - 1].privkey_crypt = 1;
+            opts->keys[opts->key_count - 1].privkey_crypt = 1;
         }
     }
 
@@ -591,85 +616,224 @@ nc_ssh_client_add_keypair(const char *pub_key, const char *priv_key)
 }
 
 API int
-nc_ssh_client_del_keypair(int idx)
+nc_client_ssh_add_keypair(const char *pub_key, const char *priv_key)
 {
-    if (idx >= ssh_opts.key_count) {
+    return _nc_client_ssh_add_keypair(pub_key, priv_key, &ssh_opts);
+}
+
+API int
+nc_client_ssh_ch_add_keypair(const char *pub_key, const char *priv_key)
+{
+    return _nc_client_ssh_add_keypair(pub_key, priv_key, &ssh_ch_opts);
+}
+
+static int
+_nc_client_ssh_del_keypair(int idx, struct nc_client_ssh_opts *opts)
+{
+    if (idx >= opts->key_count) {
         ERRARG;
         return -1;
     }
 
-    free(ssh_opts.keys[idx].pubkey_path);
-    free(ssh_opts.keys[idx].privkey_path);
+    free(opts->keys[idx].pubkey_path);
+    free(opts->keys[idx].privkey_path);
 
-    --ssh_opts.key_count;
-
-    memcpy(ssh_opts.keys + idx, ssh_opts.keys + ssh_opts.key_count, sizeof *ssh_opts.keys);
-    ssh_opts.keys = realloc(ssh_opts.keys, ssh_opts.key_count * sizeof *ssh_opts.keys);
+    --opts->key_count;
+    if (idx < opts->key_count) {
+        memcpy(&opts->keys[idx], &opts->keys[opts->key_count], sizeof *opts->keys);
+    }
+    if (opts->key_count) {
+        opts->keys = realloc(opts->keys, opts->key_count * sizeof *opts->keys);
+    } else {
+        free(opts->keys);
+        opts->keys = NULL;
+    }
 
     return 0;
 }
 
 API int
-nc_ssh_client_get_keypair_count(void)
+nc_client_ssh_del_keypair(int idx)
 {
-    return ssh_opts.key_count;
+    return _nc_client_ssh_del_keypair(idx, &ssh_opts);
 }
 
 API int
-nc_ssh_client_get_keypair(int idx, const char **pub_key, const char **priv_key)
+nc_client_ssh_ch_del_keypair(int idx)
 {
-    if ((idx >= ssh_opts.key_count) || (!pub_key && !priv_key)) {
+    return _nc_client_ssh_del_keypair(idx, &ssh_ch_opts);
+}
+
+static int
+_nc_client_ssh_get_keypair_count(struct nc_client_ssh_opts *opts)
+{
+    return opts->key_count;
+}
+
+API int
+nc_client_ssh_get_keypair_count(void)
+{
+    return _nc_client_ssh_get_keypair_count(&ssh_opts);
+}
+
+API int
+nc_client_ssh_ch_get_keypair_count(void)
+{
+    return _nc_client_ssh_get_keypair_count(&ssh_ch_opts);
+}
+
+static int
+_nc_client_ssh_get_keypair(int idx, const char **pub_key, const char **priv_key, struct nc_client_ssh_opts *opts)
+{
+    if ((idx >= opts->key_count) || (!pub_key && !priv_key)) {
         ERRARG;
         return -1;
     }
 
     if (pub_key) {
-        *pub_key = ssh_opts.keys[idx].pubkey_path;
+        *pub_key = opts->keys[idx].pubkey_path;
     }
     if (priv_key) {
-        *priv_key = ssh_opts.keys[idx].privkey_path;
+        *priv_key = opts->keys[idx].privkey_path;
     }
 
     return 0;
 }
 
-API void
-nc_ssh_client_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, short int pref)
+API int
+nc_client_ssh_get_keypair(int idx, const char **pub_key, const char **priv_key)
+{
+    return _nc_client_ssh_get_keypair(idx, pub_key, priv_key, &ssh_opts);
+}
+
+API int
+nc_client_ssh_ch_get_keypair(int idx, const char **pub_key, const char **priv_key)
+{
+    return _nc_client_ssh_get_keypair(idx, pub_key, priv_key, &ssh_ch_opts);
+}
+
+static void
+_nc_client_ssh_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref, struct nc_client_ssh_opts *opts)
 {
     if (pref < 0) {
         pref = -1;
     }
 
     if (auth_type == NC_SSH_AUTH_INTERACTIVE) {
-        ssh_opts.auth_pref[0].value = pref;
+        opts->auth_pref[0].value = pref;
     } else if (auth_type == NC_SSH_AUTH_PASSWORD) {
-        ssh_opts.auth_pref[1].value = pref;
+        opts->auth_pref[1].value = pref;
     } else if (auth_type == NC_SSH_AUTH_PUBLICKEY) {
-        ssh_opts.auth_pref[2].value = pref;
+        opts->auth_pref[2].value = pref;
     }
 }
 
-API short int
-nc_ssh_client_get_auth_pref(NC_SSH_AUTH_TYPE auth_type)
+API void
+nc_client_ssh_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref)
 {
-    short int pref = 0;
+    _nc_client_ssh_set_auth_pref(auth_type, pref, &ssh_opts);
+}
+
+API void
+nc_client_ssh_ch_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref)
+{
+    _nc_client_ssh_set_auth_pref(auth_type, pref, &ssh_ch_opts);
+}
+
+static int16_t
+_nc_client_ssh_get_auth_pref(NC_SSH_AUTH_TYPE auth_type, struct nc_client_ssh_opts *opts)
+{
+    int16_t pref = 0;
 
     if (auth_type == NC_SSH_AUTH_INTERACTIVE) {
-        pref = ssh_opts.auth_pref[0].value;
+        pref = opts->auth_pref[0].value;
     } else if (auth_type == NC_SSH_AUTH_PASSWORD) {
-        pref = ssh_opts.auth_pref[1].value;
+        pref = opts->auth_pref[1].value;
     } else if (auth_type == NC_SSH_AUTH_PUBLICKEY) {
-        pref = ssh_opts.auth_pref[2].value;
+        pref = opts->auth_pref[2].value;
     }
 
     return pref;
 }
 
-/* Establish a secure SSH connection, authenticate, and create a channel with the 'netconf' subsystem.
+API int16_t
+nc_client_ssh_get_auth_pref(NC_SSH_AUTH_TYPE auth_type)
+{
+    return _nc_client_ssh_get_auth_pref(auth_type, &ssh_opts);
+}
+
+API int16_t
+nc_client_ssh_ch_get_auth_pref(NC_SSH_AUTH_TYPE auth_type)
+{
+    return _nc_client_ssh_get_auth_pref(auth_type, &ssh_ch_opts);
+}
+
+static int
+_nc_client_ssh_set_username(const char *username, struct nc_client_ssh_opts *opts)
+{
+    if (opts->username) {
+        free(opts->username);
+    }
+    if (username) {
+        opts->username = strdup(username);
+        if (!opts->username) {
+            ERRMEM;
+            return -1;
+        }
+    } else {
+        opts->username = NULL;
+    }
+
+    return 0;
+}
+
+API int
+nc_client_ssh_set_username(const char *username)
+{
+    return _nc_client_ssh_set_username(username, &ssh_opts);
+}
+
+API int
+nc_client_ssh_ch_set_username(const char *username)
+{
+    return _nc_client_ssh_set_username(username, &ssh_ch_opts);
+}
+
+static const char *
+_nc_client_ssh_get_username(struct nc_client_ssh_opts *opts)
+{
+    return opts->username;
+}
+
+API const char *
+nc_client_ssh_get_username(void)
+{
+    return _nc_client_ssh_get_username(&ssh_opts);
+}
+
+API const char *
+nc_client_ssh_ch_get_username(void)
+{
+    return _nc_client_ssh_get_username(&ssh_ch_opts);
+}
+
+API int
+nc_client_ssh_ch_add_bind_listen(const char *address, uint16_t port)
+{
+    return nc_client_ch_add_bind_listen(address, port, NC_TI_LIBSSH);
+}
+
+API int
+nc_client_ssh_ch_del_bind(const char *address, uint16_t port)
+{
+    return nc_client_ch_del_bind(address, port, NC_TI_LIBSSH);
+}
+
+/* Establish a secure SSH connection and authenticate.
  * Host, port, username, and a connected socket is expected to be set.
  */
 static int
-connect_ssh_session_netconf(struct nc_session *session)
+connect_ssh_session(struct nc_session *session)
 {
     int j, ret_auth, userauthlist;
     NC_SSH_AUTH_TYPE auth;
@@ -727,7 +891,6 @@ connect_ssh_session_netconf(struct nc_session *session)
         }
         if ((userauthlist & SSH_AUTH_METHOD_PUBLICKEY) && (ssh_opts.auth_pref[2].value > pref)) {
             auth = NC_SSH_AUTH_PUBLICKEY;
-            pref = ssh_opts.auth_pref[2].value;
         }
 
         if (!auth) {
@@ -740,7 +903,7 @@ connect_ssh_session_netconf(struct nc_session *session)
         case NC_SSH_AUTH_PASSWORD:
             userauthlist &= ~SSH_AUTH_METHOD_PASSWORD;
 
-            VRB("Password authentication (host %s, user %s).", session->host, session->username);
+            VRB("Password authentication (host \"%s\", user \"%s\").", session->host, session->username);
             s = sshauth_password(session->username, session->host);
             if ((ret_auth = ssh_userauth_password(ssh_sess, session->username, s)) != SSH_AUTH_SUCCESS) {
                 memset(s, 0, strlen(s));
@@ -786,7 +949,7 @@ connect_ssh_session_netconf(struct nc_session *session)
             }
 
             for (j = 0; j < ssh_opts.key_count; j++) {
-                VRB("Trying to authenticate using %spair %s %s.",
+                VRB("Trying to authenticate using %spair \"%s\" \"%s\".",
                      ssh_opts.keys[j].privkey_crypt ? "password-protected " : "", ssh_opts.keys[j].privkey_path,
                      ssh_opts.keys[j].pubkey_path);
 
@@ -846,6 +1009,29 @@ connect_ssh_session_netconf(struct nc_session *session)
         return -1;
     }
 
+    return 0;
+}
+
+/* Open new SSH channel and request the 'netconf' subsystem.
+ * SSH connection is expected to be established.
+ */
+static int
+open_netconf_channel(struct nc_session *session)
+{
+    ssh_session ssh_sess;
+
+    ssh_sess = session->ti.libssh.session;
+
+    if (!ssh_is_connected(ssh_sess)) {
+        ERR("SSH session not connected.");
+        return -1;
+    }
+
+    if (session->ti.libssh.channel) {
+        ERR("SSH channel already created.");
+        return -1;
+    }
+
     /* open a channel */
     session->ti.libssh.channel = ssh_channel_new(ssh_sess);
     if (ssh_channel_open_session(session->ti.libssh.channel) != SSH_OK) {
@@ -863,14 +1049,16 @@ connect_ssh_session_netconf(struct nc_session *session)
         return -1;
     }
 
-    return EXIT_SUCCESS;
+    return 0;
 }
 
 API struct nc_session *
-nc_connect_ssh(const char *host, uint16_t port, const char *username, struct ly_ctx *ctx)
+nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
 {
     const int timeout = NC_SSH_TIMEOUT;
     int sock;
+    uint32_t port_uint;
+    char *username;
     struct passwd *pw;
     struct nc_session *session = NULL;
 
@@ -882,8 +1070,9 @@ nc_connect_ssh(const char *host, uint16_t port, const char *username, struct ly_
     if (!port) {
         port = NC_PORT_SSH;
     }
+    port_uint = port;
 
-    if (!username) {
+    if (!ssh_opts.username) {
         pw = getpwuid(getuid());
         if (!pw) {
             ERR("Unknown username for the SSH connection (%s).", strerror(errno));
@@ -891,6 +1080,8 @@ nc_connect_ssh(const char *host, uint16_t port, const char *username, struct ly_
         } else {
             username = pw->pw_name;
         }
+    } else {
+        username = ssh_opts.username;
     }
 
     /* prepare session structure */
@@ -920,7 +1111,7 @@ nc_connect_ssh(const char *host, uint16_t port, const char *username, struct ly_
 
     /* set some basic SSH session options */
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
-    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_PORT, &port);
+    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_PORT, &port_uint);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_TIMEOUT, &timeout);
     if (ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOSTKEYS,
@@ -931,7 +1122,7 @@ nc_connect_ssh(const char *host, uint16_t port, const char *username, struct ly_
     }
 
     /* create and assign communication socket */
-    sock = nc_connect_getsocket(host, port);
+    sock = nc_sock_connect(host, port);
     if (sock == -1) {
         goto fail;
     }
@@ -940,13 +1131,17 @@ nc_connect_ssh(const char *host, uint16_t port, const char *username, struct ly_
     /* temporarily, for session connection */
     session->host = host;
     session->username = username;
-    if (connect_ssh_session_netconf(session)) {
+    if (connect_ssh_session(session) || open_netconf_channel(session)) {
         goto fail;
     }
 
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = ly_ctx_new(SCHEMAS_DIR);
+        if (client_opts.schema_searchpath) {
+            ctx = ly_ctx_new(client_opts.schema_searchpath);
+        } else {
+            ctx = ly_ctx_new(SCHEMAS_DIR);
+        }
     } else {
         session->flags |= NC_SESSION_SHAREDCTX;
     }
@@ -958,7 +1153,7 @@ nc_connect_ssh(const char *host, uint16_t port, const char *username, struct ly_
     }
     session->status = NC_STATUS_RUNNING;
 
-    if (nc_ctx_check_and_fill(session)) {
+    if (nc_ctx_check_and_fill(session) == -1) {
         goto fail;
     }
 
@@ -982,6 +1177,11 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
     int sock;
     struct passwd *pw;
     struct nc_session *session = NULL;
+
+    if (!ssh_session) {
+        ERRARG;
+        return NULL;
+    }
 
     /* prepare session structure */
     session = calloc(1, sizeof *session);
@@ -1017,7 +1217,7 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
         ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
 
         /* create and connect socket */
-        sock = nc_connect_getsocket(host, port);
+        sock = nc_sock_connect(host, port);
         if (sock == -1) {
             goto fail;
         }
@@ -1034,31 +1234,45 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
 
         /* remember username */
         if (!username) {
-            pw = getpwuid(getuid());
-            if (!pw) {
-                ERR("Unknown username for the SSH connection (%s).", strerror(errno));
-                goto fail;
+            if (!ssh_opts.username) {
+                pw = getpwuid(getuid());
+                if (!pw) {
+                    ERR("Unknown username for the SSH connection (%s).", strerror(errno));
+                    goto fail;
+                }
+                username = strdup(pw->pw_name);
+            } else {
+                username = strdup(ssh_opts.username);
             }
-
-            username = strdup(pw->pw_name);
             ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
         }
 
         /* authenticate SSH session */
         session->host = host;
         session->username = username;
-        if (connect_ssh_session_netconf(session)) {
+        if (connect_ssh_session(session)) {
             goto fail;
         }
     }
 
     /*
-     * SSH session is established, create NETCONF session. (Application layer)
+     * Almost done, open a netconf channel. (Transport layer / application layer)
+     */
+    if (open_netconf_channel(session)) {
+        goto fail;
+    }
+
+    /*
+     * SSH session is established and netconf channel opened, create a NETCONF session. (Application layer)
      */
 
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = ly_ctx_new(SCHEMAS_DIR);
+        if (client_opts.schema_searchpath) {
+            ctx = ly_ctx_new(client_opts.schema_searchpath);
+        } else {
+            ctx = ly_ctx_new(SCHEMAS_DIR);
+        }
     } else {
         session->flags |= NC_SESSION_SHAREDCTX;
     }
@@ -1070,7 +1284,7 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
     }
     session->status = NC_STATUS_RUNNING;
 
-    if (nc_ctx_check_and_fill(session)) {
+    if (nc_ctx_check_and_fill(session) == -1) {
         goto fail;
     }
 
@@ -1097,6 +1311,11 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
 {
     struct nc_session *new_session, *ptr;
 
+    if (!session) {
+        ERRARG;
+        return NULL;
+    }
+
     /* prepare session structure */
     new_session = calloc(1, sizeof *new_session);
     if (!new_session) {
@@ -1115,20 +1334,17 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     pthread_mutex_lock(new_session->ti_lock);
 
     /* open a channel */
-    new_session->ti.libssh.channel = ssh_channel_new(new_session->ti.libssh.session);
-    if (ssh_channel_open_session(new_session->ti.libssh.channel) != SSH_OK) {
-        ERR("Opening an SSH channel failed (%s).", ssh_get_error(new_session->ti.libssh.session));
-        goto fail;
-    }
-    /* execute the NETCONF subsystem on the channel */
-    if (ssh_channel_request_subsystem(new_session->ti.libssh.channel, "netconf") != SSH_OK) {
-        ERR("Starting the \"netconf\" SSH subsystem failed (%s).", ssh_get_error(new_session->ti.libssh.session));
+    if (open_netconf_channel(new_session)) {
         goto fail;
     }
 
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = ly_ctx_new(SCHEMAS_DIR);
+        if (client_opts.schema_searchpath) {
+            ctx = ly_ctx_new(client_opts.schema_searchpath);
+        } else {
+            ctx = ly_ctx_new(SCHEMAS_DIR);
+        }
     } else {
         new_session->flags |= NC_SESSION_SHAREDCTX;
     }
@@ -1142,7 +1358,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
 
     pthread_mutex_unlock(new_session->ti_lock);
 
-    if (nc_ctx_check_and_fill(new_session)) {
+    if (nc_ctx_check_and_fill(new_session) == -1) {
         goto fail;
     }
 
@@ -1168,22 +1384,12 @@ fail:
     return NULL;
 }
 
-API struct nc_session *
-nc_callhome_accept_ssh(uint16_t port, const char *username, int timeout, struct ly_ctx *ctx)
+struct nc_session *
+nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx)
 {
     const int ssh_timeout = NC_SSH_TIMEOUT;
-    int sock;
-    char *server_host;
+    struct passwd *pw;
     ssh_session sess;
-
-    if (!port) {
-        port = NC_PORT_CH_SSH;
-    }
-
-    sock = nc_callhome_accept_connection(port, timeout, NULL, &server_host);
-    if (sock == -1) {
-        return NULL;
-    }
 
     sess = ssh_new();
     if (!sess) {
@@ -1193,11 +1399,18 @@ nc_callhome_accept_ssh(uint16_t port, const char *username, int timeout, struct 
     }
 
     ssh_options_set(sess, SSH_OPTIONS_FD, &sock);
-    ssh_options_set(sess, SSH_OPTIONS_HOST, server_host);
+    ssh_options_set(sess, SSH_OPTIONS_HOST, host);
     ssh_options_set(sess, SSH_OPTIONS_PORT, &port);
     ssh_options_set(sess, SSH_OPTIONS_TIMEOUT, &ssh_timeout);
-    if (username) {
-        ssh_options_set(sess, SSH_OPTIONS_USER, username);
+    if (!ssh_ch_opts.username) {
+        pw = getpwuid(getuid());
+        if (!pw) {
+            ERR("Unknown username for the SSH connection (%s).", strerror(errno));
+            return NULL;
+        }
+        ssh_options_set(sess, SSH_OPTIONS_USER, pw->pw_name);
+    } else {
+        ssh_options_set(sess, SSH_OPTIONS_USER, ssh_ch_opts.username);
     }
     if (ssh_options_set(sess, SSH_OPTIONS_HOSTKEYS,
                         "ssh-ed25519,ecdsa-sha2-nistp521,ecdsa-sha2-nistp384,"
@@ -1205,8 +1418,6 @@ nc_callhome_accept_ssh(uint16_t port, const char *username, int timeout, struct 
         /* ecdsa is probably not supported... */
         ssh_options_set(sess, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519,ssh-rsa,ssh-dss,ssh-rsa1");
     }
-
-    free(server_host);
 
     return nc_connect_libssh(sess, ctx);
 }
