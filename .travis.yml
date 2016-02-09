@@ -15,9 +15,9 @@ branches:
 before_install:
   - sudo apt-get install -y zlib1g-dev
   - sudo apt-get install -y libssl-dev
-  - wget https://red.libssh.org/attachments/download/121/libssh-0.6.5.tar.xz
-  - tar -xJf libssh-0.6.5.tar.xz
-  - mkdir libssh-0.6.5/build && cd libssh-0.6.5/build
+  - wget https://red.libssh.org/attachments/download/177/libssh-0.7.2.tar.xz
+  - tar -xJf libssh-0.7.2.tar.xz
+  - mkdir libssh-0.7.2/build && cd libssh-0.7.2/build
   - cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
   - cd ../..
 
