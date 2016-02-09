@@ -36,7 +36,7 @@ before_install:
   - if [ "${CC}" = "gcc" ]; then pip install --user codecov; fi
 
 script: 
-  - mkdir build && cd build ; cmake -DENABLE_TLS=ON -DENABLE_SSH=ON .. && make -j2 && make test
+  - mkdir build && cd build ; cmake -DENABLE_TLS=ON -DENABLE_SSH=ON .. && make -j2 && ./tests/test_server_thread && make test
 
 after_success:
   - if [ "${CC}" = "gcc" ]; then codecov; fi
