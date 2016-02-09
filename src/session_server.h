@@ -449,7 +449,8 @@ int nc_server_tls_endpt_set_key(const char *endpt_name, const char *privkey, int
 int nc_server_tls_endpt_set_key_path(const char *endpt_name, const char *privkey_path);
 
 /**
- * @brief Add a trusted certificate. Can be both a CA or a client one.
+ * @brief Add a trusted certificate. Can be both a CA or a client one. Can be
+ *        safely used together with #nc_server_tls_endpt_set_trusted_ca_paths().
  *
  * @param[in] endpt_name Existing endpoint name.
  * @param[in] cert Base64-enocded certificate in ASN.1 DER encoding.
@@ -458,7 +459,8 @@ int nc_server_tls_endpt_set_key_path(const char *endpt_name, const char *privkey
 int nc_server_tls_endpt_add_trusted_cert(const char *endpt_name, const char *cert);
 
 /**
- * @brief Add a trusted certificate. Can be both a CA or a client one.
+ * @brief Add a trusted certificate. Can be both a CA or a client one. Can be
+ *        safely used together with #nc_server_tls_endpt_set_trusted_ca_paths().
  *
  * @param[in] endpt_name Existing endpoint name.
  * @param[in] cert_path Path to a trusted certificate file in PEM format.
@@ -468,7 +470,8 @@ int nc_server_tls_endpt_add_trusted_cert_path(const char *endpt_name, const char
 
 /**
  * @brief Set trusted Certificate Authority certificate locations. There can only be
- *        one file and one directory, they are replaced if already set.
+ *        one file and one directory, they are replaced if already set. Can be safely
+ *        used with #nc_server_tls_endpt_add_trusted_cert() or its _path variant.
  *
  * @param[in] endpt_name Existing endpoint name.
  * @param[in] ca_file Path to a trusted CA cert store file in PEM format. Can be NULL.
