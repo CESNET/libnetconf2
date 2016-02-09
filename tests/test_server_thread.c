@@ -35,11 +35,11 @@
 #include "config.h"
 
 /* millisec */
-#define NC_ACCEPT_TIMEOUT 1000
+#define NC_ACCEPT_TIMEOUT 5000
 /* millisec */
-#define NC_PS_POLL_TIMEOUT 1000
+#define NC_PS_POLL_TIMEOUT 5000
 /* sec */
-#define CLIENT_SSH_AUTH_TIMEOUT 3
+#define CLIENT_SSH_AUTH_TIMEOUT 10
 
 pthread_barrier_t barrier;
 
