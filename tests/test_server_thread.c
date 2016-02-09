@@ -619,7 +619,7 @@ tls_client_thread(void *arg)
 
     ret = nc_client_tls_set_cert_key_paths(TESTS_DIR"/data/client.crt", TESTS_DIR"/data/client.key");
     assert(!ret);
-    ret = nc_client_tls_set_trusted_ca_paths(NULL, "data");
+    ret = nc_client_tls_set_trusted_ca_paths(NULL, TESTS_DIR"/data");
     assert(!ret);
 
     session = nc_connect_tls("127.0.0.1", 6501, NULL);
