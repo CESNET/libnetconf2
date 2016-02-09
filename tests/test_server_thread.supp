@@ -1,5 +1,10 @@
 {
-   <false_positive_custom_malloc_func_check>
-   Helgrind:Race
-   fun:CRYPTO_malloc
+    <custom_func_global_variables_check>
+    Helgrind:Race
+    fun:CRYPTO_malloc
+}
+{
+    <global_variable_always_set_with_default_method_when_getting>
+    Helgrind:Race
+    fun:DSA_get_default_method
 }
