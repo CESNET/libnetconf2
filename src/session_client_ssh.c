@@ -50,6 +50,8 @@
 #include "session_client_ch.h"
 #include "libnetconf.h"
 
+extern struct nc_client_opts client_opts;
+
 static struct nc_client_ssh_opts ssh_opts = {
     .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 1}}
 };
@@ -1135,7 +1137,11 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
 
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = ly_ctx_new(SCHEMAS_DIR);
+        if (client_opts.schema_searchpath) {
+            ctx = ly_ctx_new(client_opts.schema_searchpath);
+        } else {
+            ctx = ly_ctx_new(SCHEMAS_DIR);
+        }
     } else {
         session->flags |= NC_SESSION_SHAREDCTX;
     }
@@ -1262,7 +1268,11 @@ nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
 
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = ly_ctx_new(SCHEMAS_DIR);
+        if (client_opts.schema_searchpath) {
+            ctx = ly_ctx_new(client_opts.schema_searchpath);
+        } else {
+            ctx = ly_ctx_new(SCHEMAS_DIR);
+        }
     } else {
         session->flags |= NC_SESSION_SHAREDCTX;
     }
@@ -1330,7 +1340,11 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
 
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = ly_ctx_new(SCHEMAS_DIR);
+        if (client_opts.schema_searchpath) {
+            ctx = ly_ctx_new(client_opts.schema_searchpath);
+        } else {
+            ctx = ly_ctx_new(SCHEMAS_DIR);
+        }
     } else {
         new_session->flags |= NC_SESSION_SHAREDCTX;
     }

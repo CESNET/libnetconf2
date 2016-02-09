@@ -42,7 +42,7 @@
 
 static const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "candidate"};
 
-static struct nc_client_opts client_opts;
+struct nc_client_opts client_opts;
 
 API int
 nc_client_schema_searchpath(const char *path)
