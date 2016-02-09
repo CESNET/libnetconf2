@@ -816,6 +816,8 @@ main(void)
     assert(!ret);
 #endif
 
+    ret = nc_client_schema_searchpath(TESTS_DIR"/../schemas");
+    assert(!ret);
     clients_start_cleanup();
 
     /* threads'n'stuff */
@@ -834,6 +836,7 @@ main(void)
 
     pthread_barrier_destroy(&barrier);
 
+    nc_client_schema_searchpath(NULL);
     nc_server_destroy();
     ly_ctx_destroy(ctx, NULL);
 
