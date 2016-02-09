@@ -1125,6 +1125,7 @@ nc_accept(int timeout, struct nc_session **session)
     if (ret < 1) {
         /* WRITE UNLOCK */
         pthread_rwlock_unlock(&server_opts.endpt_array_lock);
+        free(host);
         return ret;
     }
     sock = ret;
