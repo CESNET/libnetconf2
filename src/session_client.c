@@ -146,19 +146,18 @@ ctx_check_and_load_model(struct nc_session *session, const char *cpblt)
     return 0;
 }
 
-/* SCHEMAS_DIR used */
+/* SCHEMAS_DIR used as the last resort */
 static int
-ctx_check_and_load_ietf_netconf(struct ly_ctx *ctx, const char **cpblts, int from_file)
+ctx_check_and_load_ietf_netconf(struct ly_ctx *ctx, const char **cpblts)
 {
     int i;
     const struct lys_module *ietfnc;
 
     ietfnc = ly_ctx_get_module(ctx, "ietf-netconf", NULL);
     if (!ietfnc) {
-        if (from_file) {
+        ietfnc = ly_ctx_load_module(ctx, "ietf-netconf", NULL);
+        if (!ietfnc) {
             ietfnc = lys_parse_path(ctx, SCHEMAS_DIR"/ietf-netconf.yin", LYS_IN_YIN);
-        } else {
-            ietfnc = ly_ctx_load_module(ctx, "ietf-netconf", NULL);
         }
     }
     if (!ietfnc) {
@@ -283,7 +282,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     }
 
     /* load base model disregarding whether it's in capabilities (but NETCONF capabilities are used to enable features) */
-    if (ctx_check_and_load_ietf_netconf(session->ctx, session->cpblts, !get_schema_support)) {
+    if (ctx_check_and_load_ietf_netconf(session->ctx, session->cpblts)) {
         if (old_clb) {
             ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
         }
