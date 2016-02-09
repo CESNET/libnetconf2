@@ -166,7 +166,7 @@ ssh_endpt_set_hostkey_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_endpt_set_hostkey("main", "data/key_dsa");
+    ret = nc_server_ssh_endpt_set_hostkey("main", TESTS_DIR"/data/key_dsa");
     assert(!ret);
 
     return NULL;
@@ -236,7 +236,7 @@ ssh_endpt_add_authkey_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_endpt_add_authkey("main", "data/key_rsa.pub", "test3");
+    ret = nc_server_ssh_endpt_add_authkey("main", TESTS_DIR"/data/key_rsa.pub", "test3");
     assert(!ret);
 
     return NULL;
@@ -250,7 +250,7 @@ ssh_endpt_del_authkey_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_endpt_del_authkey("main", "data/key_ecdsa.pub", "test2");
+    ret = nc_server_ssh_endpt_del_authkey("main", TESTS_DIR"/data/key_ecdsa.pub", "test2");
     assert(!ret);
 
     return NULL;
@@ -296,11 +296,11 @@ ssh_client_thread(void *arg)
     ret = ssh_userauth_none(sshsession, NULL);
     assert(ret == SSH_AUTH_DENIED);
     assert(ssh_userauth_list(sshsession, NULL) & SSH_AUTH_METHOD_PUBLICKEY);
-    ret = ssh_pki_import_pubkey_file("data/key_dsa.pub", &pubkey);
+    ret = ssh_pki_import_pubkey_file(TESTS_DIR"/data/key_dsa.pub", &pubkey);
     assert(ret == SSH_OK);
     ret = ssh_userauth_try_publickey(sshsession, NULL, pubkey);
     assert(ret == SSH_AUTH_SUCCESS);
-    ret = ssh_pki_import_privkey_file("data/key_dsa", NULL, NULL, NULL, &privkey);
+    ret = ssh_pki_import_privkey_file(TESTS_DIR"/data/key_dsa", NULL, NULL, NULL, &privkey);
     assert(ret == SSH_OK);
     ret = ssh_userauth_publickey(sshsession, NULL, privkey);
     assert(ret == SSH_AUTH_SUCCESS);
@@ -535,7 +535,7 @@ tls_endpt_set_trusted_ca_paths_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_tls_endpt_set_trusted_ca_paths("quaternary", "data/serverca.pem", "data");
+    ret = nc_server_tls_endpt_set_trusted_ca_paths("quaternary", TESTS_DIR"/data/serverca.pem", "data");
     assert(!ret);
 
     nc_thread_destroy();
@@ -617,7 +617,7 @@ tls_client_thread(void *arg)
     int ret;
     struct nc_session *session;
 
-    ret = nc_client_tls_set_cert_key_paths("data/client.crt", "data/client.key");
+    ret = nc_client_tls_set_cert_key_paths(TESTS_DIR"/data/client.crt", TESTS_DIR"/data/client.key");
     assert(!ret);
     ret = nc_client_tls_set_trusted_ca_paths(NULL, "data");
     assert(!ret);
@@ -772,13 +772,13 @@ main(void)
     /* do first, so that client can connect on SSH */
     ret = nc_server_ssh_add_endpt_listen("main", "0.0.0.0", 6001);
     assert(!ret);
-    ret = nc_server_ssh_endpt_add_authkey("main", "data/key_dsa.pub", "test");
+    ret = nc_server_ssh_endpt_add_authkey("main", TESTS_DIR"/data/key_dsa.pub", "test");
     assert(!ret);
-    ret = nc_server_ssh_endpt_set_hostkey("main", "data/key_rsa");
+    ret = nc_server_ssh_endpt_set_hostkey("main", TESTS_DIR"/data/key_rsa");
     assert(!ret);
 
     /* for ssh_endpt_del_authkey */
-    ret = nc_server_ssh_endpt_add_authkey("main", "data/key_ecdsa.pub", "test2");
+    ret = nc_server_ssh_endpt_add_authkey("main", TESTS_DIR"/data/key_ecdsa.pub", "test2");
     assert(!ret);
 
     /* for ssh_del_endpt */
@@ -794,11 +794,11 @@ main(void)
     /* do first, so that client can connect on TLS */
     ret = nc_server_tls_add_endpt_listen("main", "0.0.0.0", 6501);
     assert(!ret);
-    ret = nc_server_tls_endpt_set_cert_path("main", "data/server.crt");
+    ret = nc_server_tls_endpt_set_cert_path("main", TESTS_DIR"/data/server.crt");
     assert(!ret);
-    ret = nc_server_tls_endpt_set_key_path("main", "data/server.key");
+    ret = nc_server_tls_endpt_set_key_path("main", TESTS_DIR"/data/server.key");
     assert(!ret);
-    ret = nc_server_tls_endpt_add_trusted_cert_path("main", "data/client.crt");
+    ret = nc_server_tls_endpt_add_trusted_cert_path("main", TESTS_DIR"/data/client.crt");
     assert(!ret);
     ret = nc_server_tls_endpt_add_ctn("main", 0, "02:D3:03:0E:77:21:E2:14:1F:E5:75:48:98:6B:FD:8A:63:BB:DE:40:34", NC_TLS_CTN_SPECIFIED, "test");
     assert(!ret);
