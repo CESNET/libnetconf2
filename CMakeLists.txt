@@ -4,10 +4,19 @@ cmake_minimum_required(VERSION 2.6)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMakeModules/")
 
 project(libnetconf2 C)
+set(LIBNETCONF2_DESCRIPTION "NETCONF server and client library in C.")
 
 # check the supported platform
 if(NOT UNIX)
     message(FATAL_ERROR "Only *nix like systems are supported.")
+endif()
+
+if(NOT LIB_INSTALL_DIR)
+    set(LIB_INSTALL_DIR lib)
+endif()
+
+if(NOT INCLUDE_INSTALL_DIR)
+    set(INCLUDE_INSTALL_DIR include)
 endif()
 
 # set default build type if not specified by user
@@ -156,6 +165,22 @@ install(
     CODE "file(GLOB yin_schemas \"${CMAKE_SOURCE_DIR}/schemas/*.yin\")"
     CODE "file(INSTALL \${yin_schemas} DESTINATION ${DATA_INSTALL_DIR})"
 )
+
+# install pkg-config file
+find_package(PkgConfig)
+if(PKG_CONFIG_FOUND)
+    configure_file("libnetconf2.pc.in" "libnetconf2.pc" @ONLY)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libnetconf2.pc" DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig")
+    # check that pkg-config includes the used path
+    execute_process(COMMAND ${PKG_CONFIG_EXECUTABLE} --variable pc_path pkg-config RESULT_VARIABLE RETURN OUTPUT_VARIABLE PC_PATH ERROR_QUIET)
+    if(RETURN EQUAL 0)
+        string(REGEX MATCH "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig" SUBSTR "${PC_PATH}")
+        string(LENGTH "${SUBSTR}" SUBSTR_LEN)
+        if(SUBSTR_LEN EQUAL 0)
+            message(WARNING "pkg-config will not detect the new package after installation, adjust PKG_CONFIG_PATH using \"export PKG_CONFIG_PATH=\${PKG_CONFIG_PATH}:${CMAKE_INSTALL_PREFIX}/lib/pkgconfig\".")
+        endif()
+    endif()
+endif()
 
 if(ENABLE_VALGRIND_TESTS)
     set(ENABLE_BUILD_TESTS ON)
