@@ -703,7 +703,6 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
 {
     struct lyxml_elem *iter;
     const struct lys_node *schema = NULL;
-    const struct lys_module *mod;
     struct lyd_node *data = NULL;
     struct nc_client_reply_error *error_rpl;
     struct nc_reply_data *data_rpl;
@@ -792,10 +791,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
             break;
 
         case NC_RPC_GETSCHEMA:
-            mod = ly_ctx_get_module(ctx, "ietf-netconf-monitoring", NULL);
-            if (mod) {
-                schema = lys_get_node(mod, "/get-schema");
-            }
+            schema = ly_ctx_get_node(ctx, "/ietf-netconf-monitoring:get-schema");
             if (!schema) {
                 ERRINT;
                 return NULL;

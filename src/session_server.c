@@ -304,10 +304,7 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
         return nc_server_reply_err(err);
     }
 
-    module = ly_ctx_get_module(server_opts.ctx, "ietf-netconf-monitoring", NULL);
-    if (module) {
-        sdata = lys_get_node(module, "/get-schema/output/data");
-    }
+    sdata = ly_ctx_get_node(server_opts.ctx, "/ietf-netconf-monitoring:get-schema/output/data");
     if (model_data && sdata) {
         nc_ctx_lock(-1, NULL);
         data = lyd_output_new_anyxml(sdata, model_data);
@@ -333,7 +330,6 @@ API int
 nc_server_init(struct ly_ctx *ctx)
 {
     const struct lys_node *rpc;
-    const struct lys_module *mod;
 
     if (!ctx) {
         ERRARG;
@@ -341,21 +337,13 @@ nc_server_init(struct ly_ctx *ctx)
     }
 
     /* set default <get-schema> callback if not specified */
-    rpc = NULL;
-    mod = ly_ctx_get_module(ctx, "ietf-netconf-monitoring", NULL);
-    if (mod) {
-        rpc = lys_get_node(mod, "/get-schema");
-    }
+    rpc = ly_ctx_get_node(ctx, "/ietf-netconf-monitoring:get-schema");
     if (rpc && !rpc->private) {
         lys_set_private(rpc, nc_clb_default_get_schema);
     }
 
     /* set default <close-session> callback if not specififed */
-    rpc = NULL;
-    mod = ly_ctx_get_module(ctx, "ietf-netconf", NULL);
-    if (mod) {
-        rpc = lys_get_node(mod, "/close-session");
-    }
+    rpc = ly_ctx_get_node(ctx, "/ietf-netconf:close-session");
     if (rpc && !rpc->private) {
         lys_set_private(rpc, nc_clb_default_close_session);
     }

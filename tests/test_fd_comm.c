@@ -94,11 +94,11 @@ setup_sessions(void **state)
     assert_non_null(module);
 
     /* set RPC callbacks */
-    node = lys_get_node(module, "/get");
+    node = ly_ctx_get_node(module->ctx, "/ietf-netconf:get");
     assert_non_null(node);
     lys_set_private(node, my_get_rpc_clb);
 
-    node = lys_get_node(module, "/get-config");
+    node = ly_ctx_get_node(module->ctx, "/ietf-netconf:get-config");
     assert_non_null(node);
     lys_set_private(node, my_getconfig_rpc_clb);
 
