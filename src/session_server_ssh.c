@@ -322,11 +322,8 @@ nc_server_ssh_add_authkey(const char *pubkey_path, const char *username, struct 
 
     ++opts->authkey_count;
     opts->authkeys = realloc(opts->authkeys, opts->authkey_count * sizeof *opts->authkeys);
-
-    nc_ctx_lock(-1, NULL);
     opts->authkeys[opts->authkey_count - 1].path = lydict_insert(server_opts.ctx, pubkey_path, 0);
     opts->authkeys[opts->authkey_count - 1].username = lydict_insert(server_opts.ctx, username, 0);
-    nc_ctx_unlock();
 
     return 0;
 }
@@ -370,14 +367,12 @@ nc_server_ssh_del_authkey(const char *pubkey_path, const char *username, struct 
     int ret = -1;
 
     if (!pubkey_path && !username) {
-        nc_ctx_lock(-1, NULL);
         for (i = 0; i < opts->authkey_count; ++i) {
             lydict_remove(server_opts.ctx, opts->authkeys[i].path);
             lydict_remove(server_opts.ctx, opts->authkeys[i].username);
 
             ret = 0;
         }
-        nc_ctx_unlock();
         free(opts->authkeys);
         opts->authkeys = NULL;
         opts->authkey_count = 0;
@@ -385,10 +380,8 @@ nc_server_ssh_del_authkey(const char *pubkey_path, const char *username, struct 
         for (i = 0; i < opts->authkey_count; ++i) {
             if ((!pubkey_path || !strcmp(opts->authkeys[i].path, pubkey_path))
                     && (!username || !strcmp(opts->authkeys[i].username, username))) {
-                nc_ctx_lock(-1, NULL);
                 lydict_remove(server_opts.ctx, opts->authkeys[i].path);
                 lydict_remove(server_opts.ctx, opts->authkeys[i].username);
-                nc_ctx_unlock();
 
                 --opts->authkey_count;
                 if (i < opts->authkey_count) {

@@ -53,9 +53,8 @@ void nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REAS
  * @brief Initialize the server using a libyang context.
  *
  * The context is not modified internally, only its dictionary is used for holding
- * all the strings. When the dictionary is being written to or removed from,
- * libnetconf2 always holds ctx lock using nc_ctx_lock(). Reading models is considered
- * thread-safe as models cannot be removed and are rarely modified.
+ * all the strings, which is thread-safe. Reading models is considered thread-safe
+ * as models cannot be removed and are rarely modified (augments or deviations).
  *
  * Server capabilities are generated based on its content. Changing the context
  * in ways that result in changed capabilities (adding models, changing features)
@@ -70,9 +69,6 @@ void nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REAS
  * This callback is called by nc_ps_poll() if the particular RPC request is
  * received. Callbacks for ietf-netconf:get-schema (supporting YANG and YIN format
  * only) and ietf-netconf:close-session are set internally if left unset.
- *
- * Access to the context in libnetconf2 functions is not managed in any way,
- * the application is responsible for handling it in a thread-safe manner.
  *
  * @param[in] ctx Core NETCONF server context.
  * @return 0 on success, -1 on error.
@@ -204,24 +200,6 @@ int nc_ps_poll(struct nc_pollsession *ps, int timeout);
  * @param[in] ps Pollsession structure to clear.
  */
 void nc_ps_clear(struct nc_pollsession *ps);
-
-/**
- * @brief Lock server context.
- *
- * @param[in] timeout Timeout in milliseconds. 0 for non-blocking call, -1 for
- *                    infinite waiting.
- * @param[out] elapsed Elapsed milliseconds will be added to this variable.
- *                     Can be NULL.
- * @return 1 on success, 0 on elapsed timeout, -1 on error.
- */
-int nc_ctx_lock(int timeout, int *elapsed);
-
-/**
- * @brief Unlock server context.
- *
- * @return 0 on success, -1 on error.
- */
-int nc_ctx_unlock(void);
 
 #if defined(ENABLE_SSH) || defined(ENABLE_TLS)
 

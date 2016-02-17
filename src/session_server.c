@@ -306,9 +306,7 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
 
     sdata = ly_ctx_get_node(server_opts.ctx, "/ietf-netconf-monitoring:get-schema/output/data");
     if (model_data && sdata) {
-        nc_ctx_lock(-1, NULL);
         data = lyd_output_new_anyxml(sdata, model_data);
-        nc_ctx_unlock();
     }
     free(model_data);
     if (!data) {
@@ -556,10 +554,7 @@ nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
     case NC_MSG_RPC:
         *rpc = malloc(sizeof **rpc);
 
-        nc_ctx_lock(-1, NULL);
         (*rpc)->tree = lyd_parse_xml(server_opts.ctx, &xml->child, LYD_OPT_DESTRUCT | LYD_OPT_RPC);
-        nc_ctx_unlock();
-
         if (!(*rpc)->tree) {
             ERR("Session %u: received message failed to be parsed into a known RPC.", session->id);
             msgtype = NC_MSG_NONE;
@@ -826,27 +821,6 @@ nc_ps_clear(struct nc_pollsession *ps)
     }
 }
 
-API int
-nc_ctx_lock(int timeout, int *elapsed)
-{
-    return nc_timedlock(&server_opts.ctx_lock, timeout, elapsed);
-}
-
-API int
-nc_ctx_unlock(void)
-{
-    int ret;
-
-    ret = pthread_mutex_unlock(&server_opts.ctx_lock);
-
-    if (ret) {
-        ERR("Mutex unlock failed (%s).", strerror(ret));
-        return -1;
-    }
-
-    return 0;
-}
-
 #if defined(ENABLE_SSH) || defined(ENABLE_TLS)
 
 int
@@ -887,10 +861,8 @@ nc_server_add_endpt_listen(const char *name, const char *address, uint16_t port,
     server_opts.binds = realloc(server_opts.binds, server_opts.endpt_count * sizeof *server_opts.binds);
     server_opts.endpts = realloc(server_opts.endpts, server_opts.endpt_count * sizeof *server_opts.endpts);
 
-    nc_ctx_lock(-1, NULL);
     server_opts.endpts[server_opts.endpt_count - 1].name = lydict_insert(server_opts.ctx, name, 0);
     server_opts.binds[server_opts.endpt_count - 1].address = lydict_insert(server_opts.ctx, address, 0);
-    nc_ctx_unlock();
     server_opts.binds[server_opts.endpt_count - 1].port = port;
     server_opts.binds[server_opts.endpt_count - 1].sock = sock;
     server_opts.binds[server_opts.endpt_count - 1].ti = ti;
@@ -995,10 +967,8 @@ nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti)
     if (!name && !ti) {
         /* remove all */
         for (i = 0; i < server_opts.endpt_count; ++i) {
-            nc_ctx_lock(-1, NULL);
             lydict_remove(server_opts.ctx, server_opts.endpts[i].name);
             lydict_remove(server_opts.ctx, server_opts.binds[i].address);
-            nc_ctx_unlock();
 
             close(server_opts.binds[i].sock);
             pthread_mutex_destroy(&server_opts.endpts[i].endpt_lock);
@@ -1033,11 +1003,8 @@ nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti)
             if ((server_opts.binds[i].ti == ti) &&
                     (!name || !strcmp(server_opts.endpts[i].name, name))) {
 
-                nc_ctx_lock(-1, NULL);
                 lydict_remove(server_opts.ctx, server_opts.endpts[i].name);
                 lydict_remove(server_opts.ctx, server_opts.binds[i].address);
-                nc_ctx_unlock();
-
                 close(server_opts.binds[i].sock);
                 pthread_mutex_destroy(&server_opts.endpts[i].endpt_lock);
                 switch (server_opts.binds[i].ti) {
@@ -1130,9 +1097,7 @@ nc_accept(int timeout, struct nc_session **session)
     (*session)->side = NC_SERVER;
     (*session)->ctx = server_opts.ctx;
     (*session)->flags = NC_SESSION_SHAREDCTX;
-    nc_ctx_lock(-1, NULL);
     (*session)->host = lydict_insert_zc(server_opts.ctx, host);
-    nc_ctx_unlock();
     (*session)->port = port;
 
     /* transport lock */
@@ -1225,9 +1190,7 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int t
     (*session)->side = NC_SERVER;
     (*session)->ctx = server_opts.ctx;
     (*session)->flags = NC_SESSION_SHAREDCTX | NC_SESSION_CALLHOME;
-    nc_ctx_lock(-1, NULL);
     (*session)->host = lydict_insert(server_opts.ctx, host, 0);
-    nc_ctx_unlock();
     (*session)->port = port;
 
     /* transport lock */

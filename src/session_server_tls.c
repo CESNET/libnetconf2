@@ -626,9 +626,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
 
     /* cert-to-name match, now to extract the specific field from the peer cert */
     if (map_type == NC_TLS_CTN_SPECIFIED) {
-        nc_ctx_lock(-1, NULL);
         session->username = lydict_insert(server_opts.ctx, username, 0);
-        nc_ctx_unlock();
     } else {
         rc = nc_tls_ctn_get_username_from_cert(session->tls_cert, map_type, &cp);
         if (rc) {
@@ -637,9 +635,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
             }
             goto fail;
         }
-        nc_ctx_lock(-1, NULL);
         session->username = lydict_insert_zc(server_opts.ctx, cp);
-        nc_ctx_unlock();
     }
 
     VRB("Cert verify CTN: new client username recognized as \"%s\".", session->username);
@@ -1329,10 +1325,8 @@ nc_server_tls_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE m
 
     new = malloc(sizeof *new);
 
-    nc_ctx_lock(-1, NULL);
     new->fingerprint = lydict_insert(server_opts.ctx, fingerprint, 0);
     new->name = lydict_insert(server_opts.ctx, name, 0);
-    nc_ctx_unlock();
     new->id = id;
     new->map_type = map_type;
     new->next = NULL;
@@ -1394,7 +1388,6 @@ nc_server_tls_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE ma
 
     if ((id < 0) && !fingerprint && !map_type && !name) {
         ctn = opts->ctn;
-        nc_ctx_lock(-1, NULL);
         while (ctn) {
             lydict_remove(server_opts.ctx, ctn->fingerprint);
             lydict_remove(server_opts.ctx, ctn->name);
@@ -1405,7 +1398,6 @@ nc_server_tls_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE ma
 
             ret = 0;
         }
-        nc_ctx_unlock();
         opts->ctn = NULL;
     } else {
         prev = NULL;
@@ -1415,10 +1407,8 @@ nc_server_tls_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE ma
                     && (!fingerprint || !strcmp(ctn->fingerprint, fingerprint))
                     && (!map_type || (ctn->map_type == map_type))
                     && (!name || (ctn->name && !strcmp(ctn->name, name)))) {
-                nc_ctx_lock(-1, NULL);
                 lydict_remove(server_opts.ctx, ctn->fingerprint);
                 lydict_remove(server_opts.ctx, ctn->name);
-                nc_ctx_unlock();
 
                 if (prev) {
                     prev->next = ctn->next;

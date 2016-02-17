@@ -131,9 +131,8 @@ struct nc_client_opts {
 };
 
 struct nc_server_opts {
-    /* ACCESS locked with ctx_lock */
+    /* ACCESS unlocked (dictionary locked internally in libyang) */
     struct ly_ctx *ctx;
-    pthread_mutex_t ctx_lock;
 
     /* ACCESS unlocked */
     NC_WD_MODE wd_basic_mode;
