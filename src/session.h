@@ -100,6 +100,14 @@ NC_STATUS nc_session_get_status(const struct nc_session *session);
 uint32_t nc_session_get_id(const struct nc_session *session);
 
 /**
+ * @brief Get session NETCONF version.
+ *
+ * @param[in] session Session to get the information from.
+ * @return 0 for version 1.0, non-zero for version 1.1.
+ */
+int nc_session_get_version(const struct nc_session *session);
+
+/**
  * @brief Get session transport used.
  *
  * @param[in] session Session to get the information from.

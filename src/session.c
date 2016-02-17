@@ -136,6 +136,17 @@ nc_session_get_id(const struct nc_session *session)
     return session->id;
 }
 
+API int
+nc_session_get_version(const struct nc_session *session)
+{
+    if (!session) {
+        ERRARG;
+        return -1;
+    }
+
+    return (session->version == NC_VERSION_10 ? 0 : 1);
+}
+
 API NC_TRANSPORT_IMPL
 nc_session_get_ti(const struct nc_session *session)
 {
