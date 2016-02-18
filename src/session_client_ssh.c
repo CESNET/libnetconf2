@@ -50,6 +50,7 @@
 #include "session_client_ch.h"
 #include "libnetconf.h"
 
+static int sshauth_hostkey_check(const char *hostname, ssh_session session);
 static char *sshauth_password(const char *username, const char *hostname);
 static char *sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo);
 static char *sshauth_privkey_passphrase(const char* privkey_path);
@@ -58,6 +59,7 @@ extern struct nc_client_opts client_opts;
 
 static struct nc_client_ssh_opts ssh_opts = {
     .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 1}},
+    .auth_hostkey_check = sshauth_hostkey_check,
     .auth_password = sshauth_password,
     .auth_interactive = sshauth_interactive,
     .auth_privkey_passphrase = sshauth_privkey_passphrase
@@ -65,6 +67,7 @@ static struct nc_client_ssh_opts ssh_opts = {
 
 static struct nc_client_ssh_opts ssh_ch_opts = {
     .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}},
+    .auth_hostkey_check = sshauth_hostkey_check,
     .auth_password = sshauth_password,
     .auth_interactive = sshauth_interactive,
     .auth_privkey_passphrase = sshauth_privkey_passphrase
@@ -88,6 +91,222 @@ nc_client_ssh_destroy_opts(void)
 {
     _nc_client_ssh_destroy_opts(&ssh_opts);
     _nc_client_ssh_destroy_opts(&ssh_ch_opts);
+}
+
+#ifdef ENABLE_DNSSEC
+
+/* return 0 (DNSSEC + key valid), 1 (unsecure DNS + key valid), 2 (key not found or an error) */
+/* type - 1 (RSA), 2 (DSA), 3 (ECDSA); alg - 1 (SHA1), 2 (SHA-256) */
+static int
+sshauth_hostkey_hash_dnssec_check(const char *hostname, const char *sha1hash, int type, int alg) {
+    ns_msg handle;
+    ns_rr rr;
+    val_status_t val_status;
+    const unsigned char* rdata;
+    unsigned char buf[4096];
+    int buf_len = 4096;
+    int ret = 0, i, j, len;
+
+    /* class 1 - internet, type 44 - SSHFP */
+    len = val_res_query(NULL, hostname, 1, 44, buf, buf_len, &val_status);
+
+    if ((len < 0) || !val_istrusted(val_status)) {
+        ret = 2;
+        goto finish;
+    }
+
+    if (ns_initparse(buf, len, &handle) < 0) {
+        ERR("Failed to initialize DNSSEC response parser.");
+        ret = 2;
+        goto finish;
+    }
+
+    if ((i = libsres_msg_getflag(handle, ns_f_rcode))) {
+        ERR("DNSSEC query returned %d.", i);
+        ret = 2;
+        goto finish;
+    }
+
+    if (!libsres_msg_getflag(handle, ns_f_ad)) {
+        /* response not secured by DNSSEC */
+        ret = 1;
+    }
+
+    /* query section */
+    if (ns_parserr(&handle, ns_s_qd, 0, &rr)) {
+        ERROR("DNSSEC query section parser fail.");
+        ret = 2;
+        goto finish;
+    }
+
+    if (strcmp(hostname, ns_rr_name(rr)) || (ns_rr_type(rr) != 44) || (ns_rr_class(rr) != 1)) {
+        ERROR("DNSSEC query in the answer does not match the original query.");
+        ret = 2;
+        goto finish;
+    }
+
+    /* answer section */
+    i = 0;
+    while (!ns_parserr(&handle, ns_s_an, i, &rr)) {
+        if (ns_rr_type(rr) != 44) {
+            ++i;
+            continue;
+        }
+
+        rdata = ns_rr_rdata(rr);
+        if (rdata[0] != type) {
+            ++i;
+            continue;
+        }
+        if (rdata[1] != alg) {
+            ++i;
+            continue;
+        }
+
+        /* we found the correct SSHFP entry */
+        rdata += 2;
+        for (j = 0; j < 20; ++j) {
+            if (rdata[j] != (unsigned char)sha1hash[j]) {
+                ret = 2;
+                goto finish;
+            }
+        }
+
+        /* server fingerprint is supported by a DNS entry,
+        * we have already determined if DNSSEC was used or not
+        */
+        goto finish;
+    }
+
+    /* no match */
+    ret = 2;
+
+finish:
+    val_free_validator_state();
+    return ret;
+}
+
+#endif /* ENABLE_DNSSEC */
+
+static int
+sshauth_hostkey_check(const char *hostname, ssh_session session)
+{
+    char *hexa;
+    int c, state, ret;
+    ssh_key srv_pubkey;
+    unsigned char *hash_sha1 = NULL;
+    size_t hlen;
+    enum ssh_keytypes_e srv_pubkey_type;
+    char answer[5];
+
+    state = ssh_is_server_known(session);
+
+    ret = ssh_get_publickey(session, &srv_pubkey);
+    if (ret < 0) {
+        ERR("Unable to get server public key.");
+        return -1;
+    }
+
+    srv_pubkey_type = ssh_key_type(srv_pubkey);
+    ret = ssh_get_publickey_hash(srv_pubkey, SSH_PUBLICKEY_HASH_SHA1, &hash_sha1, &hlen);
+    ssh_key_free(srv_pubkey);
+    if (ret < 0) {
+        ERR("Failed to calculate SHA1 hash of the server public key.");
+        return -1;
+    }
+
+    hexa = ssh_get_hexa(hash_sha1, hlen);
+
+    switch (state) {
+    case SSH_SERVER_KNOWN_OK:
+        break; /* ok */
+
+    case SSH_SERVER_KNOWN_CHANGED:
+        ERR("Remote host key changed, the connection will be terminated!");
+        goto fail;
+
+    case SSH_SERVER_FOUND_OTHER:
+        WRN("Remote host key is not known, but a key of another type for this host is known. Continue with caution.");
+        goto hostkey_not_known;
+
+    case SSH_SERVER_FILE_NOT_FOUND:
+        WRN("Could not find the known hosts file.");
+        goto hostkey_not_known;
+
+    case SSH_SERVER_NOT_KNOWN:
+hostkey_not_known:
+#ifdef ENABLE_DNSSEC
+        if ((srv_pubkey_type != SSH_KEYTYPE_UNKNOWN) || (srv_pubkey_type != SSH_KEYTYPE_RSA1)) {
+            if (srv_pubkey_type == SSH_KEYTYPE_DSS) {
+                ret = callback_ssh_hostkey_hash_dnssec_check(hostname, hash_sha1, 2, 1);
+            } else if (srv_pubkey_type == SSH_KEYTYPE_RSA) {
+                ret = callback_ssh_hostkey_hash_dnssec_check(hostname, hash_sha1, 1, 1);
+            } else if (srv_pubkey_type == SSH_KEYTYPE_ECDSA) {
+                ret = callback_ssh_hostkey_hash_dnssec_check(hostname, hash_sha1, 3, 1);
+            }
+
+            /* DNSSEC SSHFP check successful, that's enough */
+            if (!ret) {
+                VRB("DNSSEC SSHFP check successful.");
+                ssh_write_knownhost(session);
+                ssh_clean_pubkey_hash(&hash_sha1);
+                ssh_string_free_char(hexa);
+                return 0;
+            }
+        }
+#endif
+
+        /* try to get result from user */
+        fprintf(stdout, "The authenticity of the host \'%s\' cannot be established.\n", hostname);
+        fprintf(stdout, "%s key fingerprint is %s.\n", ssh_key_type_to_char(srv_pubkey_type), hexa);
+
+#ifdef ENABLE_DNSSEC
+        if (ret == 2) {
+            fprintf(stdout, "No matching host key fingerprint found using DNS.\n");
+        } else if (ret == 1) {
+            fprintf(stdout, "Matching host key fingerprint found using DNS.\n");
+        }
+#endif
+
+        fprintf(stdout, "Are you sure you want to continue connecting (yes/no)? ");
+
+        do {
+            if (fscanf(stdin, "%4s", answer) == EOF) {
+                ERR("fscanf() failed (%s).", strerror(errno));
+                goto fail;
+            }
+            while (((c = getchar()) != EOF) && (c != '\n'));
+
+            fflush(stdin);
+            if (!strcmp("yes", answer)) {
+                /* store the key into the host file */
+                ret = ssh_write_knownhost(session);
+                if (ret != SSH_OK) {
+                    WRN("Adding the known host \"%s\" failed (%s).", hostname, ssh_get_error(session));
+                }
+            } else if (!strcmp("no", answer)) {
+                goto fail;
+            } else {
+                fprintf(stdout, "Please type 'yes' or 'no': ");
+            }
+        } while (strcmp(answer, "yes") && strcmp(answer, "no"));
+
+        break;
+
+    case SSH_SERVER_ERROR:
+        ssh_clean_pubkey_hash(&hash_sha1);
+        fprintf(stderr,"%s",ssh_get_error(session));
+        return -1;
+    }
+
+    ssh_clean_pubkey_hash(&hash_sha1);
+    ssh_string_free_char(hexa);
+    return 0;
+
+fail:
+    ssh_clean_pubkey_hash(&hash_sha1);
+    ssh_string_free_char(hexa);
+    return -1;
 }
 
 static char *
@@ -350,221 +569,29 @@ fail:
     return NULL;
 }
 
-#ifdef ENABLE_DNSSEC
-
-/* return 0 (DNSSEC + key valid), 1 (unsecure DNS + key valid), 2 (key not found or an error) */
-/* type - 1 (RSA), 2 (DSA), 3 (ECDSA); alg - 1 (SHA1), 2 (SHA-256) */
-static int
-sshauth_hostkey_hash_dnssec_check(const char *hostname, const char *sha1hash, int type, int alg) {
-    ns_msg handle;
-    ns_rr rr;
-    val_status_t val_status;
-    const unsigned char* rdata;
-    unsigned char buf[4096];
-    int buf_len = 4096;
-    int ret = 0, i, j, len;
-
-    /* class 1 - internet, type 44 - SSHFP */
-    len = val_res_query(NULL, hostname, 1, 44, buf, buf_len, &val_status);
-
-    if ((len < 0) || !val_istrusted(val_status)) {
-        ret = 2;
-        goto finish;
-    }
-
-    if (ns_initparse(buf, len, &handle) < 0) {
-        ERR("Failed to initialize DNSSEC response parser.");
-        ret = 2;
-        goto finish;
-    }
-
-    if ((i = libsres_msg_getflag(handle, ns_f_rcode))) {
-        ERR("DNSSEC query returned %d.", i);
-        ret = 2;
-        goto finish;
-    }
-
-    if (!libsres_msg_getflag(handle, ns_f_ad)) {
-        /* response not secured by DNSSEC */
-        ret = 1;
-    }
-
-    /* query section */
-    if (ns_parserr(&handle, ns_s_qd, 0, &rr)) {
-        ERROR("DNSSEC query section parser fail.");
-        ret = 2;
-        goto finish;
-    }
-
-    if (strcmp(hostname, ns_rr_name(rr)) || (ns_rr_type(rr) != 44) || (ns_rr_class(rr) != 1)) {
-        ERROR("DNSSEC query in the answer does not match the original query.");
-        ret = 2;
-        goto finish;
-    }
-
-    /* answer section */
-    i = 0;
-    while (!ns_parserr(&handle, ns_s_an, i, &rr)) {
-        if (ns_rr_type(rr) != 44) {
-            ++i;
-            continue;
-        }
-
-        rdata = ns_rr_rdata(rr);
-        if (rdata[0] != type) {
-            ++i;
-            continue;
-        }
-        if (rdata[1] != alg) {
-            ++i;
-            continue;
-        }
-
-        /* we found the correct SSHFP entry */
-        rdata += 2;
-        for (j = 0; j < 20; ++j) {
-            if (rdata[j] != (unsigned char)sha1hash[j]) {
-                ret = 2;
-                goto finish;
-            }
-        }
-
-        /* server fingerprint is supported by a DNS entry,
-        * we have already determined if DNSSEC was used or not
-        */
-        goto finish;
-    }
-
-    /* no match */
-    ret = 2;
-
-finish:
-    val_free_validator_state();
-    return ret;
-}
-
-#endif /* ENABLE_DNSSEC */
-
-static int
-sshauth_hostkey_check(const char *hostname, ssh_session session)
+static void
+_nc_client_ssh_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session),
+                                     struct nc_client_ssh_opts *opts)
 {
-    char *hexa;
-    int c, state, ret;
-    ssh_key srv_pubkey;
-    unsigned char *hash_sha1 = NULL;
-    size_t hlen;
-    enum ssh_keytypes_e srv_pubkey_type;
-    char answer[5];
-
-    state = ssh_is_server_known(session);
-
-    ret = ssh_get_publickey(session, &srv_pubkey);
-    if (ret < 0) {
-        ERR("Unable to get server public key.");
-        return -1;
+    if (auth_hostkey_check) {
+        opts->auth_hostkey_check = auth_hostkey_check;
+    } else {
+        opts->auth_hostkey_check = sshauth_hostkey_check;
     }
-
-    srv_pubkey_type = ssh_key_type(srv_pubkey);
-    ret = ssh_get_publickey_hash(srv_pubkey, SSH_PUBLICKEY_HASH_SHA1, &hash_sha1, &hlen);
-    ssh_key_free(srv_pubkey);
-    if (ret < 0) {
-        ERR("Failed to calculate SHA1 hash of the server public key.");
-        return -1;
-    }
-
-    hexa = ssh_get_hexa(hash_sha1, hlen);
-
-    switch (state) {
-    case SSH_SERVER_KNOWN_OK:
-        break; /* ok */
-
-    case SSH_SERVER_KNOWN_CHANGED:
-        ERR("Remote host key changed, the connection will be terminated!");
-        goto fail;
-
-    case SSH_SERVER_FOUND_OTHER:
-        WRN("Remote host key is not known, but a key of another type for this host is known. Continue with caution.");
-        goto hostkey_not_known;
-
-    case SSH_SERVER_FILE_NOT_FOUND:
-        WRN("Could not find the known hosts file.");
-        goto hostkey_not_known;
-
-    case SSH_SERVER_NOT_KNOWN:
-hostkey_not_known:
-#ifdef ENABLE_DNSSEC
-        if ((srv_pubkey_type != SSH_KEYTYPE_UNKNOWN) || (srv_pubkey_type != SSH_KEYTYPE_RSA1)) {
-            if (srv_pubkey_type == SSH_KEYTYPE_DSS) {
-                ret = callback_ssh_hostkey_hash_dnssec_check(hostname, hash_sha1, 2, 1);
-            } else if (srv_pubkey_type == SSH_KEYTYPE_RSA) {
-                ret = callback_ssh_hostkey_hash_dnssec_check(hostname, hash_sha1, 1, 1);
-            } else if (srv_pubkey_type == SSH_KEYTYPE_ECDSA) {
-                ret = callback_ssh_hostkey_hash_dnssec_check(hostname, hash_sha1, 3, 1);
-            }
-
-            /* DNSSEC SSHFP check successful, that's enough */
-            if (!ret) {
-                VRB("DNSSEC SSHFP check successful.");
-                ssh_write_knownhost(session);
-                ssh_clean_pubkey_hash(&hash_sha1);
-                ssh_string_free_char(hexa);
-                return 0;
-            }
-        }
-#endif
-
-        /* try to get result from user */
-        fprintf(stdout, "The authenticity of the host \'%s\' cannot be established.\n", hostname);
-        fprintf(stdout, "%s key fingerprint is %s.\n", ssh_key_type_to_char(srv_pubkey_type), hexa);
-
-#ifdef ENABLE_DNSSEC
-        if (ret == 2) {
-            fprintf(stdout, "No matching host key fingerprint found using DNS.\n");
-        } else if (ret == 1) {
-            fprintf(stdout, "Matching host key fingerprint found using DNS.\n");
-        }
-#endif
-
-        fprintf(stdout, "Are you sure you want to continue connecting (yes/no)? ");
-
-        do {
-            if (fscanf(stdin, "%4s", answer) == EOF) {
-                ERR("fscanf() failed (%s).", strerror(errno));
-                goto fail;
-            }
-            while (((c = getchar()) != EOF) && (c != '\n'));
-
-            fflush(stdin);
-            if (!strcmp("yes", answer)) {
-                /* store the key into the host file */
-                ret = ssh_write_knownhost(session);
-                if (ret != SSH_OK) {
-                    WRN("Adding the known host \"%s\" failed (%s).", hostname, ssh_get_error(session));
-                }
-            } else if (!strcmp("no", answer)) {
-                goto fail;
-            } else {
-                fprintf(stdout, "Please type 'yes' or 'no': ");
-            }
-        } while (strcmp(answer, "yes") && strcmp(answer, "no"));
-
-        break;
-
-    case SSH_SERVER_ERROR:
-        ssh_clean_pubkey_hash(&hash_sha1);
-        fprintf(stderr,"%s",ssh_get_error(session));
-        return -1;
-    }
-
-    ssh_clean_pubkey_hash(&hash_sha1);
-    ssh_string_free_char(hexa);
-    return 0;
-
-fail:
-    ssh_clean_pubkey_hash(&hash_sha1);
-    ssh_string_free_char(hexa);
-    return -1;
 }
+
+API void
+nc_client_ssh_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session))
+{
+    _nc_client_ssh_set_auth_hostkey_check_clb(auth_hostkey_check, &ssh_opts);
+}
+
+API void
+nc_client_ssh_ch_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session))
+{
+    _nc_client_ssh_set_auth_hostkey_check_clb(auth_hostkey_check, &ssh_ch_opts);
+}
+
 
 static void
 _nc_client_ssh_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname),
@@ -933,7 +960,7 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts)
         return -1;
     }
 
-    if (sshauth_hostkey_check(session->host, ssh_sess)) {
+    if (opts->auth_hostkey_check(session->host, ssh_sess)) {
         ERR("Checking the host key failed.");
         return -1;
     }

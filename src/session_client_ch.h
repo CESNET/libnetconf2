@@ -47,6 +47,14 @@ int nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **sess
 #ifdef ENABLE_SSH
 
 /**
+ * @brief Set SSH CALL Home authentication hostkey check (knownhosts) callback.
+ *
+ * @param[in] auth_hostkey_check Function to call, returns 0 on success, non-zero in error.
+ *                               If NULL, the default callback is set.
+ */
+void nc_client_ssh_ch_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session));
+
+/**
  * @brief Set SSH Call Home password authentication callback.
  *
  * @param[in] auth_password Function to call, returns the password for username@hostname.
