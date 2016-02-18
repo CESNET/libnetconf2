@@ -79,6 +79,32 @@ struct nc_session *nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx);
 #ifdef ENABLE_SSH
 
 /**
+ * @brief Set SSH password authentication callback.
+ *
+ * @param[in] auth_password Function to call, returns the password for username@hostname.
+ *                          If NULL, the default callback is set.
+ */
+void nc_client_ssh_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname));
+
+/**
+ * @brief Set SSH interactive authentication callback.
+ *
+ * @param[in] auth_interactive Function to call for every question, returns the answer for
+ *                             authentication name with instruction and echoing prompt.
+ *                             If NULL, the default callback is set.
+ */
+void nc_client_ssh_set_auth_interactive_clb(char *(*auth_interactive)(const char *auth_name, const char *instruction,
+                                                                      const char *prompt, int echo));
+
+/**
+ * @brief Set SSH publickey authentication encrypted private key passphrase callback.
+ *
+ * @param[in] auth_privkey_passphrase Function to call for every question, returns
+ *                                    the passphrase for the specific private key.
+ */
+void nc_client_ssh_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path));
+
+/**
  * @brief Add an SSH public and private key pair to be used for client authentication.
  *
  * Private key can be encrypted, the passphrase will be asked for before using it.

@@ -50,14 +50,24 @@
 #include "session_client_ch.h"
 #include "libnetconf.h"
 
+static char *sshauth_password(const char *username, const char *hostname);
+static char *sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo);
+static char *sshauth_privkey_passphrase(const char* privkey_path);
+
 extern struct nc_client_opts client_opts;
 
 static struct nc_client_ssh_opts ssh_opts = {
-    .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 1}}
+    .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 1}},
+    .auth_password = sshauth_password,
+    .auth_interactive = sshauth_interactive,
+    .auth_privkey_passphrase = sshauth_privkey_passphrase
 };
 
 static struct nc_client_ssh_opts ssh_ch_opts = {
-    .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}}
+    .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}},
+    .auth_password = sshauth_password,
+    .auth_interactive = sshauth_interactive,
+    .auth_privkey_passphrase = sshauth_privkey_passphrase
 };
 
 static void
@@ -264,7 +274,7 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
 }
 
 static char *
-sshauth_passphrase(const char* privkey_path)
+sshauth_privkey_passphrase(const char* privkey_path)
 {
     char c, *buf, *newbuf;
     int buflen = 1024, len = 0;
@@ -556,6 +566,78 @@ fail:
     return -1;
 }
 
+static void
+_nc_client_ssh_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname),
+                                     struct nc_client_ssh_opts *opts)
+{
+    if (auth_password) {
+        opts->auth_password = auth_password;
+    } else {
+        opts->auth_password = sshauth_password;
+    }
+}
+
+API void
+nc_client_ssh_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname))
+{
+    _nc_client_ssh_set_auth_password_clb(auth_password, &ssh_opts);
+}
+
+API void
+nc_client_ssh_ch_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname))
+{
+    _nc_client_ssh_set_auth_password_clb(auth_password, &ssh_ch_opts);
+}
+
+static void
+_nc_client_ssh_set_auth_interactive_clb(char *(*auth_interactive)(const char *auth_name, const char *instruction,
+                                                                  const char *prompt, int echo),
+                                        struct nc_client_ssh_opts *opts)
+{
+    if (auth_interactive) {
+        opts->auth_interactive = auth_interactive;
+    } else {
+        opts->auth_interactive = sshauth_interactive;
+    }
+}
+
+API void
+nc_client_ssh_set_auth_interactive_clb(char *(*auth_interactive)(const char *auth_name, const char *instruction,
+                                                                  const char *prompt, int echo))
+{
+    _nc_client_ssh_set_auth_interactive_clb(auth_interactive, &ssh_opts);
+}
+
+API void
+nc_client_ssh_ch_set_auth_interactive_clb(char *(*auth_interactive)(const char *auth_name, const char *instruction,
+                                                                  const char *prompt, int echo))
+{
+    _nc_client_ssh_set_auth_interactive_clb(auth_interactive, &ssh_ch_opts);
+}
+
+static void
+_nc_client_ssh_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path),
+                                        struct nc_client_ssh_opts *opts)
+{
+    if (auth_privkey_passphrase) {
+        opts->auth_privkey_passphrase = auth_privkey_passphrase;
+    } else {
+        opts->auth_privkey_passphrase = sshauth_privkey_passphrase;
+    }
+}
+
+API void
+nc_client_ssh_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path))
+{
+    _nc_client_ssh_set_auth_privkey_passphrase_clb(auth_privkey_passphrase, &ssh_opts);
+}
+
+API void
+nc_client_ssh_ch_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path))
+{
+    _nc_client_ssh_set_auth_privkey_passphrase_clb(auth_privkey_passphrase, &ssh_ch_opts);
+}
+
 static int
 _nc_client_ssh_add_keypair(const char *pub_key, const char *priv_key, struct nc_client_ssh_opts *opts)
 {
@@ -833,7 +915,7 @@ nc_client_ssh_ch_del_bind(const char *address, uint16_t port)
  * Host, port, username, and a connected socket is expected to be set.
  */
 static int
-connect_ssh_session(struct nc_session *session)
+connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts)
 {
     int j, ret_auth, userauthlist;
     NC_SSH_AUTH_TYPE auth;
@@ -865,15 +947,15 @@ connect_ssh_session(struct nc_session *session)
     userauthlist = ssh_userauth_list(ssh_sess, NULL);
 
     /* remove those disabled */
-    if (ssh_opts.auth_pref[0].value < 0) {
+    if (opts->auth_pref[0].value < 0) {
         VRB("Interactive SSH authentication method was disabled.");
         userauthlist &= ~SSH_AUTH_METHOD_INTERACTIVE;
     }
-    if (ssh_opts.auth_pref[1].value < 0) {
+    if (opts->auth_pref[1].value < 0) {
         VRB("Password SSH authentication method was disabled.");
         userauthlist &= ~SSH_AUTH_METHOD_PASSWORD;
     }
-    if (ssh_opts.auth_pref[2].value < 0) {
+    if (opts->auth_pref[2].value < 0) {
         VRB("Publickey SSH authentication method was disabled.");
         userauthlist &= ~SSH_AUTH_METHOD_PUBLICKEY;
     }
@@ -883,13 +965,13 @@ connect_ssh_session(struct nc_session *session)
         pref = 0;
         if (userauthlist & SSH_AUTH_METHOD_INTERACTIVE) {
             auth = NC_SSH_AUTH_INTERACTIVE;
-            pref = ssh_opts.auth_pref[0].value;
+            pref = opts->auth_pref[0].value;
         }
-        if ((userauthlist & SSH_AUTH_METHOD_PASSWORD) && (ssh_opts.auth_pref[1].value > pref)) {
+        if ((userauthlist & SSH_AUTH_METHOD_PASSWORD) && (opts->auth_pref[1].value > pref)) {
             auth = NC_SSH_AUTH_PASSWORD;
-            pref = ssh_opts.auth_pref[1].value;
+            pref = opts->auth_pref[1].value;
         }
-        if ((userauthlist & SSH_AUTH_METHOD_PUBLICKEY) && (ssh_opts.auth_pref[2].value > pref)) {
+        if ((userauthlist & SSH_AUTH_METHOD_PUBLICKEY) && (opts->auth_pref[2].value > pref)) {
             auth = NC_SSH_AUTH_PUBLICKEY;
         }
 
@@ -904,7 +986,7 @@ connect_ssh_session(struct nc_session *session)
             userauthlist &= ~SSH_AUTH_METHOD_PASSWORD;
 
             VRB("Password authentication (host \"%s\", user \"%s\").", session->host, session->username);
-            s = sshauth_password(session->username, session->host);
+            s = opts->auth_password(session->username, session->host);
             if ((ret_auth = ssh_userauth_password(ssh_sess, session->username, s)) != SSH_AUTH_SUCCESS) {
                 memset(s, 0, strlen(s));
                 VRB("Authentication failed (%s).", ssh_get_error(ssh_sess));
@@ -921,9 +1003,9 @@ connect_ssh_session(struct nc_session *session)
                     if (prompt == NULL) {
                         break;
                     }
-                    answer = sshauth_interactive(ssh_userauth_kbdint_getname(ssh_sess),
-                                                 ssh_userauth_kbdint_getinstruction(ssh_sess),
-                                                 prompt, echo);
+                    answer = opts->auth_interactive(ssh_userauth_kbdint_getname(ssh_sess),
+                                                    ssh_userauth_kbdint_getinstruction(ssh_sess),
+                                                    prompt, echo);
                     if (ssh_userauth_kbdint_setanswer(ssh_sess, j, answer) < 0) {
                         free(answer);
                         break;
@@ -943,18 +1025,18 @@ connect_ssh_session(struct nc_session *session)
             VRB("Publickey athentication.");
 
             /* if publickeys path not provided, we cannot continue */
-            if (!ssh_opts.key_count) {
+            if (!opts->key_count) {
                 VRB("No key pair specified.");
                 break;
             }
 
-            for (j = 0; j < ssh_opts.key_count; j++) {
+            for (j = 0; j < opts->key_count; j++) {
                 VRB("Trying to authenticate using %spair \"%s\" \"%s\".",
-                     ssh_opts.keys[j].privkey_crypt ? "password-protected " : "", ssh_opts.keys[j].privkey_path,
-                     ssh_opts.keys[j].pubkey_path);
+                     opts->keys[j].privkey_crypt ? "password-protected " : "", opts->keys[j].privkey_path,
+                     opts->keys[j].pubkey_path);
 
-                if (ssh_pki_import_pubkey_file(ssh_opts.keys[j].pubkey_path, &pubkey) != SSH_OK) {
-                    WRN("Failed to import the key \"%s\".", ssh_opts.keys[j].pubkey_path);
+                if (ssh_pki_import_pubkey_file(opts->keys[j].pubkey_path, &pubkey) != SSH_OK) {
+                    WRN("Failed to import the key \"%s\".", opts->keys[j].pubkey_path);
                     continue;
                 }
                 ret_auth = ssh_userauth_try_publickey(ssh_sess, NULL, pubkey);
@@ -968,14 +1050,14 @@ connect_ssh_session(struct nc_session *session)
                     break;
                 }
 
-                if (ssh_opts.keys[j].privkey_crypt) {
-                    s = sshauth_passphrase(ssh_opts.keys[j].privkey_path);
+                if (opts->keys[j].privkey_crypt) {
+                    s = opts->auth_privkey_passphrase(opts->keys[j].privkey_path);
                 } else {
                     s = NULL;
                 }
 
-                if (ssh_pki_import_privkey_file(ssh_opts.keys[j].privkey_path, s, NULL, NULL, &privkey) != SSH_OK) {
-                    WRN("Failed to import the key \"%s\".", ssh_opts.keys[j].privkey_path);
+                if (ssh_pki_import_privkey_file(opts->keys[j].privkey_path, s, NULL, NULL, &privkey) != SSH_OK) {
+                    WRN("Failed to import the key \"%s\".", opts->keys[j].privkey_path);
                     if (s) {
                         memset(s, 0, strlen(s));
                         free(s);
@@ -1050,6 +1132,143 @@ open_netconf_channel(struct nc_session *session)
     }
 
     return 0;
+}
+
+static struct nc_session *
+_nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client_ssh_opts *opts)
+{
+    char *host = NULL, *username = NULL;
+    unsigned short port = 0;
+    int sock;
+    struct passwd *pw;
+    struct nc_session *session = NULL;
+
+    if (!ssh_session) {
+        ERRARG;
+        return NULL;
+    }
+
+    /* prepare session structure */
+    session = calloc(1, sizeof *session);
+    if (!session) {
+        ERRMEM;
+        return NULL;
+    }
+    session->status = NC_STATUS_STARTING;
+    session->side = NC_CLIENT;
+
+    /* transport lock */
+    session->ti_lock = malloc(sizeof *session->ti_lock);
+    if (!session->ti_lock) {
+        ERRMEM;
+        goto fail;
+    }
+    pthread_mutex_init(session->ti_lock, NULL);
+
+    session->ti_type = NC_TI_LIBSSH;
+    session->ti.libssh.session = ssh_session;
+
+    /* was port set? */
+    ssh_options_get_port(ssh_session, (unsigned int *)&port);
+
+    if (ssh_options_get(ssh_session, SSH_OPTIONS_HOST, &host) != SSH_OK) {
+        /*
+         * There is no file descriptor (detected based on the host, there is no way to check
+         * the SSH_OPTIONS_FD directly :/), we need to create it. (TCP/IP layer)
+         */
+
+        /* remember host */
+        host = strdup("localhost");
+        ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
+
+        /* create and connect socket */
+        sock = nc_sock_connect(host, port);
+        if (sock == -1) {
+            goto fail;
+        }
+        ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_FD, &sock);
+    }
+
+    /* was username set? */
+    ssh_options_get(ssh_session, SSH_OPTIONS_USER, &username);
+
+    if (!ssh_is_connected(ssh_session)) {
+        /*
+         * We are connected, but not SSH authenticated. (Transport layer)
+         */
+
+        /* remember username */
+        if (!username) {
+            if (!opts->username) {
+                pw = getpwuid(getuid());
+                if (!pw) {
+                    ERR("Unknown username for the SSH connection (%s).", strerror(errno));
+                    goto fail;
+                }
+                username = strdup(pw->pw_name);
+            } else {
+                username = strdup(opts->username);
+            }
+            ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
+        }
+
+        /* connect and authenticate SSH session */
+        session->host = host;
+        session->username = username;
+        if (connect_ssh_session(session, opts)) {
+            goto fail;
+        }
+    }
+
+    /*
+     * Almost done, open a netconf channel. (Transport layer / application layer)
+     */
+    if (open_netconf_channel(session)) {
+        goto fail;
+    }
+
+    /*
+     * SSH session is established and netconf channel opened, create a NETCONF session. (Application layer)
+     */
+
+    /* assign context (dicionary needed for handshake) */
+    if (!ctx) {
+        if (client_opts.schema_searchpath) {
+            ctx = ly_ctx_new(client_opts.schema_searchpath);
+        } else {
+            ctx = ly_ctx_new(SCHEMAS_DIR);
+        }
+    } else {
+        session->flags |= NC_SESSION_SHAREDCTX;
+    }
+    session->ctx = ctx;
+
+    /* NETCONF handshake */
+    if (nc_handshake(session)) {
+        goto fail;
+    }
+    session->status = NC_STATUS_RUNNING;
+
+    if (nc_ctx_check_and_fill(session) == -1) {
+        goto fail;
+    }
+
+    /* store information into the dictionary */
+    if (host) {
+        session->host = lydict_insert_zc(ctx, host);
+    }
+    if (port) {
+        session->port = port;
+    }
+    if (username) {
+        session->username = lydict_insert_zc(ctx, username);
+    }
+
+    return session;
+
+fail:
+    nc_session_free(session);
+    return NULL;
 }
 
 API struct nc_session *
@@ -1131,7 +1350,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     /* temporarily, for session connection */
     session->host = host;
     session->username = username;
-    if (connect_ssh_session(session) || open_netconf_channel(session)) {
+    if (connect_ssh_session(session, &ssh_opts) || open_netconf_channel(session)) {
         goto fail;
     }
 
@@ -1172,138 +1391,7 @@ fail:
 API struct nc_session *
 nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
 {
-    char *host = NULL, *username = NULL;
-    unsigned short port = 0;
-    int sock;
-    struct passwd *pw;
-    struct nc_session *session = NULL;
-
-    if (!ssh_session) {
-        ERRARG;
-        return NULL;
-    }
-
-    /* prepare session structure */
-    session = calloc(1, sizeof *session);
-    if (!session) {
-        ERRMEM;
-        return NULL;
-    }
-    session->status = NC_STATUS_STARTING;
-    session->side = NC_CLIENT;
-
-    /* transport lock */
-    session->ti_lock = malloc(sizeof *session->ti_lock);
-    if (!session->ti_lock) {
-        ERRMEM;
-        goto fail;
-    }
-    pthread_mutex_init(session->ti_lock, NULL);
-
-    session->ti_type = NC_TI_LIBSSH;
-    session->ti.libssh.session = ssh_session;
-
-    /* was port set? */
-    ssh_options_get_port(ssh_session, (unsigned int *)&port);
-
-    if (ssh_options_get(ssh_session, SSH_OPTIONS_HOST, &host) != SSH_OK) {
-        /*
-         * There is no file descriptor (detected based on the host, there is no way to check
-         * the SSH_OPTIONS_FD directly :/), we need to create it. (TCP/IP layer)
-         */
-
-        /* remember host */
-        host = strdup("localhost");
-        ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
-
-        /* create and connect socket */
-        sock = nc_sock_connect(host, port);
-        if (sock == -1) {
-            goto fail;
-        }
-        ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_FD, &sock);
-    }
-
-    /* was username set? */
-    ssh_options_get(ssh_session, SSH_OPTIONS_USER, &username);
-
-    if (!ssh_is_connected(ssh_session)) {
-        /*
-         * We are connected, but not SSH authenticated. (Transport layer)
-         */
-
-        /* remember username */
-        if (!username) {
-            if (!ssh_opts.username) {
-                pw = getpwuid(getuid());
-                if (!pw) {
-                    ERR("Unknown username for the SSH connection (%s).", strerror(errno));
-                    goto fail;
-                }
-                username = strdup(pw->pw_name);
-            } else {
-                username = strdup(ssh_opts.username);
-            }
-            ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
-        }
-
-        /* authenticate SSH session */
-        session->host = host;
-        session->username = username;
-        if (connect_ssh_session(session)) {
-            goto fail;
-        }
-    }
-
-    /*
-     * Almost done, open a netconf channel. (Transport layer / application layer)
-     */
-    if (open_netconf_channel(session)) {
-        goto fail;
-    }
-
-    /*
-     * SSH session is established and netconf channel opened, create a NETCONF session. (Application layer)
-     */
-
-    /* assign context (dicionary needed for handshake) */
-    if (!ctx) {
-        if (client_opts.schema_searchpath) {
-            ctx = ly_ctx_new(client_opts.schema_searchpath);
-        } else {
-            ctx = ly_ctx_new(SCHEMAS_DIR);
-        }
-    } else {
-        session->flags |= NC_SESSION_SHAREDCTX;
-    }
-    session->ctx = ctx;
-
-    /* NETCONF handshake */
-    if (nc_handshake(session)) {
-        goto fail;
-    }
-    session->status = NC_STATUS_RUNNING;
-
-    if (nc_ctx_check_and_fill(session) == -1) {
-        goto fail;
-    }
-
-    /* store information into the dictionary */
-    if (host) {
-        session->host = lydict_insert_zc(ctx, host);
-    }
-    if (port) {
-        session->port = port;
-    }
-    if (username) {
-        session->username = lydict_insert_zc(ctx, username);
-    }
-
-    return session;
-
-fail:
-    nc_session_free(session);
-    return NULL;
+    return _nc_connect_libssh(ssh_session, ctx, &ssh_opts);
 }
 
 API struct nc_session *
@@ -1389,6 +1477,7 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
 {
     const int ssh_timeout = NC_SSH_TIMEOUT;
     struct passwd *pw;
+    struct nc_session *session;
     ssh_session sess;
 
     sess = ssh_new();
@@ -1419,5 +1508,6 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
         ssh_options_set(sess, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519,ssh-rsa,ssh-dss,ssh-rsa1");
     }
 
-    return nc_connect_libssh(sess, ctx);
+    session = _nc_connect_libssh(sess, ctx, &ssh_ch_opts);
+    return session;
 }

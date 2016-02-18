@@ -47,6 +47,32 @@ int nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **sess
 #ifdef ENABLE_SSH
 
 /**
+ * @brief Set SSH Call Home password authentication callback.
+ *
+ * @param[in] auth_password Function to call, returns the password for username@hostname.
+ *                          If NULL, the default callback is set.
+ */
+void nc_client_ssh_ch_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname));
+
+/**
+ * @brief Set SSH Call Home interactive authentication callback.
+ *
+ * @param[in] auth_interactive Function to call for every question, returns the answer for
+ *                             authentication name with instruction and echoing prompt.
+ *                             If NULL, the default callback is set.
+ */
+void nc_client_ssh_ch_set_auth_interactive_clb(char *(*auth_interactive)(const char *auth_name, const char *instruction,
+                                                                         const char *prompt, int echo));
+
+/**
+ * @brief Set SSH Call Home publickey authentication encrypted private key passphrase callback.
+ *
+ * @param[in] auth_privkey_passphrase Function to call for every question, returns
+ *                                    the passphrase for the specific private key.
+ */
+void nc_client_ssh_ch_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path));
+
+/**
  * @brief Add a new client bind and start listening on it for SSH Call Home connections.
  *
  * @param[in] address IP address to bind to.
