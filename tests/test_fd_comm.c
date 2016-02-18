@@ -188,7 +188,7 @@ test_send_recv_ok(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, &reply);
+    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, 0, &reply);
     assert_int_equal(msgtype, NC_MSG_REPLY);
 
     nc_rpc_free(rpc);
@@ -247,7 +247,7 @@ test_send_recv_error(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, &reply);
+    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, 0, &reply);
     assert_int_equal(msgtype, NC_MSG_REPLY);
 
     nc_rpc_free(rpc);
@@ -307,7 +307,7 @@ test_send_recv_data(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, &reply);
+    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, 0, &reply);
     assert_int_equal(msgtype, NC_MSG_REPLY);
 
     nc_rpc_free(rpc);

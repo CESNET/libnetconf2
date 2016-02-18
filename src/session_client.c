@@ -216,7 +216,7 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
         return NULL;
     }
 
-    msg = nc_recv_reply(session, rpc, msgid, 250, &reply);
+    msg = nc_recv_reply(session, rpc, msgid, 250, 0, &reply);
     nc_rpc_free(rpc);
     if (msg == NC_MSG_WOULDBLOCK) {
         ERR("Session %u: timeout for receiving reply to a <get-schema> expired.", session->id);
@@ -699,7 +699,7 @@ parse_rpc_error(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_err *err)
 }
 
 static struct nc_reply *
-parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
+parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int parseroptions)
 {
     struct lyxml_elem *iter;
     const struct lys_node *schema = NULL;
@@ -764,7 +764,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
             if (rpc_gen->has_data) {
                 schema = rpc_gen->content.data->schema;
             } else {
-                data = lyd_parse_mem(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC);
+                data = lyd_parse_mem(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | parseroptions);
                 if (!data) {
                     ERR("Failed to parse a generic RPC XML.");
                     return NULL;
@@ -783,7 +783,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
         case NC_RPC_GET:
             /* special treatment */
             data = lyd_parse_xml(ctx, &xml->child->child, LYD_OPT_DESTRUCT
-                                 | (rpc->type == NC_RPC_GETCONFIG ? LYD_OPT_GETCONFIG : LYD_OPT_GET));
+                                 | (rpc->type == NC_RPC_GETCONFIG ? LYD_OPT_GETCONFIG : LYD_OPT_GET) | parseroptions);
             if (!data) {
                 ERR("Failed to parse <%s> reply.", (rpc->type == NC_RPC_GETCONFIG ? "get-config" : "get"));
                 return NULL;
@@ -820,7 +820,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
         data_rpl = malloc(sizeof *data_rpl);
         data_rpl->type = NC_RPL_DATA;
         if (!data) {
-            data_rpl->data = lyd_parse_xml(ctx, &xml->child, LYD_OPT_DESTRUCT | LYD_OPT_RPCREPLY, schema);
+            data_rpl->data = lyd_parse_xml(ctx, &xml->child, LYD_OPT_DESTRUCT | LYD_OPT_RPCREPLY | parseroptions, schema);
         } else {
             /* <get>, <get-config> */
             data_rpl->data = data;
@@ -945,24 +945,25 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
 #endif /* ENABLE_SSH || ENABLE_TLS */
 
 API NC_MSG_TYPE
-nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout, struct nc_reply **reply)
+nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout, int parseroptions, struct nc_reply **reply)
 {
     struct lyxml_elem *xml;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
 
-    if (!session || !rpc || !reply) {
+    if (!session || !rpc || !reply || (parseroptions & LYD_OPT_TYPEMASK)) {
         ERRARG;
         return NC_MSG_ERROR;
     } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR("Session %u: invalid session to receive RPC replies.", session->id);
         return NC_MSG_ERROR;
     }
+    parseroptions &= ~(LYD_OPT_DESTRUCT | LYD_OPT_NOSIBLINGS);
     *reply = NULL;
 
     msgtype = get_msg(session, timeout, msgid, &xml);
 
     if (msgtype == NC_MSG_REPLY) {
-        *reply = parse_reply(session->ctx, xml, rpc);
+        *reply = parse_reply(session->ctx, xml, rpc, parseroptions);
         lyxml_free(session->ctx, xml);
         if (!(*reply)) {
             return NC_MSG_ERROR;

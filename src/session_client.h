@@ -376,13 +376,15 @@ struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
  * @param[in] msgid Expected message ID of the reply.
  * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite
  *            waiting and 0 for immediate return if data are not available on wire.
+ * @param[in] parseroptions libyang parseroptions flags, do not set the data type, it is set
+ *            internally. LYD_OPT_DESTRUCT and LYD_OPT_NOSIBLINGS is ignored.
  * @param[out] reply Resulting object of NETCONF RPC reply.
  * @return #NC_MSG_REPLY for success, #NC_MSG_WOULDBLOCK if timeout has elapsed, #NC_MSG_ERROR if
  *         reading has failed, and #NC_MSG_NOTIF if a notification was read instead (call this
  *         function again to get the reply).
  */
 NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout,
-                          struct nc_reply **reply);
+                          int parseroptions, struct nc_reply **reply);
 
 /**
  * @brief Receive NETCONF Notification.
