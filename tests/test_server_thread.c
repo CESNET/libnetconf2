@@ -256,58 +256,36 @@ ssh_endpt_del_authkey_thread(void *arg)
     return NULL;
 }
 
+static int
+ssh_hostkey_check_clb(const char *hostname, ssh_session session)
+{
+    (void)hostname;
+    (void)session;
+
+    return 0;
+}
+
 static void *
 ssh_client_thread(void *arg)
 {
     (void)arg;
     int ret;
-    long timeout = CLIENT_SSH_AUTH_TIMEOUT;
-    uint32_t port;
-    ssh_session sshsession;
-    ssh_key pubkey, privkey;
     struct nc_session *session;
 
-    /* We cannot use nc_connect_ssh(), because we want to skip the knownhost check.
-    ret = nc_client_ssh_set_username("test");
-    assert_int_equal(ret, 0);
+    /* skip the knownhost check */
+    nc_client_ssh_set_auth_hostkey_check_clb(ssh_hostkey_check_clb);
 
-    ret = nc_client_ssh_add_keypair("data/key_dsa.pub", "data/key_dsa");
-    assert_int_equal(ret, 0);
+    ret = nc_client_ssh_set_username("test");
+    assert(!ret);
+
+    ret = nc_client_ssh_add_keypair(TESTS_DIR"/data/key_dsa.pub", TESTS_DIR"/data/key_dsa");
+    assert(!ret);
 
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PUBLICKEY, 1);
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PASSWORD, -1);
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_INTERACTIVE, -1);
 
-    session = nc_session_connect("127.0.0.1", NC_PORT_SSH, NULL);*/
-
-    port = 6001;
-
-    sshsession = ssh_new();
-    ssh_options_set(sshsession, SSH_OPTIONS_HOST, "127.0.0.1");
-    ssh_options_set(sshsession, SSH_OPTIONS_PORT, &port);
-    ssh_options_set(sshsession, SSH_OPTIONS_USER, "test");
-    ssh_options_set(sshsession, SSH_OPTIONS_TIMEOUT, &timeout);
-    ssh_options_set(sshsession, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519,ssh-rsa,ssh-dss,ssh-rsa1");
-
-    ret = ssh_connect(sshsession);
-    assert(ret == SSH_OK);
-
-    /* authentication */
-    ret = ssh_userauth_none(sshsession, NULL);
-    assert(ret == SSH_AUTH_DENIED);
-    assert(ssh_userauth_list(sshsession, NULL) & SSH_AUTH_METHOD_PUBLICKEY);
-    ret = ssh_pki_import_pubkey_file(TESTS_DIR"/data/key_dsa.pub", &pubkey);
-    assert(ret == SSH_OK);
-    ret = ssh_userauth_try_publickey(sshsession, NULL, pubkey);
-    assert(ret == SSH_AUTH_SUCCESS);
-    ret = ssh_pki_import_privkey_file(TESTS_DIR"/data/key_dsa", NULL, NULL, NULL, &privkey);
-    assert(ret == SSH_OK);
-    ret = ssh_userauth_publickey(sshsession, NULL, privkey);
-    assert(ret == SSH_AUTH_SUCCESS);
-    ssh_key_free(pubkey);
-    ssh_key_free(privkey);
-
-    session = nc_connect_libssh(sshsession, NULL);
+    session = nc_connect_ssh("127.0.0.1", 6001, NULL);
     assert(session);
 
     nc_session_free(session);
