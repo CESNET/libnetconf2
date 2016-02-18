@@ -679,6 +679,8 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
 
     session = nc_connect_libssl(tls, ctx);
     if (session) {
+        session->flags |= NC_SESSION_CALLHOME;
+
         /* store information into session and the dictionary */
         session->host = lydict_insert(session->ctx, host, 0);
         session->port = port;

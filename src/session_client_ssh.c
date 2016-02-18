@@ -1509,5 +1509,9 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
     }
 
     session = _nc_connect_libssh(sess, ctx, &ssh_ch_opts);
+    if (session) {
+        session->flags |= NC_SESSION_CALLHOME;
+    }
+
     return session;
 }
