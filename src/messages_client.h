@@ -407,7 +407,7 @@ struct nc_rpc *nc_rpc_cancel(const char *persist_id, NC_PARAMTYPE paramtype);
  * needed NETCONF capabilities for the RPC.
  *
  * @param[in] source Source datastore being validated.
- * @param[in] url_or_config Usedn instead \p source if the source is an URL or a config.
+ * @param[in] url_or_config Used instead \p source if the source is an URL or a config.
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
