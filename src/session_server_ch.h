@@ -29,7 +29,7 @@
 #include "session.h"
 #include "netconf.h"
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
 
 /**
  * @brief Establish an SSH Call Home connection with a listening NETCONF client.
@@ -110,9 +110,9 @@ int nc_server_ssh_ch_del_authkey(const char *pubkey_path, const char *username);
  */
 void nc_server_ssh_ch_clear_opts(void);
 
-#endif /* ENABLE_SSH */
+#endif /* NC_ENABLED_SSH */
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
 
 /**
  * @brief Establish a TLS Call Home connection with a listening NETCONF client.
@@ -245,6 +245,6 @@ int nc_server_tls_ch_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAP
  */
 void nc_server_tls_ch_clear_opts(void);
 
-#endif /* ENABLE_TLS */
+#endif /* NC_ENABLED_TLS */
 
 #endif /* NC_SESSION_SERVER_CH_H_ */

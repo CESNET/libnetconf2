@@ -34,7 +34,7 @@
 #include "session.h"
 #include "messages_client.h"
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
 
 #   include <libssh/libssh.h>
 #   include <libssh/callbacks.h>
@@ -85,9 +85,9 @@ struct nc_server_ssh_opts {
     uint16_t auth_timeout;
 };
 
-#endif /* ENABLE_SSH */
+#endif /* NC_ENABLED_SSH */
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
 
 #   include <openssl/bio.h>
 #   include <openssl/ssl.h>
@@ -121,7 +121,7 @@ struct nc_server_tls_opts {
     } *ctn;
 };
 
-#endif /* ENABLE_TLS */
+#endif /* NC_ENABLED_TLS */
 
 /* ACCESS unlocked */
 struct nc_client_opts {
@@ -229,7 +229,7 @@ struct nc_session {
             int in;              /**< input file descriptor */
             int out;             /**< output file descriptor */
         } fd;                    /**< NC_TI_FD transport implementation structure */
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
         struct {
             ssh_channel channel;
             ssh_session session;
@@ -238,7 +238,7 @@ struct nc_session {
                                           otherwise there is a ring list of the NETCONF sessions */
         } libssh;
 #endif
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
         SSL *tls;
 #endif
     } ti;                          /**< transport implementation data */
@@ -261,7 +261,7 @@ struct nc_session {
     /* server side only data */
     void *ti_opts;
     time_t last_rpc;               /**< time the last RPC was received on this session */
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     /* SSH session authenticated */
 #   define NC_SESSION_SSH_AUTHENTICATED 0x04
     /* netconf subsystem requested */
@@ -273,7 +273,7 @@ struct nc_session {
 
     uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
 #endif
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     X509 *tls_cert;                /**< TLS client certificate it used for authentication */
 #endif
 };
@@ -436,7 +436,7 @@ int nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL 
  */
 int nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int timeout, struct nc_session **session);
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
 
 /**
  * @brief Accept a server Call Home connection on a socket.
@@ -489,9 +489,9 @@ int nc_ssh_pollin(struct nc_session *session, int *timeout);
 /* TODO */
 void nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts);
 
-#endif /* ENABLE_SSH */
+#endif /* NC_ENABLED_SSH */
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
 
 /* TODO */
 struct nc_session *nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx);
@@ -510,7 +510,7 @@ int nc_accept_tls_session(struct nc_session *session, int sock, int timeout);
 /* TODO */
 void nc_server_tls_clear_opts(struct nc_server_tls_opts *opts);
 
-#endif /* ENABLE_TLS */
+#endif /* NC_ENABLED_TLS */
 
 /**
  * Functions

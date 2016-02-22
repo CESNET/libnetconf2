@@ -31,19 +31,19 @@
 #include "libnetconf.h"
 #include "session_server.h"
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
 
 #   include <libssh/libssh.h>
 
-#endif /* ENABLE_SSH */
+#endif /* NC_ENABLED_SSH */
 
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 #   include <openssl/engine.h>
 #   include <openssl/conf.h>
 #   include <openssl/err.h>
 
-#endif /* ENABLE_SSH || ENABLE_TLS */
+#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
 /* in seconds */
 #define NC_CLIENT_HELLO_TIMEOUT 60
@@ -365,7 +365,7 @@ nc_session_free(struct nc_session *session)
         (void)siter;
         break;
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
         if (connected) {
             ssh_channel_free(session->ti.libssh.channel);
@@ -430,7 +430,7 @@ nc_session_free(struct nc_session *session)
         break;
 #endif
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
         if (connected) {
             SSL_shutdown(session->ti.tls);
@@ -896,7 +896,7 @@ nc_handshake(struct nc_session *session)
     return 0;
 }
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
 
 API void
 nc_ssh_init(void)
@@ -915,9 +915,9 @@ nc_ssh_destroy(void)
     ssh_finalize();
 }
 
-#endif /* ENABLE_SSH */
+#endif /* NC_ENABLED_SSH */
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
 
 static pthread_mutex_t *tls_locks;
 
@@ -1020,9 +1020,9 @@ nc_tls_destroy(void)
     CRYPTO_set_dynlock_destroy_callback(NULL);
 }
 
-#endif /* ENABLE_TLS */
+#endif /* NC_ENABLED_TLS */
 
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 API void
 nc_thread_destroy(void) {
@@ -1035,9 +1035,9 @@ nc_thread_destroy(void) {
     ERR_remove_thread_state(&crypto_tid);
 }
 
-#endif /* ENABLE_SSH || ENABLE_TLS */
+#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
-#if defined(ENABLE_SSH) && defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
 
 API void
 nc_ssh_tls_init(void)
@@ -1066,4 +1066,4 @@ nc_ssh_tls_destroy(void)
     CRYPTO_set_dynlock_destroy_callback(NULL);
 }
 
-#endif /* ENABLE_SSH && ENABLE_TLS */
+#endif /* NC_ENABLED_SSH && NC_ENABLED_TLS */

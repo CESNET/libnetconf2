@@ -201,7 +201,7 @@ int nc_ps_poll(struct nc_pollsession *ps, int timeout);
  */
 void nc_ps_clear(struct nc_pollsession *ps);
 
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 /**
  * @brief Accept new sessions on all the listening endpoints.
@@ -213,9 +213,9 @@ void nc_ps_clear(struct nc_pollsession *ps);
  */
 int nc_accept(int timeout, struct nc_session **session);
 
-#endif /* ENABLE_SSH || ENABLE_TLS */
+#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
 
 /**
  * @brief Accept a new NETCONF session on an SSH session of a running NETCONF session
@@ -336,9 +336,9 @@ int nc_server_ssh_endpt_add_authkey(const char *endpt_name, const char *pubkey_p
  */
 int nc_server_ssh_endpt_del_authkey(const char *endpt_name, const char *pubkey_path, const char *username);
 
-#endif /* ENABLE_SSH */
+#endif /* NC_ENABLED_SSH */
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
 
 /**
  * @brief Add a new TLS endpoint and start listening on it.
@@ -511,6 +511,6 @@ int nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char 
  */
 int nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
-#endif /* ENABLE_TLS */
+#endif /* NC_ENABLED_TLS */
 
 #endif /* NC_SESSION_SERVER_H_ */

@@ -87,7 +87,7 @@ nc_read(struct nc_session *session, char *buf, size_t count)
         }
         break;
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
         /* read via libssh */
         while (count) {
@@ -118,7 +118,7 @@ nc_read(struct nc_session *session, char *buf, size_t count)
         break;
 #endif
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
         /* read via OpenSSL */
         while (count) {
@@ -403,7 +403,7 @@ nc_read_poll(struct nc_session *session, int timeout)
     }
 
     switch (session->ti_type) {
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
         /* EINTR is handled, it resumes waiting */
         ret = ssh_channel_poll_timeout(session->ti.libssh.channel, timeout, 0);
@@ -427,7 +427,7 @@ nc_read_poll(struct nc_session *session, int timeout)
         }
         /* fallthrough */
 #endif
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
         if (session->ti_type == NC_TI_OPENSSL) {
             fds.fd = SSL_get_fd(session->ti.tls);
@@ -527,12 +527,12 @@ nc_session_is_connected(struct nc_session *session)
     case NC_TI_FD:
         fds.fd = session->ti.fd.in;
         break;
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
         fds.fd = ssh_get_fd(session->ti.libssh.session);
         break;
 #endif
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
         fds.fd = SSL_get_fd(session->ti.tls);
         break;
@@ -586,7 +586,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
     case NC_TI_FD:
         return write(session->ti.fd.out, buf, count);
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
         if (ssh_channel_is_closed(session->ti.libssh.channel) || ssh_channel_is_eof(session->ti.libssh.channel)) {
             if (ssh_channel_is_closed(session->ti.libssh.channel)) {
@@ -600,7 +600,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
         }
         return ssh_channel_write(session->ti.libssh.channel, buf, count);
 #endif
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
         return SSL_write(session->ti.tls, buf, count);
 #endif

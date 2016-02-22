@@ -836,7 +836,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
     return reply;
 }
 
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 int
 nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
@@ -918,12 +918,12 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
         return sock;
     }
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     if (client_opts.ch_binds[idx].ti == NC_TI_LIBSSH) {
         *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx);
     } else
 #endif
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     if (client_opts.ch_binds[idx].ti == NC_TI_OPENSSL) {
         *session = nc_accept_callhome_tls_sock(sock, host, port, ctx);
     } else
@@ -942,7 +942,7 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
     return 1;
 }
 
-#endif /* ENABLE_SSH || ENABLE_TLS */
+#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
 API NC_MSG_TYPE
 nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout, int parseroptions, struct nc_reply **reply)

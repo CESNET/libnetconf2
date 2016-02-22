@@ -60,14 +60,14 @@ if(ENABLE_SSH)
     set(libsrc ${libsrc}
         src/session_client_ssh.c
         src/session_server_ssh.c)
-    set(SSH_MACRO "#ifndef ENABLE_SSH\n#define ENABLE_SSH\n#endif")
+    set(SSH_MACRO "#ifndef NC_ENABLED_SSH\n#define NC_ENABLED_SSH\n#endif")
 endif()
 
 if(ENABLE_TLS)
     set(libsrc ${libsrc}
         src/session_client_tls.c
         src/session_server_tls.c)
-    set(TLS_MACRO "#ifndef ENABLE_TLS\n#define ENABLE_TLS\n#endif")
+    set(TLS_MACRO "#ifndef NC_ENABLED_TLS\n#define NC_ENABLED_TLS\n#endif")
 endif()
 
 set(headers
@@ -101,7 +101,7 @@ target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
 # dependencies - libssh
 if(ENABLE_SSH)
     find_package(LibSSH 0.6.4 REQUIRED)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_SSH ${LIBSSH_DEFINITIONS}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH ${LIBSSH_DEFINITIONS}")
     target_link_libraries(netconf2 ${LIBSSH_LIBRARIES} -lssh_threads -lcrypt)
     include_directories(${LIBSSH_INCLUDE_DIRS})
 endif()
@@ -110,7 +110,7 @@ endif()
 if(ENABLE_TLS OR ENABLE_DNSSEC)
     find_package(OpenSSL REQUIRED)
     if (ENABLE_TLS)
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_TLS")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_TLS")
     endif()
     target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
     include_directories(${OPENSSL_INCLUDE_DIR})

@@ -113,7 +113,7 @@ typedef enum NC_PARAMTYPE {
     NC_PARAMTYPE_DUP_AND_FREE /**< make a copy of the argument, free afterwards */
 } NC_PARAMTYPE;
 
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 /**
  * @brief Free all the dynamically allocated thread-specific libssl/libcrypto
@@ -127,9 +127,9 @@ typedef enum NC_PARAMTYPE {
  */
 void nc_thread_destroy(void);
 
-#endif /* ENABLE_SSH || ENABLE_TLS */
+#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
-#if defined(ENABLE_SSH) && defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
 
 /**
  * @brief Initialize both libssh and libssl/libcrypto libraries for thread-safe usage.
@@ -148,9 +148,9 @@ void nc_ssh_tls_init(void);
  */
 void nc_ssh_tls_destroy(void);
 
-#endif /* ENABLE_SSH && ENABLE_TLS */
+#endif /* NC_ENABLED_SSH && NC_ENABLED_TLS */
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
 
 /**
  * @brief Initialize libssh for thread-safe usage. If you plan to use libcrypto/
@@ -168,9 +168,9 @@ void nc_ssh_init(void);
  */
 void nc_ssh_destroy(void);
 
-#endif /* ENABLE_SSH */
+#endif /* NC_ENABLED_SSH */
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
 
 /**
  * @brief Initialize libssl/libcrypto for thread-safe usage. If you plan to use libssh
@@ -187,7 +187,7 @@ void nc_tls_init(void);
  */
 void nc_tls_destroy(void);
 
-#endif /* ENABLE_TLS */
+#endif /* NC_ENABLED_TLS */
 
 /**
  * @brief Transform given time_t (seconds since the epoch) into the RFC 3339 format

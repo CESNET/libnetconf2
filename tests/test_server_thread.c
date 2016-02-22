@@ -48,11 +48,11 @@ setup_lib(void)
 {
     nc_verbosity(NC_VERB_VERBOSE);
 
-#if defined(ENABLE_SSH) && defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
     nc_ssh_tls_init();
-#elif defined(ENABLE_SSH)
+#elif defined(NC_ENABLED_SSH)
     nc_ssh_init();
-#elif defined(ENABLE_TLS)
+#elif defined(NC_ENABLED_TLS)
     nc_tls_init();
 #endif
 
@@ -62,18 +62,18 @@ setup_lib(void)
 static int
 teardown_lib(void)
 {
-#if defined(ENABLE_SSH) && defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
     nc_ssh_tls_destroy();
-#elif defined(ENABLE_SSH)
+#elif defined(NC_ENABLED_SSH)
     nc_ssh_destroy();
-#elif defined(ENABLE_TLS)
+#elif defined(NC_ENABLED_TLS)
     nc_tls_destroy();
 #endif
 
     return 0;
 }
 
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 static void *
 server_thread(void *arg)
@@ -88,7 +88,7 @@ server_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-#if defined(ENABLE_SSH) && defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
     ret = nc_accept(NC_ACCEPT_TIMEOUT, &session);
     assert(ret == 1);
 
@@ -112,9 +112,9 @@ server_thread(void *arg)
     return NULL;
 }
 
-#endif /* ENABLE_SSH || ENABLE_TLS */
+#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
 
 static void *
 ssh_add_endpt_thread(void *arg)
@@ -326,9 +326,9 @@ thread_ssh_client(void)
     return client_tid;
 }
 
-#endif /* ENABLE_SSH */
+#endif /* NC_ENABLED_SSH */
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
 
 static void *
 tls_add_endpt_thread(void *arg)
@@ -641,13 +641,13 @@ thread_tls_client(void)
     return client_tid;
 }
 
-#endif /* ENABLE_TLS */
+#endif /* NC_ENABLED_TLS */
 
 static void *(*thread_funcs[])(void *) = {
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
     server_thread,
 #endif
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     ssh_add_endpt_thread,
     ssh_endpt_set_port_thread,
     ssh_del_endpt_thread,
@@ -659,7 +659,7 @@ static void *(*thread_funcs[])(void *) = {
     ssh_endpt_add_authkey_thread,
     ssh_endpt_del_authkey_thread,
 #endif
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     tls_add_endpt_thread,
     tls_endpt_set_port_thread,
     tls_del_endpt_thread,
@@ -683,7 +683,7 @@ clients_start_cleanup(void)
     //static pid_t pids[2] = {0, 0};
     static pthread_t tids[2] = {0, 0};
 
-#if defined(ENABLE_SSH) && defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
     /*if (pids[0] && pids[1]) {
         waitpid(pids[0], NULL, 0);
         waitpid(pids[1], NULL, 0);
@@ -699,7 +699,7 @@ clients_start_cleanup(void)
     }
     tids[0] = thread_ssh_client();
     tids[1] = thread_tls_client();
-#elif defined(ENABLE_SSH)
+#elif defined(NC_ENABLED_SSH)
     /*if (pids[0]) {
         waitpid(pids[0], NULL, 0);
         return;
@@ -711,7 +711,7 @@ clients_start_cleanup(void)
         return;
     }
     tids[0] = thread_ssh_client();
-#elif defined(ENABLE_TLS)
+#elif defined(NC_ENABLED_TLS)
     /*if (pids[1]) {
         waitpid(pids[1], NULL, 0);
         return;
@@ -746,7 +746,7 @@ main(void)
 
     pthread_barrier_init(&barrier, NULL, thread_count);
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     /* do first, so that client can connect on SSH */
     ret = nc_server_ssh_add_endpt_listen("main", "0.0.0.0", 6001);
     assert(!ret);
@@ -768,7 +768,7 @@ main(void)
     assert(!ret);
 #endif
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     /* do first, so that client can connect on TLS */
     ret = nc_server_tls_add_endpt_listen("main", "0.0.0.0", 6501);
     assert(!ret);

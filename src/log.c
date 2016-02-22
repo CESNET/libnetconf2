@@ -39,7 +39,7 @@ nc_verbosity(NC_VERB_LEVEL level)
 {
     verbose_level = level;
     ly_verb((LY_LOG_LEVEL)level);
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     ssh_set_log_level(level);
 #endif
 }

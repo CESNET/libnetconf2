@@ -25,13 +25,13 @@
 
 #include <libyang/libyang.h>
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
 
 #include <libssh/libssh.h>
 
 #endif
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
 
 #include <openssl/ssl.h>
 
@@ -76,7 +76,7 @@ int nc_client_schema_searchpath(const char *path);
  */
 struct nc_session *nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx);
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
 
 /**
  * @brief Set SSH authentication hostkey check (knownhosts) callback.
@@ -257,9 +257,9 @@ struct nc_session *nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx
  */
 struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx);
 
-#endif /* ENABLE_SSH */
+#endif /* NC_ENABLED_SSH */
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
 
 /**
  * @brief Set client authentication identity - a certificate and a private key.
@@ -369,7 +369,7 @@ struct nc_session *nc_connect_tls(const char *host, uint16_t port, struct ly_ctx
  */
 struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
 
-#endif /* ENABLE_TLS */
+#endif /* NC_ENABLED_TLS */
 
 /**
  * @brief Receive NETCONF RPC reply.
