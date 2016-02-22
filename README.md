@@ -101,6 +101,12 @@ $ make
 # install
 ```
 
+The library documentation can be generated directly from the source codes using
+Doxygen tool:
+```
+$ make doc
+```
+
 ## Build Options
 
 There are various options to change result of building.
