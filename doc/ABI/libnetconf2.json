@@ -1,0 +1,8 @@
+{
+  "Name":           "libnetconf2",
+  "SourceDir":      "src/libnetconf2/",
+  "BuildScript":    "build.sh",
+  "ChangeLog":      "On",
+  "HeadersDiff":    "On",
+  "PkgDiff":        "On",
+}
