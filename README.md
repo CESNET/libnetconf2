@@ -75,7 +75,7 @@ manager for OpenSSL package including the necessary development files
 ## Optional Dependencies
 
 ### cmocka
-For running the tests.
+For running the tests (see the [Tests](#tests) section for more information).
 ```
 $ git clone git://git.cryptomilk.org/projects/cmocka.git
 $ cd cmocka
