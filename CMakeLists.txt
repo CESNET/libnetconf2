@@ -156,7 +156,7 @@ install(FILES ${headers} DESTINATION ${INCLUDE_INSTALL_SUBDIR})
 # install schemas
 install(
     CODE "file(GLOB yin_schemas \"${CMAKE_SOURCE_DIR}/schemas/*.yin\")"
-    CODE "file(INSTALL \${yin_schemas} DESTINATION ${DATA_INSTALL_DIR})"
+    CODE "file(INSTALL \${yin_schemas} DESTINATION ${CMAKE_INSTALL_PREFIX}/${DATA_INSTALL_DIR})"
 )
 
 # install pkg-config file

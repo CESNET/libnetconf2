@@ -29,6 +29,6 @@
 /*
  * Location of installed basic YIN/YANG schemas
  */
-#define SCHEMAS_DIR "@DATA_INSTALL_DIR@/"
+#define SCHEMAS_DIR "@CMAKE_INSTALL_PREFIX@/@DATA_INSTALL_DIR@"
 
 #endif /* NC_CONFIG_H_ */
