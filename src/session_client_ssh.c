@@ -1022,6 +1022,10 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts)
                     if (prompt == NULL) {
                         break;
                     }
+
+                    /* libssh BUG - echo is always 1 for some reason, assume always 0 */
+                    echo = 0;
+
                     answer = opts->auth_interactive(ssh_userauth_kbdint_getname(ssh_sess),
                                                     ssh_userauth_kbdint_getinstruction(ssh_sess),
                                                     prompt, echo);
