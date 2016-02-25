@@ -15,6 +15,7 @@ branches:
 before_install:
   - sudo apt-get install -y zlib1g-dev
   - sudo apt-get install -y libssl-dev
+  - sudo apt-get install -y libval-dev
   - wget https://red.libssh.org/attachments/download/177/libssh-0.7.2.tar.xz
   - tar -xJf libssh-0.7.2.tar.xz
   - mkdir libssh-0.7.2/build && cd libssh-0.7.2/build
