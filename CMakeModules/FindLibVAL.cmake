@@ -56,7 +56,7 @@ else (LIBVAL_LIBRARIES AND LIBVAL_INCLUDE_DIRS)
   find_library(LIBVAL_LIBRARY
     NAMES
       libval-threads
-      libsres
+      val-threads
     PATHS
       /usr/lib
       /usr/lib64
@@ -66,17 +66,31 @@ else (LIBVAL_LIBRARIES AND LIBVAL_INCLUDE_DIRS)
       /sw/lib
       ${CMAKE_LIBRARY_PATH}
       ${CMAKE_INSTALL_PREFIX}/lib
-    NAMES_PER_DIR
   )
 
-  if (LIBVAL_INCLUDE_DIR AND LIBVAL_LIBRARY)
+  find_library(LIBSRES_LIBRARY
+    NAMES
+      libsres
+      sres
+    PATHS
+      /usr/lib
+      /usr/lib64
+      /usr/local/lib
+      /usr/local/lib64
+      /opt/local/lib
+      /sw/lib
+      ${CMAKE_LIBRARY_PATH}
+      ${CMAKE_INSTALL_PREFIX}/lib
+  )
+
+  if (LIBVAL_INCLUDE_DIR AND LIBVAL_LIBRARY AND LIBSRES_LIBRARY)
     set(LIBVAL_FOUND TRUE)
-  else (LIBVAL_INCLUDE_DIR AND LIBVAL_LIBRARY)
+  else (LIBVAL_INCLUDE_DIR AND LIBVAL_LIBRARY AND LIBSRES_LIBRARY)
     set(LIBVAL_FOUND FALSE)
-  endif (LIBVAL_INCLUDE_DIR AND LIBVAL_LIBRARY)
+  endif (LIBVAL_INCLUDE_DIR AND LIBVAL_LIBRARY AND LIBSRES_LIBRARY)
 
   set(LIBVAL_INCLUDE_DIRS ${LIBVAL_INCLUDE_DIR})
-  set(LIBVAL_LIBRARIES ${LIBVAL_LIBRARY})
+  set(LIBVAL_LIBRARIES ${LIBSRES_LIBRARY} ${LIBVAL_LIBRARY})
 
   # show the LIBVAL_INCLUDE_DIRS and LIBVAL_LIBRARIES variables only in the advanced view
   mark_as_advanced(LIBVAL_INCLUDE_DIRS LIBVAL_LIBRARIES)
