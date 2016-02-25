@@ -903,7 +903,7 @@ nc_ssh_destroy(void)
 {
     ENGINE_cleanup();
     CONF_modules_unload(1);
-    ERR_remove_state(0);
+    nc_thread_destroy();
     ssh_finalize();
 }
 
@@ -995,12 +995,12 @@ nc_tls_destroy(void)
     int i;
 
     CRYPTO_cleanup_all_ex_data();
-    ERR_remove_state(0);
+    nc_thread_destroy();
     EVP_cleanup();
     ERR_free_strings();
     sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
 
-    CRYPTO_set_id_callback(NULL);
+    CRYPTO_THREADID_set_callback(NULL);
     CRYPTO_set_locking_callback(NULL);
     for (i = 0; i < CRYPTO_num_locks(); ++i) {
         pthread_mutex_destroy(tls_locks + i);
