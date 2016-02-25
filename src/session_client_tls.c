@@ -22,6 +22,7 @@
 
 #include <libyang/libyang.h>
 #include <openssl/err.h>
+#include <openssl/x509.h>
 
 #include "session_client.h"
 #include "session_client_ch.h"
