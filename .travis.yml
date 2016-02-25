@@ -35,8 +35,12 @@ before_install:
 
   - if [ "${CC}" = "gcc" ]; then pip install --user codecov; export CFLAGS="-coverage"; fi
 
-script: 
-  - mkdir build && cd build ; cmake -DENABLE_TLS=ON -DENABLE_SSH=ON .. && make -j2 && make test
+script:
+  - mkdir build_none && cd build_none ; cmake -DENABLE_TLS=OFF -DENABLE_SSH=OFF -DENABLE_DNSSEC=OFF .. && make -j2 && make test
+  - mkdir build_tls && cd build_tls ; cmake -DENABLE_TLS=ON -DENABLE_SSH=OFF -DENABLE_DNSSEC=OFF .. && make -j2 && make test
+  - mkdir build_ssh && cd build_ssh ; cmake -DENABLE_TLS=OFF -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && make test
+  - mkdir build_ssh_tls && cd build_ssh_tls ; cmake -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && make test
+  - mkdir build_all && cd build_all ; cmake -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=ON .. && make -j2 && make test
 
 after_success:
   - if [ "${CC}" = "gcc" ]; then codecov; fi
