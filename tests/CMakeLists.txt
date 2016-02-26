@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 2.6)
-find_package(CMocka 1.0.0 REQUIRED)
 
 # list of all the tests
 set(tests test_io test_fd_comm test_server_thread)

@@ -180,8 +180,11 @@ if(ENABLE_VALGRIND_TESTS)
 endif()
 
 if(ENABLE_BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(tests)
+    find_package(CMocka 1.0.0)
+    if(CMOCKA_FOUND)
+        enable_testing()
+        add_subdirectory(tests)
+    endif(CMOCKA_FOUND)
 endif()
 
 configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_SOURCE_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)
