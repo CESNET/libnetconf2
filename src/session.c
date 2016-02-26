@@ -93,19 +93,6 @@ nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed)
     return 1;
 }
 
-void
-nc_subtract_elapsed(int *timeout, struct timespec *old_ts)
-{
-    struct timespec new_ts;
-
-    clock_gettime(CLOCK_MONOTONIC_RAW, &new_ts);
-
-    *timeout -= (new_ts.tv_sec - old_ts->tv_sec) * 1000;
-    *timeout -= (new_ts.tv_nsec - old_ts->tv_nsec) / 1000000;
-
-    *old_ts = new_ts;
-}
-
 API NC_STATUS
 nc_session_get_status(const struct nc_session *session)
 {

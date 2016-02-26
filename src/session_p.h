@@ -285,8 +285,6 @@ NC_MSG_TYPE nc_send_msg(struct nc_session *session, struct lyd_node *op);
 
 int nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed);
 
-void nc_subtract_elapsed(int *timeout, struct timespec *old_ts);
-
 /**
  * @brief Fill libyang context in \p session. Context models are based on the stored session
  *        capabilities. If the server does not support \<get-schema\>, the models are searched
