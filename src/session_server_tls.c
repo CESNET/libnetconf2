@@ -1490,7 +1490,6 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
 {
     struct nc_server_tls_opts *opts;
     struct pollfd pfd;
-    struct timespec old_ts, new_ts;
     int ret, elapsed = 0;
 
     opts = session->ti_opts;
@@ -1498,10 +1497,6 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     pfd.fd = sock;
     pfd.events = POLLIN;
     pfd.revents = 0;
-
-    if (timeout > 0) {
-        clock_gettime(CLOCK_MONOTONIC_RAW, &old_ts);
-    }
 
     /* poll for a new connection */
     errno = 0;
@@ -1514,14 +1509,6 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
         ERR("poll failed (%s).", strerror(errno));
         close(sock);
         return -1;
-    }
-
-    if (timeout > 0) {
-        /* decrease timeout */
-        clock_gettime(CLOCK_MONOTONIC_RAW, &new_ts);
-
-        elapsed = (new_ts.tv_sec - old_ts.tv_sec) * 1000;
-        elapsed += (new_ts.tv_nsec - old_ts.tv_nsec) / 1000000;
     }
 
     /* data waiting, prepare session */
