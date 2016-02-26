@@ -77,7 +77,7 @@ prv_printf(NC_VERB_LEVEL level, const char *format, ...)
 static void
 nc_ly_log_clb(LY_LOG_LEVEL lvl, const char *msg, const char *UNUSED(path))
 {
-    print_clb(lvl, msg);
+    print_clb((NC_VERB_LEVEL)lvl, msg);
 }
 
 API void
