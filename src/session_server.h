@@ -178,7 +178,7 @@ int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
  *
  *         Only with SSH support:
  *         4 if an SSH message was processed,
- *         5 if a new NETCONF SSH channel was created; call #nc_ssh_ps_accept_channel()
+ *         5 if a new NETCONF SSH channel was created; call #nc_ps_accept_ssh_channel
  *           to establish a new NETCONF session.
  */
 int nc_ps_poll(struct nc_pollsession *ps, int timeout);

@@ -177,14 +177,14 @@ int nc_server_tls_ch_add_trusted_cert_path(const char *cert_path);
  * @brief Set trusted Call Home Certificate Authority certificate locations. There
  *        can only be one file and one directory, they are replaced if already set.
  *
- * @param[in] cacert_file_path Path to a trusted CA cert store file in PEM format.
- *                             Can be NULL.
- * @param[in] cacert_dir_path Path to a trusted CA cert store hashed directory
- *                            (c_rehash utility can be used to create hashes)
- *                            with PEM files. Can be NULL.
+ * @param[in] ca_file Path to a trusted CA cert store file in PEM format.
+ *                    Can be NULL.
+ * @param[in] ca_dir Path to a trusted CA cert store hashed directory
+ *                   (c_rehash utility can be used to create hashes)
+ *                   with PEM files. Can be NULL.
  * @return 0 on success, -1 on error.
  */
-int nc_server_tls_ch_set_trusted_cacert_locations(const char *cacert_file_path, const char *cacert_dir_path);
+int nc_server_tls_ch_set_trusted_ca_paths(const char *ca_file, const char *ca_dir);
 
 /**
  * @brief Destroy and clean all the set Call Home certificates and private keys.
@@ -196,12 +196,12 @@ void nc_server_tls_ch_clear_certs(void);
  * @brief Set Call Home Certificate Revocation List locations. There can only be
  *        one file and one directory, they are replaced if already set.
  *
- * @param[in] crl_file_path Path to a CRL store file in PEM format. Can be NULL.
- * @param[in] crl_dir_path Path to a CRL store hashed directory (c_rehash utility
- *                         can be used to create hashes) with PEM files. Can be NULL.
+ * @param[in] crl_file Path to a CRL store file in PEM format. Can be NULL.
+ * @param[in] crl_dir Path to a CRL store hashed directory (c_rehash utility
+ *                    can be used to create hashes) with PEM files. Can be NULL.
  * @return 0 on success, -1 on error.
  */
-int nc_server_tls_ch_set_crl_locations(const char *crl_file_path, const char *crl_dir_path);
+int nc_server_tls_ch_set_crl_paths(const char *crl_file, const char *crl_dir);
 
 /**
  * @brief Destroy and clean Call Home CRLs. Call Home certificates, private keys,
