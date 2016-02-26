@@ -936,6 +936,21 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
 
 #endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
+API void
+nc_client_destroy(void)
+{
+    nc_client_schema_searchpath(NULL);
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+    nc_client_ch_del_bind(NULL, 0, 0);
+#endif
+#ifdef NC_ENABLED_SSH
+    nc_client_ssh_destroy_opts();
+#endif
+#ifdef NC_ENABLED_SSH
+    nc_client_tls_destroy_opts();
+#endif
+}
+
 API NC_MSG_TYPE
 nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout, int parseroptions, struct nc_reply **reply)
 {

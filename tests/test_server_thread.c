@@ -282,8 +282,6 @@ ssh_client_thread(void *arg)
 
     nc_session_free(session);
 
-    nc_client_ssh_destroy_opts();
-
     nc_thread_destroy();
     return NULL;
 }
@@ -597,8 +595,6 @@ tls_client_thread(void *arg)
 
     nc_session_free(session);
 
-    nc_client_tls_destroy_opts();
-
     nc_thread_destroy();
     return NULL;
 }
@@ -806,7 +802,7 @@ main(void)
 
     pthread_barrier_destroy(&barrier);
 
-    nc_client_schema_searchpath(NULL);
+    nc_client_destroy();
     nc_server_destroy();
     ly_ctx_destroy(ctx, NULL);
 

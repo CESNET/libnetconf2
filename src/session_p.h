@@ -476,14 +476,14 @@ int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
  */
 int nc_ssh_pollin(struct nc_session *session, int *timeout);
 
-/* TODO */
 void nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts);
+
+void nc_client_ssh_destroy_opts(void);
 
 #endif /* NC_ENABLED_SSH */
 
 #ifdef NC_ENABLED_TLS
 
-/* TODO */
 struct nc_session *nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx);
 
 /**
@@ -497,8 +497,9 @@ struct nc_session *nc_accept_callhome_tls_sock(int sock, const char *host, uint1
  */
 int nc_accept_tls_session(struct nc_session *session, int sock, int timeout);
 
-/* TODO */
 void nc_server_tls_clear_opts(struct nc_server_tls_opts *opts);
+
+void nc_client_tls_destroy_opts(void);
 
 #endif /* NC_ENABLED_TLS */
 

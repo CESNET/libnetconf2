@@ -140,7 +140,7 @@ _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts)
     X509_STORE_free(opts->crl_store);
 }
 
-API void
+void
 nc_client_tls_destroy_opts(void)
 {
     _nc_client_tls_destroy_opts(&tls_opts);

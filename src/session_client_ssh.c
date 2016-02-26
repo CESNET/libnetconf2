@@ -78,7 +78,7 @@ _nc_client_ssh_destroy_opts(struct nc_client_ssh_opts *opts)
     free(opts->username);
 }
 
-API void
+void
 nc_client_ssh_destroy_opts(void)
 {
     _nc_client_ssh_destroy_opts(&ssh_opts);
