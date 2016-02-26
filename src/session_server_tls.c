@@ -1490,7 +1490,7 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
 {
     struct nc_server_tls_opts *opts;
     struct pollfd pfd;
-    int ret, elapsed = 0;
+    int ret;
 
     opts = session->ti_opts;
 
