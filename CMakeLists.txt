@@ -37,7 +37,7 @@ set(CMAKE_C_FLAGS_DEBUG   "-g -O0")
 # set version
 set(LIBNETCONF2_MAJOR_VERSION 0)
 set(LIBNETCONF2_MINOR_VERSION 2)
-set(LIBNETCONF2_MICRO_VERSION 6)
+set(LIBNETCONF2_MICRO_VERSION 7)
 set(LIBNETCONF2_VERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION}.${LIBNETCONF2_MICRO_VERSION})
 set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION})
 
@@ -180,8 +180,11 @@ if(ENABLE_VALGRIND_TESTS)
 endif()
 
 if(ENABLE_BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(tests)
+    find_package(CMocka 1.0.0)
+    if(CMOCKA_FOUND)
+        enable_testing()
+        add_subdirectory(tests)
+    endif(CMOCKA_FOUND)
 endif()
 
 configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_SOURCE_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)
