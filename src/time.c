@@ -95,10 +95,18 @@ nc_time2datetime(time_t time, const char *tz)
     char *tz_origin;
 
     if (tz) {
-        tz_origin = secure_getenv("TZ");
+        tz_origin = getenv("TZ");
+        if (tz_origin) {
+            tz_origin = strdup(tz_origin);
+        }
         setenv("TZ", tz, 1);
         tm_ret = localtime_r(&time, &tm);
-        setenv("TZ", tz_origin, 1);
+        if (tz_origin) {
+            setenv("TZ", tz_origin, 1);
+            free(tz_origin);
+        } else {
+            unsetenv("TZ");
+        }
 
         if (!tm_ret) {
             return NULL;
