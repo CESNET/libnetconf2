@@ -947,7 +947,7 @@ nc_client_destroy(void)
 #ifdef NC_ENABLED_SSH
     nc_client_ssh_destroy_opts();
 #endif
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_TLS
     nc_client_tls_destroy_opts();
 #endif
 }
