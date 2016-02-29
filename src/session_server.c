@@ -1098,7 +1098,7 @@ nc_accept(int timeout, struct nc_session **session)
     /* sock gets assigned to session or closed */
 #ifdef NC_ENABLED_SSH
     if (server_opts.binds[idx].ti == NC_TI_LIBSSH) {
-        ret = nc_accept_ssh_session(*session, sock, timeout);
+        ret = nc_accept_ssh_session(*session, sock);
         if (ret < 1) {
             goto fail;
         }
@@ -1106,7 +1106,7 @@ nc_accept(int timeout, struct nc_session **session)
 #endif
 #ifdef NC_ENABLED_TLS
     if (server_opts.binds[idx].ti == NC_TI_OPENSSL) {
-        ret = nc_accept_tls_session(*session, sock, timeout);
+        ret = nc_accept_tls_session(*session, sock);
         if (ret < 1) {
             goto fail;
         }
@@ -1149,7 +1149,7 @@ fail:
 }
 
 int
-nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int timeout, struct nc_session **session)
+nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struct nc_session **session)
 {
     int sock, ret;
 
@@ -1193,7 +1193,7 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int t
         pthread_mutex_lock(&ssh_ch_opts_lock);
 
         (*session)->ti_opts = &ssh_ch_opts;
-        ret = nc_accept_ssh_session(*session, sock, timeout);
+        ret = nc_accept_ssh_session(*session, sock);
         (*session)->ti_opts = NULL;
 
         /* OPTS UNLOCK */
@@ -1210,7 +1210,7 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int t
         pthread_mutex_lock(&tls_ch_opts_lock);
 
         (*session)->ti_opts = &tls_ch_opts;
-        ret = nc_accept_tls_session(*session, sock, timeout);
+        ret = nc_accept_tls_session(*session, sock);
         (*session)->ti_opts = NULL;
 
         /* OPTS UNLOCK */

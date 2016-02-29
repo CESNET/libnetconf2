@@ -1062,13 +1062,13 @@ nc_ssh_pollin(struct nc_session *session, int *timeout)
 }
 
 API int
-nc_connect_callhome_ssh(const char *host, uint16_t port, int timeout, struct nc_session **session)
+nc_connect_callhome_ssh(const char *host, uint16_t port, struct nc_session **session)
 {
-    return nc_connect_callhome(host, port, NC_TI_LIBSSH, timeout, session);
+    return nc_connect_callhome(host, port, NC_TI_LIBSSH, session);
 }
 
 int
-nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
+nc_accept_ssh_session(struct nc_session *session, int sock)
 {
     struct nc_server_ssh_opts *opts;
     int libssh_auth_methods = 0, elapsed_usec = 0, ret;

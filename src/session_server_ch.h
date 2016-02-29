@@ -28,12 +28,10 @@
  *
  * @param[in] host Host the client is listening on.
  * @param[in] port Port the client is listening on.
- * @param[in] timeout Timeout for transport-related operations in milliseconds.
- *                    0 for non-blocking call, -1 for infinite waiting.
  * @param[out] session New Call Home session.
  * @return 1 on success, 0 on timeout, -1 on error.
  */
-int nc_connect_callhome_ssh(const char *host, uint16_t port, int timeout, struct nc_session **session);
+int nc_connect_callhome_ssh(const char *host, uint16_t port, struct nc_session **session);
 
 /**
  * @brief Set Call Home SSH host keys the server will identify itself with. Each of RSA, DSA, and
@@ -111,12 +109,10 @@ void nc_server_ssh_ch_clear_opts(void);
  *
  * @param[in] host Host the client is listening on.
  * @param[in] port Port the client is listening on.
- * @param[in] timeout Timeout for transport-related operations in milliseconds.
- *                    0 for non-blocking call, -1 for infinite waiting.
  * @param[out] session New Call Home session.
  * @return 1 on success, 0 on timeout, -1 on error.
  */
-int nc_connect_callhome_tls(const char *host, uint16_t port, int timeout, struct nc_session **session);
+int nc_connect_callhome_tls(const char *host, uint16_t port, struct nc_session **session);
 
 /**
  * @brief Set server Call Home TLS certificate. Alternative to nc_tls_server_set_cert_path().

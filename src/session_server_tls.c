@@ -1480,40 +1480,20 @@ nc_tls_make_verify_key(void)
 }
 
 API int
-nc_connect_callhome_tls(const char *host, uint16_t port, int timeout, struct nc_session **session)
+nc_connect_callhome_tls(const char *host, uint16_t port, struct nc_session **session)
 {
-    return nc_connect_callhome(host, port, NC_TI_OPENSSL, timeout, session);
+    return nc_connect_callhome(host, port, NC_TI_OPENSSL, session);
 }
 
 int
-nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
+nc_accept_tls_session(struct nc_session *session, int sock)
 {
     struct nc_server_tls_opts *opts;
-    struct pollfd pfd;
     int ret;
 
     opts = session->ti_opts;
 
-    pfd.fd = sock;
-    pfd.events = POLLIN;
-    pfd.revents = 0;
-
-    /* poll for a new connection */
-    errno = 0;
-    ret = poll(&pfd, 1, timeout);
-    if (!ret) {
-        /* we timeouted */
-        close(sock);
-        return 0;
-    } else if (ret == -1) {
-        ERR("poll failed (%s).", strerror(errno));
-        close(sock);
-        return -1;
-    }
-
-    /* data waiting, prepare session */
     session->ti_type = NC_TI_OPENSSL;
-
     session->ti.tls = SSL_new(opts->tls_ctx);
 
     if (!session->ti.tls) {

@@ -420,11 +420,10 @@ int nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL 
  * @param[in] host Hostname to connect to.
  * @param[in] port Port to connect to.
  * @param[in] ti Transport fo the connection.
- * @param[in] timeout Timeout.
  * @param[out] session New Call Home session.
  * @return 0 on success, -1 on error.
  */
-int nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int timeout, struct nc_session **session);
+int nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struct nc_session **session);
 
 #ifdef NC_ENABLED_SSH
 
@@ -444,11 +443,10 @@ struct nc_session *nc_accept_callhome_ssh_sock(int sock, const char *host, uint1
  *
  * @param[in] session Session structure of the new connection.
  * @param[in] sock Socket of the new connection.
- * @param[in] timeout Timeout for all the related tasks.
  * @param[in] ch Whether to accept a Call Home session or a standard one.
  * @return 1 on success, 0 on timeout, -1 on error.
  */
-int nc_accept_ssh_session(struct nc_session *session, int sock, int timeout);
+int nc_accept_ssh_session(struct nc_session *session, int sock);
 
 /**
  * @brief Callback called when a new SSH message is received.
@@ -491,11 +489,10 @@ struct nc_session *nc_accept_callhome_tls_sock(int sock, const char *host, uint1
  *
  * @param[in] session Session structure of the new connection.
  * @param[in] sock Socket of the new connection.
- * @param[in] timeout Timeout for all the related tasks.
  * @param[in] ch Whether to accept a Call Home session or a standard one.
  * @return 1 on success, 0 on timeout, -1 on error.
  */
-int nc_accept_tls_session(struct nc_session *session, int sock, int timeout);
+int nc_accept_tls_session(struct nc_session *session, int sock);
 
 void nc_server_tls_clear_opts(struct nc_server_tls_opts *opts);
 
