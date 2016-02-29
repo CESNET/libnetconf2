@@ -77,15 +77,16 @@
 /**
  * @page howtoinit Init and Thread-safety Information
  *
- * Before working with the library, it must be initialized.
- * Which init function to call depends on the libnetconf2 and libssh/OpenSSL
- * (libssh and libcrypto) functions you plan to use in the application.
- * If you use any libnetconf2 SSH or libssh functions, you need SSH. If you
- * use any libnetconf2 TLS, libssl, or libcrypto functions, you need TLS.
- * Based on this you select between nc_ssh_init(), nc_tls_init(), and
- * nc_ssh_tls_init(). If you create only sessions with pre-established
- * transport protocol (_inout functions), you do not need to call
- * any init function at all.
+ * Before working with the library, it must be initialized using nc_init().
+ * Based on how the library was compiled, also libssh and/or libssh/libcrypto
+ * are initialized (for multi-threaded use) too. It is advised to compile
+ * libnetconf2, for instance, with TLS support even if you do not want to
+ * use lnc2 TLS functions, but only use libssl/libcrypto functions in your
+ * application. You can then use libnetconf2 cleanup function and do not
+ * trouble yourself with the cleanup. If you create
+ * only sessions with pre-established transport protocol (_inout functions),
+ * you do not need to call any init function at all, but there may be reachable
+ * dynamic memory after your application exits.
  *
  * To prevent any reachable memory at the end of your application, there
  * are complementary destroy functions available. If your application is
@@ -111,12 +112,8 @@
  *
  * Available in both __nc_client.h__ and __nc_server.h__.
  *
- * - nc_ssh_init()
- * - nc_ssh_destroy()
- * - nc_tls_init()
- * - nc_tls_destroy()
- * - nc_ssh_tls_init()
- * - nc_ssh_tls_destroy()
+ * - nc_init()
+ * - nc_destroy()
  * - nc_thread_destroy()
  */
 
