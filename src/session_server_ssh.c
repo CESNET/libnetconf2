@@ -1129,19 +1129,15 @@ nc_accept_ssh_session(struct nc_session *session, int sock)
 
         usleep(NC_TIMEOUT_STEP);
         elapsed_usec += NC_TIMEOUT_STEP;
-    } while ((timeout == -1) || (timeout && (elapsed_usec / 1000 < timeout)));
+    } while (!opts->auth_timeout || (elapsed_usec / 1000000 < opts->auth_timeout));
 
     if (!(session->flags & NC_SESSION_SSH_AUTHENTICATED)) {
         /* timeout */
         return 0;
     }
 
-    if (timeout > 0) {
-        timeout -= elapsed_usec / 1000;
-    }
-
     /* open channel */
-    ret = nc_open_netconf_channel(session, timeout);
+    ret = nc_open_netconf_channel(session, opts->auth_timeout ? (opts->auth_timeout * 1000 - elapsed_usec / 1000) : -1);
     if (ret < 1) {
         return ret;
     }
