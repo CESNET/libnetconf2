@@ -774,6 +774,14 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
 
         case NC_RPC_GETCONFIG:
         case NC_RPC_GET:
+            if (!xml->child->child) {
+                /* we did not receive any data */
+                data_rpl = malloc(sizeof *data_rpl);
+                data_rpl->type = NC_RPL_DATA;
+                data_rpl->data = NULL;
+                return (struct nc_reply *)data_rpl;
+            }
+
             /* special treatment */
             data = lyd_parse_xml(ctx, &xml->child->child, LYD_OPT_DESTRUCT
                                  | (rpc->type == NC_RPC_GETCONFIG ? LYD_OPT_GETCONFIG : LYD_OPT_GET) | parseroptions);
