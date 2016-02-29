@@ -43,7 +43,7 @@ set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSI
 
 # build options
 option(ENABLE_SSH "Enable NETCONF over SSH support (via libssh)" ON)
-option(ENABLE_TLS "Enable NETCONF over TLS support (via OpenSSL)" OFF)
+option(ENABLE_TLS "Enable NETCONF over TLS support (via OpenSSL)" ON)
 option(ENABLE_DNSSEC "Enable support for SSHFP retrieval using DNSSEC for SSH (requires OpenSSL and libval)" OFF)
 
 if(ENABLE_DNSSEC AND NOT ENABLE_SSH)
