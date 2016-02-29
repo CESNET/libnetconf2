@@ -39,8 +39,6 @@
  * The location is search when connecting to a NETCONF server and building
  * YANG context for further processing of the NETCONF messages and data.
  *
- * Function is provided only via nc_client.h header file.
- *
  * @param[in] path Directory where to search for YANG/YIN schemas.
  * @return 0 on success, 1 on (memory allocation) failure.
  */
@@ -57,8 +55,6 @@ void nc_client_destroy(void);
  * Transport layer is supposed to be already set. Function do not cover authentication
  * or any other manipulation with the transport layer, it only establish NETCONF session
  * by sending and processing NETCONF \<hello\> messages.
- *
- * Function is provided only via nc_client.h header file.
  *
  * @param[in] fdin Input file descriptor for reading (clear) data from NETCONF server.
  * @param[in] fdout Output file descriptor for writing (clear) data for NETCONF server.
@@ -86,7 +82,7 @@ void nc_client_ssh_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const ch
 /**
  * @brief Set SSH password authentication callback.
  *
- * @param[in] auth_password Function to call, returns the password for username@hostname.
+ * @param[in] auth_password Function to call, returns the password for username\@hostname.
  *                          If NULL, the default callback is set.
  */
 void nc_client_ssh_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname));
@@ -114,8 +110,6 @@ void nc_client_ssh_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphra
  *
  * Private key can be encrypted, the passphrase will be asked for before using it.
  *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
- *
  * @param[in] pub_key Path to the public key.
  * @param[in] priv_key Path to the private key.
  * @return 0 on success, -1 on error.
@@ -124,8 +118,6 @@ int nc_client_ssh_add_keypair(const char *pub_key, const char *priv_key);
 
 /**
  * @brief Remove an SSH public and private key pair that was used for client authentication.
- *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  *
  * @param[in] idx Index of the keypair starting with 0.
  * @return 0 on success, -1 on error.
@@ -152,8 +144,6 @@ int nc_client_ssh_get_keypair(int idx, const char **pub_key, const char **priv_k
 /**
  * @brief Set SSH authentication method preference.
  *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
- *
  * @param[in] auth_type Authentication method to modify the prefrence of.
  * @param[in] pref Preference of \p auth_type. Negative values disable the method.
  */
@@ -161,8 +151,6 @@ void nc_client_ssh_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref);
 
 /**
  * @brief Get SSH authentication method preference.
- *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  *
  * @param[in] auth_type Authentication method to retrieve the prefrence of.
  * @return Preference of the \p auth_type.
@@ -190,8 +178,6 @@ const char *nc_client_ssh_get_username(void);
  * SSH session is created with default options. If the caller needs to use specific SSH session properties,
  * they are supposed to use nc_connect_libssh().
  *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
- *
  * @param[in] host Hostname or address (both Ipv4 and IPv6 are accepted) of the target server.
  *                 'localhost' is used by default if NULL is specified.
  * @param[in] port Port number of the target server. Default value 830 is used if 0 is specified.
@@ -214,8 +200,6 @@ struct nc_session *nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx
  * set and connected only the host and the username must be set/is detected. Or the \p ssh_session
  * can already be authenticated in which case it is used directly.
  *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
- *
  * @param[in] ssh_session libssh structure representing SSH session object. After passing it
  *                        to libnetconf2 this way, it is fully managed by it (including freeing!).
  * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
@@ -231,8 +215,6 @@ struct nc_session *nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx
 
 /**
  * @brief Create another NETCONF session on existing SSH session using separated SSH channel.
- *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  *
  * @param[in] session Existing NETCONF session. The session has to be created on SSH transport layer using libssh -
  *                    it has to be created by nc_connect_ssh(), nc_connect_libssh() or nc_connect_ssh_channel().
@@ -254,8 +236,6 @@ struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_
 /**
  * @brief Set client authentication identity - a certificate and a private key.
  *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
- *
  * @param[in] client_cert Path to the file containing the client certificate.
  * @param[in] client_key Path to the file containing the private key for the \p client_cert.
  *                       If NULL, key is expected to be stored with \p client_cert.
@@ -265,8 +245,6 @@ int nc_client_tls_set_cert_key_paths(const char *client_cert, const char *client
 
 /**
  * @brief Get client authentication identity - a certificate and a private key.
- *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  *
  * @param[out] client_cert Path to the file containing the client certificate. Can be NULL.
  * @param[out] client_key Path to the file containing the private key for the \p client_cert. Can be NULL.
@@ -314,10 +292,8 @@ void nc_client_tls_get_crl_paths(const char **crl_file, const char **crl_dir);
 /**
  * @brief Connect to the NETCONF server using TLS transport (via libssl)
  *
- * TLS session is created with the certificates set using nc_client_init_tls(), which must be called beforehand!
+ * TLS session is created with the certificates set using nc_client_tls_* functions, which must be called beforehand!
  * If the caller needs to use specific TLS session properties, they are supposed to use nc_connect_libssl().
- *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  *
  * @param[in] host Hostname or address (both Ipv4 and IPv6 are accepted) of the target server.
  *                 'localhost' is used by default if NULL is specified.
@@ -337,8 +313,6 @@ struct nc_session *nc_connect_tls(const char *host, uint16_t port, struct ly_ctx
  * @brief Connect to the NETCONF server using the provided TLS (libssl) session.
  *
  * The TLS session supplied is expected to be fully connected and authenticated!
- *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  *
  * @param[in] tls libssl structure representing the TLS session object.
  * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session

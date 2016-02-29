@@ -178,7 +178,7 @@ int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
  *
  *         Only with SSH support:
  *         4 if an SSH message was processed,
- *         5 if a new NETCONF SSH channel was created; call #nc_ps_accept_ssh_channel
+ *         5 if a new NETCONF SSH channel was created; call nc_ps_accept_ssh_channel()
  *           to establish a new NETCONF session.
  */
 int nc_ps_poll(struct nc_pollsession *ps, int timeout);
@@ -187,7 +187,7 @@ int nc_ps_poll(struct nc_pollsession *ps, int timeout);
  * @brief Remove invalid sessions from a pollsession structure and
  *        call #nc_session_free() on them.
  *
- * Calling this function makes sense if #nc_ps_poll() returned 3.
+ * Calling this function makes sense if nc_ps_poll() returned 3.
  *
  * @param[in] ps Pollsession structure to clear.
  */
@@ -420,7 +420,7 @@ int nc_server_tls_endpt_set_key_path(const char *endpt_name, const char *privkey
 
 /**
  * @brief Add a trusted certificate. Can be both a CA or a client one. Can be
- *        safely used together with #nc_server_tls_endpt_set_trusted_ca_paths().
+ *        safely used together with nc_server_tls_endpt_set_trusted_ca_paths().
  *
  * @param[in] endpt_name Existing endpoint name.
  * @param[in] cert Base64-enocded certificate in ASN.1 DER encoding.
@@ -430,7 +430,7 @@ int nc_server_tls_endpt_add_trusted_cert(const char *endpt_name, const char *cer
 
 /**
  * @brief Add a trusted certificate. Can be both a CA or a client one. Can be
- *        safely used together with #nc_server_tls_endpt_set_trusted_ca_paths().
+ *        safely used together with nc_server_tls_endpt_set_trusted_ca_paths().
  *
  * @param[in] endpt_name Existing endpoint name.
  * @param[in] cert_path Path to a trusted certificate file in PEM format.
@@ -441,7 +441,7 @@ int nc_server_tls_endpt_add_trusted_cert_path(const char *endpt_name, const char
 /**
  * @brief Set trusted Certificate Authority certificate locations. There can only be
  *        one file and one directory, they are replaced if already set. Can be safely
- *        used with #nc_server_tls_endpt_add_trusted_cert() or its _path variant.
+ *        used with nc_server_tls_endpt_add_trusted_cert() or its _path variant.
  *
  * @param[in] endpt_name Existing endpoint name.
  * @param[in] ca_file Path to a trusted CA cert store file in PEM format. Can be NULL.

@@ -763,7 +763,8 @@ WARN_LOGFILE           =
 # spaces.
 # Note: If this tag is empty the current directory is searched.
 
-INPUT                  = ./src/netconf.h \
+INPUT                  = ./src/libnetconf.h \
+                         ./src/netconf.h \
                          ./src/log.h \
                          ./src/messages_client.h \
                          ./src/messages_server.h \
@@ -2013,7 +2014,7 @@ INCLUDE_FILE_PATTERNS  =
 # recursively expanded use the := operator instead of the = operator.
 # This tag requires that the tag ENABLE_PREPROCESSING is set to YES.
 
-PREDEFINED             =
+PREDEFINED             = NC_ENABLED_SSH NC_ENABLED_TLS
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then this
 # tag can be used to specify a list of macro names that should be expanded. The
