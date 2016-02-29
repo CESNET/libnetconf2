@@ -1,7 +1,7 @@
 /**
- * \file test_init_destroy_ssh_tls.c
+ * \file test_init_destroy.c
  * \author Michal Vasko <mvasko@cesnet.cz>
- * \brief libnetconf2 tests - libssh with libssl/libcrypto init/destroy
+ * \brief libnetconf2 tests - init/destroy
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
@@ -33,21 +33,21 @@
 #include <netconf.h>
 
 static int
-setup_ssh_tls(void **state)
+setup(void **state)
 {
     (void)state;
 
-    nc_ssh_tls_init();
+    nc_init();
 
     return 0;
 }
 
 static int
-teardown_ssh_tls(void **state)
+teardown(void **state)
 {
     (void)state;
 
-    nc_ssh_tls_destroy();
+    nc_destroy();
 
     return 0;
 }
@@ -62,7 +62,7 @@ int
 main(void)
 {
     const struct CMUnitTest init_destroy[] = {
-        cmocka_unit_test_setup_teardown(test_dummy, setup_ssh_tls, teardown_ssh_tls)
+        cmocka_unit_test_setup_teardown(test_dummy, setup, teardown)
     };
 
     return cmocka_run_group_tests(init_destroy, NULL, NULL);

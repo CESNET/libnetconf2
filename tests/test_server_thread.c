@@ -40,13 +40,7 @@ setup_lib(void)
 {
     nc_verbosity(NC_VERB_VERBOSE);
 
-#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
-    nc_ssh_tls_init();
-#elif defined(NC_ENABLED_SSH)
-    nc_ssh_init();
-#elif defined(NC_ENABLED_TLS)
-    nc_tls_init();
-#endif
+    nc_init();
 
     return 0;
 }
@@ -54,13 +48,7 @@ setup_lib(void)
 static int
 teardown_lib(void)
 {
-#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
-    nc_ssh_tls_destroy();
-#elif defined(NC_ENABLED_SSH)
-    nc_ssh_destroy();
-#elif defined(NC_ENABLED_TLS)
-    nc_tls_destroy();
-#endif
+    nc_destroy();
 
     return 0;
 }
