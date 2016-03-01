@@ -86,7 +86,7 @@ teardown_write(void **state)
     nc_rpc_free(w->rpc);
     w->session->ti.fd.in = -1;
     w->session->ti.fd.out = -1;
-    nc_session_free(w->session);
+    nc_session_free(w->session, NULL);
     free(w);
     *state = NULL;
 

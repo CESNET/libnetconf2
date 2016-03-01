@@ -436,7 +436,7 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
     return 0;
 
 fail:
-    nc_session_free(*session);
+    nc_session_free(*session, NULL);
     *session = NULL;
     return -1;
 }
@@ -856,7 +856,7 @@ finish:
 }
 
 API void
-nc_ps_clear(struct nc_pollsession *ps, int all)
+nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
 {
     uint16_t i;
     struct nc_session *session;
@@ -871,7 +871,7 @@ nc_ps_clear(struct nc_pollsession *ps, int all)
 
     if (all) {
         for (i = 0; i < ps->session_count; ) {
-            nc_session_free(ps->sessions[i]);
+            nc_session_free(ps->sessions[i], data_free);
         }
         free(ps->sessions);
         ps->sessions = NULL;
@@ -883,7 +883,7 @@ nc_ps_clear(struct nc_pollsession *ps, int all)
             if (ps->sessions[i]->status != NC_STATUS_RUNNING) {
                 session = ps->sessions[i];
                 _nc_ps_del_session(ps, session);
-                nc_session_free(session);
+                nc_session_free(session, data_free);
                 continue;
             }
 
@@ -1224,7 +1224,7 @@ nc_accept(int timeout, struct nc_session **session)
 
     /* NETCONF handshake */
     if (nc_handshake(*session)) {
-        nc_session_free(*session);
+        nc_session_free(*session, NULL);
         *session = NULL;
         return -1;
     }
@@ -1236,7 +1236,7 @@ fail:
     /* WRITE UNLOCK */
     pthread_rwlock_unlock(&server_opts.endpt_array_lock);
 
-    nc_session_free(*session);
+    nc_session_free(*session, NULL);
     *session = NULL;
     return ret;
 }
@@ -1338,7 +1338,7 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struc
     return 1;
 
 fail:
-    nc_session_free(*session);
+    nc_session_free(*session, NULL);
     *session = NULL;
     return ret;
 }

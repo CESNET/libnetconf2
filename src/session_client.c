@@ -369,7 +369,7 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     return session;
 
 fail:
-    nc_session_free(session);
+    nc_session_free(session, NULL);
     return NULL;
 }
 

@@ -205,8 +205,9 @@ int nc_ps_poll(struct nc_pollsession *ps, int timeout);
  *
  * @param[in] ps Pollsession structure to clear.
  * @param[in] all Whether to free all sessions, or only the invalid ones.
+ * @param[in] data_free Session user data destructor.
  */
-void nc_ps_clear(struct nc_pollsession *ps, int all);
+void nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *));
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 

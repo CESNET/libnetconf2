@@ -255,7 +255,7 @@ nc_send_msg(struct nc_session *session, struct lyd_node *op)
 }
 
 API void
-nc_session_free(struct nc_session *session)
+nc_session_free(struct nc_session *session, void (*data_free)(void *))
 {
     int r, i;
     int connected; /* flag to indicate whether the transport socket is still connected */
@@ -349,6 +349,10 @@ nc_session_free(struct nc_session *session)
             }
             free(session->cpblts);
         }
+    }
+
+    if (session->data && data_free) {
+        data_free(session->data);
     }
 
     session->status = NC_STATUS_CLOSING;

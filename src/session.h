@@ -176,7 +176,8 @@ void *nc_session_get_data(const struct nc_session *session);
  * @brief Free the NETCONF session object.
  *
  * @param[in] session Object to free.
+ * @param[in] data_free Session user data destructor.
  */
-void nc_session_free(struct nc_session *session);
+void nc_session_free(struct nc_session *session, void (*data_free)(void *));
 
 #endif /* NC_SESSION_H_ */

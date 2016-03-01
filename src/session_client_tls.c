@@ -565,7 +565,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     return session;
 
 fail:
-    nc_session_free(session);
+    nc_session_free(session, NULL);
     return NULL;
 }
 
@@ -625,7 +625,7 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     return session;
 
 fail:
-    nc_session_free(session);
+    nc_session_free(session, NULL);
     return NULL;
 }
 

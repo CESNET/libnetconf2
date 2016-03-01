@@ -1290,7 +1290,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client
     return session;
 
 fail:
-    nc_session_free(session);
+    nc_session_free(session, NULL);
     return NULL;
 }
 
@@ -1407,7 +1407,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     return session;
 
 fail:
-    nc_session_free(session);
+    nc_session_free(session, NULL);
     return NULL;
 }
 
@@ -1491,7 +1491,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     return new_session;
 
 fail:
-    nc_session_free(new_session);
+    nc_session_free(new_session, NULL);
     return NULL;
 }
 
