@@ -48,6 +48,11 @@ void nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REAS
  * all the strings, which is thread-safe. Reading models is considered thread-safe
  * as models cannot be removed and are rarely modified (augments or deviations).
  *
+ * If the callbacks on schema nodes (their private data) are modified after
+ * server initialization with that particular context, they will be called (changes
+ * will take effect). However, there could be race conditions as the access to
+ * these callbacks is not thread-safe.
+ *
  * Server capabilities are generated based on its content. Changing the context
  * in ways that result in changed capabilities (adding models, changing features)
  * is discouraged after sessions are established as it is not possible to change
