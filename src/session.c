@@ -619,7 +619,8 @@ create_cpblts(struct ly_ctx *ctx)
                 continue;
             }
 
-            str_len = sprintf(str, "%s?module=%s&amp;revision=%s", ns->value_str, name->value_str, rev->value_str);
+            str_len = sprintf(str, "%s?module=%s%s%s", ns->value_str, name->value_str,
+                              rev->value_str[0] ? "&amp;revision=" : "", rev->value_str);
             if (feat_count) {
                 strcat(str, "&amp;features=");
                 str_len += 14;
