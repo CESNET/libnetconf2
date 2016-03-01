@@ -468,6 +468,7 @@
  * - nc_ps_new()
  * - nc_ps_add_session()
  * - nc_ps_del_session()
+ * - nc_ps_session_count()
  * - nc_ps_free()
  *
  * - nc_ps_poll()

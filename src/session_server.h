@@ -160,6 +160,14 @@ int nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session);
 int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
 
 /**
+ * @brief Learn the number of sessions in a pollsession structure.
+ *
+ * @param[in] ps Pollsession structure to check.
+ * @return Number of sessions (even invalid ones) in \p ps.
+ */
+uint16_t nc_ps_session_count(struct nc_pollsession *ps);
+
+/**
  * @brief Poll sessions and process any received RPCs.
  *
  * All the sessions must be running. If a session fails causing it to change its

@@ -525,6 +525,17 @@ nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
     return -1;
 }
 
+API uint16_t
+nc_ps_session_count(struct nc_pollsession *ps)
+{
+    if (!ps) {
+        ERRARG;
+        return 0;
+    }
+
+    return ps->session_count;
+}
+
 /* must be called holding the session lock! */
 static NC_MSG_TYPE
 nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
