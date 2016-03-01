@@ -221,6 +221,7 @@ int nc_accept(int timeout, struct nc_session **session);
 /**
  * @brief Accept a new NETCONF session on an SSH session of a running NETCONF session
  *        that was polled in \p ps. Call this function only when nc_ps_poll() on \p ps returns 5.
+ *        The new session is only returned in \p session, it is not added to \p ps.
  *
  * @param[in] ps Unmodified pollsession structure from the previous nc_ps_poll() call.
  * @param[out] session New session.
