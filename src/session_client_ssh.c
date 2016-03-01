@@ -304,7 +304,7 @@ fail:
 static char *
 sshauth_password(const char *username, const char *hostname)
 {
-    char *buf, *newbuf;
+    char *buf;
     int buflen = 1024, len = 0;
     char c = 0;
     struct termios newterm, oldterm;
@@ -345,13 +345,9 @@ sshauth_password(const char *username, const char *hostname)
     while ((fread(&c, 1, 1, tty) == 1) && (c != '\n')) {
         if (len >= buflen - 1) {
             buflen *= 2;
-            newbuf = realloc(buf, buflen * sizeof *newbuf);
-            if (!newbuf) {
+            buf = nc_realloc(buf, buflen * sizeof *buf);
+            if (!buf) {
                 ERRMEM;
-
-                /* remove content of the buffer */
-                memset(buf, 0, len);
-                free(buf);
 
                 /* restore terminal settings */
                 if (tcsetattr(fileno(tty), TCSANOW, &oldterm) != 0) {
@@ -359,8 +355,6 @@ sshauth_password(const char *username, const char *hostname)
                 }
                 fclose(tty);
                 return NULL;
-            } else {
-                buf = newbuf;
             }
         }
         buf[len++] = c;
@@ -388,7 +382,7 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
     unsigned int buflen = 8, response_len;
     char c = 0;
     struct termios newterm, oldterm;
-    char *newtext, *response;
+    char *response;
     FILE *tty;
 
     if (!(tty = fopen("/dev/tty", "r+"))) {
@@ -449,10 +443,9 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
     while ((fread(&c, 1, 1, tty) == 1) && (c != '\n')) {
         if (response_len >= buflen - 1) {
             buflen *= 2;
-            newtext = realloc(response, buflen * sizeof *newtext);
-            if (!newtext) {
+            response = nc_realloc(response, buflen * sizeof *response);
+            if (!response) {
                 ERRMEM;
-                free(response);
 
                 /* restore terminal settings */
                 if (tcsetattr(fileno(tty), TCSANOW, &oldterm)) {
@@ -460,8 +453,6 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
                 }
                 fclose(tty);
                 return NULL;
-            } else {
-                response = newtext;
             }
         }
         response[response_len++] = c;
@@ -487,7 +478,7 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
 static char *
 sshauth_privkey_passphrase(const char* privkey_path)
 {
-    char c, *buf, *newbuf;
+    char c, *buf;
     int buflen = 1024, len = 0;
     struct termios newterm, oldterm;
     FILE *tty;
@@ -524,8 +515,8 @@ sshauth_privkey_passphrase(const char* privkey_path)
     while ((fread(&c, 1, 1, tty) == 1) && (c != '\n')) {
         if (len >= buflen - 1) {
             buflen *= 2;
-            newbuf = realloc(buf, buflen * sizeof *newbuf);
-            if (!newbuf) {
+            buf = nc_realloc(buf, buflen * sizeof *buf);
+            if (!buf) {
                 ERRMEM;
                 /* restore terminal settings */
                 if (tcsetattr(fileno(tty), TCSANOW, &oldterm)) {
@@ -533,7 +524,6 @@ sshauth_privkey_passphrase(const char* privkey_path)
                 }
                 goto fail;
             }
-            buf = newbuf;
         }
         buf[len++] = (char)c;
     }
@@ -688,10 +678,19 @@ _nc_client_ssh_add_keypair(const char *pub_key, const char *priv_key, struct nc_
 
     /* add the keys */
     ++opts->key_count;
-    opts->keys = realloc(opts->keys, opts->key_count * sizeof *opts->keys);
+    opts->keys = nc_realloc(opts->keys, opts->key_count * sizeof *opts->keys);
+    if (!opts->keys) {
+        ERRMEM;
+        return -1;
+    }
     opts->keys[opts->key_count - 1].pubkey_path = strdup(pub_key);
     opts->keys[opts->key_count - 1].privkey_path = strdup(priv_key);
     opts->keys[opts->key_count - 1].privkey_crypt = 0;
+
+    if (!opts->keys[opts->key_count - 1].pubkey_path || !opts->keys[opts->key_count - 1].privkey_path) {
+        ERRMEM;
+        return -1;
+    }
 
     /* check encryption */
     if ((key = fopen(priv_key, "r"))) {
@@ -744,7 +743,11 @@ _nc_client_ssh_del_keypair(int idx, struct nc_client_ssh_opts *opts)
         memcpy(&opts->keys[idx], &opts->keys[opts->key_count], sizeof *opts->keys);
     }
     if (opts->key_count) {
-        opts->keys = realloc(opts->keys, opts->key_count * sizeof *opts->keys);
+        opts->keys = nc_realloc(opts->keys, opts->key_count * sizeof *opts->keys);
+        if (!opts->keys) {
+            ERRMEM;
+            return -1;
+        }
     } else {
         free(opts->keys);
         opts->keys = NULL;
@@ -1202,6 +1205,10 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client
 
         /* remember host */
         host = strdup("localhost");
+        if (!host) {
+            ERRMEM;
+            goto fail;
+        }
         ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
 
         /* create and connect socket */
@@ -1231,6 +1238,10 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client
                 username = strdup(pw->pw_name);
             } else {
                 username = strdup(opts->username);
+            }
+            if (!username) {
+                ERRMEM;
+                goto fail;
             }
             ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
         }

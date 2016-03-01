@@ -36,6 +36,10 @@ nc_datetime2time(const char *datetime)
     }
 
     dt = strdup(datetime);
+    if (!dt) {
+        ERRMEM;
+        return -1;
+    }
 
     if (strlen(dt) < 20 || dt[4] != '-' || dt[7] != '-' || dt[13] != ':' || dt[16] != ':') {
         ERR("Wrong date time format not compliant to RFC 3339.");
@@ -98,6 +102,10 @@ nc_time2datetime(time_t time, const char *tz)
         tz_origin = getenv("TZ");
         if (tz_origin) {
             tz_origin = strdup(tz_origin);
+            if (!tz_origin) {
+                ERRMEM;
+                return NULL;
+            }
         }
         setenv("TZ", tz, 1);
         tm_ret = localtime_r(&time, &tm);

@@ -313,7 +313,11 @@ nc_server_ssh_add_authkey(const char *pubkey_path, const char *username, struct 
     }
 
     ++opts->authkey_count;
-    opts->authkeys = realloc(opts->authkeys, opts->authkey_count * sizeof *opts->authkeys);
+    opts->authkeys = nc_realloc(opts->authkeys, opts->authkey_count * sizeof *opts->authkeys);
+    if (!opts->authkeys) {
+        ERRMEM;
+        return -1;
+    }
     opts->authkeys[opts->authkey_count - 1].path = lydict_insert(server_opts.ctx, pubkey_path, 0);
     opts->authkeys[opts->authkey_count - 1].username = lydict_insert(server_opts.ctx, username, 0);
 
@@ -681,6 +685,10 @@ nc_sshcb_channel_subsystem(struct nc_session *session, ssh_channel channel, cons
     } else {
         /* additional channel subsystem request, new session is ready as far as SSH is concerned */
         new_session = calloc(1, sizeof *new_session);
+        if (!new_session) {
+            ERRMEM;
+            return -1;
+        }
 
         /* insert the new session */
         if (!session->ti.libssh.next) {

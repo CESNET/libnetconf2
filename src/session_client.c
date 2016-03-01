@@ -507,6 +507,11 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
             cont_ptr = &((*cont_ptr)->next);
         }
         *cont_ptr = malloc(sizeof **cont_ptr);
+        if (!*cont_ptr) {
+            ERRMEM;
+            lyxml_free(session->ctx, xml);
+            return NC_MSG_ERROR;
+        }
         (*cont_ptr)->msg = xml;
         (*cont_ptr)->next = NULL;
     }
@@ -526,6 +531,11 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
             cont_ptr = &((*cont_ptr)->next);
         }
         *cont_ptr = malloc(sizeof **cont_ptr);
+        if (!cont_ptr) {
+            ERRMEM;
+            lyxml_free(session->ctx, xml);
+            return NC_MSG_ERROR;
+        }
         (*cont_ptr)->msg = xml;
         (*cont_ptr)->next = NULL;
     }
@@ -656,15 +666,27 @@ parse_rpc_error(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_err *err)
                         }
                     } else if (!strcmp(info->name, "bad-attr")) {
                         ++err->attr_count;
-                        err->attr = realloc(err->attr, err->attr_count * sizeof *err->attr);
+                        err->attr = nc_realloc(err->attr, err->attr_count * sizeof *err->attr);
+                        if (!err->attr) {
+                            ERRMEM;
+                            return;
+                        }
                         err->attr[err->attr_count - 1] = lydict_insert(ctx, (info->content ? info->content : ""), 0);
                     } else if (!strcmp(info->name, "bad-element")) {
                         ++err->elem_count;
-                        err->elem = realloc(err->elem, err->elem_count * sizeof *err->elem);
+                        err->elem = nc_realloc(err->elem, err->elem_count * sizeof *err->elem);
+                        if (!err->elem) {
+                            ERRMEM;
+                            return;
+                        }
                         err->elem[err->elem_count - 1] = lydict_insert(ctx, (info->content ? info->content : ""), 0);
                     } else if (!strcmp(info->name, "bad-namespace")) {
                         ++err->ns_count;
-                        err->ns = realloc(err->ns, err->ns_count * sizeof *err->ns);
+                        err->ns = nc_realloc(err->ns, err->ns_count * sizeof *err->ns);
+                        if (!err->ns) {
+                            ERRMEM;
+                            return;
+                        }
                         err->ns[err->ns_count - 1] = lydict_insert(ctx, (info->content ? info->content : ""), 0);
                     } else {
                         if (info->content) {
@@ -677,7 +699,11 @@ parse_rpc_error(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_err *err)
                 } else {
                     lyxml_unlink(ctx, info);
                     ++err->other_count;
-                    err->other = realloc(err->other, err->other_count * sizeof *err->other);
+                    err->other = nc_realloc(err->other, err->other_count * sizeof *err->other);
+                    if (!err->other) {
+                        ERRMEM;
+                        return;
+                    }
                     err->other[err->other_count - 1] = info;
                 }
             }
@@ -727,8 +753,17 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
         }
 
         error_rpl = malloc(sizeof *error_rpl);
+        if (!error_rpl) {
+            ERRMEM;
+            return NULL;
+        }
         error_rpl->type = NC_RPL_ERROR;
         error_rpl->err = calloc(i, sizeof *error_rpl->err);
+        if (!error_rpl->err) {
+            ERRMEM;
+            free(error_rpl);
+            return NULL;
+        }
         error_rpl->count = i;
         error_rpl->ctx = ctx;
         reply = (struct nc_reply *)error_rpl;
@@ -746,6 +781,10 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
             return NULL;
         }
         reply = malloc(sizeof *reply);
+        if (!reply) {
+            ERRMEM;
+            return NULL;
+        }
         reply->type = NC_RPL_OK;
 
     /* some RPC output */
@@ -777,6 +816,10 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
             if (!xml->child->child) {
                 /* we did not receive any data */
                 data_rpl = malloc(sizeof *data_rpl);
+                if (!data_rpl) {
+                    ERRMEM;
+                    return NULL;
+                }
                 data_rpl->type = NC_RPL_DATA;
                 data_rpl->data = NULL;
                 return (struct nc_reply *)data_rpl;
@@ -819,6 +862,10 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
         }
 
         data_rpl = malloc(sizeof *data_rpl);
+        if (!data_rpl) {
+            ERRMEM;
+            return NULL;
+        }
         data_rpl->type = NC_RPL_DATA;
         if (!data) {
             data_rpl->data = lyd_parse_xml(ctx, &xml->child, LYD_OPT_DESTRUCT | LYD_OPT_RPCREPLY | parseroptions, schema);
@@ -855,9 +902,17 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IM
     }
 
     ++client_opts.ch_bind_count;
-    client_opts.ch_binds = realloc(client_opts.ch_binds, client_opts.ch_bind_count * sizeof *client_opts.ch_binds);
+    client_opts.ch_binds = nc_realloc(client_opts.ch_binds, client_opts.ch_bind_count * sizeof *client_opts.ch_binds);
+    if (!client_opts.ch_binds) {
+        ERRMEM;
+        return -1;
+    }
 
     client_opts.ch_binds[client_opts.ch_bind_count - 1].address = strdup(address);
+    if (!client_opts.ch_binds[client_opts.ch_bind_count - 1].address) {
+        ERRMEM;
+        return -1;
+    }
     client_opts.ch_binds[client_opts.ch_bind_count - 1].port = port;
     client_opts.ch_binds[client_opts.ch_bind_count - 1].sock = sock;
     client_opts.ch_binds[client_opts.ch_bind_count - 1].ti = ti;
@@ -1014,6 +1069,11 @@ nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
 
     if (msgtype == NC_MSG_NOTIF) {
         *notif = calloc(1, sizeof **notif);
+        if (!*notif) {
+            ERRMEM;
+            lyxml_free(session->ctx, xml);
+            return NC_MSG_ERROR;
+        }
 
         /* eventTime */
         LY_TREE_FOR(xml->child, ev_time) {
@@ -1101,11 +1161,20 @@ nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_s
     }
 
     ntarg = malloc(sizeof *ntarg);
+    if (!ntarg) {
+        ERRMEM;
+        return -1;
+    }
     ntarg->session = session;
     ntarg->notif_clb = notif_clb;
 
     /* just so that nc_recv_notif_thread() does not immediately exit, the value does not matter */
     session->ntf_tid = malloc(sizeof *session->ntf_tid);
+    if (!session->ntf_tid) {
+        ERRMEM;
+        free(ntarg);
+        return -1;
+    }
 
     ret = pthread_create((pthread_t *)session->ntf_tid, NULL, nc_recv_notif_thread, ntarg);
     if (ret) {

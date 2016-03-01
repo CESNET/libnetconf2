@@ -474,7 +474,11 @@ add_cpblt(struct ly_ctx *ctx, const char *capab, const char ***cpblts, int *size
 {
     if (*count == *size) {
         *size += 5;
-        *cpblts = realloc(*cpblts, *size * sizeof **cpblts);
+        *cpblts = nc_realloc(*cpblts, *size * sizeof **cpblts);
+        if (!(*cpblts)) {
+            ERRMEM;
+            return;
+        }
     }
 
     if (capab) {
@@ -501,6 +505,10 @@ create_cpblts(struct ly_ctx *ctx)
     }
 
     cpblts = malloc(size * sizeof *cpblts);
+    if (!cpblts) {
+        ERRMEM;
+        return NULL;
+    }
     cpblts[0] = lydict_insert(ctx, "urn:ietf:params:netconf:base:1.0", 0);
     cpblts[1] = lydict_insert(ctx, "urn:ietf:params:netconf:base:1.1", 0);
     count = 2;
@@ -596,7 +604,12 @@ create_cpblts(struct ly_ctx *ctx)
                 } else if (!strcmp(child2->schema->name, "revision")) {
                     rev = (struct lyd_node_leaf_list *)child2;
                 } else if (!strcmp(child2->schema->name, "feature")) {
-                    features = realloc(features, ++feat_count * sizeof *features);
+                    features = nc_realloc(features, ++feat_count * sizeof *features);
+                    if (!features) {
+                        ERRMEM;
+                        free(cpblts);
+                        return NULL;
+                    }
                     features[feat_count - 1] = (struct lyd_node_leaf_list *)child2;
                 }
             }
@@ -703,6 +716,10 @@ nc_send_client_hello(struct nc_session *session)
 
     /* client side hello - send only NETCONF base capabilities */
     cpblts = malloc(3 * sizeof *cpblts);
+    if (!cpblts) {
+        ERRMEM;
+        return NC_MSG_ERROR;
+    }
     cpblts[0] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.0", 0);
     cpblts[1] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.1", 0);
     cpblts[2] = NULL;
@@ -994,6 +1011,10 @@ nc_tls_init(void)
     SSL_library_init();
 
     tls_locks = malloc(CRYPTO_num_locks() * sizeof *tls_locks);
+    if (!tls_locks) {
+        ERRMEM;
+        return;
+    }
     for (i = 0; i < CRYPTO_num_locks(); ++i) {
         pthread_mutex_init(tls_locks + i, NULL);
     }

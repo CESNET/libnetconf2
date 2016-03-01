@@ -155,7 +155,7 @@ nc_read_chunk(struct nc_session *session, size_t len, char **chunk)
         return 0;
     }
 
-    *chunk = malloc ((len + 1) * sizeof **chunk);
+    *chunk = malloc((len + 1) * sizeof **chunk);
     if (!*chunk) {
         ERRMEM;
         return -1;
@@ -187,7 +187,7 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, char
     } else {
         size = BUFFERSIZE;
     }
-    chunk = malloc ((size + 1) * sizeof *chunk);
+    chunk = malloc((size + 1) * sizeof *chunk);
     if (!chunk) {
         ERRMEM;
         return -1;
@@ -206,13 +206,11 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, char
         if (count == size) {
             /* get more memory */
             size = size + BUFFERSIZE;
-            char *tmp = realloc (chunk, (size + 1) * sizeof *tmp);
-            if (!tmp) {
+            chunk = realloc(chunk, (size + 1) * sizeof *chunk);
+            if (!chunk) {
                 ERRMEM;
-                free(chunk);
                 return -1;
             }
-            chunk = tmp;
         }
 
         /* get another character */
@@ -249,7 +247,7 @@ NC_MSG_TYPE
 nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
 {
     int ret;
-    char *msg = NULL, *chunk, *aux;
+    char *msg = NULL, *chunk;
     uint64_t chunk_len, len = 0;
     struct nc_server_reply *reply;
 
@@ -304,12 +302,11 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
             }
 
             /* realloc message buffer, remember to count terminating null byte */
-            aux = realloc(msg, len + chunk_len + 1);
-            if (!aux) {
+            msg = realloc(msg, len + chunk_len + 1);
+            if (!msg) {
                 ERRMEM;
                 goto error;
             }
-            msg = aux;
             memcpy(msg + len, chunk, chunk_len);
             len += chunk_len;
             msg[len] = '\0';
@@ -893,6 +890,10 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
 
         count = asprintf(&buf, "<rpc xmlns=\"%s\" message-id=\"%"PRIu64"\"%s>",
                          NC_NS_BASE, session->msgid + 1, attrs ? attrs : "");
+        if (count == -1) {
+            ERRMEM;
+            return -1;
+        }
         nc_write_clb((void *)&arg, buf, count);
         free(buf);
         lyd_print_clb(nc_write_clb, (void *)&arg, content, LYD_XML, LYP_WITHSIBLINGS);
@@ -950,15 +951,30 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
         sid = va_arg(ap, uint32_t*);
 
         count = asprintf(&buf, "<hello xmlns=\"%s\"><capabilities>", NC_NS_BASE);
+        if (count == -1) {
+            ERRMEM;
+            va_end(ap);
+            return -1;
+        }
         nc_write_clb((void *)&arg, buf, count);
         free(buf);
         for (i = 0; capabilities[i]; i++) {
             count = asprintf(&buf, "<capability>%s</capability>", capabilities[i]);
+            if (count == -1) {
+                ERRMEM;
+                va_end(ap);
+                return -1;
+            }
             nc_write_clb((void *)&arg, buf, count);
             free(buf);
         }
         if (sid) {
             count = asprintf(&buf, "</capabilities><session-id>%u</session-id></hello>", *sid);
+            if (count == -1) {
+                ERRMEM;
+                va_end(ap);
+                return -1;
+            }
             nc_write_clb((void *)&arg, buf, count);
             free(buf);
         } else {
@@ -981,4 +997,17 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
     }
 
     return 0;
+}
+
+void *
+nc_realloc(void *ptr, size_t size)
+{
+    void *ret;
+
+    ret = realloc(ptr, size);
+    if (!ret) {
+        free(ptr);
+    }
+
+    return ret;
 }

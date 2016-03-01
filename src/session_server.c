@@ -176,6 +176,11 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
     int ret, sock = -1;
 
     pfd = malloc(bind_count * sizeof *pfd);
+    if (!pfd) {
+        ERRMEM;
+        return -1;
+    }
+
     for (i = 0; i < bind_count; ++i) {
         pfd[i].fd = binds[i].sock;
         pfd[i].events = POLLIN;
@@ -222,25 +227,33 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
     if (host) {
         if (saddr.ss_family == AF_INET) {
             *host = malloc(15);
-            if (!inet_ntop(AF_INET, &((struct sockaddr_in *)&saddr)->sin_addr.s_addr, *host, 15)) {
-                ERR("inet_ntop failed (%s).", strerror(errno));
-                free(*host);
-                *host = NULL;
-            }
+            if (*host) {
+                if (!inet_ntop(AF_INET, &((struct sockaddr_in *)&saddr)->sin_addr.s_addr, *host, 15)) {
+                    ERR("inet_ntop failed (%s).", strerror(errno));
+                    free(*host);
+                    *host = NULL;
+                }
 
-            if (port) {
-                *port = ntohs(((struct sockaddr_in *)&saddr)->sin_port);
+                if (port) {
+                    *port = ntohs(((struct sockaddr_in *)&saddr)->sin_port);
+                }
+            } else {
+                ERRMEM;
             }
         } else if (saddr.ss_family == AF_INET6) {
             *host = malloc(40);
-            if (!inet_ntop(AF_INET6, ((struct sockaddr_in6 *)&saddr)->sin6_addr.s6_addr, *host, 40)) {
-                ERR("inet_ntop failed (%s).", strerror(errno));
-                free(*host);
-                *host = NULL;
-            }
+            if (*host) {
+                if (!inet_ntop(AF_INET6, ((struct sockaddr_in6 *)&saddr)->sin6_addr.s6_addr, *host, 40)) {
+                    ERR("inet_ntop failed (%s).", strerror(errno));
+                    free(*host);
+                    *host = NULL;
+                }
 
-            if (port) {
-                *port = ntohs(((struct sockaddr_in6 *)&saddr)->sin6_port);
+                if (port) {
+                    *port = ntohs(((struct sockaddr_in6 *)&saddr)->sin6_port);
+                }
+            } else {
+                ERRMEM;
             }
         } else {
             ERR("Source host of an unknown protocol family.");
@@ -447,6 +460,10 @@ nc_ps_new(void)
     struct nc_pollsession *ps;
 
     ps = calloc(1, sizeof(struct nc_pollsession));
+    if (!ps) {
+        ERRMEM;
+        return NULL;
+    }
     pthread_mutex_init(&ps->lock, NULL);
 
     return ps;
@@ -478,8 +495,14 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
     pthread_mutex_lock(&ps->lock);
 
     ++ps->session_count;
-    ps->pfds = realloc(ps->pfds, ps->session_count * sizeof *ps->pfds);
-    ps->sessions = realloc(ps->sessions, ps->session_count * sizeof *ps->sessions);
+    ps->pfds = nc_realloc(ps->pfds, ps->session_count * sizeof *ps->pfds);
+    ps->sessions = nc_realloc(ps->sessions, ps->session_count * sizeof *ps->sessions);
+    if (!ps->pfds || !ps->sessions) {
+        ERRMEM;
+        /* UNLOCK */
+        pthread_mutex_unlock(&ps->lock);
+        return -1;
+    }
 
     switch (session->ti_type) {
     case NC_TI_FD:
@@ -600,6 +623,10 @@ nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
     switch (msgtype) {
     case NC_MSG_RPC:
         *rpc = malloc(sizeof **rpc);
+        if (!*rpc) {
+            ERRMEM;
+            goto error;
+        }
 
         (*rpc)->tree = lyd_parse_xml(server_opts.ctx, &xml->child, LYD_OPT_DESTRUCT | LYD_OPT_RPC);
         if (!(*rpc)->tree) {
@@ -932,8 +959,14 @@ nc_server_add_endpt_listen(const char *name, const char *address, uint16_t port,
     }
 
     ++server_opts.endpt_count;
-    server_opts.binds = realloc(server_opts.binds, server_opts.endpt_count * sizeof *server_opts.binds);
-    server_opts.endpts = realloc(server_opts.endpts, server_opts.endpt_count * sizeof *server_opts.endpts);
+    server_opts.binds = nc_realloc(server_opts.binds, server_opts.endpt_count * sizeof *server_opts.binds);
+    server_opts.endpts = nc_realloc(server_opts.endpts, server_opts.endpt_count * sizeof *server_opts.endpts);
+    if (!server_opts.binds || !server_opts.endpts) {
+        ERRMEM;
+        /* WRITE UNLOCK */
+        pthread_rwlock_unlock(&server_opts.endpt_array_lock);
+        return -1;
+    }
 
     server_opts.endpts[server_opts.endpt_count - 1].name = lydict_insert(server_opts.ctx, name, 0);
     server_opts.binds[server_opts.endpt_count - 1].address = lydict_insert(server_opts.ctx, address, 0);
@@ -944,6 +977,12 @@ nc_server_add_endpt_listen(const char *name, const char *address, uint16_t port,
 #ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
         ssh_opts = calloc(1, sizeof *ssh_opts);
+        if (!ssh_opts) {
+            ERRMEM;
+            /* WRITE UNLOCK */
+            pthread_rwlock_unlock(&server_opts.endpt_array_lock);
+            return -1;
+        }
         /* set default values */
         ssh_opts->auth_methods = NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD | NC_SSH_AUTH_INTERACTIVE;
         ssh_opts->auth_attempts = 3;
@@ -955,6 +994,12 @@ nc_server_add_endpt_listen(const char *name, const char *address, uint16_t port,
 #ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
         server_opts.endpts[server_opts.endpt_count - 1].ti_opts = calloc(1, sizeof(struct nc_server_tls_opts));
+        if (!server_opts.endpts[server_opts.endpt_count - 1].ti_opts) {
+            ERRMEM;
+            /* WRITE UNLOCK */
+            pthread_rwlock_unlock(&server_opts.endpt_array_lock);
+            return -1;
+        }
         break;
 #endif
     default:
