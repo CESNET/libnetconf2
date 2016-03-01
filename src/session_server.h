@@ -192,14 +192,15 @@ uint16_t nc_ps_session_count(struct nc_pollsession *ps);
 int nc_ps_poll(struct nc_pollsession *ps, int timeout);
 
 /**
- * @brief Remove invalid sessions from a pollsession structure and
- *        call #nc_session_free() on them.
+ * @brief Remove sessions from a pollsession structure and
+ *        call nc_session_free() on them.
  *
- * Calling this function makes sense if nc_ps_poll() returned 3.
+ * Calling this function with \p all false makes sense if nc_ps_poll() returned 3.
  *
  * @param[in] ps Pollsession structure to clear.
+ * @param[in] all Whether to free all sessions, or only the invalid ones.
  */
-void nc_ps_clear(struct nc_pollsession *ps);
+void nc_ps_clear(struct nc_pollsession *ps, int all);
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 

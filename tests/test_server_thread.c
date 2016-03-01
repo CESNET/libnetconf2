@@ -75,7 +75,7 @@ server_thread(void *arg)
     nc_ps_add_session(ps, session);
     ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT);
     assert(ret == 3);
-    nc_ps_clear(ps);
+    nc_ps_clear(ps, 0);
 #endif
 
     ret = nc_accept(NC_ACCEPT_TIMEOUT, &session);
@@ -84,7 +84,7 @@ server_thread(void *arg)
     nc_ps_add_session(ps, session);
     ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT);
     assert(ret == 3);
-    nc_ps_clear(ps);
+    nc_ps_clear(ps, 0);
 
     nc_ps_free(ps);
 

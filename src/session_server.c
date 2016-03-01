@@ -793,7 +793,7 @@ retry_poll:
 }
 
 API void
-nc_ps_clear(struct nc_pollsession *ps)
+nc_ps_clear(struct nc_pollsession *ps, int all)
 {
     uint16_t i;
     struct nc_session *session;
@@ -804,7 +804,7 @@ nc_ps_clear(struct nc_pollsession *ps)
     }
 
     for (i = 0; i < ps->session_count; ) {
-        if (ps->sessions[i]->status != NC_STATUS_RUNNING) {
+        if (all || (ps->sessions[i]->status != NC_STATUS_RUNNING)) {
             session = ps->sessions[i];
             nc_ps_del_session(ps, session);
             nc_session_free(session);
