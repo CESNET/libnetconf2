@@ -586,7 +586,6 @@ create_cpblts(struct ly_ctx *ctx)
     }
 
     /* models */
-
     LY_TREE_FOR(yanglib->child, child) {
         if (!strcmp(child->schema->name, "module")) {
             LY_TREE_FOR(child->child, child2) {
@@ -597,7 +596,7 @@ create_cpblts(struct ly_ctx *ctx)
                 } else if (!strcmp(child2->schema->name, "revision")) {
                     rev = (struct lyd_node_leaf_list *)child2;
                 } else if (!strcmp(child2->schema->name, "feature")) {
-                    features = realloc(features, feat_count++ * sizeof *features);
+                    features = realloc(features, ++feat_count * sizeof *features);
                     features[feat_count - 1] = (struct lyd_node_leaf_list *)child2;
                 }
             }
