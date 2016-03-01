@@ -465,7 +465,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         return 0;
     }
 
-    opts = session->ti_opts;
+    opts = session->data;
 
     /* get the last certificate, that is the peer (client) certificate */
     if (!session->tls_cert) {
@@ -1491,7 +1491,7 @@ nc_accept_tls_session(struct nc_session *session, int sock)
     struct nc_server_tls_opts *opts;
     int ret;
 
-    opts = session->ti_opts;
+    opts = session->data;
 
     session->ti_type = NC_TI_OPENSSL;
     session->ti.tls = SSL_new(opts->tls_ctx);

@@ -1104,7 +1104,7 @@ nc_accept(int timeout, struct nc_session **session)
     }
     pthread_mutex_init((*session)->ti_lock, NULL);
 
-    (*session)->ti_opts = server_opts.endpts[idx].ti_opts;
+    (*session)->data = server_opts.endpts[idx].ti_opts;
 
     /* sock gets assigned to session or closed */
 #ifdef NC_ENABLED_SSH
@@ -1129,6 +1129,8 @@ nc_accept(int timeout, struct nc_session **session)
         ret = -1;
         goto fail;
     }
+
+    (*session)->data = NULL;
 
     /* WRITE UNLOCK */
     pthread_rwlock_unlock(&server_opts.endpt_array_lock);
@@ -1203,9 +1205,9 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struc
         /* OPTS LOCK */
         pthread_mutex_lock(&ssh_ch_opts_lock);
 
-        (*session)->ti_opts = &ssh_ch_opts;
+        (*session)->data = &ssh_ch_opts;
         ret = nc_accept_ssh_session(*session, sock);
-        (*session)->ti_opts = NULL;
+        (*session)->data = NULL;
 
         /* OPTS UNLOCK */
         pthread_mutex_unlock(&ssh_ch_opts_lock);
@@ -1220,9 +1222,9 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struc
         /* OPTS LOCK */
         pthread_mutex_lock(&tls_ch_opts_lock);
 
-        (*session)->ti_opts = &tls_ch_opts;
+        (*session)->data = &tls_ch_opts;
         ret = nc_accept_tls_session(*session, sock);
-        (*session)->ti_opts = NULL;
+        (*session)->data = NULL;
 
         /* OPTS UNLOCK */
         pthread_mutex_unlock(&tls_ch_opts_lock);

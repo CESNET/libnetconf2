@@ -607,7 +607,7 @@ nc_sshcb_auth_pubkey(struct nc_session *session, ssh_message msg)
         return;
 
     } else if (signature_state == SSH_PUBLICKEY_STATE_NONE) {
-        if ((username = auth_pubkey_compare_key(session->ti_opts, ssh_message_auth_pubkey(msg))) == NULL) {
+        if ((username = auth_pubkey_compare_key(session->data, ssh_message_auth_pubkey(msg))) == NULL) {
             VRB("User \"%s\" tried to use an unknown (unauthorized) public key.", session->username);
 
         } else if (strcmp(session->username, username)) {
@@ -846,7 +846,7 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
             return 0;
         }
 
-        if (session->ssh_auth_attempts >= ((struct nc_server_ssh_opts *)session->ti_opts)->auth_attempts) {
+        if (session->ssh_auth_attempts >= ((struct nc_server_ssh_opts *)session->data)->auth_attempts) {
             /* too many failed attempts */
             ssh_message_reply_default(msg);
             return 0;
@@ -1073,7 +1073,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock)
     struct nc_server_ssh_opts *opts;
     int libssh_auth_methods = 0, elapsed_usec = 0, ret;
 
-    opts = session->ti_opts;
+    opts = session->data;
 
     /* other transport-specific data */
     session->ti_type = NC_TI_LIBSSH;

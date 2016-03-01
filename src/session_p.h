@@ -240,6 +240,7 @@ struct nc_session {
 
     /* other */
     struct ly_ctx *ctx;            /**< libyang context of the session */
+    void *data;                    /**< arbitrary user data */
     uint8_t flags;                 /**< various flags of the session - TODO combine with status and/or side */
 #define NC_SESSION_SHAREDCTX 0x01
 #define NC_SESSION_CALLHOME 0x02
@@ -251,7 +252,6 @@ struct nc_session {
     struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
 
     /* server side only data */
-    void *ti_opts;
     time_t last_rpc;               /**< time the last RPC was received on this session */
 #ifdef NC_ENABLED_SSH
     /* SSH session authenticated */

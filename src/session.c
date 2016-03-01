@@ -212,6 +212,28 @@ nc_session_cpblt(const struct nc_session *session, const char *capab)
     return NULL;
 }
 
+API void
+nc_session_set_data(struct nc_session *session, void *data)
+{
+    if (!session) {
+        ERRARG;
+        return;
+    }
+
+    session->data = data;
+}
+
+API void *
+nc_session_get_data(const struct nc_session *session)
+{
+    if (!session) {
+        ERRARG;
+        return NULL;
+    }
+
+    return session->data;
+}
+
 NC_MSG_TYPE
 nc_send_msg(struct nc_session *session, struct lyd_node *op)
 {
