@@ -77,16 +77,13 @@
 /**
  * @page howtoinit Init and Thread-safety Information
  *
- * Before working with the library, it must be initialized using nc_init().
- * Based on how the library was compiled, also libssh and/or libssh/libcrypto
- * are initialized (for multi-threaded use) too. It is advised to compile
- * libnetconf2, for instance, with TLS support even if you do not want to
- * use lnc2 TLS functions, but only use libssl/libcrypto functions in your
+ * Before working with the library, it must be initialized using nc_client_init()
+ * or nc_server_init(). Based on how the library was compiled, also libssh and/or
+ * libssh/libcrypto are initialized (for multi-threaded use) too. It is advised
+ * to compile libnetconf2, for instance, with TLS support even if you do not want
+ * to use lnc2 TLS functions, but only use libssl/libcrypto functions in your
  * application. You can then use libnetconf2 cleanup function and do not
- * trouble yourself with the cleanup. If you create
- * only sessions with pre-established transport protocol (_inout functions),
- * you do not need to call any init function at all, but there may be reachable
- * dynamic memory after your application exits.
+ * trouble yourself with the cleanup.
  *
  * To prevent any reachable memory at the end of your application, there
  * are complementary destroy functions available. If your application is
@@ -110,10 +107,18 @@
  * Functions List
  * --------------
  *
+ * Available in __nc_client.h__.
+ *
+ * - nc_client_init()
+ * - nc_client_destroy()
+ *
+ * Available in __nc_server.h__.
+ *
+ * - nc_server_init()
+ * - nc_server_destroy()
+ *
  * Available in both __nc_client.h__ and __nc_server.h__.
  *
- * - nc_init()
- * - nc_destroy()
  * - nc_thread_destroy()
  */
 
@@ -262,11 +267,11 @@
  * Init
  * ====
  *
- * Server has its own initialization function. With it, you set the
- * server context, which determines what modules it supports and what
- * capabilities to advertise. Few capabilities that cannot be learnt
- * from the context are set with separate functions. So are several
- * general options.
+ * Server takes an argument for its [initialization function](@ref howtoinit).
+ * In it, you set the server context, which determines what modules it
+ * supports and what capabilities to advertise. Few capabilities that
+ * cannot be learnt from the context are set with separate functions.
+ * So are several general options.
  *
  * Context does not only determine server modules, but its overall
  * functionality as well. For every RPC the server should support,
@@ -280,7 +285,6 @@
  *
  * Available in __nc_server.h__.
  *
- * - nc_server_init()
  * - nc_server_set_capab_withdefaults()
  * - nc_server_set_capab_interleave()
  * - nc_server_set_hello_timeout()

@@ -1074,7 +1074,9 @@ nc_thread_destroy(void)
     ERR_remove_thread_state(&crypto_tid);
 }
 
-API void
+#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
+
+void
 nc_init(void)
 {
 #if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
@@ -1086,7 +1088,7 @@ nc_init(void)
 #endif
 }
 
-API void
+void
 nc_destroy(void)
 {
 #if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
@@ -1097,5 +1099,3 @@ nc_destroy(void)
     nc_tls_destroy();
 #endif
 }
-
-#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */

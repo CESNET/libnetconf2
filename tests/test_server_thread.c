@@ -35,24 +35,6 @@
 
 pthread_barrier_t barrier;
 
-static int
-setup_lib(void)
-{
-    nc_verbosity(NC_VERB_VERBOSE);
-
-    nc_init();
-
-    return 0;
-}
-
-static int
-teardown_lib(void)
-{
-    nc_destroy();
-
-    return 0;
-}
-
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 static void *
@@ -248,9 +230,13 @@ ssh_hostkey_check_clb(const char *hostname, ssh_session session)
 static void *
 ssh_client_thread(void *arg)
 {
-    (void)arg;
-    int ret;
+    int ret, read_pipe = *(int *)arg;
+    char buf[9];
     struct nc_session *session;
+
+    ret = read(read_pipe, buf, 9);
+    assert(ret == 9);
+    assert(!strncmp(buf, "ssh_ready", 9));
 
     /* skip the knownhost check */
     nc_client_ssh_set_auth_hostkey_check_clb(ssh_hostkey_check_clb);
@@ -272,36 +258,6 @@ ssh_client_thread(void *arg)
 
     nc_thread_destroy();
     return NULL;
-}
-
-pid_t
-fork_ssh_client(void)
-{
-    pid_t client_pid;
-
-    if (!(client_pid = fork())) {
-        /* cleanup */
-        //nc_server_destroy();
-        //ly_ctx_destroy(ctx, NULL);
-        pthread_barrier_destroy(&barrier);
-
-        ssh_client_thread(NULL);
-
-        teardown_lib();
-        exit(0);
-    }
-
-    return client_pid;
-}
-
-pthread_t
-thread_ssh_client(void)
-{
-    pthread_t client_tid;
-
-    pthread_create(&client_tid, NULL, ssh_client_thread, NULL);
-
-    return client_tid;
 }
 
 #endif /* NC_ENABLED_SSH */
@@ -569,9 +525,13 @@ tls_endpt_del_ctn_thread(void *arg)
 static void *
 tls_client_thread(void *arg)
 {
-    (void)arg;
-    int ret;
+    int ret, read_pipe = *(int *)arg;
+    char buf[9];
     struct nc_session *session;
+
+    ret = read(read_pipe, buf, 9);
+    assert(ret == 9);
+    assert(!strncmp(buf, "tls_ready", 9));
 
     ret = nc_client_tls_set_cert_key_paths(TESTS_DIR"/data/client.crt", TESTS_DIR"/data/client.key");
     assert(!ret);
@@ -585,36 +545,6 @@ tls_client_thread(void *arg)
 
     nc_thread_destroy();
     return NULL;
-}
-
-pid_t
-fork_tls_client(void)
-{
-    pid_t client_pid;
-
-    if (!(client_pid = fork())) {
-        /* cleanup */
-        //nc_server_destroy();
-        //ly_ctx_destroy(ctx, NULL);
-        pthread_barrier_destroy(&barrier);
-
-        tls_client_thread(NULL);
-
-        teardown_lib();
-        exit(0);
-    }
-
-    return client_pid;
-}
-
-pthread_t
-thread_tls_client(void)
-{
-    pthread_t client_tid;
-
-    pthread_create(&client_tid, NULL, tls_client_thread, NULL);
-
-    return client_tid;
 }
 
 #endif /* NC_ENABLED_TLS */
@@ -653,56 +583,63 @@ static void *(*thread_funcs[])(void *) = {
 
 const int thread_count = sizeof thread_funcs / sizeof *thread_funcs;
 
-static void
-clients_start_cleanup(void)
-{
-    //static pid_t pids[2] = {0, 0};
-    static pthread_t tids[2] = {0, 0};
-
 #if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
-    /*if (pids[0] && pids[1]) {
-        waitpid(pids[0], NULL, 0);
-        waitpid(pids[1], NULL, 0);
-        return;
-    }
-    pids[0] = fork_ssh_client();
-    pids[1] = fork_tls_client();*/
-
-    if (tids[0] && tids[1]) {
-        pthread_join(tids[0], NULL);
-        pthread_join(tids[1], NULL);
-        return;
-    }
-    tids[0] = thread_ssh_client();
-    tids[1] = thread_tls_client();
-#elif defined(NC_ENABLED_SSH)
-    /*if (pids[0]) {
-        waitpid(pids[0], NULL, 0);
-        return;
-    }
-    pids[0] = fork_ssh_client();*/
-
-    if (tids[0]) {
-        pthread_join(tids[0], NULL);
-        return;
-    }
-    tids[0] = thread_ssh_client();
-#elif defined(NC_ENABLED_TLS)
-    /*if (pids[1]) {
-        waitpid(pids[1], NULL, 0);
-        return;
-    }
-    pids[1] = fork_tls_client();*/
-
-    if (tids[1]) {
-        pthread_join(tids[1], NULL);
-        return;
-    }
-    tids[1] = thread_tls_client();
+const int client_count = 2;
+pid_t pids[2];
+int pipes[4];
 #else
-    if (!tids[0] && !tids[1]) {
-        return;
+const int client_count = 1;
+pid_t pids[1];
+int pipes[2];
+#endif
+
+static void
+client_fork(void)
+{
+    int ret, clients = 0;
+
+#ifdef NC_ENABLED_SSH
+    pipe(pipes + clients * 2);
+
+    if (!(pids[clients] = fork())) {
+        nc_client_init();
+
+        ret = nc_client_schema_searchpath(TESTS_DIR"/../schemas");
+        assert(!ret);
+
+        /* close write */
+        close(pipes[clients * 2 + 1]);
+        ssh_client_thread(&pipes[clients * 2]);
+        close(pipes[clients * 2]);
+        nc_client_destroy();
+        exit(0);
     }
+    /* close read */
+    close(pipes[clients * 2]);
+
+    ++clients;
+#endif
+
+#ifdef NC_ENABLED_TLS
+    pipe(pipes + clients * 2);
+
+    if (!(pids[clients] = fork())) {
+        nc_client_init();
+
+        ret = nc_client_schema_searchpath(TESTS_DIR"/../schemas");
+        assert(!ret);
+
+        /* close write */
+        close(pipes[clients * 2 + 1]);
+        tls_client_thread(&pipes[clients * 2]);
+        close(pipes[clients * 2]);
+        nc_client_destroy();
+        exit(0);
+    }
+    /* close read */
+    close(pipes[clients * 2]);
+
+    ++clients;
 #endif
 }
 
@@ -710,10 +647,12 @@ int
 main(void)
 {
     struct ly_ctx *ctx;
-    int ret, i;
+    int ret, i, clients = 0;
     pthread_t tids[thread_count];
 
-    setup_lib();
+    nc_verbosity(NC_VERB_VERBOSE);
+
+    client_fork();
 
     ctx = ly_ctx_new(TESTS_DIR"/../schemas");
     assert(ctx);
@@ -730,6 +669,11 @@ main(void)
     assert(!ret);
     ret = nc_server_ssh_endpt_set_hostkey("main", TESTS_DIR"/data/key_rsa");
     assert(!ret);
+
+    /* client ready */
+    ret = write(pipes[clients * 2 + 1], "ssh_ready", 9);
+    assert(ret == 9);
+    ++clients;
 
     /* for ssh_endpt_del_authkey */
     ret = nc_server_ssh_endpt_add_authkey("main", TESTS_DIR"/data/key_ecdsa.pub", "test2");
@@ -757,6 +701,11 @@ main(void)
     ret = nc_server_tls_endpt_add_ctn("main", 0, "02:D3:03:0E:77:21:E2:14:1F:E5:75:48:98:6B:FD:8A:63:BB:DE:40:34", NC_TLS_CTN_SPECIFIED, "test");
     assert(!ret);
 
+    /* client ready */
+    ret = write(pipes[clients * 2 + 1], "tls_ready", 9);
+    assert(ret == 9);
+    ++clients;
+
     /* for tls_del_endpt */
     ret = nc_server_tls_add_endpt_listen("secondary", "0.0.0.0", 6502);
     assert(!ret);
@@ -770,10 +719,6 @@ main(void)
     assert(!ret);
 #endif
 
-    ret = nc_client_schema_searchpath(TESTS_DIR"/../schemas");
-    assert(!ret);
-    clients_start_cleanup();
-
     /* threads'n'stuff */
     ret = 0;
     for (i = 0; i < thread_count; ++i) {
@@ -785,16 +730,15 @@ main(void)
     for (i = 0; i < thread_count; ++i) {
         pthread_join(tids[i], NULL);
     }
-
-    clients_start_cleanup();
+    for (i = 0; i < client_count; ++i) {
+        waitpid(pids[i], NULL, 0);
+        close(pipes[i * 2 + 1]);
+    }
 
     pthread_barrier_destroy(&barrier);
 
-    nc_client_destroy();
     nc_server_destroy();
     ly_ctx_destroy(ctx, NULL);
-
-    teardown_lib();
 
     return 0;
 }

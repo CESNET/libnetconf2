@@ -427,6 +427,10 @@ int nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL 
  */
 int nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struct nc_session **session);
 
+void nc_init(void);
+
+void nc_destroy(void);
+
 #ifdef NC_ENABLED_SSH
 
 /**

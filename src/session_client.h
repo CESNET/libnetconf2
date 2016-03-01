@@ -45,7 +45,13 @@
 int nc_client_schema_searchpath(const char *path);
 
 /**
- * @brief Destroy all the client options, for both SSH and TLS, and for Call Home too.
+ * @brief Initialize libssh and/or libssl/libcrypto for use in the client.
+ */
+void nc_client_init(void);
+
+/**
+ * @brief Destroy all libssh and/or libssl/libcrypto dynamic memory and
+ *        the client options, for both SSH and TLS, and for Call Home too.
  */
 void nc_client_destroy(void);
 

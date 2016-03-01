@@ -326,6 +326,8 @@ nc_server_init(struct ly_ctx *ctx)
         return -1;
     }
 
+    nc_init();
+
     /* set default <get-schema> callback if not specified */
     rpc = ly_ctx_get_node(ctx, "/ietf-netconf-monitoring:get-schema");
     if (rpc && !rpc->private) {
@@ -354,6 +356,7 @@ nc_server_destroy(void)
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
     nc_server_del_endpt(NULL, 0);
 #endif
+    nc_destroy();
 }
 
 API int

@@ -1,7 +1,7 @@
 /**
- * \file test_init_destroy.c
+ * \file test_init_destroy_client.c
  * \author Michal Vasko <mvasko@cesnet.cz>
- * \brief libnetconf2 tests - init/destroy
+ * \brief libnetconf2 tests - init/destroy client
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
@@ -30,24 +30,24 @@
 #include <libyang/libyang.h>
 
 #include "config.h"
-#include <netconf.h>
+#include <session_client.h>
 
 static int
-setup(void **state)
+setup_client(void **state)
 {
     (void)state;
 
-    nc_init();
+    nc_client_init();
 
     return 0;
 }
 
 static int
-teardown(void **state)
+teardown_client(void **state)
 {
     (void)state;
 
-    nc_destroy();
+    nc_client_destroy();
 
     return 0;
 }
@@ -62,7 +62,7 @@ int
 main(void)
 {
     const struct CMUnitTest init_destroy[] = {
-        cmocka_unit_test_setup_teardown(test_dummy, setup, teardown)
+        cmocka_unit_test_setup_teardown(test_dummy, setup_client, teardown_client)
     };
 
     return cmocka_run_group_tests(init_destroy, NULL, NULL);

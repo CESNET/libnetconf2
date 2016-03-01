@@ -111,22 +111,11 @@ typedef enum NC_PARAMTYPE {
  * @brief Free all the dynamically allocated thread-specific libssl/libcrypto
  *        resources.
  *
- *        This function should be called only if nc_init() was called. Call it in every
+ *        This function should be called only if init was called. Call it in every
  *        thread your application creates just before the thread exits. In the last thread
  *        (usually the main one) call only nc_destroy().
  */
 void nc_thread_destroy(void);
-
-/**
- * @brief Initialize libnetconf2 (libssh and/or libssl/libcrypto too, based on
- *        the macros used during compilation) for thread-safe usage.
- *        If you application is single-threaded, you only need to call this
- *        function if you want to avoid reachable dynamic memory on application
- *        exit.
- *
- *        Must be called before calling any libnetconf2 SSH and/or TLS function.
- */
-void nc_init(void);
 
 /**
  * @brief Free all the dynamically allocated libssh and libssl/libcrypto resources.

@@ -42,7 +42,7 @@ typedef struct nc_server_reply *(*nc_rpc_clb)(struct lyd_node *rpc, struct nc_se
 void nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REASON reason);
 
 /**
- * @brief Initialize the server using a libyang context.
+ * @brief Initialize libssh and/or libssl/libcrypto and the server using a libyang context.
  *
  * The context is not modified internally, only its dictionary is used for holding
  * all the strings, which is thread-safe. Reading models is considered thread-safe
@@ -68,7 +68,8 @@ void nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REAS
 int nc_server_init(struct ly_ctx *ctx);
 
 /**
- * @brief Destroy any dynamically allocated server resources.
+ * @brief Destroy any dynamically allocated libssh and/or libssl/libcrypto and
+ *        server resources.
  */
 void nc_server_destroy(void);
 

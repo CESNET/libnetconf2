@@ -946,6 +946,12 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
 #endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
 API void
+nc_client_init(void)
+{
+    nc_init();
+}
+
+API void
 nc_client_destroy(void)
 {
     nc_client_schema_searchpath(NULL);
@@ -958,6 +964,7 @@ nc_client_destroy(void)
 #ifdef NC_ENABLED_TLS
     nc_client_tls_destroy_opts();
 #endif
+    nc_destroy();
 }
 
 API NC_MSG_TYPE
