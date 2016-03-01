@@ -270,10 +270,12 @@ struct nc_session {
 #endif
 };
 
+/* ACCESS locked */
 struct nc_pollsession {
     struct pollfd *pfds;
     struct nc_session **sessions;
     uint16_t session_count;
+    pthread_mutex_t lock;
 };
 
 struct nc_ntf_thread_arg {

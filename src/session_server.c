@@ -441,7 +441,12 @@ fail:
 API struct nc_pollsession *
 nc_ps_new(void)
 {
-    return calloc(1, sizeof(struct nc_pollsession));
+    struct nc_pollsession *ps;
+
+    ps = calloc(1, sizeof(struct nc_pollsession));
+    pthread_mutex_init(&ps->lock, NULL);
+
+    return ps;
 }
 
 API void
@@ -453,6 +458,8 @@ nc_ps_free(struct nc_pollsession *ps)
 
     free(ps->pfds);
     free(ps->sessions);
+    pthread_mutex_destroy(&ps->lock);
+
     free(ps);
 }
 
@@ -463,6 +470,9 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
         ERRARG;
         return -1;
     }
+
+    /* LOCK */
+    pthread_mutex_lock(&ps->lock);
 
     ++ps->session_count;
     ps->pfds = realloc(ps->pfds, ps->session_count * sizeof *ps->pfds);
@@ -487,24 +497,24 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
 
     default:
         ERRINT;
+        /* UNLOCK */
+        pthread_mutex_unlock(&ps->lock);
         return -1;
     }
     ps->pfds[ps->session_count - 1].events = POLLIN;
     ps->pfds[ps->session_count - 1].revents = 0;
     ps->sessions[ps->session_count - 1] = session;
 
+    /* UNLOCK */
+    pthread_mutex_unlock(&ps->lock);
+
     return 0;
 }
 
-API int
-nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
+static int
+_nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
 {
     uint16_t i;
-
-    if (!ps || !session) {
-        ERRARG;
-        return -1;
-    }
 
     for (i = 0; i < ps->session_count; ++i) {
         if (ps->sessions[i] == session) {
@@ -525,15 +535,46 @@ nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
     return -1;
 }
 
+API int
+nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
+{
+    int ret;
+
+    if (!ps || !session) {
+        ERRARG;
+        return -1;
+    }
+
+    /* LOCK */
+    pthread_mutex_lock(&ps->lock);
+
+    ret = _nc_ps_del_session(ps, session);
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&ps->lock);
+
+    return ret;
+}
+
 API uint16_t
 nc_ps_session_count(struct nc_pollsession *ps)
 {
+    uint16_t count;
+
     if (!ps) {
         ERRARG;
         return 0;
     }
 
-    return ps->session_count;
+    /* LOCK */
+    pthread_mutex_lock(&ps->lock);
+
+    count = ps->session_count;
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&ps->lock);
+
+    return count;
 }
 
 /* must be called holding the session lock! */
@@ -643,10 +684,14 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
 
     cur_time = time(NULL);
 
+    /* LOCK */
+    pthread_mutex_lock(&ps->lock);
+
     for (i = 0; i < ps->session_count; ++i) {
         if (ps->sessions[i]->status != NC_STATUS_RUNNING) {
             ERR("Session %u: session not running.", ps->sessions[i]->id);
-            return -1;
+            ret = -1;
+            goto finish;
         }
 
         /* TODO invalidate only sessions without subscription */
@@ -654,7 +699,8 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
             ERR("Session %u: session idle timeout elapsed.", ps->sessions[i]->id);
             ps->sessions[i]->status = NC_STATUS_INVALID;
             ps->sessions[i]->term_reason = NC_SESSION_TERM_TIMEOUT;
-            return 3;
+            ret = 3;
+            goto finish;
         }
 
         if (ps->pfds[i].revents) {
@@ -670,7 +716,7 @@ retry_poll:
         i = 0;
         ret = poll(ps->pfds, ps->session_count, timeout);
         if (ret < 1) {
-            return ret;
+            goto finish;
         }
     }
 
@@ -680,12 +726,14 @@ retry_poll:
             ERR("Session %u: communication socket unexpectedly closed.", ps->sessions[i]->id);
             ps->sessions[i]->status = NC_STATUS_INVALID;
             ps->sessions[i]->term_reason = NC_SESSION_TERM_DROPPED;
-            return 3;
+            ret = 3;
+            goto finish;
         } else if (ps->pfds[i].revents & POLLERR) {
             ERR("Session %u: communication socket error.", ps->sessions[i]->id);
             ps->sessions[i]->status = NC_STATUS_INVALID;
             ps->sessions[i]->term_reason = NC_SESSION_TERM_OTHER;
-            return 3;
+            ret = 3;
+            goto finish;
         } else if (ps->pfds[i].revents & POLLIN) {
 #ifdef NC_ENABLED_SSH
             if (ps->sessions[i]->ti_type == NC_TI_LIBSSH) {
@@ -706,7 +754,7 @@ retry_poll:
                 /* actual event happened */
                 if ((ret <= 0) || (ret >= 3)) {
                     ps->pfds[i].revents = 0;
-                    return ret;
+                    goto finish;
 
                 /* event occurred on some other channel */
                 } else if (ret == 2) {
@@ -715,7 +763,8 @@ retry_poll:
                         /* last session and it is not the right channel, ... */
                         if (!timeout) {
                             /* ... timeout is 0, so that is it */
-                            return 0;
+                            ret = 0;
+                            goto finish;
                         }
                         /* ... retry polling reasonable time apart ... */
                         usleep(NC_TIMEOUT_STEP);
@@ -739,7 +788,8 @@ retry_poll:
 
     if (i == ps->session_count) {
         ERRINT;
-        return -1;
+        ret = -1;
+        goto finish;
     }
 
     /* this is the session with some data available for reading */
@@ -749,16 +799,18 @@ retry_poll:
     ret = nc_timedlock(session->ti_lock, timeout, NULL);
     if (ret != 1) {
         /* error or timeout */
-        return ret;
+        goto finish;
     }
 
     msgtype = nc_recv_rpc(session, &rpc);
     if (msgtype == NC_MSG_ERROR) {
         pthread_mutex_unlock(session->ti_lock);
         if (session->status != NC_STATUS_RUNNING) {
-            return 3;
+            ret = 3;
+            goto finish;
         }
-        return -1;
+        ret = -1;
+        goto finish;
     }
 
     /* NC_MSG_NONE is not a real (known) RPC */
@@ -773,23 +825,31 @@ retry_poll:
 
     if (msgtype == NC_MSG_ERROR) {
         nc_server_rpc_free(rpc, server_opts.ctx);
-        return -1;
+        ret = -1;
+        goto finish;
     }
     nc_server_rpc_free(rpc, server_opts.ctx);
 
     /* status change takes precedence over leftover events (return 2) */
     if (session->status != NC_STATUS_RUNNING) {
-        return 3;
+        ret = 3;
+        goto finish;
     }
 
     /* is there some other socket waiting? */
     for (++i; i < ps->session_count; ++i) {
         if (ps->pfds[i].revents) {
-            return 2;
+            ret = 2;
+            goto finish;
         }
     }
 
-    return 1;
+    ret = 1;
+
+finish:
+    /* UNLOCK */
+    pthread_mutex_unlock(&ps->lock);
+    return ret;
 }
 
 API void
@@ -803,16 +863,33 @@ nc_ps_clear(struct nc_pollsession *ps, int all)
         return;
     }
 
-    for (i = 0; i < ps->session_count; ) {
-        if (all || (ps->sessions[i]->status != NC_STATUS_RUNNING)) {
-            session = ps->sessions[i];
-            nc_ps_del_session(ps, session);
-            nc_session_free(session);
-            continue;
-        }
+    /* LOCK */
+    pthread_mutex_lock(&ps->lock);
 
-        ++i;
+    if (all) {
+        for (i = 0; i < ps->session_count; ) {
+            nc_session_free(ps->sessions[i]);
+        }
+        free(ps->sessions);
+        ps->sessions = NULL;
+        free(ps->pfds);
+        ps->pfds = NULL;
+        ps->session_count = 0;
+    } else {
+        for (i = 0; i < ps->session_count; ) {
+            if (ps->sessions[i]->status != NC_STATUS_RUNNING) {
+                session = ps->sessions[i];
+                _nc_ps_del_session(ps, session);
+                nc_session_free(session);
+                continue;
+            }
+
+            ++i;
+        }
     }
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&ps->lock);
 }
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
