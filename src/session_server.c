@@ -343,13 +343,13 @@ nc_server_init(struct ly_ctx *ctx)
 
     /* set default <get-schema> callback if not specified */
     rpc = ly_ctx_get_node(ctx, "/ietf-netconf-monitoring:get-schema");
-    if (rpc && !rpc->private) {
+    if (rpc && !rpc->priv) {
         lys_set_private(rpc, nc_clb_default_get_schema);
     }
 
     /* set default <close-session> callback if not specififed */
     rpc = ly_ctx_get_node(ctx, "/ietf-netconf:close-session");
-    if (rpc && !rpc->private) {
+    if (rpc && !rpc->priv) {
         lys_set_private(rpc, nc_clb_default_close_session);
     }
 
@@ -669,10 +669,10 @@ nc_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
     int ret;
 
     /* no callback, reply with a not-implemented error */
-    if (!rpc->tree || !rpc->tree->schema->private) {
+    if (!rpc->tree || !rpc->tree->schema->priv) {
         reply = nc_server_reply_err(nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_PROT));
     } else {
-        clb = (nc_rpc_clb)rpc->tree->schema->private;
+        clb = (nc_rpc_clb)rpc->tree->schema->priv;
         reply = clb(rpc->tree, session);
     }
 
