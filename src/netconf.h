@@ -117,14 +117,6 @@ typedef enum NC_PARAMTYPE {
  */
 void nc_thread_destroy(void);
 
-/**
- * @brief Free all the dynamically allocated libssh and libssl/libcrypto resources.
- *
- *        No libnetconf2 SSH/TLS, libssh, and libcrypto/libssl function should be
- *        called afterwards.
- */
-void nc_destroy(void);
-
 #endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
 /**
