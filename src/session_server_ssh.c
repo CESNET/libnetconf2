@@ -984,6 +984,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
 
         if ((timeout != -1) && (elapsed_usec / 1000 >= timeout)) {
             /* timeout */
+            ERR("Failed to start \"netconf\" SSH subsystem for too long, disconnecting.");
             break;
         }
 
@@ -1133,6 +1134,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock)
 
     if (!(session->flags & NC_SESSION_SSH_AUTHENTICATED)) {
         /* timeout */
+        ERR("Client failed to authenticate for too long, disconnecting.");
         return 0;
     }
 
