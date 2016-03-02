@@ -1516,10 +1516,10 @@ nc_connect_callhome_tls(const char *host, uint16_t port, struct nc_session **ses
 }
 
 int
-nc_accept_tls_session(struct nc_session *session, int sock)
+nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
 {
     struct nc_server_tls_opts *opts;
-    int ret;
+    int ret, elapsed_usec = 0;
 
     opts = session->data;
 
@@ -1539,7 +1539,14 @@ nc_accept_tls_session(struct nc_session *session, int sock)
     pthread_once(&verify_once, nc_tls_make_verify_key);
     pthread_setspecific(verify_key, session);
 
-    ret = SSL_accept(session->ti.tls);
+    while (((ret = SSL_accept(session->ti.tls)) == -1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
+        usleep(NC_TIMEOUT_STEP);
+        elapsed_usec += NC_TIMEOUT_STEP;
+        if ((timeout > -1) && (elapsed_usec / 1000 >= timeout)) {
+            ERR("SSL_accept timeout.");
+            return 0;
+        }
+    }
 
     if (ret != 1) {
         switch (SSL_get_error(session->ti.tls, ret)) {

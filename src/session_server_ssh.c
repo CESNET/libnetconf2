@@ -1077,7 +1077,7 @@ nc_connect_callhome_ssh(const char *host, uint16_t port, struct nc_session **ses
 }
 
 int
-nc_accept_ssh_session(struct nc_session *session, int sock)
+nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 {
     struct nc_server_ssh_opts *opts;
     int libssh_auth_methods = 0, elapsed_usec = 0, ret;
@@ -1114,12 +1114,25 @@ nc_accept_ssh_session(struct nc_session *session, int sock)
         return -1;
     }
 
-    if (ssh_handle_key_exchange(session->ti.libssh.session) != SSH_OK) {
+    ssh_set_blocking(session->ti.libssh.session, 0);
+
+    while ((ret = ssh_handle_key_exchange(session->ti.libssh.session)) == SSH_AGAIN) {
+        usleep(NC_TIMEOUT_STEP);
+        elapsed_usec += NC_TIMEOUT_STEP;
+        if ((timeout > -1) && (elapsed_usec / 1000 >= timeout)) {
+            break;
+        }
+    }
+    if (ret == SSH_AGAIN) {
+        ERR("SSH key exchange timeout.");
+        return 0;
+    } else if (ret != SSH_OK) {
         ERR("SSH key exchange error (%s).", ssh_get_error(session->ti.libssh.session));
         return -1;
     }
 
     /* authenticate */
+    elapsed_usec = 0;
     do {
         if (!nc_session_is_connected(session)) {
             ERR("Communication socket unexpectedly closed (libssh).");

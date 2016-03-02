@@ -376,7 +376,7 @@ fail:
 int
 nc_sock_connect(const char* host, uint16_t port)
 {
-    int i, sock = -1;
+    int i, sock = -1, flags;
     struct addrinfo hints, *res_list, *res;
     char port_s[6]; /* length of string representation of short int */
 
@@ -407,6 +407,12 @@ nc_sock_connect(const char* host, uint16_t port)
             close(sock);
             sock = -1;
             goto errloop;
+        }
+
+        /* make the socket non-blocking */
+        if (((flags = fcntl(sock, F_GETFL)) == -1) || (fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
+            ERR("Fcntl failed (%s).", strerror(errno));
+            return -1;
         }
 
         /* we're done, network connection established */
@@ -976,12 +982,12 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
 
 #ifdef NC_ENABLED_SSH
     if (client_opts.ch_binds[idx].ti == NC_TI_LIBSSH) {
-        *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx);
+        *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
     } else
 #endif
 #ifdef NC_ENABLED_TLS
     if (client_opts.ch_binds[idx].ti == NC_TI_OPENSSL) {
-        *session = nc_accept_callhome_tls_sock(sock, host, port, ctx);
+        *session = nc_accept_callhome_tls_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
     } else
 #endif
     {

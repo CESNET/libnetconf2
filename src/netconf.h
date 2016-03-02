@@ -34,8 +34,10 @@ extern "C" {
 /** @brief Default NETCONF over TLS Call Home port */
 #define NC_PORT_CH_TLS 6667
 
-/** @brief Microseconds after which tasks are repeated until the full timeout elapses */
-#define NC_TIMEOUT_STEP 100
+/** @brief Microseconds after which tasks are repeated until the full timeout elapses.
+ *         A second (1000 000) should be divisible by this number without remain.
+ */
+#define NC_TIMEOUT_STEP 20
 
 /**
  * @brief Enumeration of reasons of the NETCONF session termination as defined in RFC 6470.

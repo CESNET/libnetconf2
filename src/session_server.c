@@ -22,6 +22,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <time.h>
 
@@ -173,7 +174,7 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
     struct pollfd *pfd;
     struct sockaddr_storage saddr;
     socklen_t saddr_len = sizeof(saddr);
-    int ret, sock = -1;
+    int ret, sock = -1, flags;
 
     pfd = malloc(bind_count * sizeof *pfd);
     if (!pfd) {
@@ -216,6 +217,12 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
     ret = accept(sock, (struct sockaddr *)&saddr, &saddr_len);
     if (ret < 0) {
         ERR("Accept failed (%s).", strerror(errno));
+        return -1;
+    }
+
+    /* make the socket non-blocking */
+    if (((flags = fcntl(ret, F_GETFL)) == -1) || (fcntl(ret, F_SETFL, flags | O_NONBLOCK) == -1)) {
+        ERR("Fcntl failed (%s).", strerror(errno));
         return -1;
     }
 
@@ -1234,7 +1241,7 @@ nc_accept(int timeout, struct nc_session **session)
     /* sock gets assigned to session or closed */
 #ifdef NC_ENABLED_SSH
     if (server_opts.binds[idx].ti == NC_TI_LIBSSH) {
-        ret = nc_accept_ssh_session(*session, sock);
+        ret = nc_accept_ssh_session(*session, sock, timeout);
         if (ret < 1) {
             goto fail;
         }
@@ -1242,7 +1249,7 @@ nc_accept(int timeout, struct nc_session **session)
 #endif
 #ifdef NC_ENABLED_TLS
     if (server_opts.binds[idx].ti == NC_TI_OPENSSL) {
-        ret = nc_accept_tls_session(*session, sock);
+        ret = nc_accept_tls_session(*session, sock, timeout);
         if (ret < 1) {
             goto fail;
         }
@@ -1331,7 +1338,7 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struc
         pthread_mutex_lock(&ssh_ch_opts_lock);
 
         (*session)->data = &ssh_ch_opts;
-        ret = nc_accept_ssh_session(*session, sock);
+        ret = nc_accept_ssh_session(*session, sock, NC_TRANSPORT_TIMEOUT);
         (*session)->data = NULL;
 
         /* OPTS UNLOCK */
@@ -1348,7 +1355,7 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struc
         pthread_mutex_lock(&tls_ch_opts_lock);
 
         (*session)->data = &tls_ch_opts;
-        ret = nc_accept_tls_session(*session, sock);
+        ret = nc_accept_tls_session(*session, sock, NC_TRANSPORT_TIMEOUT);
         (*session)->data = NULL;
 
         /* OPTS UNLOCK */

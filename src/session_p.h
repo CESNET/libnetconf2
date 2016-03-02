@@ -158,14 +158,14 @@ struct nc_server_opts {
 };
 
 /**
- * Sleep time in microseconds to wait between unsuccessful reading due to EAGAIN or EWOULDBLOCK.
- */
-#define NC_READ_SLEEP 100
-
-/**
- * Sleep time in microseconds to wait between nc_recv_notif() calls.
+ * Sleep time in msec to wait between nc_recv_notif() calls.
  */
 #define NC_CLIENT_NOTIF_THREAD_SLEEP 10000
+
+/**
+ * Timeout in msec for transport-related data to arrive (ssh_handle_key_exchange(), SSL_accept(), SSL_connect()).
+ */
+#define NC_TRANSPORT_TIMEOUT 500
 
 /**
  * Number of sockets kept waiting to be accepted.
@@ -442,19 +442,20 @@ void nc_destroy(void);
  * @param[in] host Hostname of the server.
  * @param[in] port Port of the server.
  * @param[in] ctx Context for the session. Can be NULL.
+ * @param[in] timeout Transport operations timeout in msec.
  * @return New session, NULL on error.
  */
-struct nc_session *nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx);
+struct nc_session *nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout);
 
 /**
  * @brief Establish SSH transport on a socket.
  *
  * @param[in] session Session structure of the new connection.
  * @param[in] sock Socket of the new connection.
- * @param[in] ch Whether to accept a Call Home session or a standard one.
+ * @param[in] timeout Transport operations timeout in msec (not SSH authentication one).
  * @return 1 on success, 0 on timeout, -1 on error.
  */
-int nc_accept_ssh_session(struct nc_session *session, int sock);
+int nc_accept_ssh_session(struct nc_session *session, int sock, int timeout);
 
 /**
  * @brief Callback called when a new SSH message is received.
@@ -490,17 +491,17 @@ void nc_client_ssh_destroy_opts(void);
 
 #ifdef NC_ENABLED_TLS
 
-struct nc_session *nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx);
+struct nc_session *nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout);
 
 /**
  * @brief Establish TLS transport on a socket.
  *
  * @param[in] session Session structure of the new connection.
  * @param[in] sock Socket of the new connection.
- * @param[in] ch Whether to accept a Call Home session or a standard one.
+ * @param[in] timeout Transport operations timeout in msec.
  * @return 1 on success, 0 on timeout, -1 on error.
  */
-int nc_accept_tls_session(struct nc_session *session, int sock);
+int nc_accept_tls_session(struct nc_session *session, int sock, int timeout);
 
 void nc_server_tls_clear_opts(struct nc_server_tls_opts *opts);
 

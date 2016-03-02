@@ -463,7 +463,8 @@ API struct nc_session *
 nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
 {
     struct nc_session *session = NULL;
-    int sock, verify;
+    int sock, verify, ret;
+    uint32_t elapsed_usec = 0;
 
     if (!tls_opts.cert_path || (!tls_opts.ca_file && !tls_opts.ca_dir)) {
         ERRARG;
@@ -520,8 +521,26 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
 
     /* connect and perform the handshake */
     tlsauth_ch = 0;
-    if (SSL_connect(session->ti.tls) != 1) {
-        ERR("Connecting over TLS failed (%s).", ERR_reason_error_string(ERR_get_error()));
+    while (((ret = SSL_connect(session->ti.tls)) == -1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
+        usleep(NC_TIMEOUT_STEP);
+        elapsed_usec += NC_TIMEOUT_STEP;
+        if (elapsed_usec / 1000 >= NC_TRANSPORT_TIMEOUT) {
+            ERR("SSL_connect timeout.");
+            goto fail;
+        }
+    }
+    if (ret != 1) {
+        switch (SSL_get_error(session->ti.tls, ret)) {
+        case SSL_ERROR_SYSCALL:
+            ERR("SSL_connect failed (%s).", strerror(errno));
+            break;
+        case SSL_ERROR_SSL:
+            ERR("SSL_connect failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            break;
+        default:
+            ERR("SSL_connect failed.");
+            break;
+        }
         goto fail;
     }
 
@@ -630,9 +649,9 @@ fail:
 }
 
 struct nc_session *
-nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx)
+nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout)
 {
-    int verify;
+    int verify, ret, elapsed_usec = 0;
     SSL *tls;
     struct nc_session *session;
 
@@ -654,8 +673,27 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
 
     /* connect and perform the handshake */
     tlsauth_ch = 1;
-    if (SSL_connect(tls) != 1) {
-        ERR("Connecting over TLS failed (%s).", ERR_reason_error_string(ERR_get_error()));
+    while (((ret = SSL_connect(tls)) == -1) && (SSL_get_error(tls, ret) == SSL_ERROR_WANT_READ)) {
+        usleep(NC_TIMEOUT_STEP);
+        elapsed_usec += NC_TIMEOUT_STEP;
+        if ((timeout > -1) && (elapsed_usec / 1000 >= timeout)) {
+            ERR("SSL_connect timeout.");
+            SSL_free(tls);
+            return NULL;
+        }
+    }
+    if (ret != 1) {
+        switch (SSL_get_error(tls, ret)) {
+        case SSL_ERROR_SYSCALL:
+            ERR("SSL_connect failed (%s).", strerror(errno));
+            break;
+        case SSL_ERROR_SSL:
+            ERR("SSL_connect failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            break;
+        default:
+            ERR("SSL_connect failed.");
+            break;
+        }
         SSL_free(tls);
         return NULL;
     }
