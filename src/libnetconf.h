@@ -78,11 +78,11 @@
  * @page howtoinit Init and Thread-safety Information
  *
  * Before working with the library, it must be initialized using nc_client_init()
- * or nc_server_init(). Based on how the library was compiled, also libssh and/or
- * libssh/libcrypto are initialized (for multi-threaded use) too. It is advised
- * to compile libnetconf2, for instance, with TLS support even if you do not want
- * to use lnc2 TLS functions, but only use libssl/libcrypto functions in your
- * application. You can then use libnetconf2 cleanup function and do not
+ * or nc_server_init(). Based on how the library was compiled, also _libssh_ and/or
+ * _libssh_/_libcrypto_ are initialized (for multi-threaded use) too. It is advised
+ * to compile _libnetconf2_, for instance, with TLS support even if you do not want
+ * to use _lnc2_ TLS functions, but only use _libssl/libcrypto_ functions in your
+ * application. You can then use _libnetconf2_ cleanup function and do not
  * trouble yourself with the cleanup.
  *
  * To prevent any reachable memory at the end of your application, there
@@ -91,13 +91,13 @@
  * the other threads have ended. In every other thread you should call
  * nc_thread_destroy() just before it exits.
  *
- * If libnetconf2 is used in accordance with this information, there should
+ * If _libnetconf2_ is used in accordance with this information, there should
  * not be memory leaks of any kind at program exit. For thread-safety details
- * of libssh, libssl, and libcrypto please refer to the corresponding project
- * documentation. libnetconf2 thread-safety information is below.
+ * of _libssh_, _libssl_, and _libcrypto_, please refer to the corresponding project
+ * documentation. _libnetconf2_ thread-safety information is below.
  *
- * Client is NOT thread-safe and there is no access control in the client
- * functions at all. Server is MOSTLY thread-safe meaning you can set all the
+ * Client is __NOT__ thread-safe and there is no access control in the client
+ * functions at all. Server is __MOSTLY__ thread-safe meaning you can set all the
  * options simultaneously while listening for or accepting new sessions or
  * polling the existing ones. It should even be safe to poll one session in
  * several threads, but it is definitely discouraged. Generally, servers can
@@ -125,6 +125,13 @@
 /**
  * @page howtoclient Client sessions
  *
+ * To connect to a NETCONF server, a NETCONF session must be established,
+ * which requires a working transport session. It is possible to create
+ * NETCONF sessions with SSH (using _libssh_) or TLS (using _libssl/libcrypto_)
+ * as the underlying transport protocol. It is also possible to establish
+ * the transport protocol outside _libnetconf2_ and then provide these file
+ * descriptors (FD) for full NETCONF session creation.
+ *
  * There are a lot of options for both an SSH and a TLS client. All of them
  * have setters and getters so that there is no need to duplicate them in
  * a client.
@@ -132,16 +139,24 @@
  * SSH
  * ===
  *
- * It is mostly required to set any SSH options and then simply connect to
- * a NETCONF server. Optionally, some authetication callbacks can be set,
+ * Connecting to a server using SSH does not strictly require to set any
+ * options, there are sensible default values for all the basic ones.
+ * Except all the SSH options, optionally some authetication callbacks can be set,
  * which are particulary useful in automated clients (passwords cannot be
  * asked a user) or simply if any additional information is retrieved some
  * other way than from standard terminal input.
  *
- * Afterwards, there are 2 functions to use for a new server connection
- * and an additional one for creating a new SSH channel on an existing
- * NETCONF session. The libssh variant enables to customize the SSH session
- * in every way the libssh allows, although that should not normally be needed.
+ * Having the default options or changing any unsuitable ones, there are 2 functions
+ * to use for a new server connection. nc_connect_ssh() is the standard function
+ * that creates sessions using the set options. If there are some options, which
+ * cannot be changed with the provided API, there is nc_connect_libssh() available.
+ * It requires a _libssh_ session, in which all the SSH options can be modified
+ * and even the connection established. This allows for full customization and
+ * should fit any specific situation.
+ *
+ * New NETCONF sessions can also be created on existing authenticated SSH sessions.
+ * There is a new SSH channel needed, on which the NETCONF session is then created.
+ * Use nc_connect_ssh_channel() for this purpose.
  *
  * Functions List
  * --------------
@@ -169,11 +184,15 @@
  * TLS
  * ===
  *
- * With TLS authentication, is is mandatory to set the client certificate
- * with a private key and additional trusted certificates and revocation lists.
+ * To connect to a server using TLS, there must be some client identification
+ * options set. Client must specify its certificate with a private key using
+ * nc_client_tls_set_cert_key_paths(). Also, the Certificate Authority of
+ * a server certificate must be considered trusted. Paths to all the trusted
+ * CA certificates can be set by nc_client_tls_set_trusted_ca_paths().
  *
- * Then there are again 2 functions for connecting, the libssl variant enables
- * to customize the TLS session in every way the libssl allows.
+ * Then there are again 2 functions for connecting, nc_connect_tls() being
+ * the standard way of connecting. nc_connect_libssl() again enables
+ * to customize the TLS session in every way _libssl_ allows.
  *
  * Functions List
  * --------------
@@ -195,8 +214,8 @@
  * ==
  *
  * If you authenticated the connection using some tunneling software, you
- * can pass its file descriptors to libnetconf2, which will continue to
- * establish a full NETCONF session.
+ * can pass its file descriptors to _libnetconf2_ using nc_connect_inout(),
+ * which will continue to establish a full NETCONF session.
  *
  * Funtions List
  * -------------
@@ -211,8 +230,9 @@
  *
  * Call Home needs the same options set as standard SSH or TLS and the functions
  * reflect it exactly. However, to accept a connection, the client must first
- * specify addresses and ports, which to listen on. Then connections can be
- * accepted.
+ * specify addresses and ports, which to listen on by nc_client_ssh_ch_add_bind_listen()
+ * and nc_client_tls_ch_add_bind_listen(). Then connections can be
+ * accepted using nc_accept_callhome().
  *
  * Functions List
  * --------------
@@ -250,15 +270,7 @@
  * =======
  *
  * These options and the schema searchpath are stored in dynamically
- * allocated memory. To free it, destroy the client, it cleans up all
- * the options
- *
- * Functions List
- * --------------
- *
- * Available in __nc_client.h__.
- *
- * - nc_client_destroy()
+ * allocated memory. They are freed as a part of [destroying the client](@ref howtoinit).
  */
 
 /**
@@ -270,13 +282,20 @@
  * Server takes an argument for its [initialization function](@ref howtoinit).
  * In it, you set the server context, which determines what modules it
  * supports and what capabilities to advertise. Few capabilities that
- * cannot be learnt from the context are set with separate functions.
- * So are several general options.
+ * cannot be learnt from the context are set with separate functions
+ * nc_server_set_capab_withdefaults() and nc_server_set_capab_interleave().
+ * Timeout for receiving the _hello_ message on a new session can be set
+ * by nc_server_set_hello_timeout() and the timeout for disconnecting
+ * an inactive session by nc_server_set_idle_timeout().
  *
  * Context does not only determine server modules, but its overall
  * functionality as well. For every RPC the server should support,
  * an nc_rpc_clb callback should be set on that node in the context.
  * Server then calls these as appropriate [during poll](@ref howtoservercomm).
+ *
+ * Just like in the [client](@ref howtoclient), you can let _libnetconf2_
+ * establish SSH or TLS transport or do it yourself and only provide the file
+ * descriptors of the connection.
  *
  * Server options can be only set, there are no getters.
  *
@@ -294,8 +313,10 @@
  * SSH
  * ===
  *
- * To be able to accept SSH connections, an endpoint must be added
- * and its options set.
+ * To be able to accept SSH connections, individual endpoints must be added
+ * with nc_server_ssh_add_endpt_listen() and their options set. The only
+ * mandatory SSH option before sessions can be established on an endpoint
+ * is the host key, set it using nc_server_ssh_endpt_set_hostkey().
  *
  * Functions List
  * --------------
@@ -319,9 +340,28 @@
  * TLS
  * ===
  *
- * TLS requires at least one endpoint too, but its options differ
- * significantly from the SSH ones, especially in the cert-to-name
+ * TLS works with endpoints too, but its options differ
+ * significantly from the SSH ones, especially in the _cert-to-name_
  * options that TLS uses to derive usernames from client certificates.
+ * So, after starting listening on an endpoint with nc_server_tls_add_endpt_listen(),
+ * you need to set the server certificate (nc_server_tls_endpt_set_cert()
+ * or nc_server_tls_endpt_set_cert_path()) and private key (nc_server_tls_endpt_set_key()
+ * or nc_server_tls_endpt_set_key_path()).
+ *
+ * To accept client certificates, they must first be considered trusted,
+ * which you have three ways of achieving. You can add each of their Certificate Authority
+ * certificates to the trusted ones or mark a specific client certificate
+ * as trusted using nc_server_tls_endpt_add_trusted_cert(). Lastly, you can
+ * set paths with all the trusted CA certificates with nc_server_tls_endpt_set_trusted_ca_paths().
+ *
+ * Then, from each trusted client certificate a username must be derived
+ * for the NETCONF session. This is accomplished by finding a matching
+ * _cert-to-name_ entry. They are added using nc_server_tls_endpt_add_ctn().
+ *
+ * If you need to remove trusted certificates or Certificate Revocation
+ * Lists, you must first clear them all with nc_server_tls_endpt_clear_certs()
+ * and nc_server_tls_endpt_clear_crls(), respectively. Then add all
+ * the certificates again.
  *
  * Functions List
  * --------------
@@ -350,7 +390,8 @@
  * ==
  *
  * If you used a tunneling software, which does its own authentication,
- * you can accept a NETCONF session on its file descriptors.
+ * you can accept a NETCONF session on its file descriptors with
+ * nc_accept_inout().
  *
  * Functions List
  * --------------
@@ -364,7 +405,10 @@
  * =========
  *
  * Call Home does not work with endpoints like standard sessions.
- * The options must be reset manually after another Call Home session
+ * Connecting is similar to the [client](@ref howtoclient), just call
+ * nc_connect_callhome_ssh() or nc_connect_callhome_tls(). Any options
+ * must be reset manually by nc_server_ssh_ch_clear_opts()
+ * or nc_server_tls_ch_clear_crls() after another Call Home session
  * (with different options than the previous one) is to be established.
  * Also, monitoring of these sessions is up to the application.
  *
@@ -403,9 +447,9 @@
  * Connecting And Cleanup
  * ======================
  *
- * When accepting connections, all the endpoints are examined
+ * When accepting connections with nc_accept(), all the endpoints are examined
  * and the first with a pending connection is used. To remove all
- * the endpoints and free any used dynamic memory, destroy the server.
+ * the endpoints and free any used dynamic memory, [destroy](@ref howtoinit) the server.
  *
  * Functions List
  * --------------
@@ -413,19 +457,17 @@
  * Available in __nc_server.h__.
  *
  * - nc_accept()
- *
- * - nc_server_destroy()
  */
 
 /**
  * @page howtoclientcomm Client communication
  *
- * To send RPCs on a session, you simply create an RPC, send it,
- * and then wait for a reply. If you are subscribed, there are 2 ways
+ * To send RPCs on a session, you simply create an RPC, send it using nc_send_rpc(),
+ * and then wait for a reply using nc_recv_reply(). If you are subscribed, there are 2 ways
  * of receiving notifications. Either you wait for them the same way
- * as for standard replies or you create a dispatcher that asynchronously
- * (in a separate thread) reads notifications and passes them to your
- * callback.
+ * as for standard replies with nc_recv_notif() or you create a dispatcher
+ * with nc_recv_notif_dispatch() that asynchronously (in a separate thread)
+ * reads notifications and passes them to your callback.
  *
  * Functions List
  * --------------
@@ -459,15 +501,19 @@
  * @page howtoservercomm Server communication
  *
  * Once at least one session is established, an nc_pollsession structure
- * should be created, filled with the session and polled. Based on
- * the return value from the poll further actions can be taken. More
- * sessions can be polled at the same time. Any requests received on
+ * should be created with nc_ps_new(), filled with the session using
+ * nc_ps_add_session() and finally polled with nc_ps_poll(). Based on
+ * the return value from the poll, further actions can be taken. More
+ * sessions can be polled at the same time and any requests received on
  * the sessions are [handled internally](@ref howtoserver).
+ *
+ * If an SSH NETCONF session asks for a new channel, you can accept
+ * this request with nc_ps_accept_ssh_channel().
  *
  * Functions List
  * --------------
  *
- * Available in __nc_client.h__.
+ * Available in __nc_server.h__.
  *
  * - nc_ps_new()
  * - nc_ps_add_session()
