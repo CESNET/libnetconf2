@@ -31,4 +31,9 @@
  */
 #define SCHEMAS_DIR "@CMAKE_INSTALL_PREFIX@/@DATA_INSTALL_DIR@"
 
+/*
+ * Partial message read timeout in seconds
+ */
+#define NC_READ_TIMEOUT @READ_TIMEOUT@
+
 #endif /* NC_CONFIG_H_ */

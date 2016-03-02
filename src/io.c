@@ -31,10 +31,11 @@
 #define BUFFERSIZE 512
 
 static ssize_t
-nc_read(struct nc_session *session, char *buf, size_t count)
+nc_read(struct nc_session *session, char *buf, size_t count, uint16_t *read_timeout)
 {
     size_t size = 0;
     ssize_t r;
+    uint16_t sleep_count = 0;
 
     assert(session);
     assert(buf);
@@ -47,17 +48,20 @@ nc_read(struct nc_session *session, char *buf, size_t count)
         return 0;
     }
 
-    switch (session->ti_type) {
-    case NC_TI_NONE:
-        return 0;
+    while (count) {
+        switch (session->ti_type) {
+        case NC_TI_NONE:
+            return 0;
 
-    case NC_TI_FD:
-        /* read via standard file descriptor */
-        while (count) {
+        case NC_TI_FD:
+            /* read via standard file descriptor */
             r = read(session->ti.fd.in, &(buf[size]), count);
             if (r < 0) {
-                if ((errno == EAGAIN) || (errno == EINTR)) {
-                    usleep(NC_READ_SLEEP);
+                if (errno == EAGAIN) {
+                    r = 0;
+                    break;
+                } else if (errno == EINTR) {
+                    usleep(NC_TIMEOUT_STEP);
                     continue;
                 } else {
                     ERR("Session %u: reading from file descriptor (%d) failed (%s).",
@@ -73,20 +77,15 @@ nc_read(struct nc_session *session, char *buf, size_t count)
                 session->term_reason = NC_SESSION_TERM_DROPPED;
                 return -1;
             }
-
-            size = size + r;
-            count = count - r;
-        }
-        break;
+            break;
 
 #ifdef NC_ENABLED_SSH
-    case NC_TI_LIBSSH:
-        /* read via libssh */
-        while (count) {
+        case NC_TI_LIBSSH:
+            /* read via libssh */
             r = ssh_channel_read(session->ti.libssh.channel, &(buf[size]), count, 0);
             if (r == SSH_AGAIN) {
-                usleep(NC_READ_SLEEP);
-                continue;
+                r = 0;
+                break;
             } else if (r == SSH_ERROR) {
                 ERR("Session %u: reading from the SSH channel failed (%s).", session->id,
                     ssh_get_error(session->ti.libssh.session));
@@ -100,27 +99,21 @@ nc_read(struct nc_session *session, char *buf, size_t count)
                     session->term_reason = NC_SESSION_TERM_DROPPED;
                     return -1;
                 }
-                usleep(NC_READ_SLEEP);
-                continue;
+                break;
             }
-
-            size = size + r;
-            count = count - r;
-        }
-        break;
+            break;
 #endif
 
 #ifdef NC_ENABLED_TLS
-    case NC_TI_OPENSSL:
-        /* read via OpenSSL */
-        while (count) {
+        case NC_TI_OPENSSL:
+            /* read via OpenSSL */
             r = SSL_read(session->ti.tls, &(buf[size]), count);
             if (r <= 0) {
                 int x;
                 switch (x = SSL_get_error(session->ti.tls, r)) {
                 case SSL_ERROR_WANT_READ:
-                    usleep(NC_READ_SLEEP);
-                    continue;
+                    r = 0;
+                    break;
                 case SSL_ERROR_ZERO_RETURN:
                     ERR("Session %u: communication socket unexpectedly closed (OpenSSL).", session->id);
                     session->status = NC_STATUS_INVALID;
@@ -133,18 +126,37 @@ nc_read(struct nc_session *session, char *buf, size_t count)
                     return -1;
                 }
             }
-            size = size + r;
-            count = count - r;
-        }
-        break;
+            break;
 #endif
+        }
+
+        /* nothing read */
+        if (r == 0) {
+            usleep(NC_TIMEOUT_STEP);
+            ++sleep_count;
+            if (1000000 / NC_TIMEOUT_STEP == sleep_count) {
+                /* we slept a full second */
+                --(*read_timeout);
+                sleep_count = 0;
+            }
+            if (!*read_timeout) {
+                ERR("Session %u: reading a full NETCONF message timeout elapsed.", session->id);
+                session->status = NC_STATUS_INVALID;
+                session->term_reason = NC_SESSION_TERM_OTHER;
+                return -1;
+            }
+            continue;
+        }
+
+        size += r;
+        count -= r;
     }
 
     return (ssize_t)size;
 }
 
 static ssize_t
-nc_read_chunk(struct nc_session *session, size_t len, char **chunk)
+nc_read_chunk(struct nc_session *session, size_t len, uint16_t *read_timeout, char **chunk)
 {
     ssize_t r;
 
@@ -161,7 +173,7 @@ nc_read_chunk(struct nc_session *session, size_t len, char **chunk)
         return -1;
     }
 
-    r = nc_read(session, *chunk, len);
+    r = nc_read(session, *chunk, len, read_timeout);
     if (r <= 0) {
         free(*chunk);
         return -1;
@@ -174,7 +186,7 @@ nc_read_chunk(struct nc_session *session, size_t len, char **chunk)
 }
 
 static ssize_t
-nc_read_until(struct nc_session *session, const char *endtag, size_t limit, char **result)
+nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint16_t *read_timeout, char **result)
 {
     char *chunk = NULL;
     size_t size, count = 0, r, len;
@@ -214,7 +226,7 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, char
         }
 
         /* get another character */
-        r = nc_read(session, &(chunk[count]), 1);
+        r = nc_read(session, &(chunk[count]), 1, read_timeout);
         if (r != 1) {
             free(chunk);
             return -1;
@@ -249,6 +261,7 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
     int ret;
     char *msg = NULL, *chunk;
     uint64_t chunk_len, len = 0;
+    uint16_t read_timeout = NC_READ_TIMEOUT;
     struct nc_server_reply *reply;
 
     assert(session && data);
@@ -262,7 +275,7 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
     /* read the message */
     switch (session->version) {
     case NC_VERSION_10:
-        ret = nc_read_until(session, NC_VERSION_10_ENDTAG, 0, &msg);
+        ret = nc_read_until(session, NC_VERSION_10_ENDTAG, 0, &read_timeout, &msg);
         if (ret == -1) {
             goto error;
         }
@@ -272,11 +285,11 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
         break;
     case NC_VERSION_11:
         while (1) {
-            ret = nc_read_until(session, "\n#", 0, NULL);
+            ret = nc_read_until(session, "\n#", 0, &read_timeout, NULL);
             if (ret == -1) {
                 goto error;
             }
-            ret = nc_read_until(session, "\n", 0, &chunk);
+            ret = nc_read_until(session, "\n", 0, &read_timeout, &chunk);
             if (ret == -1) {
                 goto error;
             }
@@ -296,7 +309,7 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
             }
 
             /* now we have size of next chunk, so read the chunk */
-            ret = nc_read_chunk(session, chunk_len, &chunk);
+            ret = nc_read_chunk(session, chunk_len, &read_timeout, &chunk);
             if (ret == -1) {
                 goto error;
             }

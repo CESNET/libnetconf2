@@ -145,6 +145,11 @@ if(DOXYGEN_FOUND)
     configure_file(Doxyfile.in Doxyfile)
 endif()
 
+# option - partial message read timeout in seconds
+if(NOT READ_TIMEOUT)
+    set(READ_TIMEOUT 30)
+endif()
+
 # install library
 install(TARGETS netconf2 DESTINATION ${LIB_INSTALL_DIR})
 
