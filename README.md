@@ -80,9 +80,9 @@ manager for OpenSSL package including the necessary development files
 It is required only if DNSSEC SSHFP retrieval is enabled (it is disabled by
 default, see the [Build Options](#build-options) secion).
 
-The easier way of installing it is as a part of the dnssec-tools package,
-if you can find it for your distribution. Packages for some distributions
-or the source can be downloaded from [here](https://www.dnssec-tools.org/download/).
+The easier way of installing it is as the libval-dev package (or a part of
+the dnssec-tools package), if you can find it for your distribution. Packages
+for some distributions or the source can be downloaded from [here](https://www.dnssec-tools.org/download/).
 
 ### cmocka
 For running the tests (see the [Tests](#tests) section for more information).
