@@ -546,12 +546,17 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
 }
 
 static int
-_nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
+_nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session, int index)
 {
     uint16_t i;
 
+    if (index >= 0) {
+        i = (uint16_t)index;
+        goto remove;
+    }
     for (i = 0; i < ps->session_count; ++i) {
         if (ps->sessions[i] == session) {
+remove:
             --ps->session_count;
             if (i < ps->session_count) {
                 ps->sessions[i] = ps->sessions[ps->session_count];
@@ -582,7 +587,7 @@ nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
     /* LOCK */
     pthread_mutex_lock(&ps->lock);
 
-    ret = _nc_ps_del_session(ps, session);
+    ret = _nc_ps_del_session(ps, session, -1);
 
     /* UNLOCK */
     pthread_mutex_unlock(&ps->lock);
@@ -922,7 +927,7 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
         for (i = 0; i < ps->session_count; ) {
             if (ps->sessions[i]->status != NC_STATUS_RUNNING) {
                 session = ps->sessions[i];
-                _nc_ps_del_session(ps, session);
+                _nc_ps_del_session(ps, NULL, i);
                 nc_session_free(session, data_free);
                 continue;
             }
