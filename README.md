@@ -66,9 +66,9 @@ $ make
 ```
 
 ### OpenSSL
-This dependency is required only when the TLS support is enabled (it is
-disabled by default, for enabling it see the [Build Options](#build-options)
-section).
+This dependency is required when the TLS support is enabled, which it is by
+default but libssh requires it too. So, to remove this dependency, you need
+to disable both SSH and TLS (see the [Build Options](#build-options) section).
 
 OpenSSL is a standard part of the most distribution, so ask your package
 manager for OpenSSL package including the necessary development files
