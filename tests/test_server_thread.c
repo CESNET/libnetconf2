@@ -13,9 +13,9 @@
  */
 
 #include <pthread.h>
-#include <assert.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -34,6 +34,8 @@
 /* sec */
 #define CLIENT_SSH_AUTH_TIMEOUT 10
 
+#define nc_assert(cond) if (!(cond)) { fprintf(stderr, "assert failed (%s:%d)\n", __FILE__, __LINE__); exit(1); }
+
 pthread_barrier_t barrier;
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
@@ -47,26 +49,26 @@ server_thread(void *arg)
     struct nc_session *session;
 
     ps = nc_ps_new();
-    assert(ps);
+    nc_assert(ps);
 
     pthread_barrier_wait(&barrier);
 
 #if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
     ret = nc_accept(NC_ACCEPT_TIMEOUT, &session);
-    assert(ret == 1);
+    nc_assert(ret == 1);
 
     nc_ps_add_session(ps, session);
     ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT);
-    assert(ret == 3);
+    nc_assert(ret == 3);
     nc_ps_clear(ps, 0, NULL);
 #endif
 
     ret = nc_accept(NC_ACCEPT_TIMEOUT, &session);
-    assert(ret == 1);
+    nc_assert(ret == 1);
 
     nc_ps_add_session(ps, session);
     ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT);
-    assert(ret == 3);
+    nc_assert(ret == 3);
     nc_ps_clear(ps, 0, NULL);
 
     nc_ps_free(ps);
@@ -88,7 +90,7 @@ ssh_add_endpt_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_add_endpt_listen("tertiary", "0.0.0.0", 6003);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -102,7 +104,7 @@ ssh_endpt_set_port_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_set_port("quaternary", 6005);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -116,7 +118,7 @@ ssh_del_endpt_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_del_endpt("secondary");
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -130,7 +132,7 @@ ssh_endpt_set_hostkey_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_set_hostkey("main", TESTS_DIR"/data/key_dsa");
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -144,7 +146,7 @@ ssh_endpt_set_banner_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_set_banner("main", "Howdy, partner!");
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -158,7 +160,7 @@ ssh_endpt_set_auth_methods_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_set_auth_methods("main", NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD | NC_SSH_AUTH_INTERACTIVE);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -172,7 +174,7 @@ ssh_endpt_set_auth_attempts_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_set_auth_attempts("main", 2);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -186,7 +188,7 @@ ssh_endpt_set_auth_timeout_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_set_auth_timeout("main", 5);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -200,7 +202,7 @@ ssh_endpt_add_authkey_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_add_authkey("main", TESTS_DIR"/data/key_rsa.pub", "test3");
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -214,7 +216,7 @@ ssh_endpt_del_authkey_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_del_authkey("main", TESTS_DIR"/data/key_ecdsa.pub", "test2");
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -236,24 +238,24 @@ ssh_client_thread(void *arg)
     struct nc_session *session;
 
     ret = read(read_pipe, buf, 9);
-    assert(ret == 9);
-    assert(!strncmp(buf, "ssh_ready", 9));
+    nc_assert(ret == 9);
+    nc_assert(!strncmp(buf, "ssh_ready", 9));
 
     /* skip the knownhost check */
     nc_client_ssh_set_auth_hostkey_check_clb(ssh_hostkey_check_clb);
 
     ret = nc_client_ssh_set_username("test");
-    assert(!ret);
+    nc_assert(!ret);
 
     ret = nc_client_ssh_add_keypair(TESTS_DIR"/data/key_dsa.pub", TESTS_DIR"/data/key_dsa");
-    assert(!ret);
+    nc_assert(!ret);
 
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PUBLICKEY, 1);
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PASSWORD, -1);
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_INTERACTIVE, -1);
 
     session = nc_connect_ssh("127.0.0.1", 6001, NULL);
-    assert(session);
+    nc_assert(session);
 
     nc_session_free(session, NULL);
 
@@ -274,7 +276,7 @@ tls_add_endpt_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_tls_add_endpt_listen("tertiary", "0.0.0.0", 6503);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -288,7 +290,7 @@ tls_endpt_set_port_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_tls_endpt_set_port("quaternary", 6505);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -302,7 +304,7 @@ tls_del_endpt_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_tls_del_endpt("secondary");
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -338,7 +340,7 @@ tls_endpt_set_cert_thread(void *arg)
                                        "BltsK0iOMPDLVlXdk1hpU5HvlMXdBHQebfTiCFDQSX7ViKc4wSJUHDt4CyoCzchY\n"
                                        "mbQIcTc7uNDE5chQWV8Z3Vxkp4yuqZM3HdLskoo4IgFDOoj8eCAi+58+YRuKpaEQ\n"
                                        "fWt+A9rvlaOApWryMW4=");
-    assert(!ret);
+    nc_assert(!ret);
 
     nc_thread_destroy();
     return NULL;
@@ -401,7 +403,7 @@ tls_endpt_set_key_thread(void *arg)
                                       "dOZPvkfqyIKFmbQgYbtD66rHuzNOfJpzqr/WVLO57/zzW8245NKG2B6B0oXkei/K\n"
                                       "qDY0DAbHR3i3EOj1NPtVI1FC/xX8R9BREaid458bqoHJKuInrGcBjaUI9Cvymv8T\n"
                                       "bstUgD6NPbJR4Sm6vrLeUqzjWZP3t1+Z6DjXmnpR2vvhMU/FWb//21p/88o=", 1);
-    assert(!ret);
+    nc_assert(!ret);
 
     nc_thread_destroy();
     return NULL;
@@ -434,7 +436,7 @@ tls_endpt_add_trusted_cert_thread(void *arg)
                                                "sgq28vGMSXLSYKBNaP/llXNmqW35oLs6CwVuiCL7Go0IDIOmiXN2bssb87hZSw3B\n"
                                                "6iwU78wYshJUGZjLaK9PuMvFYJLFWSAePA2Yb+aEv80wMbX1oANSryU7Uf5BJk8V\n"
                                                "kO3mlRDh2b1/5Gb5xA2vU2z3ReHdPNy6qSx0Mk4XJvQw9FsVHZ13");
-    assert(!ret);
+    nc_assert(!ret);
 
     nc_thread_destroy();
     return NULL;
@@ -449,7 +451,7 @@ tls_endpt_set_trusted_ca_paths_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_tls_endpt_set_trusted_ca_paths("quaternary", TESTS_DIR"/data/serverca.pem", "data");
-    assert(!ret);
+    nc_assert(!ret);
 
     nc_thread_destroy();
     return NULL;
@@ -476,7 +478,7 @@ tls_endpt_set_crl_paths_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_tls_endpt_set_crl_paths("quaternary", NULL, "data");
-    assert(!ret);
+    nc_assert(!ret);
 
     nc_thread_destroy();
     return NULL;
@@ -504,7 +506,7 @@ tls_endpt_add_ctn_thread(void *arg)
 
     ret = nc_server_tls_endpt_add_ctn("main", 0, "02:F0:F1:F2:F3:F4:F5:F6:F7:F8:F9:10:11:12:EE:FF:A0:A1:A2:A3",
                                       NC_TLS_CTN_SAN_IP_ADDRESS, NULL);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -518,7 +520,7 @@ tls_endpt_del_ctn_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_tls_endpt_del_ctn("main", -1, NULL, NC_TLS_CTN_SAN_ANY, NULL);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -531,16 +533,16 @@ tls_client_thread(void *arg)
     struct nc_session *session;
 
     ret = read(read_pipe, buf, 9);
-    assert(ret == 9);
-    assert(!strncmp(buf, "tls_ready", 9));
+    nc_assert(ret == 9);
+    nc_assert(!strncmp(buf, "tls_ready", 9));
 
     ret = nc_client_tls_set_cert_key_paths(TESTS_DIR"/data/client.crt", TESTS_DIR"/data/client.key");
-    assert(!ret);
+    nc_assert(!ret);
     ret = nc_client_tls_set_trusted_ca_paths(NULL, TESTS_DIR"/data");
-    assert(!ret);
+    nc_assert(!ret);
 
     session = nc_connect_tls("127.0.0.1", 6501, NULL);
-    assert(session);
+    nc_assert(session);
 
     nc_session_free(session, NULL);
 
@@ -606,7 +608,7 @@ client_fork(void)
         nc_client_init();
 
         ret = nc_client_schema_searchpath(TESTS_DIR"/../schemas");
-        assert(!ret);
+        nc_assert(!ret);
 
         /* close write */
         close(pipes[clients * 2 + 1]);
@@ -628,7 +630,7 @@ client_fork(void)
         nc_client_init();
 
         ret = nc_client_schema_searchpath(TESTS_DIR"/../schemas");
-        assert(!ret);
+        nc_assert(!ret);
 
         /* close write */
         close(pipes[clients * 2 + 1]);
@@ -656,7 +658,7 @@ main(void)
     client_fork();
 
     ctx = ly_ctx_new(TESTS_DIR"/../schemas");
-    assert(ctx);
+    nc_assert(ctx);
     ly_ctx_load_module(ctx, "ietf-netconf", NULL);
     nc_server_init(ctx);
 
@@ -665,59 +667,59 @@ main(void)
 #ifdef NC_ENABLED_SSH
     /* do first, so that client can connect on SSH */
     ret = nc_server_ssh_add_endpt_listen("main", "0.0.0.0", 6001);
-    assert(!ret);
+    nc_assert(!ret);
     ret = nc_server_ssh_endpt_add_authkey("main", TESTS_DIR"/data/key_dsa.pub", "test");
-    assert(!ret);
+    nc_assert(!ret);
     ret = nc_server_ssh_endpt_set_hostkey("main", TESTS_DIR"/data/key_rsa");
-    assert(!ret);
+    nc_assert(!ret);
 
     /* client ready */
     ret = write(pipes[clients * 2 + 1], "ssh_ready", 9);
-    assert(ret == 9);
+    nc_assert(ret == 9);
     ++clients;
 
     /* for ssh_endpt_del_authkey */
     ret = nc_server_ssh_endpt_add_authkey("main", TESTS_DIR"/data/key_ecdsa.pub", "test2");
-    assert(!ret);
+    nc_assert(!ret);
 
     /* for ssh_del_endpt */
     ret = nc_server_ssh_add_endpt_listen("secondary", "0.0.0.0", 6002);
-    assert(!ret);
+    nc_assert(!ret);
 
     /* for ssh_endpt_set_port */
     ret = nc_server_ssh_add_endpt_listen("quaternary", "0.0.0.0", 6004);
-    assert(!ret);
+    nc_assert(!ret);
 #endif
 
 #ifdef NC_ENABLED_TLS
     /* do first, so that client can connect on TLS */
     ret = nc_server_tls_add_endpt_listen("main", "0.0.0.0", 6501);
-    assert(!ret);
+    nc_assert(!ret);
     ret = nc_server_tls_endpt_set_cert_path("main", TESTS_DIR"/data/server.crt");
-    assert(!ret);
+    nc_assert(!ret);
     ret = nc_server_tls_endpt_set_key_path("main", TESTS_DIR"/data/server.key");
-    assert(!ret);
+    nc_assert(!ret);
     ret = nc_server_tls_endpt_add_trusted_cert_path("main", TESTS_DIR"/data/client.crt");
-    assert(!ret);
+    nc_assert(!ret);
     ret = nc_server_tls_endpt_add_ctn("main", 0, "02:D3:03:0E:77:21:E2:14:1F:E5:75:48:98:6B:FD:8A:63:BB:DE:40:34", NC_TLS_CTN_SPECIFIED, "test");
-    assert(!ret);
+    nc_assert(!ret);
 
     /* client ready */
     ret = write(pipes[clients * 2 + 1], "tls_ready", 9);
-    assert(ret == 9);
+    nc_assert(ret == 9);
     ++clients;
 
     /* for tls_del_endpt */
     ret = nc_server_tls_add_endpt_listen("secondary", "0.0.0.0", 6502);
-    assert(!ret);
+    nc_assert(!ret);
 
     /* for tls_endpt_set_port */
     ret = nc_server_tls_add_endpt_listen("quaternary", "0.0.0.0", 6504);
-    assert(!ret);
+    nc_assert(!ret);
 
     /* for tls_endpt_del_ctn */
     ret = nc_server_tls_endpt_add_ctn("main", 0, "02:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:A0:A1:A2:A3", NC_TLS_CTN_SAN_ANY, NULL);
-    assert(!ret);
+    nc_assert(!ret);
 #endif
 
     /* threads'n'stuff */
@@ -725,7 +727,7 @@ main(void)
     for (i = 0; i < thread_count; ++i) {
         ret += pthread_create(&tids[i], NULL, thread_funcs[i], NULL);
     }
-    assert(!ret);
+    nc_assert(!ret);
 
     /* cleanup */
     for (i = 0; i < thread_count; ++i) {
