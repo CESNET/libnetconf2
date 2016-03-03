@@ -1216,7 +1216,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     struct nc_rpc_getschema *rpc_gs;
     struct nc_rpc_subscribe *rpc_sub;
     struct lyd_node *data, *node;
-    const struct lys_module *ietfnc, *ietfncmon, *notifs, *ietfncwd = NULL;
+    const struct lys_module *ietfnc = NULL, *ietfncmon, *notifs, *ietfncwd = NULL;
     char str[11];
     uint64_t cur_msgid;
 

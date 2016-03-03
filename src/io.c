@@ -34,7 +34,7 @@ static ssize_t
 nc_read(struct nc_session *session, char *buf, size_t count, uint16_t *read_timeout)
 {
     size_t size = 0;
-    ssize_t r;
+    ssize_t r = -1;
     uint16_t sleep_count = 0;
 
     assert(session);
