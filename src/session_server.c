@@ -676,6 +676,11 @@ nc_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
     struct nc_server_reply *reply;
     int ret;
 
+    if (!rpc) {
+        ERRINT;
+        return NC_MSG_ERROR;
+    }
+
     /* no callback, reply with a not-implemented error */
     if (!rpc->tree || !rpc->tree->schema->priv) {
         reply = nc_server_reply_err(nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_PROT));
@@ -713,7 +718,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
     time_t cur_time;
     NC_MSG_TYPE msgtype;
     struct nc_session *session;
-    struct nc_server_rpc *rpc;
+    struct nc_server_rpc *rpc = NULL;
 
     if (!ps || !ps->session_count) {
         ERRARG;
