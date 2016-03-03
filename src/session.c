@@ -246,7 +246,7 @@ nc_send_msg(struct nc_session *session, struct lyd_node *op)
 API void
 nc_session_free(struct nc_session *session, void (*data_free)(void *))
 {
-    int r, i;
+    int r, i, locked;
     int connected; /* flag to indicate whether the transport socket is still connected */
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
     pthread_t tid;
@@ -263,9 +263,14 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     /* mark session for closing */
     if (session->ti_lock) {
-        r = nc_timedlock(session->ti_lock, -1);
+        r = nc_timedlock(session->ti_lock, NC_READ_TIMEOUT * 1000);
         if (r == -1) {
             return;
+        } else if (!r) {
+            /* we failed to lock it, too bad */
+            locked = 0;
+        } else {
+            locked = 1;
         }
     }
 
@@ -279,7 +284,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         pthread_join(tid, NULL);
     }
 
-    if ((session->side == NC_CLIENT) && (session->status == NC_STATUS_RUNNING)) {
+    if ((session->side == NC_CLIENT) && (session->status == NC_STATUS_RUNNING) && locked) {
         /* cleanup message queues */
         /* notifications */
         for (contiter = session->notifs; contiter; ) {
@@ -444,7 +449,9 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     /* final cleanup */
     if (session->ti_lock) {
-        pthread_mutex_unlock(session->ti_lock);
+        if (locked) {
+            pthread_mutex_unlock(session->ti_lock);
+        }
         if (!multisession) {
             pthread_mutex_destroy(session->ti_lock);
             free(session->ti_lock);
