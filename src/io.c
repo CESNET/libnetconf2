@@ -5,19 +5,11 @@
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of the Company nor the names of its contributors
- *    may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *     https://opensource.org/licenses/BSD-3-Clause
  */
 
 #define _GNU_SOURCE /* asprintf, ppoll */
@@ -39,10 +31,11 @@
 #define BUFFERSIZE 512
 
 static ssize_t
-nc_read(struct nc_session *session, char *buf, size_t count)
+nc_read(struct nc_session *session, char *buf, size_t count, uint16_t *read_timeout)
 {
     size_t size = 0;
-    ssize_t r;
+    ssize_t r = -1;
+    uint16_t sleep_count = 0;
 
     assert(session);
     assert(buf);
@@ -55,17 +48,20 @@ nc_read(struct nc_session *session, char *buf, size_t count)
         return 0;
     }
 
-    switch (session->ti_type) {
-    case NC_TI_NONE:
-        return 0;
+    while (count) {
+        switch (session->ti_type) {
+        case NC_TI_NONE:
+            return 0;
 
-    case NC_TI_FD:
-        /* read via standard file descriptor */
-        while (count) {
+        case NC_TI_FD:
+            /* read via standard file descriptor */
             r = read(session->ti.fd.in, &(buf[size]), count);
             if (r < 0) {
-                if ((errno == EAGAIN) || (errno == EINTR)) {
-                    usleep(NC_READ_SLEEP);
+                if (errno == EAGAIN) {
+                    r = 0;
+                    break;
+                } else if (errno == EINTR) {
+                    usleep(NC_TIMEOUT_STEP);
                     continue;
                 } else {
                     ERR("Session %u: reading from file descriptor (%d) failed (%s).",
@@ -81,20 +77,15 @@ nc_read(struct nc_session *session, char *buf, size_t count)
                 session->term_reason = NC_SESSION_TERM_DROPPED;
                 return -1;
             }
+            break;
 
-            size = size + r;
-            count = count - r;
-        }
-        break;
-
-#ifdef ENABLE_SSH
-    case NC_TI_LIBSSH:
-        /* read via libssh */
-        while (count) {
+#ifdef NC_ENABLED_SSH
+        case NC_TI_LIBSSH:
+            /* read via libssh */
             r = ssh_channel_read(session->ti.libssh.channel, &(buf[size]), count, 0);
             if (r == SSH_AGAIN) {
-                usleep(NC_READ_SLEEP);
-                continue;
+                r = 0;
+                break;
             } else if (r == SSH_ERROR) {
                 ERR("Session %u: reading from the SSH channel failed (%s).", session->id,
                     ssh_get_error(session->ti.libssh.session));
@@ -108,27 +99,21 @@ nc_read(struct nc_session *session, char *buf, size_t count)
                     session->term_reason = NC_SESSION_TERM_DROPPED;
                     return -1;
                 }
-                usleep(NC_READ_SLEEP);
-                continue;
+                break;
             }
-
-            size = size + r;
-            count = count - r;
-        }
-        break;
+            break;
 #endif
 
-#ifdef ENABLE_TLS
-    case NC_TI_OPENSSL:
-        /* read via OpenSSL */
-        while (count) {
+#ifdef NC_ENABLED_TLS
+        case NC_TI_OPENSSL:
+            /* read via OpenSSL */
             r = SSL_read(session->ti.tls, &(buf[size]), count);
             if (r <= 0) {
                 int x;
                 switch (x = SSL_get_error(session->ti.tls, r)) {
                 case SSL_ERROR_WANT_READ:
-                    usleep(NC_READ_SLEEP);
-                    continue;
+                    r = 0;
+                    break;
                 case SSL_ERROR_ZERO_RETURN:
                     ERR("Session %u: communication socket unexpectedly closed (OpenSSL).", session->id);
                     session->status = NC_STATUS_INVALID;
@@ -141,18 +126,37 @@ nc_read(struct nc_session *session, char *buf, size_t count)
                     return -1;
                 }
             }
-            size = size + r;
-            count = count - r;
-        }
-        break;
+            break;
 #endif
+        }
+
+        /* nothing read */
+        if (r == 0) {
+            usleep(NC_TIMEOUT_STEP);
+            ++sleep_count;
+            if (1000000 / NC_TIMEOUT_STEP == sleep_count) {
+                /* we slept a full second */
+                --(*read_timeout);
+                sleep_count = 0;
+            }
+            if (!*read_timeout) {
+                ERR("Session %u: reading a full NETCONF message timeout elapsed.", session->id);
+                session->status = NC_STATUS_INVALID;
+                session->term_reason = NC_SESSION_TERM_OTHER;
+                return -1;
+            }
+            continue;
+        }
+
+        size += r;
+        count -= r;
     }
 
     return (ssize_t)size;
 }
 
 static ssize_t
-nc_read_chunk(struct nc_session *session, size_t len, char **chunk)
+nc_read_chunk(struct nc_session *session, size_t len, uint16_t *read_timeout, char **chunk)
 {
     ssize_t r;
 
@@ -163,13 +167,13 @@ nc_read_chunk(struct nc_session *session, size_t len, char **chunk)
         return 0;
     }
 
-    *chunk = malloc ((len + 1) * sizeof **chunk);
+    *chunk = malloc((len + 1) * sizeof **chunk);
     if (!*chunk) {
         ERRMEM;
         return -1;
     }
 
-    r = nc_read(session, *chunk, len);
+    r = nc_read(session, *chunk, len, read_timeout);
     if (r <= 0) {
         free(*chunk);
         return -1;
@@ -182,7 +186,7 @@ nc_read_chunk(struct nc_session *session, size_t len, char **chunk)
 }
 
 static ssize_t
-nc_read_until(struct nc_session *session, const char *endtag, size_t limit, char **result)
+nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint16_t *read_timeout, char **result)
 {
     char *chunk = NULL;
     size_t size, count = 0, r, len;
@@ -195,7 +199,7 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, char
     } else {
         size = BUFFERSIZE;
     }
-    chunk = malloc ((size + 1) * sizeof *chunk);
+    chunk = malloc((size + 1) * sizeof *chunk);
     if (!chunk) {
         ERRMEM;
         return -1;
@@ -214,17 +218,15 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, char
         if (count == size) {
             /* get more memory */
             size = size + BUFFERSIZE;
-            char *tmp = realloc (chunk, (size + 1) * sizeof *tmp);
-            if (!tmp) {
+            chunk = realloc(chunk, (size + 1) * sizeof *chunk);
+            if (!chunk) {
                 ERRMEM;
-                free(chunk);
                 return -1;
             }
-            chunk = tmp;
         }
 
         /* get another character */
-        r = nc_read(session, &(chunk[count]), 1);
+        r = nc_read(session, &(chunk[count]), 1, read_timeout);
         if (r != 1) {
             free(chunk);
             return -1;
@@ -257,8 +259,9 @@ NC_MSG_TYPE
 nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
 {
     int ret;
-    char *msg = NULL, *chunk, *aux;
+    char *msg = NULL, *chunk;
     uint64_t chunk_len, len = 0;
+    uint16_t read_timeout = NC_READ_TIMEOUT;
     struct nc_server_reply *reply;
 
     assert(session && data);
@@ -272,7 +275,7 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
     /* read the message */
     switch (session->version) {
     case NC_VERSION_10:
-        ret = nc_read_until(session, NC_VERSION_10_ENDTAG, 0, &msg);
+        ret = nc_read_until(session, NC_VERSION_10_ENDTAG, 0, &read_timeout, &msg);
         if (ret == -1) {
             goto error;
         }
@@ -282,11 +285,11 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
         break;
     case NC_VERSION_11:
         while (1) {
-            ret = nc_read_until(session, "\n#", 0, NULL);
+            ret = nc_read_until(session, "\n#", 0, &read_timeout, NULL);
             if (ret == -1) {
                 goto error;
             }
-            ret = nc_read_until(session, "\n", 0, &chunk);
+            ret = nc_read_until(session, "\n", 0, &read_timeout, &chunk);
             if (ret == -1) {
                 goto error;
             }
@@ -306,18 +309,17 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
             }
 
             /* now we have size of next chunk, so read the chunk */
-            ret = nc_read_chunk(session, chunk_len, &chunk);
+            ret = nc_read_chunk(session, chunk_len, &read_timeout, &chunk);
             if (ret == -1) {
                 goto error;
             }
 
             /* realloc message buffer, remember to count terminating null byte */
-            aux = realloc(msg, len + chunk_len + 1);
-            if (!aux) {
+            msg = realloc(msg, len + chunk_len + 1);
+            if (!msg) {
                 ERRMEM;
                 goto error;
             }
-            msg = aux;
             memcpy(msg + len, chunk, chunk_len);
             len += chunk_len;
             msg[len] = '\0';
@@ -403,7 +405,7 @@ nc_read_poll(struct nc_session *session, int timeout)
     }
 
     switch (session->ti_type) {
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
         /* EINTR is handled, it resumes waiting */
         ret = ssh_channel_poll_timeout(session->ti.libssh.channel, timeout, 0);
@@ -427,7 +429,7 @@ nc_read_poll(struct nc_session *session, int timeout)
         }
         /* fallthrough */
 #endif
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
         if (session->ti_type == NC_TI_OPENSSL) {
             fds.fd = SSL_get_fd(session->ti.tls);
@@ -527,12 +529,12 @@ nc_session_is_connected(struct nc_session *session)
     case NC_TI_FD:
         fds.fd = session->ti.fd.in;
         break;
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
         fds.fd = ssh_get_fd(session->ti.libssh.session);
         break;
 #endif
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
         fds.fd = SSL_get_fd(session->ti.tls);
         break;
@@ -586,7 +588,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
     case NC_TI_FD:
         return write(session->ti.fd.out, buf, count);
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
         if (ssh_channel_is_closed(session->ti.libssh.channel) || ssh_channel_is_eof(session->ti.libssh.channel)) {
             if (ssh_channel_is_closed(session->ti.libssh.channel)) {
@@ -600,7 +602,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
         }
         return ssh_channel_write(session->ti.libssh.channel, buf, count);
 #endif
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
         return SSL_write(session->ti.tls, buf, count);
 #endif
@@ -901,9 +903,14 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
 
         count = asprintf(&buf, "<rpc xmlns=\"%s\" message-id=\"%"PRIu64"\"%s>",
                          NC_NS_BASE, session->msgid + 1, attrs ? attrs : "");
+        if (count == -1) {
+            ERRMEM;
+            va_end(ap);
+            return -1;
+        }
         nc_write_clb((void *)&arg, buf, count);
         free(buf);
-        lyd_print_clb(nc_write_clb, (void *)&arg, content, LYD_XML, 0);
+        lyd_print_clb(nc_write_clb, (void *)&arg, content, LYD_XML, LYP_WITHSIBLINGS);
         nc_write_clb((void *)&arg, "</rpc>", 6);
 
         session->msgid++;
@@ -925,7 +932,7 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
             break;
         case NC_RPL_DATA:
             nc_write_clb((void *)&arg, "<data>", 6);
-            lyd_print_clb(nc_write_clb, (void *)&arg, ((struct nc_reply_data *)reply)->data, LYD_XML, 0);
+            lyd_print_clb(nc_write_clb, (void *)&arg, ((struct nc_reply_data *)reply)->data, LYD_XML, LYP_WITHSIBLINGS);
             nc_write_clb((void *)&arg, "</data>", 7);
             break;
         case NC_RPL_ERROR:
@@ -958,15 +965,30 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
         sid = va_arg(ap, uint32_t*);
 
         count = asprintf(&buf, "<hello xmlns=\"%s\"><capabilities>", NC_NS_BASE);
+        if (count == -1) {
+            ERRMEM;
+            va_end(ap);
+            return -1;
+        }
         nc_write_clb((void *)&arg, buf, count);
         free(buf);
         for (i = 0; capabilities[i]; i++) {
             count = asprintf(&buf, "<capability>%s</capability>", capabilities[i]);
+            if (count == -1) {
+                ERRMEM;
+                va_end(ap);
+                return -1;
+            }
             nc_write_clb((void *)&arg, buf, count);
             free(buf);
         }
         if (sid) {
             count = asprintf(&buf, "</capabilities><session-id>%u</session-id></hello>", *sid);
+            if (count == -1) {
+                ERRMEM;
+                va_end(ap);
+                return -1;
+            }
             nc_write_clb((void *)&arg, buf, count);
             free(buf);
         } else {
@@ -989,4 +1011,17 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
     }
 
     return 0;
+}
+
+void *
+nc_realloc(void *ptr, size_t size)
+{
+    void *ret;
+
+    ret = realloc(ptr, size);
+    if (!ret) {
+        free(ptr);
+    }
+
+    return ret;
 }

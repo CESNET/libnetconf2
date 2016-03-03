@@ -5,25 +5,18 @@
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of the Company nor the names of its contributors
- *    may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *     https://opensource.org/licenses/BSD-3-Clause
  */
 
 #include <pthread.h>
-#include <assert.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -41,39 +34,11 @@
 /* sec */
 #define CLIENT_SSH_AUTH_TIMEOUT 10
 
+#define nc_assert(cond) if (!(cond)) { fprintf(stderr, "assert failed (%s:%d)\n", __FILE__, __LINE__); exit(1); }
+
 pthread_barrier_t barrier;
 
-static int
-setup_lib(void)
-{
-    nc_verbosity(NC_VERB_VERBOSE);
-
-#if defined(ENABLE_SSH) && defined(ENABLE_TLS)
-    nc_ssh_tls_init();
-#elif defined(ENABLE_SSH)
-    nc_ssh_init();
-#elif defined(ENABLE_TLS)
-    nc_tls_init();
-#endif
-
-    return 0;
-}
-
-static int
-teardown_lib(void)
-{
-#if defined(ENABLE_SSH) && defined(ENABLE_TLS)
-    nc_ssh_tls_destroy();
-#elif defined(ENABLE_SSH)
-    nc_ssh_destroy();
-#elif defined(ENABLE_TLS)
-    nc_tls_destroy();
-#endif
-
-    return 0;
-}
-
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 static void *
 server_thread(void *arg)
@@ -84,27 +49,27 @@ server_thread(void *arg)
     struct nc_session *session;
 
     ps = nc_ps_new();
-    assert(ps);
+    nc_assert(ps);
 
     pthread_barrier_wait(&barrier);
 
-#if defined(ENABLE_SSH) && defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
     ret = nc_accept(NC_ACCEPT_TIMEOUT, &session);
-    assert(ret == 1);
+    nc_assert(ret == 1);
 
     nc_ps_add_session(ps, session);
     ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT);
-    assert(ret == 3);
-    nc_ps_clear(ps);
+    nc_assert(ret == 3);
+    nc_ps_clear(ps, 0, NULL);
 #endif
 
     ret = nc_accept(NC_ACCEPT_TIMEOUT, &session);
-    assert(ret == 1);
+    nc_assert(ret == 1);
 
     nc_ps_add_session(ps, session);
     ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT);
-    assert(ret == 3);
-    nc_ps_clear(ps);
+    nc_assert(ret == 3);
+    nc_ps_clear(ps, 0, NULL);
 
     nc_ps_free(ps);
 
@@ -112,9 +77,9 @@ server_thread(void *arg)
     return NULL;
 }
 
-#endif /* ENABLE_SSH || ENABLE_TLS */
+#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
 
 static void *
 ssh_add_endpt_thread(void *arg)
@@ -125,7 +90,7 @@ ssh_add_endpt_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_add_endpt_listen("tertiary", "0.0.0.0", 6003);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -139,7 +104,7 @@ ssh_endpt_set_port_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_set_port("quaternary", 6005);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -153,7 +118,7 @@ ssh_del_endpt_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_del_endpt("secondary");
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -167,7 +132,7 @@ ssh_endpt_set_hostkey_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_set_hostkey("main", TESTS_DIR"/data/key_dsa");
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -181,7 +146,7 @@ ssh_endpt_set_banner_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_set_banner("main", "Howdy, partner!");
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -195,7 +160,7 @@ ssh_endpt_set_auth_methods_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_set_auth_methods("main", NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD | NC_SSH_AUTH_INTERACTIVE);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -209,7 +174,7 @@ ssh_endpt_set_auth_attempts_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_set_auth_attempts("main", 2);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -223,7 +188,7 @@ ssh_endpt_set_auth_timeout_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_set_auth_timeout("main", 5);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -237,7 +202,7 @@ ssh_endpt_add_authkey_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_add_authkey("main", TESTS_DIR"/data/key_rsa.pub", "test3");
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -251,106 +216,56 @@ ssh_endpt_del_authkey_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_ssh_endpt_del_authkey("main", TESTS_DIR"/data/key_ecdsa.pub", "test2");
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
+}
+
+static int
+ssh_hostkey_check_clb(const char *hostname, ssh_session session)
+{
+    (void)hostname;
+    (void)session;
+
+    return 0;
 }
 
 static void *
 ssh_client_thread(void *arg)
 {
-    (void)arg;
-    int ret;
-    long timeout = CLIENT_SSH_AUTH_TIMEOUT;
-    uint32_t port;
-    ssh_session sshsession;
-    ssh_key pubkey, privkey;
+    int ret, read_pipe = *(int *)arg;
+    char buf[9];
     struct nc_session *session;
 
-    /* We cannot use nc_connect_ssh(), because we want to skip the knownhost check.
-    ret = nc_client_ssh_set_username("test");
-    assert_int_equal(ret, 0);
+    ret = read(read_pipe, buf, 9);
+    nc_assert(ret == 9);
+    nc_assert(!strncmp(buf, "ssh_ready", 9));
 
-    ret = nc_client_ssh_add_keypair("data/key_dsa.pub", "data/key_dsa");
-    assert_int_equal(ret, 0);
+    /* skip the knownhost check */
+    nc_client_ssh_set_auth_hostkey_check_clb(ssh_hostkey_check_clb);
+
+    ret = nc_client_ssh_set_username("test");
+    nc_assert(!ret);
+
+    ret = nc_client_ssh_add_keypair(TESTS_DIR"/data/key_dsa.pub", TESTS_DIR"/data/key_dsa");
+    nc_assert(!ret);
 
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PUBLICKEY, 1);
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PASSWORD, -1);
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_INTERACTIVE, -1);
 
-    session = nc_session_connect("127.0.0.1", NC_PORT_SSH, NULL);*/
+    session = nc_connect_ssh("127.0.0.1", 6001, NULL);
+    nc_assert(session);
 
-    port = 6001;
-
-    sshsession = ssh_new();
-    ssh_options_set(sshsession, SSH_OPTIONS_HOST, "127.0.0.1");
-    ssh_options_set(sshsession, SSH_OPTIONS_PORT, &port);
-    ssh_options_set(sshsession, SSH_OPTIONS_USER, "test");
-    ssh_options_set(sshsession, SSH_OPTIONS_TIMEOUT, &timeout);
-    ssh_options_set(sshsession, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519,ssh-rsa,ssh-dss,ssh-rsa1");
-
-    ret = ssh_connect(sshsession);
-    assert(ret == SSH_OK);
-
-    /* authentication */
-    ret = ssh_userauth_none(sshsession, NULL);
-    assert(ret == SSH_AUTH_DENIED);
-    assert(ssh_userauth_list(sshsession, NULL) & SSH_AUTH_METHOD_PUBLICKEY);
-    ret = ssh_pki_import_pubkey_file(TESTS_DIR"/data/key_dsa.pub", &pubkey);
-    assert(ret == SSH_OK);
-    ret = ssh_userauth_try_publickey(sshsession, NULL, pubkey);
-    assert(ret == SSH_AUTH_SUCCESS);
-    ret = ssh_pki_import_privkey_file(TESTS_DIR"/data/key_dsa", NULL, NULL, NULL, &privkey);
-    assert(ret == SSH_OK);
-    ret = ssh_userauth_publickey(sshsession, NULL, privkey);
-    assert(ret == SSH_AUTH_SUCCESS);
-    ssh_key_free(pubkey);
-    ssh_key_free(privkey);
-
-    session = nc_connect_libssh(sshsession, NULL);
-    assert(session);
-
-    nc_session_free(session);
-
-    nc_client_ssh_destroy_opts();
+    nc_session_free(session, NULL);
 
     nc_thread_destroy();
     return NULL;
 }
 
-pid_t
-fork_ssh_client(void)
-{
-    pid_t client_pid;
+#endif /* NC_ENABLED_SSH */
 
-    if (!(client_pid = fork())) {
-        /* cleanup */
-        //nc_server_destroy();
-        //ly_ctx_destroy(ctx, NULL);
-        pthread_barrier_destroy(&barrier);
-
-        ssh_client_thread(NULL);
-
-        teardown_lib();
-        exit(0);
-    }
-
-    return client_pid;
-}
-
-pthread_t
-thread_ssh_client(void)
-{
-    pthread_t client_tid;
-
-    pthread_create(&client_tid, NULL, ssh_client_thread, NULL);
-
-    return client_tid;
-}
-
-#endif /* ENABLE_SSH */
-
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
 
 static void *
 tls_add_endpt_thread(void *arg)
@@ -361,7 +276,7 @@ tls_add_endpt_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_tls_add_endpt_listen("tertiary", "0.0.0.0", 6503);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -375,7 +290,7 @@ tls_endpt_set_port_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_tls_endpt_set_port("quaternary", 6505);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -389,7 +304,7 @@ tls_del_endpt_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_tls_del_endpt("secondary");
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -425,7 +340,7 @@ tls_endpt_set_cert_thread(void *arg)
                                        "BltsK0iOMPDLVlXdk1hpU5HvlMXdBHQebfTiCFDQSX7ViKc4wSJUHDt4CyoCzchY\n"
                                        "mbQIcTc7uNDE5chQWV8Z3Vxkp4yuqZM3HdLskoo4IgFDOoj8eCAi+58+YRuKpaEQ\n"
                                        "fWt+A9rvlaOApWryMW4=");
-    assert(!ret);
+    nc_assert(!ret);
 
     nc_thread_destroy();
     return NULL;
@@ -488,7 +403,7 @@ tls_endpt_set_key_thread(void *arg)
                                       "dOZPvkfqyIKFmbQgYbtD66rHuzNOfJpzqr/WVLO57/zzW8245NKG2B6B0oXkei/K\n"
                                       "qDY0DAbHR3i3EOj1NPtVI1FC/xX8R9BREaid458bqoHJKuInrGcBjaUI9Cvymv8T\n"
                                       "bstUgD6NPbJR4Sm6vrLeUqzjWZP3t1+Z6DjXmnpR2vvhMU/FWb//21p/88o=", 1);
-    assert(!ret);
+    nc_assert(!ret);
 
     nc_thread_destroy();
     return NULL;
@@ -521,7 +436,7 @@ tls_endpt_add_trusted_cert_thread(void *arg)
                                                "sgq28vGMSXLSYKBNaP/llXNmqW35oLs6CwVuiCL7Go0IDIOmiXN2bssb87hZSw3B\n"
                                                "6iwU78wYshJUGZjLaK9PuMvFYJLFWSAePA2Yb+aEv80wMbX1oANSryU7Uf5BJk8V\n"
                                                "kO3mlRDh2b1/5Gb5xA2vU2z3ReHdPNy6qSx0Mk4XJvQw9FsVHZ13");
-    assert(!ret);
+    nc_assert(!ret);
 
     nc_thread_destroy();
     return NULL;
@@ -536,7 +451,7 @@ tls_endpt_set_trusted_ca_paths_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_tls_endpt_set_trusted_ca_paths("quaternary", TESTS_DIR"/data/serverca.pem", "data");
-    assert(!ret);
+    nc_assert(!ret);
 
     nc_thread_destroy();
     return NULL;
@@ -563,7 +478,7 @@ tls_endpt_set_crl_paths_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_tls_endpt_set_crl_paths("quaternary", NULL, "data");
-    assert(!ret);
+    nc_assert(!ret);
 
     nc_thread_destroy();
     return NULL;
@@ -591,7 +506,7 @@ tls_endpt_add_ctn_thread(void *arg)
 
     ret = nc_server_tls_endpt_add_ctn("main", 0, "02:F0:F1:F2:F3:F4:F5:F6:F7:F8:F9:10:11:12:EE:FF:A0:A1:A2:A3",
                                       NC_TLS_CTN_SAN_IP_ADDRESS, NULL);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -605,7 +520,7 @@ tls_endpt_del_ctn_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     ret = nc_server_tls_endpt_del_ctn("main", -1, NULL, NC_TLS_CTN_SAN_ANY, NULL);
-    assert(!ret);
+    nc_assert(!ret);
 
     return NULL;
 }
@@ -613,63 +528,35 @@ tls_endpt_del_ctn_thread(void *arg)
 static void *
 tls_client_thread(void *arg)
 {
-    (void)arg;
-    int ret;
+    int ret, read_pipe = *(int *)arg;
+    char buf[9];
     struct nc_session *session;
 
+    ret = read(read_pipe, buf, 9);
+    nc_assert(ret == 9);
+    nc_assert(!strncmp(buf, "tls_ready", 9));
+
     ret = nc_client_tls_set_cert_key_paths(TESTS_DIR"/data/client.crt", TESTS_DIR"/data/client.key");
-    assert(!ret);
+    nc_assert(!ret);
     ret = nc_client_tls_set_trusted_ca_paths(NULL, TESTS_DIR"/data");
-    assert(!ret);
+    nc_assert(!ret);
 
     session = nc_connect_tls("127.0.0.1", 6501, NULL);
-    assert(session);
+    nc_assert(session);
 
-    nc_session_free(session);
-
-    nc_client_tls_destroy_opts();
+    nc_session_free(session, NULL);
 
     nc_thread_destroy();
     return NULL;
 }
 
-pid_t
-fork_tls_client(void)
-{
-    pid_t client_pid;
-
-    if (!(client_pid = fork())) {
-        /* cleanup */
-        //nc_server_destroy();
-        //ly_ctx_destroy(ctx, NULL);
-        pthread_barrier_destroy(&barrier);
-
-        tls_client_thread(NULL);
-
-        teardown_lib();
-        exit(0);
-    }
-
-    return client_pid;
-}
-
-pthread_t
-thread_tls_client(void)
-{
-    pthread_t client_tid;
-
-    pthread_create(&client_tid, NULL, tls_client_thread, NULL);
-
-    return client_tid;
-}
-
-#endif /* ENABLE_TLS */
+#endif /* NC_ENABLED_TLS */
 
 static void *(*thread_funcs[])(void *) = {
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
     server_thread,
 #endif
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     ssh_add_endpt_thread,
     ssh_endpt_set_port_thread,
     ssh_del_endpt_thread,
@@ -681,7 +568,7 @@ static void *(*thread_funcs[])(void *) = {
     ssh_endpt_add_authkey_thread,
     ssh_endpt_del_authkey_thread,
 #endif
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     tls_add_endpt_thread,
     tls_endpt_set_port_thread,
     tls_del_endpt_thread,
@@ -699,56 +586,63 @@ static void *(*thread_funcs[])(void *) = {
 
 const int thread_count = sizeof thread_funcs / sizeof *thread_funcs;
 
-static void
-clients_start_cleanup(void)
-{
-    //static pid_t pids[2] = {0, 0};
-    static pthread_t tids[2] = {0, 0};
-
-#if defined(ENABLE_SSH) && defined(ENABLE_TLS)
-    /*if (pids[0] && pids[1]) {
-        waitpid(pids[0], NULL, 0);
-        waitpid(pids[1], NULL, 0);
-        return;
-    }
-    pids[0] = fork_ssh_client();
-    pids[1] = fork_tls_client();*/
-
-    if (tids[0] && tids[1]) {
-        pthread_join(tids[0], NULL);
-        pthread_join(tids[1], NULL);
-        return;
-    }
-    tids[0] = thread_ssh_client();
-    tids[1] = thread_tls_client();
-#elif defined(ENABLE_SSH)
-    /*if (pids[0]) {
-        waitpid(pids[0], NULL, 0);
-        return;
-    }
-    pids[0] = fork_ssh_client();*/
-
-    if (tids[0]) {
-        pthread_join(tids[0], NULL);
-        return;
-    }
-    tids[0] = thread_ssh_client();
-#elif defined(ENABLE_TLS)
-    /*if (pids[1]) {
-        waitpid(pids[1], NULL, 0);
-        return;
-    }
-    pids[1] = fork_tls_client();*/
-
-    if (tids[1]) {
-        pthread_join(tids[1], NULL);
-        return;
-    }
-    tids[1] = thread_tls_client();
+#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
+const int client_count = 2;
+pid_t pids[2];
+int pipes[4];
 #else
-    if (!tids[0] && !tids[1]) {
-        return;
+const int client_count = 1;
+pid_t pids[1];
+int pipes[2];
+#endif
+
+static void
+client_fork(void)
+{
+    int ret, clients = 0;
+
+#ifdef NC_ENABLED_SSH
+    pipe(pipes + clients * 2);
+
+    if (!(pids[clients] = fork())) {
+        nc_client_init();
+
+        ret = nc_client_schema_searchpath(TESTS_DIR"/../schemas");
+        nc_assert(!ret);
+
+        /* close write */
+        close(pipes[clients * 2 + 1]);
+        ssh_client_thread(&pipes[clients * 2]);
+        close(pipes[clients * 2]);
+        nc_client_destroy();
+        exit(0);
     }
+    /* close read */
+    close(pipes[clients * 2]);
+
+    ++clients;
+#endif
+
+#ifdef NC_ENABLED_TLS
+    pipe(pipes + clients * 2);
+
+    if (!(pids[clients] = fork())) {
+        nc_client_init();
+
+        ret = nc_client_schema_searchpath(TESTS_DIR"/../schemas");
+        nc_assert(!ret);
+
+        /* close write */
+        close(pipes[clients * 2 + 1]);
+        tls_client_thread(&pipes[clients * 2]);
+        close(pipes[clients * 2]);
+        nc_client_destroy();
+        exit(0);
+    }
+    /* close read */
+    close(pipes[clients * 2]);
+
+    ++clients;
 #endif
 }
 
@@ -756,91 +650,98 @@ int
 main(void)
 {
     struct ly_ctx *ctx;
-    int ret, i;
+    int ret, i, clients = 0;
     pthread_t tids[thread_count];
 
-    setup_lib();
+    nc_verbosity(NC_VERB_VERBOSE);
+
+    client_fork();
 
     ctx = ly_ctx_new(TESTS_DIR"/../schemas");
-    assert(ctx);
+    nc_assert(ctx);
     ly_ctx_load_module(ctx, "ietf-netconf", NULL);
     nc_server_init(ctx);
 
     pthread_barrier_init(&barrier, NULL, thread_count);
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     /* do first, so that client can connect on SSH */
     ret = nc_server_ssh_add_endpt_listen("main", "0.0.0.0", 6001);
-    assert(!ret);
+    nc_assert(!ret);
     ret = nc_server_ssh_endpt_add_authkey("main", TESTS_DIR"/data/key_dsa.pub", "test");
-    assert(!ret);
+    nc_assert(!ret);
     ret = nc_server_ssh_endpt_set_hostkey("main", TESTS_DIR"/data/key_rsa");
-    assert(!ret);
+    nc_assert(!ret);
+
+    /* client ready */
+    ret = write(pipes[clients * 2 + 1], "ssh_ready", 9);
+    nc_assert(ret == 9);
+    ++clients;
 
     /* for ssh_endpt_del_authkey */
     ret = nc_server_ssh_endpt_add_authkey("main", TESTS_DIR"/data/key_ecdsa.pub", "test2");
-    assert(!ret);
+    nc_assert(!ret);
 
     /* for ssh_del_endpt */
     ret = nc_server_ssh_add_endpt_listen("secondary", "0.0.0.0", 6002);
-    assert(!ret);
+    nc_assert(!ret);
 
     /* for ssh_endpt_set_port */
     ret = nc_server_ssh_add_endpt_listen("quaternary", "0.0.0.0", 6004);
-    assert(!ret);
+    nc_assert(!ret);
 #endif
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     /* do first, so that client can connect on TLS */
     ret = nc_server_tls_add_endpt_listen("main", "0.0.0.0", 6501);
-    assert(!ret);
+    nc_assert(!ret);
     ret = nc_server_tls_endpt_set_cert_path("main", TESTS_DIR"/data/server.crt");
-    assert(!ret);
+    nc_assert(!ret);
     ret = nc_server_tls_endpt_set_key_path("main", TESTS_DIR"/data/server.key");
-    assert(!ret);
+    nc_assert(!ret);
     ret = nc_server_tls_endpt_add_trusted_cert_path("main", TESTS_DIR"/data/client.crt");
-    assert(!ret);
+    nc_assert(!ret);
     ret = nc_server_tls_endpt_add_ctn("main", 0, "02:D3:03:0E:77:21:E2:14:1F:E5:75:48:98:6B:FD:8A:63:BB:DE:40:34", NC_TLS_CTN_SPECIFIED, "test");
-    assert(!ret);
+    nc_assert(!ret);
+
+    /* client ready */
+    ret = write(pipes[clients * 2 + 1], "tls_ready", 9);
+    nc_assert(ret == 9);
+    ++clients;
 
     /* for tls_del_endpt */
     ret = nc_server_tls_add_endpt_listen("secondary", "0.0.0.0", 6502);
-    assert(!ret);
+    nc_assert(!ret);
 
     /* for tls_endpt_set_port */
     ret = nc_server_tls_add_endpt_listen("quaternary", "0.0.0.0", 6504);
-    assert(!ret);
+    nc_assert(!ret);
 
     /* for tls_endpt_del_ctn */
     ret = nc_server_tls_endpt_add_ctn("main", 0, "02:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:A0:A1:A2:A3", NC_TLS_CTN_SAN_ANY, NULL);
-    assert(!ret);
+    nc_assert(!ret);
 #endif
-
-    ret = nc_client_schema_searchpath(TESTS_DIR"/../schemas");
-    assert(!ret);
-    clients_start_cleanup();
 
     /* threads'n'stuff */
     ret = 0;
     for (i = 0; i < thread_count; ++i) {
         ret += pthread_create(&tids[i], NULL, thread_funcs[i], NULL);
     }
-    assert(!ret);
+    nc_assert(!ret);
 
     /* cleanup */
     for (i = 0; i < thread_count; ++i) {
         pthread_join(tids[i], NULL);
     }
-
-    clients_start_cleanup();
+    for (i = 0; i < client_count; ++i) {
+        waitpid(pids[i], NULL, 0);
+        close(pipes[i * 2 + 1]);
+    }
 
     pthread_barrier_destroy(&barrier);
 
-    nc_client_schema_searchpath(NULL);
     nc_server_destroy();
     ly_ctx_destroy(ctx, NULL);
-
-    teardown_lib();
 
     return 0;
 }

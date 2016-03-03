@@ -1,0 +1,9 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+includedir=${prefix}/@INCLUDE_INSTALL_DIR@
+libdir=${prefix}/@LIB_INSTALL_DIR@
+
+Name: @PROJECT_NAME@
+Description: @LIBNETCONF2_DESCRIPTION@
+Version: @LIBNETCONF2_VERSION@
+Libs: -L${libdir} -lnetconf2
+Cflags: -I${includedir}

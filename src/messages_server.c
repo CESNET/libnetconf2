@@ -5,19 +5,11 @@
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of the Company nor the names of its contributors
- *    may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *     https://opensource.org/licenses/BSD-3-Clause
  */
 
 #include <ctype.h>
@@ -52,11 +44,6 @@ nc_server_reply_data(struct lyd_node *data, NC_PARAMTYPE paramtype)
 {
     struct nc_server_reply_data *ret;
 
-    if (!data) {
-        ERRARG;
-        return NULL;
-    }
-
     ret = malloc(sizeof *ret);
     if (!ret) {
         ERRMEM;
@@ -64,10 +51,8 @@ nc_server_reply_data(struct lyd_node *data, NC_PARAMTYPE paramtype)
     }
 
     ret->type = NC_RPL_DATA;
-    if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
-        nc_ctx_lock(-1, NULL);
+    if (data && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
         ret->data = lyd_dup(data, 1);
-        nc_ctx_unlock();
     } else {
         ret->data = data;
     }
@@ -97,6 +82,11 @@ nc_server_reply_err(struct nc_server_error *err)
 
     ret->type = NC_RPL_ERROR;
     ret->err = malloc(sizeof *ret->err);
+    if (!ret->err) {
+        ERRMEM;
+        free(ret);
+        return NULL;
+    }
     ret->err[0] = err;
     ret->count = 1;
     return (struct nc_server_reply *)ret;
@@ -114,7 +104,11 @@ nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_error *e
 
     err_rpl = (struct nc_server_reply_error *)reply;
     ++err_rpl->count;
-    err_rpl->err = realloc(err_rpl->err, err_rpl->count * sizeof *err_rpl->err);
+    err_rpl->err = nc_realloc(err_rpl->err, err_rpl->count * sizeof *err_rpl->err);
+    if (!err_rpl->err) {
+        ERRMEM;
+        return -1;
+    }
     err_rpl->err[err_rpl->count - 1] = err;
     return 0;
 }
@@ -308,12 +302,10 @@ nc_err_set_app_tag(struct nc_server_error *err, const char *error_app_tag)
         return -1;
     }
 
-    nc_ctx_lock(-1, NULL);
     if (err->apptag) {
         lydict_remove(server_opts.ctx, err->apptag);
     }
     err->apptag = lydict_insert(server_opts.ctx, error_app_tag, 0);
-    nc_ctx_unlock();
 
     return 0;
 }
@@ -326,12 +318,10 @@ nc_err_set_path(struct nc_server_error *err, const char *error_path)
         return -1;
     }
 
-    nc_ctx_lock(-1, NULL);
     if (err->path) {
         lydict_remove(server_opts.ctx, err->path);
     }
     err->path = lydict_insert(server_opts.ctx, error_path, 0);
-    nc_ctx_unlock();
 
     return 0;
 }
@@ -344,7 +334,6 @@ nc_err_set_msg(struct nc_server_error *err, const char *error_message, const cha
         return -1;
     }
 
-    nc_ctx_lock(-1, NULL);
     if (err->message) {
         lydict_remove(server_opts.ctx, err->apptag);
     }
@@ -358,7 +347,6 @@ nc_err_set_msg(struct nc_server_error *err, const char *error_message, const cha
     } else {
         lang = NULL;
     }
-    nc_ctx_unlock();
 
     return 0;
 }
@@ -384,11 +372,12 @@ nc_err_add_bad_attr(struct nc_server_error *err, const char *attr_name)
     }
 
     ++err->attr_count;
-    err->attr = realloc(err->attr, err->attr_count * sizeof *err->attr);
-
-    nc_ctx_lock(-1, NULL);
+    err->attr = nc_realloc(err->attr, err->attr_count * sizeof *err->attr);
+    if (!err->attr) {
+        ERRMEM;
+        return -1;
+    }
     err->attr[err->attr_count - 1] = lydict_insert(server_opts.ctx, attr_name, 0);
-    nc_ctx_unlock();
 
     return 0;
 }
@@ -402,11 +391,12 @@ nc_err_add_bad_elem(struct nc_server_error *err, const char *elem_name)
     }
 
     ++err->elem_count;
-    err->elem = realloc(err->elem, err->elem_count * sizeof *err->elem);
-
-    nc_ctx_lock(-1, NULL);
+    err->elem = nc_realloc(err->elem, err->elem_count * sizeof *err->elem);
+    if (!err->elem) {
+        ERRMEM;
+        return -1;
+    }
     err->elem[err->elem_count - 1] = lydict_insert(server_opts.ctx, elem_name, 0);
-    nc_ctx_unlock();
 
     return 0;
 }
@@ -420,11 +410,12 @@ nc_err_add_bad_ns(struct nc_server_error *err, const char *ns_name)
     }
 
     ++err->ns_count;
-    err->ns = realloc(err->ns, err->ns_count * sizeof *err->ns);
-
-    nc_ctx_lock(-1, NULL);
+    err->ns = nc_realloc(err->ns, err->ns_count * sizeof *err->ns);
+    if (!err->ns) {
+        ERRMEM;
+        return -1;
+    }
     err->ns[err->ns_count - 1] = lydict_insert(server_opts.ctx, ns_name, 0);
-    nc_ctx_unlock();
 
     return 0;
 }
@@ -438,7 +429,11 @@ nc_err_add_info_other(struct nc_server_error *err, struct lyxml_elem *other)
     }
 
     ++err->other_count;
-    err->other = realloc(err->other, err->other_count * sizeof *err->other);
+    err->other = nc_realloc(err->other, err->other_count * sizeof *err->other);
+    if (!err->other) {
+        ERRMEM;
+        return -1;
+    }
     err->other[err->other_count - 1] = other;
     return 0;
 }
@@ -450,10 +445,8 @@ nc_server_rpc_free(struct nc_server_rpc *rpc, struct ly_ctx *ctx)
         return;
     }
 
-    nc_ctx_lock(-1, NULL);
     lyxml_free(ctx, rpc->root);
     lyd_free(rpc->tree);
-    nc_ctx_unlock();
 
     free(rpc);
 }
@@ -473,9 +466,7 @@ nc_server_reply_free(struct nc_server_reply *reply)
     case NC_RPL_DATA:
         data_rpl = (struct nc_server_reply_data *)reply;
         if (data_rpl->free) {
-            nc_ctx_lock(-1, NULL);
             lyd_free_withsiblings(data_rpl->data);
-            nc_ctx_unlock();
         }
         break;
     case NC_RPL_OK:
@@ -503,7 +494,6 @@ nc_err_free(struct nc_server_error *err)
         return;
     }
 
-    nc_ctx_lock(-1, NULL);
     lydict_remove(server_opts.ctx, err->apptag);
     lydict_remove(server_opts.ctx, err->path);
     lydict_remove(server_opts.ctx, err->message);
@@ -523,7 +513,6 @@ nc_err_free(struct nc_server_error *err)
     for (i = 0; i < err->other_count; ++i) {
         lyxml_free(server_opts.ctx, err->other[i]);
     }
-    nc_ctx_unlock();
     free(err->other);
     free(err);
 }

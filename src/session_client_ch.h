@@ -5,19 +5,11 @@
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of the Company nor the names of its contributors
- *    may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *     https://opensource.org/licenses/BSD-3-Clause
  */
 
 #ifndef NC_SESSION_CLIENT_CH_H_
@@ -29,7 +21,7 @@
 #include "netconf.h"
 #include "messages_client.h"
 
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 /**
  * @brief Accept a Call Home connection on any of the listening binds.
@@ -42,9 +34,43 @@
  */
 int nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session);
 
-#endif /* ENABLE_SSH || ENABLE_TLS */
+#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
+
+/**
+ * @brief Set SSH CALL Home authentication hostkey check (knownhosts) callback.
+ *
+ * @param[in] auth_hostkey_check Function to call, returns 0 on success, non-zero in error.
+ *                               If NULL, the default callback is set.
+ */
+void nc_client_ssh_ch_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session));
+
+/**
+ * @brief Set SSH Call Home password authentication callback.
+ *
+ * @param[in] auth_password Function to call, returns the password for username\@hostname.
+ *                          If NULL, the default callback is set.
+ */
+void nc_client_ssh_ch_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname));
+
+/**
+ * @brief Set SSH Call Home interactive authentication callback.
+ *
+ * @param[in] auth_interactive Function to call for every question, returns the answer for
+ *                             authentication name with instruction and echoing prompt.
+ *                             If NULL, the default callback is set.
+ */
+void nc_client_ssh_ch_set_auth_interactive_clb(char *(*auth_interactive)(const char *auth_name, const char *instruction,
+                                                                         const char *prompt, int echo));
+
+/**
+ * @brief Set SSH Call Home publickey authentication encrypted private key passphrase callback.
+ *
+ * @param[in] auth_privkey_passphrase Function to call for every question, returns
+ *                                    the passphrase for the specific private key.
+ */
+void nc_client_ssh_ch_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path));
 
 /**
  * @brief Add a new client bind and start listening on it for SSH Call Home connections.
@@ -69,8 +95,6 @@ int nc_client_ssh_ch_del_bind(const char *address, uint16_t port);
  *
  * Private key can be encrypted, the passphrase will be asked for before using it.
  *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
- *
  * @param[in] pub_key Path to the public key.
  * @param[in] priv_key Path to the private key.
  * @return 0 on success, -1 on error.
@@ -79,8 +103,6 @@ int nc_client_ssh_ch_add_keypair(const char *pub_key, const char *priv_key);
 
 /**
  * @brief Remove an SSH public and private key pair that was used for Call Home client authentication.
- *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  *
  * @param[in] idx Index of the keypair starting with 0.
  * @return 0 on success, -1 on error.
@@ -107,8 +129,6 @@ int nc_client_ssh_ch_get_keypair(int idx, const char **pub_key, const char **pri
 /**
  * @brief Set SSH Call Home authentication method preference.
  *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
- *
  * @param[in] auth_type Authentication method to modify the prefrence of.
  * @param[in] pref Preference of \p auth_type. Negative values disable the method.
  */
@@ -116,8 +136,6 @@ void nc_client_ssh_ch_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref);
 
 /**
  * @brief Get SSH Call Home authentication method preference.
- *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with libssh support.
  *
  * @param[in] auth_type Authentication method to retrieve the prefrence of.
  * @return Preference of the \p auth_type.
@@ -139,9 +157,9 @@ int nc_client_ssh_ch_set_username(const char *username);
  */
 const char *nc_client_ssh_ch_get_username(void);
 
-#endif /* ENABLE_SSH */
+#endif /* NC_ENABLED_SSH */
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
 
 /**
  * @brief Add a new client bind and start listening on it for TLS Call Home connections.
@@ -164,8 +182,6 @@ int nc_client_tls_ch_del_bind(const char *address, uint16_t port);
 /**
  * @brief Set client Call Home authentication identity - a certificate and a private key.
  *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
- *
  * @param[in] client_cert Path to the file containing the client certificate.
  * @param[in] client_key Path to the file containing the private key for the \p client_cert.
  *                       If NULL, key is expected to be stored with \p client_cert.
@@ -175,8 +191,6 @@ int nc_client_tls_ch_set_cert_key_paths(const char *client_cert, const char *cli
 
 /**
  * @brief Get client Call Home authentication identity - a certificate and a private key.
- *
- * Function is provided only via nc_client.h header file and only when libnetconf2 is compiled with TLS support.
  *
  * @param[out] client_cert Path to the file containing the client certificate. Can be NULL.
  * @param[out] client_key Path to the file containing the private key for the \p client_cert.
@@ -224,6 +238,6 @@ int nc_client_tls_ch_set_crl_paths(const char *crl_file, const char *crl_dir);
  */
 void nc_client_tls_ch_get_crl_paths(const char **crl_file, const char **crl_dir);
 
-#endif /* ENABLE_TLS */
+#endif /* NC_ENABLED_TLS */
 
 #endif /* NC_SESSION_CLIENT_CH_H_ */

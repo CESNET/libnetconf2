@@ -6,19 +6,11 @@
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of the Company nor the names of its contributors
- *    may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *     https://opensource.org/licenses/BSD-3-Clause
  */
 
 #ifndef NC_SESSION_PRIVATE_H_
@@ -34,7 +26,7 @@
 #include "session.h"
 #include "messages_client.h"
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
 
 #   include <libssh/libssh.h>
 #   include <libssh/callbacks.h>
@@ -61,6 +53,12 @@ struct nc_client_ssh_opts {
     } *keys;
     uint16_t key_count;
 
+    /* SSH authentication callbacks */
+    int (*auth_hostkey_check)(const char *hostname, ssh_session session);
+    char *(*auth_password)(const char *, const char *);
+    char *(*auth_interactive)(const char *, const char *, const char *, int);
+    char *(*auth_privkey_passphrase)(const char *);
+
     char *username;
 };
 
@@ -79,9 +77,9 @@ struct nc_server_ssh_opts {
     uint16_t auth_timeout;
 };
 
-#endif /* ENABLE_SSH */
+#endif /* NC_ENABLED_SSH */
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
 
 #   include <openssl/bio.h>
 #   include <openssl/ssl.h>
@@ -115,7 +113,7 @@ struct nc_server_tls_opts {
     } *ctn;
 };
 
-#endif /* ENABLE_TLS */
+#endif /* NC_ENABLED_TLS */
 
 /* ACCESS unlocked */
 struct nc_client_opts {
@@ -131,9 +129,8 @@ struct nc_client_opts {
 };
 
 struct nc_server_opts {
-    /* ACCESS locked with ctx_lock */
+    /* ACCESS unlocked (dictionary locked internally in libyang) */
     struct ly_ctx *ctx;
-    pthread_mutex_t ctx_lock;
 
     /* ACCESS unlocked */
     NC_WD_MODE wd_basic_mode;
@@ -161,14 +158,14 @@ struct nc_server_opts {
 };
 
 /**
- * Sleep time in microseconds to wait between unsuccessful reading due to EAGAIN or EWOULDBLOCK.
- */
-#define NC_READ_SLEEP 100
-
-/**
- * Sleep time in microseconds to wait between nc_recv_notif() calls.
+ * Sleep time in msec to wait between nc_recv_notif() calls.
  */
 #define NC_CLIENT_NOTIF_THREAD_SLEEP 10000
+
+/**
+ * Timeout in msec for transport-related data to arrive (ssh_handle_key_exchange(), SSL_accept(), SSL_connect()).
+ */
+#define NC_TRANSPORT_TIMEOUT 500
 
 /**
  * Number of sockets kept waiting to be accepted.
@@ -224,7 +221,7 @@ struct nc_session {
             int in;              /**< input file descriptor */
             int out;             /**< output file descriptor */
         } fd;                    /**< NC_TI_FD transport implementation structure */
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
         struct {
             ssh_channel channel;
             ssh_session session;
@@ -233,7 +230,7 @@ struct nc_session {
                                           otherwise there is a ring list of the NETCONF sessions */
         } libssh;
 #endif
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
         SSL *tls;
 #endif
     } ti;                          /**< transport implementation data */
@@ -243,6 +240,7 @@ struct nc_session {
 
     /* other */
     struct ly_ctx *ctx;            /**< libyang context of the session */
+    void *data;                    /**< arbitrary user data */
     uint8_t flags;                 /**< various flags of the session - TODO combine with status and/or side */
 #define NC_SESSION_SHAREDCTX 0x01
 #define NC_SESSION_CALLHOME 0x02
@@ -254,9 +252,8 @@ struct nc_session {
     struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
 
     /* server side only data */
-    void *ti_opts;
     time_t last_rpc;               /**< time the last RPC was received on this session */
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     /* SSH session authenticated */
 #   define NC_SESSION_SSH_AUTHENTICATED 0x04
     /* netconf subsystem requested */
@@ -268,15 +265,17 @@ struct nc_session {
 
     uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
 #endif
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     X509 *tls_cert;                /**< TLS client certificate it used for authentication */
 #endif
 };
 
+/* ACCESS locked */
 struct nc_pollsession {
     struct pollfd *pfds;
     struct nc_session **sessions;
     uint16_t session_count;
+    pthread_mutex_t lock;
 };
 
 struct nc_ntf_thread_arg {
@@ -284,11 +283,11 @@ struct nc_ntf_thread_arg {
     void (*notif_clb)(struct nc_session *session, const struct nc_notif *notif);
 };
 
+void *nc_realloc(void *ptr, size_t size);
+
 NC_MSG_TYPE nc_send_msg(struct nc_session *session, struct lyd_node *op);
 
-int nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed);
-
-void nc_subtract_elapsed(int *timeout, struct timespec *old_ts);
+int nc_timedlock(pthread_mutex_t *lock, int timeout);
 
 /**
  * @brief Fill libyang context in \p session. Context models are based on the stored session
@@ -425,13 +424,16 @@ int nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL 
  * @param[in] host Hostname to connect to.
  * @param[in] port Port to connect to.
  * @param[in] ti Transport fo the connection.
- * @param[in] timeout Timeout.
  * @param[out] session New Call Home session.
  * @return 0 on success, -1 on error.
  */
-int nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, int timeout, struct nc_session **session);
+int nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struct nc_session **session);
 
-#ifdef ENABLE_SSH
+void nc_init(void);
+
+void nc_destroy(void);
+
+#ifdef NC_ENABLED_SSH
 
 /**
  * @brief Accept a server Call Home connection on a socket.
@@ -440,17 +442,17 @@ int nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, i
  * @param[in] host Hostname of the server.
  * @param[in] port Port of the server.
  * @param[in] ctx Context for the session. Can be NULL.
+ * @param[in] timeout Transport operations timeout in msec.
  * @return New session, NULL on error.
  */
-struct nc_session *nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx);
+struct nc_session *nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout);
 
 /**
  * @brief Establish SSH transport on a socket.
  *
  * @param[in] session Session structure of the new connection.
  * @param[in] sock Socket of the new connection.
- * @param[in] timeout Timeout for all the related tasks.
- * @param[in] ch Whether to accept a Call Home session or a standard one.
+ * @param[in] timeout Transport operations timeout in msec (not SSH authentication one).
  * @return 1 on success, 0 on timeout, -1 on error.
  */
 int nc_accept_ssh_session(struct nc_session *session, int sock, int timeout);
@@ -470,7 +472,7 @@ int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
  * returned POLLIN.
  *
  * @param[in] session NETCONF session communicating on the socket.
- * @param[in,out] timeout Timeout for locking ti_lock, gets updated.
+ * @param[in,out] timeout Timeout for locking ti_lock.
  * @return 0 - timeout,
  *         1 if \p session channel has data,
  *         2 if some other channel has data,
@@ -479,33 +481,33 @@ int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
  *         5 on new NETCONF SSH channel,
  *        -1 on error.
  */
-int nc_ssh_pollin(struct nc_session *session, int *timeout);
+int nc_ssh_pollin(struct nc_session *session, int timeout);
 
-/* TODO */
 void nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts);
 
-#endif /* ENABLE_SSH */
+void nc_client_ssh_destroy_opts(void);
 
-#ifdef ENABLE_TLS
+#endif /* NC_ENABLED_SSH */
 
-/* TODO */
-struct nc_session *nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx);
+#ifdef NC_ENABLED_TLS
+
+struct nc_session *nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout);
 
 /**
  * @brief Establish TLS transport on a socket.
  *
  * @param[in] session Session structure of the new connection.
  * @param[in] sock Socket of the new connection.
- * @param[in] timeout Timeout for all the related tasks.
- * @param[in] ch Whether to accept a Call Home session or a standard one.
+ * @param[in] timeout Transport operations timeout in msec.
  * @return 1 on success, 0 on timeout, -1 on error.
  */
 int nc_accept_tls_session(struct nc_session *session, int sock, int timeout);
 
-/* TODO */
 void nc_server_tls_clear_opts(struct nc_server_tls_opts *opts);
 
-#endif /* ENABLE_TLS */
+void nc_client_tls_destroy_opts(void);
+
+#endif /* NC_ENABLED_TLS */
 
 /**
  * Functions

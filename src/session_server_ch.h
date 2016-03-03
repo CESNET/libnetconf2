@@ -5,19 +5,11 @@
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of the Company nor the names of its contributors
- *    may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *     https://opensource.org/licenses/BSD-3-Clause
  */
 
 #ifndef NC_SESSION_SERVER_CH_H_
@@ -29,19 +21,17 @@
 #include "session.h"
 #include "netconf.h"
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
 
 /**
  * @brief Establish an SSH Call Home connection with a listening NETCONF client.
  *
  * @param[in] host Host the client is listening on.
  * @param[in] port Port the client is listening on.
- * @param[in] timeout Timeout for transport-related operations in milliseconds.
- *                    0 for non-blocking call, -1 for infinite waiting.
  * @param[out] session New Call Home session.
  * @return 1 on success, 0 on timeout, -1 on error.
  */
-int nc_connect_callhome_ssh(const char *host, uint16_t port, int timeout, struct nc_session **session);
+int nc_connect_callhome_ssh(const char *host, uint16_t port, struct nc_session **session);
 
 /**
  * @brief Set Call Home SSH host keys the server will identify itself with. Each of RSA, DSA, and
@@ -110,21 +100,19 @@ int nc_server_ssh_ch_del_authkey(const char *pubkey_path, const char *username);
  */
 void nc_server_ssh_ch_clear_opts(void);
 
-#endif /* ENABLE_SSH */
+#endif /* NC_ENABLED_SSH */
 
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
 
 /**
  * @brief Establish a TLS Call Home connection with a listening NETCONF client.
  *
  * @param[in] host Host the client is listening on.
  * @param[in] port Port the client is listening on.
- * @param[in] timeout Timeout for transport-related operations in milliseconds.
- *                    0 for non-blocking call, -1 for infinite waiting.
  * @param[out] session New Call Home session.
  * @return 1 on success, 0 on timeout, -1 on error.
  */
-int nc_connect_callhome_tls(const char *host, uint16_t port, int timeout, struct nc_session **session);
+int nc_connect_callhome_tls(const char *host, uint16_t port, struct nc_session **session);
 
 /**
  * @brief Set server Call Home TLS certificate. Alternative to nc_tls_server_set_cert_path().
@@ -185,14 +173,14 @@ int nc_server_tls_ch_add_trusted_cert_path(const char *cert_path);
  * @brief Set trusted Call Home Certificate Authority certificate locations. There
  *        can only be one file and one directory, they are replaced if already set.
  *
- * @param[in] cacert_file_path Path to a trusted CA cert store file in PEM format.
- *                             Can be NULL.
- * @param[in] cacert_dir_path Path to a trusted CA cert store hashed directory
- *                            (c_rehash utility can be used to create hashes)
- *                            with PEM files. Can be NULL.
+ * @param[in] ca_file Path to a trusted CA cert store file in PEM format.
+ *                    Can be NULL.
+ * @param[in] ca_dir Path to a trusted CA cert store hashed directory
+ *                   (c_rehash utility can be used to create hashes)
+ *                   with PEM files. Can be NULL.
  * @return 0 on success, -1 on error.
  */
-int nc_server_tls_ch_set_trusted_cacert_locations(const char *cacert_file_path, const char *cacert_dir_path);
+int nc_server_tls_ch_set_trusted_ca_paths(const char *ca_file, const char *ca_dir);
 
 /**
  * @brief Destroy and clean all the set Call Home certificates and private keys.
@@ -204,12 +192,12 @@ void nc_server_tls_ch_clear_certs(void);
  * @brief Set Call Home Certificate Revocation List locations. There can only be
  *        one file and one directory, they are replaced if already set.
  *
- * @param[in] crl_file_path Path to a CRL store file in PEM format. Can be NULL.
- * @param[in] crl_dir_path Path to a CRL store hashed directory (c_rehash utility
- *                         can be used to create hashes) with PEM files. Can be NULL.
+ * @param[in] crl_file Path to a CRL store file in PEM format. Can be NULL.
+ * @param[in] crl_dir Path to a CRL store hashed directory (c_rehash utility
+ *                    can be used to create hashes) with PEM files. Can be NULL.
  * @return 0 on success, -1 on error.
  */
-int nc_server_tls_ch_set_crl_locations(const char *crl_file_path, const char *crl_dir_path);
+int nc_server_tls_ch_set_crl_paths(const char *crl_file, const char *crl_dir);
 
 /**
  * @brief Destroy and clean Call Home CRLs. Call Home certificates, private keys,
@@ -245,6 +233,6 @@ int nc_server_tls_ch_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAP
  */
 void nc_server_tls_ch_clear_opts(void);
 
-#endif /* ENABLE_TLS */
+#endif /* NC_ENABLED_TLS */
 
 #endif /* NC_SESSION_SERVER_CH_H_ */

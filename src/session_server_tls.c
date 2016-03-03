@@ -5,19 +5,11 @@
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of the Company nor the names of its contributors
- *    may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *     https://opensource.org/licenses/BSD-3-Clause
  */
 
 #define _GNU_SOURCE
@@ -59,6 +51,11 @@ asn1time_to_str(ASN1_TIME *t)
     ASN1_TIME_print(bio, t);
     n = BIO_pending(bio);
     cp = malloc(n + 1);
+    if (!cp) {
+        ERRMEM;
+        BIO_free(bio);
+        return NULL;
+    }
     n = BIO_read(bio, cp, n);
     if (n < 0) {
         BIO_free(bio);
@@ -76,6 +73,10 @@ digest_to_str(const unsigned char *digest, unsigned int dig_len, char **str)
     unsigned int i;
 
     *str = malloc(dig_len * 3);
+    if (!*str) {
+        ERRMEM;
+        return;
+    }
     for (i = 0; i < dig_len - 1; ++i) {
         sprintf((*str) + (i * 3), "%02x:", digest[i]);
     }
@@ -202,6 +203,10 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
             *strchr(common_name, '/') = '\0';
         }
         *username = strdup(common_name);
+        if (!*username) {
+            ERRMEM;
+            return 1;
+        }
         free(subject);
     } else {
         /* retrieve subjectAltName's rfc822Name (email), dNSName and iPAddress values */
@@ -219,6 +224,10 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
             if ((map_type == NC_TLS_CTN_SAN_ANY || map_type == NC_TLS_CTN_SAN_RFC822_NAME) &&
                     san_name->type == GEN_EMAIL) {
                 *username = strdup((char *)ASN1_STRING_data(san_name->d.rfc822Name));
+                if (!*username) {
+                    ERRMEM;
+                    return 1;
+                }
                 break;
             }
 
@@ -226,6 +235,10 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
             if ((map_type == NC_TLS_CTN_SAN_ANY || map_type == NC_TLS_CTN_SAN_DNS_NAME) &&
                     san_name->type == GEN_DNS) {
                 *username = strdup((char *)ASN1_STRING_data(san_name->d.dNSName));
+                if (!*username) {
+                    ERRMEM;
+                    return 1;
+                }
                 break;
             }
 
@@ -291,6 +304,11 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
     unsigned int buf_len = 64;
     int ret = 0;
     struct nc_ctn *ctn;
+
+    if (!buf) {
+        ERRMEM;
+        return -1;
+    }
 
     if (!ctn_first || !cert || !map_type || !name) {
         free(buf);
@@ -473,7 +491,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         return 0;
     }
 
-    opts = session->ti_opts;
+    opts = session->data;
 
     /* get the last certificate, that is the peer (client) certificate */
     if (!session->tls_cert) {
@@ -626,9 +644,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
 
     /* cert-to-name match, now to extract the specific field from the peer cert */
     if (map_type == NC_TLS_CTN_SPECIFIED) {
-        nc_ctx_lock(-1, NULL);
         session->username = lydict_insert(server_opts.ctx, username, 0);
-        nc_ctx_unlock();
     } else {
         rc = nc_tls_ctn_get_username_from_cert(session->tls_cert, map_type, &cp);
         if (rc) {
@@ -637,9 +653,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
             }
             goto fail;
         }
-        nc_ctx_lock(-1, NULL);
         session->username = lydict_insert_zc(server_opts.ctx, cp);
-        nc_ctx_unlock();
     }
 
     VRB("Cert verify CTN: new client username recognized as \"%s\".", session->username);
@@ -1328,11 +1342,13 @@ nc_server_tls_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE m
     }
 
     new = malloc(sizeof *new);
+    if (!new) {
+        ERRMEM;
+        return -1;
+    }
 
-    nc_ctx_lock(-1, NULL);
     new->fingerprint = lydict_insert(server_opts.ctx, fingerprint, 0);
     new->name = lydict_insert(server_opts.ctx, name, 0);
-    nc_ctx_unlock();
     new->id = id;
     new->map_type = map_type;
     new->next = NULL;
@@ -1394,7 +1410,6 @@ nc_server_tls_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE ma
 
     if ((id < 0) && !fingerprint && !map_type && !name) {
         ctn = opts->ctn;
-        nc_ctx_lock(-1, NULL);
         while (ctn) {
             lydict_remove(server_opts.ctx, ctn->fingerprint);
             lydict_remove(server_opts.ctx, ctn->name);
@@ -1405,7 +1420,6 @@ nc_server_tls_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE ma
 
             ret = 0;
         }
-        nc_ctx_unlock();
         opts->ctn = NULL;
     } else {
         prev = NULL;
@@ -1415,10 +1429,8 @@ nc_server_tls_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE ma
                     && (!fingerprint || !strcmp(ctn->fingerprint, fingerprint))
                     && (!map_type || (ctn->map_type == map_type))
                     && (!name || (ctn->name && !strcmp(ctn->name, name)))) {
-                nc_ctx_lock(-1, NULL);
                 lydict_remove(server_opts.ctx, ctn->fingerprint);
                 lydict_remove(server_opts.ctx, ctn->name);
-                nc_ctx_unlock();
 
                 if (prev) {
                     prev->next = ctn->next;
@@ -1498,53 +1510,20 @@ nc_tls_make_verify_key(void)
 }
 
 API int
-nc_connect_callhome_tls(const char *host, uint16_t port, int timeout, struct nc_session **session)
+nc_connect_callhome_tls(const char *host, uint16_t port, struct nc_session **session)
 {
-    return nc_connect_callhome(host, port, NC_TI_OPENSSL, timeout, session);
+    return nc_connect_callhome(host, port, NC_TI_OPENSSL, session);
 }
 
 int
 nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
 {
     struct nc_server_tls_opts *opts;
-    struct pollfd pfd;
-    struct timespec old_ts, new_ts;
-    int ret, elapsed = 0;
+    int ret, elapsed_usec = 0;
 
-    opts = session->ti_opts;
+    opts = session->data;
 
-    pfd.fd = sock;
-    pfd.events = POLLIN;
-    pfd.revents = 0;
-
-    if (timeout > 0) {
-        clock_gettime(CLOCK_MONOTONIC_RAW, &old_ts);
-    }
-
-    /* poll for a new connection */
-    errno = 0;
-    ret = poll(&pfd, 1, timeout);
-    if (!ret) {
-        /* we timeouted */
-        close(sock);
-        return 0;
-    } else if (ret == -1) {
-        ERR("poll failed (%s).", strerror(errno));
-        close(sock);
-        return -1;
-    }
-
-    if (timeout > 0) {
-        /* decrease timeout */
-        clock_gettime(CLOCK_MONOTONIC_RAW, &new_ts);
-
-        elapsed = (new_ts.tv_sec - old_ts.tv_sec) * 1000;
-        elapsed += (new_ts.tv_nsec - old_ts.tv_nsec) / 1000000;
-    }
-
-    /* data waiting, prepare session */
     session->ti_type = NC_TI_OPENSSL;
-
     session->ti.tls = SSL_new(opts->tls_ctx);
 
     if (!session->ti.tls) {
@@ -1560,7 +1539,14 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     pthread_once(&verify_once, nc_tls_make_verify_key);
     pthread_setspecific(verify_key, session);
 
-    ret = SSL_accept(session->ti.tls);
+    while (((ret = SSL_accept(session->ti.tls)) == -1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
+        usleep(NC_TIMEOUT_STEP);
+        elapsed_usec += NC_TIMEOUT_STEP;
+        if ((timeout > -1) && (elapsed_usec / 1000 >= timeout)) {
+            ERR("SSL_accept timeout.");
+            return 0;
+        }
+    }
 
     if (ret != 1) {
         switch (SSL_get_error(session->ti.tls, ret)) {

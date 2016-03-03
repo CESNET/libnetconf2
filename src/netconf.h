@@ -5,19 +5,11 @@
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of the Company nor the names of its contributors
- *    may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *     https://opensource.org/licenses/BSD-3-Clause
  */
 
 #ifndef NC_NETCONF_H_
@@ -42,8 +34,10 @@ extern "C" {
 /** @brief Default NETCONF over TLS Call Home port */
 #define NC_PORT_CH_TLS 6667
 
-/** @brief Microseconds after which tasks are repeated until the full timeout elapses */
-#define NC_TIMEOUT_STEP 100
+/** @brief Microseconds after which tasks are repeated until the full timeout elapses.
+ *         A second (1000 000) should be divisible by this number without remain.
+ */
+#define NC_TIMEOUT_STEP 20
 
 /**
  * @brief Enumeration of reasons of the NETCONF session termination as defined in RFC 6470.
@@ -113,81 +107,19 @@ typedef enum NC_PARAMTYPE {
     NC_PARAMTYPE_DUP_AND_FREE /**< make a copy of the argument, free afterwards */
 } NC_PARAMTYPE;
 
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 /**
  * @brief Free all the dynamically allocated thread-specific libssl/libcrypto
  *        resources.
  *
- *        This function should be called only if any of #nc_ssh_init(), #nc_tls_init(),
- *        or #nc_ssh_tls_init() was called. Call it in every thread your application
- *        creates just before the thread exits. In the last thread (usually the main one)
- *        call only #nc_ssh_destroy(), #nc_ssh_tls_destroy(), or #nc_tls_destroy,
- *        depending on what you used for initialization.
+ *        This function should be called only if init was called. Call it in every
+ *        thread your application creates just before the thread exits. In the last thread
+ *        (usually the main one) call only nc_destroy().
  */
 void nc_thread_destroy(void);
 
-#endif /* ENABLE_SSH || ENABLE_TLS */
-
-#if defined(ENABLE_SSH) && defined(ENABLE_TLS)
-
-/**
- * @brief Initialize both libssh and libssl/libcrypto libraries for thread-safe usage.
- *        Call this function even if you, for instance, will use only SSH transport,
- *        but want to use some libssl/libcrypto functions in your application.
- *
- *        Must be called before calling any libnetconf2 SSH and/or TLS function.
- */
-void nc_ssh_tls_init(void);
-
-/**
- * @brief Free all the dynamically allocated libssh and libssl/libcrypto resources.
- *
- *        No libnetconf2 SSH/TLS, libssh, and libcrypto/libssl function should be
- *        called afterwards.
- */
-void nc_ssh_tls_destroy(void);
-
-#endif /* ENABLE_SSH && ENABLE_TLS */
-
-#ifdef ENABLE_SSH
-
-/**
- * @brief Initialize libssh for thread-safe usage. If you plan to use libcrypto/
- *        /libssl in your application as well, please call #nc_ssh_tls_init()
- *        instead.
- *
- *        Must be called before calling any libnetconf2 SSH function.
- */
-void nc_ssh_init(void);
-
-/**
- * @brief Free all the dynamically allocated libssh resources.
- *
- *        No libnetconf2 SSH and libssh function should be called afterwards.
- */
-void nc_ssh_destroy(void);
-
-#endif /* ENABLE_SSH */
-
-#ifdef ENABLE_TLS
-
-/**
- * @brief Initialize libssl/libcrypto for thread-safe usage. If you plan to use libssh
- *        in your application as well, please call #nc_ssh_tls_init() instead.
- *
- *        Must be called before calling any libnetconf2 TLS function.
- */
-void nc_tls_init(void);
-
-/**
- * @brief Free all the dynamically allocated libssl/libcrypto resources.
- *
- *        No libnetconf2 TLS and libssl/libcrypto function should be called afterwards.
- */
-void nc_tls_destroy(void);
-
-#endif /* ENABLE_TLS */
+#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
 /**
  * @brief Transform given time_t (seconds since the epoch) into the RFC 3339 format

@@ -1,9 +1,11 @@
-# - Try to find LibVAL
+# - Try to find LibNETCONF2
 # Once done this will define
 #
-#  LIBVAL_FOUND - system has LibVAL
-#  LIBVAL_INCLUDE_DIRS - the LibVAL include directory
-#  LIBVAL_LIBRARIES - link these to use LibVAL
+#  LIBNETCONF2_FOUND - system has LibNETCONF2
+#  LIBNETCONF2_INCLUDE_DIRS - the LibNETCONF2 include directory
+#  LIBNETCONF2_LIBRARIES - Link these to use LibNETCONF2
+#  LIBNETCONF2_ENABLED_SSH - LibNETCONF2 was compiled with SSH support
+#  LIBNETCONF2_ENABLED_TLS - LibNETCONF2 was compiled with TLS support
 #
 #  Author Michal Vasko <mvasko@cesnet.cz>
 #  Copyright (c) 2015 CESNET, z.s.p.o.
@@ -32,18 +34,18 @@
 #  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-if (LIBVAL_LIBRARIES AND LIBVAL_INCLUDE_DIRS)
-  # in cache already
-  set(LIBVAL_FOUND TRUE)
-else (LIBVAL_LIBRARIES AND LIBVAL_INCLUDE_DIRS)
+INCLUDE(CheckSymbolExists)
 
-  find_path(LIBVAL_INCLUDE_DIR
+if (LIBNETCONF2_LIBRARIES AND LIBNETCONF2_INCLUDE_DIRS)
+  # in cache already
+  set(LIBNETCONF2_FOUND TRUE)
+else (LIBNETCONF2_LIBRARIES AND LIBNETCONF2_INCLUDE_DIRS)
+
+  find_path(LIBNETCONF2_INCLUDE_DIR
     NAMES
-      validator/validator.h
-      validator/resolver.h
-      validator/validator-compat.h
-      validator/val_dane.h
-      validator/val_errors.h
+      nc_client.h
+      nc_server.h
+      nc_transapi.h
     PATHS
       /usr/include
       /usr/local/include
@@ -53,10 +55,10 @@ else (LIBVAL_LIBRARIES AND LIBVAL_INCLUDE_DIRS)
       ${CMAKE_INSTALL_PREFIX}/include
   )
 
-  find_library(LIBVAL_LIBRARY
+  find_library(LIBNETCONF2_LIBRARY
     NAMES
-      libval-threads
-      val-threads
+      netconf2
+      libnetconf2
     PATHS
       /usr/lib
       /usr/lib64
@@ -68,32 +70,20 @@ else (LIBVAL_LIBRARIES AND LIBVAL_INCLUDE_DIRS)
       ${CMAKE_INSTALL_PREFIX}/lib
   )
 
-  find_library(LIBSRES_LIBRARY
-    NAMES
-      libsres
-      sres
-    PATHS
-      /usr/lib
-      /usr/lib64
-      /usr/local/lib
-      /usr/local/lib64
-      /opt/local/lib
-      /sw/lib
-      ${CMAKE_LIBRARY_PATH}
-      ${CMAKE_INSTALL_PREFIX}/lib
-  )
+  if (LIBNETCONF2_INCLUDE_DIR AND LIBNETCONF2_LIBRARY)
+    set(LIBNETCONF2_FOUND TRUE)
+    # check compile flags
+    check_symbol_exists("NC_ENABLED_SSH" "nc_client.h" LIBNETCONF2_ENABLED_SSH)
+    check_symbol_exists("NC_ENABLED_TLS" "nc_client.h" LIBNETCONF2_ENABLED_TLS)
+  else (LIBNETCONF2_INCLUDE_DIR AND LIBNETCONF2_LIBRARY)
+    set(LIBNETCONF2_FOUND FALSE)
+  endif (LIBNETCONF2_INCLUDE_DIR AND LIBNETCONF2_LIBRARY)
 
-  if (LIBVAL_INCLUDE_DIR AND LIBVAL_LIBRARY AND LIBSRES_LIBRARY)
-    set(LIBVAL_FOUND TRUE)
-  else (LIBVAL_INCLUDE_DIR AND LIBVAL_LIBRARY AND LIBSRES_LIBRARY)
-    set(LIBVAL_FOUND FALSE)
-  endif (LIBVAL_INCLUDE_DIR AND LIBVAL_LIBRARY AND LIBSRES_LIBRARY)
+  set(LIBNETCONF2_INCLUDE_DIRS ${LIBNETCONF2_INCLUDE_DIR})
+  set(LIBNETCONF2_LIBRARIES ${LIBNETCONF2_LIBRARY})
 
-  set(LIBVAL_INCLUDE_DIRS ${LIBVAL_INCLUDE_DIR})
-  set(LIBVAL_LIBRARIES ${LIBSRES_LIBRARY} ${LIBVAL_LIBRARY})
+  # show the LIBNETCONF2_INCLUDE_DIRS and LIBNETCONF2_LIBRARIES variables only in the advanced view
+  mark_as_advanced(LIBNETCONF2_INCLUDE_DIRS LIBNETCONF2_LIBRARIES)
 
-  # show the LIBVAL_INCLUDE_DIRS and LIBVAL_LIBRARIES variables only in the advanced view
-  mark_as_advanced(LIBVAL_INCLUDE_DIRS LIBVAL_LIBRARIES)
-
-endif (LIBVAL_LIBRARIES AND LIBVAL_INCLUDE_DIRS)
+endif (LIBNETCONF2_LIBRARIES AND LIBNETCONF2_INCLUDE_DIRS)
 

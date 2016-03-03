@@ -5,19 +5,11 @@
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of the Company nor the names of its contributors
- *    may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *     https://opensource.org/licenses/BSD-3-Clause
  */
 
 #include <errno.h>
@@ -45,6 +37,7 @@
 
 struct nc_session *server_session;
 struct nc_session *client_session;
+struct ly_ctx *ctx;
 
 struct nc_server_reply *
 my_get_rpc_clb(struct lyd_node *rpc, struct nc_session *session)
@@ -77,35 +70,10 @@ static int
 setup_sessions(void **state)
 {
     (void)state;
-    struct ly_ctx *ctx;
-    const struct lys_module *module;
-    const struct lys_node *node;
     int sock[2];
-
-    /* create ctx */
-    ctx = ly_ctx_new(TESTS_DIR"../schemas");
-    assert_non_null(ctx);
-
-    /* load modules */
-    module = ly_ctx_load_module(ctx, "ietf-netconf-acm", NULL);
-    assert_non_null(module);
-
-    module = ly_ctx_load_module(ctx, "ietf-netconf", NULL);
-    assert_non_null(module);
-
-    /* set RPC callbacks */
-    node = lys_get_node(module, "/get");
-    assert_non_null(node);
-    lys_set_private(node, my_get_rpc_clb);
-
-    node = lys_get_node(module, "/get-config");
-    assert_non_null(node);
-    lys_set_private(node, my_getconfig_rpc_clb);
 
     /* create communication channel */
     socketpair(AF_UNIX, SOCK_STREAM, 0, sock);
-
-    nc_server_init(ctx);
 
     /* create server session */
     server_session = calloc(1, sizeof *server_session);
@@ -141,10 +109,6 @@ static int
 teardown_sessions(void **state)
 {
     (void)state;
-
-    nc_server_destroy();
-
-    ly_ctx_destroy(server_session->ctx, NULL);
 
     close(server_session->ti.fd.in);
     pthread_mutex_destroy(server_session->ti_lock);
@@ -188,7 +152,7 @@ test_send_recv_ok(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, &reply);
+    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, 0, &reply);
     assert_int_equal(msgtype, NC_MSG_REPLY);
 
     nc_rpc_free(rpc);
@@ -247,7 +211,7 @@ test_send_recv_error(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, &reply);
+    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, 0, &reply);
     assert_int_equal(msgtype, NC_MSG_REPLY);
 
     nc_rpc_free(rpc);
@@ -307,7 +271,7 @@ test_send_recv_data(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, &reply);
+    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, 0, &reply);
     assert_int_equal(msgtype, NC_MSG_REPLY);
 
     nc_rpc_free(rpc);
@@ -347,6 +311,32 @@ test_send_recv_notif(void)
 int
 main(void)
 {
+    int ret;
+    const struct lys_module *module;
+    const struct lys_node *node;
+
+    /* create ctx */
+    ctx = ly_ctx_new(TESTS_DIR"../schemas");
+    assert_non_null(ctx);
+
+    /* load modules */
+    module = ly_ctx_load_module(ctx, "ietf-netconf-acm", NULL);
+    assert_non_null(module);
+
+    module = ly_ctx_load_module(ctx, "ietf-netconf", NULL);
+    assert_non_null(module);
+
+    /* set RPC callbacks */
+    node = ly_ctx_get_node(module->ctx, "/ietf-netconf:get");
+    assert_non_null(node);
+    lys_set_private(node, my_get_rpc_clb);
+
+    node = ly_ctx_get_node(module->ctx, "/ietf-netconf:get-config");
+    assert_non_null(node);
+    lys_set_private(node, my_getconfig_rpc_clb);
+
+    nc_server_init(ctx);
+
     const struct CMUnitTest comm[] = {
         cmocka_unit_test_setup_teardown(test_send_recv_ok_10, setup_sessions, teardown_sessions),
         cmocka_unit_test_setup_teardown(test_send_recv_error_10, setup_sessions, teardown_sessions),
@@ -356,5 +346,10 @@ main(void)
         cmocka_unit_test_setup_teardown(test_send_recv_data_11, setup_sessions, teardown_sessions)
     };
 
-    return cmocka_run_group_tests(comm, NULL, NULL);
+    ret = cmocka_run_group_tests(comm, NULL, NULL);
+
+    nc_server_destroy();
+    ly_ctx_destroy(ctx, NULL);
+
+    return ret;
 }

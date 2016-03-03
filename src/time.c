@@ -5,19 +5,11 @@
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of the Company nor the names of its contributors
- *    may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *     https://opensource.org/licenses/BSD-3-Clause
  */
 
 #define _GNU_SOURCE
@@ -44,6 +36,10 @@ nc_datetime2time(const char *datetime)
     }
 
     dt = strdup(datetime);
+    if (!dt) {
+        ERRMEM;
+        return -1;
+    }
 
     if (strlen(dt) < 20 || dt[4] != '-' || dt[7] != '-' || dt[13] != ':' || dt[16] != ':') {
         ERR("Wrong date time format not compliant to RFC 3339.");
@@ -103,10 +99,22 @@ nc_time2datetime(time_t time, const char *tz)
     char *tz_origin;
 
     if (tz) {
-        tz_origin = secure_getenv("TZ");
+        tz_origin = getenv("TZ");
+        if (tz_origin) {
+            tz_origin = strdup(tz_origin);
+            if (!tz_origin) {
+                ERRMEM;
+                return NULL;
+            }
+        }
         setenv("TZ", tz, 1);
         tm_ret = localtime_r(&time, &tm);
-        setenv("TZ", tz_origin, 1);
+        if (tz_origin) {
+            setenv("TZ", tz_origin, 1);
+            free(tz_origin);
+        } else {
+            unsetenv("TZ");
+        }
 
         if (!tm_ret) {
             return NULL;

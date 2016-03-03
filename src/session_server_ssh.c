@@ -5,19 +5,11 @@
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of the Company nor the names of its contributors
- *    may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *     https://opensource.org/licenses/BSD-3-Clause
  */
 
 #define _GNU_SOURCE
@@ -321,12 +313,13 @@ nc_server_ssh_add_authkey(const char *pubkey_path, const char *username, struct 
     }
 
     ++opts->authkey_count;
-    opts->authkeys = realloc(opts->authkeys, opts->authkey_count * sizeof *opts->authkeys);
-
-    nc_ctx_lock(-1, NULL);
+    opts->authkeys = nc_realloc(opts->authkeys, opts->authkey_count * sizeof *opts->authkeys);
+    if (!opts->authkeys) {
+        ERRMEM;
+        return -1;
+    }
     opts->authkeys[opts->authkey_count - 1].path = lydict_insert(server_opts.ctx, pubkey_path, 0);
     opts->authkeys[opts->authkey_count - 1].username = lydict_insert(server_opts.ctx, username, 0);
-    nc_ctx_unlock();
 
     return 0;
 }
@@ -370,14 +363,12 @@ nc_server_ssh_del_authkey(const char *pubkey_path, const char *username, struct 
     int ret = -1;
 
     if (!pubkey_path && !username) {
-        nc_ctx_lock(-1, NULL);
         for (i = 0; i < opts->authkey_count; ++i) {
             lydict_remove(server_opts.ctx, opts->authkeys[i].path);
             lydict_remove(server_opts.ctx, opts->authkeys[i].username);
 
             ret = 0;
         }
-        nc_ctx_unlock();
         free(opts->authkeys);
         opts->authkeys = NULL;
         opts->authkey_count = 0;
@@ -385,10 +376,8 @@ nc_server_ssh_del_authkey(const char *pubkey_path, const char *username, struct 
         for (i = 0; i < opts->authkey_count; ++i) {
             if ((!pubkey_path || !strcmp(opts->authkeys[i].path, pubkey_path))
                     && (!username || !strcmp(opts->authkeys[i].username, username))) {
-                nc_ctx_lock(-1, NULL);
                 lydict_remove(server_opts.ctx, opts->authkeys[i].path);
                 lydict_remove(server_opts.ctx, opts->authkeys[i].username);
-                nc_ctx_unlock();
 
                 --opts->authkey_count;
                 if (i < opts->authkey_count) {
@@ -622,7 +611,7 @@ nc_sshcb_auth_pubkey(struct nc_session *session, ssh_message msg)
         return;
 
     } else if (signature_state == SSH_PUBLICKEY_STATE_NONE) {
-        if ((username = auth_pubkey_compare_key(session->ti_opts, ssh_message_auth_pubkey(msg))) == NULL) {
+        if ((username = auth_pubkey_compare_key(session->data, ssh_message_auth_pubkey(msg))) == NULL) {
             VRB("User \"%s\" tried to use an unknown (unauthorized) public key.", session->username);
 
         } else if (strcmp(session->username, username)) {
@@ -696,6 +685,10 @@ nc_sshcb_channel_subsystem(struct nc_session *session, ssh_channel channel, cons
     } else {
         /* additional channel subsystem request, new session is ready as far as SSH is concerned */
         new_session = calloc(1, sizeof *new_session);
+        if (!new_session) {
+            ERRMEM;
+            return -1;
+        }
 
         /* insert the new session */
         if (!session->ti.libssh.next) {
@@ -861,7 +854,7 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
             return 0;
         }
 
-        if (session->ssh_auth_attempts >= ((struct nc_server_ssh_opts *)session->ti_opts)->auth_attempts) {
+        if (session->ssh_auth_attempts >= ((struct nc_server_ssh_opts *)session->data)->auth_attempts) {
             /* too many failed attempts */
             ssh_message_reply_default(msg);
             return 0;
@@ -924,7 +917,7 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
 static int
 nc_open_netconf_channel(struct nc_session *session, int timeout)
 {
-    int elapsed_usec = 0, ret, elapsed;
+    int elapsed_usec = 0, ret;
 
     /* message callback is executed twice to give chance for the channel to be
      * created if timeout == 0 (it takes 2 messages, channel-open, subsystem-request) */
@@ -934,7 +927,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
             return -1;
         }
 
-        ret = nc_timedlock(session->ti_lock, timeout, NULL);
+        ret = nc_timedlock(session->ti_lock, timeout);
         if (ret != 1) {
             return ret;
         }
@@ -976,12 +969,10 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
             return -1;
         }
 
-        elapsed = 0;
-        ret = nc_timedlock(session->ti_lock, timeout, &elapsed);
+        ret = nc_timedlock(session->ti_lock, timeout);
         if (ret != 1) {
             return ret;
         }
-        elapsed_usec += elapsed * 1000;
 
         ret = ssh_execute_message_callbacks(session->ti.libssh.session);
         if (ret != SSH_OK) {
@@ -999,6 +990,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
 
         if ((timeout != -1) && (elapsed_usec / 1000 >= timeout)) {
             /* timeout */
+            ERR("Failed to start \"netconf\" SSH subsystem for too long, disconnecting.");
             break;
         }
 
@@ -1012,15 +1004,12 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
 /* ret 0 - timeout, 1 channel has data, 2 some other channel has data,
  * 3 status change, 4 new SSH message, 5 new NETCONF SSH channel, -1 error */
 int
-nc_ssh_pollin(struct nc_session *session, int *timeout)
+nc_ssh_pollin(struct nc_session *session, int timeout)
 {
-    int ret, elapsed = 0;
+    int ret;
     struct nc_session *new;
 
-    ret = nc_timedlock(session->ti_lock, *timeout, &elapsed);
-    if (*timeout > 0) {
-        *timeout -= elapsed;
-    }
+    ret = nc_timedlock(session->ti_lock, timeout);
 
     if (ret != 1) {
         return ret;
@@ -1077,9 +1066,9 @@ nc_ssh_pollin(struct nc_session *session, int *timeout)
 }
 
 API int
-nc_connect_callhome_ssh(const char *host, uint16_t port, int timeout, struct nc_session **session)
+nc_connect_callhome_ssh(const char *host, uint16_t port, struct nc_session **session)
 {
-    return nc_connect_callhome(host, port, NC_TI_LIBSSH, timeout, session);
+    return nc_connect_callhome(host, port, NC_TI_LIBSSH, session);
 }
 
 int
@@ -1088,7 +1077,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     struct nc_server_ssh_opts *opts;
     int libssh_auth_methods = 0, elapsed_usec = 0, ret;
 
-    opts = session->ti_opts;
+    opts = session->data;
 
     /* other transport-specific data */
     session->ti_type = NC_TI_LIBSSH;
@@ -1120,12 +1109,26 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         return -1;
     }
 
-    if (ssh_handle_key_exchange(session->ti.libssh.session) != SSH_OK) {
+    ssh_set_blocking(session->ti.libssh.session, 0);
+
+    while ((ret = ssh_handle_key_exchange(session->ti.libssh.session)) == SSH_AGAIN) {
+        /* this tends to take longer */
+        usleep(NC_TIMEOUT_STEP * 20);
+        elapsed_usec += NC_TIMEOUT_STEP * 20;
+        if ((timeout > -1) && (elapsed_usec / 1000 >= timeout)) {
+            break;
+        }
+    }
+    if (ret == SSH_AGAIN) {
+        ERR("SSH key exchange timeout.");
+        return 0;
+    } else if (ret != SSH_OK) {
         ERR("SSH key exchange error (%s).", ssh_get_error(session->ti.libssh.session));
         return -1;
     }
 
     /* authenticate */
+    elapsed_usec = 0;
     do {
         if (!nc_session_is_connected(session)) {
             ERR("Communication socket unexpectedly closed (libssh).");
@@ -1144,19 +1147,16 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 
         usleep(NC_TIMEOUT_STEP);
         elapsed_usec += NC_TIMEOUT_STEP;
-    } while ((timeout == -1) || (timeout && (elapsed_usec / 1000 < timeout)));
+    } while (!opts->auth_timeout || (elapsed_usec / 1000000 < opts->auth_timeout));
 
     if (!(session->flags & NC_SESSION_SSH_AUTHENTICATED)) {
         /* timeout */
+        ERR("Client failed to authenticate for too long, disconnecting.");
         return 0;
     }
 
-    if (timeout > 0) {
-        timeout -= elapsed_usec / 1000;
-    }
-
     /* open channel */
-    ret = nc_open_netconf_channel(session, timeout);
+    ret = nc_open_netconf_channel(session, opts->auth_timeout ? (opts->auth_timeout * 1000 - elapsed_usec / 1000) : -1);
     if (ret < 1) {
         return ret;
     }
@@ -1176,6 +1176,9 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
         ERRARG;
         return -1;
     }
+
+    /* LOCK */
+    pthread_mutex_lock(&ps->lock);
 
     for (i = 0; i < ps->session_count; ++i) {
         if ((ps->sessions[i]->status == NC_STATUS_RUNNING) && (ps->sessions[i]->ti_type == NC_TI_LIBSSH)
@@ -1198,6 +1201,9 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
         }
     }
 
+    /* UNLOCK */
+    pthread_mutex_unlock(&ps->lock);
+
     if (!new_session) {
         ERR("No session with a NETCONF SSH channel ready was found.");
         return -1;
@@ -1212,6 +1218,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     if (nc_handshake(new_session)) {
         return -1;
     }
+
     new_session->status = NC_STATUS_RUNNING;
     *session = new_session;
 

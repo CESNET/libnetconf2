@@ -5,19 +5,11 @@
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of the Company nor the names of its contributors
- *    may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *     https://opensource.org/licenses/BSD-3-Clause
  */
 
 #include <stdarg.h>
@@ -39,7 +31,7 @@ nc_verbosity(NC_VERB_LEVEL level)
 {
     verbose_level = level;
     ly_verb((LY_LOG_LEVEL)level);
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     ssh_set_log_level(level);
 #endif
 }
@@ -82,9 +74,15 @@ prv_printf(NC_VERB_LEVEL level, const char *format, ...)
     va_end(ap);
 }
 
+static void
+nc_ly_log_clb(LY_LOG_LEVEL lvl, const char *msg, const char *UNUSED(path))
+{
+    print_clb((NC_VERB_LEVEL)lvl, msg);
+}
+
 API void
 nc_set_print_clb(void (*clb)(NC_VERB_LEVEL, const char *))
 {
     print_clb = clb;
-    ly_set_log_clb((void (*)(LY_LOG_LEVEL, const char *))clb);
+    ly_set_log_clb(nc_ly_log_clb, 0);
 }

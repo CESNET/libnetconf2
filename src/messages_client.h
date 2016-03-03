@@ -6,19 +6,11 @@
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of the Company nor the names of its contributors
- *    may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *     https://opensource.org/licenses/BSD-3-Clause
  */
 
 #ifndef NC_MESSAGES_CLIENT_H_
@@ -407,7 +399,7 @@ struct nc_rpc *nc_rpc_cancel(const char *persist_id, NC_PARAMTYPE paramtype);
  * needed NETCONF capabilities for the RPC.
  *
  * @param[in] source Source datastore being validated.
- * @param[in] url_or_config Usedn instead \p source if the source is an URL or a config.
+ * @param[in] url_or_config Used instead \p source if the source is an URL or a config.
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */

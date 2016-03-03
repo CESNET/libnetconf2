@@ -5,25 +5,18 @@
  *
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of the Company nor the names of its contributors
- *    may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *     https://opensource.org/licenses/BSD-3-Clause
  */
 
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -216,7 +209,7 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
         return NULL;
     }
 
-    msg = nc_recv_reply(session, rpc, msgid, 250, &reply);
+    msg = nc_recv_reply(session, rpc, msgid, 250, 0, &reply);
     nc_rpc_free(rpc);
     if (msg == NC_MSG_WOULDBLOCK) {
         ERR("Session %u: timeout for receiving reply to a <get-schema> expired.", session->id);
@@ -376,14 +369,14 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     return session;
 
 fail:
-    nc_session_free(session);
+    nc_session_free(session, NULL);
     return NULL;
 }
 
 int
 nc_sock_connect(const char* host, uint16_t port)
 {
-    int i, sock = -1;
+    int i, sock = -1, flags;
     struct addrinfo hints, *res_list, *res;
     char port_s[6]; /* length of string representation of short int */
 
@@ -416,6 +409,13 @@ nc_sock_connect(const char* host, uint16_t port)
             goto errloop;
         }
 
+        /* make the socket non-blocking */
+        if (((flags = fcntl(sock, F_GETFL)) == -1) || (fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
+            ERR("Fcntl failed (%s).", strerror(errno));
+            close(sock);
+            return -1;
+        }
+
         /* we're done, network connection established */
         break;
 errloop:
@@ -437,7 +437,7 @@ errloop:
 static NC_MSG_TYPE
 get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_elem **msg)
 {
-    int r, elapsed = 0;
+    int r;
     char *ptr;
     const char *str_msgid;
     uint64_t cur_msgid;
@@ -445,16 +445,13 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
     struct nc_msg_cont *cont, **cont_ptr;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
 
-    r = nc_timedlock(session->ti_lock, timeout, &elapsed);
+    r = nc_timedlock(session->ti_lock, timeout);
     if (r == -1) {
         /* error */
         return NC_MSG_ERROR;
     } else if (!r) {
         /* timeout */
         return NC_MSG_WOULDBLOCK;
-    }
-    if (timeout > 0) {
-        timeout -= elapsed;
     }
 
     /* try to get notification from the session's queue */
@@ -514,6 +511,11 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
             cont_ptr = &((*cont_ptr)->next);
         }
         *cont_ptr = malloc(sizeof **cont_ptr);
+        if (!*cont_ptr) {
+            ERRMEM;
+            lyxml_free(session->ctx, xml);
+            return NC_MSG_ERROR;
+        }
         (*cont_ptr)->msg = xml;
         (*cont_ptr)->next = NULL;
     }
@@ -533,6 +535,11 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
             cont_ptr = &((*cont_ptr)->next);
         }
         *cont_ptr = malloc(sizeof **cont_ptr);
+        if (!cont_ptr) {
+            ERRMEM;
+            lyxml_free(session->ctx, xml);
+            return NC_MSG_ERROR;
+        }
         (*cont_ptr)->msg = xml;
         (*cont_ptr)->next = NULL;
     }
@@ -663,15 +670,27 @@ parse_rpc_error(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_err *err)
                         }
                     } else if (!strcmp(info->name, "bad-attr")) {
                         ++err->attr_count;
-                        err->attr = realloc(err->attr, err->attr_count * sizeof *err->attr);
+                        err->attr = nc_realloc(err->attr, err->attr_count * sizeof *err->attr);
+                        if (!err->attr) {
+                            ERRMEM;
+                            return;
+                        }
                         err->attr[err->attr_count - 1] = lydict_insert(ctx, (info->content ? info->content : ""), 0);
                     } else if (!strcmp(info->name, "bad-element")) {
                         ++err->elem_count;
-                        err->elem = realloc(err->elem, err->elem_count * sizeof *err->elem);
+                        err->elem = nc_realloc(err->elem, err->elem_count * sizeof *err->elem);
+                        if (!err->elem) {
+                            ERRMEM;
+                            return;
+                        }
                         err->elem[err->elem_count - 1] = lydict_insert(ctx, (info->content ? info->content : ""), 0);
                     } else if (!strcmp(info->name, "bad-namespace")) {
                         ++err->ns_count;
-                        err->ns = realloc(err->ns, err->ns_count * sizeof *err->ns);
+                        err->ns = nc_realloc(err->ns, err->ns_count * sizeof *err->ns);
+                        if (!err->ns) {
+                            ERRMEM;
+                            return;
+                        }
                         err->ns[err->ns_count - 1] = lydict_insert(ctx, (info->content ? info->content : ""), 0);
                     } else {
                         if (info->content) {
@@ -684,7 +703,11 @@ parse_rpc_error(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_err *err)
                 } else {
                     lyxml_unlink(ctx, info);
                     ++err->other_count;
-                    err->other = realloc(err->other, err->other_count * sizeof *err->other);
+                    err->other = nc_realloc(err->other, err->other_count * sizeof *err->other);
+                    if (!err->other) {
+                        ERRMEM;
+                        return;
+                    }
                     err->other[err->other_count - 1] = info;
                 }
             }
@@ -699,11 +722,10 @@ parse_rpc_error(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_err *err)
 }
 
 static struct nc_reply *
-parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
+parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int parseroptions)
 {
     struct lyxml_elem *iter;
     const struct lys_node *schema = NULL;
-    const struct lys_module *mod;
     struct lyd_node *data = NULL;
     struct nc_client_reply_error *error_rpl;
     struct nc_reply_data *data_rpl;
@@ -735,8 +757,17 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
         }
 
         error_rpl = malloc(sizeof *error_rpl);
+        if (!error_rpl) {
+            ERRMEM;
+            return NULL;
+        }
         error_rpl->type = NC_RPL_ERROR;
         error_rpl->err = calloc(i, sizeof *error_rpl->err);
+        if (!error_rpl->err) {
+            ERRMEM;
+            free(error_rpl);
+            return NULL;
+        }
         error_rpl->count = i;
         error_rpl->ctx = ctx;
         reply = (struct nc_reply *)error_rpl;
@@ -754,6 +785,10 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
             return NULL;
         }
         reply = malloc(sizeof *reply);
+        if (!reply) {
+            ERRMEM;
+            return NULL;
+        }
         reply->type = NC_RPL_OK;
 
     /* some RPC output */
@@ -765,7 +800,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
             if (rpc_gen->has_data) {
                 schema = rpc_gen->content.data->schema;
             } else {
-                data = lyd_parse_mem(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC);
+                data = lyd_parse_mem(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | parseroptions);
                 if (!data) {
                     ERR("Failed to parse a generic RPC XML.");
                     return NULL;
@@ -782,9 +817,21 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
 
         case NC_RPC_GETCONFIG:
         case NC_RPC_GET:
+            if (!xml->child->child) {
+                /* we did not receive any data */
+                data_rpl = malloc(sizeof *data_rpl);
+                if (!data_rpl) {
+                    ERRMEM;
+                    return NULL;
+                }
+                data_rpl->type = NC_RPL_DATA;
+                data_rpl->data = NULL;
+                return (struct nc_reply *)data_rpl;
+            }
+
             /* special treatment */
             data = lyd_parse_xml(ctx, &xml->child->child, LYD_OPT_DESTRUCT
-                                 | (rpc->type == NC_RPC_GETCONFIG ? LYD_OPT_GETCONFIG : LYD_OPT_GET));
+                                 | (rpc->type == NC_RPC_GETCONFIG ? LYD_OPT_GETCONFIG : LYD_OPT_GET) | parseroptions);
             if (!data) {
                 ERR("Failed to parse <%s> reply.", (rpc->type == NC_RPC_GETCONFIG ? "get-config" : "get"));
                 return NULL;
@@ -792,10 +839,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
             break;
 
         case NC_RPC_GETSCHEMA:
-            mod = ly_ctx_get_module(ctx, "ietf-netconf-monitoring", NULL);
-            if (mod) {
-                schema = lys_get_node(mod, "/get-schema");
-            }
+            schema = ly_ctx_get_node(ctx, "/ietf-netconf-monitoring:get-schema");
             if (!schema) {
                 ERRINT;
                 return NULL;
@@ -822,9 +866,13 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
         }
 
         data_rpl = malloc(sizeof *data_rpl);
+        if (!data_rpl) {
+            ERRMEM;
+            return NULL;
+        }
         data_rpl->type = NC_RPL_DATA;
         if (!data) {
-            data_rpl->data = lyd_parse_xml(ctx, &xml->child, LYD_OPT_DESTRUCT | LYD_OPT_RPCREPLY, schema);
+            data_rpl->data = lyd_parse_xml(ctx, &xml->child, LYD_OPT_DESTRUCT | LYD_OPT_RPCREPLY | parseroptions, schema);
         } else {
             /* <get>, <get-config> */
             data_rpl->data = data;
@@ -840,7 +888,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc)
     return reply;
 }
 
-#if defined(ENABLE_SSH) || defined(ENABLE_TLS)
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 int
 nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
@@ -858,9 +906,19 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IM
     }
 
     ++client_opts.ch_bind_count;
-    client_opts.ch_binds = realloc(client_opts.ch_binds, client_opts.ch_bind_count * sizeof *client_opts.ch_binds);
+    client_opts.ch_binds = nc_realloc(client_opts.ch_binds, client_opts.ch_bind_count * sizeof *client_opts.ch_binds);
+    if (!client_opts.ch_binds) {
+        ERRMEM;
+        close(sock);
+        return -1;
+    }
 
     client_opts.ch_binds[client_opts.ch_bind_count - 1].address = strdup(address);
+    if (!client_opts.ch_binds[client_opts.ch_bind_count - 1].address) {
+        ERRMEM;
+        close(sock);
+        return -1;
+    }
     client_opts.ch_binds[client_opts.ch_bind_count - 1].port = port;
     client_opts.ch_binds[client_opts.ch_bind_count - 1].sock = sock;
     client_opts.ch_binds[client_opts.ch_bind_count - 1].ti = ti;
@@ -922,14 +980,14 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
         return sock;
     }
 
-#ifdef ENABLE_SSH
+#ifdef NC_ENABLED_SSH
     if (client_opts.ch_binds[idx].ti == NC_TI_LIBSSH) {
-        *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx);
+        *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
     } else
 #endif
-#ifdef ENABLE_TLS
+#ifdef NC_ENABLED_TLS
     if (client_opts.ch_binds[idx].ti == NC_TI_OPENSSL) {
-        *session = nc_accept_callhome_tls_sock(sock, host, port, ctx);
+        *session = nc_accept_callhome_tls_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
     } else
 #endif
     {
@@ -946,27 +1004,50 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
     return 1;
 }
 
-#endif /* ENABLE_SSH || ENABLE_TLS */
+#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
+
+API void
+nc_client_init(void)
+{
+    nc_init();
+}
+
+API void
+nc_client_destroy(void)
+{
+    nc_client_schema_searchpath(NULL);
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+    nc_client_ch_del_bind(NULL, 0, 0);
+#endif
+#ifdef NC_ENABLED_SSH
+    nc_client_ssh_destroy_opts();
+#endif
+#ifdef NC_ENABLED_TLS
+    nc_client_tls_destroy_opts();
+#endif
+    nc_destroy();
+}
 
 API NC_MSG_TYPE
-nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout, struct nc_reply **reply)
+nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout, int parseroptions, struct nc_reply **reply)
 {
     struct lyxml_elem *xml;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
 
-    if (!session || !rpc || !reply) {
+    if (!session || !rpc || !reply || (parseroptions & LYD_OPT_TYPEMASK)) {
         ERRARG;
         return NC_MSG_ERROR;
     } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR("Session %u: invalid session to receive RPC replies.", session->id);
         return NC_MSG_ERROR;
     }
+    parseroptions &= ~(LYD_OPT_DESTRUCT | LYD_OPT_NOSIBLINGS);
     *reply = NULL;
 
     msgtype = get_msg(session, timeout, msgid, &xml);
 
     if (msgtype == NC_MSG_REPLY) {
-        *reply = parse_reply(session->ctx, xml, rpc);
+        *reply = parse_reply(session->ctx, xml, rpc, parseroptions);
         lyxml_free(session->ctx, xml);
         if (!(*reply)) {
             return NC_MSG_ERROR;
@@ -994,6 +1075,11 @@ nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
 
     if (msgtype == NC_MSG_NOTIF) {
         *notif = calloc(1, sizeof **notif);
+        if (!*notif) {
+            ERRMEM;
+            lyxml_free(session->ctx, xml);
+            return NC_MSG_ERROR;
+        }
 
         /* eventTime */
         LY_TREE_FOR(xml->child, ev_time) {
@@ -1081,11 +1167,20 @@ nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_s
     }
 
     ntarg = malloc(sizeof *ntarg);
+    if (!ntarg) {
+        ERRMEM;
+        return -1;
+    }
     ntarg->session = session;
     ntarg->notif_clb = notif_clb;
 
     /* just so that nc_recv_notif_thread() does not immediately exit, the value does not matter */
     session->ntf_tid = malloc(sizeof *session->ntf_tid);
+    if (!session->ntf_tid) {
+        ERRMEM;
+        free(ntarg);
+        return -1;
+    }
 
     ret = pthread_create((pthread_t *)session->ntf_tid, NULL, nc_recv_notif_thread, ntarg);
     if (ret) {
@@ -1118,7 +1213,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     struct nc_rpc_getschema *rpc_gs;
     struct nc_rpc_subscribe *rpc_sub;
     struct lyd_node *data, *node;
-    const struct lys_module *ietfnc, *ietfncmon, *notifs, *ietfncwd = NULL;
+    const struct lys_module *ietfnc = NULL, *ietfncmon, *notifs, *ietfncwd = NULL;
     char str[11];
     uint64_t cur_msgid;
 
@@ -1570,7 +1665,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         return NC_MSG_ERROR;
     }
 
-    ret = nc_timedlock(session->ti_lock, timeout, NULL);
+    ret = nc_timedlock(session->ti_lock, timeout);
     if (ret == -1) {
         /* error */
         r = NC_MSG_ERROR;
