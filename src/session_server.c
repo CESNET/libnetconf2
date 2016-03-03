@@ -910,7 +910,7 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
     pthread_mutex_lock(&ps->lock);
 
     if (all) {
-        for (i = 0; i < ps->session_count; ) {
+        for (i = 0; i < ps->session_count; i++) {
             nc_session_free(ps->sessions[i], data_free);
         }
         free(ps->sessions);
