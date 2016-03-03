@@ -412,6 +412,7 @@ nc_sock_connect(const char* host, uint16_t port)
         /* make the socket non-blocking */
         if (((flags = fcntl(sock, F_GETFL)) == -1) || (fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
             ERR("Fcntl failed (%s).", strerror(errno));
+            close(sock);
             return -1;
         }
 
@@ -911,12 +912,14 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IM
     client_opts.ch_binds = nc_realloc(client_opts.ch_binds, client_opts.ch_bind_count * sizeof *client_opts.ch_binds);
     if (!client_opts.ch_binds) {
         ERRMEM;
+        close(sock);
         return -1;
     }
 
     client_opts.ch_binds[client_opts.ch_bind_count - 1].address = strdup(address);
     if (!client_opts.ch_binds[client_opts.ch_bind_count - 1].address) {
         ERRMEM;
+        close(sock);
         return -1;
     }
     client_opts.ch_binds[client_opts.ch_bind_count - 1].port = port;

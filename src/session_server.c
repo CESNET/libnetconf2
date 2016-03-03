@@ -223,6 +223,7 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
     /* make the socket non-blocking */
     if (((flags = fcntl(ret, F_GETFL)) == -1) || (fcntl(ret, F_SETFL, flags | O_NONBLOCK) == -1)) {
         ERR("Fcntl failed (%s).", strerror(errno));
+        close(ret);
         return -1;
     }
 
@@ -972,6 +973,7 @@ nc_server_add_endpt_listen(const char *name, const char *address, uint16_t port,
         ERRMEM;
         /* WRITE UNLOCK */
         pthread_rwlock_unlock(&server_opts.endpt_array_lock);
+        close(sock);
         return -1;
     }
 

@@ -905,6 +905,7 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
                          NC_NS_BASE, session->msgid + 1, attrs ? attrs : "");
         if (count == -1) {
             ERRMEM;
+            va_end(ap);
             return -1;
         }
         nc_write_clb((void *)&arg, buf, count);
