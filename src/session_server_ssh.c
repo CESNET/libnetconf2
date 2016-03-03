@@ -1117,8 +1117,9 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     ssh_set_blocking(session->ti.libssh.session, 0);
 
     while ((ret = ssh_handle_key_exchange(session->ti.libssh.session)) == SSH_AGAIN) {
-        usleep(NC_TIMEOUT_STEP);
-        elapsed_usec += NC_TIMEOUT_STEP;
+        /* this tends to take longer */
+        usleep(NC_TIMEOUT_STEP * 20);
+        elapsed_usec += NC_TIMEOUT_STEP * 20;
         if ((timeout > -1) && (elapsed_usec / 1000 >= timeout)) {
             break;
         }
