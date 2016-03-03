@@ -186,7 +186,7 @@ ctx_check_and_load_ietf_netconf(struct ly_ctx *ctx, const char **cpblts)
 
 static char *
 libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_INFORMAT *format,
-                   void (**free_model_data)(char *model_data))
+                   void (**free_model_data)(void *model_data))
 {
     struct nc_session *session = (struct nc_session *)user_data;
     struct nc_rpc *rpc;
@@ -229,7 +229,7 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
     data_rpl = (struct nc_reply_data *)reply;
     lyxml_print_mem(&anyxml, ((struct lyd_node_anyxml *)data_rpl->data)->value, 0);
     nc_reply_free(reply);
-    *free_model_data = NULL;
+    *free_model_data = free;
 
     /* it's with the data root node, remove it */
     if (anyxml) {
@@ -268,7 +268,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
         if (lys_parse_path(session->ctx, SCHEMAS_DIR"/ietf-netconf-monitoring.yin", LYS_IN_YIN)) {
             /* set module retrieval using <get-schema> */
             old_clb = ly_ctx_get_module_clb(session->ctx, &old_data);
-            ly_ctx_set_module_clb(session->ctx, &libyang_module_clb, session);
+            ly_ctx_set_module_clb(session->ctx, libyang_module_clb, session);
         } else {
             WRN("Loading NETCONF monitoring schema failed, cannot use <get-schema>.");
         }
