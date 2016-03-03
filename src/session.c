@@ -85,7 +85,7 @@ nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed)
         return 0;
     } else if (ret) {
         /* error */
-        ERR("Mutex lock failed (%s).", strerror(errno));
+        ERR("Mutex lock failed (%s).", strerror(ret));
         return -1;
     }
 
