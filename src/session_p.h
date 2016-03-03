@@ -287,7 +287,7 @@ void *nc_realloc(void *ptr, size_t size);
 
 NC_MSG_TYPE nc_send_msg(struct nc_session *session, struct lyd_node *op);
 
-int nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed);
+int nc_timedlock(pthread_mutex_t *lock, int timeout);
 
 /**
  * @brief Fill libyang context in \p session. Context models are based on the stored session
@@ -472,7 +472,7 @@ int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
  * returned POLLIN.
  *
  * @param[in] session NETCONF session communicating on the socket.
- * @param[in,out] timeout Timeout for locking ti_lock, gets updated.
+ * @param[in,out] timeout Timeout for locking ti_lock.
  * @return 0 - timeout,
  *         1 if \p session channel has data,
  *         2 if some other channel has data,
@@ -481,7 +481,7 @@ int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
  *         5 on new NETCONF SSH channel,
  *        -1 on error.
  */
-int nc_ssh_pollin(struct nc_session *session, int *timeout);
+int nc_ssh_pollin(struct nc_session *session, int timeout);
 
 void nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts);
 

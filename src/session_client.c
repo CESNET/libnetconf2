@@ -437,7 +437,7 @@ errloop:
 static NC_MSG_TYPE
 get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_elem **msg)
 {
-    int r, elapsed = 0;
+    int r;
     char *ptr;
     const char *str_msgid;
     uint64_t cur_msgid;
@@ -445,16 +445,13 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
     struct nc_msg_cont *cont, **cont_ptr;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
 
-    r = nc_timedlock(session->ti_lock, timeout, &elapsed);
+    r = nc_timedlock(session->ti_lock, timeout);
     if (r == -1) {
         /* error */
         return NC_MSG_ERROR;
     } else if (!r) {
         /* timeout */
         return NC_MSG_WOULDBLOCK;
-    }
-    if (timeout > 0) {
-        timeout -= elapsed;
     }
 
     /* try to get notification from the session's queue */
@@ -1668,7 +1665,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         return NC_MSG_ERROR;
     }
 
-    ret = nc_timedlock(session->ti_lock, timeout, NULL);
+    ret = nc_timedlock(session->ti_lock, timeout);
     if (ret == -1) {
         /* error */
         r = NC_MSG_ERROR;

@@ -917,7 +917,7 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
 static int
 nc_open_netconf_channel(struct nc_session *session, int timeout)
 {
-    int elapsed_usec = 0, ret, elapsed;
+    int elapsed_usec = 0, ret;
 
     /* message callback is executed twice to give chance for the channel to be
      * created if timeout == 0 (it takes 2 messages, channel-open, subsystem-request) */
@@ -927,7 +927,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
             return -1;
         }
 
-        ret = nc_timedlock(session->ti_lock, timeout, NULL);
+        ret = nc_timedlock(session->ti_lock, timeout);
         if (ret != 1) {
             return ret;
         }
@@ -969,12 +969,10 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
             return -1;
         }
 
-        elapsed = 0;
-        ret = nc_timedlock(session->ti_lock, timeout, &elapsed);
+        ret = nc_timedlock(session->ti_lock, timeout);
         if (ret != 1) {
             return ret;
         }
-        elapsed_usec += elapsed * 1000;
 
         ret = ssh_execute_message_callbacks(session->ti.libssh.session);
         if (ret != SSH_OK) {
@@ -1006,15 +1004,12 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
 /* ret 0 - timeout, 1 channel has data, 2 some other channel has data,
  * 3 status change, 4 new SSH message, 5 new NETCONF SSH channel, -1 error */
 int
-nc_ssh_pollin(struct nc_session *session, int *timeout)
+nc_ssh_pollin(struct nc_session *session, int timeout)
 {
-    int ret, elapsed = 0;
+    int ret;
     struct nc_session *new;
 
-    ret = nc_timedlock(session->ti_lock, *timeout, &elapsed);
-    if (*timeout > 0) {
-        *timeout -= elapsed;
-    }
+    ret = nc_timedlock(session->ti_lock, timeout);
 
     if (ret != 1) {
         return ret;

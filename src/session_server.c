@@ -788,7 +788,7 @@ retry_poll:
                 uint16_t j;
 
                 /* things are not that simple with SSH... */
-                ret = nc_ssh_pollin(ps->sessions[i], &timeout);
+                ret = nc_ssh_pollin(ps->sessions[i], timeout);
 
                 /* clear POLLIN on sessions sharing this session's SSH session */
                 if ((ret == 1) || (ret >= 4)) {
@@ -844,7 +844,7 @@ retry_poll:
     session = ps->sessions[i];
 
     /* reading an RPC and sending a reply must be atomic (no other RPC should be read) */
-    ret = nc_timedlock(session->ti_lock, timeout, NULL);
+    ret = nc_timedlock(session->ti_lock, timeout);
     if (ret != 1) {
         /* error or timeout */
         goto finish;

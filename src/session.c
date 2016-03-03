@@ -51,29 +51,18 @@ extern struct nc_server_opts server_opts;
  *        -1 - error
  */
 int
-nc_timedlock(pthread_mutex_t *lock, int timeout, int *elapsed)
+nc_timedlock(pthread_mutex_t *lock, int timeout)
 {
     int ret;
-    struct timespec ts_timeout, ts_old, ts_new;
+    struct timespec ts_timeout;
 
     if (timeout > 0) {
         clock_gettime(CLOCK_REALTIME, &ts_timeout);
-
-        if (elapsed) {
-            ts_old = ts_timeout;
-        }
 
         ts_timeout.tv_sec += timeout / 1000;
         ts_timeout.tv_nsec += (timeout % 1000) * 1000000;
 
         ret = pthread_mutex_timedlock(lock, &ts_timeout);
-
-        if (elapsed) {
-            clock_gettime(CLOCK_REALTIME, &ts_new);
-
-            *elapsed += (ts_new.tv_sec - ts_old.tv_sec) * 1000;
-            *elapsed += (ts_new.tv_nsec - ts_old.tv_nsec) / 1000000;
-        }
     } else if (!timeout) {
         ret = pthread_mutex_trylock(lock);
     } else { /* timeout == -1 */
@@ -274,7 +263,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     /* mark session for closing */
     if (session->ti_lock) {
-        r = nc_timedlock(session->ti_lock, -1, NULL);
+        r = nc_timedlock(session->ti_lock, -1);
         if (r == -1) {
             return;
         }
