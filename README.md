@@ -141,12 +141,12 @@ $ cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr ..
 
 The NETCONF protocol specification allows to use the protocol on top of
 several transport protocols. **libnetconf2** provides support for SSH and
-TLS transport. By default, only SSH transport (as the mandatory one) is
-enabled. Disabling and enabling both the transport protocols can be made
+TLS transport. By default, both SSH and TLS transport is enabled. Disabling
+and enabling both the transport protocols can be made
 in the same way. The following command has actually the same effect as
 specifying no option since it specifies the default settings.
 ```
-$ cmake -DENABLE_TLS=OFF -DENABLE_SSH=ON ..
+$ cmake -DENABLE_TLS=ON -DENABLE_SSH=ON ..
 ```
 
 ### DNSSEC SSHFP Retrieval
