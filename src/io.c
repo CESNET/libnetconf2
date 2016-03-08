@@ -663,9 +663,10 @@ nc_write_clb_flush(struct wclb_arg *warg)
 }
 
 static ssize_t
-nc_write_clb(void *arg, const void *buf, size_t count)
+nc_write_clb(void *arg, const void *buf, size_t count, int xmlcontent)
 {
     int ret = 0, c;
+    size_t l;
     struct wclb_arg *warg = (struct wclb_arg *)arg;
 
     if (!buf) {
@@ -694,7 +695,7 @@ nc_write_clb(void *arg, const void *buf, size_t count)
         ret += c;
     }
 
-    if (count > WRITE_BUFSIZE) {
+    if (!xmlcontent && count > WRITE_BUFSIZE) {
         /* write directly */
         c = nc_write_starttag_and_msg(warg->session, buf, count);
         if (c == -1) {
@@ -703,12 +704,53 @@ nc_write_clb(void *arg, const void *buf, size_t count)
         ret += c;
     } else {
         /* keep in buffer and write later */
-        memcpy(&warg->buf[warg->len], buf, count);
-        warg->len += count; /* is <= WRITE_BUFSIZE */
-        ret += count;
+        if (xmlcontent) {
+            for (l = 0; l < count; l++) {
+                if (warg->len + 5 >= WRITE_BUFSIZE) {
+                    /* buffer is full */
+                    c = nc_write_clb_flush(warg);
+                    if (c == -1) {
+                        return -1;
+                    }
+                }
+
+                switch (((char *)buf)[l]) {
+                case '&':
+                    ret += 5;
+                    memcpy(&warg->buf[warg->len], "&amp;", 5);
+                    warg->len += 5;
+                    break;
+                case '<':
+                    ret += 4;
+                    memcpy(&warg->buf[warg->len], "&lt;", 4);
+                    warg->len += 4;
+                    break;
+                case '>':
+                    /* not needed, just for readability */
+                    ret += 4;
+                    memcpy(&warg->buf[warg->len], "&gt;", 4);
+                    warg->len += 4;
+                    break;
+                default:
+                    ret++;
+                    memcpy(&warg->buf[warg->len], &((char *)buf)[l], 1);
+                    warg->len++;
+                }
+            }
+        } else {
+            memcpy(&warg->buf[warg->len], buf, count);
+            warg->len += count; /* is <= WRITE_BUFSIZE */
+            ret += count;
+        }
     }
 
     return ret;
+}
+
+static ssize_t
+nc_write_xmlclb(void *arg, const void *buf, size_t count)
+{
+    return nc_write_clb(arg, buf, count, 0);
 }
 
 static void
@@ -717,155 +759,155 @@ nc_write_error(struct wclb_arg *arg, struct nc_server_error *err)
     uint16_t i;
     char str_sid[11];
 
-    nc_write_clb((void *)arg, "<rpc-error>", 11);
+    nc_write_clb((void *)arg, "<rpc-error>", 11, 0);
 
-    nc_write_clb((void *)arg, "<error-type>", 12);
+    nc_write_clb((void *)arg, "<error-type>", 12, 0);
     switch (err->type) {
     case NC_ERR_TYPE_TRAN:
-        nc_write_clb((void *)arg, "transport", 9);
+        nc_write_clb((void *)arg, "transport", 9, 0);
         break;
     case NC_ERR_TYPE_RPC:
-        nc_write_clb((void *)arg, "rpc", 3);
+        nc_write_clb((void *)arg, "rpc", 3, 0);
         break;
     case NC_ERR_TYPE_PROT:
-        nc_write_clb((void *)arg, "protocol", 8);
+        nc_write_clb((void *)arg, "protocol", 8, 0);
         break;
     case NC_ERR_TYPE_APP:
-        nc_write_clb((void *)arg, "application", 11);
+        nc_write_clb((void *)arg, "application", 11, 0);
         break;
     default:
         ERRINT;
         return;
     }
-    nc_write_clb((void *)arg, "</error-type>", 13);
+    nc_write_clb((void *)arg, "</error-type>", 13, 0);
 
-    nc_write_clb((void *)arg, "<error-tag>", 11);
+    nc_write_clb((void *)arg, "<error-tag>", 11, 0);
     switch (err->tag) {
     case NC_ERR_IN_USE:
-        nc_write_clb((void *)arg, "in-use", 6);
+        nc_write_clb((void *)arg, "in-use", 6, 0);
         break;
     case NC_ERR_INVALID_VALUE:
-        nc_write_clb((void *)arg, "invalid-value", 13);
+        nc_write_clb((void *)arg, "invalid-value", 13, 0);
         break;
     case NC_ERR_TOO_BIG:
-        nc_write_clb((void *)arg, "too-big", 7);
+        nc_write_clb((void *)arg, "too-big", 7, 0);
         break;
     case NC_ERR_MISSING_ATTR:
-        nc_write_clb((void *)arg, "missing-attribute", 17);
+        nc_write_clb((void *)arg, "missing-attribute", 17, 0);
         break;
     case NC_ERR_BAD_ATTR:
-        nc_write_clb((void *)arg, "bad-attribute", 13);
+        nc_write_clb((void *)arg, "bad-attribute", 13, 0);
         break;
     case NC_ERR_UNKNOWN_ATTR:
-        nc_write_clb((void *)arg, "unknown-attribute", 17);
+        nc_write_clb((void *)arg, "unknown-attribute", 17, 0);
         break;
     case NC_ERR_MISSING_ELEM:
-        nc_write_clb((void *)arg, "missing-element", 15);
+        nc_write_clb((void *)arg, "missing-element", 15, 0);
         break;
     case NC_ERR_BAD_ELEM:
-        nc_write_clb((void *)arg, "bad-element", 11);
+        nc_write_clb((void *)arg, "bad-element", 11, 0);
         break;
     case NC_ERR_UNKNOWN_ELEM:
-        nc_write_clb((void *)arg, "unknown-element", 15);
+        nc_write_clb((void *)arg, "unknown-element", 15, 0);
         break;
     case NC_ERR_UNKNOWN_NS:
-        nc_write_clb((void *)arg, "unknown-namespace", 17);
+        nc_write_clb((void *)arg, "unknown-namespace", 17, 0);
         break;
     case NC_ERR_ACCESS_DENIED:
-        nc_write_clb((void *)arg, "access-denied", 13);
+        nc_write_clb((void *)arg, "access-denied", 13, 0);
         break;
     case NC_ERR_LOCK_DENIED:
-        nc_write_clb((void *)arg, "lock-denied", 11);
+        nc_write_clb((void *)arg, "lock-denied", 11, 0);
         break;
     case NC_ERR_RES_DENIED:
-        nc_write_clb((void *)arg, "resource-denied", 15);
+        nc_write_clb((void *)arg, "resource-denied", 15, 0);
         break;
     case NC_ERR_ROLLBACK_FAILED:
-        nc_write_clb((void *)arg, "rollback-failed", 15);
+        nc_write_clb((void *)arg, "rollback-failed", 15, 0);
         break;
     case NC_ERR_DATA_EXISTS:
-        nc_write_clb((void *)arg, "data-exists", 11);
+        nc_write_clb((void *)arg, "data-exists", 11, 0);
         break;
     case NC_ERR_DATA_MISSING:
-        nc_write_clb((void *)arg, "data-missing", 12);
+        nc_write_clb((void *)arg, "data-missing", 12, 0);
         break;
     case NC_ERR_OP_NOT_SUPPORTED:
-        nc_write_clb((void *)arg, "operation-not-supported", 23);
+        nc_write_clb((void *)arg, "operation-not-supported", 23, 0);
         break;
     case NC_ERR_OP_FAILED:
-        nc_write_clb((void *)arg, "operation-failed", 16);
+        nc_write_clb((void *)arg, "operation-failed", 16, 0);
         break;
     case NC_ERR_MALFORMED_MSG:
-        nc_write_clb((void *)arg, "malformed-message", 17);
+        nc_write_clb((void *)arg, "malformed-message", 17, 0);
         break;
     default:
         ERRINT;
         return;
     }
-    nc_write_clb((void *)arg, "</error-tag>", 12);
+    nc_write_clb((void *)arg, "</error-tag>", 12, 0);
 
-    nc_write_clb((void *)arg, "<error-severity>error</error-severity>", 38);
+    nc_write_clb((void *)arg, "<error-severity>error</error-severity>", 38, 0);
 
     if (err->apptag) {
-        nc_write_clb((void *)arg, "<error-app-tag>", 15);
-        nc_write_clb((void *)arg, err->apptag, strlen(err->apptag));
-        nc_write_clb((void *)arg, "</error-app-tag>", 16);
+        nc_write_clb((void *)arg, "<error-app-tag>", 15, 0);
+        nc_write_clb((void *)arg, err->apptag, strlen(err->apptag), 1);
+        nc_write_clb((void *)arg, "</error-app-tag>", 16, 0);
     }
 
     if (err->path) {
-        nc_write_clb((void *)arg, "<error-path>", 12);
-        nc_write_clb((void *)arg, err->path, strlen(err->path));
-        nc_write_clb((void *)arg, "</error-path>", 13);
+        nc_write_clb((void *)arg, "<error-path>", 12, 0);
+        nc_write_clb((void *)arg, err->path, strlen(err->path), 1);
+        nc_write_clb((void *)arg, "</error-path>", 13, 0);
     }
 
     if (err->message) {
-        nc_write_clb((void *)arg, "<error-message", 14);
+        nc_write_clb((void *)arg, "<error-message", 14, 0);
         if (err->message_lang) {
-            nc_write_clb((void *)arg, " xml:lang=\"", 11);
-            nc_write_clb((void *)arg, err->message_lang, strlen(err->message_lang));
-            nc_write_clb((void *)arg, "\"", 1);
+            nc_write_clb((void *)arg, " xml:lang=\"", 11, 0);
+            nc_write_clb((void *)arg, err->message_lang, strlen(err->message_lang), 1);
+            nc_write_clb((void *)arg, "\"", 1, 0);
         }
-        nc_write_clb((void *)arg, ">", 1);
-        nc_write_clb((void *)arg, err->message, strlen(err->message));
-        nc_write_clb((void *)arg, "</error-message>", 16);
+        nc_write_clb((void *)arg, ">", 1, 0);
+        nc_write_clb((void *)arg, err->message, strlen(err->message), 1);
+        nc_write_clb((void *)arg, "</error-message>", 16, 0);
     }
 
     if (err->sid || err->attr_count || err->elem_count || err->ns_count || err->other_count) {
-        nc_write_clb((void *)arg, "<error-info>", 12);
+        nc_write_clb((void *)arg, "<error-info>", 12, 0);
 
         if (err->sid) {
-            nc_write_clb((void *)arg, "<session-id>", 12);
+            nc_write_clb((void *)arg, "<session-id>", 12, 0);
             sprintf(str_sid, "%u", err->sid);
-            nc_write_clb((void *)arg, str_sid, strlen(str_sid));
-            nc_write_clb((void *)arg, "</session-id>", 13);
+            nc_write_clb((void *)arg, str_sid, strlen(str_sid), 0);
+            nc_write_clb((void *)arg, "</session-id>", 13, 0);
         }
 
         for (i = 0; i < err->attr_count; ++i) {
-            nc_write_clb((void *)arg, "<bad-attribute>", 15);
-            nc_write_clb((void *)arg, err->attr[i], strlen(err->attr[i]));
-            nc_write_clb((void *)arg, "</bad-attribute>", 16);
+            nc_write_clb((void *)arg, "<bad-attribute>", 15, 0);
+            nc_write_clb((void *)arg, err->attr[i], strlen(err->attr[i]), 1);
+            nc_write_clb((void *)arg, "</bad-attribute>", 16, 0);
         }
 
         for (i = 0; i < err->elem_count; ++i) {
-            nc_write_clb((void *)arg, "<bad-element>", 13);
-            nc_write_clb((void *)arg, err->elem[i], strlen(err->elem[i]));
-            nc_write_clb((void *)arg, "</bad-element>", 14);
+            nc_write_clb((void *)arg, "<bad-element>", 13, 0);
+            nc_write_clb((void *)arg, err->elem[i], strlen(err->elem[i]), 1);
+            nc_write_clb((void *)arg, "</bad-element>", 14, 0);
         }
 
         for (i = 0; i < err->ns_count; ++i) {
-            nc_write_clb((void *)arg, "<bad-namespace>", 15);
-            nc_write_clb((void *)arg, err->ns[i], strlen(err->ns[i]));
-            nc_write_clb((void *)arg, "</bad-namespace>", 16);
+            nc_write_clb((void *)arg, "<bad-namespace>", 15, 0);
+            nc_write_clb((void *)arg, err->ns[i], strlen(err->ns[i]), 1);
+            nc_write_clb((void *)arg, "</bad-namespace>", 16, 0);
         }
 
         for (i = 0; i < err->other_count; ++i) {
-            lyxml_print_clb(nc_write_clb, (void *)arg, err->other[i], 0);
+            lyxml_print_clb(nc_write_xmlclb, (void *)arg, err->other[i], 0);
         }
 
-        nc_write_clb((void *)arg, "</error-info>", 13);
+        nc_write_clb((void *)arg, "</error-info>", 13, 0);
     }
 
-    nc_write_clb((void *)arg, "</rpc-error>", 12);
+    nc_write_clb((void *)arg, "</rpc-error>", 12, 0);
 }
 
 /* return -1 can change session status */
@@ -908,10 +950,10 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
             va_end(ap);
             return -1;
         }
-        nc_write_clb((void *)&arg, buf, count);
+        nc_write_clb((void *)&arg, buf, count, 0);
         free(buf);
-        lyd_print_clb(nc_write_clb, (void *)&arg, content, LYD_XML, LYP_WITHSIBLINGS);
-        nc_write_clb((void *)&arg, "</rpc>", 6);
+        lyd_print_clb(nc_write_xmlclb, (void *)&arg, content, LYD_XML, LYP_WITHSIBLINGS);
+        nc_write_clb((void *)&arg, "</rpc>", 6, 0);
 
         session->msgid++;
         break;
@@ -920,20 +962,20 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
         rpc_elem = va_arg(ap, struct lyxml_elem *);
         reply = va_arg(ap, struct nc_server_reply *);
 
-        nc_write_clb((void *)&arg, "<rpc-reply", 10);
+        nc_write_clb((void *)&arg, "<rpc-reply", 10, 0);
         /* can be NULL if replying with a malformed-message error */
         if (rpc_elem) {
-            lyxml_print_clb(nc_write_clb, (void *)&arg, rpc_elem, LYXML_PRINT_ATTRS);
+            lyxml_print_clb(nc_write_xmlclb, (void *)&arg, rpc_elem, LYXML_PRINT_ATTRS);
         }
-        nc_write_clb((void *)&arg, ">", 1);
+        nc_write_clb((void *)&arg, ">", 1, 0);
         switch (reply->type) {
         case NC_RPL_OK:
-            nc_write_clb((void *)&arg, "<ok/>", 5);
+            nc_write_clb((void *)&arg, "<ok/>", 5, 0);
             break;
         case NC_RPL_DATA:
-            nc_write_clb((void *)&arg, "<data>", 6);
-            lyd_print_clb(nc_write_clb, (void *)&arg, ((struct nc_reply_data *)reply)->data, LYD_XML, LYP_WITHSIBLINGS);
-            nc_write_clb((void *)&arg, "</data>", 7);
+            nc_write_clb((void *)&arg, "<data>", 6, 0);
+            lyd_print_clb(nc_write_xmlclb, (void *)&arg, ((struct nc_reply_data *)reply)->data, LYD_XML, LYP_WITHSIBLINGS);
+            nc_write_clb((void *)&arg, "</data>", 7, 0);
             break;
         case NC_RPL_ERROR:
             error_rpl = (struct nc_server_reply_error *)reply;
@@ -943,17 +985,17 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
             break;
         default:
             ERRINT;
-            nc_write_clb((void *)&arg, NULL, 0);
+            nc_write_clb((void *)&arg, NULL, 0, 0);
             va_end(ap);
             return -1;
         }
-        nc_write_clb((void *)&arg, "</rpc-reply>", 12);
+        nc_write_clb((void *)&arg, "</rpc-reply>", 12, 0);
         break;
 
     case NC_MSG_NOTIF:
-        nc_write_clb((void *)&arg, "<notification xmlns=\""NC_NS_NOTIF"\"/>", 21 + 47 + 3);
+        nc_write_clb((void *)&arg, "<notification xmlns=\""NC_NS_NOTIF"\"/>", 21 + 47 + 3, 0);
         /* TODO content */
-        nc_write_clb((void *)&arg, "</notification>", 12);
+        nc_write_clb((void *)&arg, "</notification>", 12, 0);
         break;
 
     case NC_MSG_HELLO:
@@ -970,17 +1012,12 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
             va_end(ap);
             return -1;
         }
-        nc_write_clb((void *)&arg, buf, count);
+        nc_write_clb((void *)&arg, buf, count, 0);
         free(buf);
         for (i = 0; capabilities[i]; i++) {
-            count = asprintf(&buf, "<capability>%s</capability>", capabilities[i]);
-            if (count == -1) {
-                ERRMEM;
-                va_end(ap);
-                return -1;
-            }
-            nc_write_clb((void *)&arg, buf, count);
-            free(buf);
+            nc_write_clb((void *)&arg, "<capability>", 12, 0);
+            nc_write_clb((void *)&arg, capabilities[i], strlen(capabilities[i]), 1);
+            nc_write_clb((void *)&arg, "</capability>", 13, 0);
         }
         if (sid) {
             count = asprintf(&buf, "</capabilities><session-id>%u</session-id></hello>", *sid);
@@ -989,10 +1026,10 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
                 va_end(ap);
                 return -1;
             }
-            nc_write_clb((void *)&arg, buf, count);
+            nc_write_clb((void *)&arg, buf, count, 0);
             free(buf);
         } else {
-            nc_write_clb((void *)&arg, "</capabilities></hello>", 23);
+            nc_write_clb((void *)&arg, "</capabilities></hello>", 23, 0);
         }
         break;
 
@@ -1002,7 +1039,7 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
     }
 
     /* flush message */
-    nc_write_clb((void *)&arg, NULL, 0);
+    nc_write_clb((void *)&arg, NULL, 0, 0);
 
     va_end(ap);
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
