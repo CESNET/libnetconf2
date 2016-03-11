@@ -261,7 +261,16 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         return;
     }
 
-    /* mark session for closing */
+    /* stop notifications loop if any */
+    if (session->ntf_tid) {
+        tid = *session->ntf_tid;
+        free((pthread_t *)session->ntf_tid);
+        session->ntf_tid = NULL;
+        /* the thread now knows it should quit */
+
+        pthread_join(tid, NULL);
+    }
+
     if (session->ti_lock) {
         r = nc_timedlock(session->ti_lock, NC_READ_TIMEOUT * 1000);
         if (r == -1) {
@@ -272,16 +281,6 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         } else {
             locked = 1;
         }
-    }
-
-    /* stop notifications loop if any */
-    if (session->ntf_tid) {
-        tid = *session->ntf_tid;
-        free((pthread_t *)session->ntf_tid);
-        session->ntf_tid = NULL;
-        /* the thread now knows it should quit */
-
-        pthread_join(tid, NULL);
     }
 
     if ((session->side == NC_CLIENT) && (session->status == NC_STATUS_RUNNING) && locked) {
@@ -349,6 +348,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         data_free(session->data);
     }
 
+    /* mark session for closing */
     session->status = NC_STATUS_CLOSING;
     connected = nc_session_is_connected(session);
 
