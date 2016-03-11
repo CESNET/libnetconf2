@@ -351,6 +351,11 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
         ctx = ly_ctx_new(SCHEMAS_DIR);
+        /* definitely should not happen, but be ready */
+        if (!ctx && !(ctx = ly_ctx_new(NULL))) {
+            /* that's just it */
+            goto fail;
+        }
     } else {
         session->flags |= NC_SESSION_SHAREDCTX;
     }

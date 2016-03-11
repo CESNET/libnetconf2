@@ -1363,6 +1363,11 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client
         } else {
             ctx = ly_ctx_new(SCHEMAS_DIR);
         }
+        /* definitely should not happen, but be ready */
+        if (!ctx && !(ctx = ly_ctx_new(NULL))) {
+            /* that's just it */
+            goto fail;
+        }
     } else {
         session->flags |= NC_SESSION_SHAREDCTX;
     }
@@ -1487,6 +1492,11 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
             ctx = ly_ctx_new(client_opts.schema_searchpath);
         } else {
             ctx = ly_ctx_new(SCHEMAS_DIR);
+        }
+        /* definitely should not happen, but be ready */
+        if (!ctx && !(ctx = ly_ctx_new(NULL))) {
+            /* that's just it */
+            goto fail;
         }
     } else {
         session->flags |= NC_SESSION_SHAREDCTX;
