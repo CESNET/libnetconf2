@@ -38,7 +38,7 @@ static const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "c
 struct nc_client_opts client_opts;
 
 API int
-nc_client_schema_searchpath(const char *path)
+nc_client_set_schema_searchpath(const char *path)
 {
     if (client_opts.schema_searchpath) {
         free(client_opts.schema_searchpath);
@@ -55,6 +55,12 @@ nc_client_schema_searchpath(const char *path)
     }
 
     return 0;
+}
+
+API const char *
+nc_client_get_schema_searchpath(void)
+{
+    return client_opts.schema_searchpath;
 }
 
 /* SCHEMAS_DIR not used (implicitly) */
@@ -1020,7 +1026,7 @@ nc_client_init(void)
 API void
 nc_client_destroy(void)
 {
-    nc_client_schema_searchpath(NULL);
+    nc_client_set_schema_searchpath(NULL);
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
     nc_client_ch_del_bind(NULL, 0, 0);
 #endif

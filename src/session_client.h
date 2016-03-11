@@ -36,13 +36,20 @@
 /**
  * @brief Set location where libnetconf tries to search for YANG/YIN schemas.
  *
- * The location is search when connecting to a NETCONF server and building
+ * The location is searched when connecting to a NETCONF server and building
  * YANG context for further processing of the NETCONF messages and data.
  *
  * @param[in] path Directory where to search for YANG/YIN schemas.
  * @return 0 on success, 1 on (memory allocation) failure.
  */
-int nc_client_schema_searchpath(const char *path);
+int nc_client_set_schema_searchpath(const char *path);
+
+/**
+ * @brief Get schema searchpath that was set by nc_client_set_schema_searchpath().
+ *
+ * @return Schema searchpath directory, NULL if not set.
+ */
+const char *nc_client_get_schema_searchpath(void);
 
 /**
  * @brief Initialize libssh and/or libssl/libcrypto for use in the client.

@@ -607,7 +607,7 @@ client_fork(void)
     if (!(pids[clients] = fork())) {
         nc_client_init();
 
-        ret = nc_client_schema_searchpath(TESTS_DIR"/../schemas");
+        ret = nc_client_set_schema_searchpath(TESTS_DIR"/../schemas");
         nc_assert(!ret);
 
         /* close write */
@@ -629,7 +629,7 @@ client_fork(void)
     if (!(pids[clients] = fork())) {
         nc_client_init();
 
-        ret = nc_client_schema_searchpath(TESTS_DIR"/../schemas");
+        ret = nc_client_set_schema_searchpath(TESTS_DIR"/../schemas");
         nc_assert(!ret);
 
         /* close write */
