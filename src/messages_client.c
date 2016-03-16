@@ -108,7 +108,7 @@ nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_WD_MODE wd_mode, NC
     }
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter must either be an XML subtree or an XPath expression.");
+        ERR("Filter must either be an XML subtree or an XPath expression (invalid first character '%c').", filter[0]);
         return NULL;
     }
 
@@ -287,7 +287,7 @@ nc_rpc_get(const char *filter, NC_WD_MODE wd_mode, NC_PARAMTYPE paramtype)
     struct nc_rpc_get *rpc;
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter must either be an XML subtree or an XPath expression.");
+        ERR("Filter must either be an XML subtree or an XPath expression (invalid first character '%c').", filter[0]);
         return NULL;
     }
 
@@ -476,7 +476,7 @@ nc_rpc_subscribe(const char *stream_name, const char *filter, const char *start_
     struct nc_rpc_subscribe *rpc;
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter must either be an XML subtree or an XPath expression.");
+        ERR("Filter must either be an XML subtree or an XPath expression (invalid first character '%c').", filter[0]);
         return NULL;
     }
 
