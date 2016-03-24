@@ -850,7 +850,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
             break;
 
         case NC_RPC_GETSCHEMA:
-            schema = ly_ctx_get_node(ctx, "/ietf-netconf-monitoring:get-schema");
+            schema = ly_ctx_get_node(ctx, NULL, "/ietf-netconf-monitoring:get-schema");
             if (!schema) {
                 ERRINT;
                 return NULL;
@@ -1268,11 +1268,11 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         if (rpc_gc->filter) {
             if (!rpc_gc->filter[0] || (rpc_gc->filter[0] == '<')) {
                 node = lyd_new_anyxml(data, ietfnc, "filter", rpc_gc->filter);
-                lyd_insert_attr(node, "type", "subtree");
+                lyd_insert_attr(node, NULL, "type", "subtree");
             } else {
                 node = lyd_new_anyxml(data, ietfnc, "filter", NULL);
-                lyd_insert_attr(node, "type", "xpath");
-                lyd_insert_attr(node, "select", rpc_gc->filter);
+                lyd_insert_attr(node, NULL, "type", "xpath");
+                lyd_insert_attr(node, NULL, "select", rpc_gc->filter);
             }
             if (!node) {
                 lyd_free(data);
@@ -1467,11 +1467,11 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         if (rpc_g->filter) {
             if (!rpc_g->filter[0] || (rpc_g->filter[0] == '<')) {
                 node = lyd_new_anyxml(data, ietfnc, "filter", rpc_g->filter);
-                lyd_insert_attr(node, "type", "subtree");
+                lyd_insert_attr(node, NULL, "type", "subtree");
             } else {
                 node = lyd_new_anyxml(data, ietfnc, "filter", NULL);
-                lyd_insert_attr(node, "type", "xpath");
-                lyd_insert_attr(node, "select", rpc_g->filter);
+                lyd_insert_attr(node, NULL, "type", "xpath");
+                lyd_insert_attr(node, NULL, "select", rpc_g->filter);
             }
             if (!node) {
                 lyd_free(data);
@@ -1638,11 +1638,11 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         if (rpc_sub->filter) {
             if (!rpc_sub->filter[0] || (rpc_sub->filter[0] == '<')) {
                 node = lyd_new_anyxml(data, notifs, "filter", rpc_sub->filter);
-                lyd_insert_attr(node, "type", "subtree");
+                lyd_insert_attr(node, NULL, "type", "subtree");
             } else {
                 node = lyd_new_anyxml(data, notifs, "filter", NULL);
-                lyd_insert_attr(node, "type", "xpath");
-                lyd_insert_attr(node, "select", rpc_sub->filter);
+                lyd_insert_attr(node, NULL, "type", "xpath");
+                lyd_insert_attr(node, NULL, "select", rpc_sub->filter);
             }
             if (!node) {
                 lyd_free(data);
@@ -1671,7 +1671,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         return NC_MSG_ERROR;
     }
 
-    if (lyd_validate(data, LYD_OPT_STRICT)) {
+    if (lyd_validate(&data, LYD_OPT_STRICT)) {
         lyd_free(data);
         return NC_MSG_ERROR;
     }
