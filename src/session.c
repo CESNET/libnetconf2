@@ -281,6 +281,9 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         } else {
             locked = 1;
         }
+    } else {
+        ERRINT;
+        return;
     }
 
     if ((session->side == NC_CLIENT) && (session->status == NC_STATUS_RUNNING) && locked) {
