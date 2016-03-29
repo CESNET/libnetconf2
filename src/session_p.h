@@ -292,7 +292,7 @@ int nc_timedlock(pthread_mutex_t *lock, int timeout);
 /**
  * @brief Fill libyang context in \p session. Context models are based on the stored session
  *        capabilities. If the server does not support \<get-schema\>, the models are searched
- *        for in the directory set using nc_schema_searchpath().
+ *        for in the directory set using nc_client_schema_searchpath().
  *
  * @param[in] session Session to create the context for.
  * @return 0 on success, 1 on some missing schemas, -1 on error.

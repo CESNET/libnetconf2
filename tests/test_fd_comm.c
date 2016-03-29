@@ -271,7 +271,7 @@ test_send_recv_data(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, 0, &reply);
+    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, LYD_OPT_KEEPEMPTYCONT, &reply);
     assert_int_equal(msgtype, NC_MSG_REPLY);
 
     nc_rpc_free(rpc);
@@ -327,11 +327,11 @@ main(void)
     assert_non_null(module);
 
     /* set RPC callbacks */
-    node = ly_ctx_get_node(module->ctx, "/ietf-netconf:get");
+    node = ly_ctx_get_node(module->ctx, NULL, "/ietf-netconf:get");
     assert_non_null(node);
     lys_set_private(node, my_get_rpc_clb);
 
-    node = ly_ctx_get_node(module->ctx, "/ietf-netconf:get-config");
+    node = ly_ctx_get_node(module->ctx, NULL, "/ietf-netconf:get-config");
     assert_non_null(node);
     lys_set_private(node, my_getconfig_rpc_clb);
 

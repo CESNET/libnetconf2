@@ -317,7 +317,7 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
         return nc_server_reply_err(err);
     }
 
-    sdata = ly_ctx_get_node(server_opts.ctx, "/ietf-netconf-monitoring:get-schema/output/data");
+    sdata = ly_ctx_get_node(server_opts.ctx, NULL, "/ietf-netconf-monitoring:get-schema/output/data");
     if (model_data && sdata) {
         data = lyd_output_new_anyxml(sdata, model_data);
     }
@@ -350,13 +350,13 @@ nc_server_init(struct ly_ctx *ctx)
     nc_init();
 
     /* set default <get-schema> callback if not specified */
-    rpc = ly_ctx_get_node(ctx, "/ietf-netconf-monitoring:get-schema");
+    rpc = ly_ctx_get_node(ctx, NULL, "/ietf-netconf-monitoring:get-schema");
     if (rpc && !rpc->priv) {
         lys_set_private(rpc, nc_clb_default_get_schema);
     }
 
     /* set default <close-session> callback if not specififed */
-    rpc = ly_ctx_get_node(ctx, "/ietf-netconf:close-session");
+    rpc = ly_ctx_get_node(ctx, NULL, "/ietf-netconf:close-session");
     if (rpc && !rpc->priv) {
         lys_set_private(rpc, nc_clb_default_close_session);
     }

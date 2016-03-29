@@ -78,7 +78,15 @@
  * @page howtoinit Init and Thread-safety Information
  *
  * Before working with the library, it must be initialized using nc_client_init()
- * or nc_server_init(). Based on how the library was compiled, also _libssh_ and/or
+ * or nc_server_init(). Optionally, a client can use nc_client_set_schema_searchpath()
+ * to set the path to a directory with modules that will be loaded from there if they
+ * could not be downloaded from the server (it does not support \<get-schema\>).
+ * However, to be able to create at least the \<get-schema\> RPC, this directory must
+ * contain the module _ietf-netconf-monitoring_. If this directory is not set,
+ * the default _libnetconf2_ schema directory is used that includes this module
+ * and a few others.
+ *
+ * Based on how the library was compiled, also _libssh_ and/or
  * _libssh_/_libcrypto_ are initialized (for multi-threaded use) too. It is advised
  * to compile _libnetconf2_, for instance, with TLS support even if you do not want
  * to use _lnc2_ TLS functions, but only use _libssl/libcrypto_ functions in your
@@ -111,6 +119,9 @@
  *
  * - nc_client_init()
  * - nc_client_destroy()
+ *
+ * - nc_client_set_schema_searchpath()
+ * - nc_client_get_schema_searchpath()
  *
  * Available in __nc_server.h__.
  *
