@@ -1404,7 +1404,7 @@ fail:
 API struct nc_session *
 nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
 {
-    const int timeout = NC_SSH_TIMEOUT;
+    const long timeout = NC_SSH_TIMEOUT;
     int sock;
     uint32_t port_uint;
     char *username;
@@ -1612,7 +1612,7 @@ fail:
 struct nc_session *
 nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout)
 {
-    const int ssh_timeout = NC_SSH_TIMEOUT;
+    const long ssh_timeout = NC_SSH_TIMEOUT;
     struct passwd *pw;
     struct nc_session *session;
     ssh_session sess;
