@@ -301,6 +301,9 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
     /* check and get module with the name identifier */
     module = ly_ctx_get_module(server_opts.ctx, identifier, version);
     if (!module) {
+        module = (const struct lys_module *)ly_ctx_get_submodule(server_opts.ctx, NULL, NULL, identifier, version);
+    }
+    if (!module) {
         err = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
         nc_err_set_msg(err, "The requested schema was not found.", "en");
         return nc_server_reply_err(err);
@@ -316,14 +319,22 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
         nc_err_set_msg(err, "The requested format is not supported.", "en");
         return nc_server_reply_err(err);
     }
+    if (!model_data) {
+        ERRINT;
+        return NULL;
+    }
 
     sdata = ly_ctx_get_node(server_opts.ctx, NULL, "/ietf-netconf-monitoring:get-schema/output/data");
-    if (model_data && sdata) {
-        data = lyd_output_new_anyxml(sdata, model_data);
+    if (!sdata) {
+        ERRINT;
+        free(model_data);
+        return NULL;
     }
-    free(model_data);
+
+    data = lyd_output_new_anyxml_str(sdata, model_data);
     if (!data) {
         ERRINT;
+        free(model_data);
         return NULL;
     }
 
