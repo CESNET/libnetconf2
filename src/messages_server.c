@@ -142,7 +142,7 @@ nc_err(NC_ERR tag, ...)
     case NC_ERR_ROLLBACK_FAILED:
     case NC_ERR_OP_NOT_SUPPORTED:
         type = va_arg(ap, NC_ERR_TYPE);
-        if ((type != NC_ERR_TYPE_PROT) && (type == NC_ERR_TYPE_APP)) {
+        if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
             goto fail;
         }
         break;
