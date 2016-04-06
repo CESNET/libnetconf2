@@ -10,7 +10,6 @@ compiler:
 branches:
   only:
     - master
-    - devel
 
 before_install:
   - sudo apt-get install -y zlib1g-dev
@@ -30,7 +29,6 @@ before_install:
 
   - git clone https://github.com/CESNET/libyang.git
   - mkdir libyang/build && cd libyang/build
-  - git checkout devel
   - cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
   - cd ../..
 
