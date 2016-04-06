@@ -140,6 +140,16 @@ int nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_erro
 struct nc_server_error *nc_err(NC_ERR tag, ...);
 
 /**
+ * @brief Create a server error structure based on libyang error.
+ *
+ * The function should be used immediately when a libyang function fails to generate
+ * NETCONF error structure based on internal libyang error information (ly_errno, ly_errmsg, ...)
+ *
+ * @return Server error structure, NULL on error.
+ */
+API struct nc_server_error *nc_err_libyang(void);
+
+/**
  * @brief Set the \<error-app-tag\> element of an error. Any previous value will be overwritten.
  *
  * @param[in] err Error to modify.

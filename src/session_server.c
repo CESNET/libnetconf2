@@ -634,9 +634,6 @@ nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
     struct lyxml_elem *xml = NULL;
     NC_MSG_TYPE msgtype;
     struct nc_server_reply *reply = NULL;
-    struct nc_server_error *e = NULL;
-    const char *str, *stri, *strj;
-    char *attr;
     int ret;
 
     if (!session || !rpc) {
@@ -661,48 +658,7 @@ nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
         (*rpc)->tree = lyd_parse_xml(server_opts.ctx, &xml->child, LYD_OPT_DESTRUCT | LYD_OPT_RPC);
         if (!(*rpc)->tree) {
             /* parsing RPC failed */
-            if (ly_errno == LY_EVALID) {
-                switch (ly_vecode) {
-                case LYVE_INELEM:
-                    str = ly_errpath();
-                    if (!strcmp(str, "/")) {
-                        e = nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_APP);
-                        goto skiplymsg;
-                    } else {
-                        e = nc_err(NC_ERR_UNKNOWN_ELEM, NC_ERR_TYPE_PROT, ly_errpath());
-                    }
-                    break;
-                case LYVE_MISSELEM:
-                case LYVE_INORDER:
-                    e = nc_err(NC_ERR_MISSING_ELEM, NC_ERR_TYPE_PROT, ly_errpath());
-                    break;
-                case LYVE_INVAL:
-                    e = nc_err(NC_ERR_BAD_ELEM, NC_ERR_TYPE_PROT, ly_errpath());
-                    break;
-                case LYVE_INATTR:
-                case LYVE_MISSATTR:
-                    str = ly_errmsg();
-                    stri = strchr(str, '"'); stri++;
-                    strj = strchr(stri, '"'); strj--;
-                    attr = strndup(stri, strj - stri);
-                    e = nc_err(ly_vecode == LYVE_INATTR ? NC_ERR_UNKNOWN_ATTR : NC_ERR_MISSING_ATTR,
-                               NC_ERR_TYPE_PROT, attr, ly_errpath());
-                    free(attr);
-                    break;
-                case LYVE_OORVAL:
-                case LYVE_NOCOND:
-                    e = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_PROT);
-                    break;
-                default:
-                    e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
-                    break;
-                }
-            } else {
-                e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
-            }
-            nc_err_set_msg(e, ly_errmsg(), "en");
-skiplymsg:
-            reply = nc_server_reply_err(e);
+            reply = nc_server_reply_err(nc_err_libyang());
             ret = nc_write_msg(session, NC_MSG_REPLY, (*rpc)->root, reply);
             nc_server_reply_free(reply);
             if (ret == -1) {

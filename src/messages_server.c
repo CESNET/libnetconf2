@@ -294,6 +294,63 @@ fail:
     return NULL;
 }
 
+API struct nc_server_error *
+nc_err_libyang(void)
+{
+    struct nc_server_error *e;
+    const char *str, *stri, *strj;
+    char *attr;
+
+    if (!ly_errno) {
+        /* LY_SUCCESS */
+        return NULL;
+    } else if (ly_errno == LY_EVALID) {
+        switch (ly_vecode) {
+        case LYVE_INELEM:
+            str = ly_errpath();
+            if (!strcmp(str, "/")) {
+                e = nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_APP);
+                /* keep default message */
+                return e;
+            } else {
+                e = nc_err(NC_ERR_UNKNOWN_ELEM, NC_ERR_TYPE_PROT, ly_errpath());
+            }
+            break;
+        case LYVE_MISSELEM:
+        case LYVE_INORDER:
+            e = nc_err(NC_ERR_MISSING_ELEM, NC_ERR_TYPE_PROT, ly_errpath());
+            break;
+        case LYVE_INVAL:
+            e = nc_err(NC_ERR_BAD_ELEM, NC_ERR_TYPE_PROT, ly_errpath());
+            break;
+        case LYVE_INATTR:
+        case LYVE_MISSATTR:
+            str = ly_errmsg();
+            stri = strchr(str, '"');
+            stri++;
+            strj = strchr(stri, '"');
+            strj--;
+            attr = strndup(stri, strj - stri);
+            e = nc_err(ly_vecode == LYVE_INATTR ? NC_ERR_UNKNOWN_ATTR : NC_ERR_MISSING_ATTR, NC_ERR_TYPE_PROT, attr,
+                       ly_errpath());
+            free(attr);
+            break;
+        case LYVE_OORVAL:
+        case LYVE_NOCOND:
+            e = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_PROT);
+            break;
+        default:
+            e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+            break;
+        }
+    } else {
+        /* non-validation (internal) error */
+        e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+    }
+    nc_err_set_msg(e, ly_errmsg(), "en");
+    return e;
+}
+
 API int
 nc_err_set_app_tag(struct nc_server_error *err, const char *error_app_tag)
 {
