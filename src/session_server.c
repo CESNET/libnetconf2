@@ -622,6 +622,11 @@ nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
 {
     struct lyxml_elem *xml = NULL;
     NC_MSG_TYPE msgtype;
+    struct nc_server_reply *reply = NULL;
+    struct nc_server_error *e = NULL;
+    const char *str, *stri, *strj;
+    char *attr;
+    int ret;
 
     if (!session || !rpc) {
         ERRARG;
@@ -635,16 +640,66 @@ nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
 
     switch (msgtype) {
     case NC_MSG_RPC:
-        *rpc = malloc(sizeof **rpc);
+        *rpc = calloc(1, sizeof **rpc);
         if (!*rpc) {
             ERRMEM;
             goto error;
         }
 
+        ly_errno = LY_SUCCESS;
         (*rpc)->tree = lyd_parse_xml(server_opts.ctx, &xml->child, LYD_OPT_DESTRUCT | LYD_OPT_RPC);
         if (!(*rpc)->tree) {
-            ERR("Session %u: received message failed to be parsed into a known RPC.", session->id);
-            msgtype = NC_MSG_NONE;
+            /* parsing RPC failed */
+            if (ly_errno == LY_EVALID) {
+                switch (ly_vecode) {
+                case LYVE_INELEM:
+                    str = ly_errpath();
+                    if (!strcmp(str, "/")) {
+                        e = nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_APP);
+                        goto skiplymsg;
+                    } else {
+                        e = nc_err(NC_ERR_UNKNOWN_ELEM, NC_ERR_TYPE_PROT, ly_errpath());
+                    }
+                    break;
+                case LYVE_MISSELEM:
+                case LYVE_INORDER:
+                    e = nc_err(NC_ERR_MISSING_ELEM, NC_ERR_TYPE_PROT, ly_errpath());
+                    break;
+                case LYVE_INVAL:
+                    e = nc_err(NC_ERR_BAD_ELEM, NC_ERR_TYPE_PROT, ly_errpath());
+                    break;
+                case LYVE_INATTR:
+                case LYVE_MISSATTR:
+                    str = ly_errmsg();
+                    stri = strchr(str, '"'); stri++;
+                    strj = strchr(stri, '"'); strj--;
+                    attr = strndup(stri, strj - stri);
+                    e = nc_err(ly_vecode == LYVE_INATTR ? NC_ERR_UNKNOWN_ATTR : NC_ERR_MISSING_ATTR,
+                               NC_ERR_TYPE_PROT, attr, ly_errpath());
+                    free(attr);
+                    break;
+                case LYVE_OORVAL:
+                case LYVE_NOCOND:
+                    e = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_PROT);
+                    break;
+                default:
+                    e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+                    break;
+                }
+            } else {
+                e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+            }
+            nc_err_set_msg(e, ly_errmsg(), "en");
+skiplymsg:
+            reply = nc_server_reply_err(e);
+            ret = nc_write_msg(session, NC_MSG_REPLY, (*rpc)->root, reply);
+            nc_server_reply_free(reply);
+            if (ret == -1) {
+                ERR("Session %u: failed to write reply.", session->id);
+                msgtype = NC_MSG_ERROR;
+            } else {
+                msgtype = NC_MSG_NONE;
+            }
         }
         (*rpc)->root = xml;
         break;
@@ -687,7 +742,7 @@ nc_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
     }
 
     /* no callback, reply with a not-implemented error */
-    if (!rpc->tree || !rpc->tree->schema->priv) {
+    if (!rpc->tree->schema->priv) {
         reply = nc_server_reply_err(nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_PROT));
     } else {
         clb = (nc_rpc_clb)rpc->tree->schema->priv;
@@ -859,9 +914,12 @@ retry_poll:
         }
         ret = -1;
         goto finish;
+    } else if (msgtype == NC_MSG_NONE) {
+        /* already processed, just stop further processing */
+        pthread_mutex_unlock(session->ti_lock);
+        goto done;
     }
 
-    /* NC_MSG_NONE is not a real (known) RPC */
     if (msgtype == NC_MSG_RPC) {
         session->last_rpc = time(NULL);
     }
@@ -876,6 +934,8 @@ retry_poll:
         ret = -1;
         goto finish;
     }
+
+done:
     nc_server_rpc_free(rpc, server_opts.ctx);
 
     /* status change takes precedence over leftover events (return 2) */
