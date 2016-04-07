@@ -473,6 +473,100 @@ fail:
     return -1;
 }
 
+static int
+nc_ps_lock(struct nc_pollsession *ps)
+{
+    int ret;
+    uint8_t our_id, queue_last;
+    struct timespec ts;
+
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += NC_READ_TIMEOUT;
+
+    /* LOCK */
+    ret = pthread_mutex_timedlock(&ps->lock, &ts);
+    if (ret) {
+        ERR("Failed to lock a pollsession (%s).", strerror(ret));
+        return -1;
+    }
+
+    /* get a unique queue value (by adding 1 to the last added value, if any) */
+    if (ps->queue_len) {
+        queue_last = ps->queue_begin + ps->queue_len - 1;
+        if (queue_last > NC_PS_QUEUE_SIZE - 1) {
+            queue_last -= NC_PS_QUEUE_SIZE;
+        }
+        our_id = ps->queue[queue_last] + 1;
+    } else {
+        our_id = 0;
+    }
+
+    /* add ourselves into the queue */
+    if (ps->queue_len == NC_PS_QUEUE_SIZE) {
+        ERR("Pollsession queue too small.");
+        return -1;
+    }
+    ++ps->queue_len;
+    queue_last = ps->queue_begin + ps->queue_len - 1;
+    if (queue_last > NC_PS_QUEUE_SIZE - 1) {
+        queue_last -= NC_PS_QUEUE_SIZE;
+    }
+    ps->queue[queue_last] = our_id;
+
+    /* is it our turn? */
+    while (ps->queue[ps->queue_begin] != our_id) {
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += NC_READ_TIMEOUT;
+
+        ret = pthread_cond_timedwait(&ps->cond, &ps->lock, &ts);
+        if (ret) {
+            ERR("Failed to wait for a pollsession condition (%s).", strerror(ret));
+            /* remove ourselves from the queue */
+            ps->queue_begin = (ps->queue_begin < NC_PS_QUEUE_SIZE - 1 ? ps->queue_begin + 1 : 0);
+            --ps->queue_len;
+            return -1;
+        }
+    }
+
+    VRB("locked, begin = %d, len = %d", ps->queue_begin, ps->queue_len);
+    /* UNLOCK */
+    pthread_mutex_unlock(&ps->lock);
+
+    return 0;
+}
+
+static int
+nc_ps_unlock(struct nc_pollsession *ps)
+{
+    int ret;
+    struct timespec ts;
+
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += NC_READ_TIMEOUT;
+
+    /* LOCK */
+    ret = pthread_mutex_timedlock(&ps->lock, &ts);
+    if (ret) {
+        ERR("Failed to lock a pollsession (%s).", strerror(ret));
+        ret = -1;
+    }
+
+    /* remove ourselves from the queue */
+    ps->queue_begin = (ps->queue_begin < NC_PS_QUEUE_SIZE - 1 ? ps->queue_begin + 1 : 0);
+    --ps->queue_len;
+
+    /* broadcast to all other threads that the queue moved */
+    pthread_cond_broadcast(&ps->cond);
+
+    VRB("unlocked, begin = %d, len = %d", ps->queue_begin, ps->queue_len);
+    /* UNLOCK */
+    if (!ret) {
+        pthread_mutex_unlock(&ps->lock);
+    }
+
+    return ret;
+}
+
 API struct nc_pollsession *
 nc_ps_new(void)
 {
@@ -483,6 +577,7 @@ nc_ps_new(void)
         ERRMEM;
         return NULL;
     }
+    pthread_cond_init(&ps->cond, NULL);
     pthread_mutex_init(&ps->lock, NULL);
 
     return ps;
@@ -495,9 +590,14 @@ nc_ps_free(struct nc_pollsession *ps)
         return;
     }
 
+    if (ps->queue_len) {
+        ERR("FATAL: Freeing a pollsession structure that is currently being worked with!");
+    }
+
     free(ps->pfds);
     free(ps->sessions);
     pthread_mutex_destroy(&ps->lock);
+    pthread_cond_destroy(&ps->cond);
 
     free(ps);
 }
@@ -511,7 +611,9 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
     }
 
     /* LOCK */
-    pthread_mutex_lock(&ps->lock);
+    if (nc_ps_lock(ps)) {
+        return -1;
+    }
 
     ++ps->session_count;
     ps->pfds = nc_realloc(ps->pfds, ps->session_count * sizeof *ps->pfds);
@@ -519,7 +621,7 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
     if (!ps->pfds || !ps->sessions) {
         ERRMEM;
         /* UNLOCK */
-        pthread_mutex_unlock(&ps->lock);
+        nc_ps_unlock(ps);
         return -1;
     }
 
@@ -543,7 +645,7 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
     default:
         ERRINT;
         /* UNLOCK */
-        pthread_mutex_unlock(&ps->lock);
+        nc_ps_unlock(ps);
         return -1;
     }
     ps->pfds[ps->session_count - 1].events = POLLIN;
@@ -551,9 +653,7 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
     ps->sessions[ps->session_count - 1] = session;
 
     /* UNLOCK */
-    pthread_mutex_unlock(&ps->lock);
-
-    return 0;
+    return nc_ps_unlock(ps);
 }
 
 static int
@@ -588,7 +688,7 @@ remove:
 API int
 nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
 {
-    int ret;
+    int ret, ret2;
 
     if (!ps || !session) {
         ERRARG;
@@ -596,14 +696,16 @@ nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
     }
 
     /* LOCK */
-    pthread_mutex_lock(&ps->lock);
+    if (nc_ps_lock(ps)) {
+        return -1;
+    }
 
     ret = _nc_ps_del_session(ps, session, -1);
 
     /* UNLOCK */
-    pthread_mutex_unlock(&ps->lock);
+    ret2 = nc_ps_unlock(ps);
 
-    return ret;
+    return (ret || ret2 ? -1 : 0);
 }
 
 API uint16_t
@@ -617,12 +719,14 @@ nc_ps_session_count(struct nc_pollsession *ps)
     }
 
     /* LOCK */
-    pthread_mutex_lock(&ps->lock);
+    if (nc_ps_lock(ps)) {
+        return -1;
+    }
 
     count = ps->session_count;
 
     /* UNLOCK */
-    pthread_mutex_unlock(&ps->lock);
+    nc_ps_unlock(ps);
 
     return count;
 }
@@ -755,7 +859,9 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
     cur_time = time(NULL);
 
     /* LOCK */
-    pthread_mutex_lock(&ps->lock);
+    if (nc_ps_lock(ps)) {
+        return -1;
+    }
 
     for (i = 0; i < ps->session_count; ++i) {
         if (ps->sessions[i]->status != NC_STATUS_RUNNING) {
@@ -923,7 +1029,7 @@ done:
 
 finish:
     /* UNLOCK */
-    pthread_mutex_unlock(&ps->lock);
+    nc_ps_unlock(ps);
     return ret;
 }
 
@@ -939,7 +1045,9 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
     }
 
     /* LOCK */
-    pthread_mutex_lock(&ps->lock);
+    if (nc_ps_lock(ps)) {
+        return;
+    }
 
     if (all) {
         for (i = 0; i < ps->session_count; i++) {
@@ -964,7 +1072,7 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
     }
 
     /* UNLOCK */
-    pthread_mutex_unlock(&ps->lock);
+    nc_ps_unlock(ps);
 }
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)

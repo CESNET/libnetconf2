@@ -32,7 +32,7 @@
 #define SCHEMAS_DIR "@CMAKE_INSTALL_PREFIX@/@DATA_INSTALL_DIR@"
 
 /*
- * Partial message read timeout in seconds
+ * Partial message read timeout in seconds (also used as nc_pollsession lock timeout)
  */
 #define NC_READ_TIMEOUT @READ_TIMEOUT@
 
