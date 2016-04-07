@@ -143,6 +143,9 @@ struct nc_pollsession *nc_ps_new(void);
 /**
  * @brief Free a pollsession structure.
  *
+ * !IMPORTANT! Make sure that \p ps is not accessible (is not used)
+ * by any thread before and after this call!
+ *
  * @param[in] ps Pollsession structure to free.
  */
 void nc_ps_free(struct nc_pollsession *ps);
