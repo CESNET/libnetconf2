@@ -86,7 +86,7 @@ API NC_STATUS
 nc_session_get_status(const struct nc_session *session)
 {
     if (!session) {
-        ERRARG;
+        ERRARG("session");
         return 0;
     }
 
@@ -97,7 +97,7 @@ API uint32_t
 nc_session_get_id(const struct nc_session *session)
 {
     if (!session) {
-        ERRARG;
+        ERRARG("session");
         return 0;
     }
 
@@ -108,7 +108,7 @@ API int
 nc_session_get_version(const struct nc_session *session)
 {
     if (!session) {
-        ERRARG;
+        ERRARG("session");
         return -1;
     }
 
@@ -119,7 +119,7 @@ API NC_TRANSPORT_IMPL
 nc_session_get_ti(const struct nc_session *session)
 {
     if (!session) {
-        ERRARG;
+        ERRARG("session");
         return 0;
     }
 
@@ -130,7 +130,7 @@ API const char *
 nc_session_get_username(const struct nc_session *session)
 {
     if (!session) {
-        ERRARG;
+        ERRARG("session");
         return NULL;
     }
 
@@ -141,7 +141,7 @@ API const char *
 nc_session_get_host(const struct nc_session *session)
 {
     if (!session) {
-        ERRARG;
+        ERRARG("session");
         return NULL;
     }
 
@@ -152,7 +152,7 @@ API uint16_t
 nc_session_get_port(const struct nc_session *session)
 {
     if (!session) {
-        ERRARG;
+        ERRARG("session");
         return 0;
     }
 
@@ -163,7 +163,7 @@ API struct ly_ctx *
 nc_session_get_ctx(const struct nc_session *session)
 {
     if (!session) {
-        ERRARG;
+        ERRARG("session");
         return NULL;
     }
 
@@ -174,7 +174,7 @@ API const char **
 nc_session_get_cpblts(const struct nc_session *session)
 {
     if (!session) {
-        ERRARG;
+        ERRARG("session");
         return NULL;
     }
 
@@ -186,8 +186,11 @@ nc_session_cpblt(const struct nc_session *session, const char *capab)
 {
     int i, len;
 
-    if (!session || !capab) {
-        ERRARG;
+    if (!session) {
+        ERRARG("session");
+        return NULL;
+    } else if (!capab) {
+        ERRARG("capab");
         return NULL;
     }
 
@@ -205,7 +208,7 @@ API void
 nc_session_set_data(struct nc_session *session, void *data)
 {
     if (!session) {
-        ERRARG;
+        ERRARG("session");
         return;
     }
 
@@ -216,7 +219,7 @@ API void *
 nc_session_get_data(const struct nc_session *session)
 {
     if (!session) {
-        ERRARG;
+        ERRARG("session");
         return NULL;
     }
 

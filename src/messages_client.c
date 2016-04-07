@@ -29,7 +29,7 @@ API NC_RPC_TYPE
 nc_rpc_get_type(const struct nc_rpc *rpc)
 {
     if (!rpc) {
-        ERRARG;
+        ERRARG("rpc");
         return 0;
     }
 
@@ -42,7 +42,7 @@ nc_rpc_generic(const struct lyd_node *data, NC_PARAMTYPE paramtype)
     struct nc_rpc_generic *rpc;
 
     if (!data) {
-        ERRARG;
+        ERRARG("data");
         return NULL;
     }
 
@@ -75,7 +75,7 @@ nc_rpc_generic_xml(const char *xml_str, NC_PARAMTYPE paramtype)
     struct nc_rpc_generic *rpc;
 
     if (!xml_str) {
-        ERRARG;
+        ERRARG("xml_str");
         return NULL;
     }
 
@@ -103,12 +103,12 @@ nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_WD_MODE wd_mode, NC
     struct nc_rpc_getconfig *rpc;
 
     if (!source) {
-        ERRARG;
+        ERRARG("source");
         return NULL;
     }
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter must either be an XML subtree or an XPath expression (invalid first character '%c').", filter[0]);
+        ERR("Filter must either be an XML subtree or an XPath expression (invalid first char '%c').", filter[0]);
         return NULL;
     }
 
@@ -137,13 +137,16 @@ nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, NC_RPC_EDIT_TEST
 {
     struct nc_rpc_edit *rpc;
 
-    if (!target || !edit_content) {
-        ERRARG;
+    if (!target) {
+        ERRARG("target");
+        return NULL;
+    } else if (!edit_content) {
+        ERRARG("edit_content");
         return NULL;
     }
 
     if ((edit_content[0] != '<') && !isalpha(edit_content[0])) {
-        ERR("<edit-config> content must either be a URL or a config (XML).");
+        ERR("<edit-config> content must either be a URL or an XML config (invalid first char '%c').", edit_content[0]);
         return NULL;
     }
 
@@ -174,13 +177,16 @@ nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTORE source, const
 {
     struct nc_rpc_copy *rpc;
 
-    if (!target || !source) {
-        ERRARG;
+    if (!target) {
+        ERRARG("target");
+        return NULL;
+    } else if (!source) {
+        ERRARG("source");
         return NULL;
     }
 
     if (url_or_config_src && (url_or_config_src[0] != '<') && !isalpha(url_or_config_src[0])) {
-        ERR("<copy-config> source is neither a URL nor a config (XML).");
+        ERR("<copy-config> source is neither a URL nor an XML config (invalid first char '%c').", url_or_config_src[0]);
         return NULL;
     }
 
@@ -215,7 +221,7 @@ nc_rpc_delete(NC_DATASTORE target, const char *url, NC_PARAMTYPE paramtype)
     struct nc_rpc_delete *rpc;
 
     if (!target) {
-        ERRARG;
+        ERRARG("target");
         return NULL;
     }
 
@@ -243,7 +249,7 @@ nc_rpc_lock(NC_DATASTORE target)
     struct nc_rpc_lock *rpc;
 
     if (!target) {
-        ERRARG;
+        ERRARG("target");
         return NULL;
     }
 
@@ -265,7 +271,7 @@ nc_rpc_unlock(NC_DATASTORE target)
     struct nc_rpc_lock *rpc;
 
     if (!target) {
-        ERRARG;
+        ERRARG("target");
         return NULL;
     }
 
@@ -287,7 +293,7 @@ nc_rpc_get(const char *filter, NC_WD_MODE wd_mode, NC_PARAMTYPE paramtype)
     struct nc_rpc_get *rpc;
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter must either be an XML subtree or an XPath expression (invalid first character '%c').", filter[0]);
+        ERR("Filter must either be an XML subtree or an XPath expression (invalid first char '%c').", filter[0]);
         return NULL;
     }
 
@@ -315,7 +321,7 @@ nc_rpc_kill(uint32_t session_id)
     struct nc_rpc_kill *rpc;
 
     if (!session_id) {
-        ERRARG;
+        ERRARG("session_id");
         return NULL;
     }
 
@@ -405,12 +411,12 @@ nc_rpc_validate(NC_DATASTORE source, const char *url_or_config, NC_PARAMTYPE par
     struct nc_rpc_validate *rpc;
 
     if (!source) {
-        ERRARG;
+        ERRARG("source");
         return NULL;
     }
 
     if (url_or_config && (url_or_config[0] != '<') && !isalpha(url_or_config[0])) {
-        ERR("<validate> source is neither a URL nor a config (XML).");
+        ERR("<validate> source is neither a URL nor an XML config (invalid first char '%c').", url_or_config[0]);
         return NULL;
     }
 
@@ -438,7 +444,7 @@ nc_rpc_getschema(const char *identifier, const char *version, const char *format
     struct nc_rpc_getschema *rpc;
 
     if (!identifier) {
-        ERRARG;
+        ERRARG("identifier");
         return NULL;
     }
 
@@ -476,7 +482,7 @@ nc_rpc_subscribe(const char *stream_name, const char *filter, const char *start_
     struct nc_rpc_subscribe *rpc;
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter must either be an XML subtree or an XPath expression (invalid first character '%c').", filter[0]);
+        ERR("Filter must either be an XML subtree or an XPath expression (invalid first char '%c').", filter[0]);
         return NULL;
     }
 

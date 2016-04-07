@@ -31,7 +31,7 @@ nc_datetime2time(const char *datetime)
     time_t retval;
 
     if (!datetime) {
-        ERRARG;
+        ERRARG("datetime");
         return -1;
     }
 

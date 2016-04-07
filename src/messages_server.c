@@ -70,7 +70,7 @@ nc_server_reply_err(struct nc_server_error *err)
     struct nc_server_reply_error *ret;
 
     if (!err) {
-        ERRARG;
+        ERRARG("err");
         return NULL;
     }
 
@@ -97,8 +97,11 @@ nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_error *e
 {
     struct nc_server_reply_error *err_rpl;
 
-    if (!reply || (reply->type != NC_RPL_ERROR) || !err) {
-        ERRARG;
+    if (!reply || (reply->type != NC_RPL_ERROR)) {
+        ERRARG("reply");
+        return -1;
+    } else if (!err) {
+        ERRARG("err");
         return -1;
     }
 
@@ -123,7 +126,7 @@ nc_err(NC_ERR tag, ...)
     uint32_t sid;
 
     if (!tag) {
-        ERRARG;
+        ERRARG("tag");
         return NULL;
     }
 
@@ -143,6 +146,7 @@ nc_err(NC_ERR tag, ...)
     case NC_ERR_OP_NOT_SUPPORTED:
         type = va_arg(ap, NC_ERR_TYPE);
         if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
+            ERRARG("type");
             goto fail;
         }
         break;
@@ -161,6 +165,7 @@ nc_err(NC_ERR tag, ...)
         arg2 = va_arg(ap, const char *);
 
         if (type == NC_ERR_TYPE_TRAN) {
+            ERRARG("type");
             goto fail;
         }
         nc_err_add_bad_attr(ret, arg1);
@@ -174,6 +179,7 @@ nc_err(NC_ERR tag, ...)
         arg1 = va_arg(ap, const char *);
 
         if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
+            ERRARG("type");
             goto fail;
         }
         nc_err_add_bad_elem(ret, arg1);
@@ -185,6 +191,7 @@ nc_err(NC_ERR tag, ...)
         arg2 = va_arg(ap, const char *);
 
         if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
+            ERRARG("type");
             goto fail;
         }
         nc_err_add_bad_elem(ret, arg1);
@@ -207,6 +214,7 @@ nc_err(NC_ERR tag, ...)
         type = va_arg(ap, NC_ERR_TYPE);
 
         if (type == NC_ERR_TYPE_TRAN) {
+            ERRARG("type");
             goto fail;
         }
         break;
@@ -216,6 +224,7 @@ nc_err(NC_ERR tag, ...)
         break;
 
     default:
+        ERRARG("tag");
         goto fail;
     }
 
@@ -278,6 +287,7 @@ nc_err(NC_ERR tag, ...)
         nc_err_set_msg(ret, "A message could not be handled because it failed to be parsed correctly.", "en");
         break;
     default:
+        ERRARG("tag");
         goto fail;
     }
 
@@ -288,7 +298,6 @@ nc_err(NC_ERR tag, ...)
     return ret;
 
 fail:
-    ERRARG;
     va_end(ap);
     free(ret);
     return NULL;
@@ -354,8 +363,11 @@ nc_err_libyang(void)
 API int
 nc_err_set_app_tag(struct nc_server_error *err, const char *error_app_tag)
 {
-    if (!err || !error_app_tag) {
-        ERRARG;
+    if (!err) {
+        ERRARG("err");
+        return -1;
+    } else if (!error_app_tag) {
+        ERRARG("error_app_tag");
         return -1;
     }
 
@@ -370,8 +382,11 @@ nc_err_set_app_tag(struct nc_server_error *err, const char *error_app_tag)
 API int
 nc_err_set_path(struct nc_server_error *err, const char *error_path)
 {
-    if (!err || !error_path) {
-        ERRARG;
+    if (!err) {
+        ERRARG("err");
+        return -1;
+    } else if (!error_path) {
+        ERRARG("error_path");
         return -1;
     }
 
@@ -386,8 +401,11 @@ nc_err_set_path(struct nc_server_error *err, const char *error_path)
 API int
 nc_err_set_msg(struct nc_server_error *err, const char *error_message, const char *lang)
 {
-    if (!err || !error_message) {
-        ERRARG;
+    if (!err) {
+        ERRARG("err");
+        return -1;
+    } else if (!error_message) {
+        ERRARG("error_message");
         return -1;
     }
 
@@ -411,8 +429,11 @@ nc_err_set_msg(struct nc_server_error *err, const char *error_message, const cha
 API int
 nc_err_set_sid(struct nc_server_error *err, uint32_t session_id)
 {
-    if (!err || !session_id) {
-        ERRARG;
+    if (!err) {
+        ERRARG("err");
+        return -1;
+    } else if (!session_id) {
+        ERRARG("session_id");
         return -1;
     }
 
@@ -423,8 +444,11 @@ nc_err_set_sid(struct nc_server_error *err, uint32_t session_id)
 API int
 nc_err_add_bad_attr(struct nc_server_error *err, const char *attr_name)
 {
-    if (!err || !attr_name) {
-        ERRARG;
+    if (!err) {
+        ERRARG("err");
+        return -1;
+    } else if (!attr_name) {
+        ERRARG("attr_name");
         return -1;
     }
 
@@ -442,8 +466,11 @@ nc_err_add_bad_attr(struct nc_server_error *err, const char *attr_name)
 API int
 nc_err_add_bad_elem(struct nc_server_error *err, const char *elem_name)
 {
-    if (!err || !elem_name) {
-        ERRARG;
+    if (!err) {
+        ERRARG("err");
+        return -1;
+    } else if (!elem_name) {
+        ERRARG("elem_name");
         return -1;
     }
 
@@ -461,8 +488,11 @@ nc_err_add_bad_elem(struct nc_server_error *err, const char *elem_name)
 API int
 nc_err_add_bad_ns(struct nc_server_error *err, const char *ns_name)
 {
-    if (!err || !ns_name) {
-        ERRARG;
+    if (!err) {
+        ERRARG("err");
+        return -1;
+    } else if (!ns_name) {
+        ERRARG("ns_name");
         return -1;
     }
 
@@ -480,8 +510,11 @@ nc_err_add_bad_ns(struct nc_server_error *err, const char *ns_name)
 API int
 nc_err_add_info_other(struct nc_server_error *err, struct lyxml_elem *other)
 {
-    if (!err || !other) {
-        ERRARG;
+    if (!err) {
+        ERRARG("err");
+        return -1;
+    } else if (!other) {
+        ERRARG("other");
         return -1;
     }
 

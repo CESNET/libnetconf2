@@ -700,7 +700,7 @@ nc_server_tls_set_cert(const char *cert, struct nc_server_tls_opts *opts)
     X509 *x509_cert;
 
     if (!cert) {
-        ERRARG;
+        ERRARG("cert");
         return -1;
     }
 
@@ -763,7 +763,7 @@ static int
 nc_server_tls_set_cert_path(const char *cert_path, struct nc_server_tls_opts *opts)
 {
     if (!cert_path) {
-        ERRARG;
+        ERRARG("cert_path");
         return -1;
     }
 
@@ -825,7 +825,7 @@ nc_server_tls_set_key(const char *privkey, int is_rsa, struct nc_server_tls_opts
     EVP_PKEY *key;;
 
     if (!privkey) {
-        ERRARG;
+        ERRARG("privkey");
         return -1;
     }
 
@@ -888,7 +888,7 @@ static int
 nc_server_tls_set_key_path(const char *privkey_path, struct nc_server_tls_opts *opts)
 {
     if (!privkey_path) {
-        ERRARG;
+        ERRARG("privkey_path");
         return -1;
     }
 
@@ -951,7 +951,7 @@ nc_server_tls_add_trusted_cert(const char *cert, struct nc_server_tls_opts *opts
     X509 *x509_cert;
 
     if (!cert) {
-        ERRARG;
+        ERRARG("cert");
         return -1;
     }
 
@@ -1023,7 +1023,7 @@ nc_server_tls_add_trusted_cert_path(const char *cert_path, struct nc_server_tls_
     X509 *x509_cert;
 
     if (!cert_path) {
-        ERRARG;
+        ERRARG("cert_path");
         return -1;
     }
 
@@ -1097,7 +1097,7 @@ nc_server_tls_set_trusted_ca_paths(const char *ca_file, const char *ca_dir, stru
     X509_LOOKUP *lookup;
 
     if (!ca_file && !ca_dir) {
-        ERRARG;
+        ERRARG("ca_file and ca_dir");
         return -1;
     }
 
@@ -1222,7 +1222,7 @@ nc_server_tls_set_crl_paths(const char *crl_file, const char *crl_dir, struct nc
     X509_LOOKUP *lookup;
 
     if (!crl_file && !crl_dir) {
-        ERRARG;
+        ERRARG("crl_file and crl_dir");
         return -1;
     }
 
@@ -1335,9 +1335,15 @@ nc_server_tls_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE m
 {
     struct nc_ctn *ctn, *new;
 
-    if (!fingerprint || !map_type || ((map_type == NC_TLS_CTN_SPECIFIED) && !name)
+    if (!fingerprint) {
+        ERRARG("fingerprint");
+        return -1;
+    } else if (!map_type) {
+        ERRARG("map_type");
+        return -1;
+    } else if (((map_type == NC_TLS_CTN_SPECIFIED) && !name)
             || ((map_type != NC_TLS_CTN_SPECIFIED) && name)) {
-        ERRARG;
+        ERRARG("map_type and name");
         return -1;
     }
 

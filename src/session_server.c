@@ -81,8 +81,11 @@ nc_server_endpt_unlock(struct nc_endpt *endpt)
 API void
 nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REASON reason)
 {
-    if (!session || !reason) {
-        ERRARG;
+    if (!session) {
+        ERRARG("session");
+        return;
+    } else if (!reason) {
+        ERRARG("reason");
         return;
     }
 
@@ -354,7 +357,7 @@ nc_server_init(struct ly_ctx *ctx)
     const struct lys_node *rpc;
 
     if (!ctx) {
-        ERRARG;
+        ERRARG("ctx");
         return -1;
     }
 
@@ -394,9 +397,11 @@ nc_server_destroy(void)
 API int
 nc_server_set_capab_withdefaults(NC_WD_MODE basic_mode, int also_supported)
 {
-    if (!basic_mode || (basic_mode == NC_WD_ALL_TAG)
-            || (also_supported && !(also_supported & (NC_WD_ALL | NC_WD_ALL_TAG | NC_WD_TRIM | NC_WD_EXPLICIT)))) {
-        ERRARG;
+    if (!basic_mode || (basic_mode == NC_WD_ALL_TAG)) {
+        ERRARG("basic_mode");
+        return -1;
+    } else if (also_supported && !(also_supported & (NC_WD_ALL | NC_WD_ALL_TAG | NC_WD_TRIM | NC_WD_EXPLICIT))) {
+        ERRARG("also_supported");
         return -1;
     }
 
@@ -430,8 +435,20 @@ nc_server_set_idle_timeout(uint16_t idle_timeout)
 API int
 nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **session)
 {
-    if (!server_opts.ctx || (fdin < 0) || (fdout < 0) || !username || !session) {
-        ERRARG;
+    if (!server_opts.ctx) {
+        ERRINIT;
+        return -1;
+    } else if (fdin < 0) {
+        ERRARG("fdin");
+        return -1;
+    } else if (fdout < 0) {
+        ERRARG("fdout");
+        return -1;
+    } else if (!username) {
+        ERRARG("username");
+        return -1;
+    } else if (!session) {
+        ERRARG("session");
         return -1;
     }
 
@@ -605,8 +622,11 @@ nc_ps_free(struct nc_pollsession *ps)
 API int
 nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
 {
-    if (!ps || !session) {
-        ERRARG;
+    if (!ps) {
+        ERRARG("ps");
+        return -1;
+    } else if (!session) {
+        ERRARG("session");
         return -1;
     }
 
@@ -690,8 +710,11 @@ nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
 {
     int ret, ret2;
 
-    if (!ps || !session) {
-        ERRARG;
+    if (!ps) {
+        ERRARG("ps");
+        return -1;
+    } else if (!session) {
+        ERRARG("session");
         return -1;
     }
 
@@ -714,7 +737,7 @@ nc_ps_session_count(struct nc_pollsession *ps)
     uint16_t count;
 
     if (!ps) {
-        ERRARG;
+        ERRARG("ps");
         return 0;
     }
 
@@ -740,8 +763,11 @@ nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
     struct nc_server_reply *reply = NULL;
     int ret;
 
-    if (!session || !rpc) {
-        ERRARG;
+    if (!session) {
+        ERRARG("session");
+        return NC_MSG_ERROR;
+    } else if (!rpc) {
+        ERRARG("rpc");
         return NC_MSG_ERROR;
     } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_SERVER)) {
         ERR("Session %u: invalid session to receive RPCs.", session->id);
@@ -852,7 +878,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
     struct nc_server_rpc *rpc = NULL;
 
     if (!ps || !ps->session_count) {
-        ERRARG;
+        ERRARG("ps");
         return -1;
     }
 
@@ -1040,7 +1066,7 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
     struct nc_session *session;
 
     if (!ps) {
-        ERRARG;
+        ERRARG("ps");
         return;
     }
 
@@ -1086,8 +1112,14 @@ nc_server_add_endpt_listen(const char *name, const char *address, uint16_t port,
     struct nc_server_ssh_opts *ssh_opts;
 #endif
 
-    if (!name || !address || !port) {
-        ERRARG;
+    if (!name) {
+        ERRARG("name");
+        return -1;
+    } else if (!address) {
+        ERRARG("address");
+        return -1;
+    } else if (!port) {
+        ERRARG("port");
         return -1;
     }
 
@@ -1177,8 +1209,14 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
     uint16_t i;
     int sock;
 
-    if (!endpt_name || (!address && !port) || (address && port) || !ti) {
-        ERRARG;
+    if (!endpt_name) {
+        ERRARG("endpt_name");
+        return -1;
+    } else if ((!address && !port) || (address && port)) {
+        ERRARG("address and port");
+        return -1;
+    } else if (!ti) {
+        ERRARG("ti");
         return -1;
     }
 
@@ -1331,8 +1369,11 @@ nc_accept(int timeout, struct nc_session **session)
     char *host = NULL;
     uint16_t port, idx;
 
-    if (!server_opts.ctx || !session) {
-        ERRARG;
+    if (!server_opts.ctx) {
+        ERRINIT;
+        return -1;
+    } else if (!session) {
+        ERRARG("session");
         return -1;
     }
 
@@ -1342,7 +1383,7 @@ nc_accept(int timeout, struct nc_session **session)
     pthread_rwlock_wrlock(&server_opts.endpt_array_lock);
 
     if (!server_opts.endpt_count) {
-        ERRARG;
+        ERRINIT;
         /* WRITE UNLOCK */
         pthread_rwlock_unlock(&server_opts.endpt_array_lock);
         return -1;
@@ -1445,8 +1486,17 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struc
 {
     int sock, ret;
 
-    if (!host || !port || !ti || !session) {
-        ERRARG;
+    if (!host) {
+        ERRARG("host");
+        return -1;
+    } else if (!port) {
+        ERRARG("port");
+        return -1;
+    } else if (!ti) {
+        ERRARG("ti");
+        return -1;
+    } else if (!session) {
+        ERRARG("session");
         return -1;
     }
 
