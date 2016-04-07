@@ -473,7 +473,7 @@ fail:
     return -1;
 }
 
-static int
+int
 nc_ps_lock(struct nc_pollsession *ps)
 {
     int ret;
@@ -535,7 +535,7 @@ nc_ps_lock(struct nc_pollsession *ps)
     return 0;
 }
 
-static int
+int
 nc_ps_unlock(struct nc_pollsession *ps)
 {
     int ret;

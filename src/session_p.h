@@ -296,6 +296,10 @@ NC_MSG_TYPE nc_send_msg(struct nc_session *session, struct lyd_node *op);
 
 int nc_timedlock(pthread_mutex_t *lock, int timeout);
 
+int nc_ps_lock(struct nc_pollsession *ps);
+
+int nc_ps_unlock(struct nc_pollsession *ps);
+
 /**
  * @brief Fill libyang context in \p session. Context models are based on the stored session
  *        capabilities. If the server does not support \<get-schema\>, the models are searched

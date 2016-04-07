@@ -1179,7 +1179,9 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     }
 
     /* LOCK */
-    pthread_mutex_lock(&ps->lock);
+    if (nc_ps_lock(ps)) {
+        return -1;
+    }
 
     for (i = 0; i < ps->session_count; ++i) {
         if ((ps->sessions[i]->status == NC_STATUS_RUNNING) && (ps->sessions[i]->ti_type == NC_TI_LIBSSH)
@@ -1203,7 +1205,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     }
 
     /* UNLOCK */
-    pthread_mutex_unlock(&ps->lock);
+    nc_ps_unlock(ps);
 
     if (!new_session) {
         ERR("No session with a NETCONF SSH channel ready was found.");
