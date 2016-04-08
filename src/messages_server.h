@@ -147,7 +147,7 @@ struct nc_server_error *nc_err(NC_ERR tag, ...);
  *
  * @return Server error structure, NULL on error.
  */
-API struct nc_server_error *nc_err_libyang(void);
+struct nc_server_error *nc_err_libyang(void);
 
 /**
  * @brief Set the \<error-app-tag\> element of an error. Any previous value will be overwritten.
