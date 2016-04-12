@@ -545,7 +545,6 @@ nc_ps_lock(struct nc_pollsession *ps)
         }
     }
 
-    VRB("locked, begin = %d, len = %d", ps->queue_begin, ps->queue_len);
     /* UNLOCK */
     pthread_mutex_unlock(&ps->lock);
 
@@ -575,7 +574,6 @@ nc_ps_unlock(struct nc_pollsession *ps)
     /* broadcast to all other threads that the queue moved */
     pthread_cond_broadcast(&ps->cond);
 
-    VRB("unlocked, begin = %d, len = %d", ps->queue_begin, ps->queue_len);
     /* UNLOCK */
     if (!ret) {
         pthread_mutex_unlock(&ps->lock);
