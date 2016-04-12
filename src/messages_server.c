@@ -303,18 +303,145 @@ fail:
     return NULL;
 }
 
+static struct lyxml_elem *
+nc_err_libyang_other_elem(const char *name, const char *content, int cont_len)
+{
+    struct lyxml_elem *root = NULL;
+    struct lyxml_ns *ns;
+
+    root = calloc(1, sizeof *root);
+    if (!root) {
+        ERRMEM;
+        goto error;
+    }
+    root->prev = root;
+    root->name = lydict_insert(server_opts.ctx, name, 0);
+    root->content = lydict_insert(server_opts.ctx, content, cont_len);
+
+    ns = calloc(1, sizeof *root->ns);
+    if (!ns) {
+        ERRMEM;
+        goto error;
+    }
+    root->attr = (struct lyxml_attr *)ns;
+    ns->type = LYXML_ATTR_NS;
+    ns->parent = root;
+    ns->value = lydict_insert(server_opts.ctx, "urn:ietf:params:xml:ns:yang:1", 0);
+    root->ns = ns;
+
+    return root;
+
+error:
+    lyxml_free(server_opts.ctx, root);
+    return NULL;
+}
+
 API struct nc_server_error *
 nc_err_libyang(void)
 {
     struct nc_server_error *e;
-    const char *str, *stri, *strj;
-    char *attr;
+    struct lyxml_elem *elem;
+    const char *str, *stri, *strj, *strk, *strl, *uniqi, *uniqj;
+    char *attr, *path;
+    int len;
 
     if (!ly_errno) {
         /* LY_SUCCESS */
         return NULL;
     } else if (ly_errno == LY_EVALID) {
         switch (ly_vecode) {
+        /* RFC 6020 section 13 errors */
+        case LYVE_NOUNIQ:
+            e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+            nc_err_set_app_tag(e, "data-not-unique");
+            nc_err_set_path(e, ly_errpath());
+
+            /* parse the message and get all the information we need */
+            str = ly_errmsg();
+            uniqi = strchr(str, '"');
+            uniqi++;
+            uniqj = strchr(uniqi, '"');
+
+            stri = strchr(uniqj + 1, '"');
+            stri++;
+            strj = strchr(stri, '"');
+
+            strk = strchr(strj + 1, '"');
+            ++strk;
+            strl = strchr(strk, '"');
+
+            /* maximum length is the whole unique string with the longer list instance identifier */
+            len = (uniqj - uniqi) + (strj - stri > strl - strk ? strj - stri : strl - strk);
+            path = malloc(len + 1);
+            if (!path) {
+                ERRMEM;
+                return e;
+            }
+
+            /* create non-unique elements, one in 1st list, one in 2nd list, for each unique list */
+            while (1) {
+                uniqj = strpbrk(uniqi, " \"");
+
+                len = sprintf(path, "%.*s/%.*s", (int)(strj - stri), stri, (int)(uniqj - uniqi), uniqi);
+                elem = nc_err_libyang_other_elem("non-unique", path, len);
+                if (!elem) {
+                    free(path);
+                    return e;
+                }
+                nc_err_add_info_other(e, elem);
+
+                len = sprintf(path, "%.*s/%.*s", (int)(strl - strk), strk, (int)(uniqj - uniqi), uniqi);
+                elem = nc_err_libyang_other_elem("non-unique", path, len);
+                if (!elem) {
+                    return e;
+                }
+                nc_err_add_info_other(e, elem);
+
+                if (uniqj[0] == '"') {
+                    break;
+                }
+                uniqi = uniqj + 1;
+            }
+            free(path);
+            break;
+        case LYVE_NOMAX:
+            e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+            nc_err_set_app_tag(e, "too-many-elements");
+            nc_err_set_path(e, ly_errpath());
+            break;
+        case LYVE_NOMIN:
+            e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+            nc_err_set_app_tag(e, "too-few-elements");
+            nc_err_set_path(e, ly_errpath());
+            break;
+        case LYVE_NOMUST:
+            e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+            if (ly_errapptag()[0]) {
+                nc_err_set_app_tag(e, ly_errapptag());
+            } else {
+                nc_err_set_app_tag(e, "must-violation");
+            }
+            break;
+        case LYVE_NOREQINS:
+        case LYVE_NOLEAFREF:
+            e = nc_err(NC_ERR_DATA_MISSING);
+            nc_err_set_app_tag(e, "instance-required");
+            nc_err_set_path(e, ly_errpath());
+            break;
+        case LYVE_NOMANDCHOICE:
+            e = nc_err(NC_ERR_DATA_MISSING);
+            nc_err_set_app_tag(e, "missing-choice");
+            nc_err_set_path(e, ly_errpath());
+
+            str = ly_errmsg();
+            stri = strchr(str, '"');
+            stri++;
+            strj = strchr(stri, '"');
+            elem = nc_err_libyang_other_elem("missing-choice", stri, strj - stri);
+            if (elem) {
+                nc_err_add_info_other(e, elem);
+            }
+            break;
         case LYVE_INELEM:
             str = ly_errpath();
             if (!strcmp(str, "/")) {
@@ -350,9 +477,13 @@ nc_err_libyang(void)
             }
             free(attr);
             break;
-        case LYVE_OORVAL:
-        case LYVE_NOCOND:
+        case LYVE_NOCONSTR:
+        case LYVE_NOWHEN:
             e = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_PROT);
+            /* LYVE_NOCONSTR (length, range, pattern) can have a specific error-app-tag */
+            if (ly_errapptag()[0]) {
+                nc_err_set_app_tag(e, ly_errapptag());
+            }
             break;
         default:
             e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
