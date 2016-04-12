@@ -416,7 +416,7 @@ nc_err_set_msg(struct nc_server_error *err, const char *error_message, const cha
     }
 
     if (err->message) {
-        lydict_remove(server_opts.ctx, err->apptag);
+        lydict_remove(server_opts.ctx, err->message);
     }
     err->message = lydict_insert(server_opts.ctx, error_message, 0);
 
