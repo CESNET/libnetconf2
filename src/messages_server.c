@@ -44,6 +44,11 @@ nc_server_reply_data(struct lyd_node *data, NC_PARAMTYPE paramtype)
 {
     struct nc_server_reply_data *ret;
 
+    if (!data) {
+        ERRARG("data");
+        return NULL;
+    }
+
     ret = malloc(sizeof *ret);
     if (!ret) {
         ERRMEM;
@@ -51,7 +56,7 @@ nc_server_reply_data(struct lyd_node *data, NC_PARAMTYPE paramtype)
     }
 
     ret->type = NC_RPL_DATA;
-    if (data && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+    if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
         ret->data = lyd_dup(data, 1);
     } else {
         ret->data = data;
