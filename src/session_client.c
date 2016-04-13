@@ -1742,7 +1742,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         return NC_MSG_ERROR;
     }
 
-    if (lyd_validate(&data, LYD_OPT_STRICT)) {
+    if (lyd_validate(&data, LYD_OPT_RPC | LYD_OPT_STRICT)) {
         lyd_free(data);
         return NC_MSG_ERROR;
     }
