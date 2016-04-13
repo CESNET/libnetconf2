@@ -411,6 +411,22 @@ nc_server_set_capab_withdefaults(NC_WD_MODE basic_mode, int also_supported)
 }
 
 API void
+nc_server_get_capab_withdefaults(NC_WD_MODE *basic_mode, int *also_supported)
+{
+    if (!basic_mode && !also_supported) {
+        ERRARG("basic_mode and also_supported");
+        return;
+    }
+
+    if (basic_mode) {
+        *basic_mode = server_opts.wd_basic_mode;
+    }
+    if (also_supported) {
+        *also_supported = server_opts.wd_also_supported;
+    }
+}
+
+API void
 nc_server_set_capab_interleave(int interleave_support)
 {
     if (interleave_support) {
@@ -420,16 +436,34 @@ nc_server_set_capab_interleave(int interleave_support)
     }
 }
 
+API int
+nc_server_get_capab_interleave(void)
+{
+    return server_opts.interleave_capab;
+}
+
 API void
 nc_server_set_hello_timeout(uint16_t hello_timeout)
 {
     server_opts.hello_timeout = hello_timeout;
 }
 
+API uint16_t
+nc_server_get_hello_timeout(void)
+{
+    return server_opts.hello_timeout;
+}
+
 API void
 nc_server_set_idle_timeout(uint16_t idle_timeout)
 {
     server_opts.idle_timeout = idle_timeout;
+}
+
+API uint16_t
+nc_server_get_idle_timeout(void)
+{
+    return server_opts.idle_timeout;
 }
 
 API int
