@@ -821,7 +821,7 @@ nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
         if (!(*rpc)->tree) {
             /* parsing RPC failed */
             reply = nc_server_reply_err(nc_err_libyang());
-            ret = nc_write_msg(session, NC_MSG_REPLY, (*rpc)->root, reply);
+            ret = nc_write_msg(session, NC_MSG_REPLY, xml, reply);
             nc_server_reply_free(reply);
             if (ret == -1) {
                 ERR("Session %u: failed to write reply.", session->id);

@@ -966,8 +966,11 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
         /* can be NULL if replying with a malformed-message error */
         if (rpc_elem) {
             lyxml_print_clb(nc_write_xmlclb, (void *)&arg, rpc_elem, LYXML_PRINT_ATTRS);
+            nc_write_clb((void *)&arg, ">", 1, 0);
+        } else {
+            /* but put there at least the correct namespace */
+            nc_write_clb((void *)&arg, "xmlns=\""NC_NS_BASE"\">", 48, 0);
         }
-        nc_write_clb((void *)&arg, ">", 1, 0);
         switch (reply->type) {
         case NC_RPL_OK:
             nc_write_clb((void *)&arg, "<ok/>", 5, 0);
