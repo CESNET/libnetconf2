@@ -95,6 +95,16 @@ void nc_server_destroy(void);
 int nc_server_set_capab_withdefaults(NC_WD_MODE basic_mode, int also_supported);
 
 /**
+ * @brief Get with-defaults capability extra parameters.
+ *
+ * At least one argument must be non-NULL.
+ *
+ * @param[in,out] basic_mode basic-mode parameter.
+ * @param[in,out] also_supported also-supported parameter.
+ */
+void nc_server_get_capab_withdefaults(NC_WD_MODE *basic_mode, int *also_supported);
+
+/**
  * @brief Set the interleave capability.
  *
  * For the capability to be actually advertised, the server context must also
@@ -108,11 +118,25 @@ int nc_server_set_capab_withdefaults(NC_WD_MODE basic_mode, int also_supported);
 void nc_server_set_capab_interleave(int interleave_support);
 
 /**
+ * @brief Get the interleave capability state.
+ *
+ * @return 1 for supported, 0 for not supported.
+ */
+int nc_server_get_capab_interleave(void);
+
+/**
  * @brief Set server timeout for receiving a hello message.
  *
  * @param[in] hello_timeout Hello message timeout. 0 for infinite waiting.
  */
 void nc_server_set_hello_timeout(uint16_t hello_timeout);
+
+/**
+ * @brief get server timeout for receiving a hello message.
+ *
+ * @return Hello message timeout, 0 is infinite.
+ */
+uint16_t nc_server_get_hello_timeout(void);
 
 /**
  * @brief Set server timeout for dropping an idle session.
@@ -121,6 +145,14 @@ void nc_server_set_hello_timeout(uint16_t hello_timeout);
  *                         because of inactivity.
  */
 void nc_server_set_idle_timeout(uint16_t idle_timeout);
+
+/**
+ * @brief Get server timeout for dropping an idle session.
+ *
+ * @return Idle session timeout, 0 for for never dropping
+ *         a session because of inactivity.
+ */
+uint16_t nc_server_get_idle_timeout(void);
 
 /**
  * @brief Accept a new session on a pre-established transport session.
@@ -142,6 +174,9 @@ struct nc_pollsession *nc_ps_new(void);
 
 /**
  * @brief Free a pollsession structure.
+ *
+ * !IMPORTANT! Make sure that \p ps is not accessible (is not used)
+ * by any thread before and after this call!
  *
  * @param[in] ps Pollsession structure to free.
  */

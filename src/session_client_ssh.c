@@ -654,8 +654,11 @@ _nc_client_ssh_add_keypair(const char *pub_key, const char *priv_key, struct nc_
     FILE *key;
     char line[128];
 
-    if (!pub_key || !priv_key) {
-        ERRARG;
+    if (!pub_key) {
+        ERRARG("pub_key");
+        return -1;
+    } else if (!priv_key) {
+        ERRARG("priv_key");
         return -1;
     }
 
@@ -731,7 +734,7 @@ static int
 _nc_client_ssh_del_keypair(int idx, struct nc_client_ssh_opts *opts)
 {
     if (idx >= opts->key_count) {
-        ERRARG;
+        ERRARG("idx");
         return -1;
     }
 
@@ -789,8 +792,11 @@ nc_client_ssh_ch_get_keypair_count(void)
 static int
 _nc_client_ssh_get_keypair(int idx, const char **pub_key, const char **priv_key, struct nc_client_ssh_opts *opts)
 {
-    if ((idx >= opts->key_count) || (!pub_key && !priv_key)) {
-        ERRARG;
+    if (idx >= opts->key_count) {
+        ERRARG("idx");
+        return -1;
+    } else if (!pub_key && !priv_key) {
+        ERRARG("pub_key and priv_key");
         return -1;
     }
 
@@ -1260,7 +1266,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client
     struct nc_session *session = NULL;
 
     if (!ssh_session) {
-        ERRARG;
+        ERRARG("ssh_session");
         return NULL;
     }
 
@@ -1404,7 +1410,7 @@ fail:
 API struct nc_session *
 nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
 {
-    const int timeout = NC_SSH_TIMEOUT;
+    const long timeout = NC_SSH_TIMEOUT;
     int sock;
     uint32_t port_uint;
     char *username;
@@ -1537,7 +1543,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     struct nc_session *new_session, *ptr;
 
     if (!session) {
-        ERRARG;
+        ERRARG("session");
         return NULL;
     }
 
@@ -1612,7 +1618,7 @@ fail:
 struct nc_session *
 nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout)
 {
-    const int ssh_timeout = NC_SSH_TIMEOUT;
+    const long ssh_timeout = NC_SSH_TIMEOUT;
     struct passwd *pw;
     struct nc_session *session;
     ssh_session sess;

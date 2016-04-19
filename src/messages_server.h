@@ -76,7 +76,8 @@ struct nc_server_reply *nc_server_reply_ok(void);
 /**
  * @brief Create a DATA rpc-reply object.
  *
- * @param[in] data Tree with the data.
+ * @param[in] data Reply data tree. This tree must be valid according to
+ * the RPC output of the RPC this is a reply to.
  * @param[in] paramtype Determines how the \p data parameter is treated.
  * @return rpc-reply object, NULL on error.
  */
@@ -138,6 +139,16 @@ int nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_erro
  * @return Server error structure, NULL on error.
  */
 struct nc_server_error *nc_err(NC_ERR tag, ...);
+
+/**
+ * @brief Create a server error structure based on libyang error.
+ *
+ * The function should be used immediately when a libyang function fails to generate
+ * NETCONF error structure based on internal libyang error information (ly_errno, ly_errmsg, ...)
+ *
+ * @return Server error structure, NULL on error.
+ */
+struct nc_server_error *nc_err_libyang(void);
 
 /**
  * @brief Set the \<error-app-tag\> element of an error. Any previous value will be overwritten.

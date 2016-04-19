@@ -270,12 +270,19 @@ struct nc_session {
 #endif
 };
 
+#define NC_PS_QUEUE_SIZE 6
+
 /* ACCESS locked */
 struct nc_pollsession {
     struct pollfd *pfds;
     struct nc_session **sessions;
     uint16_t session_count;
+
+    pthread_cond_t cond;
     pthread_mutex_t lock;
+    uint8_t queue[NC_PS_QUEUE_SIZE]; /**< round buffer, queue is empty when queue_len == 0 */
+    uint8_t queue_begin;             /**< queue starts on queue[queue_begin] */
+    uint8_t queue_len;               /**< queue ends on queue[queue_begin + queue_len - 1] */
 };
 
 struct nc_ntf_thread_arg {
@@ -288,6 +295,10 @@ void *nc_realloc(void *ptr, size_t size);
 NC_MSG_TYPE nc_send_msg(struct nc_session *session, struct lyd_node *op);
 
 int nc_timedlock(pthread_mutex_t *lock, int timeout);
+
+int nc_ps_lock(struct nc_pollsession *ps);
+
+int nc_ps_unlock(struct nc_pollsession *ps);
 
 /**
  * @brief Fill libyang context in \p session. Context models are based on the stored session

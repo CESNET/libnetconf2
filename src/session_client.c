@@ -199,7 +199,7 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
     struct nc_reply *reply;
     struct nc_reply_data *data_rpl;
     NC_MSG_TYPE msg;
-    char *model_data = NULL, *ptr, *ptr2, *anyxml = NULL;
+    char *model_data = NULL;
     uint64_t msgid;
 
     /* TODO later replace with yang to reduce model size? */
@@ -233,20 +233,13 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
     }
 
     data_rpl = (struct nc_reply_data *)reply;
-    lyxml_print_mem(&anyxml, ((struct lyd_node_anyxml *)data_rpl->data)->value, 0);
+    if (((struct lyd_node_anyxml *)data_rpl->data)->xml_struct) {
+        lyxml_print_mem(&model_data, ((struct lyd_node_anyxml *)data_rpl->data)->value.xml, LYXML_PRINT_SIBLINGS);
+    } else {
+        model_data = strdup(((struct lyd_node_anyxml *)data_rpl->data)->value.str);
+    }
     nc_reply_free(reply);
     *free_model_data = free;
-
-    /* it's with the data root node, remove it */
-    if (anyxml) {
-        ptr = strchr(anyxml, '>');
-        ++ptr;
-
-        ptr2 = strrchr(anyxml, '<');
-
-        model_data = strndup(ptr, strlen(ptr) - strlen(ptr2));
-        free(anyxml);
-    }
 
     return model_data;
 }
@@ -335,8 +328,11 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
 {
     struct nc_session *session;
 
-    if ((fdin < 0) || (fdout < 0)) {
-        ERRARG;
+    if (fdin < 0) {
+        ERRARG("fdin");
+        return NULL;
+    } else if (fdout < 0) {
+        ERRARG("fdout");
         return NULL;
     }
 
@@ -906,8 +902,11 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IM
 {
     int sock;
 
-    if (!address || !port) {
-        ERRARG;
+    if (!address) {
+        ERRARG("address");
+        return -1;
+    } else if (!port) {
+        ERRARG("port");
         return -1;
     }
 
@@ -979,8 +978,11 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
     char *host = NULL;
     uint16_t port, idx;
 
-    if (!client_opts.ch_binds || !session) {
-        ERRARG;
+    if (!client_opts.ch_binds) {
+        ERRINIT;
+        return -1;
+    } else if (!session) {
+        ERRARG("session");
         return -1;
     }
 
@@ -1045,8 +1047,17 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
     struct lyxml_elem *xml;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
 
-    if (!session || !rpc || !reply || (parseroptions & LYD_OPT_TYPEMASK)) {
-        ERRARG;
+    if (!session) {
+        ERRARG("session");
+        return NC_MSG_ERROR;
+    } else if (!rpc) {
+        ERRARG("rpc");
+        return NC_MSG_ERROR;
+    } else if (!reply) {
+        ERRARG("reply");
+        return NC_MSG_ERROR;
+    } else if (parseroptions & LYD_OPT_TYPEMASK) {
+        ERRARG("parseroptions");
         return NC_MSG_ERROR;
     } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR("Session %u: invalid session to receive RPC replies.", session->id);
@@ -1074,8 +1085,11 @@ nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
     struct lyxml_elem *xml, *ev_time;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
 
-    if (!session || !notif) {
-        ERRARG;
+    if (!session) {
+        ERRARG("session");
+        return NC_MSG_ERROR;
+    } else if (!notif) {
+        ERRARG("notif");
         return NC_MSG_ERROR;
     } else if (session->status != NC_STATUS_RUNNING || session->side != NC_CLIENT) {
         ERR("Session %u: invalid session to receive Notifications.", session->id);
@@ -1166,8 +1180,11 @@ nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_s
     struct nc_ntf_thread_arg *ntarg;
     int ret;
 
-    if (!session || !notif_clb) {
-        ERRARG;
+    if (!session) {
+        ERRARG("session");
+        return -1;
+    } else if (!notif_clb) {
+        ERRARG("notif_clb");
         return -1;
     } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR("Session %u: invalid session to receive Notifications.", session->id);
@@ -1225,11 +1242,17 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     struct nc_rpc_subscribe *rpc_sub;
     struct lyd_node *data, *node;
     const struct lys_module *ietfnc = NULL, *ietfncmon, *notifs, *ietfncwd = NULL;
-    char str[11];
+    char str[11], *filter;
     uint64_t cur_msgid;
 
-    if (!session || !rpc || !msgid) {
-        ERRARG;
+    if (!session) {
+        ERRARG("session");
+        return NC_MSG_ERROR;
+    } else if (!rpc) {
+        ERRARG("rpc");
+        return NC_MSG_ERROR;
+    } else if (!msgid) {
+        ERRARG("msgid");
         return NC_MSG_ERROR;
     } else if (session->status != NC_STATUS_RUNNING || session->side != NC_CLIENT) {
         ERR("Session %u: invalid session to send RPCs.", session->id);
@@ -1267,10 +1290,18 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         }
         if (rpc_gc->filter) {
             if (!rpc_gc->filter[0] || (rpc_gc->filter[0] == '<')) {
-                node = lyd_new_anyxml(data, ietfnc, "filter", rpc_gc->filter);
+                /* we need a copy of the filter */
+                filter = strdup(rpc_gc->filter);
+                if (!filter) {
+                    ERRMEM;
+                    lyd_free(data);
+                    return NC_MSG_ERROR;
+                }
+
+                node = lyd_new_anyxml_str(data, ietfnc, "filter", filter);
                 lyd_insert_attr(node, NULL, "type", "subtree");
             } else {
-                node = lyd_new_anyxml(data, ietfnc, "filter", NULL);
+                node = lyd_new_anyxml_str(data, ietfnc, "filter", NULL);
                 lyd_insert_attr(node, NULL, "type", "xpath");
                 lyd_insert_attr(node, NULL, "select", rpc_gc->filter);
             }
@@ -1348,7 +1379,15 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         }
 
         if (rpc_e->edit_cont[0] == '<') {
-            node = lyd_new_anyxml(data, ietfnc, "config", rpc_e->edit_cont);
+            /* we need a copy of the content */
+            filter = strdup(rpc_e->edit_cont);
+            if (!filter) {
+                ERRMEM;
+                lyd_free(data);
+                return NC_MSG_ERROR;
+            }
+
+            node = lyd_new_anyxml_str(data, ietfnc, "config", filter);
         } else {
             node = lyd_new_leaf(data, ietfnc, "url", rpc_e->edit_cont);
         }
@@ -1376,7 +1415,15 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         node = lyd_new(data, ietfnc, "source");
         if (rpc_cp->url_config_src) {
             if (rpc_cp->url_config_src[0] == '<') {
-                node = lyd_new_anyxml(node, ietfnc, "config", rpc_cp->url_config_src);
+                /* we need a copy of the content */
+                filter = strdup(rpc_cp->url_config_src);
+                if (!filter) {
+                    ERRMEM;
+                    lyd_free(data);
+                    return NC_MSG_ERROR;
+                }
+
+                node = lyd_new_anyxml_str(node, ietfnc, "config", filter);
             } else {
                 node = lyd_new_leaf(node, ietfnc, "url", rpc_cp->url_config_src);
             }
@@ -1466,10 +1513,18 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         data = lyd_new(NULL, ietfnc, "get");
         if (rpc_g->filter) {
             if (!rpc_g->filter[0] || (rpc_g->filter[0] == '<')) {
-                node = lyd_new_anyxml(data, ietfnc, "filter", rpc_g->filter);
+                /* we need a copy of the filter */
+                filter = strdup(rpc_g->filter);
+                if (!filter) {
+                    ERRMEM;
+                    lyd_free(data);
+                    return NC_MSG_ERROR;
+                }
+
+                node = lyd_new_anyxml_str(data, ietfnc, "filter", filter);
                 lyd_insert_attr(node, NULL, "type", "subtree");
             } else {
-                node = lyd_new_anyxml(data, ietfnc, "filter", NULL);
+                node = lyd_new_anyxml_str(data, ietfnc, "filter", NULL);
                 lyd_insert_attr(node, NULL, "type", "xpath");
                 lyd_insert_attr(node, NULL, "select", rpc_g->filter);
             }
@@ -1573,7 +1628,15 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         node = lyd_new(data, ietfnc, "source");
         if (rpc_val->url_config_src) {
             if (rpc_val->url_config_src[0] == '<') {
-                node = lyd_new_anyxml(node, ietfnc, "config", rpc_val->url_config_src);
+                /* we need a copy of the config */
+                filter = strdup(rpc_val->url_config_src);
+                if (!filter) {
+                    ERRMEM;
+                    lyd_free(data);
+                    return NC_MSG_ERROR;
+                }
+
+                node = lyd_new_anyxml_str(node, ietfnc, "config", filter);
             } else {
                 node = lyd_new_leaf(node, ietfnc, "url", rpc_val->url_config_src);
             }
@@ -1637,10 +1700,18 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         if (rpc_sub->filter) {
             if (!rpc_sub->filter[0] || (rpc_sub->filter[0] == '<')) {
-                node = lyd_new_anyxml(data, notifs, "filter", rpc_sub->filter);
+                /* we need a copy of the filter */
+                filter = strdup(rpc_sub->filter);
+                if (!filter) {
+                    ERRMEM;
+                    lyd_free(data);
+                    return NC_MSG_ERROR;
+                }
+
+                node = lyd_new_anyxml_str(data, notifs, "filter", filter);
                 lyd_insert_attr(node, NULL, "type", "subtree");
             } else {
-                node = lyd_new_anyxml(data, notifs, "filter", NULL);
+                node = lyd_new_anyxml_str(data, notifs, "filter", NULL);
                 lyd_insert_attr(node, NULL, "type", "xpath");
                 lyd_insert_attr(node, NULL, "select", rpc_sub->filter);
             }
@@ -1671,7 +1742,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         return NC_MSG_ERROR;
     }
 
-    if (lyd_validate(&data, LYD_OPT_STRICT)) {
+    if (lyd_validate(&data, LYD_OPT_RPC | LYD_OPT_STRICT)) {
         lyd_free(data);
         return NC_MSG_ERROR;
     }

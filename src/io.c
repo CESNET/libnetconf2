@@ -976,9 +976,7 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
             nc_write_clb((void *)&arg, "<ok/>", 5, 0);
             break;
         case NC_RPL_DATA:
-            nc_write_clb((void *)&arg, "<data>", 6, 0);
             lyd_print_clb(nc_write_xmlclb, (void *)&arg, ((struct nc_reply_data *)reply)->data, LYD_XML, LYP_WITHSIBLINGS);
-            nc_write_clb((void *)&arg, "</data>", 7, 0);
             break;
         case NC_RPL_ERROR:
             error_rpl = (struct nc_server_reply_error *)reply;

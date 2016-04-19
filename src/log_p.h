@@ -44,7 +44,8 @@ extern volatile uint8_t verbose_level;
 #define DBG(format,args...) if(verbose_level>=NC_VERB_DEBUG){prv_printf(NC_VERB_DEBUG,format,##args);}
 
 #define ERRMEM ERR("%s: memory reallocation failed (%s:%d).", __func__, __FILE__, __LINE__)
-#define ERRARG ERR("%s: invalid arguments or libnetconf2 not initialized.", __func__)
+#define ERRARG(arg) ERR("%s: invalid argument (%s).", __func__, arg)
+#define ERRINIT ERR("%s: libnetconf2 not initialized.", __func__)
 #define ERRINT ERR("%s: internal error (%s:%d).", __func__, __FILE__, __LINE__)
 
 #endif /* NC_LOG_PRIVATE_H_ */

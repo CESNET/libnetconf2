@@ -62,7 +62,7 @@ static int
 nc_server_ssh_set_hostkey(const char *privkey_path, struct nc_server_ssh_opts *opts)
 {
     if (!privkey_path) {
-        ERRARG;
+        ERRARG("privkey_path");
         return -1;
     }
 
@@ -122,7 +122,7 @@ static int
 nc_server_ssh_set_banner(const char *banner, struct nc_server_ssh_opts *opts)
 {
     if (!banner) {
-        ERRARG;
+        ERRARG("banner");
         return -1;
     }
 
@@ -176,7 +176,7 @@ nc_server_ssh_set_auth_methods(int auth_methods, struct nc_server_ssh_opts *opts
 {
     if (!(auth_methods & NC_SSH_AUTH_PUBLICKEY) && !(auth_methods & NC_SSH_AUTH_PASSWORD)
             && !(auth_methods & NC_SSH_AUTH_INTERACTIVE)) {
-        ERRARG;
+        ERRARG("auth_methods");
         return -1;
     }
 
@@ -220,7 +220,7 @@ static int
 nc_server_ssh_set_auth_attempts(uint16_t auth_attempts, struct nc_server_ssh_opts *opts)
 {
     if (!auth_attempts) {
-        ERRARG;
+        ERRARG("auth_attempts");
         return -1;
     }
 
@@ -264,7 +264,7 @@ static int
 nc_server_ssh_set_auth_timeout(uint16_t auth_timeout, struct nc_server_ssh_opts *opts)
 {
     if (!auth_timeout) {
-        ERRARG;
+        ERRARG("auth_timeout");
         return -1;
     }
 
@@ -307,8 +307,11 @@ nc_server_ssh_ch_set_auth_timeout(uint16_t auth_timeout)
 static int
 nc_server_ssh_add_authkey(const char *pubkey_path, const char *username, struct nc_server_ssh_opts *opts)
 {
-    if (!pubkey_path || !username) {
-        ERRARG;
+    if (!pubkey_path) {
+        ERRARG("pubkey_path");
+        return -1;
+    } else if (!username) {
+        ERRARG("username");
         return -1;
     }
 
@@ -1173,13 +1176,18 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     struct nc_session *new_session = NULL;
     uint16_t i;
 
-    if (!ps || !session) {
-        ERRARG;
+    if (!ps) {
+        ERRARG("ps");
+        return -1;
+    } else if (!session) {
+        ERRARG("session");
         return -1;
     }
 
     /* LOCK */
-    pthread_mutex_lock(&ps->lock);
+    if (nc_ps_lock(ps)) {
+        return -1;
+    }
 
     for (i = 0; i < ps->session_count; ++i) {
         if ((ps->sessions[i]->status == NC_STATUS_RUNNING) && (ps->sessions[i]->ti_type == NC_TI_LIBSSH)
@@ -1203,7 +1211,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     }
 
     /* UNLOCK */
-    pthread_mutex_unlock(&ps->lock);
+    nc_ps_unlock(ps);
 
     if (!new_session) {
         ERR("No session with a NETCONF SSH channel ready was found.");

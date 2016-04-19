@@ -81,8 +81,11 @@ nc_server_endpt_unlock(struct nc_endpt *endpt)
 API void
 nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REASON reason)
 {
-    if (!session || !reason) {
-        ERRARG;
+    if (!session) {
+        ERRARG("session");
+        return;
+    } else if (!reason) {
+        ERRARG("reason");
         return;
     }
 
@@ -301,6 +304,9 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
     /* check and get module with the name identifier */
     module = ly_ctx_get_module(server_opts.ctx, identifier, version);
     if (!module) {
+        module = (const struct lys_module *)ly_ctx_get_submodule(server_opts.ctx, NULL, NULL, identifier, version);
+    }
+    if (!module) {
         err = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
         nc_err_set_msg(err, "The requested schema was not found.", "en");
         return nc_server_reply_err(err);
@@ -316,14 +322,22 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
         nc_err_set_msg(err, "The requested format is not supported.", "en");
         return nc_server_reply_err(err);
     }
+    if (!model_data) {
+        ERRINT;
+        return NULL;
+    }
 
     sdata = ly_ctx_get_node(server_opts.ctx, NULL, "/ietf-netconf-monitoring:get-schema/output/data");
-    if (model_data && sdata) {
-        data = lyd_output_new_anyxml(sdata, model_data);
+    if (!sdata) {
+        ERRINT;
+        free(model_data);
+        return NULL;
     }
-    free(model_data);
+
+    data = lyd_output_new_anyxml_str(sdata, model_data);
     if (!data) {
         ERRINT;
+        free(model_data);
         return NULL;
     }
 
@@ -343,7 +357,7 @@ nc_server_init(struct ly_ctx *ctx)
     const struct lys_node *rpc;
 
     if (!ctx) {
-        ERRARG;
+        ERRARG("ctx");
         return -1;
     }
 
@@ -383,15 +397,33 @@ nc_server_destroy(void)
 API int
 nc_server_set_capab_withdefaults(NC_WD_MODE basic_mode, int also_supported)
 {
-    if (!basic_mode || (basic_mode == NC_WD_ALL_TAG)
-            || (also_supported && !(also_supported & (NC_WD_ALL | NC_WD_ALL_TAG | NC_WD_TRIM | NC_WD_EXPLICIT)))) {
-        ERRARG;
+    if (!basic_mode || (basic_mode == NC_WD_ALL_TAG)) {
+        ERRARG("basic_mode");
+        return -1;
+    } else if (also_supported && !(also_supported & (NC_WD_ALL | NC_WD_ALL_TAG | NC_WD_TRIM | NC_WD_EXPLICIT))) {
+        ERRARG("also_supported");
         return -1;
     }
 
     server_opts.wd_basic_mode = basic_mode;
     server_opts.wd_also_supported = also_supported;
     return 0;
+}
+
+API void
+nc_server_get_capab_withdefaults(NC_WD_MODE *basic_mode, int *also_supported)
+{
+    if (!basic_mode && !also_supported) {
+        ERRARG("basic_mode and also_supported");
+        return;
+    }
+
+    if (basic_mode) {
+        *basic_mode = server_opts.wd_basic_mode;
+    }
+    if (also_supported) {
+        *also_supported = server_opts.wd_also_supported;
+    }
 }
 
 API void
@@ -404,10 +436,22 @@ nc_server_set_capab_interleave(int interleave_support)
     }
 }
 
+API int
+nc_server_get_capab_interleave(void)
+{
+    return server_opts.interleave_capab;
+}
+
 API void
 nc_server_set_hello_timeout(uint16_t hello_timeout)
 {
     server_opts.hello_timeout = hello_timeout;
+}
+
+API uint16_t
+nc_server_get_hello_timeout(void)
+{
+    return server_opts.hello_timeout;
 }
 
 API void
@@ -416,11 +460,29 @@ nc_server_set_idle_timeout(uint16_t idle_timeout)
     server_opts.idle_timeout = idle_timeout;
 }
 
+API uint16_t
+nc_server_get_idle_timeout(void)
+{
+    return server_opts.idle_timeout;
+}
+
 API int
 nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **session)
 {
-    if (!server_opts.ctx || (fdin < 0) || (fdout < 0) || !username || !session) {
-        ERRARG;
+    if (!server_opts.ctx) {
+        ERRINIT;
+        return -1;
+    } else if (fdin < 0) {
+        ERRARG("fdin");
+        return -1;
+    } else if (fdout < 0) {
+        ERRARG("fdout");
+        return -1;
+    } else if (!username) {
+        ERRARG("username");
+        return -1;
+    } else if (!session) {
+        ERRARG("session");
         return -1;
     }
 
@@ -462,6 +524,98 @@ fail:
     return -1;
 }
 
+int
+nc_ps_lock(struct nc_pollsession *ps)
+{
+    int ret;
+    uint8_t our_id, queue_last;
+    struct timespec ts;
+
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += NC_READ_TIMEOUT;
+
+    /* LOCK */
+    ret = pthread_mutex_timedlock(&ps->lock, &ts);
+    if (ret) {
+        ERR("Failed to lock a pollsession (%s).", strerror(ret));
+        return -1;
+    }
+
+    /* get a unique queue value (by adding 1 to the last added value, if any) */
+    if (ps->queue_len) {
+        queue_last = ps->queue_begin + ps->queue_len - 1;
+        if (queue_last > NC_PS_QUEUE_SIZE - 1) {
+            queue_last -= NC_PS_QUEUE_SIZE;
+        }
+        our_id = ps->queue[queue_last] + 1;
+    } else {
+        our_id = 0;
+    }
+
+    /* add ourselves into the queue */
+    if (ps->queue_len == NC_PS_QUEUE_SIZE) {
+        ERR("Pollsession queue too small.");
+        return -1;
+    }
+    ++ps->queue_len;
+    queue_last = ps->queue_begin + ps->queue_len - 1;
+    if (queue_last > NC_PS_QUEUE_SIZE - 1) {
+        queue_last -= NC_PS_QUEUE_SIZE;
+    }
+    ps->queue[queue_last] = our_id;
+
+    /* is it our turn? */
+    while (ps->queue[ps->queue_begin] != our_id) {
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += NC_READ_TIMEOUT;
+
+        ret = pthread_cond_timedwait(&ps->cond, &ps->lock, &ts);
+        if (ret) {
+            ERR("Failed to wait for a pollsession condition (%s).", strerror(ret));
+            /* remove ourselves from the queue */
+            ps->queue_begin = (ps->queue_begin < NC_PS_QUEUE_SIZE - 1 ? ps->queue_begin + 1 : 0);
+            --ps->queue_len;
+            return -1;
+        }
+    }
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&ps->lock);
+
+    return 0;
+}
+
+int
+nc_ps_unlock(struct nc_pollsession *ps)
+{
+    int ret;
+    struct timespec ts;
+
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += NC_READ_TIMEOUT;
+
+    /* LOCK */
+    ret = pthread_mutex_timedlock(&ps->lock, &ts);
+    if (ret) {
+        ERR("Failed to lock a pollsession (%s).", strerror(ret));
+        ret = -1;
+    }
+
+    /* remove ourselves from the queue */
+    ps->queue_begin = (ps->queue_begin < NC_PS_QUEUE_SIZE - 1 ? ps->queue_begin + 1 : 0);
+    --ps->queue_len;
+
+    /* broadcast to all other threads that the queue moved */
+    pthread_cond_broadcast(&ps->cond);
+
+    /* UNLOCK */
+    if (!ret) {
+        pthread_mutex_unlock(&ps->lock);
+    }
+
+    return ret;
+}
+
 API struct nc_pollsession *
 nc_ps_new(void)
 {
@@ -472,6 +626,7 @@ nc_ps_new(void)
         ERRMEM;
         return NULL;
     }
+    pthread_cond_init(&ps->cond, NULL);
     pthread_mutex_init(&ps->lock, NULL);
 
     return ps;
@@ -484,9 +639,14 @@ nc_ps_free(struct nc_pollsession *ps)
         return;
     }
 
+    if (ps->queue_len) {
+        ERR("FATAL: Freeing a pollsession structure that is currently being worked with!");
+    }
+
     free(ps->pfds);
     free(ps->sessions);
     pthread_mutex_destroy(&ps->lock);
+    pthread_cond_destroy(&ps->cond);
 
     free(ps);
 }
@@ -494,13 +654,18 @@ nc_ps_free(struct nc_pollsession *ps)
 API int
 nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
 {
-    if (!ps || !session) {
-        ERRARG;
+    if (!ps) {
+        ERRARG("ps");
+        return -1;
+    } else if (!session) {
+        ERRARG("session");
         return -1;
     }
 
     /* LOCK */
-    pthread_mutex_lock(&ps->lock);
+    if (nc_ps_lock(ps)) {
+        return -1;
+    }
 
     ++ps->session_count;
     ps->pfds = nc_realloc(ps->pfds, ps->session_count * sizeof *ps->pfds);
@@ -508,7 +673,7 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
     if (!ps->pfds || !ps->sessions) {
         ERRMEM;
         /* UNLOCK */
-        pthread_mutex_unlock(&ps->lock);
+        nc_ps_unlock(ps);
         return -1;
     }
 
@@ -532,7 +697,7 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
     default:
         ERRINT;
         /* UNLOCK */
-        pthread_mutex_unlock(&ps->lock);
+        nc_ps_unlock(ps);
         return -1;
     }
     ps->pfds[ps->session_count - 1].events = POLLIN;
@@ -540,9 +705,7 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
     ps->sessions[ps->session_count - 1] = session;
 
     /* UNLOCK */
-    pthread_mutex_unlock(&ps->lock);
-
-    return 0;
+    return nc_ps_unlock(ps);
 }
 
 static int
@@ -577,22 +740,27 @@ remove:
 API int
 nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
 {
-    int ret;
+    int ret, ret2;
 
-    if (!ps || !session) {
-        ERRARG;
+    if (!ps) {
+        ERRARG("ps");
+        return -1;
+    } else if (!session) {
+        ERRARG("session");
         return -1;
     }
 
     /* LOCK */
-    pthread_mutex_lock(&ps->lock);
+    if (nc_ps_lock(ps)) {
+        return -1;
+    }
 
     ret = _nc_ps_del_session(ps, session, -1);
 
     /* UNLOCK */
-    pthread_mutex_unlock(&ps->lock);
+    ret2 = nc_ps_unlock(ps);
 
-    return ret;
+    return (ret || ret2 ? -1 : 0);
 }
 
 API uint16_t
@@ -601,17 +769,19 @@ nc_ps_session_count(struct nc_pollsession *ps)
     uint16_t count;
 
     if (!ps) {
-        ERRARG;
+        ERRARG("ps");
         return 0;
     }
 
     /* LOCK */
-    pthread_mutex_lock(&ps->lock);
+    if (nc_ps_lock(ps)) {
+        return -1;
+    }
 
     count = ps->session_count;
 
     /* UNLOCK */
-    pthread_mutex_unlock(&ps->lock);
+    nc_ps_unlock(ps);
 
     return count;
 }
@@ -623,13 +793,13 @@ nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
     struct lyxml_elem *xml = NULL;
     NC_MSG_TYPE msgtype;
     struct nc_server_reply *reply = NULL;
-    struct nc_server_error *e = NULL;
-    const char *str, *stri, *strj;
-    char *attr;
     int ret;
 
-    if (!session || !rpc) {
-        ERRARG;
+    if (!session) {
+        ERRARG("session");
+        return NC_MSG_ERROR;
+    } else if (!rpc) {
+        ERRARG("rpc");
         return NC_MSG_ERROR;
     } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_SERVER)) {
         ERR("Session %u: invalid session to receive RPCs.", session->id);
@@ -650,48 +820,7 @@ nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
         (*rpc)->tree = lyd_parse_xml(server_opts.ctx, &xml->child, LYD_OPT_DESTRUCT | LYD_OPT_RPC);
         if (!(*rpc)->tree) {
             /* parsing RPC failed */
-            if (ly_errno == LY_EVALID) {
-                switch (ly_vecode) {
-                case LYVE_INELEM:
-                    str = ly_errpath();
-                    if (!strcmp(str, "/")) {
-                        e = nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_APP);
-                        goto skiplymsg;
-                    } else {
-                        e = nc_err(NC_ERR_UNKNOWN_ELEM, NC_ERR_TYPE_PROT, ly_errpath());
-                    }
-                    break;
-                case LYVE_MISSELEM:
-                case LYVE_INORDER:
-                    e = nc_err(NC_ERR_MISSING_ELEM, NC_ERR_TYPE_PROT, ly_errpath());
-                    break;
-                case LYVE_INVAL:
-                    e = nc_err(NC_ERR_BAD_ELEM, NC_ERR_TYPE_PROT, ly_errpath());
-                    break;
-                case LYVE_INATTR:
-                case LYVE_MISSATTR:
-                    str = ly_errmsg();
-                    stri = strchr(str, '"'); stri++;
-                    strj = strchr(stri, '"'); strj--;
-                    attr = strndup(stri, strj - stri);
-                    e = nc_err(ly_vecode == LYVE_INATTR ? NC_ERR_UNKNOWN_ATTR : NC_ERR_MISSING_ATTR,
-                               NC_ERR_TYPE_PROT, attr, ly_errpath());
-                    free(attr);
-                    break;
-                case LYVE_OORVAL:
-                case LYVE_NOCOND:
-                    e = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_PROT);
-                    break;
-                default:
-                    e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
-                    break;
-                }
-            } else {
-                e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
-            }
-            nc_err_set_msg(e, ly_errmsg(), "en");
-skiplymsg:
-            reply = nc_server_reply_err(e);
+            reply = nc_server_reply_err(nc_err_libyang());
             ret = nc_write_msg(session, NC_MSG_REPLY, xml, reply);
             nc_server_reply_free(reply);
             if (ret == -1) {
@@ -781,14 +910,16 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout)
     struct nc_server_rpc *rpc = NULL;
 
     if (!ps || !ps->session_count) {
-        ERRARG;
+        ERRARG("ps");
         return -1;
     }
 
     cur_time = time(NULL);
 
     /* LOCK */
-    pthread_mutex_lock(&ps->lock);
+    if (nc_ps_lock(ps)) {
+        return -1;
+    }
 
     for (i = 0; i < ps->session_count; ++i) {
         if (ps->sessions[i]->status != NC_STATUS_RUNNING) {
@@ -956,7 +1087,7 @@ done:
 
 finish:
     /* UNLOCK */
-    pthread_mutex_unlock(&ps->lock);
+    nc_ps_unlock(ps);
     return ret;
 }
 
@@ -967,12 +1098,14 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
     struct nc_session *session;
 
     if (!ps) {
-        ERRARG;
+        ERRARG("ps");
         return;
     }
 
     /* LOCK */
-    pthread_mutex_lock(&ps->lock);
+    if (nc_ps_lock(ps)) {
+        return;
+    }
 
     if (all) {
         for (i = 0; i < ps->session_count; i++) {
@@ -997,7 +1130,7 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
     }
 
     /* UNLOCK */
-    pthread_mutex_unlock(&ps->lock);
+    nc_ps_unlock(ps);
 }
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
@@ -1011,8 +1144,14 @@ nc_server_add_endpt_listen(const char *name, const char *address, uint16_t port,
     struct nc_server_ssh_opts *ssh_opts;
 #endif
 
-    if (!name || !address || !port) {
-        ERRARG;
+    if (!name) {
+        ERRARG("name");
+        return -1;
+    } else if (!address) {
+        ERRARG("address");
+        return -1;
+    } else if (!port) {
+        ERRARG("port");
         return -1;
     }
 
@@ -1102,8 +1241,14 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
     uint16_t i;
     int sock;
 
-    if (!endpt_name || (!address && !port) || (address && port) || !ti) {
-        ERRARG;
+    if (!endpt_name) {
+        ERRARG("endpt_name");
+        return -1;
+    } else if ((!address && !port) || (address && port)) {
+        ERRARG("address and port");
+        return -1;
+    } else if (!ti) {
+        ERRARG("ti");
         return -1;
     }
 
@@ -1256,8 +1401,11 @@ nc_accept(int timeout, struct nc_session **session)
     char *host = NULL;
     uint16_t port, idx;
 
-    if (!server_opts.ctx || !session) {
-        ERRARG;
+    if (!server_opts.ctx) {
+        ERRINIT;
+        return -1;
+    } else if (!session) {
+        ERRARG("session");
         return -1;
     }
 
@@ -1267,7 +1415,7 @@ nc_accept(int timeout, struct nc_session **session)
     pthread_rwlock_wrlock(&server_opts.endpt_array_lock);
 
     if (!server_opts.endpt_count) {
-        ERRARG;
+        ERRINIT;
         /* WRITE UNLOCK */
         pthread_rwlock_unlock(&server_opts.endpt_array_lock);
         return -1;
@@ -1370,8 +1518,17 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struc
 {
     int sock, ret;
 
-    if (!host || !port || !ti || !session) {
-        ERRARG;
+    if (!host) {
+        ERRARG("host");
+        return -1;
+    } else if (!port) {
+        ERRARG("port");
+        return -1;
+    } else if (!ti) {
+        ERRARG("ti");
+        return -1;
+    } else if (!session) {
+        ERRARG("session");
         return -1;
     }
 
