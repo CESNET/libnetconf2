@@ -502,6 +502,28 @@ nc_err_libyang(void)
     return e;
 }
 
+API NC_ERR_TYPE
+nc_err_get_type(struct nc_server_error *err)
+{
+    if (!err) {
+        ERRARG("err");
+        return 0;
+    }
+
+    return err->type;
+}
+
+API NC_ERR
+nc_err_get_tag(struct nc_server_error *err)
+{
+    if (!err) {
+        ERRARG("err");
+        return 0;
+    }
+
+    return err->tag;
+}
+
 API int
 nc_err_set_app_tag(struct nc_server_error *err, const char *error_app_tag)
 {
@@ -521,6 +543,17 @@ nc_err_set_app_tag(struct nc_server_error *err, const char *error_app_tag)
     return 0;
 }
 
+API const char *
+nc_err_get_app_tag(struct nc_server_error *err)
+{
+    if (!err) {
+        ERRARG("err");
+        return NULL;
+    }
+
+    return err->apptag;
+}
+
 API int
 nc_err_set_path(struct nc_server_error *err, const char *error_path)
 {
@@ -538,6 +571,17 @@ nc_err_set_path(struct nc_server_error *err, const char *error_path)
     err->path = lydict_insert(server_opts.ctx, error_path, 0);
 
     return 0;
+}
+
+API const char *
+nc_err_get_path(struct nc_server_error *err)
+{
+    if (!err) {
+        ERRARG("err");
+        return 0;
+    }
+
+    return err->path;
 }
 
 API int
@@ -566,6 +610,17 @@ nc_err_set_msg(struct nc_server_error *err, const char *error_message, const cha
     }
 
     return 0;
+}
+
+API const char *
+nc_err_get_msg(struct nc_server_error *err)
+{
+    if (!err) {
+        ERRARG("err");
+        return 0;
+    }
+
+    return err->message;
 }
 
 API int
