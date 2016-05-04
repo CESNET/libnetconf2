@@ -532,7 +532,7 @@ nc_sshcb_auth_password(struct nc_session *session, ssh_message msg)
 
     free(pass_hash);
     ++session->ssh_auth_attempts;
-    VRB("Failed user \"'%s\" authentication attempt (#%d).", session->username, session->ssh_auth_attempts);
+    VRB("Failed user \"%s\" authentication attempt (#%d).", session->username, session->ssh_auth_attempts);
     ssh_message_reply_default(msg);
 }
 
