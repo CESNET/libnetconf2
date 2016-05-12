@@ -52,15 +52,11 @@ struct nc_server_reply *
 my_getconfig_rpc_clb(struct lyd_node *rpc, struct nc_session *session)
 {
     struct lyd_node *data;
-    const struct lys_module *module;
 
     assert_string_equal(rpc->schema->name, "get-config");
     assert_ptr_equal(session, server_session);
 
-    module = ly_ctx_get_module(session->ctx, "ietf-netconf-acm", NULL);
-    assert_non_null(module);
-
-    data = lyd_new(NULL, module, "nacm");
+    data = lyd_new_path(NULL, session->ctx, "/ietf-netconf:get-config/data", NULL, LYD_PATH_OPT_OUTPUT);
     assert_non_null(data);
 
     return nc_server_reply_data(data, NC_PARAMTYPE_FREE);
