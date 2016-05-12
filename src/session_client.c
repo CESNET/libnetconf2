@@ -198,6 +198,7 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
     struct nc_rpc *rpc;
     struct nc_reply *reply;
     struct nc_reply_data *data_rpl;
+    struct lyd_node_anyxml *get_schema_data;
     NC_MSG_TYPE msg;
     char *model_data = NULL;
     uint64_t msgid;
@@ -233,10 +234,17 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
     }
 
     data_rpl = (struct nc_reply_data *)reply;
-    if (((struct lyd_node_anyxml *)data_rpl->data)->xml_struct) {
-        lyxml_print_mem(&model_data, ((struct lyd_node_anyxml *)data_rpl->data)->value.xml, LYXML_PRINT_SIBLINGS);
+    if ((data_rpl->data->schema->nodetype != LYS_RPC) || strcmp(data_rpl->data->schema->name, "get-schema")
+            || !data_rpl->data->child || (data_rpl->data->child->schema->nodetype != LYS_ANYXML)) {
+        ERR("Session %u: unexpected data in reply to a <get-schema> RPC.", session->id);
+        nc_reply_free(reply);
+        return NULL;
+    }
+    get_schema_data = (struct lyd_node_anyxml *)data_rpl->data->child;
+    if (get_schema_data->xml_struct) {
+        lyxml_print_mem(&model_data, get_schema_data->value.xml, LYXML_PRINT_SIBLINGS);
     } else {
-        model_data = strdup(((struct lyd_node_anyxml *)data_rpl->data)->value.str);
+        model_data = strdup(get_schema_data->value.str);
     }
     nc_reply_free(reply);
     *free_model_data = free;
