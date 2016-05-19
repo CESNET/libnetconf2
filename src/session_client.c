@@ -1168,11 +1168,15 @@ nc_recv_notif_thread(void *arg)
                 break;
             }
             nc_notif_free(notif);
+        } else if (msgtype == NC_MSG_ERROR) {
+            break;
         }
 
         usleep(NC_CLIENT_NOTIF_THREAD_SLEEP);
     }
 
+    VRB("Session %u: notification thread exit.", session->id);
+    session->ntf_tid = NULL;
     return NULL;
 }
 
