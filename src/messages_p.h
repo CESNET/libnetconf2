@@ -34,7 +34,7 @@ struct nc_server_error {
     const char *message_lang;
 
     /* <error-info> */
-    uint32_t sid;
+    int64_t sid;    /* -1 for not set */
     const char **attr;
     uint16_t attr_count;
     const char **elem;

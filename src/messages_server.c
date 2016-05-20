@@ -140,6 +140,7 @@ nc_err(NC_ERR tag, ...)
         ERRMEM;
         return NULL;
     }
+    ret->sid = -1;
 
     va_start(ap, tag);
 
@@ -628,9 +629,6 @@ nc_err_set_sid(struct nc_server_error *err, uint32_t session_id)
 {
     if (!err) {
         ERRARG("err");
-        return -1;
-    } else if (!session_id) {
-        ERRARG("session_id");
         return -1;
     }
 
