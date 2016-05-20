@@ -872,12 +872,12 @@ nc_write_error(struct wclb_arg *arg, struct nc_server_error *err)
         nc_write_clb((void *)arg, "</error-message>", 16, 0);
     }
 
-    if (err->sid || err->attr_count || err->elem_count || err->ns_count || err->other_count) {
+    if ((err->sid > -1) || err->attr_count || err->elem_count || err->ns_count || err->other_count) {
         nc_write_clb((void *)arg, "<error-info>", 12, 0);
 
-        if (err->sid) {
+        if (err->sid > -1) {
             nc_write_clb((void *)arg, "<session-id>", 12, 0);
-            sprintf(str_sid, "%u", err->sid);
+            sprintf(str_sid, "%u", (uint32_t)err->sid);
             nc_write_clb((void *)arg, str_sid, strlen(str_sid), 0);
             nc_write_clb((void *)arg, "</session-id>", 13, 0);
         }
