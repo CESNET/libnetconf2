@@ -41,13 +41,8 @@ nc_rpc_generic(const struct lyd_node *data, NC_PARAMTYPE paramtype)
 {
     struct nc_rpc_generic *rpc;
 
-    if (!data) {
+    if (!data || (data->schema->nodetype != LYS_RPC) || data->next || (data->prev != data)) {
         ERRARG("data");
-        return NULL;
-    }
-
-    if (data->next || (data->prev != data)) {
-        ERR("Generic RPC must have a single root node.");
         return NULL;
     }
 
