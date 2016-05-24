@@ -141,8 +141,8 @@ test_send_recv_ok(void)
     assert_non_null(ps);
     nc_ps_add_session(ps, server_session);
 
-    ret = nc_ps_poll(ps, 0);
-    assert_int_equal(ret, 1);
+    ret = nc_ps_poll(ps, 0, NULL);
+    assert_int_equal(ret, NC_PSPOLL_RPC);
 
     /* server finished */
     nc_ps_free(ps);
@@ -200,8 +200,8 @@ test_send_recv_error(void)
     assert_non_null(ps);
     nc_ps_add_session(ps, server_session);
 
-    ret = nc_ps_poll(ps, 0);
-    assert_int_equal(ret, 1);
+    ret = nc_ps_poll(ps, 0, NULL);
+    assert_int_equal(ret, NC_PSPOLL_RPC | NC_PSPOLL_REPLY_ERROR);
 
     /* server finished */
     nc_ps_free(ps);
@@ -260,8 +260,8 @@ test_send_recv_data(void)
     assert_non_null(ps);
     nc_ps_add_session(ps, server_session);
 
-    ret = nc_ps_poll(ps, 0);
-    assert_int_equal(ret, 1);
+    ret = nc_ps_poll(ps, 0, NULL);
+    assert_int_equal(ret, NC_PSPOLL_RPC);
 
     /* server finished */
     nc_ps_free(ps);

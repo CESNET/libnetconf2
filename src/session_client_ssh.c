@@ -1380,7 +1380,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client
     session->ctx = ctx;
 
     /* NETCONF handshake */
-    if (nc_handshake(session)) {
+    if (nc_handshake(session) != NC_MSG_HELLO) {
         goto fail;
     }
     session->status = NC_STATUS_RUNNING;
@@ -1510,7 +1510,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     session->ctx = ctx;
 
     /* NETCONF handshake */
-    if (nc_handshake(session)) {
+    if (nc_handshake(session) != NC_MSG_HELLO) {
         goto fail;
     }
     session->status = NC_STATUS_RUNNING;
@@ -1582,7 +1582,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     new_session->ctx = ctx;
 
     /* NETCONF handshake */
-    if (nc_handshake(new_session)) {
+    if (nc_handshake(new_session) != NC_MSG_HELLO) {
         goto fail;
     }
     new_session->status = NC_STATUS_RUNNING;

@@ -372,7 +372,7 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     session->ctx = ctx;
 
     /* NETCONF handshake */
-    if (nc_handshake(session)) {
+    if (nc_handshake(session) != NC_MSG_HELLO) {
         goto fail;
     }
     session->status = NC_STATUS_RUNNING;

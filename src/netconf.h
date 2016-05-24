@@ -60,6 +60,7 @@ typedef enum NC_MSG_TYPE {
     NC_MSG_WOULDBLOCK,      /**< timeout return value */
     NC_MSG_NONE,            /**< no message at input or message was processed internally */
     NC_MSG_HELLO,           /**< \<hello\> message */
+    NC_MSG_BAD_HELLO,       /**< \<hello\> message parsing failed */
     NC_MSG_RPC,             /**< \<rpc\> message */
     NC_MSG_REPLY,           /**< \<rpc-reply\> message */
     NC_MSG_REPLY_ERR_MSGID, /**< \<rpc-reply\> message with missing or wrong message-id attribute value */

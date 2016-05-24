@@ -1515,7 +1515,7 @@ nc_tls_make_verify_key(void)
     pthread_key_create(&verify_key, NULL);
 }
 
-API int
+API NC_MSG_TYPE
 nc_connect_callhome_tls(const char *host, uint16_t port, struct nc_session **session)
 {
     return nc_connect_callhome(host, port, NC_TI_OPENSSL, session);
