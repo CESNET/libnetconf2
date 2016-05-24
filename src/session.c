@@ -170,40 +170,6 @@ nc_session_get_ctx(const struct nc_session *session)
     return session->ctx;
 }
 
-API const char **
-nc_session_get_cpblts(const struct nc_session *session)
-{
-    if (!session) {
-        ERRARG("session");
-        return NULL;
-    }
-
-    return session->cpblts;
-}
-
-API const char *
-nc_session_cpblt(const struct nc_session *session, const char *capab)
-{
-    int i, len;
-
-    if (!session) {
-        ERRARG("session");
-        return NULL;
-    } else if (!capab) {
-        ERRARG("capab");
-        return NULL;
-    }
-
-    len = strlen(capab);
-    for (i = 0; session->cpblts[i]; ++i) {
-        if (!strncmp(session->cpblts[i], capab, len)) {
-            return session->cpblts[i];
-        }
-    }
-
-    return NULL;
-}
-
 API void
 nc_session_set_data(struct nc_session *session, void *data)
 {

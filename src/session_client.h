@@ -342,6 +342,23 @@ struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
 #endif /* NC_ENABLED_TLS */
 
 /**
+ * @brief Get session capabilities.
+ *
+ * @param[in] session Session to get the information from.
+ * @return Session capabilities.
+ */
+const char **nc_session_get_cpblts(const struct nc_session *session);
+
+/**
+ * @brief Check capability presence in a session.
+ *
+ * @param[in] session Session to check.
+ * @param[in] capab Capability to look for, capability with any additional suffix will match.
+ * @return Matching capability, NULL if none found.
+ */
+const char *nc_session_cpblt(const struct nc_session *session, const char *capab);
+
+/**
  * @brief Receive NETCONF RPC reply.
  *
  * If a reply to \<get\> or \<get-config\> RPCs is received, the data are the whole configuration

@@ -1021,6 +1021,40 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
 
 #endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
+API const char **
+nc_session_get_cpblts(const struct nc_session *session)
+{
+    if (!session) {
+        ERRARG("session");
+        return NULL;
+    }
+
+    return session->cpblts;
+}
+
+API const char *
+nc_session_cpblt(const struct nc_session *session, const char *capab)
+{
+    int i, len;
+
+    if (!session) {
+        ERRARG("session");
+        return NULL;
+    } else if (!capab) {
+        ERRARG("capab");
+        return NULL;
+    }
+
+    len = strlen(capab);
+    for (i = 0; session->cpblts[i]; ++i) {
+        if (!strncmp(session->cpblts[i], capab, len)) {
+            return session->cpblts[i];
+        }
+    }
+
+    return NULL;
+}
+
 API void
 nc_client_init(void)
 {
