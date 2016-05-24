@@ -514,8 +514,8 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
     if (nc_handshake(*session)) {
         goto fail;
     }
+    (*session)->session_start = (*session)->last_rpc = time(NULL);
     (*session)->status = NC_STATUS_RUNNING;
-    (*session)->last_rpc = time(NULL);
 
     return 0;
 
@@ -1501,6 +1501,7 @@ nc_accept(int timeout, struct nc_session **session)
         *session = NULL;
         return -1;
     }
+    (*session)->session_start = time(NULL);
     (*session)->status = NC_STATUS_RUNNING;
 
     return 1;
@@ -1615,6 +1616,7 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struc
         ret = -1;
         goto fail;
     }
+    (*session)->session_start = time(NULL);
     (*session)->status = NC_STATUS_RUNNING;
 
     return 1;
@@ -1626,3 +1628,14 @@ fail:
 }
 
 #endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
+
+API char *
+nc_session_get_session_start(const struct nc_session *session)
+{
+    if (!session) {
+        ERRARG("session");
+        return NULL;
+    }
+
+    return nc_time2datetime(session->session_start, NULL);
+}

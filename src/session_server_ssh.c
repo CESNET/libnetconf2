@@ -1228,6 +1228,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
         return -1;
     }
 
+    new_session->session_start = time(NULL);
     new_session->status = NC_STATUS_RUNNING;
     *session = new_session;
 

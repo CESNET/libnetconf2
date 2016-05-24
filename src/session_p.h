@@ -252,6 +252,7 @@ struct nc_session {
     struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
 
     /* server side only data */
+    time_t session_start;          /**< time the session was created */
     time_t last_rpc;               /**< time the last RPC was received on this session */
 #ifdef NC_ENABLED_SSH
     /* SSH session authenticated */

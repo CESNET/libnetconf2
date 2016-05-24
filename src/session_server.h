@@ -557,4 +557,12 @@ int nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *
 
 #endif /* NC_ENABLED_TLS */
 
+/**
+ * @brief Get session start time in YANG datetime format.
+ *
+ * @param[in] session Session to get the information from.
+ * @return Session start time, must be freed, NULL on error.
+ */
+char *nc_session_get_session_start(const struct nc_session *session);
+
 #endif /* NC_SESSION_SERVER_H_ */
