@@ -457,8 +457,8 @@ add_cpblt(struct ly_ctx *ctx, const char *capab, const char ***cpblts, int *size
     ++(*count);
 }
 
-static const char **
-create_cpblts(struct ly_ctx *ctx)
+API const char **
+nc_server_get_cpblts(struct ly_ctx *ctx)
 {
     struct lyd_node *child, *child2, *yanglib;
     struct lyd_node_leaf_list **features = NULL, *ns = NULL, *rev = NULL, *name = NULL;
@@ -467,8 +467,14 @@ create_cpblts(struct ly_ctx *ctx)
     int size = 10, count, feat_count = 0, i, str_len;
     char str[512];
 
+    if (!ctx) {
+        ERRARG("ctx");
+        return NULL;
+    }
+
     yanglib = ly_ctx_info(ctx);
     if (!yanglib) {
+        ERR("Failed to get ietf-yang-library data from the context.");
         return NULL;
     }
 
@@ -713,7 +719,7 @@ nc_send_server_hello(struct nc_session *session)
     int r, i;
     const char **cpblts;
 
-    cpblts = create_cpblts(session->ctx);
+    cpblts = nc_server_get_cpblts(session->ctx);
 
     r = nc_write_msg(session, NC_MSG_HELLO, cpblts, &session->id);
 

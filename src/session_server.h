@@ -155,6 +155,17 @@ void nc_server_set_idle_timeout(uint16_t idle_timeout);
 uint16_t nc_server_get_idle_timeout(void);
 
 /**
+ * @brief Get all the server capabilities as will be sent to every client.
+ *
+ * A few capabilities (with-defaults, interleave) depend on the current
+ * server options.
+ *
+ * @param[in] ctx Context to read most capabilities from.
+ * @return Array of capabilities stored in the \p ctx dictionary, NULL on error.
+ */
+const char **nc_server_get_cpblts(struct ly_ctx *ctx);
+
+/**
  * @brief Accept a new session on a pre-established transport session.
  *
  * @param[in] fdin File descriptor to read (unencrypted) XML data from.
