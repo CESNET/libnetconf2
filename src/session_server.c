@@ -1671,13 +1671,13 @@ fail:
 
 #endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
-API char *
-nc_session_get_session_start(const struct nc_session *session)
+API time_t
+nc_session_get_start_time(const struct nc_session *session)
 {
     if (!session) {
         ERRARG("session");
-        return NULL;
+        return 0;
     }
 
-    return nc_time2datetime(session->session_start, NULL);
+    return session->session_start;
 }
