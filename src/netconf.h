@@ -129,13 +129,14 @@ void nc_thread_destroy(void);
  *
  * This is a reverse function to nc_datetime2time().
  *
- * @param[in] time time_t type value returned e.g. by time().
- * @param[in] tz timezone name for the result. See tzselect(1) for list of
+ * @param[in] time Time to convert.
+ * @param[in] tz Timezone name for the result. See tzselect(1) for list of
  * correct values. If not specified (NULL), the result is provided in UTC (Zulu).
- * @return Printed string in a format compliant to RFC 3339. It is up to the
- * caller to free the returned string.
+ * @param[in] buf Optional buffer to print the datetime into, should be at least 26 characters long!
+ * @return Printed string in a format compliant to RFC 3339 stored in \p buf if provided,
+ * otherwise it is up to the caller to free the returned string.
  */
-char* nc_time2datetime(time_t time, const char* tz);
+char* nc_time2datetime(time_t time, const char* tz, char *buf);
 
 /**
  * @brief Transform given string in RFC 3339 compliant format to the time_t

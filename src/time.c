@@ -90,7 +90,7 @@ nc_datetime2time(const char *datetime)
 }
 
 API char *
-nc_time2datetime(time_t time, const char *tz)
+nc_time2datetime(time_t time, const char *tz, char *buf)
 {
     char *date = NULL;
     char *zoneshift = NULL;
@@ -144,19 +144,29 @@ nc_time2datetime(time_t time, const char *tz)
             }
         }
     }
-    if (asprintf(&date, "%04d-%02d-%02dT%02d:%02d:%02d%s",
-                 tm.tm_year + 1900,
-                 tm.tm_mon + 1,
-                 tm.tm_mday,
-                 tm.tm_hour,
-                 tm.tm_min,
-                 tm.tm_sec,
-                 (zoneshift == NULL) ? "" : zoneshift) == -1) {
+
+    if (buf) {
+        sprintf(buf, "%04d-%02d-%02dT%02d:%02d:%02d%s",
+                        tm.tm_year + 1900,
+                        tm.tm_mon + 1,
+                        tm.tm_mday,
+                        tm.tm_hour,
+                        tm.tm_min,
+                        tm.tm_sec,
+                        (zoneshift == NULL) ? "" : zoneshift);
+    } else if (asprintf(&date, "%04d-%02d-%02dT%02d:%02d:%02d%s",
+                        tm.tm_year + 1900,
+                        tm.tm_mon + 1,
+                        tm.tm_mday,
+                        tm.tm_hour,
+                        tm.tm_min,
+                        tm.tm_sec,
+                        (zoneshift == NULL) ? "" : zoneshift) == -1) {
         free(zoneshift);
         ERRMEM;
         return NULL;
     }
     free(zoneshift);
 
-    return date;
+    return (buf ? buf : date);
 }
