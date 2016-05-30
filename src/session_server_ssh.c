@@ -575,14 +575,15 @@ auth_pubkey_compare_key(struct nc_server_ssh_opts *opts, ssh_key key)
     uint32_t i;
     ssh_key pub_key;
     const char *username = NULL;
+    int ret;
 
     for (i = 0; i < opts->authkey_count; ++i) {
-        if (ssh_pki_import_pubkey_file(opts->authkeys[i].path, &pub_key) != SSH_OK) {
-            if (eaccess(opts->authkeys[i].path, R_OK)) {
-                WRN("Failed to import the public key \"%s\" (%s).", opts->authkeys[i].path, strerror(errno));
-            } else {
-                WRN("Failed to import the public key \"%s\" (%s).", opts->authkeys[i].path, ssh_get_error(pub_key));
-            }
+        ret = ssh_pki_import_pubkey_file(opts->authkeys[i].path, &pub_key);
+        if (ret == SSH_EOF) {
+            WRN("Failed to import the public key \"%s\" (File access problem).", opts->authkeys[i].path);
+            continue;
+        } else if (ret == SSH_ERROR) {
+            WRN("Failed to import the public key \"%s\" (SSH error).", opts->authkeys[i].path);
             continue;
         }
 

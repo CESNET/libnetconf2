@@ -1109,8 +1109,12 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
                      opts->keys[j].privkey_crypt ? "password-protected " : "", opts->keys[j].privkey_path,
                      opts->keys[j].pubkey_path);
 
-                if (ssh_pki_import_pubkey_file(opts->keys[j].pubkey_path, &pubkey) != SSH_OK) {
-                    WRN("Failed to import the key \"%s\".", opts->keys[j].pubkey_path);
+                ret = ssh_pki_import_pubkey_file(opts->keys[j].pubkey_path, &pubkey);
+                if (ret == SSH_EOF) {
+                    WRN("Failed to import the key \"%s\" (File access problem).", opts->keys[j].pubkey_path);
+                    continue;
+                } else if (ret == SSH_ERROR) {
+                    WRN("Failed to import the key \"%s\" (SSH error).", opts->keys[j].pubkey_path);
                     continue;
                 }
 
@@ -1142,8 +1146,11 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
                     memset(s, 0, strlen(s));
                     free(s);
                 }
-                if (ret != SSH_OK) {
-                    WRN("Failed to import the key \"%s\".", opts->keys[j].privkey_path);
+                if (ret == SSH_EOF) {
+                    WRN("Failed to import the key \"%s\" (File access problem).", opts->keys[j].privkey_path);
+                    continue;
+                } else if (ret == SSH_ERROR) {
+                    WRN("Failed to import the key \"%s\" (SSH error).", opts->keys[j].privkey_path);
                     continue;
                 }
 
