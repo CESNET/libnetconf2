@@ -1452,6 +1452,9 @@ nc_accept(int timeout, struct nc_session **session)
         /* WRITE UNLOCK */
         pthread_rwlock_unlock(&server_opts.endpt_array_lock);
         free(host);
+        if (!ret) {
+            return NC_MSG_WOULDBLOCK;
+        }
         return NC_MSG_ERROR;
     }
     sock = ret;
