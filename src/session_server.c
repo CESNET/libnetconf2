@@ -982,7 +982,7 @@ retry_poll:
 
     /* find the first fd with POLLIN, we don't care if there are more now */
     for (; i < ps->session_count; ++i) {
-        if (ps->pfds[i].revents & POLLHUP) {
+        if (ps->pfds[i].revents & (POLLHUP | POLLNVAL)) {
             ERR("Session %u: communication socket unexpectedly closed.", ps->sessions[i]->id);
             ps->sessions[i]->status = NC_STATUS_INVALID;
             ps->sessions[i]->term_reason = NC_SESSION_TERM_DROPPED;
