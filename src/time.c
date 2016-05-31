@@ -108,6 +108,7 @@ nc_time2datetime(time_t time, const char *tz, char *buf)
             }
         }
         setenv("TZ", tz, 1);
+        tzset(); /* apply timezone change */
         tm_ret = localtime_r(&time, &tm);
         if (tz_origin) {
             setenv("TZ", tz_origin, 1);
@@ -115,6 +116,7 @@ nc_time2datetime(time_t time, const char *tz, char *buf)
         } else {
             unsetenv("TZ");
         }
+        tzset(); /* apply timezone change */
 
         if (!tm_ret) {
             return NULL;
