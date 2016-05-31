@@ -193,7 +193,7 @@ sshauth_hostkey_check(const char *hostname, ssh_session session)
 
     state = ssh_is_server_known(session);
 
-    ret = ssh_get_publickey(session, &srv_pubkey);
+    ret = ssh_get_server_publickey(session, &srv_pubkey);
     if (ret < 0) {
         ERR("Unable to get server public key.");
         return -1;
