@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.6)
 
 # list of all the tests
-set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server)
+set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_time)
 
 if (ENABLE_SSH OR ENABLE_TLS)
     list(APPEND tests test_server_thread)
