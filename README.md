@@ -4,9 +4,6 @@
 [![Build Status](https://secure.travis-ci.org/CESNET/libnetconf2.png?branch=master)](http://travis-ci.org/CESNET/libnetconf2)
 [![Coverity Scan Build Status](https://scan.coverity.com/projects/7642/badge.svg)](https://scan.coverity.com/projects/7642)
 
-TravisCI:
-[![Build Status](https://secure.travis-ci.org/CESNET/libnetconf2.png?branch=master)](http://travis-ci.org/CESNET/libnetconf2)
-
 **libnetconf2** is a NETCONF library in C intended for building NETCONF clients
 and servers. NETCONF is the [NETwork CONFiguration protocol]
 (http://trac.tools.ietf.org/wg/netconf/trac/wiki) introduced by IETF.
