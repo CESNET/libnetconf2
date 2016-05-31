@@ -359,6 +359,14 @@ const char **nc_session_get_cpblts(const struct nc_session *session);
 const char *nc_session_cpblt(const struct nc_session *session, const char *capab);
 
 /**
+ * @brief Check whether the session has a notification thread running.
+ *
+ * @param[in] session Session to check.
+ * @return 1 if notfication thread is running, 0 otherwise.
+ */
+int nc_session_ntf_thread_running(const struct nc_session *session);
+
+/**
  * @brief Receive NETCONF RPC reply.
  *
  * If a reply to \<get\> or \<get-config\> RPCs is received, the data are the whole configuration

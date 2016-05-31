@@ -1055,6 +1055,17 @@ nc_session_cpblt(const struct nc_session *session, const char *capab)
     return NULL;
 }
 
+API int
+nc_session_ntf_thread_running(const struct nc_session *session)
+{
+    if (!session) {
+        ERRARG("session");
+        return 0;
+    }
+
+    return session->ntf_tid ? 1 : 0;
+}
+
 API void
 nc_client_init(void)
 {
