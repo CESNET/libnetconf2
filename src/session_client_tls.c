@@ -572,7 +572,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     session->ctx = ctx;
 
     /* NETCONF handshake */
-    if (nc_handshake(session)) {
+    if (nc_handshake(session) != NC_MSG_HELLO) {
         goto fail;
     }
     session->status = NC_STATUS_RUNNING;
@@ -644,7 +644,7 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     session->ctx = ctx;
 
     /* NETCONF handshake */
-    if (nc_handshake(session)) {
+    if (nc_handshake(session) != NC_MSG_HELLO) {
         goto fail;
     }
     session->status = NC_STATUS_RUNNING;

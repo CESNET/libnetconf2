@@ -575,14 +575,15 @@ auth_pubkey_compare_key(struct nc_server_ssh_opts *opts, ssh_key key)
     uint32_t i;
     ssh_key pub_key;
     const char *username = NULL;
+    int ret;
 
     for (i = 0; i < opts->authkey_count; ++i) {
-        if (ssh_pki_import_pubkey_file(opts->authkeys[i].path, &pub_key) != SSH_OK) {
-            if (eaccess(opts->authkeys[i].path, R_OK)) {
-                WRN("Failed to import the public key \"%s\" (%s).", opts->authkeys[i].path, strerror(errno));
-            } else {
-                WRN("Failed to import the public key \"%s\" (%s).", opts->authkeys[i].path, ssh_get_error(pub_key));
-            }
+        ret = ssh_pki_import_pubkey_file(opts->authkeys[i].path, &pub_key);
+        if (ret == SSH_EOF) {
+            WRN("Failed to import the public key \"%s\" (File access problem).", opts->authkeys[i].path);
+            continue;
+        } else if (ret == SSH_ERROR) {
+            WRN("Failed to import the public key \"%s\" (SSH error).", opts->authkeys[i].path);
             continue;
         }
 
@@ -1005,8 +1006,6 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
     return 0;
 }
 
-/* ret 0 - timeout, 1 channel has data, 2 some other channel has data,
- * 3 status change, 4 new SSH message, 5 new NETCONF SSH channel, -1 error */
 int
 nc_ssh_pollin(struct nc_session *session, int timeout)
 {
@@ -1015,8 +1014,10 @@ nc_ssh_pollin(struct nc_session *session, int timeout)
 
     ret = nc_timedlock(session->ti_lock, timeout);
 
-    if (ret != 1) {
-        return ret;
+    if (ret < 0) {
+        return NC_PSPOLL_ERROR;
+    } else if (!ret) {
+        return NC_PSPOLL_TIMEOUT;
     }
 
     ret = ssh_execute_message_callbacks(session->ti.libssh.session);
@@ -1027,7 +1028,7 @@ nc_ssh_pollin(struct nc_session *session, int timeout)
             ssh_get_error(session->ti.libssh.session));
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_OTHER;
-        return 3;
+        return NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
     }
 
     /* new SSH message */
@@ -1038,38 +1039,38 @@ nc_ssh_pollin(struct nc_session *session, int timeout)
                 if ((new->status == NC_STATUS_STARTING) && new->ti.libssh.channel
                         && (new->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
                     /* new NETCONF SSH channel */
-                    return 5;
+                    return NC_PSPOLL_SSH_CHANNEL;
                 }
             }
         }
 
         /* just some SSH message */
-        return 4;
+        return NC_PSPOLL_SSH_MSG;
     }
 
     /* no new SSH message, maybe NETCONF data? */
     ret = ssh_channel_poll_timeout(session->ti.libssh.channel, 0, 0);
     /* not this one */
     if (!ret) {
-        return 2;
+        return NC_PSPOLL_PENDING;
     } else if (ret == SSH_ERROR) {
         ERR("Session %u: SSH channel error (%s).", session->id,
             ssh_get_error(session->ti.libssh.session));
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_OTHER;
-        return 3;
+        return NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
     } else if (ret == SSH_EOF) {
         ERR("Session %u: communication channel unexpectedly closed (libssh).",
             session->id);
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_DROPPED;
-        return 3;
+        return NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
     }
 
-    return 1;
+    return NC_PSPOLL_RPC;
 }
 
-API int
+API NC_MSG_TYPE
 nc_connect_callhome_ssh(const char *host, uint16_t port, struct nc_session **session)
 {
     return nc_connect_callhome(host, port, NC_TI_LIBSSH, session);
@@ -1170,23 +1171,77 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     return 1;
 }
 
-API int
+API NC_MSG_TYPE
+nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session **session)
+{
+    NC_MSG_TYPE msgtype;
+    struct nc_session *new_session = NULL;
+
+    if (!orig_session) {
+        ERRARG("orig_session");
+        return NC_MSG_ERROR;
+    } else if (!session) {
+        ERRARG("session");
+        return NC_MSG_ERROR;
+    }
+
+    if ((orig_session->status == NC_STATUS_RUNNING) && (orig_session->ti_type == NC_TI_LIBSSH)
+            && orig_session->ti.libssh.next) {
+        for (new_session = orig_session->ti.libssh.next;
+                new_session != orig_session;
+                new_session = new_session->ti.libssh.next) {
+            if ((new_session->status == NC_STATUS_STARTING) && new_session->ti.libssh.channel
+                    && (new_session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
+                /* we found our session */
+                break;
+            }
+        }
+        if (new_session == orig_session) {
+            new_session = NULL;
+        }
+    }
+
+    if (!new_session) {
+        ERR("Session does not have a NETCONF SSH channel ready.");
+        return NC_MSG_ERROR;
+    }
+
+    /* assign new SID atomically */
+    pthread_spin_lock(&server_opts.sid_lock);
+    new_session->id = server_opts.new_session_id++;
+    pthread_spin_unlock(&server_opts.sid_lock);
+
+    /* NETCONF handshake */
+    msgtype = nc_handshake(new_session);
+    if (msgtype != NC_MSG_HELLO) {
+        return msgtype;
+    }
+
+    new_session->session_start = time(NULL);
+    new_session->status = NC_STATUS_RUNNING;
+    *session = new_session;
+
+    return msgtype;
+}
+
+API NC_MSG_TYPE
 nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
 {
+    NC_MSG_TYPE msgtype;
     struct nc_session *new_session = NULL;
     uint16_t i;
 
     if (!ps) {
         ERRARG("ps");
-        return -1;
+        return NC_MSG_ERROR;
     } else if (!session) {
         ERRARG("session");
-        return -1;
+        return NC_MSG_ERROR;
     }
 
     /* LOCK */
     if (nc_ps_lock(ps)) {
-        return -1;
+        return NC_MSG_ERROR;
     }
 
     for (i = 0; i < ps->session_count; ++i) {
@@ -1215,7 +1270,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
 
     if (!new_session) {
         ERR("No session with a NETCONF SSH channel ready was found.");
-        return -1;
+        return NC_MSG_ERROR;
     }
 
     /* assign new SID atomically */
@@ -1224,12 +1279,14 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     pthread_spin_unlock(&server_opts.sid_lock);
 
     /* NETCONF handshake */
-    if (nc_handshake(new_session)) {
-        return -1;
+    msgtype = nc_handshake(new_session);
+    if (msgtype != NC_MSG_HELLO) {
+        return msgtype;
     }
 
+    new_session->session_start = time(NULL);
     new_session->status = NC_STATUS_RUNNING;
     *session = new_session;
 
-    return 0;
+    return msgtype;
 }

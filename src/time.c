@@ -90,7 +90,7 @@ nc_datetime2time(const char *datetime)
 }
 
 API char *
-nc_time2datetime(time_t time, const char *tz)
+nc_time2datetime(time_t time, const char *tz, char *buf)
 {
     char *date = NULL;
     char *zoneshift = NULL;
@@ -108,6 +108,7 @@ nc_time2datetime(time_t time, const char *tz)
             }
         }
         setenv("TZ", tz, 1);
+        tzset(); /* apply timezone change */
         tm_ret = localtime_r(&time, &tm);
         if (tz_origin) {
             setenv("TZ", tz_origin, 1);
@@ -115,6 +116,7 @@ nc_time2datetime(time_t time, const char *tz)
         } else {
             unsetenv("TZ");
         }
+        tzset(); /* apply timezone change */
 
         if (!tm_ret) {
             return NULL;
@@ -125,38 +127,50 @@ nc_time2datetime(time_t time, const char *tz)
         }
     }
 
-    if (tm.tm_isdst < 0) {
-        zoneshift = NULL;
+    /* years cannot be negative */
+    if (tm.tm_year < -1900) {
+        ERRARG("time");
+        return NULL;
+    }
+
+    if (tm.tm_gmtoff == 0) {
+        /* time is Zulu (UTC) */
+        if (asprintf(&zoneshift, "Z") == -1) {
+            ERRMEM;
+            return NULL;
+        }
     } else {
-        if (tm.tm_gmtoff == 0) {
-            /* time is Zulu (UTC) */
-            if (asprintf(&zoneshift, "Z") == -1) {
-                ERRMEM;
-                return NULL;
-            }
-        } else {
-            zonediff = tm.tm_gmtoff;
-            zonediff_h = zonediff / 60 / 60;
-            zonediff_m = zonediff / 60 % 60;
-            if (asprintf(&zoneshift, "%s%02d:%02d", (zonediff < 0) ? "-" : "+", zonediff_h, zonediff_m) == -1) {
-                ERRMEM;
-                return NULL;
-            }
+        zonediff = tm.tm_gmtoff;
+        zonediff_h = zonediff / 60 / 60;
+        zonediff_m = zonediff / 60 % 60;
+        if (asprintf(&zoneshift, "%+02d:%02d", zonediff_h, zonediff_m) == -1) {
+            ERRMEM;
+            return NULL;
         }
     }
-    if (asprintf(&date, "%04d-%02d-%02dT%02d:%02d:%02d%s",
-                 tm.tm_year + 1900,
-                 tm.tm_mon + 1,
-                 tm.tm_mday,
-                 tm.tm_hour,
-                 tm.tm_min,
-                 tm.tm_sec,
-                 (zoneshift == NULL) ? "" : zoneshift) == -1) {
+
+    if (buf) {
+        sprintf(buf, "%04d-%02d-%02dT%02d:%02d:%02d%s",
+                        tm.tm_year + 1900,
+                        tm.tm_mon + 1,
+                        tm.tm_mday,
+                        tm.tm_hour,
+                        tm.tm_min,
+                        tm.tm_sec,
+                        zoneshift);
+    } else if (asprintf(&date, "%04d-%02d-%02dT%02d:%02d:%02d%s",
+                        tm.tm_year + 1900,
+                        tm.tm_mon + 1,
+                        tm.tm_mday,
+                        tm.tm_hour,
+                        tm.tm_min,
+                        tm.tm_sec,
+                        zoneshift) == -1) {
         free(zoneshift);
         ERRMEM;
         return NULL;
     }
     free(zoneshift);
 
-    return date;
+    return (buf ? buf : date);
 }

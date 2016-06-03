@@ -155,15 +155,27 @@ void nc_server_set_idle_timeout(uint16_t idle_timeout);
 uint16_t nc_server_get_idle_timeout(void);
 
 /**
+ * @brief Get all the server capabilities as will be sent to every client.
+ *
+ * A few capabilities (with-defaults, interleave) depend on the current
+ * server options.
+ *
+ * @param[in] ctx Context to read most capabilities from.
+ * @return Array of capabilities stored in the \p ctx dictionary, NULL on error.
+ */
+const char **nc_server_get_cpblts(struct ly_ctx *ctx);
+
+/**
  * @brief Accept a new session on a pre-established transport session.
  *
  * @param[in] fdin File descriptor to read (unencrypted) XML data from.
  * @param[in] fdout File descriptor to write (unencrypted) XML data to.
  * @param[in] username NETCONF username as provided by the transport protocol.
  * @param[out] session New session on success.
- * @return 0 on success, -1 on error.
+ * @return NC_MSG_HELLO on success, NC_MSG_BAD_HELLO on client \<hello\> message
+ *         parsing fail, NC_MSG_WOULDBLOCK on timeout, NC_MSG_ERROR on other errors.
  */
-int nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **session);
+NC_MSG_TYPE nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **session);
 
 /**
  * @brief Create an empty structure for polling sessions.
@@ -208,29 +220,34 @@ int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
  */
 uint16_t nc_ps_session_count(struct nc_pollsession *ps);
 
+#define NC_PSPOLL_TIMEOUT 0x0001       /**< Timeout elapsed. */
+#define NC_PSPOLL_RPC 0x0002           /**< RPC was correctly parsed and processed. */
+#define NC_PSPOLL_BAD_RPC 0x0004       /**< RPC was received, but failed to be parsed. */
+#define NC_PSPOLL_REPLY_ERROR 0x0008   /**< Response to the RPC was a \<rpc-reply\> of type error. */
+#define NC_PSPOLL_SESSION_TERM 0x0010  /**< Some session was terminated. */
+#define NC_PSPOLL_SESSION_ERROR 0x0020 /**< Some session was terminated incorrectly (not by \<close-session\> or \<kill-session\> RPCs. */
+#define NC_PSPOLL_PENDING 0x0040       /**< Unhandled pending events on other session. */
+#define NC_PSPOLL_ERROR 0x0080         /**< Other fatal errors (they are printed). */
+
+#ifdef NC_ENABLED_SSH
+#   define NC_PSPOLL_SSH_MSG 0x0100       /**< SSH message received (and processed, if relevant, only with SSH support). */
+#   define NC_PSPOLL_SSH_CHANNEL 0x0200   /**< New SSH channel opened on an existing session (only with SSH support). */
+#endif
+
 /**
  * @brief Poll sessions and process any received RPCs.
  *
- * All the sessions must be running. If a session fails causing it to change its
- * status, it can be learnt from the return value. Only one event on one session
+ * All the sessions must be running. Only one event on one session
  * is handled in one function call.
  *
  * @param[in] ps Pollsession structure to use.
  * @param[in] timeout Poll timeout in milliseconds. 0 for non-blocking call, -1 for
  *                    infinite waiting.
- * @return 0 on elapsed timeout,
- *         1 if an RPC was processed (even if it was not known - it failed to be
- *           parsed into session ctx),
- *         2 if an RPC was processed and there are unhandled events on other sessions,
- *         3 if a session from \p ps changed its status (was invalidated),
- *         -1 on error (a session likely changed its status as well).
- *
- *         Only with SSH support:
- *         4 if an SSH message was processed,
- *         5 if a new NETCONF SSH channel was created; call nc_ps_accept_ssh_channel()
- *           to establish a new NETCONF session.
+ * @param[in] session Session that was processed and that specific return bits concern.
+ *                    Can be NULL.
+ * @return Bitfield of NC_PSPOLL_* macros, almost any combination can be returned.
  */
-int nc_ps_poll(struct nc_pollsession *ps, int timeout);
+int nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session);
 
 /**
  * @brief Remove sessions from a pollsession structure and
@@ -250,26 +267,39 @@ void nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *));
  * @brief Accept new sessions on all the listening endpoints.
  *
  * @param[in] timeout Timeout for receiving a new connection in milliseconds, 0 for
- * non-blocking call, -1 for infinite waiting.
+ *                    non-blocking call, -1 for infinite waiting.
  * @param[out] session New session.
- * @return 1 on success, 0 on timeout, -1 on error.
+ * @return NC_MSG_HELLO on success, NC_MSG_BAD_HELLO on client \<hello\> message
+ *         parsing fail, NC_MSG_WOULDBLOCK on timeout, NC_MSG_ERROR on other errors.
  */
-int nc_accept(int timeout, struct nc_session **session);
+NC_MSG_TYPE nc_accept(int timeout, struct nc_session **session);
 
 #endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
 #ifdef NC_ENABLED_SSH
 
 /**
+ * @brief Accept a new NETCONF session on an SSH session of a running NETCONF \p orig_session.
+ *        Call this function only when nc_ps_poll() returns NC_PSPOLL_SSH_CHANNEL on \p orig_session.
+ *
+ * @param[in] orig_session Session that has a new SSH channel ready.
+ * @param[out] session New session.
+ * @return NC_MSG_HELLO on success, NC_MSG_BAD_HELLO on client \<hello\> message
+ *         parsing fail, NC_MSG_WOULDBLOCK on timeout, NC_MSG_ERROR on other errors.
+ */
+NC_MSG_TYPE nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session **session);
+
+/**
  * @brief Accept a new NETCONF session on an SSH session of a running NETCONF session
- *        that was polled in \p ps. Call this function only when nc_ps_poll() on \p ps returns 5.
+ *        that was polled in \p ps. Call this function only when nc_ps_poll() on \p ps returns NC_PSPOLL_SSH_CHANNEL.
  *        The new session is only returned in \p session, it is not added to \p ps.
  *
  * @param[in] ps Unmodified pollsession structure from the previous nc_ps_poll() call.
  * @param[out] session New session.
- * @return 0 on success, -1 on error.
+ * @return NC_MSG_HELLO on success, NC_MSG_BAD_HELLO on client \<hello\> message
+ *         parsing fail, NC_MSG_WOULDBLOCK on timeout, NC_MSG_ERROR on other errors.
  */
-int nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session);
+NC_MSG_TYPE nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session);
 
 /**
  * @brief Add a new SSH endpoint and start listening on it.
@@ -556,5 +586,13 @@ int nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char 
 int nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
 #endif /* NC_ENABLED_TLS */
+
+/**
+ * @brief Get session start time.
+ *
+ * @param[in] session Session to get the information from.
+ * @return Session start time.
+ */
+time_t nc_session_get_start_time(const struct nc_session *session);
 
 #endif /* NC_SESSION_SERVER_H_ */

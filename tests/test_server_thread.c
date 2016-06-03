@@ -44,6 +44,7 @@ static void *
 server_thread(void *arg)
 {
     (void)arg;
+    NC_MSG_TYPE msgtype;
     int ret;
     struct nc_pollsession *ps;
     struct nc_session *session;
@@ -54,21 +55,21 @@ server_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
 #if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
-    ret = nc_accept(NC_ACCEPT_TIMEOUT, &session);
-    nc_assert(ret == 1);
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, &session);
+    nc_assert(msgtype == NC_MSG_HELLO);
 
     nc_ps_add_session(ps, session);
-    ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT);
-    nc_assert(ret == 3);
+    ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
+    nc_assert(ret & NC_PSPOLL_RPC);
     nc_ps_clear(ps, 0, NULL);
 #endif
 
-    ret = nc_accept(NC_ACCEPT_TIMEOUT, &session);
-    nc_assert(ret == 1);
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, &session);
+    nc_assert(msgtype == NC_MSG_HELLO);
 
     nc_ps_add_session(ps, session);
-    ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT);
-    nc_assert(ret == 3);
+    ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
+    nc_assert(ret & NC_PSPOLL_RPC);
     nc_ps_clear(ps, 0, NULL);
 
     nc_ps_free(ps);

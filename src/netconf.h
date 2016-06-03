@@ -60,6 +60,7 @@ typedef enum NC_MSG_TYPE {
     NC_MSG_WOULDBLOCK,      /**< timeout return value */
     NC_MSG_NONE,            /**< no message at input or message was processed internally */
     NC_MSG_HELLO,           /**< \<hello\> message */
+    NC_MSG_BAD_HELLO,       /**< \<hello\> message parsing failed */
     NC_MSG_RPC,             /**< \<rpc\> message */
     NC_MSG_REPLY,           /**< \<rpc-reply\> message */
     NC_MSG_REPLY_ERR_MSGID, /**< \<rpc-reply\> message with missing or wrong message-id attribute value */
@@ -128,13 +129,14 @@ void nc_thread_destroy(void);
  *
  * This is a reverse function to nc_datetime2time().
  *
- * @param[in] time time_t type value returned e.g. by time().
- * @param[in] tz timezone name for the result. See tzselect(1) for list of
- * correct values. If not specified (NULL), the result is provided in UTC (Zulu).
- * @return Printed string in a format compliant to RFC 3339. It is up to the
- * caller to free the returned string.
+ * @param[in] time Time to convert.
+ * @param[in] tz Timezone name for the result. See tzselect(1) for list of
+ * correct values. If not specified (NULL) or unknown/invalid, the result is provided in UTC (Zulu).
+ * @param[in] buf Optional buffer to print the datetime into, should be at least 26 characters long!
+ * @return Printed string in a format compliant to RFC 3339 stored in \p buf if provided,
+ * otherwise it is up to the caller to free the returned string. NULL on error.
  */
-char* nc_time2datetime(time_t time, const char* tz);
+char* nc_time2datetime(time_t time, const char* tz, char *buf);
 
 /**
  * @brief Transform given string in RFC 3339 compliant format to the time_t
@@ -143,7 +145,7 @@ char* nc_time2datetime(time_t time, const char* tz);
  * This is a reverse function to nc_time2datetime().
  *
  * @param[in] datetime Time structure returned e.g. by localtime().
- * @return time_t value of the given string.
+ * @return time_t value of the given string, -1 on error.
  */
 time_t nc_datetime2time(const char* datetime);
 

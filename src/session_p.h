@@ -252,6 +252,7 @@ struct nc_session {
     struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
 
     /* server side only data */
+    time_t session_start;          /**< time the session was created */
     time_t last_rpc;               /**< time the last RPC was received on this session */
 #ifdef NC_ENABLED_SSH
     /* SSH session authenticated */
@@ -314,9 +315,10 @@ int nc_ctx_check_and_fill(struct nc_session *session);
  * @brief Perform NETCONF handshake on \p session.
  *
  * @param[in] session NETCONF session to use.
- * @return 0 on success, non-zero on failure.
+ * @return NC_MSG_HELLO on success, NC_MSG_BAD_HELLO on client \<hello\> message parsing fail
+ * (server-side only), NC_MSG_WOULDBLOCK on timeout, NC_MSG_ERROR on other error.
  */
-int nc_handshake(struct nc_session *session);
+NC_MSG_TYPE nc_handshake(struct nc_session *session);
 
 /**
  * @brief Create a socket connection.
@@ -436,9 +438,10 @@ int nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL 
  * @param[in] port Port to connect to.
  * @param[in] ti Transport fo the connection.
  * @param[out] session New Call Home session.
- * @return 0 on success, -1 on error.
+ * @return NC_MSG_HELLO on success, NC_MSG_BAD_HELLO on client \<hello\> message
+ *         parsing fail, NC_MSG_WOULDBLOCK on timeout, NC_MSG_ERROR on other errors.
  */
-int nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struct nc_session **session);
+NC_MSG_TYPE nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struct nc_session **session);
 
 void nc_init(void);
 
@@ -484,13 +487,13 @@ int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
  *
  * @param[in] session NETCONF session communicating on the socket.
  * @param[in,out] timeout Timeout for locking ti_lock.
- * @return 0 - timeout,
- *         1 if \p session channel has data,
- *         2 if some other channel has data,
- *         3 on \p session status change,
- *         4 on new SSH message,
- *         5 on new NETCONF SSH channel,
- *        -1 on error.
+ * @return NC_PSPOLL_TIMEOUT,
+ *         NC_PSPOLL_RPC (has new data),
+ *         NC_PSPOLL_PENDING (other channel has data),
+ *         NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR,
+ *         NC_PSPOLL_SSH_MSG,
+ *         NC_PSPOLL_SSH_CHANNEL,
+ *         NC_PSPOLL_ERROR.
  */
 int nc_ssh_pollin(struct nc_session *session, int timeout);
 

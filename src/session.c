@@ -170,40 +170,6 @@ nc_session_get_ctx(const struct nc_session *session)
     return session->ctx;
 }
 
-API const char **
-nc_session_get_cpblts(const struct nc_session *session)
-{
-    if (!session) {
-        ERRARG("session");
-        return NULL;
-    }
-
-    return session->cpblts;
-}
-
-API const char *
-nc_session_cpblt(const struct nc_session *session, const char *capab)
-{
-    int i, len;
-
-    if (!session) {
-        ERRARG("session");
-        return NULL;
-    } else if (!capab) {
-        ERRARG("capab");
-        return NULL;
-    }
-
-    len = strlen(capab);
-    for (i = 0; session->cpblts[i]; ++i) {
-        if (!strncmp(session->cpblts[i], capab, len)) {
-            return session->cpblts[i];
-        }
-    }
-
-    return NULL;
-}
-
 API void
 nc_session_set_data(struct nc_session *session, void *data)
 {
@@ -491,8 +457,8 @@ add_cpblt(struct ly_ctx *ctx, const char *capab, const char ***cpblts, int *size
     ++(*count);
 }
 
-static const char **
-create_cpblts(struct ly_ctx *ctx)
+API const char **
+nc_server_get_cpblts(struct ly_ctx *ctx)
 {
     struct lyd_node *child, *child2, *yanglib;
     struct lyd_node_leaf_list **features = NULL, *ns = NULL, *rev = NULL, *name = NULL;
@@ -501,8 +467,14 @@ create_cpblts(struct ly_ctx *ctx)
     int size = 10, count, feat_count = 0, i, str_len;
     char str[512];
 
+    if (!ctx) {
+        ERRARG("ctx");
+        return NULL;
+    }
+
     yanglib = ly_ctx_info(ctx);
     if (!yanglib) {
+        ERR("Failed to get ietf-yang-library data from the context.");
         return NULL;
     }
 
@@ -747,7 +719,7 @@ nc_send_server_hello(struct nc_session *session)
     int r, i;
     const char **cpblts;
 
-    cpblts = create_cpblts(session->ctx);
+    cpblts = nc_server_get_cpblts(session->ctx);
 
     r = nc_write_msg(session, NC_MSG_HELLO, cpblts, &session->id);
 
@@ -817,12 +789,16 @@ nc_recv_client_hello(struct nc_session *session)
             goto error;
         }
         break;
+    case NC_MSG_WOULDBLOCK:
+        ERR("Server's <hello> timeout elapsed.");
+        break;
     case NC_MSG_ERROR:
         /* nothing special, just pass it out */
         break;
     default:
         ERR("Unexpected message received instead of <hello>.");
         msgtype = NC_MSG_ERROR;
+        break;
     }
 
     /* cleanup */
@@ -841,7 +817,7 @@ static NC_MSG_TYPE
 nc_recv_server_hello(struct nc_session *session)
 {
     struct lyxml_elem *xml = NULL, *node;
-    NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
+    NC_MSG_TYPE msgtype;
     int ver = -1;
     int flag = 0;
 
@@ -855,20 +831,20 @@ nc_recv_server_hello(struct nc_session *session)
                 continue;
             } else if (strcmp(node->name, "capabilities")) {
                 ERR("Unexpected <%s> element in client's <hello>.", node->name);
-                msgtype = NC_MSG_ERROR;
+                msgtype = NC_MSG_BAD_HELLO;
                 goto cleanup;
             }
 
             if (flag) {
                 /* multiple capabilities elements */
                 ERR("Invalid <hello> message (multiple <capabilities> elements).");
-                msgtype = NC_MSG_ERROR;
+                msgtype = NC_MSG_BAD_HELLO;
                 goto cleanup;
             }
             flag = 1;
 
             if ((ver = parse_cpblts(node, NULL)) < 0) {
-                msgtype = NC_MSG_ERROR;
+                msgtype = NC_MSG_BAD_HELLO;
                 goto cleanup;
             }
             session->version = ver;
@@ -879,11 +855,11 @@ nc_recv_server_hello(struct nc_session *session)
         break;
     case NC_MSG_WOULDBLOCK:
         ERR("Client's <hello> timeout elapsed.");
-        msgtype = NC_MSG_ERROR;
         break;
     default:
         ERR("Unexpected message received instead of <hello>.");
         msgtype = NC_MSG_ERROR;
+        break;
     }
 
 cleanup:
@@ -892,7 +868,7 @@ cleanup:
     return msgtype;
 }
 
-int
+NC_MSG_TYPE
 nc_handshake(struct nc_session *session)
 {
     NC_MSG_TYPE type;
@@ -904,7 +880,7 @@ nc_handshake(struct nc_session *session)
     }
 
     if (type != NC_MSG_HELLO) {
-        return 1;
+        return type;
     }
 
     if (session->side == NC_CLIENT) {
@@ -913,11 +889,7 @@ nc_handshake(struct nc_session *session)
         type = nc_recv_server_hello(session);
     }
 
-    if (type != NC_MSG_HELLO) {
-        return 1;
-    }
-
-    return 0;
+    return type;
 }
 
 #ifdef NC_ENABLED_SSH
