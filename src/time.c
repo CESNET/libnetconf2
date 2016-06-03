@@ -143,7 +143,7 @@ nc_time2datetime(time_t time, const char *tz, char *buf)
         zonediff = tm.tm_gmtoff;
         zonediff_h = zonediff / 60 / 60;
         zonediff_m = zonediff / 60 % 60;
-        if (asprintf(&zoneshift, "%+02d:%02d", zonediff_h, zonediff_m) == -1) {
+        if (asprintf(&zoneshift, "%+03d:%02d", zonediff_h, zonediff_m) == -1) {
             ERRMEM;
             return NULL;
         }
