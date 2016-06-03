@@ -72,6 +72,9 @@ test_2datetime(void **state)
     assert_ptr_not_equal(NULL, nc_time2datetime(t, "Asia/Vladivostok", buf));
     assert_string_equal(buf, "2010-02-28T22:34:56+10:00");
 
+    assert_ptr_not_equal(NULL, nc_time2datetime(t, "CET", buf));
+    assert_string_equal(buf, "2010-02-28T13:34:56+01:00");
+
     /* negative years are prohibited */
     assert_ptr_equal(NULL, nc_time2datetime(-69999999999, NULL, buf));
 
