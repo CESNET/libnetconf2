@@ -461,10 +461,10 @@ API const char **
 nc_server_get_cpblts(struct ly_ctx *ctx)
 {
     struct lyd_node *child, *child2, *yanglib;
-    struct lyd_node_leaf_list **features = NULL, *ns = NULL, *rev = NULL, *name = NULL;
+    struct lyd_node_leaf_list **features = NULL, **deviations = NULL, *ns = NULL, *rev = NULL, *name = NULL;
     const char **cpblts;
     const struct lys_module *mod;
-    int size = 10, count, feat_count = 0, i, str_len;
+    int size = 10, count, feat_count = 0, dev_count = 0, i, str_len;
 #define NC_CPBLT_BUF_LEN 512
     char str[NC_CPBLT_BUF_LEN];
 
@@ -583,9 +583,18 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
                     if (!features) {
                         ERRMEM;
                         free(cpblts);
+                        free(deviations);
                         return NULL;
                     }
                     features[feat_count - 1] = (struct lyd_node_leaf_list *)child2;
+                } else if (!strcmp(child2->schema->name, "deviation")) {
+                    deviations = nc_realloc(deviations, ++dev_count * sizeof *deviations);
+                    if (!deviations) {
+                        ERRMEM;
+                        free(cpblts);
+                        free(features);
+                        return NULL;
+                    }
                 }
             }
 
@@ -612,15 +621,38 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
                     str_len += strlen(features[i]->value_str);
                 }
             }
+            if (dev_count) {
+                strcat(str, "&deviations=");
+                str_len += 12;
+                for (i = 0; i < dev_count; ++i) {
+                    if (str_len + 1 + strlen(deviations[i]->value_str) >= NC_CPBLT_BUF_LEN) {
+                        ERRINT;
+                        break;
+                    }
+                    if (i) {
+                        strcat(str, ",");
+                        ++str_len;
+                    }
+                    strcat(str, deviations[i]->value_str);
+                    str_len += strlen(deviations[i]->value_str);
+                }
+            }
 
             add_cpblt(ctx, str, &cpblts, &size, &count);
 
             ns = NULL;
             name = NULL;
             rev = NULL;
-            free(features);
-            features = NULL;
-            feat_count = 0;
+            if (features || feat_count) {
+                free(features);
+                features = NULL;
+                feat_count = 0;
+            }
+            if (deviations || dev_count) {
+                free(deviations);
+                deviations = NULL;
+                dev_count = 0;
+            }
         }
     }
 
