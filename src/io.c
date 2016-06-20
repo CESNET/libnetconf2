@@ -581,6 +581,8 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
         return -1;
     }
 
+    DBG("Session %u: sending message:\n%.*s", session->id, count, buf);
+
     switch (session->ti_type) {
     case NC_TI_NONE:
         return -1;
