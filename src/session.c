@@ -465,7 +465,8 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
     const char **cpblts;
     const struct lys_module *mod;
     int size = 10, count, feat_count = 0, i, str_len;
-    char str[512];
+#define NC_CPBLT_BUF_LEN 512
+    char str[NC_CPBLT_BUF_LEN];
 
     if (!ctx) {
         ERRARG("ctx");
@@ -539,7 +540,7 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
             }
 
             if (server_opts.wd_also_supported) {
-                strcat(str, "&amp;also-supported=");
+                strcat(str, "&also-supported=");
                 if (server_opts.wd_also_supported & NC_WD_ALL) {
                     strcat(str, "report-all,");
                 }
@@ -594,12 +595,12 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
             }
 
             str_len = sprintf(str, "%s?module=%s%s%s", ns->value_str, name->value_str,
-                              rev->value_str[0] ? "&amp;revision=" : "", rev->value_str);
+                              rev->value_str[0] ? "&revision=" : "", rev->value_str);
             if (feat_count) {
-                strcat(str, "&amp;features=");
-                str_len += 14;
+                strcat(str, "&features=");
+                str_len += 10;
                 for (i = 0; i < feat_count; ++i) {
-                    if (str_len + 1 + strlen(features[i]->value_str) >= 512) {
+                    if (str_len + 1 + strlen(features[i]->value_str) >= NC_CPBLT_BUF_LEN) {
                         ERRINT;
                         break;
                     }
