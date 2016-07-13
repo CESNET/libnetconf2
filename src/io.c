@@ -297,6 +297,10 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
             if (!strcmp(chunk, "#\n")) {
                 /* end of chunked framing message */
                 free(chunk);
+                if (!msg) {
+                    ERR("Session %u: invalid frame chunk delimiters.", session->id);
+                    goto malformed_msg;
+                }
                 break;
             }
 
