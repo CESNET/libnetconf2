@@ -37,11 +37,11 @@ nc_rpc_get_type(const struct nc_rpc *rpc)
 }
 
 API struct nc_rpc *
-nc_rpc_generic(const struct lyd_node *data, NC_PARAMTYPE paramtype)
+nc_rpc_act_generic(const struct lyd_node *data, NC_PARAMTYPE paramtype)
 {
-    struct nc_rpc_generic *rpc;
+    struct nc_rpc_act_generic *rpc;
 
-    if (!data || (data->schema->nodetype != LYS_RPC) || data->next || (data->prev != data)) {
+    if (!data || data->next || (data->prev != data)) {
         ERRARG("data");
         return NULL;
     }
@@ -52,7 +52,7 @@ nc_rpc_generic(const struct lyd_node *data, NC_PARAMTYPE paramtype)
         return NULL;
     }
 
-    rpc->type = NC_RPC_GENERIC;
+    rpc->type = NC_RPC_ACT_GENERIC;
     rpc->has_data = 1;
     if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
         rpc->content.data = lyd_dup(data, 1);
@@ -65,9 +65,9 @@ nc_rpc_generic(const struct lyd_node *data, NC_PARAMTYPE paramtype)
 }
 
 API struct nc_rpc *
-nc_rpc_generic_xml(const char *xml_str, NC_PARAMTYPE paramtype)
+nc_rpc_act_generic_xml(const char *xml_str, NC_PARAMTYPE paramtype)
 {
-    struct nc_rpc_generic *rpc;
+    struct nc_rpc_act_generic *rpc;
 
     if (!xml_str) {
         ERRARG("xml_str");
@@ -80,7 +80,7 @@ nc_rpc_generic_xml(const char *xml_str, NC_PARAMTYPE paramtype)
         return NULL;
     }
 
-    rpc->type = NC_RPC_GENERIC;
+    rpc->type = NC_RPC_ACT_GENERIC;
     rpc->has_data = 0;
     if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
         rpc->content.xml_str = strdup(xml_str);
@@ -516,7 +516,7 @@ nc_rpc_subscribe(const char *stream_name, const char *filter, const char *start_
 API void
 nc_rpc_free(struct nc_rpc *rpc)
 {
-    struct nc_rpc_generic *rpc_generic;
+    struct nc_rpc_act_generic *rpc_generic;
     struct nc_rpc_getconfig *rpc_getconfig;
     struct nc_rpc_edit *rpc_edit;
     struct nc_rpc_copy *rpc_copy;
@@ -533,8 +533,8 @@ nc_rpc_free(struct nc_rpc *rpc)
     }
 
     switch (rpc->type) {
-    case NC_RPC_GENERIC:
-        rpc_generic = (struct nc_rpc_generic *)rpc;
+    case NC_RPC_ACT_GENERIC:
+        rpc_generic = (struct nc_rpc_act_generic *)rpc;
         if (rpc_generic->free) {
             if (rpc_generic->has_data) {
                 lyd_free(rpc_generic->content.data);

@@ -878,6 +878,8 @@ nc_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
 {
     nc_rpc_clb clb;
     struct nc_server_reply *reply;
+    struct lys_node *rpc_act = NULL;
+    struct lyd_node *next, *elem;
     int ret = 0, r;
 
     if (!rpc) {
@@ -885,11 +887,29 @@ nc_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
         return NC_PSPOLL_ERROR;
     }
 
-    /* no callback, reply with a not-implemented error */
-    if (!rpc->tree->schema->priv) {
+    if (rpc->tree->schema->nodetype == LYS_RPC) {
+        /* RPC */
+        rpc_act = rpc->tree->schema;
+    } else {
+        /* action */
+        LY_TREE_DFS_BEGIN(rpc->tree, next, elem) {
+            if (elem->schema->nodetype == LYS_ACTION) {
+                rpc_act = elem->schema;
+                break;
+            }
+            LY_TREE_DFS_END(rpc->tree, next, elem);
+        }
+        if (!rpc_act) {
+            ERRINT;
+            return NC_PSPOLL_ERROR;
+        }
+    }
+
+    if (!rpc_act->priv) {
+        /* no callback, reply with a not-implemented error */
         reply = nc_server_reply_err(nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_PROT));
     } else {
-        clb = (nc_rpc_clb)rpc->tree->schema->priv;
+        clb = (nc_rpc_clb)rpc_act->priv;
         reply = clb(rpc->tree, session);
     }
 

@@ -735,11 +735,11 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
 {
     struct lyxml_elem *iter;
     const struct lys_node *schema = NULL;
-    struct lyd_node *data = NULL;
+    struct lyd_node *data = NULL, *next, *elem;
     struct nc_client_reply_error *error_rpl;
     struct nc_reply_data *data_rpl;
     struct nc_reply *reply = NULL;
-    struct nc_rpc_generic *rpc_gen;
+    struct nc_rpc_act_generic *rpc_gen;
     int i;
 
     if (!xml->child) {
@@ -803,22 +803,39 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
     /* some RPC output */
     } else {
         switch (rpc->type) {
-        case NC_RPC_GENERIC:
-            rpc_gen = (struct nc_rpc_generic *)rpc;
+        case NC_RPC_ACT_GENERIC:
+            rpc_gen = (struct nc_rpc_act_generic *)rpc;
 
             if (rpc_gen->has_data) {
-                schema = rpc_gen->content.data->schema;
+                data = rpc_gen->content.data;
             } else {
                 data = lyd_parse_mem(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | parseroptions);
                 if (!data) {
-                    ERR("Failed to parse a generic RPC XML.");
+                    ERR("Failed to parse a generic RPC/action XML.");
                     return NULL;
                 }
+            }
+            if (data->schema->nodetype == LYS_RPC) {
+                /* RPC */
                 schema = data->schema;
+            } else {
+                /* action */
+                LY_TREE_DFS_BEGIN(data, next, elem) {
+                    if (elem->schema->nodetype == LYS_ACTION) {
+                        schema = elem->schema;
+                        break;
+                    }
+                    LY_TREE_DFS_END(data, next, elem);
+                }
+            }
+
+            /* cleanup */
+            if (data != rpc_gen->content.data) {
                 lyd_free(data);
                 data = NULL;
             }
             if (!schema) {
+                /* only with action, if there is no action, it should not have gotten this far */
                 ERRINT;
                 return NULL;
             }
@@ -1278,7 +1295,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 {
     NC_MSG_TYPE r;
     int ret;
-    struct nc_rpc_generic *rpc_gen;
+    struct nc_rpc_act_generic *rpc_gen;
     struct nc_rpc_getconfig *rpc_gc;
     struct nc_rpc_edit *rpc_e;
     struct nc_rpc_copy *rpc_cp;
@@ -1310,7 +1327,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         return NC_MSG_ERROR;
     }
 
-    if ((rpc->type != NC_RPC_GETSCHEMA) && (rpc->type != NC_RPC_GENERIC) && (rpc->type != NC_RPC_SUBSCRIBE)) {
+    if ((rpc->type != NC_RPC_GETSCHEMA) && (rpc->type != NC_RPC_ACT_GENERIC) && (rpc->type != NC_RPC_SUBSCRIBE)) {
         ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL);
         if (!ietfnc) {
             ERR("Session %u: missing ietf-netconf schema in the context.", session->id);
@@ -1319,8 +1336,8 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     }
 
     switch (rpc->type) {
-    case NC_RPC_GENERIC:
-        rpc_gen = (struct nc_rpc_generic *)rpc;
+    case NC_RPC_ACT_GENERIC:
+        rpc_gen = (struct nc_rpc_act_generic *)rpc;
 
         if (rpc_gen->has_data) {
             data = rpc_gen->content.data;
