@@ -532,7 +532,7 @@ nc_ps_lock(struct nc_pollsession *ps)
     uint8_t our_id, queue_last;
     struct timespec ts;
 
-    clock_gettime(CLOCK_REALTIME, &ts);
+    nc_gettimespec(&ts);
     ts.tv_sec += NC_READ_TIMEOUT;
 
     /* LOCK */
@@ -567,7 +567,7 @@ nc_ps_lock(struct nc_pollsession *ps)
 
     /* is it our turn? */
     while (ps->queue[ps->queue_begin] != our_id) {
-        clock_gettime(CLOCK_REALTIME, &ts);
+        nc_gettimespec(&ts);
         ts.tv_sec += NC_READ_TIMEOUT;
 
         ret = pthread_cond_timedwait(&ps->cond, &ps->lock, &ts);
@@ -592,7 +592,7 @@ nc_ps_unlock(struct nc_pollsession *ps)
     int ret;
     struct timespec ts;
 
-    clock_gettime(CLOCK_REALTIME, &ts);
+    nc_gettimespec(&ts);
     ts.tv_sec += NC_READ_TIMEOUT;
 
     /* LOCK */

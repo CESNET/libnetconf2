@@ -45,6 +45,26 @@
 
 extern struct nc_server_opts server_opts;
 
+int
+nc_gettimespec(struct timespec *ts)
+{
+#ifdef CLOCK_MONOTONIC
+    return clock_gettime(CLOCK_MONOTONIC, ts);
+#elif defined CLOCK_REALTIME
+    return clock_gettime(CLOCK_REALTIME, ts);
+#else
+    int rc;
+    struct timeval tv;
+
+    rc = gettimeofday(&tv, NULL);
+    if (!rc) {
+        ts->tv_sec = (time_t)tv.tv_sec;
+        ts->tv_nsec = 1000L * (long)tv.tv_usec;
+    }
+    return rc;
+#endif
+}
+
 /*
  * @return 1 - success
  *         0 - timeout
@@ -57,7 +77,7 @@ nc_timedlock(pthread_mutex_t *lock, int timeout)
     struct timespec ts_timeout;
 
     if (timeout > 0) {
-        clock_gettime(CLOCK_REALTIME, &ts_timeout);
+        nc_gettimespec(&ts_timeout);
 
         ts_timeout.tv_sec += timeout / 1000;
         ts_timeout.tv_nsec += (timeout % 1000) * 1000000;

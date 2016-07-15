@@ -295,6 +295,7 @@ void *nc_realloc(void *ptr, size_t size);
 
 NC_MSG_TYPE nc_send_msg(struct nc_session *session, struct lyd_node *op);
 
+int nc_gettimespec(struct timespec *ts);
 int nc_timedlock(pthread_mutex_t *lock, int timeout);
 
 int nc_ps_lock(struct nc_pollsession *ps);
