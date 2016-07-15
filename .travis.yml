@@ -15,9 +15,9 @@ before_install:
   - sudo apt-get install -y zlib1g-dev
   - sudo apt-get install -y libssl-dev
   - sudo apt-get install -y libval-dev
-  - wget https://red.libssh.org/attachments/download/177/libssh-0.7.2.tar.xz
-  - tar -xJf libssh-0.7.2.tar.xz
-  - mkdir libssh-0.7.2/build && cd libssh-0.7.2/build
+  - wget https://git.libssh.org/projects/libssh.git/snapshot/libssh-0.7.3.tar.bz2
+  - tar -xjf libssh-0.7.3.tar.bz2
+  - mkdir libssh-0.7.3/build && cd libssh-0.7.3/build
   - cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
   - cd ../..
 
