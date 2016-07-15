@@ -40,6 +40,11 @@
 #endif
 
 /*
+ * support for pthread_mutex_timedlock
+ */
+#cmakedefine HAVE_PTHREAD_MUTEX_TIMEDLOCK
+
+/*
  * Location of installed basic YIN/YANG schemas
  */
 #define SCHEMAS_DIR "@CMAKE_INSTALL_PREFIX@/@DATA_INSTALL_DIR@"
