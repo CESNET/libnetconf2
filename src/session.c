@@ -65,6 +65,40 @@ nc_gettimespec(struct timespec *ts)
 #endif
 }
 
+#ifndef HAVE_PTHREAD_MUTEX_TIMEDLOCK
+int
+pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *abstime)
+{
+    int rc;
+    struct timespec cur, dur;
+
+    /* Try to acquire the lock and, if we fail, sleep for 5ms. */
+    while ((rc = pthread_mutex_trylock(mutex)) == EBUSY) {
+        nc_gettimespec(&cur);
+
+        if ((cur.tv_sec > abstime->tv_sec) || ((cur.tv_sec == abstime->tv_sec) && (cur.tv_nsec >= abstime->tv_nsec))) {
+            break;
+        }
+
+        dur.tv_sec = abstime->tv_sec - cur.tv_sec;
+        dur.tv_nsec = abstime->tv_nsec - cur.tv_nsec;
+        if (dur.tv_nsec < 0) {
+            dur.tv_sec--;
+            dur.tv_nsec += 1000000000;
+        }
+
+        if ((dur.tv_sec != 0) || (dur.tv_nsec > 5000000)) {
+            dur.tv_sec = 0;
+            dur.tv_nsec = 5000000;
+        }
+
+        nanosleep(&dur, NULL);
+    }
+
+    return rc;
+}
+#endif
+
 /*
  * @return 1 - success
  *         0 - timeout
