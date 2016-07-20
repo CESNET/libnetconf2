@@ -17,7 +17,7 @@ if [ ! -d "$INSTALL_PREFIX_DIR/lib" ]; then
   wget https://git.libssh.org/projects/libssh.git/snapshot/libssh-0.7.3.tar.bz2
   tar -xjf libssh-0.7.3.tar.bz2
   mkdir libssh-0.7.3/build && cd libssh-0.7.3/build
-  cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
+  cmake -DCMAKE_SHARED_LINKER_FLAGS=-L/usr/local/opt/openssl/lib -DCMAKE_C_FLAGS=-I/usr/local/opt/openssl/include -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
   cd ../..
 
   # CMocka
@@ -30,7 +30,7 @@ if [ ! -d "$INSTALL_PREFIX_DIR/lib" ]; then
 else
   echo "Using cache ($INSTALL_PREFIX_DIR)."
 fi
-  
+
 git clone -b $TRAVIS_BRANCH https://github.com/CESNET/libyang.git
 mkdir libyang/build && cd libyang/build
 cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install

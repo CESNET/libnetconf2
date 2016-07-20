@@ -23,7 +23,7 @@ branches:
 before_install:
   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then bash .travis-deps-linux.sh; fi
   - if [ "$TRAVIS_OS_NAME" = "linux" -a "$CC" = "gcc" ]; then pip install --user codecov; export CFLAGS="-coverage"; fi
-  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then OSX_CMAKE_FLAGS="-DCMAKE_SHARED_LINKER_FLAGS=-L/usr/local/opt/openssl/lib -DOPENSSL_INCLUDE_DIR=/usr/local/opt/openssl/include"; bash .travis-deps-osx.sh; fi
+  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then OSX_CMAKE_FLAGS="-DCMAKE_SHARED_LINKER_FLAGS=-L/usr/local/opt/openssl/lib -DCMAKE_C_FLAGS=-I/usr/local/opt/openssl/include"; bash .travis-deps-osx.sh; fi
 
 script:
   - cd $TRAVIS_BUILD_DIR && mkdir build_none && cd build_none ; cmake $OSX_CMAKE_FLAGS -DENABLE_TLS=OFF -DENABLE_SSH=OFF -DENABLE_DNSSEC=OFF .. && make -j2 && make test
