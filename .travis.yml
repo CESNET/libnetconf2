@@ -23,14 +23,14 @@ branches:
 before_install:
   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then bash .travis-deps-linux.sh; fi
   - if [ "$TRAVIS_OS_NAME" = "linux" -a "$CC" = "gcc" ]; then pip install --user codecov; export CFLAGS="-coverage"; fi
-  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export LDFLAGS="-L/usr/local/opt/openssl/lib"; export CPPFLAGS="-I/usr/local/opt/openssl/include"; bash .travis-deps-osx.sh; fi
+  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then OSX_CMAKE_FLAGS="-DCMAKE_SHARED_LINKER_FLAGS=-L/usr/local/opt/openssl/lib -DOPENSSL_INCLUDE_DIR=/usr/local/opt/openssl/include"; bash .travis-deps-osx.sh; fi
 
 script:
-  - cd $TRAVIS_BUILD_DIR && mkdir build_none && cd build_none ; cmake -DENABLE_TLS=OFF -DENABLE_SSH=OFF -DENABLE_DNSSEC=OFF .. && make -j2 && make test
-  - cd $TRAVIS_BUILD_DIR && mkdir build_tls && cd build_tls ; cmake -DENABLE_TLS=ON -DENABLE_SSH=OFF -DENABLE_DNSSEC=OFF .. && make -j2 && make test
-  - cd $TRAVIS_BUILD_DIR && mkdir build_ssh && cd build_ssh ; cmake -DENABLE_TLS=OFF -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && make test
-  - cd $TRAVIS_BUILD_DIR && mkdir build_ssh_tls && cd build_ssh_tls ; cmake -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && make test
-  - cd $TRAVIS_BUILD_DIR && mkdir build_all && cd build_all ; cmake -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=ON .. && make -j2 && make test
+  - cd $TRAVIS_BUILD_DIR && mkdir build_none && cd build_none ; cmake $OSX_CMAKE_FLAGS -DENABLE_TLS=OFF -DENABLE_SSH=OFF -DENABLE_DNSSEC=OFF .. && make -j2 && make test
+  - cd $TRAVIS_BUILD_DIR && mkdir build_tls && cd build_tls ; cmake $OSX_CMAKE_FLAGS -DENABLE_TLS=ON -DENABLE_SSH=OFF -DENABLE_DNSSEC=OFF .. && make -j2 && make test
+  - cd $TRAVIS_BUILD_DIR && mkdir build_ssh && cd build_ssh ; cmake $OSX_CMAKE_FLAGS -DENABLE_TLS=OFF -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && make test
+  - cd $TRAVIS_BUILD_DIR && mkdir build_ssh_tls && cd build_ssh_tls ; cmake $OSX_CMAKE_FLAGS -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && make test
+  - cd $TRAVIS_BUILD_DIR && mkdir build_all && cd build_all ; cmake $OSX_CMAKE_FLAGS -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=ON .. && make -j2 && make test
 
 after_success:
   - if [ "$TRAVIS_OS_NAME" = "linux" -a "$CC" = "gcc" ]; then codecov; fi
