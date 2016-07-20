@@ -1,6 +1,7 @@
 #install dependencies using homebrew
 brew update
 brew upgrade openssl
+brew link --force openssl
 brew install pcre
 
 set -e
