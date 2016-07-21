@@ -178,6 +178,14 @@ const char **nc_server_get_cpblts(struct ly_ctx *ctx);
 NC_MSG_TYPE nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **session);
 
 /**
+ * @brief Set a global nc_rpc_clb that is called if the particular RPC request is
+ * received and the private field in the corresponding RPC schema node is NULL.
+ *
+ * @param[in] clb An user-defined nc_rpc_clb function callback, NULL to default.
+ */
+void nc_set_global_rpc_clb(nc_rpc_clb clb);
+
+/**
  * @brief Create an empty structure for polling sessions.
  *
  * @return Empty pollsession structure, NULL on error.
