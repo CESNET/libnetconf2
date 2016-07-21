@@ -33,6 +33,8 @@ struct nc_server_opts server_opts = {
     .endpt_array_lock = PTHREAD_RWLOCK_INITIALIZER
 };
 
+static nc_rpc_clb global_rpc_clb = NULL;
+
 extern struct nc_server_ssh_opts ssh_ch_opts;
 extern pthread_mutex_t ssh_ch_opts_lock;
 
@@ -867,6 +869,12 @@ error:
     return NC_PSPOLL_ERROR;
 }
 
+API void
+nc_set_global_rpc_clb(nc_rpc_clb clb)
+{
+    global_rpc_clb = clb;
+}
+
 /* must be called holding the session lock!
  * returns: NC_PSPOLL_ERROR,
  *          NC_PSPOLL_ERROR | NC_PSPOLL_REPLY_ERROR,
@@ -885,12 +893,15 @@ nc_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
         return NC_PSPOLL_ERROR;
     }
 
-    /* no callback, reply with a not-implemented error */
-    if (!rpc->tree->schema->priv) {
-        reply = nc_server_reply_err(nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_PROT));
-    } else {
-        clb = (nc_rpc_clb)rpc->tree->schema->priv;
+    if (rpc->tree->schema->priv) {
+        clb = (nc_rpc_clb) rpc->tree->schema->priv;
         reply = clb(rpc->tree, session);
+    } else {
+        if (global_rpc_clb) {
+            reply = global_rpc_clb(rpc->tree, session);
+        } else { /* no callback, reply with a not-implemented error */
+            reply = nc_server_reply_err(nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_PROT));
+        }
     }
 
     if (!reply) {
