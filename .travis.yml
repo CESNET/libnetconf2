@@ -1,11 +1,19 @@
-os: linux
-sudo: required
-dist: trusty
 language: c
 
-compiler:
-  - clang
-  - gcc
+matrix:
+  include:
+    - os: linux
+      dist: trusty
+      sudo: required
+      compiler: clang
+    - os: linux
+      dist: trusty
+      sudo: required
+      compiler: gcc
+    - os: osx
+      compiler: gcc
+  allow_failures:
+    - os: osx
 
 branches:
   only:
@@ -13,36 +21,16 @@ branches:
     - devel
 
 before_install:
-  - sudo apt-get install -y zlib1g-dev
-  - sudo apt-get install -y libssl-dev
-  - sudo apt-get install -y libval-dev
-  - wget https://red.libssh.org/attachments/download/177/libssh-0.7.2.tar.xz
-  - tar -xJf libssh-0.7.2.tar.xz
-  - mkdir libssh-0.7.2/build && cd libssh-0.7.2/build
-  - cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
-  - cd ../..
-
-  - wget https://cmocka.org/files/1.0/cmocka-1.0.1.tar.xz
-  - tar -xJf cmocka-1.0.1.tar.xz
-  - mkdir cmocka-1.0.1/build && cd cmocka-1.0.1/build
-  - cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
-  - cd ../..
-
-  - git clone https://github.com/CESNET/libyang.git
-  - mkdir libyang/build && cd libyang/build
-  - git checkout devel
-  - cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
-  - cd ../..
-
-  - if [ "${CC}" = "gcc" ]; then pip install --user codecov; export CFLAGS="-coverage"; fi
+  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then bash .travis-deps-linux.sh; fi
+  - if [ "$TRAVIS_OS_NAME" = "linux" -a "$CC" = "gcc" ]; then pip install --user codecov; export CFLAGS="-coverage"; fi
+  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then bash .travis-deps-osx.sh; fi
 
 script:
-  - mkdir build_none && cd build_none ; cmake -DENABLE_TLS=OFF -DENABLE_SSH=OFF -DENABLE_DNSSEC=OFF .. && make -j2 && make test && cd ..
-  - mkdir build_tls && cd build_tls ; cmake -DENABLE_TLS=ON -DENABLE_SSH=OFF -DENABLE_DNSSEC=OFF .. && make -j2 && make test && cd ..
-  - mkdir build_ssh && cd build_ssh ; cmake -DENABLE_TLS=OFF -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && make test && cd ..
-  - mkdir build_ssh_tls && cd build_ssh_tls ; cmake -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && make test && cd ..
-  - mkdir build_all && cd build_all ; cmake -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=ON .. && make -j2 && make test && cd ..
+  - cd $TRAVIS_BUILD_DIR && mkdir build_none && cd build_none ; cmake -DENABLE_TLS=OFF -DENABLE_SSH=OFF -DENABLE_DNSSEC=OFF .. && make -j2 && make test
+  - cd $TRAVIS_BUILD_DIR && mkdir build_tls && cd build_tls ; cmake -DENABLE_TLS=ON -DENABLE_SSH=OFF -DENABLE_DNSSEC=OFF .. && make -j2 && make test
+  - cd $TRAVIS_BUILD_DIR && mkdir build_ssh && cd build_ssh ; cmake -DENABLE_TLS=OFF -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && make test
+  - cd $TRAVIS_BUILD_DIR && mkdir build_ssh_tls && cd build_ssh_tls ; cmake -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && make test
+  - cd $TRAVIS_BUILD_DIR && mkdir build_all && cd build_all ; cmake -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=ON .. && make -j2 && make test
 
 after_success:
-  - if [ "${CC}" = "gcc" ]; then codecov; fi
-
+  - if [ "$TRAVIS_OS_NAME" = "linux" -a "$CC" = "gcc" ]; then codecov; fi
