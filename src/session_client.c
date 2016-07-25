@@ -191,8 +191,8 @@ ctx_check_and_load_ietf_netconf(struct ly_ctx *ctx, const char **cpblts)
 }
 
 static char *
-libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_INFORMAT *format,
-                   void (**free_model_data)(void *model_data))
+libyang_module_clb(const char *mod_name, const char *mod_rev, const char *submod_name, const char *submod_rev,
+                   void *user_data, LYS_INFORMAT *format, void (**free_model_data)(void *model_data))
 {
     struct nc_session *session = (struct nc_session *)user_data;
     struct nc_rpc *rpc;
@@ -204,7 +204,11 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
     uint64_t msgid;
 
     /* TODO later replace with yang to reduce model size? */
-    rpc = nc_rpc_getschema(name, revision, "yin", NC_PARAMTYPE_CONST);
+    if (submod_name) {
+        rpc = nc_rpc_getschema(submod_name, submod_rev, "yin", NC_PARAMTYPE_CONST);
+    } else {
+        rpc = nc_rpc_getschema(mod_name, mod_rev, "yin", NC_PARAMTYPE_CONST);
+    }
     *format = LYS_IN_YIN;
 
     while ((msg = nc_send_rpc(session, rpc, 0, &msgid)) == NC_MSG_WOULDBLOCK) {
