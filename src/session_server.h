@@ -216,7 +216,7 @@ int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
  * @brief Learn the number of sessions in a pollsession structure.
  *
  * @param[in] ps Pollsession structure to check.
- * @return Number of sessions (even invalid ones) in \p ps.
+ * @return Number of sessions (even invalid ones) in \p ps, -1 on error.
  */
 uint16_t nc_ps_session_count(struct nc_pollsession *ps);
 
@@ -225,7 +225,7 @@ uint16_t nc_ps_session_count(struct nc_pollsession *ps);
 #define NC_PSPOLL_BAD_RPC 0x0004       /**< RPC was received, but failed to be parsed. */
 #define NC_PSPOLL_REPLY_ERROR 0x0008   /**< Response to the RPC was a \<rpc-reply\> of type error. */
 #define NC_PSPOLL_SESSION_TERM 0x0010  /**< Some session was terminated. */
-#define NC_PSPOLL_SESSION_ERROR 0x0020 /**< Some session was terminated incorrectly (not by \<close-session\> or \<kill-session\> RPCs. */
+#define NC_PSPOLL_SESSION_ERROR 0x0020 /**< Some session was terminated incorrectly (not by a \<close-session\> or \<kill-session\> RPC). */
 #define NC_PSPOLL_PENDING 0x0040       /**< Unhandled pending events on other session. */
 #define NC_PSPOLL_ERROR 0x0080         /**< Other fatal errors (they are printed). */
 
