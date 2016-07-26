@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 2.6)
+include (CheckFunctionExists)
 
 # include custom Modules
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMakeModules/")
@@ -99,10 +100,15 @@ else()
     option(ENABLE_VALGRIND_TESTS "Build tests with valgrind" OFF)
 endif()
 
-#dependencies - pthread
+# dependencies - pthread
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)
 target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
+
+# check availability for some pthread functions
+set(CMAKE_REQUIRED_LIBRARIES pthread)
+check_function_exists(pthread_spin_lock HAVE_SPINLOCK)
+check_function_exists(pthread_mutex_timedlock HAVE_PTHREAD_MUTEX_TIMEDLOCK)
 
 # dependencies - libssh
 if(ENABLE_SSH)

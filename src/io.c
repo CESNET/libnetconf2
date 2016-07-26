@@ -12,7 +12,7 @@
  *     https://opensource.org/licenses/BSD-3-Clause
  */
 
-#define _GNU_SOURCE /* asprintf, ppoll */
+#define _GNU_SOURCE /* asprintf */
 #define _POSIX_SOUCE /* signals */
 #include <assert.h>
 #include <errno.h>
@@ -398,10 +398,9 @@ error:
 static int
 nc_read_poll(struct nc_session *session, int timeout)
 {
-    sigset_t sigmask;
+    sigset_t sigmask, origmask;
     int ret = -2;
     struct pollfd fds;
-    struct timespec ts_timeout;
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
         ERR("Session %u: invalid session to poll.", session->id);
@@ -450,17 +449,10 @@ nc_read_poll(struct nc_session *session, int timeout)
             fds.events = POLLIN;
             fds.revents = 0;
 
-            if (timeout > -1) {
-                if (!timeout) {
-                    ts_timeout.tv_sec = 0;
-                    ts_timeout.tv_nsec = 0;
-                } else if (timeout > 0) {
-                    ts_timeout.tv_sec = timeout / 1000;
-                    ts_timeout.tv_nsec = (timeout % 1000) * 1000000;
-                }
-            }
             sigfillset(&sigmask);
-            ret = ppoll(&fds, 1, (timeout == -1 ? NULL : &ts_timeout), &sigmask);
+            pthread_sigmask(SIG_SETMASK, &sigmask, &origmask);
+            ret = poll(&fds, 1, timeout);
+            pthread_sigmask(SIG_SETMASK, &origmask, NULL);
         }
 
         break;
@@ -473,7 +465,7 @@ nc_read_poll(struct nc_session *session, int timeout)
     /* process the poll result, unified ret meaning for poll and ssh_channel poll */
     if (ret < 0) {
         /* poll failed - something really bad happened, close the session */
-        ERR("Session %u: ppoll error (%s).", session->id, strerror(errno));
+        ERR("Session %u: poll error (%s).", session->id, strerror(errno));
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_OTHER;
         return -1;

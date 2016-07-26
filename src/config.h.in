@@ -27,6 +27,24 @@
 #endif
 
 /*
+ * Support for spinlocks
+ */
+#cmakedefine HAVE_SPINLOCK
+#ifndef HAVE_SPINLOCK
+#  define pthread_spinlock_t pthread_mutex_t
+#  define pthread_spin_init(s, opt) pthread_mutex_init(s, NULL)
+#  define pthread_spin_lock pthread_mutex_lock
+#  define pthread_spin_trylock pthread_mutex_trylock
+#  define pthread_spin_unlock pthread_mutex_unlock
+#  define pthread_spin_destroy pthread_mutex_destroy
+#endif
+
+/*
+ * support for pthread_mutex_timedlock
+ */
+#cmakedefine HAVE_PTHREAD_MUTEX_TIMEDLOCK
+
+/*
  * Location of installed basic YIN/YANG schemas
  */
 #define SCHEMAS_DIR "@CMAKE_INSTALL_PREFIX@/@DATA_INSTALL_DIR@"
