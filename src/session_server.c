@@ -561,7 +561,7 @@ nc_ps_queue_remove_id(struct nc_pollsession *ps, uint8_t id)
 }
 
 int
-nc_ps_lock(struct nc_pollsession *ps, uint8_t *id)
+nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
 {
     int ret;
     uint8_t queue_last;
@@ -573,7 +573,7 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id)
     /* LOCK */
     ret = pthread_mutex_timedlock(&ps->lock, &ts);
     if (ret) {
-        ERR("Failed to lock a pollsession (%s).", strerror(ret));
+        ERR("%s: failed to lock a pollsession (%s).", func, strerror(ret));
         return -1;
     }
 
@@ -590,7 +590,7 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id)
 
     /* add ourselves into the queue */
     if (ps->queue_len == NC_PS_QUEUE_SIZE) {
-        ERR("Pollsession queue too small.");
+        ERR("%s: pollsession queue too small.", func);
         pthread_mutex_unlock(&ps->lock);
         return -1;
     }
@@ -608,7 +608,7 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id)
 
         ret = pthread_cond_timedwait(&ps->cond, &ps->lock, &ts);
         if (ret) {
-            ERR("Failed to wait for a pollsession condition (%s).", strerror(ret));
+            ERR("%s: failed to wait for a pollsession condition (%s).", func, strerror(ret));
             /* remove ourselves from the queue */
             nc_ps_queue_remove_id(ps, *id);
             pthread_mutex_unlock(&ps->lock);
@@ -623,7 +623,7 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id)
 }
 
 int
-nc_ps_unlock(struct nc_pollsession *ps, uint8_t id)
+nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func)
 {
     int ret;
     struct timespec ts;
@@ -634,7 +634,7 @@ nc_ps_unlock(struct nc_pollsession *ps, uint8_t id)
     /* LOCK */
     ret = pthread_mutex_timedlock(&ps->lock, &ts);
     if (ret) {
-        ERR("Failed to lock a pollsession (%s).", strerror(ret));
+        ERR("%s: failed to lock a pollsession (%s).", func, strerror(ret));
         ret = -1;
     }
 
@@ -707,7 +707,7 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
     }
 
     /* LOCK */
-    if (nc_ps_lock(ps, &q_id)) {
+    if (nc_ps_lock(ps, &q_id, __func__)) {
         return -1;
     }
 
@@ -717,7 +717,7 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
     if (!ps->pfds || !ps->sessions) {
         ERRMEM;
         /* UNLOCK */
-        nc_ps_unlock(ps, q_id);
+        nc_ps_unlock(ps, q_id, __func__);
         return -1;
     }
 
@@ -741,7 +741,7 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
     default:
         ERRINT;
         /* UNLOCK */
-        nc_ps_unlock(ps, q_id);
+        nc_ps_unlock(ps, q_id, __func__);
         return -1;
     }
     ps->pfds[ps->session_count - 1].events = POLLIN;
@@ -749,7 +749,7 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
     ps->sessions[ps->session_count - 1] = session;
 
     /* UNLOCK */
-    return nc_ps_unlock(ps, q_id);
+    return nc_ps_unlock(ps, q_id, __func__);
 }
 
 static int
@@ -796,14 +796,14 @@ nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
     }
 
     /* LOCK */
-    if (nc_ps_lock(ps, &q_id)) {
+    if (nc_ps_lock(ps, &q_id, __func__)) {
         return -1;
     }
 
     ret = _nc_ps_del_session(ps, session, -1);
 
     /* UNLOCK */
-    ret2 = nc_ps_unlock(ps, q_id);
+    ret2 = nc_ps_unlock(ps, q_id, __func__);
 
     return (ret || ret2 ? -1 : 0);
 }
@@ -820,14 +820,14 @@ nc_ps_session_count(struct nc_pollsession *ps)
     }
 
     /* LOCK */
-    if (nc_ps_lock(ps, &q_id)) {
+    if (nc_ps_lock(ps, &q_id, __func__)) {
         return -1;
     }
 
     count = ps->session_count;
 
     /* UNLOCK */
-    nc_ps_unlock(ps, q_id);
+    nc_ps_unlock(ps, q_id, __func__);
 
     return count;
 }
@@ -998,7 +998,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
     cur_time = time(NULL);
 
     /* LOCK */
-    if (nc_ps_lock(ps, &q_id)) {
+    if (nc_ps_lock(ps, &q_id, __func__)) {
         return NC_PSPOLL_ERROR;
     }
 
@@ -1177,7 +1177,7 @@ retry_poll:
 
 finish:
     /* UNLOCK */
-    nc_ps_unlock(ps, q_id);
+    nc_ps_unlock(ps, q_id, __func__);
     return ret;
 }
 
@@ -1194,7 +1194,7 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
     }
 
     /* LOCK */
-    if (nc_ps_lock(ps, &q_id)) {
+    if (nc_ps_lock(ps, &q_id, __func__)) {
         return;
     }
 
@@ -1221,7 +1221,7 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
     }
 
     /* UNLOCK */
-    nc_ps_unlock(ps, q_id);
+    nc_ps_unlock(ps, q_id, __func__);
 }
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)

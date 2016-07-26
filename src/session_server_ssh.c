@@ -1241,7 +1241,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     }
 
     /* LOCK */
-    if (nc_ps_lock(ps, &q_id)) {
+    if (nc_ps_lock(ps, &q_id, __func__)) {
         return NC_MSG_ERROR;
     }
 
@@ -1267,7 +1267,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     }
 
     /* UNLOCK */
-    nc_ps_unlock(ps, q_id);
+    nc_ps_unlock(ps, q_id, __func__);
 
     if (!new_session) {
         ERR("No session with a NETCONF SSH channel ready was found.");
