@@ -593,6 +593,7 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id)
     /* add ourselves into the queue */
     if (ps->queue_len == NC_PS_QUEUE_SIZE) {
         ERR("Pollsession queue too small.");
+        pthread_mutex_unlock(&ps->lock);
         return -1;
     }
     ++ps->queue_len;
