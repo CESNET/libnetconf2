@@ -1507,7 +1507,7 @@ nc_accept(int timeout, struct nc_session **session)
     pthread_rwlock_wrlock(&server_opts.endpt_array_lock);
 
     if (!server_opts.endpt_count) {
-        ERRINIT;
+        ERR("No endpoints to accept sessions on.");
         /* WRITE UNLOCK */
         pthread_rwlock_unlock(&server_opts.endpt_array_lock);
         return NC_MSG_ERROR;
