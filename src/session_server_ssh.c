@@ -1217,7 +1217,7 @@ nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session
         return msgtype;
     }
 
-    new_session->session_start = time(NULL);
+    new_session->session_start = new_session->last_rpc = time(NULL);
     new_session->status = NC_STATUS_RUNNING;
     *session = new_session;
 
@@ -1285,7 +1285,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
         return msgtype;
     }
 
-    new_session->session_start = time(NULL);
+    new_session->session_start = new_session->last_rpc = time(NULL);
     new_session->status = NC_STATUS_RUNNING;
     *session = new_session;
 
