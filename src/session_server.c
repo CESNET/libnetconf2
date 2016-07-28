@@ -1604,7 +1604,7 @@ nc_accept(int timeout, struct nc_session **session)
         *session = NULL;
         return msgtype;
     }
-    (*session)->session_start = time(NULL);
+    (*session)->session_start = (*session)->last_rpc = time(NULL);
     (*session)->status = NC_STATUS_RUNNING;
 
     return msgtype;
@@ -1728,7 +1728,7 @@ nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struc
     if (msgtype != NC_MSG_HELLO) {
         goto fail;
     }
-    (*session)->session_start = time(NULL);
+    (*session)->session_start = (*session)->last_rpc = time(NULL);
     (*session)->status = NC_STATUS_RUNNING;
 
     return msgtype;
