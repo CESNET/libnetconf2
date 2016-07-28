@@ -1013,7 +1013,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
         }
 
         /* TODO invalidate only sessions without subscription */
-        if (server_opts.idle_timeout && (ps->sessions[i]->last_rpc + server_opts.idle_timeout >= cur_time)) {
+        if (server_opts.idle_timeout && (cur_time >= ps->sessions[i]->last_rpc + server_opts.idle_timeout)) {
             ERR("Session %u: session idle timeout elapsed.", ps->sessions[i]->id);
             ps->sessions[i]->status = NC_STATUS_INVALID;
             ps->sessions[i]->term_reason = NC_SESSION_TERM_TIMEOUT;
