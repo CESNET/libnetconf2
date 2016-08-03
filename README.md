@@ -78,7 +78,7 @@ manager for OpenSSL package including the necessary development files
 
 ### libval (part of the DNSSEC-Tools suite)
 It is required only if DNSSEC SSHFP retrieval is enabled (it is disabled by
-default, see the [Build Options](#build-options) secion).
+default, see the [Build Options](#build-options) section).
 
 The easier way of installing it is as the libval-dev package (or a part of
 the dnssec-tools package), if you can find it for your distribution. Packages
