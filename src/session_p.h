@@ -160,7 +160,7 @@ struct nc_server_opts {
 #ifdef NC_ENABLED_SSH
         struct nc_server_ssh_opts *ssh_opts;
 #endif
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_TLS
         struct nc_server_tls_opts *tls_opts;
 #endif
         pthread_mutex_t endpt_lock;
