@@ -1371,7 +1371,10 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
     }
 #else
     bind = &server_opts.binds[i];
-    assert(bind->ti == ti);
+    if (bind->ti != ti) {
+        ERRINT;
+        goto fail;
+    }
 #endif
     if (!bind) {
         ERRINT;
