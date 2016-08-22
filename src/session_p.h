@@ -64,7 +64,10 @@ struct nc_client_ssh_opts {
 
 /* ACCESS locked, separate locks */
 struct nc_server_ssh_opts {
-    ssh_bind sshbind;
+    /* SSH bind options */
+    const char **hostkeys;
+    uint8_t hostkey_count;
+    const char *banner;
 
     struct {
         const char *path;
@@ -101,7 +104,15 @@ struct nc_client_tls_opts {
 
 /* ACCESS locked, separate locks */
 struct nc_server_tls_opts {
-    SSL_CTX *tls_ctx;
+    EVP_PKEY *server_key;
+    X509 *server_cert;
+    struct nc_cert {
+        const char *name;
+        X509 *cert;
+    } *trusted_certs;
+    uint16_t trusted_cert_count;
+    const char *trusted_ca_file;
+    const char *trusted_ca_dir;
     X509_STORE *crl_store;
 
     struct nc_ctn {
@@ -146,7 +157,12 @@ struct nc_server_opts {
     struct nc_bind *binds;
     struct nc_endpt {
         const char *name;
-        void *ti_opts;
+#ifdef NC_ENABLED_SSH
+        struct nc_server_ssh_opts *ssh_opts;
+#endif
+#ifdef NC_ENABLED_SSH
+        struct nc_server_tls_opts *tls_opts;
+#endif
         pthread_mutex_t endpt_lock;
     } *endpts;
     uint16_t endpt_count;
@@ -300,6 +316,7 @@ int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *absti
 #endif
 
 int nc_gettimespec(struct timespec *ts);
+
 int nc_timedlock(pthread_mutex_t *lock, int timeout);
 
 int nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func);
@@ -368,17 +385,6 @@ int nc_sock_listen(const char *address, uint16_t port);
 int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host, uint16_t *port, uint16_t *idx);
 
 /**
- * @brief Add a new endpoint and start listening on it.
- *
- * @param[in] name Unique arbitrary name.
- * @param[in] address IP address to bind to.
- * @param[in] port Port to bind to.
- * @param[in] ti Expected transport protocol of incoming connections.
- * @return 0 on success, -1 on error.
- */
-int nc_server_add_endpt_listen(const char *name, const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
-
-/**
  * @brief Change an existing endpoint bind.
  *
  * On error the listening socket is left untouched.
@@ -392,22 +398,13 @@ int nc_server_add_endpt_listen(const char *name, const char *address, uint16_t p
 int nc_server_endpt_set_address_port(const char *endpt_name, const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
 
 /**
- * @brief Stop listening on and remove an endpoint.
- *
- * @param[in] address Name of the endpoint. NULL matches all the names.
- * @param[in] ti Expected transport. 0 matches all.
- * @return 0 on success, -1 on not finding any match.
- */
-int nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti);
-
-/**
  * @brief Lock endpoint structures for reading and the specific endpoint.
  *
  * @param[in] name Name of the endpoint.
- * @param[in] ti Endpoint transport.
+ * @param[out] idx Index of the endpoint. Optional.
  * @return Endpoint structure.
  */
-struct nc_endpt *nc_server_endpt_lock(const char *name, NC_TRANSPORT_IMPL ti);
+struct nc_endpt *nc_server_endpt_lock(const char *name, uint16_t *idx);
 
 /**
  * @brief Unlock endpoint strcutures and the specific endpoint.
