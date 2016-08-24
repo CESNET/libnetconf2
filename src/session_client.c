@@ -198,7 +198,7 @@ libyang_module_clb(const char *mod_name, const char *mod_rev, const char *submod
     struct nc_rpc *rpc;
     struct nc_reply *reply;
     struct nc_reply_data *data_rpl;
-    struct lyd_node_anyxml *get_schema_data;
+    struct lyd_node_anydata *get_schema_data;
     NC_MSG_TYPE msg;
     char *model_data = NULL;
     uint64_t msgid;
@@ -244,11 +244,18 @@ libyang_module_clb(const char *mod_name, const char *mod_rev, const char *submod
         nc_reply_free(reply);
         return NULL;
     }
-    get_schema_data = (struct lyd_node_anyxml *)data_rpl->data->child;
-    if (get_schema_data->xml_struct) {
-        lyxml_print_mem(&model_data, get_schema_data->value.xml, LYXML_PRINT_SIBLINGS);
-    } else {
+    get_schema_data = (struct lyd_node_anydata *)data_rpl->data->child;
+    switch (get_schema_data->value_type) {
+    case LYD_ANYDATA_CONSTSTRING:
+    case LYD_ANYDATA_STRING:
         model_data = strdup(get_schema_data->value.str);
+        break;
+    case LYD_ANYDATA_DATATREE:
+        lyd_print_mem(&model_data, get_schema_data->value.tree, LYD_XML, LYP_WITHSIBLINGS);
+        break;
+    case LYD_ANYDATA_XML:
+        lyxml_print_mem(&model_data, get_schema_data->value.xml, LYXML_PRINT_SIBLINGS);
+        break;
     }
     nc_reply_free(reply);
     *free_model_data = free;
@@ -1314,7 +1321,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     struct nc_rpc_subscribe *rpc_sub;
     struct lyd_node *data, *node;
     const struct lys_module *ietfnc = NULL, *ietfncmon, *notifs, *ietfncwd = NULL;
-    char str[11], *filter;
+    char str[11];
     uint64_t cur_msgid;
 
     if (!session) {
@@ -1362,18 +1369,10 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         }
         if (rpc_gc->filter) {
             if (!rpc_gc->filter[0] || (rpc_gc->filter[0] == '<')) {
-                /* we need a copy of the filter */
-                filter = strdup(rpc_gc->filter);
-                if (!filter) {
-                    ERRMEM;
-                    lyd_free(data);
-                    return NC_MSG_ERROR;
-                }
-
-                node = lyd_new_anyxml_str(data, ietfnc, "filter", filter);
+                node = lyd_new_anydata(data, ietfnc, "filter", rpc_gc->filter, LYD_ANYDATA_CONSTSTRING);
                 lyd_insert_attr(node, NULL, "type", "subtree");
             } else {
-                node = lyd_new_anyxml_str(data, ietfnc, "filter", NULL);
+                node = lyd_new_anydata(data, ietfnc, "filter", NULL, LYD_ANYDATA_CONSTSTRING);
                 lyd_insert_attr(node, NULL, "type", "xpath");
                 lyd_insert_attr(node, NULL, "select", rpc_gc->filter);
             }
@@ -1451,15 +1450,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         }
 
         if (rpc_e->edit_cont[0] == '<') {
-            /* we need a copy of the content */
-            filter = strdup(rpc_e->edit_cont);
-            if (!filter) {
-                ERRMEM;
-                lyd_free(data);
-                return NC_MSG_ERROR;
-            }
-
-            node = lyd_new_anyxml_str(data, ietfnc, "config", filter);
+            node = lyd_new_anydata(data, ietfnc, "config", rpc_e->edit_cont, LYD_ANYDATA_CONSTSTRING);
         } else {
             node = lyd_new_leaf(data, ietfnc, "url", rpc_e->edit_cont);
         }
@@ -1487,15 +1478,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         node = lyd_new(data, ietfnc, "source");
         if (rpc_cp->url_config_src) {
             if (rpc_cp->url_config_src[0] == '<') {
-                /* we need a copy of the content */
-                filter = strdup(rpc_cp->url_config_src);
-                if (!filter) {
-                    ERRMEM;
-                    lyd_free(data);
-                    return NC_MSG_ERROR;
-                }
-
-                node = lyd_new_anyxml_str(node, ietfnc, "config", filter);
+                node = lyd_new_anydata(node, ietfnc, "config", rpc_cp->url_config_src, LYD_ANYDATA_CONSTSTRING);
             } else {
                 node = lyd_new_leaf(node, ietfnc, "url", rpc_cp->url_config_src);
             }
@@ -1585,18 +1568,10 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         data = lyd_new(NULL, ietfnc, "get");
         if (rpc_g->filter) {
             if (!rpc_g->filter[0] || (rpc_g->filter[0] == '<')) {
-                /* we need a copy of the filter */
-                filter = strdup(rpc_g->filter);
-                if (!filter) {
-                    ERRMEM;
-                    lyd_free(data);
-                    return NC_MSG_ERROR;
-                }
-
-                node = lyd_new_anyxml_str(data, ietfnc, "filter", filter);
+                node = lyd_new_anydata(data, ietfnc, "filter", rpc_g->filter, LYD_ANYDATA_CONSTSTRING);
                 lyd_insert_attr(node, NULL, "type", "subtree");
             } else {
-                node = lyd_new_anyxml_str(data, ietfnc, "filter", NULL);
+                node = lyd_new_anydata(data, ietfnc, "filter", NULL, LYD_ANYDATA_CONSTSTRING);
                 lyd_insert_attr(node, NULL, "type", "xpath");
                 lyd_insert_attr(node, NULL, "select", rpc_g->filter);
             }
@@ -1700,15 +1675,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         node = lyd_new(data, ietfnc, "source");
         if (rpc_val->url_config_src) {
             if (rpc_val->url_config_src[0] == '<') {
-                /* we need a copy of the config */
-                filter = strdup(rpc_val->url_config_src);
-                if (!filter) {
-                    ERRMEM;
-                    lyd_free(data);
-                    return NC_MSG_ERROR;
-                }
-
-                node = lyd_new_anyxml_str(node, ietfnc, "config", filter);
+                node = lyd_new_anydata(node, ietfnc, "config", rpc_val->url_config_src, LYD_ANYDATA_CONSTSTRING);
             } else {
                 node = lyd_new_leaf(node, ietfnc, "url", rpc_val->url_config_src);
             }
@@ -1772,18 +1739,10 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         if (rpc_sub->filter) {
             if (!rpc_sub->filter[0] || (rpc_sub->filter[0] == '<')) {
-                /* we need a copy of the filter */
-                filter = strdup(rpc_sub->filter);
-                if (!filter) {
-                    ERRMEM;
-                    lyd_free(data);
-                    return NC_MSG_ERROR;
-                }
-
-                node = lyd_new_anyxml_str(data, notifs, "filter", filter);
+                node = lyd_new_anydata(data, notifs, "filter", rpc_sub->filter, LYD_ANYDATA_CONSTSTRING);
                 lyd_insert_attr(node, NULL, "type", "subtree");
             } else {
-                node = lyd_new_anyxml_str(data, notifs, "filter", NULL);
+                node = lyd_new_anydata(data, notifs, "filter", NULL, LYD_ANYDATA_CONSTSTRING);
                 lyd_insert_attr(node, NULL, "type", "xpath");
                 lyd_insert_attr(node, NULL, "select", rpc_sub->filter);
             }

@@ -338,13 +338,13 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
         return NULL;
     }
 
-    data = lyd_new_path(NULL, server_opts.ctx, "/ietf-netconf-monitoring:get-schema/data", model_data, LYD_PATH_OPT_OUTPUT);
+    data = lyd_new_path(NULL, server_opts.ctx, "/ietf-netconf-monitoring:get-schema/data", model_data,
+                        LYD_ANYDATA_STRING, LYD_PATH_OPT_OUTPUT);
     if (!data) {
         ERRINT;
         free(model_data);
         return NULL;
     }
-    free(model_data);
 
     return nc_server_reply_data(data, NC_PARAMTYPE_FREE);
 }
