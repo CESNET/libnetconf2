@@ -53,6 +53,7 @@ struct nc_server_reply_data {
     NC_RPL type;
     struct lyd_node *data;
     char free;
+    NC_WD_MODE wd;
 };
 
 struct nc_server_reply_error {

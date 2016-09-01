@@ -84,10 +84,10 @@ typedef enum NC_DATASTORE_TYPE {
  */
 typedef enum NC_WITHDEFAULTS_MODE {
     NC_WD_UNKNOWN = 0,    /**< invalid mode */
-    NC_WD_ALL = 0x01,     /**< report-all mode */
-    NC_WD_ALL_TAG = 0x02, /**< report-all-tagged mode */
-    NC_WD_TRIM = 0x04,    /**< trim mode */
-    NC_WD_EXPLICIT = 0x08 /**< explicit mode */
+    NC_WD_ALL,            /**< report-all mode */
+    NC_WD_ALL_TAG,        /**< report-all-tagged mode */
+    NC_WD_TRIM,           /**< trim mode */
+    NC_WD_EXPLICIT        /**< explicit mode */
 } NC_WD_MODE;
 
 /**

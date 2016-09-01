@@ -346,7 +346,7 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
         return NULL;
     }
 
-    return nc_server_reply_data(data, NC_PARAMTYPE_FREE);
+    return nc_server_reply_data(data, NC_WD_EXPLICIT, NC_PARAMTYPE_FREE);
 }
 
 static struct nc_server_reply *

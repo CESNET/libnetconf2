@@ -40,7 +40,7 @@ nc_server_reply_ok(void)
 }
 
 API struct nc_server_reply *
-nc_server_reply_data(struct lyd_node *data, NC_PARAMTYPE paramtype)
+nc_server_reply_data(struct lyd_node *data, NC_WD_MODE wd, NC_PARAMTYPE paramtype)
 {
     struct nc_server_reply_data *ret;
 
@@ -56,6 +56,7 @@ nc_server_reply_data(struct lyd_node *data, NC_PARAMTYPE paramtype)
     }
 
     ret->type = NC_RPL_DATA;
+    ret->wd = wd;
     if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
         ret->data = lyd_dup(data, 1);
     } else {

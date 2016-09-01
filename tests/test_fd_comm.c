@@ -60,7 +60,7 @@ my_getconfig_rpc_clb(struct lyd_node *rpc, struct nc_session *session)
                         LYD_PATH_OPT_OUTPUT);
     assert_non_null(data);
 
-    return nc_server_reply_data(data, NC_PARAMTYPE_FREE);
+    return nc_server_reply_data(data, NC_WD_EXPLICIT, NC_PARAMTYPE_FREE);
 }
 
 static int

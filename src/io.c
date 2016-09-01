@@ -923,6 +923,7 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
     struct wclb_arg arg;
     const char **capabilities;
     uint32_t *sid = NULL, i;
+    int wd;
 
     assert(session);
 
@@ -974,8 +975,24 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
             nc_write_clb((void *)&arg, "<ok/>", 5, 0);
             break;
         case NC_RPL_DATA:
-            assert(((struct nc_reply_data *)reply)->data->schema->nodetype == LYS_RPC);
-            lyd_print_clb(nc_write_xmlclb, (void *)&arg, ((struct nc_reply_data *)reply)->data->child, LYD_XML, LYP_WITHSIBLINGS);
+            assert(((struct nc_server_reply_data *)reply)->data->schema->nodetype == LYS_RPC);
+            switch(((struct nc_server_reply_data *)reply)->wd) {
+            case NC_WD_UNKNOWN:
+            case NC_WD_EXPLICIT:
+                wd = LYP_WD_EXPLICIT;
+                break;
+            case NC_WD_TRIM:
+                wd = LYP_WD_TRIM;
+                break;
+            case NC_WD_ALL:
+                wd = LYP_WD_ALL;
+                break;
+            case NC_WD_ALL_TAG:
+                wd = LYP_WD_ALL_TAG;
+                break;
+            }
+            lyd_print_clb(nc_write_xmlclb, (void *)&arg, ((struct nc_reply_data *)reply)->data->child, LYD_XML,
+                          LYP_WITHSIBLINGS | wd);
             break;
         case NC_RPL_ERROR:
             error_rpl = (struct nc_server_reply_error *)reply;
