@@ -654,10 +654,8 @@ nc_sshcb_auth_pubkey(struct nc_session *session, ssh_message msg)
         goto fail;
     } else if (strcmp(session->username, username)) {
         VRB("User \"%s\" is not the username identified with the presented public key.", session->username);
-        free(username);
         goto fail;
     }
-    free(username);
 
     signature_state = ssh_message_auth_publickey_state(msg);
     if (signature_state == SSH_PUBLICKEY_STATE_VALID) {
