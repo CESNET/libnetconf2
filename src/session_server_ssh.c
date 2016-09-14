@@ -649,27 +649,29 @@ nc_sshcb_auth_pubkey(struct nc_session *session, ssh_message msg)
     const char *username;
     int signature_state;
 
+    if ((username = auth_pubkey_compare_key(session->data, ssh_message_auth_pubkey(msg))) == NULL) {
+        VRB("User \"%s\" tried to use an unknown (unauthorized) public key.", session->username);
+        goto fail;
+    } else if (strcmp(session->username, username)) {
+        VRB("User \"%s\" is not the username identified with the presented public key.", session->username);
+        free(username);
+        goto fail;
+    }
+    free(username);
+
     signature_state = ssh_message_auth_publickey_state(msg);
     if (signature_state == SSH_PUBLICKEY_STATE_VALID) {
         VRB("User \"%s\" authenticated.", session->username);
         session->flags |= NC_SESSION_SSH_AUTHENTICATED;
         ssh_message_auth_reply_success(msg, 0);
-        return;
-
     } else if (signature_state == SSH_PUBLICKEY_STATE_NONE) {
-        if ((username = auth_pubkey_compare_key(session->data, ssh_message_auth_pubkey(msg))) == NULL) {
-            VRB("User \"%s\" tried to use an unknown (unauthorized) public key.", session->username);
-
-        } else if (strcmp(session->username, username)) {
-            VRB("User \"%s\" is not the username identified with the presented public key.", session->username);
-
-        } else {
-            /* accepting only the use of a public key */
-            ssh_message_auth_reply_pk_ok_simple(msg);
-            return;
-        }
+        /* accepting only the use of a public key */
+        ssh_message_auth_reply_pk_ok_simple(msg);
     }
 
+    return;
+
+fail:
     ++session->ssh_auth_attempts;
     VRB("Failed user \"%s\" authentication attempt (#%d).", session->username, session->ssh_auth_attempts);
     ssh_message_reply_default(msg);
