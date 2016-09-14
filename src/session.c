@@ -516,7 +516,7 @@ API const char **
 nc_server_get_cpblts(struct ly_ctx *ctx)
 {
     struct lyd_node *child, *child2, *yanglib;
-    struct lyd_node_leaf_list **features = NULL, **deviations = NULL, *ns = NULL, *rev = NULL, *name = NULL;
+    struct lyd_node_leaf_list **features = NULL, **deviations = NULL, *ns = NULL, *rev = NULL, *name = NULL, *module_set_id = NULL;
     const char **cpblts;
     const struct lys_module *mod;
     int size = 10, count, feat_count = 0, dev_count = 0, i, str_len;
@@ -625,6 +625,13 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
 
     /* models */
     LY_TREE_FOR(yanglib->child, child) {
+        if (!module_set_id) {
+            if (strcmp(child->prev->schema->name, "module-set-id")) {
+                ERRINT;
+                return NULL;
+            }
+            module_set_id = (struct lyd_node_leaf_list *)child->prev;
+        }
         if (!strcmp(child->schema->name, "module")) {
             LY_TREE_FOR(child->child, child2) {
                 if (!strcmp(child2->schema->name, "namespace")) {
@@ -691,6 +698,9 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
                     strcat(str, deviations[i]->value_str);
                     str_len += strlen(deviations[i]->value_str);
                 }
+            }
+            if (!strcmp(name->value_str, "ietf-yang-library")) {
+                str_len += sprintf(str + str_len, "&module-set-id=%s", module_set_id->value_str);
             }
 
             add_cpblt(ctx, str, &cpblts, &size, &count);
