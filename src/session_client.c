@@ -198,6 +198,7 @@ libyang_module_clb(const char *mod_name, const char *mod_rev, const char *submod
     struct nc_rpc *rpc;
     struct nc_reply *reply;
     struct nc_reply_data *data_rpl;
+    struct nc_reply_error *error_rpl;
     struct lyd_node_anydata *get_schema_data;
     NC_MSG_TYPE msg;
     char *model_data = NULL;
@@ -230,9 +231,26 @@ libyang_module_clb(const char *mod_name, const char *mod_rev, const char *submod
         return NULL;
     }
 
-    if (reply->type != NC_RPL_DATA) {
-        /* TODO print the error, if error */
-        ERR("Session %u: unexpected reply type to a <get-schema> RPC.", session->id);
+    switch (reply->type) {
+    case NC_RPL_OK:
+        ERR("Session %u: unexpected reply OK to a <get-schema> RPC.", session->id);
+        nc_reply_free(reply);
+        return NULL;
+    case NC_RPL_DATA:
+        /* fine */
+        break;
+    case NC_RPL_ERROR:
+        error_rpl = (struct nc_reply_error *)reply;
+        if (error_rpl->count) {
+            ERR("Session %u: error reply to a <get-schema> RPC (tag \"%s\", message \"%s\").",
+                session->id, error_rpl->err[0].tag, error_rpl->err[0].message);
+        } else {
+            ERR("Session %u: unexpected reply error to a <get-schema> RPC.", session->id);
+        }
+        nc_reply_free(reply);
+        return NULL;
+    case NC_RPL_NOTIF:
+        ERR("Session %u: unexpected reply notification to a <get-schema> RPC.", session->id);
         nc_reply_free(reply);
         return NULL;
     }
