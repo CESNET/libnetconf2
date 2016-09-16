@@ -1449,7 +1449,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
             }
         }
 
-        if (rpc_e->edit_cont[0] == '<') {
+        if (!rpc_e->edit_cont[0] || (rpc_e->edit_cont[0] == '<')) {
             node = lyd_new_anydata(data, ietfnc, "config", rpc_e->edit_cont, LYD_ANYDATA_CONSTSTRING);
         } else {
             node = lyd_new_leaf(data, ietfnc, "url", rpc_e->edit_cont);
@@ -1477,7 +1477,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         node = lyd_new(data, ietfnc, "source");
         if (rpc_cp->url_config_src) {
-            if (rpc_cp->url_config_src[0] == '<') {
+            if (!rpc_cp->url_config_src[0] || (rpc_cp->url_config_src[0] == '<')) {
                 node = lyd_new_anydata(node, ietfnc, "config", rpc_cp->url_config_src, LYD_ANYDATA_CONSTSTRING);
             } else {
                 node = lyd_new_leaf(node, ietfnc, "url", rpc_cp->url_config_src);
@@ -1674,7 +1674,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         data = lyd_new(NULL, ietfnc, "validate");
         node = lyd_new(data, ietfnc, "source");
         if (rpc_val->url_config_src) {
-            if (rpc_val->url_config_src[0] == '<') {
+            if (!rpc_val->url_config_src[0] || (rpc_val->url_config_src[0] == '<')) {
                 node = lyd_new_anydata(node, ietfnc, "config", rpc_val->url_config_src, LYD_ANYDATA_CONSTSTRING);
             } else {
                 node = lyd_new_leaf(node, ietfnc, "url", rpc_val->url_config_src);
