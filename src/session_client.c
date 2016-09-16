@@ -838,7 +838,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
             if (rpc_gen->has_data) {
                 data = rpc_gen->content.data;
             } else {
-                data = lyd_parse_mem(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | parseroptions);
+                data = lyd_parse_mem(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | parseroptions, NULL);
                 if (!data) {
                     ERR("Failed to parse a generic RPC/action XML.");
                     return NULL;
@@ -927,7 +927,8 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
         }
         data_rpl->type = NC_RPL_DATA;
         if (!data) {
-            data_rpl->data = lyd_parse_xml(ctx, &xml->child, LYD_OPT_DESTRUCT | LYD_OPT_RPCREPLY | parseroptions, schema);
+            data_rpl->data = lyd_parse_xml(ctx, &xml->child, LYD_OPT_RPCREPLY | LYD_OPT_DESTRUCT | parseroptions,
+                                           schema, NULL);
         } else {
             /* <get>, <get-config> */
             data_rpl->data = data;
@@ -1214,7 +1215,7 @@ nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
         }
 
         /* notification body */
-        (*notif)->tree = lyd_parse_xml(session->ctx, &xml->child, LYD_OPT_DESTRUCT | LYD_OPT_NOTIF);
+        (*notif)->tree = lyd_parse_xml(session->ctx, &xml->child, LYD_OPT_NOTIF | LYD_OPT_DESTRUCT, NULL);
         lyxml_free(session->ctx, xml);
         xml = NULL;
         if (!(*notif)->tree) {
@@ -1371,7 +1372,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         if (rpc_gen->has_data) {
             data = rpc_gen->content.data;
         } else {
-            data = lyd_parse_mem(session->ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | LYD_OPT_STRICT);
+            data = lyd_parse_mem(session->ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | LYD_OPT_STRICT, NULL);
         }
         break;
 
