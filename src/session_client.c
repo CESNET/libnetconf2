@@ -204,11 +204,10 @@ libyang_module_clb(const char *mod_name, const char *mod_rev, const char *submod
     char *model_data = NULL;
     uint64_t msgid;
 
-    /* TODO later replace with yang to reduce model size? */
     if (submod_name) {
-        rpc = nc_rpc_getschema(submod_name, submod_rev, "yin", NC_PARAMTYPE_CONST);
+        rpc = nc_rpc_getschema(submod_name, submod_rev, "yang", NC_PARAMTYPE_CONST);
     } else {
-        rpc = nc_rpc_getschema(mod_name, mod_rev, "yin", NC_PARAMTYPE_CONST);
+        rpc = nc_rpc_getschema(mod_name, mod_rev, "yang", NC_PARAMTYPE_CONST);
     }
     *format = LYS_IN_YIN;
 
@@ -277,6 +276,7 @@ libyang_module_clb(const char *mod_name, const char *mod_rev, const char *submod
     }
     nc_reply_free(reply);
     *free_model_data = free;
+    *format = LYS_IN_YANG;
 
     return model_data;
 }
