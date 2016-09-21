@@ -49,9 +49,7 @@ extern struct nc_server_opts server_opts;
 int
 nc_gettimespec(struct timespec *ts)
 {
-#ifdef CLOCK_MONOTONIC
-    return clock_gettime(CLOCK_MONOTONIC, ts);
-#elif defined CLOCK_REALTIME
+#ifdef CLOCK_REALTIME
     return clock_gettime(CLOCK_REALTIME, ts);
 #else
     int rc;
