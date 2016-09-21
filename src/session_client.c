@@ -273,6 +273,10 @@ libyang_module_clb(const char *mod_name, const char *mod_rev, const char *submod
     case LYD_ANYDATA_XML:
         lyxml_print_mem(&model_data, get_schema_data->value.xml, LYXML_PRINT_SIBLINGS);
         break;
+    case LYD_ANYDATA_JSON:
+    case LYD_ANYDATA_JSOND:
+        ERRINT;
+        break;
     }
     nc_reply_free(reply);
     *free_model_data = free;
