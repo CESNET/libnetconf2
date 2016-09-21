@@ -923,7 +923,7 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
     struct wclb_arg arg;
     const char **capabilities;
     uint32_t *sid = NULL, i;
-    int wd;
+    int wd = 0;
 
     assert(session);
 
