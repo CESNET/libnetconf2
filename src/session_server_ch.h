@@ -39,7 +39,7 @@ NC_MSG_TYPE nc_connect_callhome_ssh(const char *host, uint16_t port, struct nc_s
  *        ECDSA keys can be added. However, a maximum of one key of each type will be used
  *        during SSH authentication, later keys replacing earlier ones.
  *
- * @param[in] privkey_path Path to a private key. NULL matches all the keys.
+ * @param[in] privkey_path Path to a private key.
  * @return 0 on success, -1 on error.
  */
 int nc_server_ssh_ch_add_hostkey(const char *privkey_path);
@@ -47,10 +47,10 @@ int nc_server_ssh_ch_add_hostkey(const char *privkey_path);
 /**
  * @brief Delete Call Home SSH host keys. Their order is preserved.
  *
- * @param[in] privkey_path Path to a private key.
+ * @param[in] privkey_path Path to a private key. NULL matches all the keys.
  * @return 0 on success, -1 on error.
  */
-int nc_server_ssh_ch_add_hostkey(const char *privkey_path);
+int nc_server_ssh_ch_del_hostkey(const char *privkey_path);
 
 /**
  * @brief Set Call Home SSH banner the server will send to every client.
