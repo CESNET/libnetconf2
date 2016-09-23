@@ -189,10 +189,18 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
         return -1;
     }
 
-    for (i = 0; i < bind_count; ++i) {
+    i = 0;
+    while (i < bind_count) {
+        if (binds[i].sock < 0) {
+            /* invalid socket */
+            --bind_count;
+            continue;
+        }
         pfd[i].fd = binds[i].sock;
         pfd[i].events = POLLIN;
         pfd[i].revents = 0;
+
+        ++i;
     }
 
     /* poll for a new connection */
@@ -1567,7 +1575,11 @@ nc_accept(int timeout, struct nc_session **session)
         return NC_MSG_ERROR;
     }
 
+#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
+    ret = nc_sock_accept_binds(server_opts.binds, server_opts.endpt_count * 2, timeout, &host, &port, &bind_idx);
+#else
     ret = nc_sock_accept_binds(server_opts.binds, server_opts.endpt_count, timeout, &host, &port, &bind_idx);
+#endif
 
     if (ret < 1) {
         /* WRITE UNLOCK */
