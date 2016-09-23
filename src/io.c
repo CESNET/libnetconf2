@@ -24,6 +24,10 @@
 #include <unistd.h>
 #include <signal.h>
 
+#ifdef NC_ENABLED_TLS
+#   include <openssl/err.h>
+#endif
+
 #include <libyang/libyang.h>
 
 #include "libnetconf.h"
@@ -562,9 +566,12 @@ struct wclb_arg {
     size_t len;
 };
 
-static ssize_t
+static int
 nc_write(struct nc_session *session, const void *buf, size_t count)
 {
+    int c;
+    size_t written = 0;
+
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
         return -1;
     }
@@ -579,34 +586,75 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
 
     DBG("Session %u: sending message:\n%.*s", session->id, count, buf);
 
-    switch (session->ti_type) {
-    case NC_TI_NONE:
-        return -1;
+    while (written < count) {
+        switch (session->ti_type) {
+        case NC_TI_NONE:
+            return -1;
 
-    case NC_TI_FD:
-        return write(session->ti.fd.out, buf, count);
+        case NC_TI_FD:
+            c = write(session->ti.fd.out, &((char *)buf)[written], count - written);
+            if (c < 0) {
+                ERR("Session %u: socket error (%s).", strerror(errno));
+                return -1;
+            }
+            break;
 
 #ifdef NC_ENABLED_SSH
-    case NC_TI_LIBSSH:
-        if (ssh_channel_is_closed(session->ti.libssh.channel) || ssh_channel_is_eof(session->ti.libssh.channel)) {
-            if (ssh_channel_is_closed(session->ti.libssh.channel)) {
-                ERR("Session %u: SSH channel unexpectedly closed.", session->id);
-            } else {
-                ERR("Session %u: SSH channel unexpected EOF.", session->id);
+        case NC_TI_LIBSSH:
+            if (ssh_channel_is_closed(session->ti.libssh.channel) || ssh_channel_is_eof(session->ti.libssh.channel)) {
+                if (ssh_channel_is_closed(session->ti.libssh.channel)) {
+                    ERR("Session %u: SSH channel unexpectedly closed.", session->id);
+                } else {
+                    ERR("Session %u: SSH channel unexpected EOF.", session->id);
+                }
+                session->status = NC_STATUS_INVALID;
+                session->term_reason = NC_SESSION_TERM_DROPPED;
+                return -1;
             }
-            session->status = NC_STATUS_INVALID;
-            session->term_reason = NC_SESSION_TERM_DROPPED;
-            return -1;
-        }
-        return ssh_channel_write(session->ti.libssh.channel, buf, count);
+            c = ssh_channel_write(session->ti.libssh.channel, &((char *)buf)[written], count - written);
+            if ((c == SSH_ERROR) || (c == -1)) {
+                ERR("Session %u: SSH channel write failed.", session->id);
+                return -1;
+            }
+            break;
 #endif
 #ifdef NC_ENABLED_TLS
-    case NC_TI_OPENSSL:
-        return SSL_write(session->ti.tls, buf, count);
+        unsigned long e;
+
+        case NC_TI_OPENSSL:
+            c = SSL_write(session->ti.tls, &((char *)buf)[written], count - written);
+            if (c < 1) {
+                switch ((e = SSL_get_error(session->ti.tls, c))) {
+                case SSL_ERROR_ZERO_RETURN:
+                    ERR("Session %u: SSL connection was properly closed.", session->id);
+                    return -1;
+                case SSL_ERROR_WANT_WRITE:
+                    c = 0;
+                    break;
+                case SSL_ERROR_SYSCALL:
+                    ERR("Session %u: SSL socket error (%s).", session->id, strerror(errno));
+                    return -1;
+                case SSL_ERROR_SSL:
+                    ERR("Session %u: SSL error (%s).", session->id, ERR_reason_error_string(e));
+                    return -1;
+                default:
+                    ERR("Session %u: unknown SSL error occured.", session->id);
+                    return -1;
+                }
+            }
+            break;
 #endif
+        }
+
+        if (c == 0) {
+            /* we must wait */
+            usleep(NC_TIMEOUT_STEP);
+        }
+
+        written += c;
     }
 
-    return -1;
+    return written;
 }
 
 static int
