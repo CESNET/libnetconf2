@@ -594,7 +594,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
         case NC_TI_FD:
             c = write(session->ti.fd.out, &((char *)buf)[written], count - written);
             if (c < 0) {
-                ERR("Session %u: socket error (%s).", strerror(errno));
+                ERR("Session %u: socket error (%s).", session->id, strerror(errno));
                 return -1;
             }
             break;
