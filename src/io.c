@@ -587,9 +587,6 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
 
     do {
         switch (session->ti_type) {
-        case NC_TI_NONE:
-            return -1;
-
         case NC_TI_FD:
             c = write(session->ti.fd.out, (char *)(buf + written), count - written);
             if (c < 0) {
@@ -643,6 +640,9 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
             }
             break;
 #endif
+        default:
+            ERRINT;
+            return -1;
         }
 
         if (c == 0) {
