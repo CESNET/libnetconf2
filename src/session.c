@@ -995,7 +995,6 @@ nc_ssh_init(void)
 {
     ssh_threads_set_callbacks(ssh_threads_get_pthread());
     ssh_init();
-    ssh_set_log_level(verbose_level);
 }
 
 static void

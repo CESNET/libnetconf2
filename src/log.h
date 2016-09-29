@@ -39,6 +39,27 @@ typedef enum NC_VERB_LEVEL {
  */
 void nc_verbosity(NC_VERB_LEVEL level);
 
+#ifdef NC_ENABLED_SSH
+
+/**
+ * @brief Set libssh verbosity level.
+ *
+ * libssh verbosity is set separately because it defines more verbose levels than libnetconf2.
+ * Also, you need to set this for every thread unlike libnetconf verbosity.
+ *
+ * Values:
+ * - 0 - no logging,
+ * - 1 - rare conditions or warnings,
+ * - 2 - API-accessible entrypoints,
+ * - 3 - packet id and size,
+ * - 4 - functions entering and leaving.
+ *
+ * @param[in] level libssh verbosity level.
+ */
+void nc_libssh_thread_verbosity(int level);
+
+#endif
+
 /**
  * @brief Set libnetconf's print callback.
  *
