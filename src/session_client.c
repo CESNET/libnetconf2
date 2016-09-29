@@ -275,6 +275,8 @@ libyang_module_clb(const char *mod_name, const char *mod_rev, const char *submod
         break;
     case LYD_ANYDATA_JSON:
     case LYD_ANYDATA_JSOND:
+    case LYD_ANYDATA_SXML:
+    case LYD_ANYDATA_SXMLD:
         ERRINT;
         break;
     }
