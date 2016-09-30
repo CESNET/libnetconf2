@@ -48,7 +48,7 @@ void nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REAS
  * all the strings, which is thread-safe. Reading models is considered thread-safe
  * as models cannot be removed and are rarely modified (augments or deviations).
  *
- * If the callbacks on schema nodes (their private data) are modified after
+ * If the RPC callbacks on schema nodes (mentioned in @ref howtoserver) are modified after
  * server initialization with that particular context, they will be called (changes
  * will take effect). However, there could be race conditions as the access to
  * these callbacks is not thread-safe.
@@ -61,8 +61,8 @@ void nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REAS
  * This context can safely be destroyed only after calling the last libnetconf2
  * function in an application.
  *
- * Supported RPCs of models in the context are expected to have the private field
- * in the corresponding RPC schema node set to a nc_rpc_clb function callback.
+ * Supported RPCs of models in the context are expected to have their callback
+ * in the corresponding RPC schema node set to a nc_rpc_clb function callback using nc_set_rpc_callback().
  * This callback is called by nc_ps_poll() if the particular RPC request is
  * received. Callbacks for ietf-netconf:get-schema (supporting YANG and YIN format
  * only) and ietf-netconf:close-session are set internally if left unset.
@@ -566,7 +566,8 @@ void nc_server_tls_endpt_clear_crls(const char *endpt_name);
  * @param[in] name Specific username if \p map_type == NC_TLS_CTN_SPECIFED. Must be NULL otherwise.
  * @return 0 on success, -1 on error.
  */
-int nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
+int nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char *fingerprint,
+                                NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
 /**
  * @brief Remove a Cert-to-name entry.
@@ -578,7 +579,8 @@ int nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char 
  * @param[in] name Specific username for the entry. NULL matches all the usernames.
  * @return 0 on success, -1 on not finding any match.
  */
-int nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name);
+int nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *fingerprint,
+                                NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
 #endif /* NC_ENABLED_TLS */
 

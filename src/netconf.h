@@ -40,6 +40,14 @@ extern "C" {
 #define NC_TIMEOUT_STEP 20
 
 /**
+ * @brief Set RPC callback to a schema node.
+ *
+ * @param[in] node const struct lys_node *node
+ * @param[in] cb nc_rpc_clb cb
+ */
+#define nc_set_rpc_callback(node, cb) lys_set_private(node, cb)
+
+/**
  * @brief Enumeration of reasons of the NETCONF session termination as defined in RFC 6470.
  */
 typedef enum NC_SESSION_TERM_REASON {
