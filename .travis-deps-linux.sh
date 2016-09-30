@@ -11,7 +11,7 @@ echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CER
 
 # libssh
 wget https://red.libssh.org/attachments/download/195/libssh-0.7.3.tar.xz
-tar -xjf libssh-0.7.3.tar.xz
+tar -xJf libssh-0.7.3.tar.xz
 mkdir libssh-0.7.3/build && cd libssh-0.7.3/build
 cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
 cd ../..
