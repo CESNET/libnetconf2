@@ -965,6 +965,7 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
     const char *attrs;
     struct lyd_node *content;
     struct lyxml_elem *rpc_elem;
+    struct nc_server_notif *notif;
     struct nc_server_reply *reply;
     struct nc_server_reply_error *error_rpl;
     char *buf = NULL;
@@ -1058,8 +1059,13 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
         break;
 
     case NC_MSG_NOTIF:
-        nc_write_clb((void *)&arg, "<notification xmlns=\""NC_NS_NOTIF"\"/>", 21 + 47 + 3, 0);
-        /* TODO content */
+        notif = va_arg(ap, struct nc_server_notif *);
+
+        nc_write_clb((void *)&arg, "<notification xmlns=\""NC_NS_NOTIF"\">", 21 + 47 + 2, 0);
+        nc_write_clb((void *)&arg, "<eventTime>", 11, 0);
+        nc_write_clb((void *)&arg, notif->eventtime, strlen(notif->eventtime), 0);
+        nc_write_clb((void *)&arg, "</eventTime>", 12, 0);
+        lyd_print_clb(nc_write_xmlclb, (void *)&arg, notif->tree, LYD_XML, 0);
         nc_write_clb((void *)&arg, "</notification>", 12, 0);
         break;
 

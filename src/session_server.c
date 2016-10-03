@@ -857,7 +857,7 @@ nc_ps_session_count(struct nc_pollsession *ps)
  *          NC_PSPOLL_RPC
  */
 static int
-nc_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
+nc_server_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
 {
     struct lyxml_elem *xml = NULL;
     NC_MSG_TYPE msgtype;
@@ -936,6 +936,39 @@ nc_set_global_rpc_clb(nc_rpc_clb clb)
     global_rpc_clb = clb;
 }
 
+API NC_MSG_TYPE
+nc_server_notif_send(struct nc_session *session, struct nc_server_notif *notif, int timeout)
+{
+    NC_MSG_TYPE result = NC_MSG_NOTIF;
+    int ret;
+
+    /* check parameters */
+    if (!session) {
+        ERRARG("session");
+        return NC_MSG_ERROR;
+    } else if (!notif || !notif->tree || !notif->eventtime) {
+        ERRARG("notif");
+        return NC_MSG_ERROR;
+    }
+
+    /* reading an RPC and sending a reply must be atomic (no other RPC should be read) */
+    ret = nc_timedlock(session->ti_lock, timeout, __func__);
+    if (ret < 0) {
+        return NC_MSG_ERROR;
+    } else if (!ret) {
+        return NC_MSG_WOULDBLOCK;
+    }
+
+    ret = nc_write_msg(session, NC_MSG_NOTIF, notif);
+    if (ret == -1) {
+        ERR("Session %u: failed to write notification.", session->id);
+        result = NC_MSG_ERROR;
+    }
+    pthread_mutex_unlock(session->ti_lock);
+
+    return result;
+}
+
 /* must be called holding the session lock!
  * returns: NC_PSPOLL_ERROR,
  *          NC_PSPOLL_ERROR | NC_PSPOLL_REPLY_ERROR,
@@ -943,7 +976,7 @@ nc_set_global_rpc_clb(nc_rpc_clb clb)
  *          0
  */
 static int
-nc_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
+nc_server_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
 {
     nc_rpc_clb clb;
     struct nc_server_reply *reply;
@@ -1167,7 +1200,7 @@ retry_poll:
         goto finish;
     }
 
-    ret = nc_recv_rpc(cur_session, &rpc);
+    ret = nc_server_recv_rpc(cur_session, &rpc);
     if (ret & (NC_PSPOLL_ERROR | NC_PSPOLL_BAD_RPC)) {
         pthread_mutex_unlock(cur_session->ti_lock);
         if (cur_session->status != NC_STATUS_RUNNING) {
@@ -1179,7 +1212,7 @@ retry_poll:
     cur_session->last_rpc = time(NULL);
 
     /* process RPC */
-    ret |= nc_send_reply(cur_session, rpc);
+    ret |= nc_server_send_reply(cur_session, rpc);
 
     pthread_mutex_unlock(cur_session->ti_lock);
     if (cur_session->status != NC_STATUS_RUNNING) {

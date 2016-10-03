@@ -27,9 +27,9 @@
 #include <cmocka.h>
 #include <libyang/libyang.h>
 
+#include <messages_p.h>
 #include <session_p.h>
 #include <session_client.h>
-#include <messages_p.h>
 #include "config.h"
 
 struct wr {

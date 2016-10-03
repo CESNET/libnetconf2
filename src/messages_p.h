@@ -68,6 +68,11 @@ struct nc_server_rpc {
     struct lyd_node *tree;   /**< libyang data tree of the message (NETCONF operation) */
 };
 
+struct nc_server_notif {
+    char *eventtime;        /**< eventTime of the notification */
+    struct lyd_node *tree;  /**< libyang data tree of the message */
+};
+
 struct nc_client_reply_error {
     NC_RPL type;
     struct nc_err *err;

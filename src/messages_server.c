@@ -19,8 +19,8 @@
 
 #include <libyang/libyang.h>
 
-#include "session_server.h"
 #include "libnetconf.h"
+#include "session_server.h"
 
 extern struct nc_server_opts server_opts;
 
@@ -801,4 +801,40 @@ nc_err_free(struct nc_server_error *err)
     }
     free(err->other);
     free(err);
+}
+
+API struct nc_server_notif *
+nc_server_notif_new(struct lyd_node* event, char *eventtime, int eventtime_const)
+{
+    struct nc_server_notif *ntf;
+
+    if (!event || event->schema->nodetype != LYS_NOTIF) {
+        ERRARG("event");
+        return NULL;
+    } else if (!eventtime) {
+        ERRARG("eventtime");
+        return NULL;
+    }
+
+    ntf = malloc(sizeof *ntf);
+    if (eventtime_const) {
+        ntf->eventtime = strdup(eventtime);
+    } else {
+        ntf->eventtime = eventtime;
+    }
+    ntf->tree = event;
+
+    return ntf;
+}
+
+API void
+nc_server_notif_free(struct nc_server_notif *notif)
+{
+    if (!notif) {
+        return;
+    }
+
+    lyd_free(notif->tree);
+    free(notif->eventtime);
+    free(notif);
 }

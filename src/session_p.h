@@ -226,7 +226,6 @@ struct nc_session {
     /* NETCONF data */
     uint32_t id;                 /**< NETCONF session ID (session-id-type) */
     NC_VERSION version;          /**< NETCONF protocol version */
-    volatile pthread_t *ntf_tid; /**< running notifications thread - TODO client-side only for now */
 
     /* Transport implementation */
     NC_TRANSPORT_IMPL ti_type;   /**< transport implementation type to select items from ti union */
@@ -266,6 +265,7 @@ struct nc_session {
     const char **cpblts;           /**< list of server's capabilities on client side */
     struct nc_msg_cont *replies;   /**< queue for RPC replies received instead of notifications */
     struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
+    volatile pthread_t *ntf_tid;   /**< running notifications receiving thread */
 
     /* server side only data */
     time_t session_start;          /**< time the session was created */
