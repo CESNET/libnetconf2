@@ -216,7 +216,9 @@ libyang_module_clb(const char *name, const char *revision, void *user_data, LYS_
         return NULL;
     }
 
-    msg = nc_recv_reply(session, rpc, msgid, 1000, 0, &reply);
+    do {
+        msg = nc_recv_reply(session, rpc, msgid, 1000, 0, &reply);
+    } while (msg == NC_MSG_NOTIF);
     nc_rpc_free(rpc);
     if (msg == NC_MSG_WOULDBLOCK) {
         ERR("Session %u: timeout for receiving reply to a <get-schema> expired.", session->id);
