@@ -317,7 +317,7 @@ int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *absti
 
 int nc_gettimespec(struct timespec *ts);
 
-int nc_timedlock(pthread_mutex_t *lock, int timeout);
+int nc_timedlock(pthread_mutex_t *lock, int timeout, const char *func);
 
 int nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func);
 

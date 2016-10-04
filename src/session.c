@@ -104,7 +104,7 @@ pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *abstime)
  *        -1 - error
  */
 int
-nc_timedlock(pthread_mutex_t *lock, int timeout)
+nc_timedlock(pthread_mutex_t *lock, int timeout, const char *func)
 {
     int ret;
     struct timespec ts_timeout;
@@ -127,7 +127,7 @@ nc_timedlock(pthread_mutex_t *lock, int timeout)
         return 0;
     } else if (ret) {
         /* error */
-        ERR("Mutex lock failed (%s).", strerror(ret));
+        ERR("Mutex lock failed (%s, %s).", func, strerror(ret));
         return -1;
     }
 
@@ -294,7 +294,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     if (session->ti_lock) {
-        r = nc_timedlock(session->ti_lock, NC_READ_TIMEOUT * 1000);
+        r = nc_timedlock(session->ti_lock, NC_READ_TIMEOUT * 1000, __func__);
         if (r == -1) {
             return;
         } else if (!r) {

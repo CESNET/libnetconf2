@@ -973,7 +973,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
             return -1;
         }
 
-        ret = nc_timedlock(session->ti_lock, timeout);
+        ret = nc_timedlock(session->ti_lock, timeout, __func__);
         if (ret != 1) {
             return ret;
         }
@@ -1015,7 +1015,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
             return -1;
         }
 
-        ret = nc_timedlock(session->ti_lock, timeout);
+        ret = nc_timedlock(session->ti_lock, timeout, __func__);
         if (ret != 1) {
             return ret;
         }
@@ -1053,7 +1053,7 @@ nc_ssh_pollin(struct nc_session *session, int timeout)
     int ret;
     struct nc_session *new;
 
-    ret = nc_timedlock(session->ti_lock, timeout);
+    ret = nc_timedlock(session->ti_lock, timeout, __func__);
 
     if (ret < 0) {
         return NC_PSPOLL_ERROR;

@@ -1146,7 +1146,7 @@ retry_poll:
     }
 
     /* reading an RPC and sending a reply must be atomic (no other RPC should be read) */
-    ret = nc_timedlock(cur_session->ti_lock, timeout);
+    ret = nc_timedlock(cur_session->ti_lock, timeout, __func__);
     if (ret < 0) {
         ret = NC_PSPOLL_ERROR;
         goto finish;
