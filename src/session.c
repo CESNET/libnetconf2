@@ -118,6 +118,10 @@ nc_timedlock(pthread_mutex_t *lock, int timeout, const char *func)
         ret = pthread_mutex_timedlock(lock, &ts_timeout);
     } else if (!timeout) {
         ret = pthread_mutex_trylock(lock);
+        if (ret == EBUSY) {
+            /* equivalent in this case */
+            ret = ETIMEDOUT;
+        }
     } else { /* timeout == -1 */
         ret = pthread_mutex_lock(lock);
     }
