@@ -1388,10 +1388,6 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
         goto fail;
     }
 #endif
-    if (!bind) {
-        ERRINT;
-        goto fail;
-    }
 
     if (set_addr) {
         port = bind->port;
