@@ -615,9 +615,9 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
             break;
 #endif
 #ifdef NC_ENABLED_TLS
-        unsigned long e;
-
         case NC_TI_OPENSSL:
+            unsigned long e;
+
             c = SSL_write(session->ti.tls, (char *)(buf + written), count - written);
             if (c < 1) {
                 switch ((e = SSL_get_error(session->ti.tls, c))) {
