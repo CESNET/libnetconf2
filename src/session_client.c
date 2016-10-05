@@ -1206,7 +1206,7 @@ nc_recv_notif_thread(void *arg)
     free(ntarg);
 
     while (session->ntf_tid) {
-        msgtype = nc_recv_notif(session, 0, &notif);
+        msgtype = nc_recv_notif(session, NC_CLIENT_NOTIF_THREAD_SLEEP / 1000, &notif);
         if (msgtype == NC_MSG_NOTIF) {
             notif_clb(session, notif);
             if (!strcmp(notif->tree->schema->name, "notificationComplete")
