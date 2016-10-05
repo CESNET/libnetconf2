@@ -465,6 +465,7 @@ nc_sock_connect(const char* host, uint16_t port)
         if (((flags = fcntl(sock, F_GETFL)) == -1) || (fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
             ERR("Fcntl failed (%s).", strerror(errno));
             close(sock);
+            freeaddrinfo(res_list);
             return -1;
         }
 

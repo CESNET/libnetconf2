@@ -630,6 +630,8 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
         if (!module_set_id) {
             if (strcmp(child->prev->schema->name, "module-set-id")) {
                 ERRINT;
+                free(cpblts);
+                free(deviations);
                 return NULL;
             }
             module_set_id = (struct lyd_node_leaf_list *)child->prev;
