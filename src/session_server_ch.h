@@ -35,13 +35,22 @@
 NC_MSG_TYPE nc_connect_callhome_ssh(const char *host, uint16_t port, struct nc_session **session);
 
 /**
- * @brief Set Call Home SSH host keys the server will identify itself with. Each of RSA, DSA, and
- *        ECDSA keys can be set. If the particular type was already set, it is replaced.
+ * @brief Add Call Home SSH host keys the server will identify itself with. Any RSA, DSA, and
+ *        ECDSA keys can be added. However, a maximum of one key of each type will be used
+ *        during SSH authentication, later keys replacing earlier ones.
  *
  * @param[in] privkey_path Path to a private key.
  * @return 0 on success, -1 on error.
  */
-int nc_server_ssh_ch_set_hostkey(const char *privkey_path);
+int nc_server_ssh_ch_add_hostkey(const char *privkey_path);
+
+/**
+ * @brief Delete Call Home SSH host keys. Their order is preserved.
+ *
+ * @param[in] privkey_path Path to a private key. NULL matches all the keys.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_ssh_ch_del_hostkey(const char *privkey_path);
 
 /**
  * @brief Set Call Home SSH banner the server will send to every client.
@@ -158,18 +167,20 @@ int nc_server_tls_ch_set_key_path(const char *privkey_path);
 /**
  * @brief Add a Call Home trusted certificate. Can be both a CA or a client one.
  *
+ * @param[in] cert_name Arbitary name identifying this certificate.
  * @param[in] cert Base64-enocded certificate in ASN.1 DER encoding.
  * @return 0 on success, -1 on error.
  */
-int nc_server_tls_ch_add_trusted_cert(const char *cert);
+int nc_server_tls_ch_add_trusted_cert(const char *cert_name, const char *cert);
 
 /**
  * @brief Add a Call Home trusted certificate. Can be both a CA or a client one.
  *
+ * @param[in] cert_name Arbitary name identifying this certificate.
  * @param[in] cert_path Path to a trusted certificate file in PEM format.
  * @return 0 on success, -1 on error.
  */
-int nc_server_tls_ch_add_trusted_cert_path(const char *cert_path);
+int nc_server_tls_ch_add_trusted_cert_path(const char *cert_name, const char *cert_path);
 
 /**
  * @brief Set trusted Call Home Certificate Authority certificate locations. There
@@ -187,8 +198,11 @@ int nc_server_tls_ch_set_trusted_ca_paths(const char *ca_file, const char *ca_di
 /**
  * @brief Destroy and clean all the set Call Home certificates and private keys.
  *        CRLs and CTN entries are not affected.
+ *
+ * @param[in] cert_name Name of the certificate to delete. NULL deletes all the certificates.
+ * @return 0 on success, -1 on not found.
  */
-void nc_server_tls_ch_clear_certs(void);
+int nc_server_tls_ch_del_trusted_cert(const char *cert_name);
 
 /**
  * @brief Set Call Home Certificate Revocation List locations. There can only be

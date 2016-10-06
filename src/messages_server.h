@@ -78,10 +78,11 @@ struct nc_server_reply *nc_server_reply_ok(void);
  *
  * @param[in] data Reply data tree. This tree must be valid according to
  * the RPC output of the RPC this is a reply to.
+ * @param[in] wd with-default mode if applicable
  * @param[in] paramtype Determines how the \p data parameter is treated.
  * @return rpc-reply object, NULL on error.
  */
-struct nc_server_reply *nc_server_reply_data(struct lyd_node *data, NC_PARAMTYPE paramtype);
+struct nc_server_reply *nc_server_reply_data(struct lyd_node *data, NC_WD_MODE wd, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create an ERROR rpc-reply object.

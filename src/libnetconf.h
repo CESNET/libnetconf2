@@ -301,7 +301,7 @@
  *
  * Context does not only determine server modules, but its overall
  * functionality as well. For every RPC the server should support,
- * an nc_rpc_clb callback should be set on that node in the context.
+ * an nc_rpc_clb callback should be set on that node in the context using nc_set_rpc_callback().
  * Server then calls these as appropriate [during poll](@ref howtoservercomm).
  *
  * Just like in the [client](@ref howtoclient), you can let _libnetconf2_
@@ -309,6 +309,10 @@
  * descriptors of the connection.
  *
  * Server options can be only set, there are no getters.
+ *
+ * To be able to accept any connections, general endpoints must first be added
+ * with nc_server_add_endpt(). They can then be modified to accept either SSH, TLS,
+ * or both kinds of sessions.
  *
  * Functions List
  * --------------
@@ -320,26 +324,29 @@
  * - nc_server_set_hello_timeout()
  * - nc_server_set_idle_timeout()
  *
+ * - nc_server_add_endpt()
+ * - nc_server_del_endpt()
+ *
  *
  * SSH
  * ===
  *
- * To be able to accept SSH connections, individual endpoints must be added
- * with nc_server_ssh_add_endpt_listen() and their options set. The only
- * mandatory SSH option before sessions can be established on an endpoint
- * is the host key, set it using nc_server_ssh_endpt_set_hostkey().
+ * To start listening for SSH connections you must set the address
+ * and port to listen on for a particular endpoint using nc_server_ssh_endpt_set_address()
+ * and nc_server_endpt_set_port().
+ * To then successfully accept an SSH session you must also set the host key using
+ * nc_server_ssh_endpt_add_hostkey().
  *
  * Functions List
  * --------------
  *
  * Available in __nc_server.h__.
  *
- * - nc_server_ssh_add_endpt_listen()
  * - nc_server_ssh_endpt_set_address()
  * - nc_server_ssh_endpt_set_port()
- * - nc_server_ssh_del_endpt()
  *
- * - nc_server_ssh_endpt_set_hostkey()
+ * - nc_server_ssh_endpt_add_hostkey()
+ * - nc_server_ssh_endpt_del_hostkey()
  * - nc_server_ssh_endpt_set_banner()
  * - nc_server_ssh_endpt_set_auth_methods()
  * - nc_server_ssh_endpt_set_auth_attempts()
@@ -354,7 +361,8 @@
  * TLS works with endpoints too, but its options differ
  * significantly from the SSH ones, especially in the _cert-to-name_
  * options that TLS uses to derive usernames from client certificates.
- * So, after starting listening on an endpoint with nc_server_tls_add_endpt_listen(),
+ * So, after starting listening on an endpoint by calling nc_server_tls_endpt_set_address()
+ * and nc_server_tls_endpt_set_port(),
  * you need to set the server certificate (nc_server_tls_endpt_set_cert()
  * or nc_server_tls_endpt_set_cert_path()) and private key (nc_server_tls_endpt_set_key()
  * or nc_server_tls_endpt_set_key_path()).
@@ -369,20 +377,16 @@
  * for the NETCONF session. This is accomplished by finding a matching
  * _cert-to-name_ entry. They are added using nc_server_tls_endpt_add_ctn().
  *
- * If you need to remove trusted certificates or Certificate Revocation
- * Lists, you must first clear them all with nc_server_tls_endpt_clear_certs()
- * and nc_server_tls_endpt_clear_crls(), respectively. Then add all
- * the certificates again.
+ * If you need to remove trusted certificates, you can do so with nc_server_tls_endpt_del_trusted_cert().
+ * To clear all Certificate Revocation Lists use nc_server_tls_endpt_clear_crls().
  *
  * Functions List
  * --------------
  *
  * Available in __nc_server.h__.
  *
- * - nc_server_tls_add_endpt_listen()
  * - nc_server_tls_endpt_set_address()
  * - nc_server_tls_endpt_set_port()
- * - nc_server_tls_del_endpt()
  *
  * - nc_server_tls_endpt_set_cert()
  * - nc_server_tls_endpt_set_cert_path()
@@ -391,7 +395,7 @@
  * - nc_server_tls_endpt_add_trusted_cert()
  * - nc_server_tls_endpt_add_trusted_cert_path()
  * - nc_server_tls_endpt_set_trusted_ca_paths()
- * - nc_server_tls_endpt_clear_certs()
+ * - nc_server_tls_endpt_del_trusted_cert();
  * - nc_server_tls_endpt_set_crl_paths()
  * - nc_server_tls_endpt_clear_crls()
  * - nc_server_tls_endpt_add_ctn()
@@ -419,9 +423,9 @@
  * Connecting is similar to the [client](@ref howtoclient), just call
  * nc_connect_callhome_ssh() or nc_connect_callhome_tls(). Any options
  * must be reset manually by nc_server_ssh_ch_clear_opts()
- * or nc_server_tls_ch_clear_crls() after another Call Home session
- * (with different options than the previous one) is to be established.
- * Also, monitoring of these sessions is up to the application.
+ * or using nc_server_tls_ch_del_trusted_cert() and nc_server_tls_ch_clear_crls()
+ * after another Call Home session (with different options than the previous one)
+ * is to be established. Also, monitoring of these sessions is up to the application.
  *
  * Functions List
  * --------------
@@ -431,7 +435,8 @@
  * - nc_connect_callhome_ssh()
  * - nc_connect_callhome_tls()
  *
- * - nc_server_ssh_ch_set_hostkey()
+ * - nc_server_ssh_ch_add_hostkey()
+ * - nc_server_ssh_ch_del_hostkey()
  * - nc_server_ssh_ch_set_banner()
  * - nc_server_ssh_ch_set_auth_methods()
  * - nc_server_ssh_ch_set_auth_attempts()
@@ -447,7 +452,7 @@
  * - nc_server_tls_ch_add_trusted_cert()
  * - nc_server_tls_ch_add_trusted_cert_path()
  * - nc_server_tls_ch_set_trusted_ca_paths()
- * - nc_server_tls_ch_clear_certs()
+ * - nc_server_tls_ch_del_trusted_cert();
  * - nc_server_tls_ch_set_crl_paths()
  * - nc_server_tls_ch_clear_crls()
  * - nc_server_tls_ch_add_ctn()
@@ -485,8 +490,8 @@
  *
  * Available in __nc_client.h__.
  *
- * - nc_rpc_generic()
- * - nc_rpc_generic_xml()
+ * - nc_rpc_act_generic()
+ * - nc_rpc_act_generic_xml()
  * - nc_rpc_getconfig()
  * - nc_rpc_edit()
  * - nc_rpc_copy()
@@ -519,7 +524,8 @@
  * the sessions are [handled internally](@ref howtoserver).
  *
  * If an SSH NETCONF session asks for a new channel, you can accept
- * this request with nc_ps_accept_ssh_channel().
+ * this request with nc_ps_accept_ssh_channel() or nc_session_accept_ssh_channel()
+ * depending on the structure you want to use as the argument.
  *
  * Functions List
  * --------------
@@ -535,6 +541,7 @@
  * - nc_ps_poll()
  * - nc_ps_clear()
  * - nc_ps_accept_ssh_channel()
+ * - nc_session_accept_ssh_channel()
  */
 
 #endif /* NC_LIBNETCONF_H_ */

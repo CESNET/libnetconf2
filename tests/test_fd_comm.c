@@ -56,10 +56,11 @@ my_getconfig_rpc_clb(struct lyd_node *rpc, struct nc_session *session)
     assert_string_equal(rpc->schema->name, "get-config");
     assert_ptr_equal(session, server_session);
 
-    data = lyd_new_path(NULL, session->ctx, "/ietf-netconf:get-config/data", NULL, LYD_PATH_OPT_OUTPUT);
+    data = lyd_new_path(NULL, session->ctx, "/ietf-netconf:get-config/data", NULL, LYD_ANYDATA_CONSTSTRING,
+                        LYD_PATH_OPT_OUTPUT);
     assert_non_null(data);
 
-    return nc_server_reply_data(data, NC_PARAMTYPE_FREE);
+    return nc_server_reply_data(data, NC_WD_EXPLICIT, NC_PARAMTYPE_FREE);
 }
 
 static int
@@ -267,7 +268,7 @@ test_send_recv_data(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, LYD_OPT_KEEPEMPTYCONT, &reply);
+    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, 0, &reply);
     assert_int_equal(msgtype, NC_MSG_REPLY);
 
     nc_rpc_free(rpc);

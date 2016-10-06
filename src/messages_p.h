@@ -53,6 +53,7 @@ struct nc_server_reply_data {
     NC_RPL type;
     struct lyd_node *data;
     char free;
+    NC_WD_MODE wd;
 };
 
 struct nc_server_reply_error {
@@ -78,8 +79,8 @@ struct nc_rpc {
     NC_RPC_TYPE type;
 };
 
-struct nc_rpc_generic {
-    NC_RPC_TYPE type;       /**< NC_RPC_GENERIC */
+struct nc_rpc_act_generic {
+    NC_RPC_TYPE type;       /**< NC_RPC_ACT_GENERIC */
     int has_data;           /**< 1 for content.data, 0 for content.xml_str */
     union {
         struct lyd_node *data;  /**< parsed RPC data */

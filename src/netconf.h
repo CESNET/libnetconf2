@@ -40,6 +40,14 @@ extern "C" {
 #define NC_TIMEOUT_STEP 20
 
 /**
+ * @brief Set RPC callback to a schema node.
+ *
+ * @param[in] node const struct lys_node *node
+ * @param[in] cb nc_rpc_clb cb
+ */
+#define nc_set_rpc_callback(node, cb) lys_set_private(node, cb)
+
+/**
  * @brief Enumeration of reasons of the NETCONF session termination as defined in RFC 6470.
  */
 typedef enum NC_SESSION_TERM_REASON {
@@ -84,10 +92,10 @@ typedef enum NC_DATASTORE_TYPE {
  */
 typedef enum NC_WITHDEFAULTS_MODE {
     NC_WD_UNKNOWN = 0,    /**< invalid mode */
-    NC_WD_ALL = 0x01,     /**< report-all mode */
-    NC_WD_ALL_TAG = 0x02, /**< report-all-tagged mode */
-    NC_WD_TRIM = 0x04,    /**< trim mode */
-    NC_WD_EXPLICIT = 0x08 /**< explicit mode */
+    NC_WD_ALL,            /**< report-all mode */
+    NC_WD_ALL_TAG,        /**< report-all-tagged mode */
+    NC_WD_TRIM,           /**< trim mode */
+    NC_WD_EXPLICIT        /**< explicit mode */
 } NC_WD_MODE;
 
 /**

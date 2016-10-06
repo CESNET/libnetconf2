@@ -25,7 +25,7 @@
  */
 typedef enum {
     NC_RPC_UNKNOWN = 0, /**< invalid RPC. */
-    NC_RPC_GENERIC,     /**< user-defined generic RPC. */
+    NC_RPC_ACT_GENERIC, /**< user-defined generic RPC/action. */
 
     /* ietf-netconf */
     NC_RPC_GETCONFIG,   /**< \<get-config\> RPC. */
@@ -184,7 +184,7 @@ struct nc_notif {
 NC_RPC_TYPE nc_rpc_get_type(const struct nc_rpc *rpc);
 
 /**
- * @brief Create a generic NETCONF RPC
+ * @brief Create a generic NETCONF RPC or action
  *
  * Note that created object can be sent via any NETCONF session that shares the context
  * of the \p data.
@@ -193,10 +193,10 @@ NC_RPC_TYPE nc_rpc_get_type(const struct nc_rpc *rpc);
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_generic(const struct lyd_node *data, NC_PARAMTYPE paramtype);
+struct nc_rpc *nc_rpc_act_generic(const struct lyd_node *data, NC_PARAMTYPE paramtype);
 
 /**
- * @brief Create a generic NETCONF RPC from an XML string
+ * @brief Create a generic NETCONF RPC or action from an XML string
  *
  * Note that functions to create any RPC object do not check validity of the provided
  * parameters. It is checked later while sending the RPC via a specific NETCONF session
@@ -208,7 +208,7 @@ struct nc_rpc *nc_rpc_generic(const struct lyd_node *data, NC_PARAMTYPE paramtyp
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
-struct nc_rpc *nc_rpc_generic_xml(const char *xml_str, NC_PARAMTYPE paramtype);
+struct nc_rpc *nc_rpc_act_generic_xml(const char *xml_str, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<get-config\>

@@ -35,12 +35,6 @@ pthread_mutex_t ssh_ch_opts_lock = PTHREAD_MUTEX_INITIALIZER;
 extern struct nc_server_opts server_opts;
 
 API int
-nc_server_ssh_add_endpt_listen(const char *name, const char *address, uint16_t port)
-{
-    return nc_server_add_endpt_listen(name, address, port, NC_TI_LIBSSH);
-}
-
-API int
 nc_server_ssh_endpt_set_address(const char *endpt_name, const char *address)
 {
     return nc_server_endpt_set_address_port(endpt_name, address, 0, NC_TI_LIBSSH);
@@ -52,52 +46,42 @@ nc_server_ssh_endpt_set_port(const char *endpt_name, uint16_t port)
     return nc_server_endpt_set_address_port(endpt_name, NULL, port, NC_TI_LIBSSH);
 }
 
-API int
-nc_server_ssh_del_endpt(const char *name)
-{
-    return nc_server_del_endpt(name, NC_TI_LIBSSH);
-}
-
 static int
-nc_server_ssh_set_hostkey(const char *privkey_path, struct nc_server_ssh_opts *opts)
+nc_server_ssh_add_hostkey(const char *privkey_path, struct nc_server_ssh_opts *opts)
 {
     if (!privkey_path) {
         ERRARG("privkey_path");
         return -1;
     }
 
-    if (!opts->sshbind) {
-        opts->sshbind = ssh_bind_new();
-        if (!opts->sshbind) {
-            ERR("Failed to create a new ssh_bind.");
-            return -1;
-        }
-    }
-
-    if (ssh_bind_options_set(opts->sshbind, SSH_BIND_OPTIONS_HOSTKEY, privkey_path) != SSH_OK) {
-        if (eaccess(privkey_path, R_OK)) {
-            ERR("Failed to set host key (%s).", strerror(errno));
-        } else {
-            ERR("Failed to set host key (%s).", ssh_get_error(opts->sshbind));
-        }
+    if (eaccess(privkey_path, R_OK)) {
+        ERR("Host key \"%s\" cannot be read (%s).", privkey_path, strerror(errno));
         return -1;
     }
+
+    ++opts->hostkey_count;
+    opts->hostkeys = nc_realloc(opts->hostkeys, opts->hostkey_count * sizeof *opts->hostkeys);
+    if (!opts->hostkeys) {
+        ERRMEM;
+        return -1;
+    }
+    opts->hostkeys[opts->hostkey_count - 1] = lydict_insert(server_opts.ctx, privkey_path, 0);
 
     return 0;
 }
 
 API int
-nc_server_ssh_endpt_set_hostkey(const char *endpt_name, const char *privkey_path)
+nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *privkey_path)
 {
     int ret;
     struct nc_endpt *endpt;
 
     /* LOCK */
-    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
+    endpt = nc_server_endpt_lock(endpt_name, NULL);
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_ssh_set_hostkey(privkey_path, endpt->ti_opts);
+    ret = nc_server_ssh_add_hostkey(privkey_path, endpt->ssh_opts);
     /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
@@ -105,13 +89,76 @@ nc_server_ssh_endpt_set_hostkey(const char *endpt_name, const char *privkey_path
 }
 
 API int
-nc_server_ssh_ch_set_hostkey(const char *privkey_path)
+nc_server_ssh_ch_add_hostkey(const char *privkey_path)
 {
     int ret;
 
     /* OPTS LOCK */
     pthread_mutex_lock(&ssh_ch_opts_lock);
-    ret = nc_server_ssh_set_hostkey(privkey_path, &ssh_ch_opts);
+    ret = nc_server_ssh_add_hostkey(privkey_path, &ssh_ch_opts);
+    /* OPTS UNLOCK */
+    pthread_mutex_unlock(&ssh_ch_opts_lock);
+
+    return ret;
+}
+
+static int
+nc_server_ssh_del_hostkey(const char *privkey_path, struct nc_server_ssh_opts *opts)
+{
+    uint8_t i;
+
+    if (!privkey_path) {
+        for (i = 0; i < opts->hostkey_count; ++i) {
+            lydict_remove(server_opts.ctx, opts->hostkeys[i]);
+        }
+        free(opts->hostkeys);
+        opts->hostkeys = NULL;
+        opts->hostkey_count = 0;
+    } else {
+        for (i = 0; i < opts->hostkey_count; ++i) {
+            if (!strcmp(opts->hostkeys[i], privkey_path)) {
+                --opts->hostkey_count;
+                lydict_remove(server_opts.ctx, opts->hostkeys[i]);
+                if (i < opts->hostkey_count - 1) {
+                    memmove(opts->hostkeys + i, opts->hostkeys + i + 1, (opts->hostkey_count - i) * sizeof *opts->hostkeys);
+                }
+                return 0;
+            }
+        }
+
+        ERR("Host key \"%s\" not found.", privkey_path);
+        return -1;
+    }
+
+    return 0;
+}
+
+API int
+nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *privkey_path)
+{
+    int ret;
+    struct nc_endpt *endpt;
+
+    /* LOCK */
+    endpt = nc_server_endpt_lock(endpt_name, NULL);
+    if (!endpt) {
+        return -1;
+    }
+    ret = nc_server_ssh_del_hostkey(privkey_path, endpt->ssh_opts);
+    /* UNLOCK */
+    nc_server_endpt_unlock(endpt);
+
+    return ret;
+}
+
+API int
+nc_server_ssh_ch_del_hostkey(const char *privkey_path)
+{
+    int ret;
+
+    /* OPTS LOCK */
+    pthread_mutex_lock(&ssh_ch_opts_lock);
+    ret = nc_server_ssh_del_hostkey(privkey_path, &ssh_ch_opts);
     /* OPTS UNLOCK */
     pthread_mutex_unlock(&ssh_ch_opts_lock);
 
@@ -126,16 +173,10 @@ nc_server_ssh_set_banner(const char *banner, struct nc_server_ssh_opts *opts)
         return -1;
     }
 
-    if (!opts->sshbind) {
-        opts->sshbind = ssh_bind_new();
-        if (!opts->sshbind) {
-            ERR("Failed to create a new ssh_bind.");
-            return -1;
-        }
+    if (opts->banner) {
+        lydict_remove(server_opts.ctx, opts->banner);
     }
-
-    ssh_bind_options_set(opts->sshbind, SSH_BIND_OPTIONS_BANNER, banner);
-
+    opts->banner = lydict_insert(server_opts.ctx, banner, 0);
     return 0;
 }
 
@@ -146,11 +187,11 @@ nc_server_ssh_endpt_set_banner(const char *endpt_name, const char *banner)
     struct nc_endpt *endpt;
 
     /* LOCK */
-    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
+    endpt = nc_server_endpt_lock(endpt_name, NULL);
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_ssh_set_banner(banner, endpt->ti_opts);
+    ret = nc_server_ssh_set_banner(banner, endpt->ssh_opts);
     /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
@@ -191,11 +232,11 @@ nc_server_ssh_endpt_set_auth_methods(const char *endpt_name, int auth_methods)
     struct nc_endpt *endpt;
 
     /* LOCK */
-    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
+    endpt = nc_server_endpt_lock(endpt_name, NULL);
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_ssh_set_auth_methods(auth_methods, endpt->ti_opts);
+    ret = nc_server_ssh_set_auth_methods(auth_methods, endpt->ssh_opts);
     /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
@@ -235,11 +276,11 @@ nc_server_ssh_endpt_set_auth_attempts(const char *endpt_name, uint16_t auth_atte
     struct nc_endpt *endpt;
 
     /* LOCK */
-    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
+    endpt = nc_server_endpt_lock(endpt_name, NULL);
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_ssh_set_auth_attempts(auth_attempts, endpt->ti_opts);
+    ret = nc_server_ssh_set_auth_attempts(auth_attempts, endpt->ssh_opts);
     /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
@@ -279,11 +320,11 @@ nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_timeo
     struct nc_endpt *endpt;
 
     /* LOCK */
-    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
+    endpt = nc_server_endpt_lock(endpt_name, NULL);
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_ssh_set_auth_timeout(auth_timeout, endpt->ti_opts);
+    ret = nc_server_ssh_set_auth_timeout(auth_timeout, endpt->ssh_opts);
     /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
@@ -334,11 +375,11 @@ nc_server_ssh_endpt_add_authkey(const char *endpt_name, const char *pubkey_path,
     struct nc_endpt *endpt;
 
     /* LOCK */
-    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
+    endpt = nc_server_endpt_lock(endpt_name, NULL);
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_ssh_add_authkey(pubkey_path, username, endpt->ti_opts);
+    ret = nc_server_ssh_add_authkey(pubkey_path, username, endpt->ssh_opts);
     /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
@@ -405,11 +446,11 @@ nc_server_ssh_endpt_del_authkey(const char *endpt_name, const char *pubkey_path,
     struct nc_endpt *endpt;
 
     /* LOCK */
-    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH);
+    endpt = nc_server_endpt_lock(endpt_name, NULL);
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_ssh_del_authkey(pubkey_path, username, endpt->ti_opts);
+    ret = nc_server_ssh_del_authkey(pubkey_path, username, endpt->ssh_opts);
     /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
@@ -433,11 +474,11 @@ nc_server_ssh_ch_del_authkey(const char *pubkey_path, const char *username)
 void
 nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts)
 {
-    if (opts->sshbind) {
-        ssh_bind_free(opts->sshbind);
-        opts->sshbind = NULL;
+    nc_server_ssh_del_hostkey(NULL, opts);
+    if (opts->banner) {
+        lydict_remove(server_opts.ctx, opts->banner);
+        opts->banner = NULL;
     }
-
     nc_server_ssh_del_authkey(NULL, NULL, opts);
 }
 
@@ -608,27 +649,27 @@ nc_sshcb_auth_pubkey(struct nc_session *session, ssh_message msg)
     const char *username;
     int signature_state;
 
+    if ((username = auth_pubkey_compare_key(session->data, ssh_message_auth_pubkey(msg))) == NULL) {
+        VRB("User \"%s\" tried to use an unknown (unauthorized) public key.", session->username);
+        goto fail;
+    } else if (strcmp(session->username, username)) {
+        VRB("User \"%s\" is not the username identified with the presented public key.", session->username);
+        goto fail;
+    }
+
     signature_state = ssh_message_auth_publickey_state(msg);
     if (signature_state == SSH_PUBLICKEY_STATE_VALID) {
         VRB("User \"%s\" authenticated.", session->username);
         session->flags |= NC_SESSION_SSH_AUTHENTICATED;
         ssh_message_auth_reply_success(msg, 0);
-        return;
-
     } else if (signature_state == SSH_PUBLICKEY_STATE_NONE) {
-        if ((username = auth_pubkey_compare_key(session->data, ssh_message_auth_pubkey(msg))) == NULL) {
-            VRB("User \"%s\" tried to use an unknown (unauthorized) public key.", session->username);
-
-        } else if (strcmp(session->username, username)) {
-            VRB("User \"%s\" is not the username identified with the presented public key.", session->username);
-
-        } else {
-            /* accepting only the use of a public key */
-            ssh_message_auth_reply_pk_ok_simple(msg);
-            return;
-        }
+        /* accepting only the use of a public key */
+        ssh_message_auth_reply_pk_ok_simple(msg);
     }
 
+    return;
+
+fail:
     ++session->ssh_auth_attempts;
     VRB("Failed user \"%s\" authentication attempt (#%d).", session->username, session->ssh_auth_attempts);
     ssh_message_reply_default(msg);
@@ -1079,8 +1120,10 @@ nc_connect_callhome_ssh(const char *host, uint16_t port, struct nc_session **ses
 int
 nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 {
+    ssh_bind sbind;
     struct nc_server_ssh_opts *opts;
     int libssh_auth_methods = 0, elapsed_usec = 0, ret;
+    uint8_t i;
 
     opts = session->data;
 
@@ -1104,15 +1147,35 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     }
     ssh_set_auth_methods(session->ti.libssh.session, libssh_auth_methods);
 
+    sbind = ssh_bind_new();
+    if (!sbind) {
+        ERR("Failed to create an SSH bind.");
+        close(sock);
+        return -1;
+    }
+    for (i = 0; i < opts->hostkey_count; ++i) {
+        if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HOSTKEY, opts->hostkeys[i]) != SSH_OK) {
+            ERR("Failed to set hostkey \"%s\" (%s).", opts->hostkeys[i], ssh_get_error(sbind));
+            close(sock);
+            ssh_bind_free(sbind);
+            return -1;
+        }
+    }
+    if (opts->banner) {
+        ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_BANNER, opts->banner);
+    }
+
     ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, session);
     /* remember that this session was just set as nc_sshcb_msg() parameter */
     session->flags |= NC_SESSION_SSH_MSG_CB;
 
-    if (ssh_bind_accept_fd(opts->sshbind, session->ti.libssh.session, sock) == SSH_ERROR) {
-        ERR("SSH failed to accept a new connection (%s).", ssh_get_error(opts->sshbind));
+    if (ssh_bind_accept_fd(sbind, session->ti.libssh.session, sock) == SSH_ERROR) {
+        ERR("SSH failed to accept a new connection (%s).", ssh_get_error(sbind));
         close(sock);
+        ssh_bind_free(sbind);
         return -1;
     }
+    ssh_bind_free(sbind);
 
     ssh_set_blocking(session->ti.libssh.session, 0);
 
@@ -1167,7 +1230,6 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     }
 
     session->flags &= ~NC_SESSION_SSH_NEW_MSG;
-
     return 1;
 }
 
