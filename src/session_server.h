@@ -275,12 +275,13 @@ void nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *));
  * @brief Add a new endpoint.
  *
  * Before the endpoint can accept any connections, its address and port must
- * be set on at least one transport protocol.
+ * be set.
  *
  * @param[in] name Arbitrary unique endpoint name.
+ * @param[in] ti Transport protocol to use.
  * @return 0 on success, -1 on error.
  */
-int nc_server_add_endpt(const char *name);
+int nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti);
 
 /**
  * @brief Stop listening on and remove an endpoint.
@@ -289,6 +290,28 @@ int nc_server_add_endpt(const char *name);
  * @return 0 on success, -1 on not finding any match.
  */
 int nc_server_del_endpt(const char *name);
+
+/**
+ * @brief Change endpoint listening address.
+ *
+ * On error the previous listening socket (if any) is left untouched.
+ *
+ * @param[in] endpt_name Existing endpoint name.
+ * @param[in] address New listening address.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_endpt_set_address(const char *endpt_name, const char *address);
+
+/**
+ * @brief Change endpoint listening port.
+ *
+ * On error the previous listening socket (if any) is left untouched.
+ *
+ * @param[in] endpt_name Existing endpoint name.
+ * @param[in] port New listening port.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_endpt_set_port(const char *endpt_name, uint16_t port);
 
 /**
  * @brief Accept new sessions on all the listening endpoints.
@@ -327,28 +350,6 @@ NC_MSG_TYPE nc_session_accept_ssh_channel(struct nc_session *orig_session, struc
  *         parsing fail, NC_MSG_WOULDBLOCK on timeout, NC_MSG_ERROR on other errors.
  */
 NC_MSG_TYPE nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session);
-
-/**
- * @brief Change SSH endpoint listening address.
- *
- * On error the previous listening socket (if any) is left untouched.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] address New listening address.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_endpt_set_address(const char *endpt_name, const char *address);
-
-/**
- * @brief Change SSH endpoint listening port.
- *
- * On error the previous listening socket (if any) is left untouched.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] port New listening port.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_endpt_set_port(const char *endpt_name, uint16_t port);
 
 /**
  * @brief Add endpoint SSH host keys the server will identify itself with. Any RSA, DSA, and
@@ -431,28 +432,6 @@ int nc_server_ssh_endpt_del_authkey(const char *endpt_name, const char *pubkey_p
 #endif /* NC_ENABLED_SSH */
 
 #ifdef NC_ENABLED_TLS
-
-/**
- * @brief Change TLS endpoint listening address.
- *
- * On error the previous listening socket (if any) is left untouched.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] address New listening address.
- * @return 0 on success, -1 on error.
- */
-int nc_server_tls_endpt_set_address(const char *endpt_name, const char *address);
-
-/**
- * @brief Change TLS endpoint listening port.
- *
- * On error the previous listening socket (if any) is left untouched.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] port New listening port.
- * @return 0 on success, -1 on error.
- */
-int nc_server_tls_endpt_set_port(const char *endpt_name, uint16_t port);
 
 /**
  * @brief Set server TLS certificate. Alternative to nc_tls_server_set_cert_path().

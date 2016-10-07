@@ -71,6 +71,23 @@ typedef enum {
 } NC_TRANSPORT_IMPL;
 
 /**
+ * @brief Enumeration of Call Home connection types.
+ */
+typedef enum {
+    NC_CH_CT_NOT_SET = 0,
+    NC_CH_PERSIST,
+    NC_CH_PERIOD
+} NC_CH_CONN_TYPE;
+
+/**
+ * @brief Enumeration of Call Home client priority policy.
+ */
+typedef enum {
+    NC_CH_FIRST_LISTED = 0, //default
+    NC_CH_LAST_CONNECTED
+} NC_CH_START_WITH;
+
+/**
  * @brief NETCONF session object
  */
 struct nc_session;

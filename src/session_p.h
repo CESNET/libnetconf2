@@ -134,8 +134,8 @@ struct nc_client_opts {
         const char *address;
         uint16_t port;
         int sock;
-        NC_TRANSPORT_IMPL ti;
     } *ch_binds;
+    NC_TRANSPORT_IMPL *ch_bind_ti;
     uint16_t ch_bind_count;
 };
 
@@ -157,16 +157,57 @@ struct nc_server_opts {
     struct nc_bind *binds;
     struct nc_endpt {
         const char *name;
+        NC_TRANSPORT_IMPL ti;
+        union {
 #ifdef NC_ENABLED_SSH
-        struct nc_server_ssh_opts *ssh_opts;
+            struct nc_server_ssh_opts *ssh;
 #endif
 #ifdef NC_ENABLED_TLS
-        struct nc_server_tls_opts *tls_opts;
+            struct nc_server_tls_opts *tls;
 #endif
-        pthread_mutex_t endpt_lock;
+        } opts;
+        pthread_mutex_t lock;
     } *endpts;
     uint16_t endpt_count;
-    pthread_rwlock_t endpt_array_lock;
+    pthread_rwlock_t endpt_lock;
+
+    /* ACCESS locked, add/remove CH clients - WRITE lock ch_client_lock
+     *                modify CH clients - READ lock ch_client_lock + ch_client_lock */
+    struct nc_ch_client {
+        const char *name;
+        NC_TRANSPORT_IMPL ti;
+        struct nc_ch_endpt {
+            const char *name;
+            const char *address;
+            uint16_t port;
+        } *ch_endpts;
+        uint16_t ch_endpt_count;
+        union {
+#ifdef NC_ENABLED_SSH
+            struct nc_server_ssh_opts *ssh;
+#endif
+#ifdef NC_ENABLED_TLS
+            struct nc_server_tls_opts *tls;
+#endif
+        } opts;
+        NC_CH_CONN_TYPE conn_type;
+        union {
+            struct {
+                uint32_t idle_timeout;
+                uint16_t ka_max_wait;
+                uint8_t ka_max_attempts;
+            } persist;
+            struct {
+                uint16_t idle_timeout;
+                uint16_t reconnect_timeout;
+            } period;
+        } conn;
+        NC_CH_START_WITH start_with;
+        uint8_t max_attempts;
+        pthread_mutex_t lock;
+    } *ch_clients;
+    uint16_t ch_client_count;
+    pthread_rwlock_t ch_client_lock;
 
     /* ACCESS locked with sid_lock */
     uint32_t new_session_id;
@@ -260,31 +301,36 @@ struct nc_session {
 #define NC_SESSION_SHAREDCTX 0x01
 #define NC_SESSION_CALLHOME 0x02
 
-    /* client side only data */
-    uint64_t msgid;
-    const char **cpblts;           /**< list of server's capabilities on client side */
-    struct nc_msg_cont *replies;   /**< queue for RPC replies received instead of notifications */
-    struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
-    volatile pthread_t *ntf_tid;   /**< running notifications receiving thread */
-
-    /* server side only data */
-    time_t session_start;          /**< time the session was created */
-    time_t last_rpc;               /**< time the last RPC was received on this session */
+    union {
+        struct {
+            volatile pthread_t *ntf_tid; /**< running notifications thread */
+            uint64_t msgid;
+            const char **cpblts;           /**< list of server's capabilities on client side */
+            struct nc_msg_cont *replies;   /**< queue for RPC replies received instead of notifications */
+            struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
+        } client;
+        struct {
+            time_t session_start;          /**< time the session was created */
+            time_t last_rpc;               /**< time the last RPC was received on this session */
+            pthread_mutex_t *ch_lock;      /**< Call Home thread lock */
+            pthread_cond_t *ch_cond;       /**< Call Home thread condition */
 #ifdef NC_ENABLED_SSH
-    /* SSH session authenticated */
-#   define NC_SESSION_SSH_AUTHENTICATED 0x04
-    /* netconf subsystem requested */
-#   define NC_SESSION_SSH_SUBSYS_NETCONF 0x08
-    /* new SSH message arrived */
-#   define NC_SESSION_SSH_NEW_MSG 0x10
-    /* this session is passed to nc_sshcb_msg() */
-#   define NC_SESSION_SSH_MSG_CB 0x20
+            /* SSH session authenticated */
+#           define NC_SESSION_SSH_AUTHENTICATED 0x04
+            /* netconf subsystem requested */
+#           define NC_SESSION_SSH_SUBSYS_NETCONF 0x08
+            /* new SSH message arrived */
+#           define NC_SESSION_SSH_NEW_MSG 0x10
+            /* this session is passed to nc_sshcb_msg() */
+#           define NC_SESSION_SSH_MSG_CB 0x20
 
-    uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
+            uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
 #endif
 #ifdef NC_ENABLED_TLS
-    X509 *tls_cert;                /**< TLS client certificate it used for authentication */
+            X509 *client_cert;                /**< TLS client certificate if used for authentication */
 #endif
+        } server;
+    } opts;
 };
 
 #define NC_PS_QUEUE_SIZE 6
@@ -385,26 +431,14 @@ int nc_sock_listen(const char *address, uint16_t port);
 int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host, uint16_t *port, uint16_t *idx);
 
 /**
- * @brief Change an existing endpoint bind.
- *
- * On error the listening socket is left untouched.
- *
- * @param[in] endpt_name Name of the endpoint.
- * @param[in] address New address. NULL if \p port.
- * @param[in] port New port. NULL if \p address.
- * @param[in] ti Expected transport.
- * @return 0 on success, -1 on error.
- */
-int nc_server_endpt_set_address_port(const char *endpt_name, const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
-
-/**
  * @brief Lock endpoint structures for reading and the specific endpoint.
  *
  * @param[in] name Name of the endpoint.
+ * @param[in] ti Expected transport.
  * @param[out] idx Index of the endpoint. Optional.
  * @return Endpoint structure.
  */
-struct nc_endpt *nc_server_endpt_lock(const char *name, uint16_t *idx);
+struct nc_endpt *nc_server_endpt_lock(const char *name, NC_TRANSPORT_IMPL ti, uint16_t *idx);
 
 /**
  * @brief Unlock endpoint strcutures and the specific endpoint.
@@ -414,11 +448,28 @@ struct nc_endpt *nc_server_endpt_lock(const char *name, uint16_t *idx);
 void nc_server_endpt_unlock(struct nc_endpt *endpt);
 
 /**
+ * @brief Lock CH client structures for reading and the specific client.
+ *
+ * @param[in] name Name of the CH client.
+ * @param[in] ti Expected transport.
+ * @param[out] idx Index of the client. Optional.
+ * @return CH client structure.
+ */
+struct nc_ch_client *nc_server_ch_client_lock(const char *name, NC_TRANSPORT_IMPL ti, uint16_t *idx);
+
+/**
+ * @brief Unlock CH client strcutures and the specific client.
+ *
+ * @param[in] endpt Locked CH client structure.
+ */
+void nc_server_ch_client_unlock(struct nc_ch_client *client);
+
+/**
  * @brief Add a client Call Home bind, listen on it.
  *
  * @param[in] address Address to bind to.
- * @param[in] port to bind to.
- * @param[in] ti Expected transport.
+ * @param[in] port Port to bind to.
+ * @param[in] ti Transport to use.
  * @return 0 on success, -1 on error.
  */
 int nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
@@ -428,7 +479,7 @@ int nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPOR
  *
  * @param[in] address Address of the bind. NULL matches any address.
  * @param[in] port Port of the bind. 0 matches all ports.
- * @param[in] ti Expected transport of the bind. 0 matches any.
+ * @param[in] ti Transport of the bind. 0 matches all transports.
  * @return 0 on success, -1 on no matches found.
  */
 int nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
