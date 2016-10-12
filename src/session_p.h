@@ -564,7 +564,7 @@ NC_MSG_TYPE nc_read_msg(struct nc_session* session, struct lyxml_elem **data);
  * @brief Write message into wire.
  *
  * @param[in] session NETCONF session to which the message will be written.
- * @param[in] type Type of the message to write. According to the type, the
+ * @param[in] type The type of the message to write, specified as #NC_MSG_TYPE value. According to the type, the
  * specific additional parameters are required or accepted:
  * - #NC_MSG_RPC
  *   - `struct lyd_node *op;` - operation (content of the \<rpc/\> to be sent. Required parameter.
@@ -579,7 +579,7 @@ NC_MSG_TYPE nc_read_msg(struct nc_session* session, struct lyxml_elem **data);
  *   - TODO: content
  * @return 0 on success
  */
-int nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...);
+int nc_write_msg(struct nc_session *session, int type, ...);
 
 /**
  * @brief Check whether a session is still connected (on transport layer).

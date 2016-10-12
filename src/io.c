@@ -958,7 +958,7 @@ nc_write_error(struct wclb_arg *arg, struct nc_server_error *err)
 
 /* return -1 can change session status */
 int
-nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
+nc_write_msg(struct nc_session *session, int type, ...)
 {
     va_list ap;
     int count;
@@ -985,6 +985,7 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
 
     arg.session = session;
     arg.len = 0;
+
 
     switch (type) {
     case NC_MSG_RPC:

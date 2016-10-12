@@ -111,7 +111,7 @@ int nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_erro
  * @brief Create a server error structure. Its \<error-message\> is filled with
  * a general description of the specific error.
  *
- * @param[in] tag \<error-tag\> of the server error. According to the tag, the
+ * @param[in] tag \<error-tag\> of the server error specified as #NC_ERR value. According to the tag, the
  * specific additional parameters are required:
  * - #NC_ERR_IN_USE
  * - #NC_ERR_INVALID_VALUE
@@ -145,7 +145,7 @@ int nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_erro
  *   - no additional arguments
  * @return Server error structure, NULL on error.
  */
-struct nc_server_error *nc_err(NC_ERR tag, ...);
+struct nc_server_error *nc_err(int tag, ...);
 
 /**
  * @brief Create a server error structure based on libyang error.

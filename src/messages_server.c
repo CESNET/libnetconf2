@@ -123,7 +123,7 @@ nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_error *e
 }
 
 API struct nc_server_error *
-nc_err(NC_ERR tag, ...)
+nc_err(int tag, ...)
 {
     va_list ap;
     struct nc_server_error *ret;
@@ -151,7 +151,7 @@ nc_err(NC_ERR tag, ...)
     case NC_ERR_ACCESS_DENIED:
     case NC_ERR_ROLLBACK_FAILED:
     case NC_ERR_OP_NOT_SUPPORTED:
-        type = va_arg(ap, NC_ERR_TYPE);
+        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
         if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
             ERRARG("type");
             goto fail;
@@ -160,14 +160,14 @@ nc_err(NC_ERR tag, ...)
 
     case NC_ERR_TOO_BIG:
     case NC_ERR_RES_DENIED:
-        type = va_arg(ap, NC_ERR_TYPE);
+        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
         /* nothing to check */
         break;
 
     case NC_ERR_MISSING_ATTR:
     case NC_ERR_BAD_ATTR:
     case NC_ERR_UNKNOWN_ATTR:
-        type = va_arg(ap, NC_ERR_TYPE);
+        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
         arg1 = va_arg(ap, const char *);
         arg2 = va_arg(ap, const char *);
 
@@ -182,7 +182,7 @@ nc_err(NC_ERR tag, ...)
     case NC_ERR_MISSING_ELEM:
     case NC_ERR_BAD_ELEM:
     case NC_ERR_UNKNOWN_ELEM:
-        type = va_arg(ap, NC_ERR_TYPE);
+        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
         arg1 = va_arg(ap, const char *);
 
         if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
@@ -193,7 +193,7 @@ nc_err(NC_ERR tag, ...)
         break;
 
     case NC_ERR_UNKNOWN_NS:
-        type = va_arg(ap, NC_ERR_TYPE);
+        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
         arg1 = va_arg(ap, const char *);
         arg2 = va_arg(ap, const char *);
 
@@ -218,7 +218,7 @@ nc_err(NC_ERR tag, ...)
         break;
 
     case NC_ERR_OP_FAILED:
-        type = va_arg(ap, NC_ERR_TYPE);
+        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
 
         if (type == NC_ERR_TYPE_TRAN) {
             ERRARG("type");
