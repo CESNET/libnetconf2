@@ -151,7 +151,7 @@ if(DOXYGEN_FOUND)
     configure_file(Doxyfile.in Doxyfile)
 endif()
 
-# option - partial message read timeout in seconds
+# option - partial message read timeout in seconds (also used for internal <get-schema> RPC reply wait)
 if(NOT READ_TIMEOUT)
     set(READ_TIMEOUT 30)
 endif()
