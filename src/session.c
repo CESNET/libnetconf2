@@ -288,10 +288,10 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     /* stop notifications loop if any */
-    if (session->ntf_tid) {
-        tid = *session->ntf_tid;
-        free((pthread_t *)session->ntf_tid);
-        session->ntf_tid = NULL;
+    if ((session->side == NC_CLIENT) && session->opts.client.ntf_tid) {
+        tid = *session->opts.client.ntf_tid;
+        free((pthread_t *)session->opts.client.ntf_tid);
+        session->opts.client.ntf_tid = NULL;
         /* the thread now knows it should quit */
 
         pthread_join(tid, NULL);
@@ -315,7 +315,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     if ((session->side == NC_CLIENT) && (session->status == NC_STATUS_RUNNING) && locked) {
         /* cleanup message queues */
         /* notifications */
-        for (contiter = session->notifs; contiter; ) {
+        for (contiter = session->opts.client.notifs; contiter; ) {
             lyxml_free(session->ctx, contiter->msg);
 
             p = contiter;
@@ -324,7 +324,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         }
 
         /* rpc replies */
-        for (contiter = session->replies; contiter; ) {
+        for (contiter = session->opts.client.replies; contiter; ) {
             lyxml_free(session->ctx, contiter->msg);
 
             p = contiter;
@@ -365,11 +365,11 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         }
 
         /* list of server's capabilities */
-        if (session->cpblts) {
-            for (i = 0; session->cpblts[i]; i++) {
-                lydict_remove(session->ctx, session->cpblts[i]);
+        if (session->opts.client.cpblts) {
+            for (i = 0; session->opts.client.cpblts[i]; i++) {
+                lydict_remove(session->ctx, session->opts.client.cpblts[i]);
             }
-            free(session->cpblts);
+            free(session->opts.client.cpblts);
         }
     }
 
@@ -377,8 +377,21 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         data_free(session->data);
     }
 
+    if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
+        /* CH LOCK */
+        pthread_mutex_lock(session->opts.server.ch_lock);
+    }
+
     /* mark session for closing */
     session->status = NC_STATUS_CLOSING;
+
+    if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
+        pthread_cond_signal(session->opts.server.ch_cond);
+
+        /* CH UNLOCK */
+        pthread_mutex_unlock(session->opts.server.ch_lock);
+    }
+
     connected = nc_session_is_connected(session);
 
     /* transport implementation cleanup */
@@ -465,7 +478,9 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         }
         SSL_free(session->ti.tls);
 
-        X509_free(session->tls_cert);
+        if (session->side == NC_SERVER) {
+            X509_free(session->opts.server.client_cert);
+        }
         break;
 #endif
     case NC_TI_NONE:
@@ -489,6 +504,17 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     if (!(session->flags & NC_SESSION_SHAREDCTX)) {
         ly_ctx_destroy(session->ctx, NULL);
+    }
+
+    if (session->side == NC_SERVER) {
+        if (session->opts.server.ch_cond) {
+            pthread_cond_destroy(session->opts.server.ch_cond);
+            free(session->opts.server.ch_cond);
+        }
+        if (session->opts.server.ch_lock) {
+            pthread_mutex_destroy(session->opts.server.ch_lock);
+            free(session->opts.server.ch_lock);
+        }
     }
 
     free(session);
@@ -880,7 +906,7 @@ nc_recv_client_hello(struct nc_session *session)
             }
             flag = 1;
 
-            if ((ver = parse_cpblts(node, &session->cpblts)) < 0) {
+            if ((ver = parse_cpblts(node, &session->opts.client.cpblts)) < 0) {
                 goto error;
             }
             session->version = ver;

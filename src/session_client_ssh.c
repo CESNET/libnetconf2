@@ -1317,6 +1317,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client
         /* create and connect socket */
         sock = nc_sock_connect(host, port);
         if (sock == -1) {
+            ERR("Unable to connect to %s:%u (%s).", host, port, strerror(errno));
             goto fail;
         }
         ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_FD, &sock);
@@ -1486,6 +1487,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     /* create and assign communication socket */
     sock = nc_sock_connect(host, port);
     if (sock == -1) {
+        ERR("Unable to connect to %s:%u (%s).", host, port, strerror(errno));
         goto fail;
     }
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_FD, &sock);
@@ -1626,6 +1628,7 @@ struct nc_session *
 nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout)
 {
     const long ssh_timeout = NC_SSH_TIMEOUT;
+    unsigned int uint_port;
     struct passwd *pw;
     struct nc_session *session;
     ssh_session sess;
@@ -1640,7 +1643,8 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
     ssh_options_set(sess, SSH_OPTIONS_FD, &sock);
     ssh_set_blocking(sess, 0);
     ssh_options_set(sess, SSH_OPTIONS_HOST, host);
-    ssh_options_set(sess, SSH_OPTIONS_PORT, &port);
+    uint_port = port;
+    ssh_options_set(sess, SSH_OPTIONS_PORT, &uint_port);
     ssh_options_set(sess, SSH_OPTIONS_TIMEOUT, &ssh_timeout);
     if (!ssh_ch_opts.username) {
         pw = getpwuid(getuid());

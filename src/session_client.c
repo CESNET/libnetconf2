@@ -297,11 +297,11 @@ nc_ctx_check_and_fill(struct nc_session *session)
     ly_module_clb old_clb = NULL;
     void *old_data = NULL;
 
-    assert(session->cpblts && session->ctx);
+    assert(session->opts.client.cpblts && session->ctx);
 
     /* check if get-schema is supported */
-    for (i = 0; session->cpblts[i]; ++i) {
-        if (!strncmp(session->cpblts[i], "urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring", 51)) {
+    for (i = 0; session->opts.client.cpblts[i]; ++i) {
+        if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring", 51)) {
             get_schema_support = 1;
             break;
         }
@@ -319,7 +319,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     }
 
     /* load base model disregarding whether it's in capabilities (but NETCONF capabilities are used to enable features) */
-    if (ctx_check_and_load_ietf_netconf(session->ctx, session->cpblts)) {
+    if (ctx_check_and_load_ietf_netconf(session->ctx, session->opts.client.cpblts)) {
         if (old_clb) {
             ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
         }
@@ -327,13 +327,13 @@ nc_ctx_check_and_fill(struct nc_session *session)
     }
 
     /* load all other models */
-    for (i = 0; session->cpblts[i]; ++i) {
-        if (!strncmp(session->cpblts[i], "urn:ietf:params:netconf:capability", 34)
-                || !strncmp(session->cpblts[i], "urn:ietf:params:netconf:base", 28)) {
+    for (i = 0; session->opts.client.cpblts[i]; ++i) {
+        if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:netconf:capability", 34)
+                || !strncmp(session->opts.client.cpblts[i], "urn:ietf:params:netconf:base", 28)) {
             continue;
         }
 
-        r = ctx_check_and_load_model(session, session->cpblts[i]);
+        r = ctx_check_and_load_model(session, session->opts.client.cpblts[i]);
         if (r == -1) {
             ret = -1;
             break;
@@ -346,7 +346,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
                 VRB("Trying to load the schema from a different source.");
                 /* works even if old_clb is NULL */
                 ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
-                r = ctx_check_and_load_model(session, session->cpblts[i]);
+                r = ctx_check_and_load_model(session, session->opts.client.cpblts[i]);
             }
 
             /* fail again (or no other way to try), too bad */
@@ -445,20 +445,18 @@ nc_sock_connect(const char* host, uint16_t port)
         return -1;
     }
 
-    for (i = 0, res = res_list; res != NULL; res = res->ai_next) {
+    for (res = res_list; res != NULL; res = res->ai_next) {
         sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
         if (sock == -1) {
             /* socket was not created, try another resource */
-            i = errno;
-            goto errloop;
+            continue;
         }
 
         if (connect(sock, res->ai_addr, res->ai_addrlen) == -1) {
             /* network connection failed, try another resource */
-            i = errno;
             close(sock);
             sock = -1;
-            goto errloop;
+            continue;
         }
 
         /* make the socket non-blocking */
@@ -471,15 +469,9 @@ nc_sock_connect(const char* host, uint16_t port)
 
         /* we're done, network connection established */
         break;
-errloop:
-        VRB("Unable to connect to %s:%s over %s (%s).", host, port_s,
-            (res->ai_family == AF_INET6) ? "IPv6" : "IPv4", strerror(i));
-        continue;
     }
 
-    if (sock == -1) {
-        ERR("Unable to connect to %s:%s.", host, port_s);
-    } else {
+    if (sock != -1) {
         VRB("Successfully connected to %s:%s over %s.", host, port_s, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
     }
     freeaddrinfo(res_list);
@@ -508,9 +500,9 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
     }
 
     /* try to get notification from the session's queue */
-    if (!msgid && session->notifs) {
-        cont = session->notifs;
-        session->notifs = cont->next;
+    if (!msgid && session->opts.client.notifs) {
+        cont = session->opts.client.notifs;
+        session->opts.client.notifs = cont->next;
 
         xml = cont->msg;
         free(cont);
@@ -519,9 +511,9 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
     }
 
     /* try to get rpc-reply from the session's queue */
-    if (msgid && session->replies) {
-        cont = session->replies;
-        session->replies = cont->next;
+    if (msgid && session->opts.client.replies) {
+        cont = session->opts.client.replies;
+        session->opts.client.replies = cont->next;
 
         xml = cont->msg;
         free(cont);
@@ -536,7 +528,7 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
 
     /* we read rpc-reply, want a notif */
     if (!msgid && (msgtype == NC_MSG_REPLY)) {
-        cont_ptr = &session->replies;
+        cont_ptr = &session->opts.client.replies;
         while (*cont_ptr) {
             cont_ptr = &((*cont_ptr)->next);
         }
@@ -561,7 +553,7 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
             return NC_MSG_ERROR;
         }*/
 
-        cont_ptr = &session->notifs;
+        cont_ptr = &session->opts.client.notifs;
         while (*cont_ptr) {
             cont_ptr = &((*cont_ptr)->next);
         }
@@ -981,6 +973,14 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IM
         return -1;
     }
 
+    client_opts.ch_bind_ti = nc_realloc(client_opts.ch_bind_ti, client_opts.ch_bind_count * sizeof *client_opts.ch_bind_ti);
+    if (!client_opts.ch_bind_ti) {
+        ERRMEM;
+        close(sock);
+        return -1;
+    }
+    client_opts.ch_bind_ti[client_opts.ch_bind_count - 1] = ti;
+
     client_opts.ch_binds[client_opts.ch_bind_count - 1].address = strdup(address);
     if (!client_opts.ch_binds[client_opts.ch_bind_count - 1].address) {
         ERRMEM;
@@ -989,7 +989,6 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IM
     }
     client_opts.ch_binds[client_opts.ch_bind_count - 1].port = port;
     client_opts.ch_binds[client_opts.ch_bind_count - 1].sock = sock;
-    client_opts.ch_binds[client_opts.ch_bind_count - 1].ti = ti;
 
     return 0;
 }
@@ -1014,12 +1013,18 @@ nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
         for (i = 0; i < client_opts.ch_bind_count; ++i) {
             if ((!address || !strcmp(client_opts.ch_binds[i].address, address))
                     && (!port || (client_opts.ch_binds[i].port == port))
-                    && (!ti || (client_opts.ch_binds[i].ti == ti))) {
+                    && (!ti || (client_opts.ch_bind_ti[i] == ti))) {
                 close(client_opts.ch_binds[i].sock);
                 free((char *)client_opts.ch_binds[i].address);
 
                 --client_opts.ch_bind_count;
-                memcpy(&client_opts.ch_binds[i], &client_opts.ch_binds[client_opts.ch_bind_count], sizeof *client_opts.ch_binds);
+                if (!client_opts.ch_bind_count) {
+                    free(client_opts.ch_binds);
+                    client_opts.ch_binds = NULL;
+                } else if (i < client_opts.ch_bind_count) {
+                    memcpy(&client_opts.ch_binds[i], &client_opts.ch_binds[client_opts.ch_bind_count], sizeof *client_opts.ch_binds);
+                    client_opts.ch_bind_ti[i] = client_opts.ch_bind_ti[client_opts.ch_bind_count];
+                }
 
                 ret = 0;
             }
@@ -1052,12 +1057,12 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
     }
 
 #ifdef NC_ENABLED_SSH
-    if (client_opts.ch_binds[idx].ti == NC_TI_LIBSSH) {
+    if (client_opts.ch_bind_ti[idx] == NC_TI_LIBSSH) {
         *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
     } else
 #endif
 #ifdef NC_ENABLED_TLS
-    if (client_opts.ch_binds[idx].ti == NC_TI_OPENSSL) {
+    if (client_opts.ch_bind_ti[idx] == NC_TI_OPENSSL) {
         *session = nc_accept_callhome_tls_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
     } else
 #endif
@@ -1085,7 +1090,7 @@ nc_session_get_cpblts(const struct nc_session *session)
         return NULL;
     }
 
-    return session->cpblts;
+    return session->opts.client.cpblts;
 }
 
 API const char *
@@ -1102,9 +1107,9 @@ nc_session_cpblt(const struct nc_session *session, const char *capab)
     }
 
     len = strlen(capab);
-    for (i = 0; session->cpblts[i]; ++i) {
-        if (!strncmp(session->cpblts[i], capab, len)) {
-            return session->cpblts[i];
+    for (i = 0; session->opts.client.cpblts[i]; ++i) {
+        if (!strncmp(session->opts.client.cpblts[i], capab, len)) {
+            return session->opts.client.cpblts[i];
         }
     }
 
@@ -1114,12 +1119,12 @@ nc_session_cpblt(const struct nc_session *session, const char *capab)
 API int
 nc_session_ntf_thread_running(const struct nc_session *session)
 {
-    if (!session) {
+    if (!session || (session->side != NC_CLIENT)) {
         ERRARG("session");
         return 0;
     }
 
-    return session->ntf_tid ? 1 : 0;
+    return session->opts.client.ntf_tid ? 1 : 0;
 }
 
 API void
@@ -1259,7 +1264,7 @@ nc_recv_notif_thread(void *arg)
     notif_clb = ntarg->notif_clb;
     free(ntarg);
 
-    while (session->ntf_tid) {
+    while (session->opts.client.ntf_tid) {
         msgtype = nc_recv_notif(session, NC_CLIENT_NOTIF_THREAD_SLEEP / 1000, &notif);
         if (msgtype == NC_MSG_NOTIF) {
             notif_clb(session, notif);
@@ -1277,7 +1282,7 @@ nc_recv_notif_thread(void *arg)
     }
 
     VRB("Session %u: notification thread exit.", session->id);
-    session->ntf_tid = NULL;
+    session->opts.client.ntf_tid = NULL;
     return NULL;
 }
 
@@ -1296,7 +1301,7 @@ nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_s
     } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR("Session %u: invalid session to receive Notifications.", session->id);
         return -1;
-    } else if (session->ntf_tid) {
+    } else if (session->opts.client.ntf_tid) {
         ERR("Session %u: separate notification thread is already running.", session->id);
         return -1;
     }
@@ -1310,19 +1315,19 @@ nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_s
     ntarg->notif_clb = notif_clb;
 
     /* just so that nc_recv_notif_thread() does not immediately exit, the value does not matter */
-    session->ntf_tid = malloc(sizeof *session->ntf_tid);
-    if (!session->ntf_tid) {
+    session->opts.client.ntf_tid = malloc(sizeof *session->opts.client.ntf_tid);
+    if (!session->opts.client.ntf_tid) {
         ERRMEM;
         free(ntarg);
         return -1;
     }
 
-    ret = pthread_create((pthread_t *)session->ntf_tid, NULL, nc_recv_notif_thread, ntarg);
+    ret = pthread_create((pthread_t *)session->opts.client.ntf_tid, NULL, nc_recv_notif_thread, ntarg);
     if (ret) {
         ERR("Session %u: failed to create a new thread (%s).", strerror(errno));
         free(ntarg);
-        free((pthread_t *)session->ntf_tid);
-        session->ntf_tid = NULL;
+        free((pthread_t *)session->opts.client.ntf_tid);
+        session->opts.client.ntf_tid = NULL;
         return -1;
     }
 
@@ -1816,7 +1821,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     } else {
         /* send RPC, store its message ID */
         r = nc_send_msg(session, data);
-        cur_msgid = session->msgid;
+        cur_msgid = session->opts.client.msgid;
     }
     pthread_mutex_unlock(session->ti_lock);
 

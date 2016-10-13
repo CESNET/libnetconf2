@@ -993,7 +993,7 @@ nc_write_msg(struct nc_session *session, int type, ...)
         attrs = va_arg(ap, const char *);
 
         count = asprintf(&buf, "<rpc xmlns=\"%s\" message-id=\"%"PRIu64"\"%s>",
-                         NC_NS_BASE, session->msgid + 1, attrs ? attrs : "");
+                         NC_NS_BASE, session->opts.client.msgid + 1, attrs ? attrs : "");
         if (count == -1) {
             ERRMEM;
             va_end(ap);
@@ -1004,7 +1004,7 @@ nc_write_msg(struct nc_session *session, int type, ...)
         lyd_print_clb(nc_write_xmlclb, (void *)&arg, content, LYD_XML, LYP_WITHSIBLINGS);
         nc_write_clb((void *)&arg, "</rpc>", 6, 0);
 
-        session->msgid++;
+        session->opts.client.msgid++;
         break;
 
     case NC_MSG_REPLY:
