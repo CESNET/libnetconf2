@@ -97,7 +97,7 @@ setup_sessions(void **state)
     client_session->ti.fd.out = sock[1];
     client_session->ctx = ctx;
     client_session->flags = NC_SESSION_SHAREDCTX;
-    client_session->msgid = 50;
+    client_session->opts.client.msgid = 50;
 
     return 0;
 }

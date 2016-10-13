@@ -78,6 +78,10 @@ server_thread(void *arg)
     return NULL;
 }
 
+#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
+
+#ifdef NC_ENABLED_SSH
+
 static void *
 add_endpt_thread(void *arg)
 {
@@ -85,8 +89,7 @@ add_endpt_thread(void *arg)
     int ret;
 
     pthread_barrier_wait(&barrier);
-
-    ret = nc_server_add_endpt("tertiary");
+    ret = nc_server_add_endpt("tertiary", NC_TI_LIBSSH);
     nc_assert(!ret);
 
     return NULL;
@@ -106,38 +109,6 @@ del_endpt_thread(void *arg)
     return NULL;
 }
 
-#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
-
-#ifdef NC_ENABLED_SSH
-
-static void *
-ssh_endpt_set_address_thread(void *arg)
-{
-    (void)arg;
-    int ret;
-
-    pthread_barrier_wait(&barrier);
-
-    ret = nc_server_ssh_endpt_set_address("quaternary", "0.0.0.0");
-    nc_assert(!ret);
-
-    return NULL;
-}
-
-static void *
-ssh_endpt_set_port_thread(void *arg)
-{
-    (void)arg;
-    int ret;
-
-    pthread_barrier_wait(&barrier);
-
-    ret = nc_server_ssh_endpt_set_port("quaternary", 6003);
-    nc_assert(!ret);
-
-    return NULL;
-}
-
 static void *
 ssh_endpt_set_hostkey_thread(void *arg)
 {
@@ -146,7 +117,7 @@ ssh_endpt_set_hostkey_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_endpt_add_hostkey("main", TESTS_DIR"/data/key_dsa");
+    ret = nc_server_ssh_endpt_add_hostkey("main_ssh", TESTS_DIR"/data/key_dsa");
     nc_assert(!ret);
 
     return NULL;
@@ -160,7 +131,7 @@ ssh_endpt_set_banner_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_endpt_set_banner("main", "Howdy, partner!");
+    ret = nc_server_ssh_endpt_set_banner("main_ssh", "Howdy, partner!");
     nc_assert(!ret);
 
     return NULL;
@@ -174,7 +145,7 @@ ssh_endpt_set_auth_methods_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_endpt_set_auth_methods("main", NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD | NC_SSH_AUTH_INTERACTIVE);
+    ret = nc_server_ssh_endpt_set_auth_methods("main_ssh", NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD | NC_SSH_AUTH_INTERACTIVE);
     nc_assert(!ret);
 
     return NULL;
@@ -188,7 +159,7 @@ ssh_endpt_set_auth_attempts_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_endpt_set_auth_attempts("main", 2);
+    ret = nc_server_ssh_endpt_set_auth_attempts("main_ssh", 2);
     nc_assert(!ret);
 
     return NULL;
@@ -202,7 +173,7 @@ ssh_endpt_set_auth_timeout_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_endpt_set_auth_timeout("main", 5);
+    ret = nc_server_ssh_endpt_set_auth_timeout("main_ssh", 5);
     nc_assert(!ret);
 
     return NULL;
@@ -216,7 +187,7 @@ ssh_endpt_add_authkey_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_endpt_add_authkey("main", TESTS_DIR"/data/key_rsa.pub", "test3");
+    ret = nc_server_ssh_endpt_add_authkey("main_ssh", TESTS_DIR"/data/key_rsa.pub", "test3");
     nc_assert(!ret);
 
     return NULL;
@@ -230,7 +201,7 @@ ssh_endpt_del_authkey_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_endpt_del_authkey("main", TESTS_DIR"/data/key_ecdsa.pub", "test2");
+    ret = nc_server_ssh_endpt_del_authkey("main_ssh", TESTS_DIR"/data/key_ecdsa.pub", "test2");
     nc_assert(!ret);
 
     return NULL;
@@ -285,28 +256,28 @@ ssh_client_thread(void *arg)
 #ifdef NC_ENABLED_TLS
 
 static void *
-tls_endpt_set_address_thread(void *arg)
+endpt_set_address_thread(void *arg)
 {
     (void)arg;
     int ret;
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_tls_endpt_set_address("quaternary", "0.0.0.0");
+    ret = nc_server_endpt_set_address("quaternary", "0.0.0.0");
     nc_assert(!ret);
 
     return NULL;
 }
 
 static void *
-tls_endpt_set_port_thread(void *arg)
+endpt_set_port_thread(void *arg)
 {
     (void)arg;
     int ret;
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_tls_endpt_set_port("quaternary", 6505);
+    ret = nc_server_endpt_set_port("quaternary", 6003);
     nc_assert(!ret);
 
     return NULL;
@@ -461,7 +432,7 @@ tls_endpt_set_trusted_ca_paths_thread(void *arg)
 }
 
 static void *
-tls_endpt_clear_certs_thread(void *arg)
+tls_endpt_del_trusted_cert_thread(void *arg)
 {
     (void)arg;
 
@@ -507,7 +478,7 @@ tls_endpt_add_ctn_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_tls_endpt_add_ctn("main", 0, "02:F0:F1:F2:F3:F4:F5:F6:F7:F8:F9:10:11:12:EE:FF:A0:A1:A2:A3",
+    ret = nc_server_tls_endpt_add_ctn("main_tls", 0, "02:F0:F1:F2:F3:F4:F5:F6:F7:F8:F9:10:11:12:EE:FF:A0:A1:A2:A3",
                                       NC_TLS_CTN_SAN_IP_ADDRESS, NULL);
     nc_assert(!ret);
 
@@ -522,7 +493,7 @@ tls_endpt_del_ctn_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_tls_endpt_del_ctn("main", -1, NULL, NC_TLS_CTN_SAN_ANY, NULL);
+    ret = nc_server_tls_endpt_del_ctn("main_tls", -1, NULL, NC_TLS_CTN_SAN_ANY, NULL);
     nc_assert(!ret);
 
     return NULL;
@@ -562,10 +533,10 @@ static void *(*thread_funcs[])(void *) = {
     server_thread,
     add_endpt_thread,
     del_endpt_thread,
+    endpt_set_address_thread,
+    endpt_set_port_thread,
 #endif
 #ifdef NC_ENABLED_SSH
-    ssh_endpt_set_address_thread,
-    ssh_endpt_set_port_thread,
     ssh_endpt_set_hostkey_thread,
     ssh_endpt_set_banner_thread,
     ssh_endpt_set_auth_methods_thread,
@@ -575,13 +546,11 @@ static void *(*thread_funcs[])(void *) = {
     ssh_endpt_del_authkey_thread,
 #endif
 #ifdef NC_ENABLED_TLS
-    tls_endpt_set_address_thread,
-    tls_endpt_set_port_thread,
     tls_endpt_set_cert_thread,
     tls_endpt_set_key_thread,
     tls_endpt_add_trusted_cert_thread,
     tls_endpt_set_trusted_ca_paths_thread,
-    tls_endpt_clear_certs_thread,
+    tls_endpt_del_trusted_cert_thread,
     tls_endpt_set_crl_paths_thread,
     tls_endpt_clear_crls_thread,
     tls_endpt_add_ctn_thread,
@@ -669,18 +638,17 @@ main(void)
 
     pthread_barrier_init(&barrier, NULL, thread_count);
 
-    ret = nc_server_add_endpt("main");
-    nc_assert(!ret);
-
 #ifdef NC_ENABLED_SSH
     /* do first, so that client can connect on SSH */
-    ret = nc_server_ssh_endpt_set_address("main", "0.0.0.0");
+    ret = nc_server_add_endpt("main_ssh", NC_TI_LIBSSH);
     nc_assert(!ret);
-    ret = nc_server_ssh_endpt_set_port("main", 6001);
+    ret = nc_server_endpt_set_address("main_ssh", "0.0.0.0");
     nc_assert(!ret);
-    ret = nc_server_ssh_endpt_add_authkey("main", TESTS_DIR"/data/key_dsa.pub", "test");
+    ret = nc_server_endpt_set_port("main_ssh", 6001);
     nc_assert(!ret);
-    ret = nc_server_ssh_endpt_add_hostkey("main", TESTS_DIR"/data/key_rsa");
+    ret = nc_server_ssh_endpt_add_authkey("main_ssh", TESTS_DIR"/data/key_dsa.pub", "test");
+    nc_assert(!ret);
+    ret = nc_server_ssh_endpt_add_hostkey("main_ssh", TESTS_DIR"/data/key_rsa");
     nc_assert(!ret);
 
     /* client ready */
@@ -689,23 +657,28 @@ main(void)
     ++clients;
 
     /* for ssh_endpt_del_authkey */
-    ret = nc_server_ssh_endpt_add_authkey("main", TESTS_DIR"/data/key_ecdsa.pub", "test2");
+    ret = nc_server_ssh_endpt_add_authkey("main_ssh", TESTS_DIR"/data/key_ecdsa.pub", "test2");
+    nc_assert(!ret);
+
+    ret = nc_server_add_endpt("secondary", NC_TI_LIBSSH);
     nc_assert(!ret);
 #endif
 
 #ifdef NC_ENABLED_TLS
     /* do first, so that client can connect on TLS */
-    ret = nc_server_tls_endpt_set_address("main", "0.0.0.0");
+    ret = nc_server_add_endpt("main_tls", NC_TI_OPENSSL);
     nc_assert(!ret);
-    ret = nc_server_tls_endpt_set_port("main", 6501);
+    ret = nc_server_endpt_set_address("main_tls", "0.0.0.0");
     nc_assert(!ret);
-    ret = nc_server_tls_endpt_set_cert_path("main", TESTS_DIR"/data/server.crt");
+    ret = nc_server_endpt_set_port("main_tls", 6501);
     nc_assert(!ret);
-    ret = nc_server_tls_endpt_set_key_path("main", TESTS_DIR"/data/server.key");
+    ret = nc_server_tls_endpt_set_cert_path("main_tls", TESTS_DIR"/data/server.crt");
     nc_assert(!ret);
-    ret = nc_server_tls_endpt_add_trusted_cert_path("main", "client", TESTS_DIR"/data/client.crt");
+    ret = nc_server_tls_endpt_set_key_path("main_tls", TESTS_DIR"/data/server.key");
     nc_assert(!ret);
-    ret = nc_server_tls_endpt_add_ctn("main", 0, "02:D3:03:0E:77:21:E2:14:1F:E5:75:48:98:6B:FD:8A:63:BB:DE:40:34", NC_TLS_CTN_SPECIFIED, "test");
+    ret = nc_server_tls_endpt_add_trusted_cert_path("main_tls", "client", TESTS_DIR"/data/client.crt");
+    nc_assert(!ret);
+    ret = nc_server_tls_endpt_add_ctn("main_tls", 0, "02:D3:03:0E:77:21:E2:14:1F:E5:75:48:98:6B:FD:8A:63:BB:DE:40:34", NC_TLS_CTN_SPECIFIED, "test");
     nc_assert(!ret);
 
     /* client ready */
@@ -714,17 +687,12 @@ main(void)
     ++clients;
 
     /* for tls_endpt_del_ctn */
-    ret = nc_server_tls_endpt_add_ctn("main", 0, "02:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:A0:A1:A2:A3", NC_TLS_CTN_SAN_ANY, NULL);
+    ret = nc_server_tls_endpt_add_ctn("main_tls", 0, "02:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:A0:A1:A2:A3", NC_TLS_CTN_SAN_ANY, NULL);
+    nc_assert(!ret);
+
+    ret = nc_server_add_endpt("quaternary", NC_TI_OPENSSL);
     nc_assert(!ret);
 #endif
-
-    /* for del_endpt */
-    ret = nc_server_add_endpt("secondary");
-    nc_assert(!ret);
-
-    /* for endpt_set_address, endpt_set_port */
-    ret = nc_server_add_endpt("quaternary");
-    nc_assert(!ret);
 
     /* threads'n'stuff */
     ret = 0;
