@@ -445,20 +445,18 @@ nc_sock_connect(const char* host, uint16_t port)
         return -1;
     }
 
-    for (i = 0, res = res_list; res != NULL; res = res->ai_next) {
+    for (res = res_list; res != NULL; res = res->ai_next) {
         sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
         if (sock == -1) {
             /* socket was not created, try another resource */
-            i = errno;
-            goto errloop;
+            continue;
         }
 
         if (connect(sock, res->ai_addr, res->ai_addrlen) == -1) {
             /* network connection failed, try another resource */
-            i = errno;
             close(sock);
             sock = -1;
-            goto errloop;
+            continue;
         }
 
         /* make the socket non-blocking */
@@ -471,14 +469,10 @@ nc_sock_connect(const char* host, uint16_t port)
 
         /* we're done, network connection established */
         break;
-errloop:
-        VRB("Unable to connect to %s:%s over %s (%s).", host, port_s,
-            (res->ai_family == AF_INET6) ? "IPv6" : "IPv4", strerror(i));
-        continue;
     }
 
     if (sock == -1) {
-        ERR("Unable to connect to %s:%s.", host, port_s);
+        ERR("Unable to connect to %s:%s (%s).", host, port_s, strerror(errno));
     } else {
         VRB("Successfully connected to %s:%s over %s.", host, port_s, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
     }
