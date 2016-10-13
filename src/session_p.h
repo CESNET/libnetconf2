@@ -134,6 +134,7 @@ struct nc_client_opts {
         const char *address;
         uint16_t port;
         int sock;
+        int pollin;
     } *ch_binds;
     NC_TRANSPORT_IMPL *ch_bind_ti;
     uint16_t ch_bind_count;
@@ -227,7 +228,7 @@ struct nc_server_opts {
 /**
  * Number of sockets kept waiting to be accepted.
  */
-#define NC_REVERSE_QUEUE 1
+#define NC_REVERSE_QUEUE 5
 
 /**
  * @brief Type of the session

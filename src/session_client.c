@@ -989,6 +989,7 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IM
     }
     client_opts.ch_binds[client_opts.ch_bind_count - 1].port = port;
     client_opts.ch_binds[client_opts.ch_bind_count - 1].sock = sock;
+    client_opts.ch_binds[client_opts.ch_bind_count - 1].pollin = 0;
 
     return 0;
 }

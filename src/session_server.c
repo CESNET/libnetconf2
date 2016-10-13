@@ -229,37 +229,49 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
         return -1;
     }
 
-    i = 0;
-    while (i < bind_count) {
+    for (i = 0; i < bind_count; ++i) {
         if (binds[i].sock < 0) {
             /* invalid socket */
             --bind_count;
             continue;
         }
+        if (binds[i].pollin) {
+            binds[i].pollin = 0;
+            /* leftover pollin */
+            sock = binds[i].sock;
+            break;
+        }
         pfd[i].fd = binds[i].sock;
         pfd[i].events = POLLIN;
         pfd[i].revents = 0;
-
-        ++i;
     }
 
-    /* poll for a new connection */
-    errno = 0;
-    ret = poll(pfd, bind_count, timeout);
-    if (!ret) {
-        /* we timeouted */
-        free(pfd);
-        return 0;
-    } else if (ret == -1) {
-        ERR("Poll failed (%s).", strerror(errno));
-        free(pfd);
-        return -1;
-    }
+    if (sock == -1) {
+        /* poll for a new connection */
+        ret = poll(pfd, bind_count, timeout);
+        if (!ret) {
+            /* we timeouted */
+            free(pfd);
+            return 0;
+        } else if (ret == -1) {
+            ERR("Poll failed (%s).", strerror(errno));
+            free(pfd);
+            return -1;
+        }
 
-    for (i = 0; i < bind_count; ++i) {
-        if (pfd[i].revents & POLLIN) {
-            sock = pfd[i].fd;
-            break;
+        for (i = 0; i < bind_count; ++i) {
+            if (pfd[i].revents & POLLIN) {
+                --ret;
+
+                if (!ret) {
+                    /* the last socket with an event, use it */
+                    sock = pfd[i].fd;
+                    break;
+                } else {
+                    /* just remember the event for next time */
+                    binds[i].pollin = 1;
+                }
+            }
         }
     }
     free(pfd);
@@ -1367,6 +1379,7 @@ nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti)
     server_opts.binds[server_opts.endpt_count - 1].address = NULL;
     server_opts.binds[server_opts.endpt_count - 1].port = 0;
     server_opts.binds[server_opts.endpt_count - 1].sock = -1;
+    server_opts.binds[server_opts.endpt_count - 1].pollin = 0;
 
     switch (ti) {
 #ifdef NC_ENABLED_SSH
@@ -1632,7 +1645,6 @@ nc_accept(int timeout, struct nc_session **session)
     }
 
     ret = nc_sock_accept_binds(server_opts.binds, server_opts.endpt_count, timeout, &host, &port, &bind_idx);
-
     if (ret < 1) {
         /* WRITE UNLOCK */
         pthread_rwlock_unlock(&server_opts.endpt_lock);
