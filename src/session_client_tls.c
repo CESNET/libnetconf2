@@ -512,6 +512,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     /* create and assign socket */
     sock = nc_sock_connect(host, port);
     if (sock == -1) {
+        ERR("Unable to connect to %s:%u (%s).", host, port, strerror(errno));
         goto fail;
     }
     SSL_set_fd(session->ti.tls, sock);

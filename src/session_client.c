@@ -471,9 +471,7 @@ nc_sock_connect(const char* host, uint16_t port)
         break;
     }
 
-    if (sock == -1) {
-        ERR("Unable to connect to %s:%s (%s).", host, port_s, strerror(errno));
-    } else {
+    if (sock != -1) {
         VRB("Successfully connected to %s:%s over %s.", host, port_s, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
     }
     freeaddrinfo(res_list);

@@ -2620,6 +2620,7 @@ nc_ch_client_thread(void *arg)
     cur_endpt = &client->ch_endpts[0];
     cur_endpt_name = strdup(cur_endpt->name);
 
+    VRB("Call Home client \"%s\" connecting...", data->client_name);
     while (1) {
         msgtype = nc_connect_ch_client_endpt(client, cur_endpt, &session);
 
@@ -2627,9 +2628,11 @@ nc_ch_client_thread(void *arg)
             /* UNLOCK */
             nc_server_ch_client_unlock(client);
 
+            VRB("Call Home client \"%s\" session %u established.", data->client_name, session->id);
             if (nc_server_ch_client_thread_session_cond_wait(session, data)) {
                 goto cleanup;
             }
+            VRB("Call Home client \"%s\" session terminated, reconnecting...", client->name);
 
             /* LOCK */
             client = nc_server_ch_client_with_endpt_lock(data->client_name);
