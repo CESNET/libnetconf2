@@ -1595,14 +1595,14 @@ nc_server_del_endpt(const char *name)
 
                 /* move last endpt and bind(s) to the empty space */
                 --server_opts.endpt_count;
-                if (i < server_opts.endpt_count) {
-                    memcpy(&server_opts.binds[i], &server_opts.binds[server_opts.endpt_count], sizeof *server_opts.binds);
-                    memcpy(&server_opts.endpts[i], &server_opts.endpts[server_opts.endpt_count], sizeof *server_opts.endpts);
-                } else if (!server_opts.endpt_count) {
+                if (!server_opts.endpt_count) {
                     free(server_opts.binds);
                     server_opts.binds = NULL;
                     free(server_opts.endpts);
                     server_opts.endpts = NULL;
+                } else if (i < server_opts.endpt_count) {
+                    memcpy(&server_opts.binds[i], &server_opts.binds[server_opts.endpt_count], sizeof *server_opts.binds);
+                    memcpy(&server_opts.endpts[i], &server_opts.endpts[server_opts.endpt_count], sizeof *server_opts.endpts);
                 }
 
                 ret = 0;
