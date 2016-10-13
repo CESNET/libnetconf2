@@ -377,8 +377,21 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         data_free(session->data);
     }
 
+    if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
+        /* CH LOCK */
+        pthread_mutex_lock(session->opts.server.ch_lock);
+    }
+
     /* mark session for closing */
     session->status = NC_STATUS_CLOSING;
+
+    if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
+        pthread_cond_signal(session->opts.server.ch_cond);
+
+        /* CH UNLOCK */
+        pthread_mutex_unlock(session->opts.server.ch_lock);
+    }
+
     connected = nc_session_is_connected(session);
 
     /* transport implementation cleanup */
@@ -491,6 +504,17 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     if (!(session->flags & NC_SESSION_SHAREDCTX)) {
         ly_ctx_destroy(session->ctx, NULL);
+    }
+
+    if (session->side == NC_SERVER) {
+        if (session->opts.server.ch_cond) {
+            pthread_cond_destroy(session->opts.server.ch_cond);
+            free(session->opts.server.ch_cond);
+        }
+        if (session->opts.server.ch_lock) {
+            pthread_mutex_destroy(session->opts.server.ch_lock);
+            free(session->opts.server.ch_lock);
+        }
     }
 
     free(session);

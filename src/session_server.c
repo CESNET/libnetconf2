@@ -1108,7 +1108,8 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
         }
 
         /* TODO invalidate only sessions without subscription */
-        if (server_opts.idle_timeout && (cur_time >= ps->sessions[i]->opts.server.last_rpc + server_opts.idle_timeout)) {
+        if (!(ps->sessions[i]->flags & NC_SESSION_CALLHOME) && server_opts.idle_timeout
+                && (cur_time >= ps->sessions[i]->opts.server.last_rpc + server_opts.idle_timeout)) {
             ERR("Session %u: session idle timeout elapsed.", ps->sessions[i]->id);
             ps->sessions[i]->status = NC_STATUS_INVALID;
             ps->sessions[i]->term_reason = NC_SESSION_TERM_TIMEOUT;
@@ -1771,6 +1772,8 @@ nc_server_ch_add_client(const char *name, NC_TRANSPORT_IMPL ti)
     }
     server_opts.ch_clients[server_opts.ch_client_count - 1].name = lydict_insert(server_opts.ctx, name, 0);
     server_opts.ch_clients[server_opts.ch_client_count - 1].ti = ti;
+    server_opts.ch_clients[server_opts.ch_client_count - 1].ch_endpts = NULL;
+    server_opts.ch_clients[server_opts.ch_client_count - 1].ch_endpt_count = 0;
 
     switch (ti) {
 #ifdef NC_ENABLED_SSH
@@ -1805,6 +1808,8 @@ nc_server_ch_add_client(const char *name, NC_TRANSPORT_IMPL ti)
         pthread_rwlock_unlock(&server_opts.ch_client_lock);
         return -1;
     }
+
+    server_opts.ch_clients[server_opts.ch_client_count - 1].conn_type = 0;
 
     /* set CH default options */
     server_opts.ch_clients[server_opts.ch_client_count - 1].start_with = NC_CH_FIRST_LISTED;
@@ -2392,7 +2397,7 @@ nc_connect_ch_client_endpt(struct nc_ch_client *client, struct nc_ch_endpt *endp
     (*session)->status = NC_STATUS_STARTING;
     (*session)->side = NC_SERVER;
     (*session)->ctx = server_opts.ctx;
-    (*session)->flags = NC_SESSION_SHAREDCTX | NC_SESSION_CALLHOME;
+    (*session)->flags = NC_SESSION_SHAREDCTX;
     (*session)->host = lydict_insert(server_opts.ctx, endpt->address, 0);
     (*session)->port = endpt->port;
 
@@ -2469,6 +2474,7 @@ fail:
 
 /* ms */
 #define NC_CH_NO_ENDPT_WAIT 1000
+#define NC_CH_ENDPT_FAIL_WAIT 1000
 
 struct nc_ch_client_thread_arg {
     char *client_name;
@@ -2504,6 +2510,7 @@ static int
 nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct nc_ch_client_thread_arg *data)
 {
     int ret;
+    uint32_t idle_timeout;
     struct timespec ts;
     struct nc_ch_client *client;
 
@@ -2517,6 +2524,8 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
     }
     pthread_mutex_init(session->opts.server.ch_lock, NULL);
     pthread_cond_init(session->opts.server.ch_cond, NULL);
+
+    session->flags |= NC_SESSION_CALLHOME;
 
     /* CH LOCK */
     pthread_mutex_lock(session->opts.server.ch_lock);
@@ -2548,7 +2557,19 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
             goto ch_client_remove;
         }
 
-        /* TODO keep-alives, idle-timeout */
+        if (client->conn_type == NC_CH_PERSIST) {
+            /* TODO keep-alives */
+            idle_timeout = client->conn.persist.idle_timeout;
+        } else {
+            idle_timeout = client->conn.period.idle_timeout;
+        }
+
+        /* TODO only for sessions without subscriptions */
+        if (idle_timeout && (ts.tv_sec >= session->opts.server.last_rpc + idle_timeout)) {
+            VRB("Call Home client \"%s\" session %u: session idle timeout elapsed.", client->name, session->id);
+            session->status = NC_STATUS_INVALID;
+            session->term_reason = NC_SESSION_TERM_TIMEOUT;
+        }
 
         /* UNLOCK */
         nc_server_ch_client_unlock(client);
@@ -2561,10 +2582,20 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
     return 0;
 
 ch_client_remove:
+    /* make the session a standard one */
+    pthread_cond_destroy(session->opts.server.ch_cond);
+    free(session->opts.server.ch_cond);
+    session->opts.server.ch_cond = NULL;
+
+    session->flags &= ~NC_SESSION_CALLHOME;
+
     /* CH UNLOCK */
     pthread_mutex_unlock(session->opts.server.ch_lock);
 
-    /* TODO make session independent */
+    pthread_mutex_destroy(session->opts.server.ch_lock);
+    free(session->opts.server.ch_lock);
+    session->opts.server.ch_lock = NULL;
+
     return 1;
 }
 
@@ -2632,6 +2663,8 @@ nc_ch_client_thread(void *arg)
             } /* else we keep the current one */
         } else {
             /* session was not created */
+            usleep(NC_CH_ENDPT_FAIL_WAIT * 1000);
+
             ++cur_attempts;
             if (cur_attempts == client->max_attempts) {
                 for (i = 0; i < client->ch_endpt_count; ++i) {
