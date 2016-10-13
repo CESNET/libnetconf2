@@ -1020,8 +1020,13 @@ nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
                 free((char *)client_opts.ch_binds[i].address);
 
                 --client_opts.ch_bind_count;
-                memcpy(&client_opts.ch_binds[i], &client_opts.ch_binds[client_opts.ch_bind_count], sizeof *client_opts.ch_binds);
-                client_opts.ch_bind_ti[i] = client_opts.ch_bind_ti[client_opts.ch_bind_count];
+                if (!client_opts.ch_bind_count) {
+                    free(client_opts.ch_binds);
+                    client_opts.ch_binds = NULL;
+                } else if (i < client_opts.ch_bind_count) {
+                    memcpy(&client_opts.ch_binds[i], &client_opts.ch_binds[client_opts.ch_bind_count], sizeof *client_opts.ch_binds);
+                    client_opts.ch_bind_ti[i] = client_opts.ch_bind_ti[client_opts.ch_bind_count];
+                }
 
                 ret = 0;
             }
