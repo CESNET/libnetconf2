@@ -286,6 +286,7 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
         ERR("Accept failed (%s).", strerror(errno));
         return -1;
     }
+    VRB("Accepted a connection on %s:%u.", binds[i].address, binds[i].port);
 
     /* make the socket non-blocking */
     if (((flags = fcntl(ret, F_GETFL)) == -1) || (fcntl(ret, F_SETFL, flags | O_NONBLOCK) == -1)) {
