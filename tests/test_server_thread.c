@@ -531,12 +531,10 @@ tls_client_thread(void *arg)
 static void *(*thread_funcs[])(void *) = {
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
     server_thread,
-    add_endpt_thread,
-    del_endpt_thread,
-    endpt_set_address_thread,
-    endpt_set_port_thread,
 #endif
 #ifdef NC_ENABLED_SSH
+    add_endpt_thread,
+    del_endpt_thread,
     ssh_endpt_set_hostkey_thread,
     ssh_endpt_set_banner_thread,
     ssh_endpt_set_auth_methods_thread,
@@ -546,6 +544,8 @@ static void *(*thread_funcs[])(void *) = {
     ssh_endpt_del_authkey_thread,
 #endif
 #ifdef NC_ENABLED_TLS
+    endpt_set_address_thread,
+    endpt_set_port_thread,
     tls_endpt_set_cert_thread,
     tls_endpt_set_key_thread,
     tls_endpt_add_trusted_cert_thread,
