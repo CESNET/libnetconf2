@@ -764,8 +764,7 @@ static struct nc_reply *
 parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int parseroptions)
 {
     struct lyxml_elem *iter;
-    const struct lys_node *schema = NULL;
-    struct lyd_node *data = NULL, *next, *elem;
+    struct lyd_node *data = NULL, *rpc_act = NULL;
     struct nc_client_reply_error *error_rpl;
     struct nc_reply_data *data_rpl;
     struct nc_reply *reply = NULL;
@@ -837,37 +836,13 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
             rpc_gen = (struct nc_rpc_act_generic *)rpc;
 
             if (rpc_gen->has_data) {
-                data = rpc_gen->content.data;
+                rpc_act = rpc_gen->content.data;
             } else {
-                data = lyd_parse_mem(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | parseroptions, NULL);
-                if (!data) {
+                rpc_act = lyd_parse_mem(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | parseroptions, NULL);
+                if (!rpc_act) {
                     ERR("Failed to parse a generic RPC/action XML.");
                     return NULL;
                 }
-            }
-            if (data->schema->nodetype == LYS_RPC) {
-                /* RPC */
-                schema = data->schema;
-            } else {
-                /* action */
-                LY_TREE_DFS_BEGIN(data, next, elem) {
-                    if (elem->schema->nodetype == LYS_ACTION) {
-                        schema = elem->schema;
-                        break;
-                    }
-                    LY_TREE_DFS_END(data, next, elem);
-                }
-            }
-
-            /* cleanup */
-            if (data != rpc_gen->content.data) {
-                lyd_free(data);
-                data = NULL;
-            }
-            if (!schema) {
-                /* only with action, if there is no action, it should not have gotten this far */
-                ERRINT;
-                return NULL;
             }
             break;
 
@@ -895,8 +870,8 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
             break;
 
         case NC_RPC_GETSCHEMA:
-            schema = ly_ctx_get_node(ctx, NULL, "/ietf-netconf-monitoring:get-schema");
-            if (!schema) {
+            rpc_act = lyd_new(NULL, ly_ctx_get_module(ctx, "ietf-netconf-monitoring", NULL), "get-schema");
+            if (!rpc_act) {
                 ERRINT;
                 return NULL;
             }
@@ -929,11 +904,12 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
         data_rpl->type = NC_RPL_DATA;
         if (!data) {
             data_rpl->data = lyd_parse_xml(ctx, &xml->child, LYD_OPT_RPCREPLY | LYD_OPT_DESTRUCT | parseroptions,
-                                           schema, NULL);
+                                           rpc_act, NULL);
         } else {
             /* <get>, <get-config> */
             data_rpl->data = data;
         }
+        lyd_free_withsiblings(rpc_act);
         if (!data_rpl->data) {
             ERR("Failed to parse <rpc-reply>.");
             free(data_rpl);
