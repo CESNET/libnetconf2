@@ -304,17 +304,20 @@ struct nc_session {
 
     union {
         struct {
-            volatile pthread_t *ntf_tid; /**< running notifications thread */
+            /* client side only data */
             uint64_t msgid;
             const char **cpblts;           /**< list of server's capabilities on client side */
             struct nc_msg_cont *replies;   /**< queue for RPC replies received instead of notifications */
             struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
+            volatile pthread_t *ntf_tid;   /**< running notifications receiving thread */
         } client;
         struct {
+            /* server side only data */
             time_t session_start;          /**< time the session was created */
             time_t last_rpc;               /**< time the last RPC was received on this session */
             pthread_mutex_t *ch_lock;      /**< Call Home thread lock */
             pthread_cond_t *ch_cond;       /**< Call Home thread condition */
+
 #ifdef NC_ENABLED_SSH
             /* SSH session authenticated */
 #           define NC_SESSION_SSH_AUTHENTICATED 0x04
