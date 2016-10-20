@@ -2656,8 +2656,6 @@ nc_ch_client_thread(void *arg)
             /* session changed status -> it was disconnected for whatever reason,
              * persistent connection immediately tries to reconnect, periodic waits some first */
             if (client->conn_type == NC_CH_PERIOD) {
-                i = client->conn.period.reconnect_timeout;
-
                 /* UNLOCK */
                 nc_server_ch_client_unlock(client);
 
