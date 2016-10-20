@@ -2023,19 +2023,19 @@ nc_server_ch_client_del_endpt(const char *client_name, const char *endpt_name)
             if (!strcmp(client->ch_endpts[i].name, endpt_name)) {
                 lydict_remove(server_opts.ctx, client->ch_endpts[i].name);
                 lydict_remove(server_opts.ctx, client->ch_endpts[i].address);
-            }
 
-            /* move last endpoint to the empty space */
-            --client->ch_endpt_count;
-            if (i < client->ch_endpt_count) {
-                memcpy(&client->ch_endpts[i], &client->ch_endpts[client->ch_endpt_count], sizeof *client->ch_endpts);
-            } else if (!server_opts.ch_client_count) {
-                free(server_opts.ch_clients);
-                server_opts.ch_clients = NULL;
-            }
+                /* move last endpoint to the empty space */
+                --client->ch_endpt_count;
+                if (i < client->ch_endpt_count) {
+                    memcpy(&client->ch_endpts[i], &client->ch_endpts[client->ch_endpt_count], sizeof *client->ch_endpts);
+                } else if (!server_opts.ch_client_count) {
+                    free(server_opts.ch_clients);
+                    server_opts.ch_clients = NULL;
+                }
 
-            ret = 0;
-            break;
+                ret = 0;
+                break;
+            }
         }
     }
 
