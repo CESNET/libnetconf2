@@ -1002,7 +1002,7 @@ nc_write_msg(struct nc_session *session, int type, ...)
         nc_write_clb((void *)&arg, buf, count, 0);
         free(buf);
 
-        lyd_print_clb(nc_write_xmlclb, (void *)&arg, content, LYD_XML, LYP_WITHSIBLINGS | LYP_NETCONF_XML);
+        lyd_print_clb(nc_write_xmlclb, (void *)&arg, content, LYD_XML, LYP_WITHSIBLINGS | LYP_NETCONF);
         nc_write_clb((void *)&arg, "</rpc>", 6, 0);
 
         session->opts.client.msgid++;
@@ -1043,7 +1043,7 @@ nc_write_msg(struct nc_session *session, int type, ...)
                 break;
             }
             lyd_print_clb(nc_write_xmlclb, (void *)&arg, ((struct nc_reply_data *)reply)->data, LYD_XML,
-                          LYP_WITHSIBLINGS | LYP_NETCONF_XML | wd);
+                          LYP_WITHSIBLINGS | LYP_NETCONF | wd);
             break;
         case NC_RPL_ERROR:
             error_rpl = (struct nc_server_reply_error *)reply;
