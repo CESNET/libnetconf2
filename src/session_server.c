@@ -2676,8 +2676,17 @@ nc_ch_client_thread(void *arg)
                 cur_endpt_name = strdup(cur_endpt->name);
             } /* else we keep the current one */
         } else {
+            /* UNLOCK */
+            nc_server_ch_client_unlock(client);
+
             /* session was not created */
             usleep(NC_CH_ENDPT_FAIL_WAIT * 1000);
+
+            /* LOCK */
+            client = nc_server_ch_client_with_endpt_lock(data->client_name);
+            if (!client) {
+                goto cleanup;
+            }
 
             ++cur_attempts;
             if (cur_attempts == client->max_attempts) {
