@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 2.6)
+project(libnetconf2 C)
+include(GNUInstallDirs)
 include (CheckFunctionExists)
 
 # include custom Modules
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMakeModules/")
 
-project(libnetconf2 C)
 set(LIBNETCONF2_DESCRIPTION "NETCONF server and client library in C.")
 
 # check the supported platform
@@ -12,19 +13,8 @@ if(NOT UNIX)
     message(FATAL_ERROR "Only *nix like systems are supported.")
 endif()
 
-if(NOT LIB_INSTALL_DIR)
-    set(LIB_INSTALL_DIR lib)
-endif()
-
-if(NOT INCLUDE_INSTALL_DIR)
-    set(INCLUDE_INSTALL_DIR include)
-endif()
-
-set(INCLUDE_INSTALL_SUBDIR ${INCLUDE_INSTALL_DIR}/libnetconf2)
-
-if(NOT DATA_INSTALL_DIR)
-    set(DATA_INSTALL_DIR share/libnetconf2)
-endif()
+set(INCLUDE_INSTALL_SUBDIR ${CMAKE_INSTALL_INCLUDEDIR}/libnetconf2)
+set(DATA_INSTALL_DIR ${CMAKE_INSTALL_DATADIR}/libnetconf2)
 
 # set default build type if not specified by user
 if(NOT CMAKE_BUILD_TYPE)
@@ -157,11 +147,11 @@ if(NOT READ_TIMEOUT)
 endif()
 
 # install library
-install(TARGETS netconf2 DESTINATION ${LIB_INSTALL_DIR})
+install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # install headers
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_client.h DESTINATION ${INCLUDE_INSTALL_DIR})
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_server.h DESTINATION ${INCLUDE_INSTALL_DIR})
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_client.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_server.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES ${headers} DESTINATION ${INCLUDE_INSTALL_SUBDIR})
 
 # install schemas
@@ -174,14 +164,14 @@ install(
 find_package(PkgConfig)
 if(PKG_CONFIG_FOUND)
     configure_file("libnetconf2.pc.in" "libnetconf2.pc" @ONLY)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libnetconf2.pc" DESTINATION "${CMAKE_INSTALL_PREFIX}/${LIB_INSTALL_DIR}/pkgconfig")
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libnetconf2.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
     # check that pkg-config includes the used path
     execute_process(COMMAND ${PKG_CONFIG_EXECUTABLE} --variable pc_path pkg-config RESULT_VARIABLE RETURN OUTPUT_VARIABLE PC_PATH ERROR_QUIET)
     if(RETURN EQUAL 0)
-        string(REGEX MATCH "${CMAKE_INSTALL_PREFIX}/${LIB_INSTALL_DIR}/pkgconfig" SUBSTR "${PC_PATH}")
+        string(REGEX MATCH "${CMAKE_INSTALL_LIBDIR}/pkgconfig" SUBSTR "${PC_PATH}")
         string(LENGTH "${SUBSTR}" SUBSTR_LEN)
         if(SUBSTR_LEN EQUAL 0)
-            message(WARNING "pkg-config will not detect the new package after installation, adjust PKG_CONFIG_PATH using \"export PKG_CONFIG_PATH=\${PKG_CONFIG_PATH}:${CMAKE_INSTALL_PREFIX}/${LIB_INSTALL_DIR}/pkgconfig\".")
+            message(WARNING "pkg-config will not detect the new package after installation, adjust PKG_CONFIG_PATH using \"export PKG_CONFIG_PATH=\${PKG_CONFIG_PATH}:${CMAKE_INSTALL_LIBDIR}/pkgconfig\".")
         endif()
     endif()
 endif()
