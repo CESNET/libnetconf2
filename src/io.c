@@ -1009,7 +1009,15 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
         rpc_elem = va_arg(ap, struct lyxml_elem *);
         reply = va_arg(ap, struct nc_server_reply *);
 
-        nc_write_clb((void *)&arg, "<rpc-reply", 10, 0);
+        if (rpc_elem && rpc_elem->ns && rpc_elem->ns->prefix) {
+            nc_write_clb((void *)&arg, "<", 1, 0);
+            nc_write_clb((void *)&arg, rpc_elem->ns->prefix, strlen(rpc_elem->ns->prefix), 0);
+            nc_write_clb((void *)&arg, ":rpc-reply", 10, 0);
+        }
+        else {
+            nc_write_clb((void *)&arg, "<rpc-reply", 10, 0);
+        }
+
         /* can be NULL if replying with a malformed-message error */
         if (rpc_elem) {
             lyxml_print_clb(nc_write_xmlclb, (void *)&arg, rpc_elem, LYXML_PRINT_ATTRS);
@@ -1054,7 +1062,14 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
             va_end(ap);
             return -1;
         }
-        nc_write_clb((void *)&arg, "</rpc-reply>", 12, 0);
+        if (rpc_elem && rpc_elem->ns && rpc_elem->ns->prefix) {
+            nc_write_clb((void *)&arg, "</", 2, 0);
+            nc_write_clb((void *)&arg, rpc_elem->ns->prefix, strlen(rpc_elem->ns->prefix), 0);
+            nc_write_clb((void *)&arg, ":rpc-reply>", 11, 0);
+        }
+        else {
+            nc_write_clb((void *)&arg, "</rpc-reply>", 12, 0);
+        }
         break;
 
     case NC_MSG_NOTIF:
