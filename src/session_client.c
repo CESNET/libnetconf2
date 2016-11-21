@@ -65,19 +65,15 @@ nc_client_get_schema_searchpath(void)
 
 /* SCHEMAS_DIR not used (implicitly) */
 static int
-ctx_check_and_load_model(struct nc_session *session, const char *cpblt)
+ctx_check_and_load_model(struct nc_session *session, const char *module_cpblt)
 {
     const struct lys_module *module;
     char *ptr, *ptr2;
     char *model_name, *revision = NULL, *features = NULL;
 
-    /* parse module */
-    ptr = strstr(cpblt, "module=");
-    if (!ptr) {
-        ERR("Unknown capability \"%s\" could not be parsed.", cpblt);
-        return -1;
-    }
-    ptr += 7;
+    assert(!strncmp(module_cpblt, "module=", 7));
+
+    ptr = (char *)module_cpblt + 7;
     ptr2 = strchr(ptr, '&');
     if (!ptr2) {
         ptr2 = ptr + strlen(ptr);
@@ -85,7 +81,7 @@ ctx_check_and_load_model(struct nc_session *session, const char *cpblt)
     model_name = strndup(ptr, ptr2 - ptr);
 
     /* parse revision */
-    ptr = strstr(cpblt, "revision=");
+    ptr = strstr(module_cpblt, "revision=");
     if (ptr) {
         ptr += 9;
         ptr2 = strchr(ptr, '&');
@@ -110,7 +106,7 @@ ctx_check_and_load_model(struct nc_session *session, const char *cpblt)
     free(model_name);
 
     /* parse features */
-    ptr = strstr(cpblt, "features=");
+    ptr = strstr(module_cpblt, "features=");
     if (ptr) {
         ptr += 9;
         ptr2 = strchr(ptr, '&');
@@ -293,6 +289,7 @@ libyang_module_clb(const char *mod_name, const char *mod_rev, const char *submod
 int
 nc_ctx_check_and_fill(struct nc_session *session)
 {
+    const char *module_cpblt;
     int i, get_schema_support = 0, ret = 0, r;
     ly_module_clb old_clb = NULL;
     void *old_data = NULL;
@@ -328,42 +325,41 @@ nc_ctx_check_and_fill(struct nc_session *session)
 
     /* load all other models */
     for (i = 0; session->opts.client.cpblts[i]; ++i) {
-        if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:netconf:capability", 34)
-                || !strncmp(session->opts.client.cpblts[i], "urn:ietf:params:netconf:base", 28)) {
-            continue;
-        }
-
-        r = ctx_check_and_load_model(session, session->opts.client.cpblts[i]);
-        if (r == -1) {
-            ret = -1;
-            break;
-        }
-
-        /* failed to load schema, but let's try to find it using user callback (or locally, if not set),
-         * if it was using get-schema */
-        if (r == 1) {
-            if (get_schema_support) {
-                VRB("Trying to load the schema from a different source.");
-                /* works even if old_clb is NULL */
-                ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
-                r = ctx_check_and_load_model(session, session->opts.client.cpblts[i]);
+        module_cpblt = strstr(session->opts.client.cpblts[i], "module=");
+        /* this capability requires a module */
+        if (module_cpblt) {
+            r = ctx_check_and_load_model(session, module_cpblt);
+            if (r == -1) {
+                ret = -1;
+                break;
             }
 
-            /* fail again (or no other way to try), too bad */
-            if (r) {
-                ret = 1;
-            }
+            /* failed to load schema, but let's try to find it using user callback (or locally, if not set),
+            * if it was using get-schema */
+            if (r == 1) {
+                if (get_schema_support) {
+                    VRB("Trying to load the schema from a different source.");
+                    /* works even if old_clb is NULL */
+                    ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
+                    r = ctx_check_and_load_model(session, module_cpblt);
+                }
 
-            /* set get-schema callback back */
-            ly_ctx_set_module_clb(session->ctx, &libyang_module_clb, session);
+                /* fail again (or no other way to try), too bad */
+                if (r) {
+                    session->flags |= NC_SESSION_CLIENT_NOT_STRICT;
+                }
+
+                /* set get-schema callback back */
+                ly_ctx_set_module_clb(session->ctx, &libyang_module_clb, session);
+            }
         }
     }
 
     if (old_clb) {
         ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
     }
-    if (ret == 1) {
-        WRN("Some models failed to be loaded, any data from these models will be ignored.");
+    if (session->flags & NC_SESSION_CLIENT_NOT_STRICT) {
+        WRN("Some models failed to be loaded, any data from these models (and any other unknown) will be ignored.");
     }
     return ret;
 }
@@ -838,8 +834,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
             if (rpc_gen->has_data) {
                 rpc_act = rpc_gen->content.data;
             } else {
-                rpc_act = lyd_parse_mem(ctx, rpc_gen->content.xml_str,
-                                        LYD_XML, LYD_OPT_RPC | LYD_OPT_STRICT | parseroptions, NULL);
+                rpc_act = lyd_parse_mem(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | parseroptions, NULL);
                 if (!rpc_act) {
                     ERR("Failed to parse a generic RPC/action XML.");
                     return NULL;
@@ -864,7 +859,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
             /* special treatment */
             data = lyd_parse_xml(ctx, &xml->child->child,
                                  LYD_OPT_DESTRUCT | (rpc->type == NC_RPC_GETCONFIG ? LYD_OPT_GETCONFIG : LYD_OPT_GET)
-                                 | LYD_OPT_STRICT | parseroptions);
+                                 | parseroptions);
             if (!data) {
                 ERR("Failed to parse <%s> reply.", (rpc->type == NC_RPC_GETCONFIG ? "get-config" : "get"));
                 return NULL;
@@ -906,8 +901,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
         data_rpl->type = NC_RPL_DATA;
         if (!data) {
             data_rpl->data = lyd_parse_xml(ctx, &xml->child,
-                                           LYD_OPT_RPCREPLY | LYD_OPT_DESTRUCT | LYD_OPT_STRICT | parseroptions,
-                                           rpc_act, NULL);
+                                           LYD_OPT_RPCREPLY | LYD_OPT_DESTRUCT | parseroptions, rpc_act, NULL);
         } else {
             /* <get>, <get-config> */
             data_rpl->data = data;
@@ -1152,12 +1146,15 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
         return NC_MSG_ERROR;
     }
     parseroptions &= ~(LYD_OPT_DESTRUCT | LYD_OPT_NOSIBLINGS);
+    if (!(session->flags & NC_SESSION_CLIENT_NOT_STRICT)) {
+        parseroptions &= LYD_OPT_STRICT;
+    }
     *reply = NULL;
 
     msgtype = get_msg(session, timeout, msgid, &xml);
 
     if ((msgtype == NC_MSG_REPLY) || (msgtype == NC_MSG_REPLY_ERR_MSGID)) {
-        *reply = parse_reply(session->ctx, xml, rpc, LYD_OPT_STRICT | parseroptions);
+        *reply = parse_reply(session->ctx, xml, rpc, parseroptions);
         lyxml_free(session->ctx, xml);
         if (!(*reply)) {
             return NC_MSG_ERROR;
@@ -1209,7 +1206,8 @@ nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
         }
 
         /* notification body */
-        (*notif)->tree = lyd_parse_xml(session->ctx, &xml->child, LYD_OPT_NOTIF | LYD_OPT_STRICT | LYD_OPT_DESTRUCT, NULL);
+        (*notif)->tree = lyd_parse_xml(session->ctx, &xml->child, LYD_OPT_NOTIF | LYD_OPT_DESTRUCT
+                                       | (session->flags & NC_SESSION_CLIENT_NOT_STRICT ? 0 : LYD_OPT_STRICT), NULL);
         lyxml_free(session->ctx, xml);
         xml = NULL;
         if (!(*notif)->tree) {
@@ -1366,7 +1364,8 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         if (rpc_gen->has_data) {
             data = rpc_gen->content.data;
         } else {
-            data = lyd_parse_mem(session->ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | LYD_OPT_STRICT, NULL);
+            data = lyd_parse_mem(session->ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC
+                                 | (session->flags & NC_SESSION_CLIENT_NOT_STRICT ? 0 : LYD_OPT_STRICT), NULL);
         }
         break;
 
@@ -1786,7 +1785,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         return NC_MSG_ERROR;
     }
 
-    if (lyd_validate(&data, LYD_OPT_RPC | LYD_OPT_STRICT, NULL)) {
+    if (lyd_validate(&data, LYD_OPT_RPC | (session->flags & NC_SESSION_CLIENT_NOT_STRICT ? 0 : LYD_OPT_STRICT), NULL)) {
         lyd_free(data);
         return NC_MSG_ERROR;
     }

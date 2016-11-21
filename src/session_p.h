@@ -310,6 +310,10 @@ struct nc_session {
             struct nc_msg_cont *replies;   /**< queue for RPC replies received instead of notifications */
             struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
             volatile pthread_t *ntf_tid;   /**< running notifications receiving thread */
+
+            /* client flags */
+            /* some server modules failed to load so the data from them will be ignored - not use strict flag for parsing */
+#           define NC_SESSION_CLIENT_NOT_STRICT 0x40
         } client;
         struct {
             /* server side only data */
@@ -318,6 +322,7 @@ struct nc_session {
             pthread_mutex_t *ch_lock;      /**< Call Home thread lock */
             pthread_cond_t *ch_cond;       /**< Call Home thread condition */
 
+            /* server flags */
 #ifdef NC_ENABLED_SSH
             /* SSH session authenticated */
 #           define NC_SESSION_SSH_AUTHENTICATED 0x04
