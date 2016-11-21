@@ -285,7 +285,6 @@ libyang_module_clb(const char *mod_name, const char *mod_rev, const char *submod
     return model_data;
 }
 
-/* return 0 - ok, 1 - some models failed to load, -1 - error */
 int
 nc_ctx_check_and_fill(struct nc_session *session)
 {
