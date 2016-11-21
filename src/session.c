@@ -1113,7 +1113,13 @@ nc_tls_destroy(void)
     nc_thread_destroy();
     EVP_cleanup();
     ERR_free_strings();
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L // >= 1.1.0
+    // no de-init needed
+#elif OPENSSL_VERSION_NUMBER >= 0x10002000L // >= 1.0.2
+    SSL_COMP_free_compression_methods();
+#else
     sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
+#endif
 
     CRYPTO_THREADID_set_callback(NULL);
     CRYPTO_set_locking_callback(NULL);
@@ -1149,7 +1155,13 @@ static void
 nc_ssh_tls_destroy(void)
 {
     ERR_free_strings();
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L // >= 1.1.0
+    // no de-init needed
+#elif OPENSSL_VERSION_NUMBER >= 0x10002000L // >= 1.0.2
+    SSL_COMP_free_compression_methods();
+#else
     sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
+#endif
 
     nc_ssh_destroy();
 
