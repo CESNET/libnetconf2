@@ -267,9 +267,13 @@ struct nc_session {
     struct nc_msg_cont *replies;   /**< queue for RPC replies received instead of notifications */
     struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
 
+    /* some server modules failed to load so the data from them will be ignored - not use strict flag for parsing */
+#   define NC_SESSION_CLIENT_NOT_STRICT 0x40
+
     /* server side only data */
     time_t session_start;          /**< time the session was created */
     time_t last_rpc;               /**< time the last RPC was received on this session */
+
 #ifdef NC_ENABLED_SSH
     /* SSH session authenticated */
 #   define NC_SESSION_SSH_AUTHENTICATED 0x04
