@@ -297,7 +297,7 @@ in progress.</text>
       <text>RFC 6241, Section 8.4</text>
     </reference>
     <uses name="common-session-parms">
-      <when condition="../confirm-event != 'timeout'"/>
+      <when condition="confirm-event != 'timeout'"/>
     </uses>
     <leaf name="confirm-event">
       <type name="enumeration">
