@@ -369,9 +369,11 @@ int nc_session_ntf_thread_running(const struct nc_session *session);
 /**
  * @brief Receive NETCONF RPC reply.
  *
- * If a reply to \<get\> or \<get-config\> RPCs is received, the data are the whole configuration
- * parsed (usually results in more top-level nodes), not just a single 'data' anyxml node with
- * the configuration unparsed inside (which would strictly be according to the model).
+ * Be careful, normally there is a whole RPC reply (output) of an RPC in the \p reply.
+ * However, if a reply to \<get\> or \<get-config\> RPC is received, the \p reply is
+ * actually the configuration (with either state data or not). This means, for example,
+ * that the reply data in these cases should not be validated with #LYD_OPT_RPCREPLY,
+ * but #LYD_OPT_GET and #LYD_OPT_GETCONFIG, respectively.
  *
  * @param[in] session NETCONF session from which the function gets data. It must be the
  *            client side session object.
