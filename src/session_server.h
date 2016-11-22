@@ -437,46 +437,38 @@ int nc_server_ssh_endpt_del_authkey(const char *endpt_name, const char *pubkey_p
 #ifdef NC_ENABLED_TLS
 
 /**
- * @brief Set server TLS certificate. Alternative to nc_tls_server_set_cert_path().
- *        There can only be one certificate for each key type, it is replaced if
- *        already set.
+ * @brief Set the server TLS certificate. Alternative to nc_tls_server_set_cert_path().
  *
  * @param[in] endpt_name Existing endpoint name.
- * @param[in] cert Base64-encoded certificate in ASN.1 DER encoding.
+ * @param[in] cert Base64-encoded certificate in ASN.1 DER encoding. If NULL, the used certificate is cleared.
  * @return 0 on success, -1 on error.
  */
 int nc_server_tls_endpt_set_cert(const char *endpt_name, const char *cert);
 
 /**
- * @brief Set server TLS certificate. Alternative to nc_tls_server_set_cert().
- *        There can only be one certificate for each key type, it is replaced if
- *        already set.
+ * @brief Set the server TLS certificate. Alternative to nc_tls_server_set_cert().
  *
  * @param[in] endpt_name Existing endpoint name.
- * @param[in] cert_path Path to a certificate file in PEM format.
+ * @param[in] cert_path Path to a certificate file in PEM format. If NULL, the used certificate is cleared.
  * @return 0 on success, -1 on error.
  */
 int nc_server_tls_endpt_set_cert_path(const char *endpt_name, const char *cert_path);
 
 /**
- * @brief Set server TLS private key matching the certificate.
- *        Alternative to nc_tls_server_set_key_path(). There can only be one of
- *        every key type, it is replaced if already set.
+ * @brief Set the server TLS private key matching the certificate.
  *
  * @param[in] endpt_name Existing endpoint name.
- * @param[in] privkey Base64-encoded certificate in ASN.1 DER encoding.
+ * @param[in] privkey Base64-encoded certificate in ASN.1 DER encoding. If NULL, the used key is cleared.
  * @param[in] is_rsa Whether \p privkey are the data of an RSA (1) or DSA (0) key.
  * @return 0 on success, -1 on error.
  */
 int nc_server_tls_endpt_set_key(const char *endpt_name, const char *privkey, int is_rsa);
 
 /**
- * @brief Set server TLS private key matching the certificate.
- *        Alternative to nc_tls_server_set_key_path(). There can only be one of
- *        every key type, it is replaced if already set.
+ * @brief Set the server TLS private key matching the certificate.
  *
  * @param[in] endpt_name Existing endpoint name.
- * @param[in] privkey_path Path to a private key file in PEM format.
+ * @param[in] privkey_path Path to a private key file in PEM format. If NULL, the used key is cleared.
  * @return 0 on success, -1 on error.
  */
 int nc_server_tls_endpt_set_key_path(const char *endpt_name, const char *privkey_path);

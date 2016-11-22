@@ -674,20 +674,26 @@ fail:
 static int
 nc_server_tls_set_cert(const char *cert, struct nc_server_tls_opts *opts)
 {
+    X509 *crt;
+
     if (!cert) {
-        ERRARG("cert");
+        if (opts->server_cert) {
+            X509_free(opts->server_cert);
+        }
+        opts->server_cert = NULL;
+        return 0;
+    }
+
+    crt = base64der_to_cert(cert);
+    if (!crt) {
+        ERR("Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
         return -1;
     }
 
     if (opts->server_cert) {
         X509_free(opts->server_cert);
     }
-
-    opts->server_cert = base64der_to_cert(cert);
-    if (!opts->server_cert) {
-        ERR("Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        return -1;
-    }
+    opts->server_cert = crt;
 
     return 0;
 }
@@ -743,20 +749,27 @@ nc_server_tls_ch_client_set_cert(const char *client_name, const char *cert)
 static int
 nc_server_tls_set_cert_path(const char *cert_path, struct nc_server_tls_opts *opts)
 {
+    X509 *crt;
+
     if (!cert_path) {
-        ERRARG("cert_path");
+        if (opts->server_cert) {
+            X509_free(opts->server_cert);
+        }
+        opts->server_cert = NULL;
+        return 0;
+    }
+
+    errno = 0;
+    crt = pem_to_cert(cert_path);
+    if (!crt) {
+        ERR("Loading the server certificate failed (%s).", (errno ? strerror(errno) : ERR_reason_error_string(ERR_get_error())));
         return -1;
     }
 
     if (opts->server_cert) {
         X509_free(opts->server_cert);
     }
-    errno = 0;
-    opts->server_cert = pem_to_cert(cert_path);
-    if (!opts->server_cert) {
-        ERR("Loading the server certificate failed (%s).", (errno ? strerror(errno) : ERR_reason_error_string(ERR_get_error())));
-        return -1;
-    }
+    opts->server_cert = crt;
 
     return 0;
 }
@@ -812,20 +825,26 @@ nc_server_tls_ch_client_set_cert_path(const char *client_name, const char *cert_
 static int
 nc_server_tls_set_key(const char *privkey, int is_rsa, struct nc_server_tls_opts *opts)
 {
+    EVP_PKEY *pkey;
+
     if (!privkey) {
-        ERRARG("privkey");
+        if (opts->server_key) {
+            EVP_PKEY_free(opts->server_key);
+        }
+        opts->server_key = NULL;
+        return 0;
+    }
+
+    pkey = base64der_to_privatekey(privkey, is_rsa);
+    if (!pkey) {
+        ERR("Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
         return -1;
     }
 
     if (opts->server_key) {
         EVP_PKEY_free(opts->server_key);
     }
-
-    opts->server_key = base64der_to_privatekey(privkey, is_rsa);
-    if (!opts->server_key) {
-        ERR("Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        return -1;
-    }
+    opts->server_key = pkey;
 
     return 0;
 }
@@ -884,8 +903,11 @@ nc_server_tls_set_key_path(const char *privkey_path, struct nc_server_tls_opts *
     FILE *file;
 
     if (!privkey_path) {
-        ERRARG("privkey_path");
-        return -1;
+        if (opts->server_key) {
+            EVP_PKEY_free(opts->server_key);
+        }
+        opts->server_key = NULL;
+        return 0;
     }
 
     file = fopen(privkey_path, "r");
