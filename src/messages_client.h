@@ -154,7 +154,7 @@ struct nc_reply {
  */
 struct nc_reply_data {
     NC_RPL type;            /**< NC_RPL_DATA */
-    struct lyd_node *reply; /**< libyang RPC reply data tree (output of an RPC),
+    struct lyd_node *data;  /**< libyang RPC reply data tree (output of an RPC),
                                  \<get\> and \<get-config\> replies are special,
                                  in those cases there is the configuration itself
                                  and it should be validated as such (using #LYD_OPT_GET or #LYD_OPT_GETCONFIG. */
