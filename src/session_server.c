@@ -455,7 +455,7 @@ nc_server_destroy(void)
     pthread_spin_destroy(&server_opts.sid_lock);
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
-    nc_server_del_endpt(NULL);
+    nc_server_del_endpt(NULL, 0);
 #endif
     nc_destroy();
 }
@@ -1514,7 +1514,7 @@ nc_server_endpt_set_port(const char *endpt_name, uint16_t port)
 }
 
 API int
-nc_server_del_endpt(const char *name)
+nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti)
 {
     uint32_t i;
     int ret = -1;
@@ -1522,7 +1522,7 @@ nc_server_del_endpt(const char *name)
     /* WRITE LOCK */
     pthread_rwlock_wrlock(&server_opts.endpt_lock);
 
-    if (!name) {
+    if (!name && !ti) {
         /* remove all endpoints */
         for (i = 0; i < server_opts.endpt_count; ++i) {
             lydict_remove(server_opts.ctx, server_opts.endpts[i].name);
@@ -1563,9 +1563,9 @@ nc_server_del_endpt(const char *name)
         server_opts.endpt_count = 0;
 
     } else {
-        /* remove one endpoint with bind(s) */
+        /* remove one endpoint with bind(s) or all endpoints using one transport protocol */
         for (i = 0; i < server_opts.endpt_count; ++i) {
-            if (!strcmp(server_opts.endpts[i].name, name)) {
+            if ((name && !strcmp(server_opts.endpts[i].name, name)) || (!name && (server_opts.endpts[i].ti == ti))) {
                 /* remove endpt */
                 lydict_remove(server_opts.ctx, server_opts.endpts[i].name);
                 pthread_mutex_destroy(&server_opts.endpts[i].lock);
@@ -1606,7 +1606,9 @@ nc_server_del_endpt(const char *name)
                 }
 
                 ret = 0;
-                break;
+                if (name) {
+                    break;
+                }
             }
         }
     }
@@ -1837,7 +1839,7 @@ nc_server_ch_add_client(const char *name, NC_TRANSPORT_IMPL ti)
 }
 
 API int
-nc_server_ch_del_client(const char *name)
+nc_server_ch_del_client(const char *name, NC_TRANSPORT_IMPL ti)
 {
     uint16_t i, j;
     int ret = -1;
@@ -1845,7 +1847,7 @@ nc_server_ch_del_client(const char *name)
     /* WRITE LOCK */
     pthread_rwlock_wrlock(&server_opts.ch_client_lock);
 
-    if (!name) {
+    if (!name && !ti) {
         /* remove all CH clients */
         for (i = 0; i < server_opts.ch_client_count; ++i) {
             lydict_remove(server_opts.ctx, server_opts.ch_clients[i].name);
@@ -1886,9 +1888,9 @@ nc_server_ch_del_client(const char *name)
         server_opts.ch_client_count = 0;
 
     } else {
-        /* remove one client with endpoint(s) */
+        /* remove one client with endpoint(s) or all clients using one protocol */
         for (i = 0; i < server_opts.ch_client_count; ++i) {
-            if (!strcmp(server_opts.ch_clients[i].name, name)) {
+            if ((name && !strcmp(server_opts.ch_clients[i].name, name)) || (!name && (server_opts.ch_clients[i].ti == ti))) {
                 /* remove endpt */
                 lydict_remove(server_opts.ctx, server_opts.ch_clients[i].name);
 
@@ -1930,7 +1932,9 @@ nc_server_ch_del_client(const char *name)
                 }
 
                 ret = 0;
-                break;
+                if (name) {
+                    break;
+                }
             }
         }
     }

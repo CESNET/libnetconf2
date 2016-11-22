@@ -36,9 +36,12 @@ int nc_server_ch_add_client(const char *name, NC_TRANSPORT_IMPL ti);
  * @brief Drop any connections, stop connecting and remove a client.
  *
  * @param[in] name Client name. NULL matches all the clients.
+ * @param[in] ti Client transport protocol. NULL matches any protocol.
+ *               Redundant to set if \p name is set, client names are
+ *               unique disregarding their protocol.
  * @return 0 on success, -1 on not finding any match.
  */
-int nc_server_ch_del_client(const char *name);
+int nc_server_ch_del_client(const char *name, NC_TRANSPORT_IMPL ti);
 
 /**
  * @brief Add a new Call Home client endpoint.

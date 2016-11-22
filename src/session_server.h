@@ -287,9 +287,12 @@ int nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti);
  * @brief Stop listening on and remove an endpoint.
  *
  * @param[in] name Endpoint name. NULL matches all endpoints.
+ * @param[in] ti Endpoint transport protocol. NULL matches any protocol.
+ *               Redundant to set if \p name is set, endpoint names are
+ *               unique disregarding their protocol.
  * @return 0 on success, -1 on not finding any match.
  */
-int nc_server_del_endpt(const char *name);
+int nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti);
 
 /**
  * @brief Change endpoint listening address.

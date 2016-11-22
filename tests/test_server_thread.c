@@ -103,7 +103,7 @@ del_endpt_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_del_endpt("secondary");
+    ret = nc_server_del_endpt("secondary", 0);
     nc_assert(!ret);
 
     return NULL;
