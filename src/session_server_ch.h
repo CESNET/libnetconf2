@@ -383,6 +383,23 @@ int nc_server_tls_ch_client_add_ctn(const char *client_name, uint32_t id, const 
 int nc_server_tls_ch_client_del_ctn(const char *client_name, int64_t id, const char *fingerprint,
                                     NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
+/**
+ * @brief Get a Call Home cert-to-name entry.
+ *
+ * If a parameter is NULL, it is ignored. If its dereferenced value is NULL,
+ * it is filled and returned. If the value is set, it is used as a filter.
+ * Returns first matching entry.
+ *
+ * @param[in] client_name Existing Call Home client name.
+ * @param[in,out] id Priority of the entry.
+ * @param[in,out] fingerprint Fingerprint fo the entry.
+ * @param[in,out] map_type Mapping type of the entry.
+ * @param[in,out] name Specific username for the entry.
+ * @return 0 on success, -1 on not finding any match.
+ */
+int nc_server_tls_ch_client_get_ctn(const char *client_name, uint32_t *id, const char **fingerprint,
+                                    NC_TLS_CTN_MAPTYPE *map_type, const char **name);
+
 #endif /* NC_ENABLED_TLS */
 
 #endif /* NC_SESSION_SERVER_CH_H_ */

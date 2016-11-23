@@ -564,6 +564,23 @@ int nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char 
 int nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *fingerprint,
                                 NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
+/**
+ * @brief Get a cert-to-name entry.
+ *
+ * If a parameter is NULL, it is ignored. If its dereferenced value is NULL,
+ * it is filled and returned. If the value is set, it is used as a filter.
+ * Returns first matching entry.
+ *
+ * @param[in] endpt_name Existing endpoint name.
+ * @param[in,out] id Priority of the entry.
+ * @param[in,out] fingerprint Fingerprint fo the entry.
+ * @param[in,out] map_type Mapping type of the entry.
+ * @param[in,out] name Specific username for the entry.
+ * @return 0 on success, -1 on not finding any match.
+ */
+int nc_server_tls_endpt_get_ctn(const char *endpt_name, uint32_t *id, const char **fingerprint,
+                                NC_TLS_CTN_MAPTYPE *map_type, const char **name);
+
 #endif /* NC_ENABLED_TLS */
 
 /**

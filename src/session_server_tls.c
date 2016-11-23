@@ -1634,6 +1634,98 @@ nc_server_tls_ch_client_del_ctn(const char *client_name, int64_t id, const char 
     return ret;
 }
 
+static int
+nc_server_tls_get_ctn(uint32_t *id, const char **fingerprint, NC_TLS_CTN_MAPTYPE *map_type, const char **name,
+                      struct nc_server_tls_opts *opts)
+{
+    struct nc_ctn *ctn;
+    int ret = -1;
+
+    for (ctn = opts->ctn; ctn; ctn = ctn->next) {
+        if (id && *id && (*id != ctn->id)) {
+            continue;
+        }
+        if (fingerprint && *fingerprint && strcmp(*fingerprint, ctn->fingerprint)) {
+            continue;
+        }
+        if (map_type && *map_type && (*map_type != ctn->map_type)) {
+            continue;
+        }
+        if (name && *name && strcmp(*name, ctn->name)) {
+            continue;
+        }
+
+        /* first match, good enough */
+        if (id && !(*id)) {
+            *id = ctn->id;
+        }
+        if (fingerprint && !(*fingerprint)) {
+            *fingerprint = strdup(ctn->fingerprint);
+        }
+        if (map_type && !(*map_type)) {
+            *map_type = ctn->map_type;
+        }
+        if (name && !(*name) && ctn->name) {
+            *name = strdup(ctn->name);
+        }
+
+        ret = 0;
+        break;
+    }
+
+    return ret;
+}
+
+API int
+nc_server_tls_endpt_get_ctn(const char *endpt_name, uint32_t *id, const char **fingerprint,
+                            NC_TLS_CTN_MAPTYPE *map_type, const char **name)
+{
+    int ret;
+    struct nc_endpt *endpt;
+
+    if (!endpt_name) {
+        ERRARG("endpt_name");
+        return -1;
+    }
+
+    /* LOCK */
+    endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL, NULL);
+    if (!endpt) {
+        return -1;
+    }
+    ret = nc_server_tls_get_ctn(id, fingerprint, map_type, name, endpt->opts.tls);
+    /* UNLOCK */
+    nc_server_endpt_unlock(endpt);
+
+    return ret;
+}
+
+API int
+nc_server_tls_ch_client_get_ctn(const char *client_name, uint32_t *id, const char **fingerprint,
+                                NC_TLS_CTN_MAPTYPE *map_type, const char **name)
+{
+    int ret;
+    struct nc_ch_client *client;
+
+    if (!client_name) {
+        ERRARG("client_name");
+        return -1;
+    }
+
+    /* LOCK */
+    client = nc_server_ch_client_lock(client_name, NC_TI_OPENSSL, NULL);
+    if (!client) {
+        return -1;
+    }
+
+    ret = nc_server_tls_get_ctn(id, fingerprint, map_type, name, client->opts.tls);
+
+    /* UNLOCK */
+    nc_server_ch_client_unlock(client);
+
+    return ret;
+}
+
 void
 nc_server_tls_clear_opts(struct nc_server_tls_opts *opts)
 {
