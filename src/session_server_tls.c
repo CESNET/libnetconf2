@@ -728,7 +728,7 @@ nc_server_tls_ch_client_set_cert(const char *client_name, const char *cert)
     struct nc_ch_client *client;
 
     if (!client_name) {
-        ERRARG("endpt_name");
+        ERRARG("client_name");
         return -1;
     }
 
@@ -804,7 +804,7 @@ nc_server_tls_ch_client_set_cert_path(const char *client_name, const char *cert_
     struct nc_ch_client *client;
 
     if (!client_name) {
-        ERRARG("endpt_name");
+        ERRARG("client_name");
         return -1;
     }
 
@@ -879,7 +879,7 @@ nc_server_tls_ch_client_set_key(const char *client_name, const char *privkey, in
     struct nc_ch_client *client;
 
     if (!client_name) {
-        ERRARG("endpt_name");
+        ERRARG("client_name");
         return -1;
     }
 
@@ -960,7 +960,7 @@ nc_server_tls_ch_client_set_key_path(const char *client_name, const char *privke
     struct nc_ch_client *client;
 
     if (!client_name) {
-        ERRARG("endpt_name");
+        ERRARG("client_name");
         return -1;
     }
 
@@ -1037,7 +1037,7 @@ nc_server_tls_ch_client_add_trusted_cert(const char *client_name, const char *ce
     struct nc_ch_client *client;
 
     if (!client_name) {
-        ERRARG("endpt_name");
+        ERRARG("client_name");
         return -1;
     }
 
@@ -1115,7 +1115,7 @@ nc_server_tls_ch_client_add_trusted_cert_path(const char *client_name, const cha
     struct nc_ch_client *client;
 
     if (!client_name) {
-        ERRARG("endpt_name");
+        ERRARG("client_name");
         return -1;
     }
 
@@ -1197,7 +1197,7 @@ nc_server_tls_ch_client_del_trusted_cert(const char *client_name, const char *ce
     struct nc_ch_client *client;
 
     if (!client_name) {
-        ERRARG("endpt_name");
+        ERRARG("client_name");
         return -1;
     }
 
@@ -1270,7 +1270,7 @@ nc_server_tls_ch_client_set_trusted_ca_paths(const char *client_name, const char
     struct nc_ch_client *client;
 
     if (!client_name) {
-        ERRARG("endpt_name");
+        ERRARG("client_name");
         return -1;
     }
 
@@ -1364,7 +1364,7 @@ nc_server_tls_ch_client_set_crl_paths(const char *client_name, const char *crl_f
     struct nc_ch_client *client;
 
     if (!client_name) {
-        ERRARG("endpt_name");
+        ERRARG("client_name");
         return -1;
     }
 
@@ -1419,7 +1419,7 @@ nc_server_tls_ch_client_clear_crls(const char *client_name)
     struct nc_ch_client *client;
 
     if (!client_name) {
-        ERRARG("endpt_name");
+        ERRARG("client_name");
         return;
     }
 
@@ -1514,7 +1514,7 @@ nc_server_tls_ch_client_add_ctn(const char *client_name, uint32_t id, const char
     struct nc_ch_client *client;
 
     if (!client_name) {
-        ERRARG("endpt_name");
+        ERRARG("client_name");
         return -1;
     }
 
@@ -1616,7 +1616,7 @@ nc_server_tls_ch_client_del_ctn(const char *client_name, int64_t id, const char 
     struct nc_ch_client *client;
 
     if (!client_name) {
-        ERRARG("endpt_name");
+        ERRARG("client_name");
         return -1;
     }
 
