@@ -539,7 +539,7 @@ int nc_server_tls_endpt_set_crl_paths(const char *endpt_name, const char *crl_fi
 void nc_server_tls_endpt_clear_crls(const char *endpt_name);
 
 /**
- * @brief Add a Cert-to-name entry.
+ * @brief Add a cert-to-name entry.
  *
  * @param[in] endpt_name Existing endpoint name.
  * @param[in] id Priority of the entry.
@@ -552,7 +552,7 @@ int nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char 
                                 NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
 /**
- * @brief Remove a Cert-to-name entry.
+ * @brief Remove a cert-to-name entry.
  *
  * @param[in] endpt_name Existing endpoint name.
  * @param[in] id Priority of the entry. -1 matches all the priorities.

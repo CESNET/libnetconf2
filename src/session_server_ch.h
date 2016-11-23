@@ -358,7 +358,7 @@ int nc_server_tls_ch_client_set_crl_paths(const char *client_name, const char *c
 void nc_server_tls_ch_client_clear_crls(const char *client_name);
 
 /**
- * @brief Add a Call Home Cert-to-name entry.
+ * @brief Add a Call Home cert-to-name entry.
  *
  * @param[in] client_name Existing Call Home client name.
  * @param[in] id Priority of the entry.
@@ -371,7 +371,7 @@ int nc_server_tls_ch_client_add_ctn(const char *client_name, uint32_t id, const 
                                     NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
 /**
- * @brief Remove a Call Home Cert-to-name entry.
+ * @brief Remove a Call Home cert-to-name entry.
  *
  * @param[in] client_name Existing Call Home client name.
  * @param[in] id Priority of the entry. -1 matches all the priorities.
