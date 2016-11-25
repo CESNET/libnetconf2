@@ -578,8 +578,8 @@ int nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *
  * @param[in,out] name Specific username for the entry.
  * @return 0 on success, -1 on not finding any match.
  */
-int nc_server_tls_endpt_get_ctn(const char *endpt_name, uint32_t *id, const char **fingerprint,
-                                NC_TLS_CTN_MAPTYPE *map_type, const char **name);
+int nc_server_tls_endpt_get_ctn(const char *endpt_name, uint32_t *id, char **fingerprint, NC_TLS_CTN_MAPTYPE *map_type,
+                                char **name);
 
 #endif /* NC_ENABLED_TLS */
 

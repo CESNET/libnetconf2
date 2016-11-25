@@ -1635,7 +1635,7 @@ nc_server_tls_ch_client_del_ctn(const char *client_name, int64_t id, const char 
 }
 
 static int
-nc_server_tls_get_ctn(uint32_t *id, const char **fingerprint, NC_TLS_CTN_MAPTYPE *map_type, const char **name,
+nc_server_tls_get_ctn(uint32_t *id, char **fingerprint, NC_TLS_CTN_MAPTYPE *map_type, char **name,
                       struct nc_server_tls_opts *opts)
 {
     struct nc_ctn *ctn;
@@ -1677,8 +1677,8 @@ nc_server_tls_get_ctn(uint32_t *id, const char **fingerprint, NC_TLS_CTN_MAPTYPE
 }
 
 API int
-nc_server_tls_endpt_get_ctn(const char *endpt_name, uint32_t *id, const char **fingerprint,
-                            NC_TLS_CTN_MAPTYPE *map_type, const char **name)
+nc_server_tls_endpt_get_ctn(const char *endpt_name, uint32_t *id, char **fingerprint, NC_TLS_CTN_MAPTYPE *map_type,
+                            char **name)
 {
     int ret;
     struct nc_endpt *endpt;
@@ -1701,8 +1701,8 @@ nc_server_tls_endpt_get_ctn(const char *endpt_name, uint32_t *id, const char **f
 }
 
 API int
-nc_server_tls_ch_client_get_ctn(const char *client_name, uint32_t *id, const char **fingerprint,
-                                NC_TLS_CTN_MAPTYPE *map_type, const char **name)
+nc_server_tls_ch_client_get_ctn(const char *client_name, uint32_t *id, char **fingerprint, NC_TLS_CTN_MAPTYPE *map_type,
+                                char **name)
 {
     int ret;
     struct nc_ch_client *client;
