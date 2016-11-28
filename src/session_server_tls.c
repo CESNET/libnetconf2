@@ -658,6 +658,13 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     }
 
     VRB("Cert verify CTN: new client username recognized as \"%s\".", session->username);
+
+    if (server_opts.user_verify_clb && !server_opts.user_verify_clb(session)) {
+        VRB("Cert verify: user verify callback revoked authorization.");
+        X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_APPLICATION_VERIFICATION);
+        return 0;
+    }
+
     return 1;
 
 fail:
@@ -1724,6 +1731,12 @@ nc_server_tls_ch_client_get_ctn(const char *client_name, uint32_t *id, char **fi
     nc_server_ch_client_unlock(client);
 
     return ret;
+}
+
+API void
+nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *session))
+{
+    server_opts.user_verify_clb = verify_clb;
 }
 
 void

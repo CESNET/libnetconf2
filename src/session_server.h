@@ -581,6 +581,17 @@ int nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *
 int nc_server_tls_endpt_get_ctn(const char *endpt_name, uint32_t *id, char **fingerprint, NC_TLS_CTN_MAPTYPE *map_type,
                                 char **name);
 
+/**
+ * @brief Set TLS authentication additional verify callback.
+ *
+ * Server will always perform cert-to-name based on its configuration. Only after it passes
+ * and this callback is set, it is also called. It should return exactly what OpenSSL
+ * verify callback meaning 1 for success, 0 to deny the user.
+ *
+ * @param[in] verify_clb Additional user verify callback.
+ */
+void nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *session));
+
 #endif /* NC_ENABLED_TLS */
 
 /**

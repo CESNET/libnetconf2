@@ -152,6 +152,9 @@ struct nc_server_opts {
     /* ACCESS unlocked */
     uint16_t hello_timeout;
     uint16_t idle_timeout;
+#ifdef NC_ENABLED_TLS
+    int (*user_verify_clb)(const struct nc_session *session);
+#endif
 
     /* ACCESS locked, add/remove binds/endpts - WRITE lock endpt_array_lock
      *                modify binds/endpts - READ lock endpt_array_lock + endpt_lock */
