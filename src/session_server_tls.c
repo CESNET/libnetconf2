@@ -1733,6 +1733,17 @@ nc_server_tls_ch_client_get_ctn(const char *client_name, uint32_t *id, char **fi
     return ret;
 }
 
+API const X509 *
+nc_session_get_client_cert(const struct nc_session *session)
+{
+    if (!session || (session->side != NC_SERVER)) {
+        ERRARG("session");
+        return NULL;
+    }
+
+    return session->opts.server.client_cert;
+}
+
 API void
 nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *session))
 {

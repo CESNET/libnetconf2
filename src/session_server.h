@@ -18,6 +18,10 @@
 #include <stdint.h>
 #include <libyang/libyang.h>
 
+#ifdef NC_ENABLED_TLS
+#   include <openssl/x509.h>
+#endif
+
 #include "session.h"
 #include "netconf.h"
 
@@ -580,6 +584,14 @@ int nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *
  */
 int nc_server_tls_endpt_get_ctn(const char *endpt_name, uint32_t *id, char **fingerprint, NC_TLS_CTN_MAPTYPE *map_type,
                                 char **name);
+
+/**
+ * @brief Get client certificate.
+ *
+ * @param[in] session Session to get the information from.
+ * @return Const session client certificate.
+ */
+const X509 *nc_session_get_client_cert(const struct nc_session *session);
 
 /**
  * @brief Set TLS authentication additional verify callback.
