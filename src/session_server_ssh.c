@@ -352,7 +352,25 @@ nc_server_ssh_ch_client_set_auth_timeout(const char *client_name, uint16_t auth_
 }
 
 static int
-nc_server_ssh_add_authkey(const char *pubkey_path, const char *username, struct nc_server_ssh_opts *opts)
+_nc_server_ssh_add_authkey(const char *pubkey_path, const char *pubkey_base64, NC_SSH_KEY_TYPE type,
+                          const char *username)
+{
+    ++server_opts.authkey_count;
+    server_opts.authkeys = nc_realloc(server_opts.authkeys, server_opts.authkey_count * sizeof *server_opts.authkeys);
+    if (!server_opts.authkeys) {
+        ERRMEM;
+        return -1;
+    }
+    server_opts.authkeys[server_opts.authkey_count - 1].path = lydict_insert(server_opts.ctx, pubkey_path, 0);
+    server_opts.authkeys[server_opts.authkey_count - 1].base64 = lydict_insert(server_opts.ctx, pubkey_base64, 0);
+    server_opts.authkeys[server_opts.authkey_count - 1].type = type;
+    server_opts.authkeys[server_opts.authkey_count - 1].username = lydict_insert(server_opts.ctx, username, 0);
+
+    return 0;
+}
+
+API int
+nc_server_ssh_add_authkey_path(const char *pubkey_path, const char *username)
 {
     if (!pubkey_path) {
         ERRARG("pubkey_path");
@@ -362,83 +380,64 @@ nc_server_ssh_add_authkey(const char *pubkey_path, const char *username, struct 
         return -1;
     }
 
-    ++opts->authkey_count;
-    opts->authkeys = nc_realloc(opts->authkeys, opts->authkey_count * sizeof *opts->authkeys);
-    if (!opts->authkeys) {
-        ERRMEM;
-        return -1;
-    }
-    opts->authkeys[opts->authkey_count - 1].path = lydict_insert(server_opts.ctx, pubkey_path, 0);
-    opts->authkeys[opts->authkey_count - 1].username = lydict_insert(server_opts.ctx, username, 0);
-
-    return 0;
+    return _nc_server_ssh_add_authkey(pubkey_path, NULL, 0, username);
 }
 
 API int
-nc_server_ssh_endpt_add_authkey(const char *endpt_name, const char *pubkey_path, const char *username)
+nc_server_ssh_add_authkey(const char *pubkey_base64, NC_SSH_KEY_TYPE type, const char *username)
 {
-    int ret;
-    struct nc_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH, NULL);
-    if (!endpt) {
+    if (!pubkey_base64) {
+        ERRARG("pubkey_base64");
+        return -1;
+    } else if (!type) {
+        ERRARG("type");
+        return -1;
+    } else if (!username) {
+        ERRARG("username");
         return -1;
     }
-    ret = nc_server_ssh_add_authkey(pubkey_path, username, endpt->opts.ssh);
-    /* UNLOCK */
-    nc_server_endpt_unlock(endpt);
 
-    return ret;
+    return _nc_server_ssh_add_authkey(NULL, pubkey_base64, type, username);
 }
 
 API int
-nc_server_ssh_ch_client_add_authkey(const char *client_name, const char *pubkey_path, const char *username)
-{
-    int ret;
-    struct nc_ch_client *client;
-
-    /* LOCK */
-    client = nc_server_ch_client_lock(client_name, NC_TI_LIBSSH, NULL);
-    if (!client) {
-        return -1;
-    }
-    ret = nc_server_ssh_add_authkey(pubkey_path, username, client->opts.ssh);
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return ret;
-}
-
-static int
-nc_server_ssh_del_authkey(const char *pubkey_path, const char *username, struct nc_server_ssh_opts *opts)
+nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64, NC_SSH_KEY_TYPE type,
+                          const char *username)
 {
     uint32_t i;
     int ret = -1;
 
-    if (!pubkey_path && !username) {
-        for (i = 0; i < opts->authkey_count; ++i) {
-            lydict_remove(server_opts.ctx, opts->authkeys[i].path);
-            lydict_remove(server_opts.ctx, opts->authkeys[i].username);
+    /* LOCK */
+    pthread_mutex_lock(&server_opts.authkey_lock);
+
+    if (!pubkey_path && !pubkey_base64 && !type && !username) {
+        for (i = 0; i < server_opts.authkey_count; ++i) {
+            lydict_remove(server_opts.ctx, server_opts.authkeys[i].path);
+            lydict_remove(server_opts.ctx, server_opts.authkeys[i].base64);
+            lydict_remove(server_opts.ctx, server_opts.authkeys[i].username);
 
             ret = 0;
         }
-        free(opts->authkeys);
-        opts->authkeys = NULL;
-        opts->authkey_count = 0;
+        free(server_opts.authkeys);
+        server_opts.authkeys = NULL;
+        server_opts.authkey_count = 0;
     } else {
-        for (i = 0; i < opts->authkey_count; ++i) {
-            if ((!pubkey_path || !strcmp(opts->authkeys[i].path, pubkey_path))
-                    && (!username || !strcmp(opts->authkeys[i].username, username))) {
-                lydict_remove(server_opts.ctx, opts->authkeys[i].path);
-                lydict_remove(server_opts.ctx, opts->authkeys[i].username);
+        for (i = 0; i < server_opts.authkey_count; ++i) {
+            if ((!pubkey_path || !strcmp(server_opts.authkeys[i].path, pubkey_path))
+                    && (!pubkey_base64 || strcmp(server_opts.authkeys[i].base64, pubkey_base64))
+                    && (!type || (server_opts.authkeys[i].type == type))
+                    && (!username || !strcmp(server_opts.authkeys[i].username, username))) {
+                lydict_remove(server_opts.ctx, server_opts.authkeys[i].path);
+                lydict_remove(server_opts.ctx, server_opts.authkeys[i].base64);
+                lydict_remove(server_opts.ctx, server_opts.authkeys[i].username);
 
-                --opts->authkey_count;
-                if (i < opts->authkey_count) {
-                    memcpy(&opts->authkeys[i], &opts->authkeys[opts->authkey_count], sizeof *opts->authkeys);
-                } else if (!opts->authkey_count) {
-                    free(opts->authkeys);
-                    opts->authkeys = NULL;
+                --server_opts.authkey_count;
+                if (i < server_opts.authkey_count) {
+                    memcpy(&server_opts.authkeys[i], &server_opts.authkeys[server_opts.authkey_count],
+                           sizeof *server_opts.authkeys);
+                } else if (!server_opts.authkey_count) {
+                    free(server_opts.authkeys);
+                    server_opts.authkeys = NULL;
                 }
 
                 ret = 0;
@@ -446,41 +445,8 @@ nc_server_ssh_del_authkey(const char *pubkey_path, const char *username, struct 
         }
     }
 
-    return ret;
-}
-
-API int
-nc_server_ssh_endpt_del_authkey(const char *endpt_name, const char *pubkey_path, const char *username)
-{
-    int ret;
-    struct nc_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH, NULL);
-    if (!endpt) {
-        return -1;
-    }
-    ret = nc_server_ssh_del_authkey(pubkey_path, username, endpt->opts.ssh);
     /* UNLOCK */
-    nc_server_endpt_unlock(endpt);
-
-    return ret;
-}
-
-API int
-nc_server_ssh_ch_client_del_authkey(const char *client_name, const char *pubkey_path, const char *username)
-{
-    int ret;
-    struct nc_ch_client *client;
-
-    /* LOCK */
-    client = nc_server_ch_client_lock(client_name, NC_TI_LIBSSH, NULL);
-    if (!client) {
-        return -1;
-    }
-    ret = nc_server_ssh_del_authkey(pubkey_path, username, client->opts.ssh);
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
+    pthread_mutex_unlock(&server_opts.authkey_lock);
 
     return ret;
 }
@@ -493,7 +459,6 @@ nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts)
         lydict_remove(server_opts.ctx, opts->banner);
         opts->banner = NULL;
     }
-    nc_server_ssh_del_authkey(NULL, NULL, opts);
 }
 
 static char *
@@ -615,20 +580,34 @@ nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
 }
 
 static const char *
-auth_pubkey_compare_key(struct nc_server_ssh_opts *opts, ssh_key key)
+auth_pubkey_compare_key(ssh_key key)
 {
     uint32_t i;
     ssh_key pub_key;
     const char *username = NULL;
     int ret;
 
-    for (i = 0; i < opts->authkey_count; ++i) {
-        ret = ssh_pki_import_pubkey_file(opts->authkeys[i].path, &pub_key);
+    for (i = 0; i < server_opts.authkey_count; ++i) {
+        switch (server_opts.authkeys[i].type) {
+        case NC_SSH_KEY_UNKNOWN:
+            ret = ssh_pki_import_pubkey_file(server_opts.authkeys[i].path, &pub_key);
+            break;
+        case NC_SSH_KEY_DSA:
+            ret = ssh_pki_import_pubkey_base64(server_opts.authkeys[i].base64, SSH_KEYTYPE_DSS, &pub_key);
+            break;
+        case NC_SSH_KEY_RSA:
+            ret = ssh_pki_import_pubkey_base64(server_opts.authkeys[i].base64, SSH_KEYTYPE_RSA, &pub_key);
+            break;
+        case NC_SSH_KEY_ECDSA:
+            ret = ssh_pki_import_pubkey_base64(server_opts.authkeys[i].base64, SSH_KEYTYPE_ECDSA, &pub_key);
+            break;
+        }
+
         if (ret == SSH_EOF) {
-            WRN("Failed to import the public key \"%s\" (File access problem).", opts->authkeys[i].path);
+            WRN("Failed to import a public key of \"%s\" (File access problem).", server_opts.authkeys[i].username);
             continue;
         } else if (ret == SSH_ERROR) {
-            WRN("Failed to import the public key \"%s\" (SSH error).", opts->authkeys[i].path);
+            WRN("Failed to import a public key of \"%s\" (SSH error).", server_opts.authkeys[i].username);
             continue;
         }
 
@@ -640,8 +619,8 @@ auth_pubkey_compare_key(struct nc_server_ssh_opts *opts, ssh_key key)
         ssh_key_free(pub_key);
     }
 
-    if (i < opts->authkey_count) {
-        username = opts->authkeys[i].username;
+    if (i < server_opts.authkey_count) {
+        username = server_opts.authkeys[i].username;
     }
 
     return username;
@@ -653,7 +632,7 @@ nc_sshcb_auth_pubkey(struct nc_session *session, ssh_message msg)
     const char *username;
     int signature_state;
 
-    if ((username = auth_pubkey_compare_key(session->data, ssh_message_auth_pubkey(msg))) == NULL) {
+    if ((username = auth_pubkey_compare_key(ssh_message_auth_pubkey(msg))) == NULL) {
         VRB("User \"%s\" tried to use an unknown (unauthorized) public key.", session->username);
         goto fail;
     } else if (strcmp(session->username, username)) {

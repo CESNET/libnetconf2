@@ -359,6 +359,39 @@ NC_MSG_TYPE nc_session_accept_ssh_channel(struct nc_session *orig_session, struc
 NC_MSG_TYPE nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session);
 
 /**
+ * @brief Add an authorized client SSH public key. This public key can be used for
+ *        publickey authentication (for any SSH connection, even Call Home) afterwards.
+ *
+ * @param[in] pubkey_base64 Authorized public key binary content encoded in base64.
+ * @param[in] type Authorized public key SSH type.
+ * @param[in] username Username that the client with the public key must use.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_ssh_add_authkey(const char *pubkey_base64, NC_SSH_KEY_TYPE type, const char *username);
+
+/**
+ * @brief Add an authorized client SSH public key. This public key can be used for
+ *        publickey authentication (for any SSH connection, even Call Home) afterwards.
+ *
+ * @param[in] pubkey_path Path to the public key.
+ * @param[in] username Username that the client with the public key must use.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_ssh_add_authkey_path(const char *pubkey_path, const char *username);
+
+/**
+ * @brief Remove an authorized client SSH public key.
+ *
+ * @param[in] pubkey_path Path to an authorized public key. NULL matches all the keys.
+ * @param[in] pubkey_base64 Authorized public key content. NULL matches any key.
+ * @param[in] type Authorized public key type. 0 matches all types.
+ * @param[in] username Username for an authorized public key. NULL matches all the usernames.
+ * @return 0 on success, -1 on not finding any match.
+ */
+int nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64, NC_SSH_KEY_TYPE type,
+                              const char *username);
+
+/**
  * @brief Add endpoint SSH host keys the server will identify itself with. Any RSA, DSA, and
  *        ECDSA keys can be added. However, a maximum of one key of each type will be used
  *        during SSH authentication, later keys replacing the earlier ones.
@@ -414,27 +447,6 @@ int nc_server_ssh_endpt_set_auth_attempts(const char *endpt_name, uint16_t auth_
  * @return 0 on success, -1 on error.
  */
 int nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_timeout);
-
-/**
- * @brief Add an endpoint authorized client SSH public key. This public key can be used for
- *        publickey authentication afterwards.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] pubkey_path Path to the public key.
- * @param[in] username Username that the client with the public key must use.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_endpt_add_authkey(const char *endpt_name, const char *pubkey_path, const char *username);
-
-/**
- * @brief Remove an endpoint authorized client SSH public key.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] pubkey_path Path to an authorized public key. NULL matches all the keys.
- * @param[in] username Username for an authorized public key. NULL matches all the usernames.
- * @return 0 on success, -1 on not finding any match.
- */
-int nc_server_ssh_endpt_del_authkey(const char *endpt_name, const char *pubkey_path, const char *username);
 
 #endif /* NC_ENABLED_SSH */
 

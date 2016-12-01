@@ -88,6 +88,16 @@ typedef enum {
 } NC_CH_START_WITH;
 
 /**
+ * @brief Enumeration of SSH key types.
+ */
+typedef enum {
+    NC_SSH_KEY_UNKNOWN = 0,
+    NC_SSH_KEY_DSA,
+    NC_SSH_KEY_RSA,
+    NC_SSH_KEY_ECDSA
+} NC_SSH_KEY_TYPE;
+
+/**
  * @brief NETCONF session object
  */
 struct nc_session;

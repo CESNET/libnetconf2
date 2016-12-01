@@ -187,7 +187,7 @@ ssh_endpt_add_authkey_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_endpt_add_authkey("main_ssh", TESTS_DIR"/data/key_rsa.pub", "test3");
+    ret = nc_server_ssh_add_authkey_path(TESTS_DIR"/data/key_rsa.pub", "test3");
     nc_assert(!ret);
 
     return NULL;
@@ -201,7 +201,7 @@ ssh_endpt_del_authkey_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_endpt_del_authkey("main_ssh", TESTS_DIR"/data/key_ecdsa.pub", "test2");
+    ret = nc_server_ssh_del_authkey(TESTS_DIR"/data/key_ecdsa.pub", NULL, 0, "test2");
     nc_assert(!ret);
 
     return NULL;
@@ -646,7 +646,7 @@ main(void)
     nc_assert(!ret);
     ret = nc_server_endpt_set_port("main_ssh", 6001);
     nc_assert(!ret);
-    ret = nc_server_ssh_endpt_add_authkey("main_ssh", TESTS_DIR"/data/key_dsa.pub", "test");
+    ret = nc_server_ssh_add_authkey_path(TESTS_DIR"/data/key_dsa.pub", "test");
     nc_assert(!ret);
     ret = nc_server_ssh_endpt_add_hostkey("main_ssh", TESTS_DIR"/data/key_rsa");
     nc_assert(!ret);
@@ -657,7 +657,7 @@ main(void)
     ++clients;
 
     /* for ssh_endpt_del_authkey */
-    ret = nc_server_ssh_endpt_add_authkey("main_ssh", TESTS_DIR"/data/key_ecdsa.pub", "test2");
+    ret = nc_server_ssh_add_authkey_path(TESTS_DIR"/data/key_ecdsa.pub", "test2");
     nc_assert(!ret);
 
     ret = nc_server_add_endpt("secondary", NC_TI_LIBSSH);

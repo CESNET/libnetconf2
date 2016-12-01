@@ -457,6 +457,9 @@ nc_server_destroy(void)
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
     nc_server_del_endpt(NULL, 0);
 #endif
+#ifdef NC_ENABLED_SSH
+    nc_server_ssh_del_authkey(NULL, NULL, 0, NULL);
+#endif
     nc_destroy();
 }
 

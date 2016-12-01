@@ -69,12 +69,6 @@ struct nc_server_ssh_opts {
     uint8_t hostkey_count;
     const char *banner;
 
-    struct {
-        const char *path;
-        const char *username;
-    } *authkeys;
-    uint16_t authkey_count;
-
     int auth_methods;
     uint16_t auth_attempts;
     uint16_t auth_timeout;
@@ -154,6 +148,18 @@ struct nc_server_opts {
     uint16_t idle_timeout;
 #ifdef NC_ENABLED_TLS
     int (*user_verify_clb)(const struct nc_session *session);
+#endif
+
+#ifdef NC_ENABLED_SSH
+    /* ACCESS locked with authkey_lock */
+    struct {
+        const char *path;
+        const char *base64;
+        NC_SSH_KEY_TYPE type;
+        const char *username;
+    } *authkeys;
+    uint16_t authkey_count;
+    pthread_mutex_t authkey_lock;
 #endif
 
     /* ACCESS locked, add/remove binds/endpts - WRITE lock endpt_array_lock

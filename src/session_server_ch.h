@@ -229,27 +229,6 @@ int nc_server_ssh_ch_client_set_auth_attempts(const char *client_name, uint16_t 
  */
 int nc_server_ssh_ch_client_set_auth_timeout(const char *client_name, uint16_t auth_timeout);
 
-/**
- * @brief Add an authorized Call Home client SSH public key. This public key can be used for
- *        publickey authentication afterwards.
- *
- * @param[in] client_name Existing Call Home client name.
- * @param[in] pubkey_path Path to the public key.
- * @param[in] username Username that the client with the public key must use.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_ch_client_add_authkey(const char *client_name, const char *pubkey_path, const char *username);
-
-/**
- * @brief Remove an authorized Call Home client SSH public key.
- *
- * @param[in] client_name Existing Call Home client name.
- * @param[in] pubkey_path Path to an authorized public key. NULL matches all the keys.
- * @param[in] username Username for an authorized public key. NULL matches all the usernames.
- * @return 0 on success, -1 on not finding any match.
- */
-int nc_server_ssh_ch_client_del_authkey(const char *client_name, const char *pubkey_path, const char *username);
-
 #endif /* NC_ENABLED_SSH */
 
 #ifdef NC_ENABLED_TLS
