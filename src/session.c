@@ -150,6 +150,17 @@ nc_session_get_status(const struct nc_session *session)
     return session->status;
 }
 
+API NC_SESSION_TERM_REASON
+nc_session_get_termreason(const struct nc_session *session)
+{
+    if (!session) {
+        ERRARG("session");
+        return 0;
+    }
+
+    return session->term_reason;
+}
+
 API uint32_t
 nc_session_get_id(const struct nc_session *session)
 {

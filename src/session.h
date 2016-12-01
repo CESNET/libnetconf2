@@ -15,6 +15,8 @@
 #ifndef NC_SESSION_H_
 #define NC_SESSION_H_
 
+#include "netconf.h"
+
 #ifdef NC_ENABLED_SSH
 
 /**
@@ -109,6 +111,14 @@ struct nc_session;
  * @return Session status.
  */
 NC_STATUS nc_session_get_status(const struct nc_session *session);
+
+/**
+ * @brief Get session termination reason.
+ *
+ * @param[in] session Session to get the information from.
+ * @return Session termination reason enum value.
+ */
+NC_SESSION_TERM_REASON nc_session_get_termreason(const struct nc_session *session);
 
 /**
  * @brief Get session ID.
