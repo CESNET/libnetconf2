@@ -452,6 +452,12 @@ nc_server_init(struct ly_ctx *ctx)
 API void
 nc_server_destroy(void)
 {
+    unsigned int i;
+
+    for (i = 0; i < server_opts.capabilities_count; i++) {
+        lydict_remove(server_opts.ctx, server_opts.capabilities[i]);
+    }
+    free(server_opts.capabilities);
     pthread_spin_destroy(&server_opts.sid_lock);
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
@@ -495,20 +501,26 @@ nc_server_get_capab_withdefaults(NC_WD_MODE *basic_mode, int *also_supported)
     }
 }
 
-API void
-nc_server_set_capab_interleave(int interleave_support)
-{
-    if (interleave_support) {
-        server_opts.interleave_capab = 1;
-    } else {
-        server_opts.interleave_capab = 0;
-    }
-}
-
 API int
-nc_server_get_capab_interleave(void)
+nc_server_set_capability(const char *value)
 {
-    return server_opts.interleave_capab;
+    const char **new;
+
+    if (!value || !value[0]) {
+        ERRARG("value must not be empty");
+        return EXIT_FAILURE;
+    }
+
+    server_opts.capabilities_count++;
+    new = realloc(server_opts.capabilities, server_opts.capabilities_count * sizeof *server_opts.capabilities);
+    if (!new) {
+        ERRMEM;
+        return EXIT_FAILURE;
+    }
+    server_opts.capabilities = new;
+    server_opts.capabilities[server_opts.capabilities_count - 1] = lydict_insert(server_opts.ctx, value, 0);
+
+    return EXIT_SUCCESS;
 }
 
 API void

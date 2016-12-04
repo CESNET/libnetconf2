@@ -109,24 +109,16 @@ int nc_server_set_capab_withdefaults(NC_WD_MODE basic_mode, int also_supported);
 void nc_server_get_capab_withdefaults(NC_WD_MODE *basic_mode, int *also_supported);
 
 /**
- * @brief Set the interleave capability.
+ * @brief Set capability of the server.
  *
- * For the capability to be actually advertised, the server context must also
- * include the nc-notifications model.
+ * Capability can be used when some behavior or extension of the server is not defined
+ * as a YANG module. The provided value will be advertised in the server's \<hello\>
+ * messages. Note, that libnetconf only checks that the provided value is non-empty
+ * string.
  *
- * Changing this option has the same ill effects as changing capabilities while
- * sessions are already established.
- *
- * @param[in] interleave_support 1 to suport interleave, 0 to not.
+ * @param[in] value Capability string to be advertised in server\s \<hello\> messages.
  */
-void nc_server_set_capab_interleave(int interleave_support);
-
-/**
- * @brief Get the interleave capability state.
- *
- * @return 1 for supported, 0 for not supported.
- */
-int nc_server_get_capab_interleave(void);
+int nc_server_set_capability(const char *value);
 
 /**
  * @brief Set server timeout for receiving a hello message.

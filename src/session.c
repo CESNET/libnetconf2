@@ -534,6 +534,27 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 static void
 add_cpblt(struct ly_ctx *ctx, const char *capab, const char ***cpblts, int *size, int *count)
 {
+    size_t len;
+    int i;
+    char *p;
+
+    if (capab) {
+        /*  check if already present */
+        p = strchr(capab, '?');
+        if (p) {
+            len = p - capab;
+        } else {
+            len = strlen(capab);
+        }
+        for (i = 0; i < *count; i++) {
+            if (!strncmp((*cpblts)[i], capab, len)) {
+                /* already present, do not duplicate it */
+                return;
+            }
+        }
+    }
+
+    /* add another capability */
     if (*count == *size) {
         *size += 5;
         *cpblts = nc_realloc(*cpblts, *size * sizeof **cpblts);
@@ -559,6 +580,7 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
     const char **cpblts;
     const struct lys_module *mod;
     int size = 10, count, feat_count = 0, dev_count = 0, i, str_len;
+    unsigned int u;
 #define NC_CPBLT_BUF_LEN 512
     char str[NC_CPBLT_BUF_LEN];
 
@@ -654,12 +676,9 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
         }
     }
 
-    mod = ly_ctx_get_module(ctx, "nc-notifications", NULL);
-    if (mod) {
-        add_cpblt(ctx, "urn:ietf:params:netconf:capability:notification:1.0", &cpblts, &size, &count);
-        if (server_opts.interleave_capab) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:capability:interleave:1.0", &cpblts, &size, &count);
-        }
+    /* other capabilities */
+    for (u = 0; u < server_opts.capabilities_count; u++) {
+        add_cpblt(ctx, server_opts.capabilities[u], &cpblts, &size, &count);
     }
 
     /* models */

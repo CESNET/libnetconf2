@@ -141,7 +141,8 @@ struct nc_server_opts {
     /* ACCESS unlocked */
     NC_WD_MODE wd_basic_mode;
     int wd_also_supported;
-    int interleave_capab;
+    unsigned int capabilities_count;
+    const char **capabilities;
 
     /* ACCESS unlocked */
     uint16_t hello_timeout;
