@@ -378,9 +378,9 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
     }
 
     /* check format */
-    if (!format || !strcmp(format, "yang")) {
+    if (!format || !strcmp(format, "ietf-netconf-monitoring:yang")) {
         lys_print_mem(&model_data, module, LYS_OUT_YANG, NULL);
-    } else if (!strcmp(format, "yin")) {
+    } else if (!strcmp(format, "ietf-netconf-monitoring:yin")) {
         lys_print_mem(&model_data, module, LYS_OUT_YIN, NULL);
     } else {
         err = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
