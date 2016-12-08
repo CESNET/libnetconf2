@@ -800,7 +800,8 @@ nc_write_xmlclb(void *arg, const void *buf, size_t count)
 }
 
 static void
-nc_write_error_elem(struct wclb_arg *arg, const char *name, uint16_t nam_len, const char *prefix, uint16_t pref_len, int open)
+nc_write_error_elem(struct wclb_arg *arg, const char *name, uint16_t nam_len, const char *prefix, uint16_t pref_len,
+                    int open, int no_attr)
 {
     if (open) {
         nc_write_clb((void *)arg, "<", 1, 0);
@@ -814,7 +815,9 @@ nc_write_error_elem(struct wclb_arg *arg, const char *name, uint16_t nam_len, co
     }
 
     nc_write_clb((void *)arg, name, nam_len, 0);
-    nc_write_clb((void *)arg, ">", 1, 0);
+    if (!open || !no_attr) {
+        nc_write_clb((void *)arg, ">", 1, 0);
+    }
 }
 
 static void
@@ -827,9 +830,9 @@ nc_write_error(struct wclb_arg *arg, struct nc_server_error *err, const char *pr
         pref_len = strlen(prefix);
     }
 
-    nc_write_error_elem(arg, "rpc-error", 9, prefix, pref_len, 1);
+    nc_write_error_elem(arg, "rpc-error", 9, prefix, pref_len, 1, 0);
 
-    nc_write_error_elem(arg, "error-type", 10, prefix, pref_len, 1);
+    nc_write_error_elem(arg, "error-type", 10, prefix, pref_len, 1, 0);
     switch (err->type) {
     case NC_ERR_TYPE_TRAN:
         nc_write_clb((void *)arg, "transport", 9, 0);
@@ -848,9 +851,9 @@ nc_write_error(struct wclb_arg *arg, struct nc_server_error *err, const char *pr
         return;
     }
 
-    nc_write_error_elem(arg, "error-type", 10, prefix, pref_len, 0);
+    nc_write_error_elem(arg, "error-type", 10, prefix, pref_len, 0, 0);
 
-    nc_write_error_elem(arg, "error-tag", 9, prefix, pref_len, 1);
+    nc_write_error_elem(arg, "error-tag", 9, prefix, pref_len, 1, 0);
     switch (err->tag) {
     case NC_ERR_IN_USE:
         nc_write_clb((void *)arg, "in-use", 6, 0);
@@ -913,26 +916,26 @@ nc_write_error(struct wclb_arg *arg, struct nc_server_error *err, const char *pr
         ERRINT;
         return;
     }
-    nc_write_error_elem(arg, "error-tag", 9, prefix, pref_len, 0);
+    nc_write_error_elem(arg, "error-tag", 9, prefix, pref_len, 0, 0);
 
-    nc_write_error_elem(arg, "error-severity", 14, prefix, pref_len, 1);
+    nc_write_error_elem(arg, "error-severity", 14, prefix, pref_len, 1, 0);
     nc_write_clb((void *)arg, "error", 5, 0);
-    nc_write_error_elem(arg, "error-severity", 14, prefix, pref_len, 0);
+    nc_write_error_elem(arg, "error-severity", 14, prefix, pref_len, 0, 0);
 
     if (err->apptag) {
-        nc_write_error_elem(arg, "error-app-tag", 13, prefix, pref_len, 1);
+        nc_write_error_elem(arg, "error-app-tag", 13, prefix, pref_len, 1, 0);
         nc_write_clb((void *)arg, err->apptag, strlen(err->apptag), 1);
-        nc_write_error_elem(arg, "error-app-tag", 13, prefix, pref_len, 0);
+        nc_write_error_elem(arg, "error-app-tag", 13, prefix, pref_len, 0, 0);
     }
 
     if (err->path) {
-        nc_write_error_elem(arg, "error-path", 10, prefix, pref_len, 1);
+        nc_write_error_elem(arg, "error-path", 10, prefix, pref_len, 1, 0);
         nc_write_clb((void *)arg, err->path, strlen(err->path), 1);
-        nc_write_error_elem(arg, "error-path", 10, prefix, pref_len, 0);
+        nc_write_error_elem(arg, "error-path", 10, prefix, pref_len, 0, 0);
     }
 
     if (err->message) {
-        nc_write_error_elem(arg, "error-message", 13, prefix, pref_len, 1);
+        nc_write_error_elem(arg, "error-message", 13, prefix, pref_len, 1, 1);
         if (err->message_lang) {
             nc_write_clb((void *)arg, " xml:lang=\"", 11, 0);
             nc_write_clb((void *)arg, err->message_lang, strlen(err->message_lang), 1);
@@ -940,45 +943,45 @@ nc_write_error(struct wclb_arg *arg, struct nc_server_error *err, const char *pr
         }
         nc_write_clb((void *)arg, ">", 1, 0);
         nc_write_clb((void *)arg, err->message, strlen(err->message), 1);
-        nc_write_error_elem(arg, "error-message", 13, prefix, pref_len, 0);
+        nc_write_error_elem(arg, "error-message", 13, prefix, pref_len, 0, 0);
     }
 
     if ((err->sid > -1) || err->attr_count || err->elem_count || err->ns_count || err->other_count) {
-        nc_write_error_elem(arg, "error-info", 10, prefix, pref_len, 1);
+        nc_write_error_elem(arg, "error-info", 10, prefix, pref_len, 1, 0);
 
         if (err->sid > -1) {
-            nc_write_error_elem(arg, "session-id", 10, prefix, pref_len, 1);
+            nc_write_error_elem(arg, "session-id", 10, prefix, pref_len, 1, 0);
             sprintf(str_sid, "%u", (uint32_t)err->sid);
             nc_write_clb((void *)arg, str_sid, strlen(str_sid), 0);
-            nc_write_error_elem(arg, "session-id", 10, prefix, pref_len, 0);
+            nc_write_error_elem(arg, "session-id", 10, prefix, pref_len, 0, 0);
         }
 
         for (i = 0; i < err->attr_count; ++i) {
-            nc_write_error_elem(arg, "bad-attribute", 13, prefix, pref_len, 1);
+            nc_write_error_elem(arg, "bad-attribute", 13, prefix, pref_len, 1, 0);
             nc_write_clb((void *)arg, err->attr[i], strlen(err->attr[i]), 1);
-            nc_write_error_elem(arg, "bad-attribute", 13, prefix, pref_len, 0);
+            nc_write_error_elem(arg, "bad-attribute", 13, prefix, pref_len, 0, 0);
         }
 
         for (i = 0; i < err->elem_count; ++i) {
-            nc_write_error_elem(arg, "bad-element", 11, prefix, pref_len, 1);
+            nc_write_error_elem(arg, "bad-element", 11, prefix, pref_len, 1, 0);
             nc_write_clb((void *)arg, err->elem[i], strlen(err->elem[i]), 1);
-            nc_write_error_elem(arg, "bad-element", 11, prefix, pref_len, 0);
+            nc_write_error_elem(arg, "bad-element", 11, prefix, pref_len, 0, 0);
         }
 
         for (i = 0; i < err->ns_count; ++i) {
-            nc_write_error_elem(arg, "bad-namespace", 13, prefix, pref_len, 1);
+            nc_write_error_elem(arg, "bad-namespace", 13, prefix, pref_len, 1, 0);
             nc_write_clb((void *)arg, err->ns[i], strlen(err->ns[i]), 1);
-            nc_write_error_elem(arg, "bad-namespace", 13, prefix, pref_len, 0);
+            nc_write_error_elem(arg, "bad-namespace", 13, prefix, pref_len, 0, 0);
         }
 
         for (i = 0; i < err->other_count; ++i) {
             lyxml_print_clb(nc_write_xmlclb, (void *)arg, err->other[i], 0);
         }
 
-        nc_write_error_elem(arg, "error-info", 10, prefix, pref_len, 0);
+        nc_write_error_elem(arg, "error-info", 10, prefix, pref_len, 0, 0);
     }
 
-    nc_write_error_elem(arg, "rpc-error", 9, prefix, pref_len, 0);
+    nc_write_error_elem(arg, "rpc-error", 9, prefix, pref_len, 0, 0);
 }
 
 /* return -1 can change session status */

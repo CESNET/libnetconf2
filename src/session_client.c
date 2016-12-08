@@ -205,7 +205,6 @@ libyang_module_clb(const char *mod_name, const char *mod_rev, const char *submod
     } else {
         rpc = nc_rpc_getschema(mod_name, mod_rev, "yang", NC_PARAMTYPE_CONST);
     }
-    *format = LYS_IN_YIN;
 
     while ((msg = nc_send_rpc(session, rpc, 0, &msgid)) == NC_MSG_WOULDBLOCK) {
         usleep(1000);
