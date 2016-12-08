@@ -216,7 +216,7 @@ libyang_module_clb(const char *mod_name, const char *mod_rev, const char *submod
     }
 
     do {
-        msg = nc_recv_reply(session, rpc, msgid, 1000, 0, &reply);
+        msg = nc_recv_reply(session, rpc, msgid, NC_READ_TIMEOUT * 1000, 0, &reply);
     } while (msg == NC_MSG_NOTIF);
     nc_rpc_free(rpc);
     if (msg == NC_MSG_WOULDBLOCK) {
@@ -898,8 +898,8 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
         }
         data_rpl->type = NC_RPL_DATA;
         if (!data) {
-            data_rpl->data = lyd_parse_xml(ctx, &xml->child,
-                                           LYD_OPT_RPCREPLY | LYD_OPT_DESTRUCT | parseroptions, rpc_act, NULL);
+            data_rpl->data = lyd_parse_xml(ctx, &xml->child, LYD_OPT_RPCREPLY | LYD_OPT_DESTRUCT | parseroptions,
+                                           rpc_act, NULL);
         } else {
             /* <get>, <get-config> */
             data_rpl->data = data;
