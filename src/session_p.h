@@ -558,7 +558,9 @@ int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
  * returned POLLIN.
  *
  * @param[in] session NETCONF session communicating on the socket.
- * @param[in,out] timeout Timeout for locking ti_lock.
+ * @param[in] timeout Timeout for locking ti_lock.
+ * @param[in] ssh_message Whether to also check for standard SSH messages or just do
+ *            application data poll.
  * @return NC_PSPOLL_TIMEOUT,
  *         NC_PSPOLL_RPC (has new data),
  *         NC_PSPOLL_PENDING (other channel has data),
@@ -567,7 +569,7 @@ int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
  *         NC_PSPOLL_SSH_CHANNEL,
  *         NC_PSPOLL_ERROR.
  */
-int nc_ssh_pollin(struct nc_session *session, int timeout);
+int nc_ssh_pollin(struct nc_session *session, int timeout, int ssh_message);
 
 void nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts);
 
