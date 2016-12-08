@@ -1048,45 +1048,46 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
 }
 
 int
-nc_ssh_pollin(struct nc_session *session, int timeout)
+nc_ssh_pollin(struct nc_session *session, int timeout, int ssh_message)
 {
     int ret;
     struct nc_session *new;
 
-    ret = nc_timedlock(session->ti_lock, timeout, __func__);
-
-    if (ret < 0) {
-        return NC_PSPOLL_ERROR;
-    } else if (!ret) {
-        return NC_PSPOLL_TIMEOUT;
-    }
-
-    ret = ssh_execute_message_callbacks(session->ti.libssh.session);
-    pthread_mutex_unlock(session->ti_lock);
-
-    if (ret != SSH_OK) {
-        ERR("Session %u: failed to receive SSH messages (%s).", session->id,
-            ssh_get_error(session->ti.libssh.session));
-        session->status = NC_STATUS_INVALID;
-        session->term_reason = NC_SESSION_TERM_OTHER;
-        return NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
-    }
-
-    /* new SSH message */
-    if (session->flags & NC_SESSION_SSH_NEW_MSG) {
-        session->flags &= ~NC_SESSION_SSH_NEW_MSG;
-        if (session->ti.libssh.next) {
-            for (new = session->ti.libssh.next; new != session; new = new->ti.libssh.next) {
-                if ((new->status == NC_STATUS_STARTING) && new->ti.libssh.channel
-                        && (new->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
-                    /* new NETCONF SSH channel */
-                    return NC_PSPOLL_SSH_CHANNEL;
-                }
-            }
+    if (ssh_message) {
+        ret = nc_timedlock(session->ti_lock, timeout, __func__);
+        if (ret < 0) {
+            return NC_PSPOLL_ERROR;
+        } else if (!ret) {
+            return NC_PSPOLL_TIMEOUT;
         }
 
-        /* just some SSH message */
-        return NC_PSPOLL_SSH_MSG;
+        ret = ssh_execute_message_callbacks(session->ti.libssh.session);
+        pthread_mutex_unlock(session->ti_lock);
+
+        if (ret != SSH_OK) {
+            ERR("Session %u: failed to receive SSH messages (%s).", session->id,
+                ssh_get_error(session->ti.libssh.session));
+            session->status = NC_STATUS_INVALID;
+            session->term_reason = NC_SESSION_TERM_OTHER;
+            return NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
+        }
+
+        /* new SSH message */
+        if (session->flags & NC_SESSION_SSH_NEW_MSG) {
+            session->flags &= ~NC_SESSION_SSH_NEW_MSG;
+            if (session->ti.libssh.next) {
+                for (new = session->ti.libssh.next; new != session; new = new->ti.libssh.next) {
+                    if ((new->status == NC_STATUS_STARTING) && new->ti.libssh.channel
+                            && (new->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
+                        /* new NETCONF SSH channel */
+                        return NC_PSPOLL_SSH_CHANNEL;
+                    }
+                }
+            }
+
+            /* just some SSH message */
+            return NC_PSPOLL_SSH_MSG;
+        }
     }
 
     /* no new SSH message, maybe NETCONF data? */

@@ -1096,7 +1096,7 @@ retry_poll:
                 uint16_t j;
 
                 /* things are not that simple with SSH... */
-                ret = nc_ssh_pollin(ps->sessions[i], timeout);
+                ret = nc_ssh_pollin(ps->sessions[i], timeout, 1);
 
                 /* clear POLLIN on sessions sharing this session's SSH session */
                 if (ret & (NC_PSPOLL_RPC | NC_PSPOLL_SSH_MSG | NC_PSPOLL_SSH_CHANNEL)) {
@@ -1190,6 +1190,17 @@ retry_poll:
     }
 
     nc_server_rpc_free(rpc, server_opts.ctx);
+
+#ifdef NC_ENABLED_SSH
+    /* is there any data received but not processed? */
+    if (cur_session->ti_type == NC_TI_LIBSSH) {
+        /* ignore errors */
+        if (nc_ssh_pollin(cur_session, 0, 0) == NC_PSPOLL_RPC) {
+            ps->pfds[i].revents = POLLIN;
+            ret |= NC_PSPOLL_PENDING;
+        }
+    }
+#endif /* NC_ENABLED_SSH */
 
     /* is there some other socket waiting? */
     for (++i; i < ps->session_count; ++i) {
