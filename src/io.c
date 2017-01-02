@@ -1065,7 +1065,7 @@ nc_write_msg(struct nc_session *session, NC_MSG_TYPE type, ...)
         nc_write_clb((void *)&arg, notif->eventtime, strlen(notif->eventtime), 0);
         nc_write_clb((void *)&arg, "</eventTime>", 12, 0);
         lyd_print_clb(nc_write_xmlclb, (void *)&arg, notif->tree, LYD_XML, 0);
-        nc_write_clb((void *)&arg, "</notification>", 12, 0);
+        nc_write_clb((void *)&arg, "</notification>", 15, 0);
         break;
 
     case NC_MSG_HELLO:
