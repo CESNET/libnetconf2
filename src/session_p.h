@@ -356,9 +356,9 @@ struct nc_session {
 
 /* ACCESS locked */
 struct nc_pollsession {
-    struct pollfd *pfds;
     struct nc_session **sessions;
     uint16_t session_count;
+    uint16_t last_event_session;
 
     pthread_cond_t cond;
     pthread_mutex_t lock;
@@ -381,6 +381,8 @@ int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *absti
 #endif
 
 int nc_gettimespec(struct timespec *ts);
+
+uint32_t nc_difftimespec(struct timespec *ts1, struct timespec *ts2);
 
 int nc_timedlock(pthread_mutex_t *lock, int timeout, const char *func);
 
@@ -552,24 +554,6 @@ int nc_accept_ssh_session(struct nc_session *session, int sock, int timeout);
  * @return 0 if the message was handled, 1 if it is left up to libssh.
  */
 int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
-
-/**
- * @brief Inspect what exactly happened if a SSH session socket poll
- * returned POLLIN.
- *
- * @param[in] session NETCONF session communicating on the socket.
- * @param[in] timeout Timeout for locking ti_lock.
- * @param[in] ssh_message Whether to also check for standard SSH messages or just do
- *            application data poll.
- * @return NC_PSPOLL_TIMEOUT,
- *         NC_PSPOLL_RPC (has new data),
- *         NC_PSPOLL_PENDING (other channel has data),
- *         NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR,
- *         NC_PSPOLL_SSH_MSG,
- *         NC_PSPOLL_SSH_CHANNEL,
- *         NC_PSPOLL_ERROR.
- */
-int nc_ssh_pollin(struct nc_session *session, int timeout, int ssh_message);
 
 void nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts);
 
