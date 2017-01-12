@@ -1811,3 +1811,14 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     *msgid = cur_msgid;
     return NC_MSG_RPC;
 }
+
+API void
+nc_client_session_set_not_strict(struct nc_session *session)
+{
+    if (session->side != NC_CLIENT) {
+        ERRARG("session");
+        return;
+    }
+
+    session->flags |= NC_SESSION_CLIENT_NOT_STRICT;
+}
