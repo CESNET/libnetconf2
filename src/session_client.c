@@ -1350,7 +1350,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     if ((rpc->type != NC_RPC_GETSCHEMA) && (rpc->type != NC_RPC_ACT_GENERIC) && (rpc->type != NC_RPC_SUBSCRIBE)) {
         ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL);
         if (!ietfnc) {
-            ERR("Session %u: missing ietf-netconf schema in the context.", session->id);
+            ERR("Session %u: missing \"ietf-netconf\" schema in the context.", session->id);
             return NC_MSG_ERROR;
         }
     }
@@ -1396,7 +1396,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
             if (!ietfncwd) {
                 ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
                 if (!ietfncwd) {
-                    ERR("Session %u: missing ietf-netconf-with-defaults schema in the context.", session->id);
+                    ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
                     return NC_MSG_ERROR;
                 }
             }
@@ -1504,7 +1504,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
             if (!ietfncwd) {
                 ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
                 if (!ietfncwd) {
-                    ERR("Session %u: missing ietf-netconf-with-defaults schema in the context.", session->id);
+                    ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
                     return NC_MSG_ERROR;
                 }
             }
@@ -1595,7 +1595,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
             if (!ietfncwd) {
                 ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
                 if (!ietfncwd) {
-                    ERR("Session %u: missing ietf-netconf-with-defaults schema in the context.", session->id);
+                    ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
                     return NC_MSG_ERROR;
                 }
             }
@@ -1701,7 +1701,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_GETSCHEMA:
         ietfncmon = ly_ctx_get_module(session->ctx, "ietf-netconf-monitoring", NULL);
         if (!ietfncmon) {
-            ERR("Session %u: missing ietf-netconf-monitoring schema in the context.", session->id);
+            ERR("Session %u: missing \"ietf-netconf-monitoring\" schema in the context.", session->id);
             return NC_MSG_ERROR;
         }
 
@@ -1732,7 +1732,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_SUBSCRIBE:
         notifs = ly_ctx_get_module(session->ctx, "notifications", NULL);
         if (!notifs) {
-            ERR("Session %u: missing notifications schema in the context.", session->id);
+            ERR("Session %u: missing \"notifications\" schema in the context.", session->id);
             return NC_MSG_ERROR;
         }
 
