@@ -434,4 +434,15 @@ int nc_recv_notif_dispatch(struct nc_session *session,
  */
 NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_t *msgid);
 
+/**
+ * @brief Make a session not strict when sending RPCs and receiving RPC replies. In other words,
+ *        it will silently skip unknown nodes without an error.
+ *
+ * Generally, no such data should be worked with, so use this function only when you know what you
+ * are doing and you understand the consequences.
+ *
+ * @param[in] session NETCONF client session.
+ */
+void nc_client_session_set_not_strict(struct nc_session *session);
+
 #endif /* NC_SESSION_CLIENT_H_ */
