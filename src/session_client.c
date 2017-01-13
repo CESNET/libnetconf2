@@ -290,7 +290,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
 {
     const char *module_cpblt;
     int i, get_schema_support = 0, ret = 0, r;
-    ly_module_clb old_clb = NULL;
+    ly_module_imp_clb old_clb = NULL;
     void *old_data = NULL;
 
     assert(session->cpblts && session->ctx);
@@ -307,8 +307,8 @@ nc_ctx_check_and_fill(struct nc_session *session)
     if (get_schema_support && !ly_ctx_get_module(session->ctx, "ietf-netconf-monitoring", NULL)) {
         if (lys_parse_path(session->ctx, SCHEMAS_DIR"/ietf-netconf-monitoring.yin", LYS_IN_YIN)) {
             /* set module retrieval using <get-schema> */
-            old_clb = ly_ctx_get_module_clb(session->ctx, &old_data);
-            ly_ctx_set_module_clb(session->ctx, libyang_module_clb, session);
+            old_clb = ly_ctx_get_module_imp_clb(session->ctx, &old_data);
+            ly_ctx_set_module_imp_clb(session->ctx, libyang_module_clb, session);
         } else {
             WRN("Loading NETCONF monitoring schema failed, cannot use <get-schema>.");
         }
@@ -317,7 +317,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     /* load base model disregarding whether it's in capabilities (but NETCONF capabilities are used to enable features) */
     if (ctx_check_and_load_ietf_netconf(session->ctx, session->cpblts)) {
         if (old_clb) {
-            ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
+            ly_ctx_set_module_imp_clb(session->ctx, old_clb, old_data);
         }
         return -1;
     }
@@ -339,7 +339,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
                 if (get_schema_support) {
                     VRB("Trying to load the schema from a different source.");
                     /* works even if old_clb is NULL */
-                    ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
+                    ly_ctx_set_module_imp_clb(session->ctx, old_clb, old_data);
                     r = ctx_check_and_load_model(session, module_cpblt);
                 }
 
@@ -349,13 +349,13 @@ nc_ctx_check_and_fill(struct nc_session *session)
                 }
 
                 /* set get-schema callback back */
-                ly_ctx_set_module_clb(session->ctx, &libyang_module_clb, session);
+                ly_ctx_set_module_imp_clb(session->ctx, &libyang_module_clb, session);
             }
         }
     }
 
     if (old_clb) {
-        ly_ctx_set_module_clb(session->ctx, old_clb, old_data);
+        ly_ctx_set_module_imp_clb(session->ctx, old_clb, old_data);
     }
     if (session->flags & NC_SESSION_CLIENT_NOT_STRICT) {
         WRN("Some models failed to be loaded, any data from these models (and any other unknown) will be ignored.");
