@@ -924,7 +924,8 @@ nc_server_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
         }
 
         ly_errno = LY_SUCCESS;
-        (*rpc)->tree = lyd_parse_xml(server_opts.ctx, &xml->child, LYD_OPT_RPC | LYD_OPT_DESTRUCT | LYD_OPT_STRICT, NULL);
+        (*rpc)->tree = lyd_parse_xml(server_opts.ctx, &xml->child,
+                                     LYD_OPT_RPC | LYD_OPT_DESTRUCT | LYD_OPT_NOEXTDEPS | LYD_OPT_STRICT, NULL);
         if (!(*rpc)->tree) {
             /* parsing RPC failed */
             reply = nc_server_reply_err(nc_err_libyang());
