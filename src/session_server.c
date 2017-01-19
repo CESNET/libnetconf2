@@ -1151,7 +1151,8 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                         poll_ret = -2;
                     } else if (r == SSH_ERROR) {
                         sprintf(msg, "SSH channel poll error (%s)", ssh_get_error(cur_session->ti.libssh.session));
-                        poll_ret = -1;
+                        term_reason = NC_SESSION_TERM_OTHER;
+                        poll_ret = -2;
                     } else {
                         poll_ret = 0;
                     }
@@ -1179,7 +1180,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                 if (r != SSH_OK) {
                     sprintf(msg, "failed to receive SSH messages (%s)", ssh_get_error(cur_session->ti.libssh.session));
                     term_reason = NC_SESSION_TERM_OTHER;
-                    poll_ret = -1;
+                    poll_ret = -2;
                 } else if (cur_session->flags & NC_SESSION_SSH_NEW_MSG) {
                     /* new SSH message */
                     cur_session->flags &= ~NC_SESSION_SSH_NEW_MSG;
@@ -1255,7 +1256,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
 
                 if (r < 0) {
                     sprintf(msg, "poll failed (%s)", strerror(errno));
-                    poll_ret = 0;
+                    poll_ret = -1;
                 } else if (r > 0) {
                     if (pfd.revents & (POLLHUP | POLLNVAL)) {
                         sprintf(msg, "communication socket unexpectedly closed");
@@ -1279,9 +1280,9 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
             }
 
              /* here: poll_ret == -2 - session error, session terminated,
-            *       poll_ret == -1 - generic error,
-             *       poll_ret == 0 - nothing to read,
-             *       poll_ret > 0 - data available */
+              *       poll_ret == -1 - generic error,
+              *       poll_ret == 0 - nothing to read,
+              *       poll_ret > 0 - data available */
             if (poll_ret == -2) {
                 ERR("Session %u: %s.", cur_session->id, msg);
                 cur_session->status = NC_STATUS_INVALID;
