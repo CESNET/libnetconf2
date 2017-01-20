@@ -102,7 +102,7 @@ check_function_exists(pthread_mutex_timedlock HAVE_PTHREAD_MUTEX_TIMEDLOCK)
 
 # dependencies - libssh
 if(ENABLE_SSH)
-    find_package(LibSSH 0.6.4 REQUIRED)
+    find_package(LibSSH 0.6.3 REQUIRED)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH ${LIBSSH_DEFINITIONS}")
     target_link_libraries(netconf2 ${LIBSSH_LIBRARIES} -L${SSH_LIBRARY} -lssh_threads -lcrypt)
     include_directories(${LIBSSH_INCLUDE_DIRS})

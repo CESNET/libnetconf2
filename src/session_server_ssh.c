@@ -1067,7 +1067,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         return -1;
     }
     for (i = 0; i < opts->hostkey_count; ++i) {
-        if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HOSTKEY, opts->hostkeys[i]) != SSH_OK) {
+        if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_RSAKEY, opts->hostkeys[i]) != SSH_OK) {
             ERR("Failed to set hostkey \"%s\" (%s).", opts->hostkeys[i], ssh_get_error(sbind));
             close(sock);
             ssh_bind_free(sbind);
