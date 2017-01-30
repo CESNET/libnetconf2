@@ -243,7 +243,7 @@ struct nc_server_opts {
 /**
  * Timeout in msec for transport-related data to arrive (ssh_handle_key_exchange(), SSL_accept(), SSL_connect()).
  */
-#define NC_TRANSPORT_TIMEOUT 500
+#define NC_TRANSPORT_TIMEOUT 2000
 
 /**
  * Number of sockets kept waiting to be accepted.
