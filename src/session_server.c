@@ -217,7 +217,7 @@ fail:
 int
 nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host, uint16_t *port, uint16_t *idx)
 {
-    uint16_t i;
+    uint16_t i, j, pfd_count;
     struct pollfd *pfd;
     struct sockaddr_storage saddr;
     socklen_t saddr_len = sizeof(saddr);
@@ -229,10 +229,9 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
         return -1;
     }
 
-    for (i = 0; i < bind_count; ++i) {
+    for (i = 0, pfd_count = 0; i < bind_count; ++i) {
         if (binds[i].sock < 0) {
             /* invalid socket */
-            --bind_count;
             continue;
         }
         if (binds[i].pollin) {
@@ -241,14 +240,16 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
             sock = binds[i].sock;
             break;
         }
-        pfd[i].fd = binds[i].sock;
-        pfd[i].events = POLLIN;
-        pfd[i].revents = 0;
+        pfd[pfd_count].fd = binds[i].sock;
+        pfd[pfd_count].events = POLLIN;
+        pfd[pfd_count].revents = 0;
+
+        ++pfd_count;
     }
 
     if (sock == -1) {
         /* poll for a new connection */
-        ret = poll(pfd, bind_count, timeout);
+        ret = poll(pfd, pfd_count, timeout);
         if (!ret) {
             /* we timeouted */
             free(pfd);
@@ -259,13 +260,18 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
             return -1;
         }
 
-        for (i = 0; i < bind_count; ++i) {
-            if (pfd[i].revents & POLLIN) {
+        for (i = 0, j = 0; j < pfd_count; ++i, ++j) {
+            /* adjust i so that indices in binds and pfd always match */
+            while (binds[i].sock != pfd[j].fd) {
+                ++i;
+            }
+
+            if (pfd[j].revents & POLLIN) {
                 --ret;
 
                 if (!ret) {
                     /* the last socket with an event, use it */
-                    sock = pfd[i].fd;
+                    sock = pfd[j].fd;
                     break;
                 } else {
                     /* just remember the event for next time */
