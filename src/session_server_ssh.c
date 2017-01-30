@@ -406,6 +406,9 @@ static int
 _nc_server_ssh_add_authkey(const char *pubkey_path, const char *pubkey_base64, NC_SSH_KEY_TYPE type,
                           const char *username)
 {
+    /* LOCK */
+    pthread_mutex_lock(&server_opts.authkey_lock);
+
     ++server_opts.authkey_count;
     server_opts.authkeys = nc_realloc(server_opts.authkeys, server_opts.authkey_count * sizeof *server_opts.authkeys);
     if (!server_opts.authkeys) {
@@ -416,6 +419,9 @@ _nc_server_ssh_add_authkey(const char *pubkey_path, const char *pubkey_base64, N
     server_opts.authkeys[server_opts.authkey_count - 1].base64 = lydict_insert(server_opts.ctx, pubkey_base64, 0);
     server_opts.authkeys[server_opts.authkey_count - 1].type = type;
     server_opts.authkeys[server_opts.authkey_count - 1].username = lydict_insert(server_opts.ctx, username, 0);
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&server_opts.authkey_lock);
 
     return 0;
 }
@@ -638,6 +644,9 @@ auth_pubkey_compare_key(ssh_key key)
     const char *username = NULL;
     int ret;
 
+    /* LOCK */
+    pthread_mutex_lock(&server_opts.authkey_lock);
+
     for (i = 0; i < server_opts.authkey_count; ++i) {
         switch (server_opts.authkeys[i].type) {
         case NC_SSH_KEY_UNKNOWN:
@@ -673,6 +682,9 @@ auth_pubkey_compare_key(ssh_key key)
     if (i < server_opts.authkey_count) {
         username = server_opts.authkeys[i].username;
     }
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&server_opts.authkey_lock);
 
     return username;
 }
