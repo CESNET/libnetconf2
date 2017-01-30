@@ -1463,6 +1463,8 @@ nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti)
     server_opts.endpts[server_opts.endpt_count - 1].name = lydict_insert(server_opts.ctx, name, 0);
     server_opts.endpts[server_opts.endpt_count - 1].ti = ti;
 
+    pthread_mutex_init(&server_opts.endpts[server_opts.endpt_count - 1].lock, NULL);
+
     server_opts.binds = nc_realloc(server_opts.binds, server_opts.endpt_count * sizeof *server_opts.binds);
     if (!server_opts.binds) {
         ERRMEM;
@@ -1509,8 +1511,6 @@ nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti)
         pthread_rwlock_unlock(&server_opts.endpt_lock);
         return -1;
     }
-
-    pthread_mutex_init(&server_opts.endpts[server_opts.endpt_count - 1].lock, NULL);
 
     /* WRITE UNLOCK */
     pthread_rwlock_unlock(&server_opts.endpt_lock);
