@@ -173,24 +173,23 @@ int nc_connect_ch_client_dispatch(const char *client_name,
 #ifdef NC_ENABLED_SSH
 
 /**
- * @brief Add Call Home SSH host keys the server will identify itself with. Any RSA, DSA, and
- *        ECDSA keys can be added. However, a maximum of one key of each type will be used
- *        during SSH authentication, later keys replacing earlier ones.
+ * @brief Add Call Home SSH host keys the server will identify itself with. Only the name is set, the key itself
+ *        wil be retrieved using a callback.
  *
  * @param[in] client_name Existing Call Home client name.
- * @param[in] privkey_path Path to a private key.
+ * @param[in] name Arbitrary name of the host key.
  * @return 0 on success, -1 on error.
  */
-int nc_server_ssh_ch_client_add_hostkey(const char *client_name, const char *privkey_path);
+int nc_server_ssh_ch_client_add_hostkey(const char *client_name, const char *name);
 
 /**
  * @brief Delete Call Home SSH host keys. Their order is preserved.
  *
  * @param[in] client_name Existing Call Home client name.
- * @param[in] privkey_path Path to a private key. NULL matches all the keys.
+ * @param[in] name Name of the host key. NULL matches all the keys.
  * @return 0 on success, -1 on error.
  */
-int nc_server_ssh_ch_client_del_hostkey(const char *client_name, const char *privkey_path);
+int nc_server_ssh_ch_client_del_hostkey(const char *client_name, const char *name);
 
 /**
  * @brief Set Call Home SSH banner the server will send to every client.
@@ -234,63 +233,32 @@ int nc_server_ssh_ch_client_set_auth_timeout(const char *client_name, uint16_t a
 #ifdef NC_ENABLED_TLS
 
 /**
- * @brief Set the server Call Home TLS certificate. Alternative to nc_tls_server_set_cert_path().
+ * @brief Set the server Call Home TLS certificate. Only the name is set, the certificate itself
+ *        wil be retrieved using a callback.
  *
  * @param[in] client_name Existing Call Home client name.
- * @param[in] cert Base64-encoded certificate in ASN.1 DER encoding. If NULL, the used certificate is cleared.
+ * @param[in] name Arbitrary certificate name.
  * @return 0 on success, -1 on error.
  */
-int nc_server_tls_ch_client_set_cert(const char *client_name, const char *cert);
+int nc_server_tls_ch_client_set_server_cert(const char *client_name, const char *name);
 
 /**
- * @brief Set the server Call Home TLS certificate. Alternative to nc_tls_server_set_cert().
+ * @brief Add a Call Home trusted certificate list. Can be both a CA or a client one.
  *
  * @param[in] client_name Existing Call Home client name.
- * @param[in] cert_path Path to a certificate file in PEM format. If NULL, the used certificate is cleared.
+ * @param[in] name Arbitary name identifying this certificate list.
  * @return 0 on success, -1 on error.
  */
-int nc_server_tls_ch_client_set_cert_path(const char *client_name, const char *cert_path);
+int nc_server_tls_ch_client_add_trusted_cert_list(const char *client_name, const char *name);
 
 /**
- * @brief Set the server Call Home TLS private key matching the certificate.
- *        Alternative to nc_server_tls_ch_client_set_key_path().
+ * @brief Remove a set Call Home trusted certificate list. CRLs and CTN entries are not affected.
  *
  * @param[in] client_name Existing Call Home client name.
- * @param[in] privkey Base64-encoded certificate in ASN.1 DER encoding. If NULL, the used key is cleared.
- * @param[in] is_rsa Whether \p privkey are the data of an RSA (1) or DSA (0) key.
- * @return 0 on success, -1 on error.
+ * @param[in] name Name of the certificate list to delete. NULL deletes all the lists.
+ * @return 0 on success, -1 on not found.
  */
-int nc_server_tls_ch_client_set_key(const char *client_name, const char *privkey, int is_rsa);
-
-/**
- * @brief Set the server Call Home TLS private key matching the certificate.
- *        Alternative to nc_server_tls_ch_client_set_key().
- *
- * @param[in] client_name Existing Call Home client name.
- * @param[in] privkey_path Path to a private key file in PEM format. If NULL, the used certificate is cleared.
- * @return 0 on success, -1 on error.
- */
-int nc_server_tls_ch_client_set_key_path(const char *client_name, const char *privkey_path);
-
-/**
- * @brief Add a Call Home trusted certificate. Can be both a CA or a client one.
- *
- * @param[in] client_name Existing Call Home client name.
- * @param[in] cert_name Arbitary name identifying this certificate.
- * @param[in] cert Base64-enocded certificate in ASN.1 DER encoding.
- * @return 0 on success, -1 on error.
- */
-int nc_server_tls_ch_client_add_trusted_cert(const char *client_name, const char *cert_name, const char *cert);
-
-/**
- * @brief Add a Call Home trusted certificate. Can be both a CA or a client one.
- *
- * @param[in] client_name Existing Call Home client name.
- * @param[in] cert_name Arbitary name identifying this certificate.
- * @param[in] cert_path Path to a trusted certificate file in PEM format.
- * @return 0 on success, -1 on error.
- */
-int nc_server_tls_ch_client_add_trusted_cert_path(const char *client_name, const char *cert_name, const char *cert_path);
+int nc_server_tls_ch_client_del_trusted_cert_list(const char *client_name, const char *name);
 
 /**
  * @brief Set trusted Call Home Certificate Authority certificate locations. There
@@ -305,16 +273,6 @@ int nc_server_tls_ch_client_add_trusted_cert_path(const char *client_name, const
  * @return 0 on success, -1 on error.
  */
 int nc_server_tls_ch_client_set_trusted_ca_paths(const char *client_name, const char *ca_file, const char *ca_dir);
-
-/**
- * @brief Remove a set Call Home trusted certificate.
- *        CRLs and CTN entries are not affected.
- *
- * @param[in] client_name Existing Call Home client name.
- * @param[in] cert_name Name of the certificate to delete. NULL deletes all the certificates.
- * @return 0 on success, -1 on not found.
- */
-int nc_server_tls_ch_client_del_trusted_cert(const char *client_name, const char *cert_name);
 
 /**
  * @brief Set Call Home Certificate Revocation List locations. There can only be

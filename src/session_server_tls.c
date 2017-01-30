@@ -134,7 +134,7 @@ pem_to_cert(const char *path)
     return out;
 }
 
-static EVP_PKEY *
+/*static EVP_PKEY *
 base64der_to_privatekey(const char *in, int rsa)
 {
     EVP_PKEY *out;
@@ -164,7 +164,7 @@ base64der_to_privatekey(const char *in, int rsa)
     free(buf);
     BIO_free(bio);
     return out;
-}
+}*/
 
 static int
 cert_pubkey_match(X509 *cert1, X509 *cert2)
@@ -679,34 +679,26 @@ fail:
 }
 
 static int
-nc_server_tls_set_cert(const char *cert, struct nc_server_tls_opts *opts)
+nc_server_tls_set_server_cert(const char *name, struct nc_server_tls_opts *opts)
 {
-    X509 *crt;
-
-    if (!cert) {
+    if (!name) {
         if (opts->server_cert) {
-            X509_free(opts->server_cert);
+            lydict_remove(server_opts.ctx, opts->server_cert);
         }
         opts->server_cert = NULL;
         return 0;
     }
 
-    crt = base64der_to_cert(cert);
-    if (!crt) {
-        ERR("Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        return -1;
-    }
-
     if (opts->server_cert) {
-        X509_free(opts->server_cert);
+        lydict_remove(server_opts.ctx, opts->server_cert);
     }
-    opts->server_cert = crt;
+    opts->server_cert = lydict_insert(server_opts.ctx, name, 0);
 
     return 0;
 }
 
 API int
-nc_server_tls_endpt_set_cert(const char *endpt_name, const char *cert)
+nc_server_tls_endpt_set_server_cert(const char *endpt_name, const char *name)
 {
     int ret;
     struct nc_endpt *endpt;
@@ -721,7 +713,7 @@ nc_server_tls_endpt_set_cert(const char *endpt_name, const char *cert)
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_tls_set_cert(cert, endpt->opts.tls);
+    ret = nc_server_tls_set_server_cert(name, endpt->opts.tls);
     /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
@@ -729,7 +721,7 @@ nc_server_tls_endpt_set_cert(const char *endpt_name, const char *cert)
 }
 
 API int
-nc_server_tls_ch_client_set_cert(const char *client_name, const char *cert)
+nc_server_tls_ch_client_set_server_cert(const char *client_name, const char *name)
 {
     int ret;
     struct nc_ch_client *client;
@@ -745,7 +737,7 @@ nc_server_tls_ch_client_set_cert(const char *client_name, const char *cert)
         return -1;
     }
 
-    ret = nc_server_tls_set_cert(cert, client->opts.tls);
+    ret = nc_server_tls_set_server_cert(name, client->opts.tls);
 
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
@@ -753,269 +745,42 @@ nc_server_tls_ch_client_set_cert(const char *client_name, const char *cert)
     return ret;
 }
 
-static int
-nc_server_tls_set_cert_path(const char *cert_path, struct nc_server_tls_opts *opts)
+API void
+nc_server_tls_set_server_cert_clb(int (*cert_clb)(const char *name, void *user_data, char **cert_path, char **cert_data,
+                                                  char **privkey_path, char **privkey_data, int *privkey_data_rsa),
+                                  void *user_data, void (*free_user_data)(void *user_data))
 {
-    X509 *crt;
-
-    if (!cert_path) {
-        if (opts->server_cert) {
-            X509_free(opts->server_cert);
-        }
-        opts->server_cert = NULL;
-        return 0;
+    if (!cert_clb) {
+        ERRARG("cert_clb");
+        return;
     }
 
-    errno = 0;
-    crt = pem_to_cert(cert_path);
-    if (!crt) {
-        ERR("Loading the server certificate failed (%s).", (errno ? strerror(errno) : ERR_reason_error_string(ERR_get_error())));
-        return -1;
-    }
-
-    if (opts->server_cert) {
-        X509_free(opts->server_cert);
-    }
-    opts->server_cert = crt;
-
-    return 0;
-}
-
-API int
-nc_server_tls_endpt_set_cert_path(const char *endpt_name, const char *cert_path)
-{
-    int ret;
-    struct nc_endpt *endpt;
-
-    if (!endpt_name) {
-        ERRARG("endpt_name");
-        return -1;
-    }
-
-    /* LOCK */
-    endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL, NULL);
-    if (!endpt) {
-        return -1;
-    }
-    ret = nc_server_tls_set_cert_path(cert_path, endpt->opts.tls);
-    /* UNLOCK */
-    nc_server_endpt_unlock(endpt);
-
-    return ret;
-}
-
-API int
-nc_server_tls_ch_client_set_cert_path(const char *client_name, const char *cert_path)
-{
-    int ret;
-    struct nc_ch_client *client;
-
-    if (!client_name) {
-        ERRARG("client_name");
-        return -1;
-    }
-
-    /* LOCK */
-    client = nc_server_ch_client_lock(client_name, NC_TI_OPENSSL, NULL);
-    if (!client) {
-        return -1;
-    }
-
-    ret = nc_server_tls_set_cert_path(cert_path, client->opts.tls);
-
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return ret;
+    server_opts.server_cert_clb = cert_clb;
+    server_opts.server_cert_data = user_data;
+    server_opts.server_cert_data_free = free_user_data;
 }
 
 static int
-nc_server_tls_set_key(const char *privkey, int is_rsa, struct nc_server_tls_opts *opts)
+nc_server_tls_add_trusted_cert_list(const char *name, struct nc_server_tls_opts *opts)
 {
-    EVP_PKEY *pkey;
-
-    if (!privkey) {
-        if (opts->server_key) {
-            EVP_PKEY_free(opts->server_key);
-        }
-        opts->server_key = NULL;
-        return 0;
-    }
-
-    pkey = base64der_to_privatekey(privkey, is_rsa);
-    if (!pkey) {
-        ERR("Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+    if (!name) {
+        ERRARG("name");
         return -1;
     }
 
-    if (opts->server_key) {
-        EVP_PKEY_free(opts->server_key);
-    }
-    opts->server_key = pkey;
-
-    return 0;
-}
-
-API int
-nc_server_tls_endpt_set_key(const char *endpt_name, const char *privkey, int is_rsa)
-{
-    int ret;
-    struct nc_endpt *endpt;
-
-    if (!endpt_name) {
-        ERRARG("endpt_name");
-        return -1;
-    }
-
-    /* LOCK */
-    endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL, NULL);
-    if (!endpt) {
-        return -1;
-    }
-    ret = nc_server_tls_set_key(privkey, is_rsa, endpt->opts.tls);
-    /* UNLOCK */
-    nc_server_endpt_unlock(endpt);
-
-    return ret;
-}
-
-API int
-nc_server_tls_ch_client_set_key(const char *client_name, const char *privkey, int is_rsa)
-{
-    int ret;
-    struct nc_ch_client *client;
-
-    if (!client_name) {
-        ERRARG("client_name");
-        return -1;
-    }
-
-    /* LOCK */
-    client = nc_server_ch_client_lock(client_name, NC_TI_OPENSSL, NULL);
-    if (!client) {
-        return -1;
-    }
-
-    ret = nc_server_tls_set_key(privkey, is_rsa, client->opts.tls);
-
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return ret;
-}
-
-static int
-nc_server_tls_set_key_path(const char *privkey_path, struct nc_server_tls_opts *opts)
-{
-    FILE *file;
-
-    if (!privkey_path) {
-        if (opts->server_key) {
-            EVP_PKEY_free(opts->server_key);
-        }
-        opts->server_key = NULL;
-        return 0;
-    }
-
-    file = fopen(privkey_path, "r");
-    if (!file) {
-        ERR("Cannot open the file \"%s\" for reading (%s).", privkey_path, strerror(errno));
-        return -1;
-    }
-
-    if (opts->server_key) {
-        EVP_PKEY_free(opts->server_key);
-    }
-    opts->server_key = PEM_read_PrivateKey(file, NULL, NULL, NULL);
-    fclose(file);
-
-    if (!opts->server_key) {
-        ERR("Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        return -1;
-    }
-
-    return 0;
-}
-
-API int
-nc_server_tls_endpt_set_key_path(const char *endpt_name, const char *privkey_path)
-{
-    int ret;
-    struct nc_endpt *endpt;
-
-    if (!endpt_name) {
-        ERRARG("endpt_name");
-        return -1;
-    }
-
-    /* LOCK */
-    endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL, NULL);
-    if (!endpt) {
-        return -1;
-    }
-    ret = nc_server_tls_set_key_path(privkey_path, endpt->opts.tls);
-    /* UNLOCK */
-    nc_server_endpt_unlock(endpt);
-
-    return ret;
-}
-
-API int
-nc_server_tls_ch_client_set_key_path(const char *client_name, const char *privkey_path)
-{
-    int ret;
-    struct nc_ch_client *client;
-
-    if (!client_name) {
-        ERRARG("client_name");
-        return -1;
-    }
-
-    /* LOCK */
-    client = nc_server_ch_client_lock(client_name, NC_TI_OPENSSL, NULL);
-    if (!client) {
-        return -1;
-    }
-
-    ret = nc_server_tls_set_key_path(privkey_path, client->opts.tls);
-
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return ret;
-}
-
-static int
-nc_server_tls_add_trusted_cert(const char *name, const char *cert, struct nc_server_tls_opts *opts)
-{
-    X509 *crt;
-
-    if (!cert) {
-        ERRARG("cert");
-        return -1;
-    }
-
-    crt = base64der_to_cert(cert);
-    if (!crt) {
-        ERR("Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        return -1;
-    }
-
-    ++opts->trusted_cert_count;
-    opts->trusted_certs = nc_realloc(opts->trusted_certs, opts->trusted_cert_count * sizeof *opts->trusted_certs);
-    if (!opts->trusted_certs) {
+    ++opts->trusted_cert_list_count;
+    opts->trusted_cert_lists = nc_realloc(opts->trusted_cert_lists, opts->trusted_cert_list_count * sizeof *opts->trusted_cert_lists);
+    if (!opts->trusted_cert_lists) {
         ERRMEM;
-        X509_free(crt);
         return -1;
     }
-    opts->trusted_certs[opts->trusted_cert_count - 1].name = lydict_insert(server_opts.ctx, name, 0);
-    opts->trusted_certs[opts->trusted_cert_count - 1].cert = crt;
+    opts->trusted_cert_lists[opts->trusted_cert_list_count - 1] = lydict_insert(server_opts.ctx, name, 0);
 
     return 0;
 }
 
 API int
-nc_server_tls_endpt_add_trusted_cert(const char *endpt_name, const char *cert_name, const char *cert)
+nc_server_tls_endpt_add_trusted_cert_list(const char *endpt_name, const char *name)
 {
     int ret;
     struct nc_endpt *endpt;
@@ -1030,7 +795,7 @@ nc_server_tls_endpt_add_trusted_cert(const char *endpt_name, const char *cert_na
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_tls_add_trusted_cert(cert_name, cert, endpt->opts.tls);
+    ret = nc_server_tls_add_trusted_cert_list(name, endpt->opts.tls);
     /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
@@ -1038,7 +803,7 @@ nc_server_tls_endpt_add_trusted_cert(const char *endpt_name, const char *cert_na
 }
 
 API int
-nc_server_tls_ch_client_add_trusted_cert(const char *client_name, const char *cert_name, const char *cert)
+nc_server_tls_ch_client_add_trusted_cert_list(const char *client_name, const char *name)
 {
     int ret;
     struct nc_ch_client *client;
@@ -1054,7 +819,7 @@ nc_server_tls_ch_client_add_trusted_cert(const char *client_name, const char *ce
         return -1;
     }
 
-    ret = nc_server_tls_add_trusted_cert(cert_name, cert, client->opts.tls);
+    ret = nc_server_tls_add_trusted_cert_list(name, client->opts.tls);
 
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
@@ -1062,120 +827,55 @@ nc_server_tls_ch_client_add_trusted_cert(const char *client_name, const char *ce
     return ret;
 }
 
-static int
-nc_server_tls_add_trusted_cert_path(const char *name, const char *cert_path, struct nc_server_tls_opts *opts)
+API void
+nc_server_tls_set_trusted_cert_list_clb(int (*cert_list_clb)(const char *name, void *user_data, char ***cert_paths,
+                                                             int *cert_path_count, char ***cert_data, int *cert_data_count),
+                                        void *user_data, void (*free_user_data)(void *user_data))
 {
-    X509 *cert;
-
-    if (!cert_path) {
-        ERRARG("cert");
-        return -1;
+    if (!cert_list_clb) {
+        ERRARG("cert_list_clb");
+        return;
     }
 
-    errno = 0;
-    cert = pem_to_cert(cert_path);
-    if (!cert) {
-        ERR("Loading the server certificate failed (%s).", (errno ? strerror(errno) : ERR_reason_error_string(ERR_get_error())));
-        return -1;
-    }
-
-    ++opts->trusted_cert_count;
-    opts->trusted_certs = nc_realloc(opts->trusted_certs, opts->trusted_cert_count * sizeof *opts->trusted_certs);
-    if (!opts->trusted_certs) {
-        ERRMEM;
-        X509_free(cert);
-        return -1;
-    }
-    opts->trusted_certs[opts->trusted_cert_count - 1].name = lydict_insert(server_opts.ctx, name, 0);
-    opts->trusted_certs[opts->trusted_cert_count - 1].cert = cert;
-
-    return 0;
-}
-
-API int
-nc_server_tls_endpt_add_trusted_cert_path(const char *endpt_name, const char *cert_name, const char *cert_path)
-{
-    int ret;
-    struct nc_endpt *endpt;
-
-    if (!endpt_name) {
-        ERRARG("endpt_name");
-        return -1;
-    }
-
-    /* LOCK */
-    endpt = nc_server_endpt_lock(endpt_name, NC_TI_OPENSSL, NULL);
-    if (!endpt) {
-        return -1;
-    }
-    ret = nc_server_tls_add_trusted_cert_path(cert_name, cert_path, endpt->opts.tls);
-    /* UNLOCK */
-    nc_server_endpt_unlock(endpt);
-
-    return ret;
-}
-
-API int
-nc_server_tls_ch_client_add_trusted_cert_path(const char *client_name, const char *cert_name, const char *cert_path)
-{
-    int ret;
-    struct nc_ch_client *client;
-
-    if (!client_name) {
-        ERRARG("client_name");
-        return -1;
-    }
-
-    /* LOCK */
-    client = nc_server_ch_client_lock(client_name, NC_TI_OPENSSL, NULL);
-    if (!client) {
-        return -1;
-    }
-
-    ret = nc_server_tls_add_trusted_cert_path(cert_name, cert_path, client->opts.tls);
-
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return ret;
+    server_opts.trusted_cert_list_clb = cert_list_clb;
+    server_opts.trusted_cert_list_data = user_data;
+    server_opts.trusted_cert_list_data_free = free_user_data;
 }
 
 static int
-nc_server_tls_del_trusted_cert(const char *name, struct nc_server_tls_opts *opts)
+nc_server_tls_del_trusted_cert_list(const char *name, struct nc_server_tls_opts *opts)
 {
     uint16_t i;
 
     if (!name) {
-        for (i = 0; i < opts->trusted_cert_count; ++i) {
-            lydict_remove(server_opts.ctx, opts->trusted_certs[i].name);
-            X509_free(opts->trusted_certs[i].cert);
+        for (i = 0; i < opts->trusted_cert_list_count; ++i) {
+            lydict_remove(server_opts.ctx, opts->trusted_cert_lists[i]);
         }
-        free(opts->trusted_certs);
-        opts->trusted_certs = NULL;
-        opts->trusted_cert_count = 0;
+        free(opts->trusted_cert_lists);
+        opts->trusted_cert_lists = NULL;
+        opts->trusted_cert_list_count = 0;
         return 0;
     } else {
-        for (i = 0; i < opts->trusted_cert_count; ++i) {
-            if (!strcmp(opts->trusted_certs[i].name, name)) {
-                lydict_remove(server_opts.ctx, opts->trusted_certs[i].name);
-                X509_free(opts->trusted_certs[i].cert);
+        for (i = 0; i < opts->trusted_cert_list_count; ++i) {
+            if (!strcmp(opts->trusted_cert_lists[i], name)) {
+                lydict_remove(server_opts.ctx, opts->trusted_cert_lists[i]);
 
-                --opts->trusted_cert_count;
-                if (i < opts->trusted_cert_count - 1) {
-                    memmove(opts->trusted_certs + i, opts->trusted_certs + i + 1,
-                            (opts->trusted_cert_count - i) * sizeof *opts->trusted_certs);
+                --opts->trusted_cert_list_count;
+                if (i < opts->trusted_cert_list_count - 1) {
+                    memmove(opts->trusted_cert_lists + i, opts->trusted_cert_lists + i + 1,
+                            (opts->trusted_cert_list_count - i) * sizeof *opts->trusted_cert_lists);
                 }
                 return 0;
             }
         }
     }
 
-    ERR("Certificate \"%s\" not found.", name);
+    ERR("Certificate list \"%s\" not found.", name);
     return -1;
 }
 
 API int
-nc_server_tls_endpt_del_trusted_cert(const char *endpt_name, const char *cert_name)
+nc_server_tls_endpt_del_trusted_cert_list(const char *endpt_name, const char *name)
 {
     int ret;
     struct nc_endpt *endpt;
@@ -1190,7 +890,7 @@ nc_server_tls_endpt_del_trusted_cert(const char *endpt_name, const char *cert_na
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_tls_del_trusted_cert(cert_name, endpt->opts.tls);
+    ret = nc_server_tls_del_trusted_cert_list(name, endpt->opts.tls);
     /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
@@ -1198,7 +898,7 @@ nc_server_tls_endpt_del_trusted_cert(const char *endpt_name, const char *cert_na
 }
 
 API int
-nc_server_tls_ch_client_del_trusted_cert(const char *client_name, const char *cert_name)
+nc_server_tls_ch_client_del_trusted_cert_list(const char *client_name, const char *name)
 {
     int ret;
     struct nc_ch_client *client;
@@ -1214,7 +914,7 @@ nc_server_tls_ch_client_del_trusted_cert(const char *client_name, const char *ce
         return -1;
     }
 
-    ret = nc_server_tls_del_trusted_cert(cert_name, client->opts.tls);
+    ret = nc_server_tls_del_trusted_cert_list(name, client->opts.tls);
 
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
@@ -1753,9 +1453,8 @@ nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *session)
 void
 nc_server_tls_clear_opts(struct nc_server_tls_opts *opts)
 {
-    EVP_PKEY_free(opts->server_key);
-    X509_free(opts->server_cert);
-    nc_server_tls_del_trusted_cert(NULL, opts);
+    lydict_remove(server_opts.ctx, opts->server_cert);
+    nc_server_tls_del_trusted_cert_list(NULL, opts);
     lydict_remove(server_opts.ctx, opts->trusted_ca_file);
     lydict_remove(server_opts.ctx, opts->trusted_ca_dir);
     nc_server_tls_clear_crls(opts);
@@ -1768,6 +1467,150 @@ nc_tls_make_verify_key(void)
     pthread_key_create(&verify_key, NULL);
 }
 
+static int
+nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
+{
+    char *cert_path = NULL, *cert_data = NULL, *privkey_path = NULL, *privkey_data = NULL;
+    int privkey_data_rsa = 1, ret = 0;
+    /*X509 *cert = NULL;
+    EVP_PKEY *pkey = NULL;*/
+
+    if (!cert_name) {
+        ERR("Server certificate not set.");
+        return -1;
+    } else if (!server_opts.server_cert_clb) {
+        ERR("Callback for retrieving the server certificate is not set.");
+        return -1;
+    }
+
+    if (server_opts.server_cert_clb(cert_name, server_opts.server_cert_data, &cert_path, &cert_data, &privkey_path,
+                                    &privkey_data, &privkey_data_rsa)) {
+        ERR("Server certificate callback failed.");
+        return -1;
+    }
+
+    /* load the certificate */
+    if (cert_path) {
+        if (SSL_CTX_use_certificate_file(tls_ctx, cert_path, SSL_FILETYPE_PEM) != 1) {
+            ERR("Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = -1;
+            goto cleanup;
+        }
+    } else {
+        /*cert = base64der_to_cert(cert_data);
+        if (!cert || (SSL_CTX_use_certificate(tls_ctx, cert) != 1)) {
+            ERR("Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = -1;
+            goto cleanup;
+        }*/
+        if (SSL_CTX_use_certificate_ASN1(tls_ctx, strlen(cert_data), (unsigned char *)cert_data) != 1) {
+            ERR("Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = -1;
+            goto cleanup;
+        }
+    }
+
+    /* load the private key */
+    if (privkey_path) {
+        if (SSL_CTX_use_PrivateKey_file(tls_ctx, privkey_path, SSL_FILETYPE_PEM) != 1) {
+            ERR("Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = -1;
+            goto cleanup;
+        }
+    } else {
+        /*pkey = base64der_to_privatekey(privkey_data, privkey_data_rsa);
+        if (!pkey || (SSL_CTX_use_PrivateKey(tls_ctx, pkey) != 1)) {
+            ERR("Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = -1;
+            goto cleanup;
+        }*/
+        if (SSL_CTX_use_PrivateKey_ASN1((privkey_data_rsa ? EVP_PKEY_RSA : EVP_PKEY_DSA), tls_ctx,
+                                        (unsigned char *)privkey_data, strlen(privkey_data)) != 1) {
+            ERR("Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = -1;
+            goto cleanup;
+        }
+    }
+
+cleanup:
+    /*X509_free(cert);
+    EVP_PKEY_free(pkey);*/
+    free(cert_path);
+    free(cert_data);
+    free(privkey_path);
+    free(privkey_data);
+    return ret;
+}
+
+static void
+tls_store_add_trusted_cert(X509_STORE *cert_store, const char *cert_path, const char *cert_data)
+{
+    X509 *cert;
+
+    if (cert_path) {
+        cert = pem_to_cert(cert_path);
+    } else {
+        cert = base64der_to_cert(cert_data);
+    }
+
+    if (!cert) {
+        if (cert_path) {
+            ERR("Loading a trusted certificate (path \"%s\") failed (%s).", cert_path,
+                ERR_reason_error_string(ERR_get_error()));
+        } else {
+            ERR("Loading a trusted certificate (data \"%s\") failed (%s).", cert_data,
+                ERR_reason_error_string(ERR_get_error()));
+        }
+        return;
+    }
+
+    /* add the trusted certificate */
+    if (X509_STORE_add_cert(cert_store, cert) != 1) {
+        ERR("Adding a trusted certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        X509_free(cert);
+        return;
+    }
+    X509_free(cert);
+}
+
+static int
+nc_tls_store_set_trusted_certs(X509_STORE *cert_store, const char **trusted_cert_lists, uint16_t trusted_cert_list_count)
+{
+    uint16_t i;
+    int j;
+    char **cert_paths, **cert_data;
+    int cert_path_count, cert_data_count;
+
+    if (!server_opts.trusted_cert_list_clb) {
+        ERR("Callback for retrieving trusted certificate lists is not set.");
+        return -1;
+    }
+
+    for (i = 0; i < trusted_cert_list_count; ++i) {
+        cert_paths = cert_data = NULL;
+        cert_path_count = cert_data_count = 0;
+        if (server_opts.trusted_cert_list_clb(trusted_cert_lists[i], server_opts.trusted_cert_list_data,
+                                              &cert_paths, &cert_path_count, &cert_data, &cert_data_count)) {
+            ERR("Trusted certificate list callback for \"%s\" failed.", trusted_cert_lists[i]);
+            return -1;
+        }
+
+        for (j = 0; j < cert_path_count; ++j) {
+            tls_store_add_trusted_cert(cert_store, cert_paths[j], NULL);
+            free(cert_paths[j]);
+        }
+        free(cert_paths);
+
+        for (j = 0; j < cert_data_count; ++j) {
+            tls_store_add_trusted_cert(cert_store, NULL, cert_data[j]);
+            free(cert_data[j]);
+        }
+        free(cert_data);
+    }
+
+    return 0;
+}
+
 int
 nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
 {
@@ -1776,7 +1619,6 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     X509_LOOKUP *lookup;
     struct nc_server_tls_opts *opts;
     int ret, elapsed_usec = 0;
-    uint16_t i;
 
     opts = session->data;
 
@@ -1787,12 +1629,7 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
         goto error;
     }
     SSL_CTX_set_verify(tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
-    if (SSL_CTX_use_PrivateKey(tls_ctx, opts->server_key) != 1) {
-        ERR("Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        goto error;
-    }
-    if (SSL_CTX_use_certificate(tls_ctx, opts->server_cert) != 1) {
-        ERR("Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
+    if (nc_tls_ctx_set_server_cert_key(tls_ctx, opts->server_cert)) {
         goto error;
     }
 
@@ -1800,11 +1637,8 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     cert_store = X509_STORE_new();
     SSL_CTX_set_cert_store(tls_ctx, cert_store);
 
-    for (i = 0; i < opts->trusted_cert_count; ++i) {
-        if (X509_STORE_add_cert(cert_store, opts->trusted_certs[i].cert) != 1) {
-            ERR("Adding a trusted certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
-            goto error;
-        }
+    if (nc_tls_store_set_trusted_certs(cert_store, opts->trusted_cert_lists, opts->trusted_cert_list_count)) {
+        goto error;
     }
 
     if (opts->trusted_ca_file) {
@@ -1836,7 +1670,7 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     session->ti_type = NC_TI_OPENSSL;
     session->ti.tls = SSL_new(tls_ctx);
 
-    /* context can be freed already */
+    /* context can be freed already, trusted certs must be freed manually */
     SSL_CTX_free(tls_ctx);
     tls_ctx = NULL;
 

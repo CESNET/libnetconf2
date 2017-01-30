@@ -383,24 +383,41 @@ int nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64
                               const char *username);
 
 /**
- * @brief Add endpoint SSH host keys the server will identify itself with. Any RSA, DSA, and
- *        ECDSA keys can be added. However, a maximum of one key of each type will be used
- *        during SSH authentication, later keys replacing the earlier ones.
+ * @brief Add endpoint SSH host keys the server will identify itself with. Only the name is set, the key itself
+ *        wil be retrieved using a callback.
  *
  * @param[in] endpt_name Existing endpoint name.
- * @param[in] privkey_path Path to a private key.
+ * @param[in] name Arbitrary name of the host key.
  * @return 0 on success, -1 on error.
  */
-int nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *privkey_path);
+int nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name);
 
 /**
- * @brief Delete endpoint SSH host keys. Their order is preserved.
+ * @brief Set the callback for retrieving host keys. Any RSA, DSA, and ECDSA keys can be added. However,
+ *        a maximum of one key of each type will be used during SSH authentication, later keys replacing
+ *        the earlier ones.
+ *
+ * @param[in] hostkey_clb Callback that should return the key itself. Zero return indicates success, non-zero
+ *                        an error. On success exactly ONE of \p privkey_path or \p privkey_data is expected
+ *                        to be set. The one set will be freed.
+ *                        - \p privkey_path expects a PEM file,
+ *                        - \p privkey_data expects a base-64 encoded ANS.1 DER data,
+ *                        - \p privkey_data_rsa flag whether \p privkey_data are the data of an RSA (1) or a DSA (0) key.
+ * @param[in] user_data Optional arbitrary user data that will be passed to \p hostkey_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
+ */
+void nc_server_ssh_set_hostkey_clb(int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path,
+                                                      char **privkey_data, int *privkey_data_rsa),
+                                   void *user_data, void (*free_user_data)(void *user_data));
+
+/**
+ * @brief Delete endpoint SSH host key. Their order is preserved.
  *
  * @param[in] endpt_name Existing endpoint name.
- * @param[in] privkey_path Path to a private key. NULL matches all the keys.
+ * @param[in] name Name of the host key. NULL matches all the keys.
  * @return 0 on success, -1 on error.
  */
-int nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *privkey_path);
+int nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *name);
 
 /**
  * @brief Set endpoint SSH banner the server will send to every client.
@@ -444,63 +461,68 @@ int nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_t
 #ifdef NC_ENABLED_TLS
 
 /**
- * @brief Set the server TLS certificate. Alternative to nc_tls_server_set_cert_path().
+ * @brief Set the server TLS certificate. Only the name is set, the certificate itself
+ *        wil be retrieved using a callback.
  *
  * @param[in] endpt_name Existing endpoint name.
- * @param[in] cert Base64-encoded certificate in ASN.1 DER encoding. If NULL, the used certificate is cleared.
+ * @param[in] name Arbitrary certificate name.
  * @return 0 on success, -1 on error.
  */
-int nc_server_tls_endpt_set_cert(const char *endpt_name, const char *cert);
+int nc_server_tls_endpt_set_server_cert(const char *endpt_name, const char *name);
 
 /**
- * @brief Set the server TLS certificate. Alternative to nc_tls_server_set_cert().
+ * @brief Set the callback for retrieving server certificate and matching private key.
  *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] cert_path Path to a certificate file in PEM format. If NULL, the used certificate is cleared.
- * @return 0 on success, -1 on error.
+ * @param[in] cert_clb Callback that should return the certificate and the key itself. Zero return indicates success,
+ *                     non-zero an error. On success exactly ONE of \p cert_path or \p cert_data and ONE of
+ *                     \p privkey_path and \p privkey_data is expected to be set. Those set will be freed.
+ *                     - \p cert_path expects a PEM file,
+ *                     - \p cert_data expects a base-64 encoded ASN.1 DER data,
+ *                     - \p privkey_path expects a PEM file,
+ *                     - \p privkey_data expects a base-64 encoded ANS.1 DER data,
+ *                     - \p privkey_data_rsa flag whether \p privkey_data are the data of an RSA (1) or a DSA (0) key.
+ * @param[in] user_data Optional arbitrary user data that will be passed to \p cert_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
  */
-int nc_server_tls_endpt_set_cert_path(const char *endpt_name, const char *cert_path);
+void nc_server_tls_set_server_cert_clb(int (*cert_clb)(const char *name, void *user_data, char **cert_path, char **cert_data,
+                                                       char **privkey_path, char **privkey_data, int *privkey_data_rsa),
+                                       void *user_data, void (*free_user_data)(void *user_data));
 
 /**
- * @brief Set the server TLS private key matching the certificate.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] privkey Base64-encoded certificate in ASN.1 DER encoding. If NULL, the used key is cleared.
- * @param[in] is_rsa Whether \p privkey are the data of an RSA (1) or DSA (0) key.
- * @return 0 on success, -1 on error.
- */
-int nc_server_tls_endpt_set_key(const char *endpt_name, const char *privkey, int is_rsa);
-
-/**
- * @brief Set the server TLS private key matching the certificate.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] privkey_path Path to a private key file in PEM format. If NULL, the used key is cleared.
- * @return 0 on success, -1 on error.
- */
-int nc_server_tls_endpt_set_key_path(const char *endpt_name, const char *privkey_path);
-
-/**
- * @brief Add a trusted certificate. Can be both a CA or a client one. Can be
+ * @brief Add a trusted certificate list. Can be both a CA or a client one. Can be
  *        safely used together with nc_server_tls_endpt_set_trusted_ca_paths().
  *
  * @param[in] endpt_name Existing endpoint name.
- * @param[in] cert_name Arbitary name identifying this certificate.
- * @param[in] cert Base64-enocded certificate in ASN.1 DER encoding.
+ * @param[in] name Arbitary name identifying this certificate list.
  * @return 0 on success, -1 on error.
  */
-int nc_server_tls_endpt_add_trusted_cert(const char *endpt_name, const char *cert_name, const char *cert);
+int nc_server_tls_endpt_add_trusted_cert_list(const char *endpt_name, const char *name);
 
 /**
- * @brief Add a trusted certificate. Can be both a CA or a client one. Can be
- *        safely used together with nc_server_tls_endpt_set_trusted_ca_paths().
+ * @brief Set the callback for retrieving trusted certificates.
+ *
+ * @param[in] cert_list_clb Callback that should return all the certificates of a list. Zero return indicates success,
+ *                          non-zero an error. On success, \p cert_paths and \p cert_data are expected to be set or left
+ *                          NULL. Both will be (deeply) freed.
+ *                          - \p cert_paths expect an array of PEM files,
+ *                          - \p cert_path_count number of \p cert_paths array members,
+ *                          - \p cert_data expect an array of base-64 encoded ASN.1 DER cert data,
+ *                          - \p cert_data_count number of \p cert_data array members.
+ * @param[in] user_data Optional arbitrary user data that will be passed to \p cert_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
+ */
+void nc_server_tls_set_trusted_cert_list_clb(int (*cert_list_clb)(const char *name, void *user_data, char ***cert_paths,
+                                                                  int *cert_path_count, char ***cert_data, int *cert_data_count),
+                                             void *user_data, void (*free_user_data)(void *user_data));
+
+/**
+ * @brief Remove a trusted certificate.
  *
  * @param[in] endpt_name Existing endpoint name.
- * @param[in] cert_name Arbitary name identifying this certificate.
- * @param[in] cert_path Path to a trusted certificate file in PEM format.
- * @return 0 on success, -1 on error.
+ * @param[in] name Name of the certificate list to delete. NULL deletes all the lists.
+ * @return 0 on success, -1 on not found.
  */
-int nc_server_tls_endpt_add_trusted_cert_path(const char *endpt_name, const char *cert_name, const char *cert_path);
+int nc_server_tls_endpt_del_trusted_cert_list(const char *endpt_name, const char *name);
 
 /**
  * @brief Set trusted Certificate Authority certificate locations. There can only be
@@ -514,16 +536,6 @@ int nc_server_tls_endpt_add_trusted_cert_path(const char *endpt_name, const char
  * @return 0 on success, -1 on error.
  */
 int nc_server_tls_endpt_set_trusted_ca_paths(const char *endpt_name, const char *ca_file, const char *ca_dir);
-
-/**
- * @brief Destroy and clean all the set certificates and private keys. CRLs and
- *        CTN entries are not affected.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] cert_name Name of the certificate to delete. NULL deletes all the certificates.
- * @return 0 on success, -1 on not found.
- */
-int nc_server_tls_endpt_del_trusted_cert(const char *endpt_name, const char *cert_name);
 
 /**
  * @brief Set Certificate Revocation List locations. There can only be one file

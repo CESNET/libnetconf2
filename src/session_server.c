@@ -465,6 +465,18 @@ nc_server_destroy(void)
 #endif
 #ifdef NC_ENABLED_SSH
     nc_server_ssh_del_authkey(NULL, NULL, 0, NULL);
+
+    if (server_opts.hostkey_data && server_opts.hostkey_data_free) {
+        server_opts.hostkey_data_free(server_opts.hostkey_data);
+    }
+#endif
+#ifdef NC_ENABLED_TLS
+    if (server_opts.server_cert_data && server_opts.server_cert_data_free) {
+        server_opts.server_cert_data_free(server_opts.server_cert_data);
+    }
+    if (server_opts.trusted_cert_list_data && server_opts.trusted_cert_list_data_free) {
+        server_opts.trusted_cert_list_data_free(server_opts.trusted_cert_list_data);
+    }
 #endif
     nc_destroy();
 }
@@ -1506,7 +1518,7 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
     struct nc_endpt *endpt;
     struct nc_bind *bind = NULL;
     uint16_t i;
-    int sock = -1, set_addr;
+    int sock = -1, set_addr, ret = 0;
 
     if (!endpt_name) {
         ERRARG("endpt_name");
@@ -1541,7 +1553,8 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
         /* create new socket, close the old one */
         sock = nc_sock_listen(address, port);
         if (sock == -1) {
-            goto fail;
+            ret = -1;
+            goto cleanup;
         }
 
         if (bind->sock > -1) {
@@ -1567,14 +1580,11 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
 #endif
     }
 
+cleanup:
     /* UNLOCK */
     nc_server_endpt_unlock(endpt);
-    return 0;
 
-fail:
-    /* UNLOCK */
-    nc_server_endpt_unlock(endpt);
-    return -1;
+    return ret;
 }
 
 API int

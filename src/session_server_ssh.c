@@ -3,7 +3,7 @@
  * \author Michal Vasko <mvasko@cesnet.cz>
  * \brief libnetconf2 SSH server session manipulation functions
  *
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2017 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
  */
 
 #define _GNU_SOURCE
+#define _POSIX_SOURCE
 
 #include <stdlib.h>
 #include <string.h>
@@ -28,16 +29,51 @@
 
 extern struct nc_server_opts server_opts;
 
-static int
-nc_server_ssh_add_hostkey(const char *privkey_path, struct nc_server_ssh_opts *opts)
+static char *
+base64der_key_to_tmp_file(const char *in, int rsa)
 {
-    if (!privkey_path) {
-        ERRARG("privkey_path");
-        return -1;
+    char path[12] = "/tmp/XXXXXX";
+    int fd, written;
+    FILE *file;
+
+    if (in == NULL) {
+        return NULL;
     }
 
-    if (eaccess(privkey_path, R_OK)) {
-        ERR("Host key \"%s\" cannot be read (%s).", privkey_path, strerror(errno));
+    fd = mkstemp(path);
+    if (fd == -1) {
+        return NULL;
+    }
+
+    file = fdopen(fd, "r");
+    if (!file) {
+        close(fd);
+        return NULL;
+    }
+
+    /* write the key into the file */
+    written = fwrite("-----BEGIN ", 1, 11, file);
+    written += fwrite((rsa ? "RSA" : "DSA"), 1, 3, file);
+    written += fwrite(" PRIVATE KEY-----\n", 1, 18, file);
+    written += fwrite(in, 1, strlen(in), file);
+    written += fwrite("\n-----END ", 1, 10, file);
+    written += fwrite((rsa ? "RSA" : "DSA"), 1, 3, file);
+    written += fwrite(" PRIVATE KEY-----", 1, 17, file);
+
+    fclose(file);
+    if ((unsigned)written != 62 + strlen(in)) {
+        unlink(path);
+        return NULL;
+    }
+
+    return strdup(path);
+}
+
+static int
+nc_server_ssh_add_hostkey(const char *name, struct nc_server_ssh_opts *opts)
+{
+    if (!name) {
+        ERRARG("name");
         return -1;
     }
 
@@ -47,13 +83,13 @@ nc_server_ssh_add_hostkey(const char *privkey_path, struct nc_server_ssh_opts *o
         ERRMEM;
         return -1;
     }
-    opts->hostkeys[opts->hostkey_count - 1] = lydict_insert(server_opts.ctx, privkey_path, 0);
+    opts->hostkeys[opts->hostkey_count - 1] = lydict_insert(server_opts.ctx, name, 0);
 
     return 0;
 }
 
 API int
-nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *privkey_path)
+nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name)
 {
     int ret;
     struct nc_endpt *endpt;
@@ -63,7 +99,7 @@ nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *privkey_path
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_ssh_add_hostkey(privkey_path, endpt->opts.ssh);
+    ret = nc_server_ssh_add_hostkey(name, endpt->opts.ssh);
     /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
@@ -71,7 +107,7 @@ nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *privkey_path
 }
 
 API int
-nc_server_ssh_ch_client_add_hostkey(const char *client_name, const char *privkey_path)
+nc_server_ssh_ch_client_add_hostkey(const char *client_name, const char *name)
 {
     int ret;
     struct nc_ch_client *client;
@@ -81,19 +117,34 @@ nc_server_ssh_ch_client_add_hostkey(const char *client_name, const char *privkey
     if (!client) {
         return -1;
     }
-    ret = nc_server_ssh_add_hostkey(privkey_path, client->opts.ssh);
+    ret = nc_server_ssh_add_hostkey(name, client->opts.ssh);
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
     return ret;
 }
 
+API void
+nc_server_ssh_set_hostkey_clb(int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path,
+                                                 char **privkey_data, int *privkey_data_rsa),
+                              void *user_data, void (*free_user_data)(void *user_data))
+{
+    if (!hostkey_clb) {
+        ERRARG("hostkey_clb");
+        return;
+    }
+
+    server_opts.hostkey_clb = hostkey_clb;
+    server_opts.hostkey_data = user_data;
+    server_opts.hostkey_data_free = free_user_data;
+}
+
 static int
-nc_server_ssh_del_hostkey(const char *privkey_path, struct nc_server_ssh_opts *opts)
+nc_server_ssh_del_hostkey(const char *name, struct nc_server_ssh_opts *opts)
 {
     uint8_t i;
 
-    if (!privkey_path) {
+    if (!name) {
         for (i = 0; i < opts->hostkey_count; ++i) {
             lydict_remove(server_opts.ctx, opts->hostkeys[i]);
         }
@@ -102,7 +153,7 @@ nc_server_ssh_del_hostkey(const char *privkey_path, struct nc_server_ssh_opts *o
         opts->hostkey_count = 0;
     } else {
         for (i = 0; i < opts->hostkey_count; ++i) {
-            if (!strcmp(opts->hostkeys[i], privkey_path)) {
+            if (!strcmp(opts->hostkeys[i], name)) {
                 --opts->hostkey_count;
                 lydict_remove(server_opts.ctx, opts->hostkeys[i]);
                 if (i < opts->hostkey_count - 1) {
@@ -112,7 +163,7 @@ nc_server_ssh_del_hostkey(const char *privkey_path, struct nc_server_ssh_opts *o
             }
         }
 
-        ERR("Host key \"%s\" not found.", privkey_path);
+        ERR("Host key \"%s\" not found.", name);
         return -1;
     }
 
@@ -120,7 +171,7 @@ nc_server_ssh_del_hostkey(const char *privkey_path, struct nc_server_ssh_opts *o
 }
 
 API int
-nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *privkey_path)
+nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *name)
 {
     int ret;
     struct nc_endpt *endpt;
@@ -130,7 +181,7 @@ nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *privkey_path
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_ssh_del_hostkey(privkey_path, endpt->opts.ssh);
+    ret = nc_server_ssh_del_hostkey(name, endpt->opts.ssh);
     /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
@@ -138,7 +189,7 @@ nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *privkey_path
 }
 
 API int
-nc_server_ssh_ch_client_del_hostkey(const char *client_name, const char *privkey_path)
+nc_server_ssh_ch_client_del_hostkey(const char *client_name, const char *name)
 {
     int ret;
     struct nc_ch_client *client;
@@ -148,7 +199,7 @@ nc_server_ssh_ch_client_del_hostkey(const char *client_name, const char *privkey
     if (!client) {
         return -1;
     }
-    ret = nc_server_ssh_del_hostkey(privkey_path, client->opts.ssh);
+    ret = nc_server_ssh_del_hostkey(name, client->opts.ssh);
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
@@ -1030,13 +1081,58 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
     return 0;
 }
 
+static int
+nc_ssh_bind_add_hostkeys(ssh_bind sbind, const char **hostkeys, uint8_t hostkey_count)
+{
+    uint8_t i;
+    char *privkey_path, *privkey_data;
+    int privkey_data_rsa, ret;
+
+    if (!server_opts.hostkey_clb) {
+        ERR("Callback for retrieving SSH host keys not set.");
+        return -1;
+    }
+
+    for (i = 0; i < hostkey_count; ++i) {
+        privkey_path = privkey_data = NULL;
+        if (server_opts.hostkey_clb(hostkeys[i], server_opts.hostkey_data, &privkey_path, &privkey_data, &privkey_data_rsa)) {
+            ERR("Host key callback failed.");
+            return -1;
+        }
+
+        if (privkey_data) {
+            privkey_path = base64der_key_to_tmp_file(privkey_data, privkey_data_rsa);
+            if (!privkey_path) {
+                ERR("Temporarily storing a host key into a file failed (%s).", strerror(errno));
+                free(privkey_data);
+                return -1;
+            }
+        }
+
+        ret = ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HOSTKEY, privkey_path);
+
+        /* cleanup */
+        if (privkey_data && unlink(privkey_path)) {
+            WRN("Removing a temporary host key file \"%s\" failed (%s).", privkey_path, strerror(errno));
+        }
+        free(privkey_path);
+        free(privkey_data);
+
+        if (ret != SSH_OK) {
+            ERR("Failed to set hostkey \"%s\" (%s).", hostkeys[i], ssh_get_error(sbind));
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 int
 nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 {
     ssh_bind sbind;
     struct nc_server_ssh_opts *opts;
     int libssh_auth_methods = 0, elapsed_usec = 0, ret;
-    uint8_t i;
 
     opts = session->data;
 
@@ -1066,13 +1162,11 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         close(sock);
         return -1;
     }
-    for (i = 0; i < opts->hostkey_count; ++i) {
-        if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HOSTKEY, opts->hostkeys[i]) != SSH_OK) {
-            ERR("Failed to set hostkey \"%s\" (%s).", opts->hostkeys[i], ssh_get_error(sbind));
-            close(sock);
-            ssh_bind_free(sbind);
-            return -1;
-        }
+
+    if (nc_ssh_bind_add_hostkeys(sbind, opts->hostkeys, opts->hostkey_count)) {
+        close(sock);
+        ssh_bind_free(sbind);
+        return -1;
     }
     if (opts->banner) {
         ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_BANNER, opts->banner);

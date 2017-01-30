@@ -4,7 +4,7 @@
  * \author Michal Vasko <mvasko@cesnet.cz>
  * \brief libnetconf2 session manipulation
  *
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2017 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -98,13 +98,9 @@ struct nc_client_tls_opts {
 
 /* ACCESS locked, separate locks */
 struct nc_server_tls_opts {
-    EVP_PKEY *server_key;
-    X509 *server_cert;
-    struct nc_cert {
-        const char *name;
-        X509 *cert;
-    } *trusted_certs;
-    uint16_t trusted_cert_count;
+    const char *server_cert;
+    const char **trusted_cert_lists;
+    uint16_t trusted_cert_list_count;
     const char *trusted_ca_file;
     const char *trusted_ca_dir;
     X509_STORE *crl_store;
@@ -149,6 +145,16 @@ struct nc_server_opts {
     uint16_t idle_timeout;
 #ifdef NC_ENABLED_TLS
     int (*user_verify_clb)(const struct nc_session *session);
+
+    int (*server_cert_clb)(const char *name, void *user_data, char **cert_path, char **cert_data,char **privkey_path,
+                           char **privkey_data, int *privkey_data_rsa);
+    void *server_cert_data;
+    void (*server_cert_data_free)(void *data);
+
+    int (*trusted_cert_list_clb)(const char *name, void *user_data, char ***cert_paths, int *cert_path_count,
+                                 char ***cert_data, int *cert_data_count);
+    void *trusted_cert_list_data;
+    void (*trusted_cert_list_data_free)(void *data);
 #endif
 
 #ifdef NC_ENABLED_SSH
@@ -161,6 +167,10 @@ struct nc_server_opts {
     } *authkeys;
     uint16_t authkey_count;
     pthread_mutex_t authkey_lock;
+
+    int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path, char **privkey_data, int *privkey_data_rsa);
+    void *hostkey_data;
+    void (*hostkey_data_free)(void *data);
 #endif
 
     /* ACCESS locked, add/remove binds/endpts - WRITE lock endpt_array_lock
