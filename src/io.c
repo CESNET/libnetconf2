@@ -416,7 +416,7 @@ nc_read_poll(struct nc_session *session, int timeout)
         /* EINTR is handled, it resumes waiting */
         ret = ssh_channel_poll_timeout(session->ti.libssh.channel, timeout, 0);
         if (ret == SSH_ERROR) {
-            ERR("Session %u: polling on the SSH channel failed (%s).", session->id,
+            ERR("Session %u: SSH channel poll error (%s).", session->id,
                 ssh_get_error(session->ti.libssh.session));
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_OTHER;
@@ -433,13 +433,19 @@ nc_read_poll(struct nc_session *session, int timeout)
         } else { /* ret == 0 */
             fds.revents = 0;
         }
-        /* fallthrough */
+        break;
 #endif
 #ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
-        if (session->ti_type == NC_TI_OPENSSL) {
-            fds.fd = SSL_get_fd(session->ti.tls);
+        ret = SSL_pending(session->ti.tls);
+        if (ret) {
+            /* some buffered TLS data available */
+            ret = 1;
+            fds.revents = POLLIN;
+            break;
         }
+
+        fds.fd = SSL_get_fd(session->ti.tls);
         /* fallthrough */
 #endif
     case NC_TI_FD:
@@ -447,16 +453,13 @@ nc_read_poll(struct nc_session *session, int timeout)
             fds.fd = session->ti.fd.in;
         }
 
-        /* poll only if it is not an SSH session */
-        if (ret == -2) {
-            fds.events = POLLIN;
-            fds.revents = 0;
+        fds.events = POLLIN;
+        fds.revents = 0;
 
-            sigfillset(&sigmask);
-            pthread_sigmask(SIG_SETMASK, &sigmask, &origmask);
-            ret = poll(&fds, 1, timeout);
-            pthread_sigmask(SIG_SETMASK, &origmask, NULL);
-        }
+        sigfillset(&sigmask);
+        pthread_sigmask(SIG_SETMASK, &sigmask, &origmask);
+        ret = poll(&fds, 1, timeout);
+        pthread_sigmask(SIG_SETMASK, &origmask, NULL);
 
         break;
 

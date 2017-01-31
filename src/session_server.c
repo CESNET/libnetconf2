@@ -1164,7 +1164,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                 r = ssh_channel_poll_timeout(cur_session->ti.libssh.channel, 0, 0);
                 if (r < 1) {
                     if (r == SSH_EOF) {
-                        sprintf(msg, "SSH channel unexpectedly closed");
+                        sprintf(msg, "SSH channel unexpected EOF");
                         term_reason = NC_SESSION_TERM_DROPPED;
                         poll_ret = -2;
                     } else if (r == SSH_ERROR) {
