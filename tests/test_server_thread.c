@@ -515,7 +515,7 @@ tls_endpt_add_ctn_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_tls_endpt_add_ctn("main_tls", 0, "02:F0:F1:F2:F3:F4:F5:F6:F7:F8:F9:10:11:12:EE:FF:A0:A1:A2:A3",
+    ret = nc_server_tls_endpt_add_ctn("main_tls", 2, "02:F0:F1:F2:F3:F4:F5:F6:F7:F8:F9:10:11:12:EE:FF:A0:A1:A2:A3",
                                       NC_TLS_CTN_SAN_IP_ADDRESS, NULL);
     nc_assert(!ret);
 
@@ -728,7 +728,7 @@ main(void)
     ++clients;
 
     /* for tls_endpt_del_ctn */
-    ret = nc_server_tls_endpt_add_ctn("main_tls", 0, "02:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:A0:A1:A2:A3", NC_TLS_CTN_SAN_ANY, NULL);
+    ret = nc_server_tls_endpt_add_ctn("main_tls", 1, "02:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:A0:A1:A2:A3", NC_TLS_CTN_SAN_ANY, NULL);
     nc_assert(!ret);
 
     ret = nc_server_add_endpt("quaternary", NC_TI_OPENSSL);

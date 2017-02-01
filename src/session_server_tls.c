@@ -317,6 +317,12 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
     }
 
     for (ctn = ctn_first; ctn; ctn = ctn->next) {
+        /* first make sure the entry is valid */
+        if (!ctn->fingerprint || !ctn->map_type || ((ctn->map_type == NC_TLS_CTN_SPECIFIED) && !ctn->name)) {
+            VRB("Cert verify CTN: entry with id %u not valid, skipping.", ctn->id);
+            continue;
+        }
+
         /* MD5 */
         if (!strncmp(ctn->fingerprint, "01", 2)) {
             if (!digest_md5) {
@@ -1148,42 +1154,54 @@ nc_server_tls_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE m
 {
     struct nc_ctn *ctn, *new;
 
-    if (!fingerprint) {
-        ERRARG("fingerprint");
-        return -1;
-    } else if (!map_type) {
-        ERRARG("map_type");
-        return -1;
-    } else if (((map_type == NC_TLS_CTN_SPECIFIED) && !name)
-            || ((map_type != NC_TLS_CTN_SPECIFIED) && name)) {
-        ERRARG("map_type and name");
-        return -1;
-    }
-
-    new = malloc(sizeof *new);
-    if (!new) {
-        ERRMEM;
-        return -1;
-    }
-
-    new->fingerprint = lydict_insert(server_opts.ctx, fingerprint, 0);
-    new->name = lydict_insert(server_opts.ctx, name, 0);
-    new->id = id;
-    new->map_type = map_type;
-    new->next = NULL;
-
     if (!opts->ctn) {
         /* the first item */
-        opts->ctn = new;
+        opts->ctn = new = calloc(1, sizeof *new);
+        if (!new) {
+            ERRMEM;
+            return -1;
+        }
     } else if (opts->ctn->id > id) {
         /* insert at the beginning */
+        new = calloc(1, sizeof *new);
+        if (!new) {
+            ERRMEM;
+            return -1;
+        }
         new->next = opts->ctn;
         opts->ctn = new;
     } else {
-        for (ctn = opts->ctn; ctn->next && ctn->next->id <= id; ctn = ctn->next);
-        /* insert after ctn */
-        new->next = ctn->next;
-        ctn->next = new;
+        for (ctn = opts->ctn; ctn->next && ctn->next->id < id; ctn = ctn->next);
+        if (ctn->next && (ctn->next->id == id)) {
+            /* it exists already */
+            new = ctn->next;
+        } else {
+            /* insert after ctn */
+            new = calloc(1, sizeof *new);
+            if (!new) {
+                ERRMEM;
+                return -1;
+            }
+            new->next = ctn->next;
+            ctn->next = new;
+        }
+    }
+
+    new->id = id;
+    if (fingerprint) {
+        if (new->fingerprint) {
+            lydict_remove(server_opts.ctx, new->fingerprint);
+        }
+        new->fingerprint = lydict_insert(server_opts.ctx, fingerprint, 0);
+    }
+    if (map_type) {
+        new->map_type = map_type;
+    }
+    if (name) {
+        if (new->name) {
+            lydict_remove(server_opts.ctx, new->name);
+        }
+        new->name = lydict_insert(server_opts.ctx, name, 0);
     }
 
     return 0;
@@ -1352,13 +1370,13 @@ nc_server_tls_get_ctn(uint32_t *id, char **fingerprint, NC_TLS_CTN_MAPTYPE *map_
         if (id && *id && (*id != ctn->id)) {
             continue;
         }
-        if (fingerprint && *fingerprint && strcmp(*fingerprint, ctn->fingerprint)) {
+        if (fingerprint && *fingerprint && (!ctn->fingerprint || strcmp(*fingerprint, ctn->fingerprint))) {
             continue;
         }
-        if (map_type && *map_type && (*map_type != ctn->map_type)) {
+        if (map_type && *map_type && (!ctn->map_type || (*map_type != ctn->map_type))) {
             continue;
         }
-        if (name && *name && strcmp(*name, ctn->name)) {
+        if (name && *name && (!ctn->name || strcmp(*name, ctn->name))) {
             continue;
         }
 
@@ -1366,13 +1384,13 @@ nc_server_tls_get_ctn(uint32_t *id, char **fingerprint, NC_TLS_CTN_MAPTYPE *map_
         if (id && !(*id)) {
             *id = ctn->id;
         }
-        if (fingerprint && !(*fingerprint)) {
+        if (fingerprint && !(*fingerprint) && ctn->fingerprint) {
             *fingerprint = strdup(ctn->fingerprint);
         }
-        if (map_type && !(*map_type)) {
+        if (map_type && !(*map_type) && ctn->map_type) {
             *map_type = ctn->map_type;
         }
-        if (name && !(*name) && ctn->name) {
+        if (name && !(*name) && ctn->name && ctn->name) {
             *name = strdup(ctn->name);
         }
 

@@ -560,11 +560,15 @@ void nc_server_tls_endpt_clear_crls(const char *endpt_name);
 /**
  * @brief Add a cert-to-name entry.
  *
+ * It is possible to add an entry step-by-step, specifying first only \p ip and in later calls
+ * \p fingerprint, \p map_type, and optionally \p name spearately.
+ *
  * @param[in] endpt_name Existing endpoint name.
- * @param[in] id Priority of the entry.
- * @param[in] fingerprint Matching certificate fingerprint.
- * @param[in] map_type Type of username-certificate mapping.
- * @param[in] name Specific username if \p map_type == NC_TLS_CTN_SPECIFED. Must be NULL otherwise.
+ * @param[in] id Priority of the entry. It must be unique. If already exists, the entry with this id
+ *               is modified.
+ * @param[in] fingerprint Matching certificate fingerprint. If NULL, kept temporarily unset.
+ * @param[in] map_type Type of username-certificate mapping. If 0, kept temporarily unset.
+ * @param[in] name Specific username used only if \p map_type == NC_TLS_CTN_SPECIFED.
  * @return 0 on success, -1 on error.
  */
 int nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char *fingerprint,
