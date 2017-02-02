@@ -841,13 +841,11 @@ remove:
             --ps->session_count;
             if (i < ps->session_count) {
                 ps->sessions[i] = ps->sessions[ps->session_count];
-                if (ps->last_event_session == i) {
-                    ps->last_event_session = 0;
-                }
             } else if (!ps->session_count) {
                 free(ps->sessions);
                 ps->sessions = NULL;
             }
+            ps->last_event_session = 0;
             return 0;
         }
     }
