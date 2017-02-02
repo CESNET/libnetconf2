@@ -1172,9 +1172,9 @@ nc_server_tls_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE m
         opts->ctn = new;
     } else {
         for (ctn = opts->ctn; ctn->next && ctn->next->id < id; ctn = ctn->next);
-        if (ctn->next && (ctn->next->id == id)) {
+        if (ctn->id == id) {
             /* it exists already */
-            new = ctn->next;
+            new = ctn;
         } else {
             /* insert after ctn */
             new = calloc(1, sizeof *new);
