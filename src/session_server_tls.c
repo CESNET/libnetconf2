@@ -134,7 +134,7 @@ pem_to_cert(const char *path)
     return out;
 }
 
-/*static EVP_PKEY *
+static EVP_PKEY *
 base64der_to_privatekey(const char *in, int rsa)
 {
     EVP_PKEY *out;
@@ -164,7 +164,7 @@ base64der_to_privatekey(const char *in, int rsa)
     free(buf);
     BIO_free(bio);
     return out;
-}*/
+}
 
 static int
 cert_pubkey_match(X509 *cert1, X509 *cert2)
@@ -1490,8 +1490,8 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
 {
     char *cert_path = NULL, *cert_data = NULL, *privkey_path = NULL, *privkey_data = NULL;
     int privkey_data_rsa = 1, ret = 0;
-    /*X509 *cert = NULL;
-    EVP_PKEY *pkey = NULL;*/
+    X509 *cert = NULL;
+    EVP_PKEY *pkey = NULL;
 
     if (!cert_name) {
         ERR("Server certificate not set.");
@@ -1515,13 +1515,8 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
             goto cleanup;
         }
     } else {
-        /*cert = base64der_to_cert(cert_data);
+        cert = base64der_to_cert(cert_data);
         if (!cert || (SSL_CTX_use_certificate(tls_ctx, cert) != 1)) {
-            ERR("Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
-            ret = -1;
-            goto cleanup;
-        }*/
-        if (SSL_CTX_use_certificate_ASN1(tls_ctx, strlen(cert_data), (unsigned char *)cert_data) != 1) {
             ERR("Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
             ret = -1;
             goto cleanup;
@@ -1536,14 +1531,8 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
             goto cleanup;
         }
     } else {
-        /*pkey = base64der_to_privatekey(privkey_data, privkey_data_rsa);
+        pkey = base64der_to_privatekey(privkey_data, privkey_data_rsa);
         if (!pkey || (SSL_CTX_use_PrivateKey(tls_ctx, pkey) != 1)) {
-            ERR("Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
-            ret = -1;
-            goto cleanup;
-        }*/
-        if (SSL_CTX_use_PrivateKey_ASN1((privkey_data_rsa ? EVP_PKEY_RSA : EVP_PKEY_DSA), tls_ctx,
-                                        (unsigned char *)privkey_data, strlen(privkey_data)) != 1) {
             ERR("Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
             ret = -1;
             goto cleanup;
@@ -1551,8 +1540,8 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
     }
 
 cleanup:
-    /*X509_free(cert);
-    EVP_PKEY_free(pkey);*/
+    X509_free(cert);
+    EVP_PKEY_free(pkey);
     free(cert_path);
     free(cert_data);
     free(privkey_path);
