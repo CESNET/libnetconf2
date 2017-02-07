@@ -71,8 +71,6 @@ setup_write(void **state)
     w->rpc = nc_rpc_lock(NC_DATASTORE_RUNNING);
     assert_non_null(w->rpc);
 
-    w->session->ti.fd.in = -1;
-
     *state = w;
 
     return 0;
@@ -166,6 +164,7 @@ test_write_rpc_11_bad(void **state)
 
     return test_write_rpc_bad(state);
 }
+
 int main(void)
 {
     const struct CMUnitTest io[] = {
