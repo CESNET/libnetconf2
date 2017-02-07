@@ -946,12 +946,6 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
             return 0;
         }
 
-        if (session->opts.server.ssh_auth_attempts >= ((struct nc_server_ssh_opts *)session->data)->auth_attempts) {
-            /* too many failed attempts */
-            ssh_message_reply_default(msg);
-            return 0;
-        }
-
         /* save the username, do not let the client change it */
         username = ssh_message_auth_user(msg);
         if (!session->username) {
@@ -1225,6 +1219,11 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         if (ssh_execute_message_callbacks(session->ti.libssh.session) != SSH_OK) {
             ERR("Failed to receive SSH messages on a session (%s).",
                 ssh_get_error(session->ti.libssh.session));
+            return -1;
+        }
+
+        if (session->opts.server.ssh_auth_attempts >= opts->auth_attempts) {
+            ERR("Too many failed authentication attempts of user \"%s\".", session->username);
             return -1;
         }
 
