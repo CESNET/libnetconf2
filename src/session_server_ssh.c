@@ -1212,7 +1212,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     elapsed_usec = 0;
     do {
         if (!nc_session_is_connected(session)) {
-            ERR("Communication socket unexpectedly closed (libssh).");
+            ERR("Communication SSH socket unexpectedly closed.");
             return -1;
         }
 
@@ -1237,7 +1237,11 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 
     if (!(session->flags & NC_SESSION_SSH_AUTHENTICATED)) {
         /* timeout */
-        ERR("Client failed to authenticate for too long, disconnecting.");
+        if (session->username) {
+            ERR("User \"%s\" failed to authenticate for too long, disconnecting.", session->username);
+        } else {
+            ERR("User failed to authenticate for too long, disconnecting.");
+        }
         return 0;
     }
 
