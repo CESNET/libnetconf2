@@ -533,8 +533,7 @@ nc_session_is_connected(struct nc_session *session)
         break;
 #ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
-        fds.fd = ssh_get_fd(session->ti.libssh.session);
-        break;
+        return ssh_is_connected(session->ti.libssh.session);
 #endif
 #ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
@@ -543,6 +542,10 @@ nc_session_is_connected(struct nc_session *session)
 #endif
     case NC_TI_NONE:
         ERRINT;
+        return 0;
+    }
+
+    if (fds.fd == -1) {
         return 0;
     }
 
