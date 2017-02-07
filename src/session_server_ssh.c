@@ -1139,7 +1139,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
             return -1;
         }
 
-        if (session->opts.server.ssh_auth_attempts >= opts->auth_attempts) {
+        if (session->ssh_auth_attempts >= opts->auth_attempts) {
             ERR("Too many failed authentication attempts of user \"%s\".", session->username);
             return -1;
         }
