@@ -36,6 +36,7 @@ set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSI
 option(ENABLE_SSH "Enable NETCONF over SSH support (via libssh)" ON)
 option(ENABLE_TLS "Enable NETCONF over TLS support (via OpenSSL)" ON)
 option(ENABLE_DNSSEC "Enable support for SSHFP retrieval using DNSSEC for SSH (requires OpenSSL and libval)" OFF)
+set(READ_TIMEOUT 30 CACHE STRING "Maximum number of seconds waiting for some expected data")
 
 if(ENABLE_DNSSEC AND NOT ENABLE_SSH)
     message(WARNING "DNSSEC SSHFP retrieval cannot be used without SSH support.")
@@ -139,11 +140,6 @@ if(DOXYGEN_FOUND)
             COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_BINARY_DIR}/Doxyfile
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
     configure_file(Doxyfile.in Doxyfile)
-endif()
-
-# option - partial message read timeout in seconds (also used for internal <get-schema> RPC reply wait)
-if(NOT READ_TIMEOUT)
-    set(READ_TIMEOUT 30)
 endif()
 
 # install library
