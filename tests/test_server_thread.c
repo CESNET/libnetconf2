@@ -132,7 +132,7 @@ ssh_endpt_set_hostkey_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_endpt_add_hostkey("main_ssh", "key_dsa");
+    ret = nc_server_ssh_endpt_add_hostkey("main_ssh", "key_dsa", -1);
     nc_assert(!ret);
 
     return NULL;
@@ -687,7 +687,7 @@ main(void)
     nc_assert(!ret);
     ret = nc_server_ssh_add_authkey_path(TESTS_DIR"/data/key_dsa.pub", "test");
     nc_assert(!ret);
-    ret = nc_server_ssh_endpt_add_hostkey("main_ssh", "key_rsa");
+    ret = nc_server_ssh_endpt_add_hostkey("main_ssh", "key_rsa", -1);
     nc_assert(!ret);
 
     /* client ready */

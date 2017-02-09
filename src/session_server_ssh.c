@@ -70,10 +70,13 @@ base64der_key_to_tmp_file(const char *in, int rsa)
 }
 
 static int
-nc_server_ssh_add_hostkey(const char *name, struct nc_server_ssh_opts *opts)
+nc_server_ssh_add_hostkey(const char *name, int16_t idx, struct nc_server_ssh_opts *opts)
 {
     if (!name) {
         ERRARG("name");
+        return -1;
+    } else if (idx > opts->hostkey_count) {
+        ERRARG("idx");
         return -1;
     }
 
@@ -83,13 +86,20 @@ nc_server_ssh_add_hostkey(const char *name, struct nc_server_ssh_opts *opts)
         ERRMEM;
         return -1;
     }
-    opts->hostkeys[opts->hostkey_count - 1] = lydict_insert(server_opts.ctx, name, 0);
+
+    if (idx < 0) {
+        idx = opts->hostkey_count - 1;
+    }
+    if (idx != opts->hostkey_count - 1) {
+        memmove(opts->hostkeys + idx + 1, opts->hostkeys + idx, opts->hostkey_count - idx);
+    }
+    opts->hostkeys[idx] = lydict_insert(server_opts.ctx, name, 0);
 
     return 0;
 }
 
 API int
-nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name)
+nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name, int16_t idx)
 {
     int ret;
     struct nc_endpt *endpt;
@@ -99,7 +109,7 @@ nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name)
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_ssh_add_hostkey(name, endpt->opts.ssh);
+    ret = nc_server_ssh_add_hostkey(name, idx, endpt->opts.ssh);
     /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
@@ -107,7 +117,7 @@ nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name)
 }
 
 API int
-nc_server_ssh_ch_client_add_hostkey(const char *client_name, const char *name)
+nc_server_ssh_ch_client_add_hostkey(const char *client_name, const char *name, int16_t idx)
 {
     int ret;
     struct nc_ch_client *client;
@@ -117,7 +127,7 @@ nc_server_ssh_ch_client_add_hostkey(const char *client_name, const char *name)
     if (!client) {
         return -1;
     }
-    ret = nc_server_ssh_add_hostkey(name, client->opts.ssh);
+    ret = nc_server_ssh_add_hostkey(name, idx, client->opts.ssh);
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
@@ -140,38 +150,52 @@ nc_server_ssh_set_hostkey_clb(int (*hostkey_clb)(const char *name, void *user_da
 }
 
 static int
-nc_server_ssh_del_hostkey(const char *name, struct nc_server_ssh_opts *opts)
+nc_server_ssh_del_hostkey(const char *name, int16_t idx, struct nc_server_ssh_opts *opts)
 {
     uint8_t i;
 
-    if (!name) {
+    if (name && (idx > -1)) {
+        ERRARG("name and idx");
+        return -1;
+    } else if (idx >= opts->hostkey_count) {
+        ERRARG("idx");
+    }
+
+    if (!name && (idx < 0)) {
         for (i = 0; i < opts->hostkey_count; ++i) {
             lydict_remove(server_opts.ctx, opts->hostkeys[i]);
         }
         free(opts->hostkeys);
         opts->hostkeys = NULL;
         opts->hostkey_count = 0;
-    } else {
+    } else if (name) {
         for (i = 0; i < opts->hostkey_count; ++i) {
             if (!strcmp(opts->hostkeys[i], name)) {
-                --opts->hostkey_count;
-                lydict_remove(server_opts.ctx, opts->hostkeys[i]);
-                if (i < opts->hostkey_count - 1) {
-                    memmove(opts->hostkeys + i, opts->hostkeys + i + 1, (opts->hostkey_count - i) * sizeof *opts->hostkeys);
-                }
-                return 0;
+                idx = i;
+                goto remove_idx;
             }
         }
 
-        ERR("Host key \"%s\" not found.", name);
+        ERRARG("name");
         return -1;
+    } else {
+remove_idx:
+        --opts->hostkey_count;
+        lydict_remove(server_opts.ctx, opts->hostkeys[idx]);
+        if (idx < opts->hostkey_count - 1) {
+            memmove(opts->hostkeys + idx, opts->hostkeys + idx + 1, (opts->hostkey_count - idx) * sizeof *opts->hostkeys);
+        }
+        if (!opts->hostkey_count) {
+            free(opts->hostkeys);
+            opts->hostkeys = NULL;
+        }
     }
 
     return 0;
 }
 
 API int
-nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *name)
+nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *name, int16_t idx)
 {
     int ret;
     struct nc_endpt *endpt;
@@ -181,7 +205,7 @@ nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *name)
     if (!endpt) {
         return -1;
     }
-    ret = nc_server_ssh_del_hostkey(name, endpt->opts.ssh);
+    ret = nc_server_ssh_del_hostkey(name, idx, endpt->opts.ssh);
     /* UNLOCK */
     nc_server_endpt_unlock(endpt);
 
@@ -189,7 +213,7 @@ nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *name)
 }
 
 API int
-nc_server_ssh_ch_client_del_hostkey(const char *client_name, const char *name)
+nc_server_ssh_ch_client_del_hostkey(const char *client_name, const char *name, int16_t idx)
 {
     int ret;
     struct nc_ch_client *client;
@@ -199,7 +223,7 @@ nc_server_ssh_ch_client_del_hostkey(const char *client_name, const char *name)
     if (!client) {
         return -1;
     }
-    ret = nc_server_ssh_del_hostkey(name, client->opts.ssh);
+    ret = nc_server_ssh_del_hostkey(name, idx, client->opts.ssh);
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
@@ -511,7 +535,7 @@ nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64, NC
 void
 nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts)
 {
-    nc_server_ssh_del_hostkey(NULL, opts);
+    nc_server_ssh_del_hostkey(NULL, -1, opts);
     if (opts->banner) {
         lydict_remove(server_opts.ctx, opts->banner);
         opts->banner = NULL;

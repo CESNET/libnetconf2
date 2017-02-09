@@ -178,18 +178,20 @@ int nc_connect_ch_client_dispatch(const char *client_name,
  *
  * @param[in] client_name Existing Call Home client name.
  * @param[in] name Arbitrary name of the host key.
+ * @param[in] idx Optional index where to add the key. -1 adds at the end.
  * @return 0 on success, -1 on error.
  */
-int nc_server_ssh_ch_client_add_hostkey(const char *client_name, const char *name);
+int nc_server_ssh_ch_client_add_hostkey(const char *client_name, const char *name, int16_t idx);
 
 /**
  * @brief Delete Call Home SSH host keys. Their order is preserved.
  *
  * @param[in] client_name Existing Call Home client name.
- * @param[in] name Name of the host key. NULL matches all the keys.
+ * @param[in] name Name of the host key. NULL matches all the keys, but if \p idx != -1 then this must be NULL.
+ * @param[in] idx Index of the hostkey. -1 matches all indices, but if \p name != NULL then this must be -1.
  * @return 0 on success, -1 on error.
  */
-int nc_server_ssh_ch_client_del_hostkey(const char *client_name, const char *name);
+int nc_server_ssh_ch_client_del_hostkey(const char *client_name, const char *name, int16_t idx);
 
 /**
  * @brief Set Call Home SSH banner the server will send to every client.

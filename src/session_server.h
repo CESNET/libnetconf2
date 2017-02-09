@@ -388,9 +388,10 @@ int nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64
  *
  * @param[in] endpt_name Existing endpoint name.
  * @param[in] name Arbitrary name of the host key.
+ * @param[in] idx Optional index where to add the key. -1 adds at the end.
  * @return 0 on success, -1 on error.
  */
-int nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name);
+int nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name, int16_t idx);
 
 /**
  * @brief Set the callback for retrieving host keys. Any RSA, DSA, and ECDSA keys can be added. However,
@@ -414,10 +415,11 @@ void nc_server_ssh_set_hostkey_clb(int (*hostkey_clb)(const char *name, void *us
  * @brief Delete endpoint SSH host key. Their order is preserved.
  *
  * @param[in] endpt_name Existing endpoint name.
- * @param[in] name Name of the host key. NULL matches all the keys.
+ * @param[in] name Name of the host key. NULL matches all the keys, but if \p idx != -1 then this must be NULL.
+ * @param[in] idx Index of the hostkey. -1 matches all indices, but if \p name != NULL then this must be -1.
  * @return 0 on success, -1 on error.
  */
-int nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *name);
+int nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *name, int16_t idx);
 
 /**
  * @brief Set endpoint SSH banner the server will send to every client.
