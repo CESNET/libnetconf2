@@ -152,7 +152,7 @@ int nc_server_ch_client_set_start_with(const char *client_name, NC_CH_START_WITH
  * @brief Set Call Home client overall max attempts.
  *
  * @param[in] client_name Existing Call Home client name.
- * @param[in] conn_type Call Home overall max reconnect attempts.
+ * @param[in] max_attempts Call Home overall max reconnect attempts.
  * @return 0 on success, -1 on error.
  */
 int nc_server_ch_client_set_max_attempts(const char *client_name, uint8_t max_attempts);
@@ -196,7 +196,7 @@ int nc_server_ssh_ch_client_del_hostkey(const char *client_name, const char *nam
 /**
  * @brief Move Call Home SSH host key.
  *
- * @param[in] endpt_name Exisitng Call Home client name.
+ * @param[in] client_name Exisitng Call Home client name.
  * @param[in] key_mov Name of the host key that will be moved.
  * @param[in] key_after Name of the key that will preceed \p key_mov. NULL if \p key_mov is to be moved at the beginning.
  * @return 0 in success, -1 on error.
@@ -322,7 +322,7 @@ void nc_server_tls_ch_client_clear_crls(const char *client_name);
  * It is possible to add an entry step-by-step, specifying first only \p ip and in later calls
  * \p fingerprint, \p map_type, and optionally \p name spearately.
  *
- * @param[in] endpt_name Existing endpoint name.
+ * @param[in] client_name Existing Call Home client name.
  * @param[in] id Priority of the entry. It must be unique. If already exists, the entry with this id
  *               is modified.
  * @param[in] fingerprint Matching certificate fingerprint. If NULL, kept temporarily unset.

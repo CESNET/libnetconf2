@@ -157,7 +157,7 @@ struct nc_reply_data {
     struct lyd_node *data;  /**< libyang RPC reply data tree (output of an RPC),
                                  \<get\> and \<get-config\> replies are special,
                                  in those cases there is the configuration itself
-                                 and it should be validated as such (using #LYD_OPT_GET or #LYD_OPT_GETCONFIG. */
+                                 and it should be validated as such (using \b LYD_OPT_GET or \b LYD_OPT_GETCONFIG). */
 };
 
 /**
