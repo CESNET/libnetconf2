@@ -422,6 +422,26 @@ void nc_server_ssh_set_hostkey_clb(int (*hostkey_clb)(const char *name, void *us
 int nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *name, int16_t idx);
 
 /**
+ * @brief Move endpoint SSH host key.
+ *
+ * @param[in] endpt_name Exisitng endpoint name.
+ * @param[in] key_mov Name of the host key that will be moved.
+ * @param[in] key_after Name of the key that will preceed \p key_mov. NULL if \p key_mov is to be moved at the beginning.
+ * @return 0 in success, -1 on error.
+ */
+int nc_server_ssh_endpt_mov_hostkey(const char *endpt_name, const char *key_mov, const char *key_after);
+
+/**
+ * @brief Modify endpoint SSH host key.
+ *
+ * @param[in] endpt_name Exisitng endpoint name.
+ * @param[in] name Name of an existing host key.
+ * @param[in] new_name New name of the host key \p name.
+ * @return 0 in success, -1 on error.
+ */
+int nc_server_ssh_endpt_mod_hostkey(const char *endpt_name, const char *name, const char *new_name);
+
+/**
  * @brief Set endpoint SSH banner the server will send to every client.
  *
  * @param[in] endpt_name Existing endpoint name.

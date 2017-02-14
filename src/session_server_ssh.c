@@ -72,12 +72,21 @@ base64der_key_to_tmp_file(const char *in, int rsa)
 static int
 nc_server_ssh_add_hostkey(const char *name, int16_t idx, struct nc_server_ssh_opts *opts)
 {
+    uint8_t i;
+
     if (!name) {
         ERRARG("name");
         return -1;
     } else if (idx > opts->hostkey_count) {
         ERRARG("idx");
         return -1;
+    }
+
+    for (i = 0; i < opts->hostkey_count; ++i) {
+        if (!strcmp(opts->hostkeys[i], name)) {
+            ERRARG("name");
+            return -1;
+        }
     }
 
     ++opts->hostkey_count;
@@ -224,6 +233,155 @@ nc_server_ssh_ch_client_del_hostkey(const char *client_name, const char *name, i
         return -1;
     }
     ret = nc_server_ssh_del_hostkey(name, idx, client->opts.ssh);
+    /* UNLOCK */
+    nc_server_ch_client_unlock(client);
+
+    return ret;
+}
+
+static int
+nc_server_ssh_mov_hostkey(const char *key_mov, const char *key_after, struct nc_server_ssh_opts *opts)
+{
+    uint8_t i;
+    int16_t mov_idx = -1, after_idx = -1;
+    const char *bckup;
+
+    if (!key_mov) {
+        ERRARG("key_mov");
+        return -1;
+    }
+
+    for (i = 0; i < opts->hostkey_count; ++i) {
+        if (key_after && (after_idx == -1) && !strcmp(opts->hostkeys[i], key_after)) {
+            after_idx = i;
+        }
+        if ((mov_idx == -1) && !strcmp(opts->hostkeys[i], key_mov)) {
+            mov_idx = i;
+        }
+
+        if ((!key_after || (after_idx > -1)) && (mov_idx > -1)) {
+            break;
+        }
+    }
+
+    if (key_after && (after_idx == -1)) {
+        ERRARG("key_after");
+        return -1;
+    }
+    if (mov_idx == -1) {
+        ERRARG("key_mov");
+        return -1;
+    }
+    if ((mov_idx == after_idx) || (mov_idx == after_idx + 1)) {
+        /* nothing to do */
+        return 0;
+    }
+
+    /* finally move the key */
+    bckup = opts->hostkeys[mov_idx];
+    if (mov_idx > after_idx) {
+        memmove(opts->hostkeys + after_idx + 2, opts->hostkeys + after_idx + 1,
+                ((mov_idx - after_idx) - 1) * sizeof *opts->hostkeys);
+        opts->hostkeys[after_idx + 1] = bckup;
+    } else {
+        memmove(opts->hostkeys + mov_idx, opts->hostkeys + mov_idx + 1, (after_idx - mov_idx) * sizeof *opts->hostkeys);
+        opts->hostkeys[after_idx] = bckup;
+    }
+
+    return 0;
+}
+
+API int
+nc_server_ssh_endpt_mov_hostkey(const char *endpt_name, const char *key_mov, const char *key_after)
+{
+    int ret;
+    struct nc_endpt *endpt;
+
+    /* LOCK */
+    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH, NULL);
+    if (!endpt) {
+        return -1;
+    }
+    ret = nc_server_ssh_mov_hostkey(key_mov, key_after, endpt->opts.ssh);
+    /* UNLOCK */
+    nc_server_endpt_unlock(endpt);
+
+    return ret;
+}
+
+API int
+nc_server_ssh_ch_client_mov_hostkey(const char *client_name, const char *key_mov, const char *key_after)
+{
+    int ret;
+    struct nc_ch_client *client;
+
+    /* LOCK */
+    client = nc_server_ch_client_lock(client_name, NC_TI_LIBSSH, NULL);
+    if (!client) {
+        return -1;
+    }
+    ret = nc_server_ssh_mov_hostkey(key_mov, key_after, client->opts.ssh);
+    /* UNLOCK */
+    nc_server_ch_client_unlock(client);
+
+    return ret;
+}
+
+static int
+nc_server_ssh_mod_hostkey(const char *name, const char *new_name, struct nc_server_ssh_opts *opts)
+{
+    uint8_t i;
+
+    if (!name) {
+        ERRARG("name");
+        return -1;
+    } else if (!new_name) {
+        ERRARG("new_name");
+        return -1;
+    }
+
+    for (i = 0; i < opts->hostkey_count; ++i) {
+        if (!strcmp(opts->hostkeys[i], name)) {
+            lydict_remove(server_opts.ctx, opts->hostkeys[i]);
+            opts->hostkeys[i] = lydict_insert(server_opts.ctx, new_name, 0);
+            return 0;
+        }
+    }
+
+    ERRARG("name");
+    return -1;
+}
+
+API int
+nc_server_ssh_endpt_mod_hostkey(const char *endpt_name, const char *name, const char *new_name)
+{
+    int ret;
+    struct nc_endpt *endpt;
+
+    /* LOCK */
+    endpt = nc_server_endpt_lock(endpt_name, NC_TI_LIBSSH, NULL);
+    if (!endpt) {
+        return -1;
+    }
+    ret = nc_server_ssh_mov_hostkey(name, new_name, endpt->opts.ssh);
+    /* UNLOCK */
+    nc_server_endpt_unlock(endpt);
+
+    return ret;
+}
+
+API int
+nc_server_ssh_ch_client_mod_hostkey(const char *client_name, const char *name, const char *new_name)
+{
+    int ret;
+    struct nc_ch_client *client;
+
+    /* LOCK */
+    client = nc_server_ch_client_lock(client_name, NC_TI_LIBSSH, NULL);
+    if (!client) {
+        return -1;
+    }
+    ret = nc_server_ssh_mod_hostkey(name, new_name, client->opts.ssh);
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 

@@ -194,6 +194,26 @@ int nc_server_ssh_ch_client_add_hostkey(const char *client_name, const char *nam
 int nc_server_ssh_ch_client_del_hostkey(const char *client_name, const char *name, int16_t idx);
 
 /**
+ * @brief Move Call Home SSH host key.
+ *
+ * @param[in] endpt_name Exisitng Call Home client name.
+ * @param[in] key_mov Name of the host key that will be moved.
+ * @param[in] key_after Name of the key that will preceed \p key_mov. NULL if \p key_mov is to be moved at the beginning.
+ * @return 0 in success, -1 on error.
+ */
+int nc_server_ssh_ch_client_mov_hostkey(const char *client_name, const char *key_mov, const char *key_after);
+
+/**
+ * @brief Modify Call Home SSH host key.
+ *
+ * @param[in] endpt_name Exisitng endpoint name.
+ * @param[in] name Name of an existing host key.
+ * @param[in] new_name New name of the host key \p name.
+ * @return 0 in success, -1 on error.
+ */
+int nc_server_ssh_ch_client_mod_hostkey(const char *endpt_name, const char *name, const char *new_name);
+
+/**
  * @brief Set Call Home SSH banner the server will send to every client.
  *
  * @param[in] client_name Existing Call Home client name.
