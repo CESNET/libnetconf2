@@ -25,7 +25,6 @@
 #include "netconf.h"
 #include "session.h"
 #include "messages_client.h"
-#include "../nc_server.h"
 
 #ifdef NC_ENABLED_SSH
 

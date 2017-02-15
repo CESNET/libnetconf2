@@ -18,7 +18,7 @@
 @SSH_MACRO@
 @TLS_MACRO@
 
-#define NC_PS_QUEUE_SIZE @MAX_PSPOLL_THREAD_COUNT@
+#define NC_MAX_PSPOLL_THREAD_COUNT @MAX_PSPOLL_THREAD_COUNT@
 
 #include <libnetconf2/netconf.h>
 #include <libnetconf2/log.h>
