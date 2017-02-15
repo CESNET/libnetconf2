@@ -895,25 +895,12 @@ nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
 API uint16_t
 nc_ps_session_count(struct nc_pollsession *ps)
 {
-    uint8_t q_id;
-    uint16_t count;
-
     if (!ps) {
         ERRARG("ps");
         return 0;
     }
 
-    /* LOCK */
-    if (nc_ps_lock(ps, &q_id, __func__)) {
-        return -1;
-    }
-
-    count = ps->session_count;
-
-    /* UNLOCK */
-    nc_ps_unlock(ps, q_id, __func__);
-
-    return count;
+    return ps->session_count;
 }
 
 /* must be called holding the session lock!

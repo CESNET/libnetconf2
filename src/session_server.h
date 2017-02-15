@@ -219,6 +219,8 @@ int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
 /**
  * @brief Learn the number of sessions in a pollsession structure.
  *
+ * Does not lock \p ps structure for efficiency.
+ *
  * @param[in] ps Pollsession structure to check.
  * @return Number of sessions (even invalid ones) in \p ps, -1 on error.
  */
