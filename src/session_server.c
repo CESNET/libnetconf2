@@ -1107,9 +1107,11 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
     struct nc_session *new;
 #endif
 
-    if (!ps || !ps->session_count) {
+    if (!ps) {
         ERRARG("ps");
         return NC_PSPOLL_ERROR;
+    } else if (!ps->session_count) {
+        return NC_PSPOLL_NOSESSIONS;
     }
 
     nc_gettimespec(&begin_ts);

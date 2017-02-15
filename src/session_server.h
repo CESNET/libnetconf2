@@ -226,17 +226,18 @@ int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
  */
 uint16_t nc_ps_session_count(struct nc_pollsession *ps);
 
-#define NC_PSPOLL_TIMEOUT 0x0001       /**< Timeout elapsed. */
-#define NC_PSPOLL_RPC 0x0002           /**< RPC was correctly parsed and processed. */
-#define NC_PSPOLL_BAD_RPC 0x0004       /**< RPC was received, but failed to be parsed. */
-#define NC_PSPOLL_REPLY_ERROR 0x0008   /**< Response to the RPC was a \<rpc-reply\> of type error. */
-#define NC_PSPOLL_SESSION_TERM 0x0010  /**< Some session was terminated. */
-#define NC_PSPOLL_SESSION_ERROR 0x0020 /**< Some session was terminated incorrectly (not by a \<close-session\> or \<kill-session\> RPC). */
-#define NC_PSPOLL_ERROR 0x0040         /**< Other fatal errors (they are printed). */
+#define NC_PSPOLL_NOSESSIONS 0x0001    /**< No sessions to poll. */
+#define NC_PSPOLL_TIMEOUT 0x0002       /**< Timeout elapsed. */
+#define NC_PSPOLL_RPC 0x0004           /**< RPC was correctly parsed and processed. */
+#define NC_PSPOLL_BAD_RPC 0x0008       /**< RPC was received, but failed to be parsed. */
+#define NC_PSPOLL_REPLY_ERROR 0x0010   /**< Response to the RPC was a \<rpc-reply\> of type error. */
+#define NC_PSPOLL_SESSION_TERM 0x0020  /**< Some session was terminated. */
+#define NC_PSPOLL_SESSION_ERROR 0x0040 /**< Some session was terminated incorrectly (not by a \<close-session\> or \<kill-session\> RPC). */
+#define NC_PSPOLL_ERROR 0x0080         /**< Other fatal errors (they are printed). */
 
 #ifdef NC_ENABLED_SSH
-#   define NC_PSPOLL_SSH_MSG 0x0080       /**< SSH message received (and processed, if relevant, only with SSH support). */
-#   define NC_PSPOLL_SSH_CHANNEL 0x0100   /**< New SSH channel opened on an existing session (only with SSH support). */
+#   define NC_PSPOLL_SSH_MSG 0x0100       /**< SSH message received (and processed, if relevant, only with SSH support). */
+#   define NC_PSPOLL_SSH_CHANNEL 0x0200   /**< New SSH channel opened on an existing session (only with SSH support). */
 #endif
 
 /**
