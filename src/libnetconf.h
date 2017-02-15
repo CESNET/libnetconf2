@@ -295,7 +295,7 @@
  * In it, you set the server context, which determines what modules it
  * supports and what capabilities to advertise. Few capabilities that
  * cannot be learnt from the context are set with separate functions
- * nc_server_set_capab_withdefaults() and nc_server_set_capab_interleave().
+ * nc_server_set_capab_withdefaults() and generally nc_server_set_capability().
  * Timeout for receiving the _hello_ message on a new session can be set
  * by nc_server_set_hello_timeout() and the timeout for disconnecting
  * an inactive session by nc_server_set_idle_timeout().
@@ -311,9 +311,9 @@
  *
  * Server options can be only set, there are no getters.
  *
- * To be able to accept any connections, general endpoints must first be added
- * with nc_server_add_endpt(). They can then be modified to accept either SSH, TLS,
- * or both kinds of sessions.
+ * To be able to accept any connections, endpoints must first be added
+ * with nc_server_add_endpt() and configured with nc_server_endpt_set_address()
+ * and nc_server_endpt_set_port().
  *
  * Functions List
  * --------------
@@ -321,39 +321,46 @@
  * Available in __nc_server.h__.
  *
  * - nc_server_set_capab_withdefaults()
- * - nc_server_set_capab_interleave()
+ * - nc_server_set_capability()
  * - nc_server_set_hello_timeout()
  * - nc_server_set_idle_timeout()
  *
  * - nc_server_add_endpt()
  * - nc_server_del_endpt()
+ * - nc_server_endpt_set_address()
+ * - nc_server_endpt_set_port()
  *
  *
  * SSH
  * ===
  *
- * To start listening for SSH connections you must set the address
- * and port to listen on for a particular endpoint using nc_server_ssh_endpt_set_address()
- * and nc_server_endpt_set_port().
- * To then successfully accept an SSH session you must also set the host key using
- * nc_server_ssh_endpt_add_hostkey().
+ * To successfully accept an SSH session you must set at least the host key using
+ * nc_server_ssh_endpt_add_hostkey(), which are ordered. This way you simply add
+ * some hostkey identifier, but the key itself will be retrieved always when needed
+ * by calling the callback set by nc_server_ssh_set_hostkey_clb().
+ *
+ * There are also some other optional settings. Note that authorized
+ * public keys are set for the server as a whole, not endpoint-specifically.
  *
  * Functions List
  * --------------
  *
  * Available in __nc_server.h__.
  *
- * - nc_server_ssh_endpt_set_address()
- * - nc_server_ssh_endpt_set_port()
- *
  * - nc_server_ssh_endpt_add_hostkey()
  * - nc_server_ssh_endpt_del_hostkey()
+ * - nc_server_ssh_endpt_mov_hostkey()
+ * - nc_server_ssh_endpt_mod_hostkey()
  * - nc_server_ssh_endpt_set_banner()
  * - nc_server_ssh_endpt_set_auth_methods()
  * - nc_server_ssh_endpt_set_auth_attempts()
  * - nc_server_ssh_endpt_set_auth_timeout()
- * - nc_server_ssh_endpt_add_authkey()
- * - nc_server_ssh_endpt_del_authkey()
+ *
+ * - nc_server_ssh_set_hostkey_clb()
+ *
+ * - nc_server_ssh_add_authkey()
+ * - nc_server_ssh_add_authkey_path()
+ * - nc_server_ssh_del_authkey()
  *
  *
  * TLS
@@ -362,23 +369,25 @@
  * TLS works with endpoints too, but its options differ
  * significantly from the SSH ones, especially in the _cert-to-name_
  * options that TLS uses to derive usernames from client certificates.
- * So, after starting listening on an endpoint by calling nc_server_tls_endpt_set_address()
- * and nc_server_tls_endpt_set_port(),
- * you need to set the server certificate (nc_server_tls_endpt_set_cert()
- * or nc_server_tls_endpt_set_cert_path()) and private key (nc_server_tls_endpt_set_key()
- * or nc_server_tls_endpt_set_key_path()).
+ * So, after starting listening on an endpoint  you need to set the server
+ * certificate (nc_server_tls_endpt_set_server_cert()). Its actual content
+ * together with the matching private key will be loaded using a callback
+ * from nc_server_tls_set_server_cert_clb().
  *
  * To accept client certificates, they must first be considered trusted,
  * which you have three ways of achieving. You can add each of their Certificate Authority
  * certificates to the trusted ones or mark a specific client certificate
- * as trusted using nc_server_tls_endpt_add_trusted_cert(). Lastly, you can
- * set paths with all the trusted CA certificates with nc_server_tls_endpt_set_trusted_ca_paths().
+ * as trusted. Lastly, you can set paths with all the trusted CA certificates
+ * with nc_server_tls_endpt_set_trusted_ca_paths(). Adding specific certificates
+ * is also performed only as an arbitrary identificator and later retrieved from
+ * callback set by nc_server_tls_set_trusted_cert_list_clb(). But, you can add
+ * certficates as whole lists, not one-by-one.
  *
  * Then, from each trusted client certificate a username must be derived
  * for the NETCONF session. This is accomplished by finding a matching
  * _cert-to-name_ entry. They are added using nc_server_tls_endpt_add_ctn().
  *
- * If you need to remove trusted certificates, you can do so with nc_server_tls_endpt_del_trusted_cert().
+ * If you need to remove trusted certificates, you can do so with nc_server_tls_endpt_del_trusted_cert_list().
  * To clear all Certificate Revocation Lists use nc_server_tls_endpt_clear_crls().
  *
  * Functions List
@@ -386,21 +395,18 @@
  *
  * Available in __nc_server.h__.
  *
- * - nc_server_tls_endpt_set_address()
- * - nc_server_tls_endpt_set_port()
- *
- * - nc_server_tls_endpt_set_cert()
- * - nc_server_tls_endpt_set_cert_path()
- * - nc_server_tls_endpt_set_key()
- * - nc_server_tls_endpt_set_key_path()
- * - nc_server_tls_endpt_add_trusted_cert()
- * - nc_server_tls_endpt_add_trusted_cert_path()
+ * - nc_server_tls_endpt_set_server_cert()
+ * - nc_server_tls_endpt_add_trusted_cert_list()
+ * - nc_server_tls_endpt_del_trusted_cert_list()
  * - nc_server_tls_endpt_set_trusted_ca_paths()
- * - nc_server_tls_endpt_del_trusted_cert();
  * - nc_server_tls_endpt_set_crl_paths()
  * - nc_server_tls_endpt_clear_crls()
  * - nc_server_tls_endpt_add_ctn()
  * - nc_server_tls_endpt_del_ctn()
+ * - nc_server_tls_endpt_get_ctn()
+ *
+ * - nc_server_tls_set_server_cert_clb()
+ * - nc_server_tls_set_trusted_cert_list_clb()
  *
  * FD
  * ==
@@ -420,53 +426,62 @@
  * Call Home
  * =========
  *
- * Call Home does not work with endpoints like standard sessions.
- * Connecting is similar to the [client](@ref howtoclient), just call
- * nc_connect_callhome_ssh() or nc_connect_callhome_tls(). Any options
- * must be reset manually by nc_server_ssh_ch_clear_opts()
- * or using nc_server_tls_ch_del_trusted_cert() and nc_server_tls_ch_clear_crls()
- * after another Call Home session (with different options than the previous one)
- * is to be established. Also, monitoring of these sessions is up to the application.
+ * _Call Home_ works with endpoints just like standard sessions, but
+ * the options are organized a bit differently and endpoints are added
+ * for CH clients. However, one important difference is that
+ * once all the mandatory options are set, _libnetconf2_ __will not__
+ * immediately start connecting to a client. It will do so only after
+ * calling nc_connect_ch_client_dispatch() in a separate thread.
+ *
+ * Lastly, monitoring of these sessions is up to the application.
  *
  * Functions List
  * --------------
  *
  * Available in __nc_server.h__.
  *
- * - nc_connect_callhome_ssh()
- * - nc_connect_callhome_tls()
+ * - nc_server_ch_add_client()
+ * - nc_server_ch_del_client()
+ * - nc_server_ch_client_add_endpt()
+ * - nc_server_ch_client_del_endpt()
+ * - nc_server_ch_client_endpt_set_address()
+ * - nc_server_ch_client_endpt_set_port()
+ * - nc_server_ch_client_set_conn_type()
+ * - nc_server_ch_client_persist_set_idle_timeout()
+ * - nc_server_ch_client_persist_set_keep_alive_max_wait()
+ * - nc_server_ch_client_persist_set_keep_alive_max_attempts()
+ * - nc_server_ch_client_period_set_idle_timeout()
+ * - nc_server_ch_client_period_set_reconnect_timeout()
+ * - nc_server_ch_client_set_start_with()
+ * - nc_server_ch_client_set_max_attempts()
+ * - nc_connect_ch_client_dispatch()
  *
- * - nc_server_ssh_ch_add_hostkey()
- * - nc_server_ssh_ch_del_hostkey()
- * - nc_server_ssh_ch_set_banner()
- * - nc_server_ssh_ch_set_auth_methods()
- * - nc_server_ssh_ch_set_auth_attempts()
- * - nc_server_ssh_ch_set_auth_timeout()
- * - nc_server_ssh_ch_add_authkey()
- * - nc_server_ssh_ch_del_authkey()
- * - nc_server_ssh_ch_clear_opts()
+ * - nc_server_ssh_ch_client_add_hostkey()
+ * - nc_server_ssh_ch_client_del_hostkey()
+ * - nc_server_ssh_ch_client_mov_hostkey()
+ * - nc_server_ssh_ch_client_mod_hostkey()
+ * - nc_server_ssh_ch_client_set_banner()
+ * - nc_server_ssh_ch_client_set_auth_methods()
+ * - nc_server_ssh_ch_client_set_auth_attempts()
+ * - nc_server_ssh_ch_client_set_auth_timeout()
  *
- * - nc_server_tls_ch_set_cert()
- * - nc_server_tls_ch_set_cert_path()
- * - nc_server_tls_ch_set_key()
- * - nc_server_tls_ch_set_key_path()
- * - nc_server_tls_ch_add_trusted_cert()
- * - nc_server_tls_ch_add_trusted_cert_path()
- * - nc_server_tls_ch_set_trusted_ca_paths()
- * - nc_server_tls_ch_del_trusted_cert();
- * - nc_server_tls_ch_set_crl_paths()
- * - nc_server_tls_ch_clear_crls()
- * - nc_server_tls_ch_add_ctn()
- * - nc_server_tls_ch_del_ctn()
- * - nc_server_tls_ch_clear_opts()
+ * - nc_server_tls_ch_client_set_server_cert()
+ * - nc_server_tls_ch_client_add_trusted_cert_list()
+ * - nc_server_tls_ch_client_del_trusted_cert_list()
+ * - nc_server_tls_ch_client_set_trusted_ca_paths()
+ * - nc_server_tls_ch_client_set_crl_paths()
+ * - nc_server_tls_ch_client_clear_crls()
+ * - nc_server_tls_ch_client_add_ctn()
+ * - nc_server_tls_ch_client_del_ctn()
+ * - nc_server_tls_ch_client_get_ctn()
  *
  *
  * Connecting And Cleanup
  * ======================
  *
  * When accepting connections with nc_accept(), all the endpoints are examined
- * and the first with a pending connection is used. To remove all
- * the endpoints and free any used dynamic memory, [destroy](@ref howtoinit) the server.
+ * and the first with a pending connection is used. To remove all CH clients,
+ * endpoints, and free any used dynamic memory, [destroy](@ref howtoinit) the server.
  *
  * Functions List
  * --------------
