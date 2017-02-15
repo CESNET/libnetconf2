@@ -46,7 +46,7 @@
  *
  * @section about-license License
  *
- * Copyright (c) 2015-2016 CESNET, z.s.p.o.
+ * Copyright (c) 2015-2017 CESNET, z.s.p.o.
  *
  * (The BSD 3-Clause License)
  *
@@ -72,6 +72,7 @@
  * - @subpage howtoserver
  * - @subpage howtoclientcomm
  * - @subpage howtoservercomm
+ * - @subpage howtotimeouts
  */
 
 /**
@@ -542,6 +543,52 @@
  * - nc_ps_clear()
  * - nc_ps_accept_ssh_channel()
  * - nc_session_accept_ssh_channel()
+ */
+
+/**
+ * @page howtotimeouts Timeouts
+ *
+ * There are several timeouts which are used throughout _libnetconf2_ to
+ * assure that it will never indefinitely hang on any operation. Normally,
+ * you should not need to worry about them much necause they are set by
+ * default to reasonable values for common systems. However, if your
+ * platform is not common (embedded, ...), adjusting these timeouts may
+ * save a lot of debugging and time.
+ *
+ * Compile Options
+ * ---------------
+ *
+ * You can adjust active and inactive read timeout using `cmake` variables.
+ * For details look into `README.md`.
+ *
+ * API Functions
+ * -------------
+ *
+ * Once a new connection is established including transport protocol negotiations,
+ * _hello_ message is exchanged. You can set how long will the server wait for
+ * receiving this message from a client before dropping it.
+ *
+ * Having a NETCONF session working, it may not communicate for a longer time.
+ * To free up some resources, it is possible to adjust the maximum idle period
+ * of a session before it is disconnected. In _Call Home_, for both a persistent
+ * and periodic connection can this idle timeout be specified separately for each
+ * client using corresponding functions.
+ *
+ * Lastly, SSH user authentication timeout can be also modified. It is the time
+ * a client has to successfully authenticate after connecting before it is disconnected.
+ *
+ * Functions List
+ * --------------
+ *
+ * Available in __nc_server.h__.
+ *
+ * - nc_server_set_hello_timeout()
+ * - nc_server_set_idle_timeout()
+ * - nc_server_ch_client_persist_set_idle_timeout()
+ * - nc_server_ch_client_period_set_idle_timeout()
+ * - nc_server_ch_client_period_set_reconnect_timeout()
+ * - nc_server_ssh_endpt_set_auth_timeout()
+ * - nc_server_ssh_ch_client_set_auth_timeout()
  */
 
 #endif /* NC_LIBNETCONF_H_ */
