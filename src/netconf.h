@@ -35,7 +35,7 @@ extern "C" {
 #define NC_PORT_CH_TLS 4335
 
 /** @brief Microseconds after which tasks are repeated until the full timeout elapses.
- *         A second (1000 000) should be divisible by this number without remain.
+ *         A millisecond (1000) should be divisible by this number without remain.
  */
 #define NC_TIMEOUT_STEP 20
 

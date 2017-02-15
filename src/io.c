@@ -35,11 +35,12 @@
 #define BUFFERSIZE 512
 
 static ssize_t
-nc_read(struct nc_session *session, char *buf, size_t count, uint16_t *read_timeout)
+nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_timeout, uint32_t *act_timeout)
 {
     size_t readd = 0;
     ssize_t r = -1;
     uint16_t sleep_count = 0;
+    uint32_t cur_inact_timeout = inact_timeout;
 
     assert(session);
     assert(buf);
@@ -134,24 +135,32 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint16_t *read_time
 #endif
         }
 
-        /* nothing read */
         if (r == 0) {
+            /* nothing read */
             usleep(NC_TIMEOUT_STEP);
             ++sleep_count;
-            if (1000000 / NC_TIMEOUT_STEP == sleep_count) {
-                /* we slept a full second */
-                --(*read_timeout);
+            if (1000 / NC_TIMEOUT_STEP == sleep_count) {
+                /* we slept a full millisecond */
+                --cur_inact_timeout;
+                --(*act_timeout);
                 sleep_count = 0;
             }
-            if (!*read_timeout) {
-                ERR("Session %u: reading a full NETCONF message timeout elapsed.", session->id);
+            if (!cur_inact_timeout || !*act_timeout) {
+                if (!inact_timeout) {
+                    ERR("Session %u: inactive read timeout elapsed.", session->id);
+                } else {
+                    ERR("Session %u: active read timeout elapsed.", session->id);
+                }
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_OTHER;
                 return -1;
             }
+        } else {
+            /* something read */
+            readd += r;
+            cur_inact_timeout = inact_timeout;
         }
 
-        readd += r;
     } while (readd < count);
     buf[count] = '\0';
 
@@ -159,7 +168,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint16_t *read_time
 }
 
 static ssize_t
-nc_read_chunk(struct nc_session *session, size_t len, uint16_t *read_timeout, char **chunk)
+nc_read_chunk(struct nc_session *session, size_t len, uint32_t inact_timeout, uint32_t *act_timeout, char **chunk)
 {
     ssize_t r;
 
@@ -176,7 +185,7 @@ nc_read_chunk(struct nc_session *session, size_t len, uint16_t *read_timeout, ch
         return -1;
     }
 
-    r = nc_read(session, *chunk, len, read_timeout);
+    r = nc_read(session, *chunk, len, inact_timeout, act_timeout);
     if (r <= 0) {
         free(*chunk);
         return -1;
@@ -189,7 +198,8 @@ nc_read_chunk(struct nc_session *session, size_t len, uint16_t *read_timeout, ch
 }
 
 static ssize_t
-nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint16_t *read_timeout, char **result)
+nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint32_t inact_timeout, uint32_t *act_timeout,
+              char **result)
 {
     char *chunk = NULL;
     size_t size, count = 0, r, len;
@@ -229,7 +239,7 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint
         }
 
         /* get another character */
-        r = nc_read(session, &(chunk[count]), 1, read_timeout);
+        r = nc_read(session, &(chunk[count]), 1, inact_timeout, act_timeout);
         if (r != 1) {
             free(chunk);
             return -1;
@@ -264,7 +274,8 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
     int ret;
     char *msg = NULL, *chunk;
     uint64_t chunk_len, len = 0;
-    uint16_t read_timeout = NC_READ_TIMEOUT;
+    /* use timeouts in milliseconds instead seconds */
+    uint32_t act_timeout = NC_READ_ACT_TIMEOUT * 1000, inact_timeout = NC_READ_INACT_TIMEOUT * 1000;
     struct nc_server_reply *reply;
 
     assert(session && data);
@@ -278,7 +289,7 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
     /* read the message */
     switch (session->version) {
     case NC_VERSION_10:
-        ret = nc_read_until(session, NC_VERSION_10_ENDTAG, 0, &read_timeout, &msg);
+        ret = nc_read_until(session, NC_VERSION_10_ENDTAG, 0, inact_timeout, &act_timeout, &msg);
         if (ret == -1) {
             goto error;
         }
@@ -288,11 +299,11 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
         break;
     case NC_VERSION_11:
         while (1) {
-            ret = nc_read_until(session, "\n#", 0, &read_timeout, NULL);
+            ret = nc_read_until(session, "\n#", 0, inact_timeout, &act_timeout, NULL);
             if (ret == -1) {
                 goto error;
             }
-            ret = nc_read_until(session, "\n", 0, &read_timeout, &chunk);
+            ret = nc_read_until(session, "\n", 0, inact_timeout, &act_timeout, &chunk);
             if (ret == -1) {
                 goto error;
             }
@@ -316,7 +327,7 @@ nc_read_msg(struct nc_session *session, struct lyxml_elem **data)
             }
 
             /* now we have size of next chunk, so read the chunk */
-            ret = nc_read_chunk(session, chunk_len, &read_timeout, &chunk);
+            ret = nc_read_chunk(session, chunk_len, inact_timeout, &act_timeout, &chunk);
             if (ret == -1) {
                 goto error;
             }

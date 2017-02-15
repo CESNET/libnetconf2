@@ -333,7 +333,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     if (session->ti_lock) {
-        r = nc_timedlock(session->ti_lock, NC_READ_TIMEOUT * 1000, __func__);
+        r = nc_timedlock(session->ti_lock, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
         if (r == -1) {
             return;
         } else if (!r) {

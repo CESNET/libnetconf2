@@ -54,7 +54,7 @@ Therefore, all the features from **libnetconf** that are connected to the
 datastore implementation are not available in **libnetconf2**. In the case of
 the Netopeer2 server, all these features (and much more) are implemented as
 part of the server itself or its datastore implementation -
-[**sysrepo**](https://github.com/sysrepo/sysrepo). 
+[**sysrepo**](https://github.com/sysrepo/sysrepo).
 
 ### Notifications
 
@@ -221,6 +221,37 @@ The `Debug` mode is currently used as the default one. to switch to the
 ```
 $ cmake -D CMAKE_BUILD_TYPE:String="Release" ..
 ```
+
+### Inactive Read Timeout
+
+It is possible to adjust inactive read timeout. It is used when a new message is
+being read and no new data had arrived for this amount of seconds. 20 is the default value.
+
+```
+$ cmake -D READ_INACTIVE_TIMEOUT:String="20" ..
+```
+
+### Active Read Timeout
+
+Active read timeout is used to limit the maximum number of seconds a message is given
+to arrive in its entirety once a beginning is read. The default is 300 (5 minutes).
+
+```
+$ cmake -D READ_ACTIVE_TIMEOUT:String="300" ..
+```
+
+### PSPoll Thread Count
+
+This value limits the maximum number of threads that can concurrently access
+(wait for access) a single pspoll structure. To simplify, how many threads could
+simultaneously call a function whose parameter is one and the same pspoll structure.
+If using **netopeer2-server**, it will warn that this value needs to be adjusted if
+too small.
+
+```
+$ cmake -D MAX_PSPOLL_THREAD_COUNT:String="6" ..
+```
+
 ### CMake Notes
 
 Note that, with CMake, if you want to change the compiler or its options after

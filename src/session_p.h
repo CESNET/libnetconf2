@@ -25,6 +25,7 @@
 #include "netconf.h"
 #include "session.h"
 #include "messages_client.h"
+#include "../nc_server.h"
 
 #ifdef NC_ENABLED_SSH
 
@@ -246,6 +247,16 @@ struct nc_server_opts {
 #define NC_TRANSPORT_TIMEOUT 2000
 
 /**
+ * Timeout in msec for acquiring a lock of a session that is supposed to be freed.
+ */
+#define NC_SESSION_FREE_LOCK_TIMEOUT 5000
+
+/**
+ * Timeout in msec for acquiring a lock of a pollsession structure.
+ */
+#define NC_PS_LOCK_TIMEOUT 500
+
+/**
  * Number of sockets kept waiting to be accepted.
  */
 #define NC_REVERSE_QUEUE 5
@@ -361,8 +372,6 @@ struct nc_session {
         } server;
     } opts;
 };
-
-#define NC_PS_QUEUE_SIZE 6
 
 /* ACCESS locked */
 struct nc_pollsession {
