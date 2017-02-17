@@ -36,7 +36,7 @@ static pthread_key_t verify_key;
 static pthread_once_t verify_once = PTHREAD_ONCE_INIT;
 
 static char *
-asn1time_to_str(ASN1_TIME *t)
+asn1time_to_str(const ASN1_TIME *t)
 {
     char *cp;
     BIO *bio;
@@ -224,7 +224,11 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
             /* rfc822Name (email) */
             if ((map_type == NC_TLS_CTN_SAN_ANY || map_type == NC_TLS_CTN_SAN_RFC822_NAME) &&
                     san_name->type == GEN_EMAIL) {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
                 *username = strdup((char *)ASN1_STRING_data(san_name->d.rfc822Name));
+#else
+                *username = strdup((char *)ASN1_STRING_get0_data(san_name->d.rfc822Name));
+#endif
                 if (!*username) {
                     ERRMEM;
                     return 1;
@@ -235,7 +239,11 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
             /* dNSName */
             if ((map_type == NC_TLS_CTN_SAN_ANY || map_type == NC_TLS_CTN_SAN_DNS_NAME) &&
                     san_name->type == GEN_DNS) {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
                 *username = strdup((char *)ASN1_STRING_data(san_name->d.dNSName));
+#else
+                *username = strdup((char *)ASN1_STRING_get0_data(san_name->d.dNSName));
+#endif
                 if (!*username) {
                     ERRMEM;
                     return 1;
@@ -470,6 +478,220 @@ cleanup:
     return ret;
 }
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L // >= 1.1.0
+
+static int
+nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
+{
+    X509_STORE_CTX *store_ctx;
+    X509_OBJECT *obj;
+    X509_NAME *subject;
+    X509_NAME *issuer;
+    X509 *cert;
+    X509_CRL *crl;
+    X509_REVOKED *revoked;
+    STACK_OF(X509) *cert_stack;
+    EVP_PKEY *pubkey;
+    struct nc_session* session;
+    struct nc_server_tls_opts *opts;
+    const ASN1_INTEGER *serial;
+    int i, n, rc, depth;
+    char *cp;
+    const char *username = NULL;
+    NC_TLS_CTN_MAPTYPE map_type = 0;
+    const ASN1_TIME *last_update = NULL, *next_update = NULL;
+
+    /* get the thread session */
+    session = pthread_getspecific(verify_key);
+    if (!session) {
+        ERRINT;
+        return 0;
+    }
+
+    opts = session->data;
+
+    /* get the last certificate, that is the peer (client) certificate */
+    if (!session->opts.server.client_cert) {
+        cert_stack = X509_STORE_CTX_get1_chain(x509_ctx);
+        session->opts.server.client_cert = sk_X509_value(cert_stack, sk_X509_num(cert_stack) - 1);
+        X509_up_ref(session->opts.server.client_cert);
+        sk_X509_pop_free(cert_stack, X509_free);
+    }
+
+    /* standard certificate verification failed, so a trusted client cert must match to continue */
+    if (!preverify_ok) {
+        subject = X509_get_subject_name(session->opts.server.client_cert);
+        cert_stack = X509_STORE_CTX_get1_certs(x509_ctx, subject);
+        if (cert_stack) {
+            for (i = 0; i < sk_X509_num(cert_stack); ++i) {
+                if (cert_pubkey_match(session->opts.server.client_cert, sk_X509_value(cert_stack, i))) {
+                    /* we are just overriding the failed standard certificate verification (preverify_ok == 0),
+                     * this callback will be called again with the same current certificate and preverify_ok == 1 */
+                    VRB("Cert verify: fail (%s), but the client certificate is trusted, continuing.",
+                        X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
+                    X509_STORE_CTX_set_error(x509_ctx, X509_V_OK);
+                    sk_X509_pop_free(cert_stack, X509_free);
+                    return 1;
+                }
+            }
+            sk_X509_pop_free(cert_stack, X509_free);
+        }
+
+        ERR("Cert verify: fail (%s).", X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
+        return 0;
+    }
+
+    /* print cert verify info */
+    depth = X509_STORE_CTX_get_error_depth(x509_ctx);
+    VRB("Cert verify: depth %d.", depth);
+
+    cert = X509_STORE_CTX_get_current_cert(x509_ctx);
+    subject = X509_get_subject_name(cert);
+    issuer = X509_get_issuer_name(cert);
+
+    cp = X509_NAME_oneline(subject, NULL, 0);
+    VRB("Cert verify: subject: %s.", cp);
+    OPENSSL_free(cp);
+    cp = X509_NAME_oneline(issuer, NULL, 0);
+    VRB("Cert verify: issuer:  %s.", cp);
+    OPENSSL_free(cp);
+
+    /* check for revocation if set */
+    if (opts->crl_store) {
+        /* try to retrieve a CRL corresponding to the _subject_ of
+         * the current certificate in order to verify it's integrity */
+        store_ctx = X509_STORE_CTX_new();
+        obj = X509_OBJECT_new();
+        X509_STORE_CTX_init(store_ctx, opts->crl_store, NULL, NULL);
+        rc = X509_STORE_get_by_subject(store_ctx, X509_LU_CRL, subject, obj);
+        X509_STORE_CTX_free(store_ctx);
+        crl = X509_OBJECT_get0_X509_CRL(obj);
+        if (rc > 0 && crl) {
+            cp = X509_NAME_oneline(subject, NULL, 0);
+            VRB("Cert verify CRL: issuer: %s.", cp);
+            OPENSSL_free(cp);
+
+            last_update = X509_CRL_get0_lastUpdate(crl);
+            next_update = X509_CRL_get0_nextUpdate(crl);
+            cp = asn1time_to_str(last_update);
+            VRB("Cert verify CRL: last update: %s.", cp);
+            free(cp);
+            cp = asn1time_to_str(next_update);
+            VRB("Cert verify CRL: next update: %s.", cp);
+            free(cp);
+
+            /* verify the signature on this CRL */
+            pubkey = X509_get_pubkey(cert);
+            if (X509_CRL_verify(crl, pubkey) <= 0) {
+                ERR("Cert verify CRL: invalid signature.");
+                X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CRL_SIGNATURE_FAILURE);
+                X509_OBJECT_free(obj);
+                if (pubkey) {
+                    EVP_PKEY_free(pubkey);
+                }
+                return 0;
+            }
+            if (pubkey) {
+                EVP_PKEY_free(pubkey);
+            }
+
+            /* check date of CRL to make sure it's not expired */
+            if (!next_update) {
+                ERR("Cert verify CRL: invalid nextUpdate field.");
+                X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD);
+                X509_OBJECT_free(obj);
+                return 0;
+            }
+            if (X509_cmp_current_time(next_update) < 0) {
+                ERR("Cert verify CRL: expired - revoking all certificates.");
+                X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CRL_HAS_EXPIRED);
+                X509_OBJECT_free(obj);
+                return 0;
+            }
+            X509_OBJECT_free(obj);
+        }
+
+        /* try to retrieve a CRL corresponding to the _issuer_ of
+         * the current certificate in order to check for revocation */
+        store_ctx = X509_STORE_CTX_new();
+        obj = X509_OBJECT_new();
+        X509_STORE_CTX_init(store_ctx, opts->crl_store, NULL, NULL);
+        rc = X509_STORE_get_by_subject(store_ctx, X509_LU_CRL, issuer, obj);
+        X509_STORE_CTX_free(store_ctx);
+        crl = X509_OBJECT_get0_X509_CRL(obj);
+        if (rc > 0 && crl) {
+            /* check if the current certificate is revoked by this CRL */
+            n = sk_X509_REVOKED_num(X509_CRL_get_REVOKED(crl));
+            for (i = 0; i < n; i++) {
+                revoked = sk_X509_REVOKED_value(X509_CRL_get_REVOKED(crl), i);
+                serial = X509_REVOKED_get0_serialNumber(revoked);
+                if (ASN1_INTEGER_cmp(serial, X509_get_serialNumber(cert)) == 0) {
+                    cp = X509_NAME_oneline(issuer, NULL, 0);
+                    ERR("Cert verify CRL: certificate with serial %ld (0x%lX) revoked per CRL from issuer %s.", serial, serial, cp);
+                    OPENSSL_free(cp);
+                    X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CERT_REVOKED);
+                    X509_OBJECT_free(obj);
+                    return 0;
+                }
+            }
+            X509_OBJECT_free(obj);
+        }
+    }
+
+    /* cert-to-name already successful */
+    if (session->username) {
+        return 1;
+    }
+
+    /* cert-to-name */
+    rc = nc_tls_cert_to_name(opts->ctn, cert, &map_type, &username);
+
+    if (rc) {
+        if (rc == -1) {
+            /* fatal error */
+            depth = 0;
+        }
+        /* rc == 1 is a normal CTN fail (no match found) */
+        goto fail;
+    }
+
+    /* cert-to-name match, now to extract the specific field from the peer cert */
+    if (map_type == NC_TLS_CTN_SPECIFIED) {
+        session->username = lydict_insert(server_opts.ctx, username, 0);
+    } else {
+        rc = nc_tls_ctn_get_username_from_cert(session->opts.server.client_cert, map_type, &cp);
+        if (rc) {
+            if (rc == -1) {
+                depth = 0;
+            }
+            goto fail;
+        }
+        session->username = lydict_insert_zc(server_opts.ctx, cp);
+    }
+
+    VRB("Cert verify CTN: new client username recognized as \"%s\".", session->username);
+
+    if (server_opts.user_verify_clb && !server_opts.user_verify_clb(session)) {
+        VRB("Cert verify: user verify callback revoked authorization.");
+        X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_APPLICATION_VERIFICATION);
+        return 0;
+    }
+
+    return 1;
+
+fail:
+    if (depth > 0) {
+        VRB("Cert verify CTN: cert fail, cert-to-name will continue on the next cert in chain.");
+        return 1;
+    }
+
+    VRB("Cert-to-name unsuccessful, dropping the new client.");
+    X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_APPLICATION_VERIFICATION);
+    return 0;
+}
+
+#else
+
 static int
 nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
 {
@@ -503,10 +725,6 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     /* get the last certificate, that is the peer (client) certificate */
     if (!session->opts.server.client_cert) {
         cert_stack = X509_STORE_CTX_get1_chain(x509_ctx);
-        /* TODO all that is needed, but function X509_up_ref not present in older OpenSSL versions
-        session->cert = sk_X509_value(cert_stack, sk_X509_num(cert_stack) - 1);
-        X509_up_ref(session->cert);
-        sk_X509_pop_free(cert_stack, X509_free); */
         while ((cert = sk_X509_pop(cert_stack))) {
             X509_free(session->opts.server.client_cert);
             session->opts.server.client_cert = cert;
@@ -683,6 +901,8 @@ fail:
     X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_APPLICATION_VERIFICATION);
     return 0;
 }
+
+#endif
 
 static int
 nc_server_tls_set_server_cert(const char *name, struct nc_server_tls_opts *opts)
@@ -1630,7 +1850,11 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     opts = session->data;
 
     /* SSL_CTX */
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L // >= 1.1.0
+    tls_ctx = SSL_CTX_new(TLS_server_method());
+#else
     tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
+#endif
     if (!tls_ctx) {
         ERR("Failed to create TLS context.");
         goto error;

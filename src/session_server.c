@@ -3,7 +3,7 @@
  * \author Michal Vasko <mvasko@cesnet.cz>
  * \brief libnetconf2 server session manipulation functions
  *
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2017 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
