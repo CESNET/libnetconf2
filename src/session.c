@@ -1098,6 +1098,8 @@ nc_ssh_destroy(void)
 
 #ifdef NC_ENABLED_TLS
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
+
 struct CRYPTO_dynlock_value {
     pthread_mutex_t lock;
 };
@@ -1135,11 +1137,13 @@ tls_dyn_destroy_func(struct CRYPTO_dynlock_value *l, const char *UNUSED(file), i
     pthread_mutex_destroy(&l->lock);
     free(l);
 }
+#endif
 
 #endif /* NC_ENABLED_TLS */
 
 #if defined(NC_ENABLED_TLS) && !defined(NC_ENABLED_SSH)
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
 static pthread_mutex_t *tls_locks;
 
 static void
@@ -1157,6 +1161,7 @@ tls_thread_id_func(CRYPTO_THREADID *tid)
 {
     CRYPTO_THREADID_set_numeric(tid, (unsigned long)pthread_self());
 }
+#endif
 
 static void
 nc_tls_init(void)
@@ -1167,6 +1172,7 @@ nc_tls_init(void)
     ERR_load_BIO_strings();
     SSL_library_init();
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     tls_locks = malloc(CRYPTO_num_locks() * sizeof *tls_locks);
     if (!tls_locks) {
         ERRMEM;
@@ -1182,6 +1188,7 @@ nc_tls_init(void)
     CRYPTO_set_dynlock_create_callback(tls_dyn_create_func);
     CRYPTO_set_dynlock_lock_callback(tls_dyn_lock_func);
     CRYPTO_set_dynlock_destroy_callback(tls_dyn_destroy_func);
+#endif
 }
 
 static void
@@ -1194,14 +1201,13 @@ nc_tls_destroy(void)
     nc_thread_destroy();
     EVP_cleanup();
     ERR_free_strings();
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L // >= 1.1.0
-    // no de-init needed
-#elif OPENSSL_VERSION_NUMBER >= 0x10002000L // >= 1.0.2
-    SSL_COMP_free_compression_methods();
-#else
+#if OPENSSL_VERSION_NUMBER < 0x10002000L // < 1.0.2
     sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
+#elif OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
+    SSL_COMP_free_compression_methods();
 #endif
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     CRYPTO_THREADID_set_callback(NULL);
     CRYPTO_set_locking_callback(NULL);
     for (i = 0; i < CRYPTO_num_locks(); ++i) {
@@ -1212,6 +1218,7 @@ nc_tls_destroy(void)
     CRYPTO_set_dynlock_create_callback(NULL);
     CRYPTO_set_dynlock_lock_callback(NULL);
     CRYPTO_set_dynlock_destroy_callback(NULL);
+#endif
 }
 
 #endif /* NC_ENABLED_TLS && !NC_ENABLED_SSH */
@@ -1227,28 +1234,30 @@ nc_ssh_tls_init(void)
 
     nc_ssh_init();
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     CRYPTO_set_dynlock_create_callback(tls_dyn_create_func);
     CRYPTO_set_dynlock_lock_callback(tls_dyn_lock_func);
     CRYPTO_set_dynlock_destroy_callback(tls_dyn_destroy_func);
+#endif
 }
 
 static void
 nc_ssh_tls_destroy(void)
 {
     ERR_free_strings();
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L // >= 1.1.0
-    // no de-init needed
-#elif OPENSSL_VERSION_NUMBER >= 0x10002000L // >= 1.0.2
-    SSL_COMP_free_compression_methods();
-#else
+#if OPENSSL_VERSION_NUMBER < 0x10002000L // < 1.0.2
     sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
+#elif OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
+    SSL_COMP_free_compression_methods();
 #endif
 
     nc_ssh_destroy();
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     CRYPTO_set_dynlock_create_callback(NULL);
     CRYPTO_set_dynlock_lock_callback(NULL);
     CRYPTO_set_dynlock_destroy_callback(NULL);
+#endif
 }
 
 #endif /* NC_ENABLED_SSH && NC_ENABLED_TLS */
@@ -1258,13 +1267,15 @@ nc_ssh_tls_destroy(void)
 API void
 nc_thread_destroy(void)
 {
-    CRYPTO_THREADID crypto_tid;
-
     /* caused data-races and seems not neccessary for avoiding valgrind reachable memory */
     //CRYPTO_cleanup_all_ex_data();
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
+    CRYPTO_THREADID crypto_tid;
+
     CRYPTO_THREADID_current(&crypto_tid);
     ERR_remove_thread_state(&crypto_tid);
+#endif
 }
 
 #endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
