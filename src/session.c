@@ -65,28 +65,33 @@ nc_gettimespec(struct timespec *ts)
 #endif
 }
 
-/* ts1 < ts2, returns milliseconds */
-uint32_t
+/* ts1 < ts2 -> +, ts1 > ts2 -> -, returns milliseconds */
+int32_t
 nc_difftimespec(struct timespec *ts1, struct timespec *ts2)
 {
-    uint64_t nsec_diff = 0;
+    int64_t nsec_diff = 0;
 
     if (ts1->tv_nsec > ts2->tv_nsec) {
         ts2->tv_nsec += 1000000000L;
         --ts2->tv_sec;
     }
 
-    if (ts1->tv_sec <= ts2->tv_sec) {
-        nsec_diff += (ts2->tv_sec - ts1->tv_sec) * 1000000000L;
-    } else {
-        ERRINT;
-    }
-
-    if (ts1->tv_nsec < ts2->tv_nsec) {
-        nsec_diff += ts2->tv_nsec - ts1->tv_nsec;
-    }
+    nsec_diff += (ts2->tv_sec - ts1->tv_sec) * 1000000000L;
+    nsec_diff += ts2->tv_nsec - ts1->tv_nsec;
 
     return (nsec_diff ? nsec_diff / 1000000L : 0);
+}
+
+void
+nc_addtimespec(struct timespec *ts, uint32_t msec)
+{
+    ts->tv_sec += msec / 1000000L;
+    ts->tv_nsec += (msec % 1000000L) * 1000000L;
+
+    if (ts->tv_nsec > 1000000000L) {
+        ts->tv_sec += ts->tv_nsec / 1000000000L;
+        ts->tv_nsec %= 1000000000L;
+    }
 }
 
 #ifndef HAVE_PTHREAD_MUTEX_TIMEDLOCK

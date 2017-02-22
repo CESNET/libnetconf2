@@ -37,7 +37,7 @@ extern "C" {
 /** @brief Microseconds after which tasks are repeated until the full timeout elapses.
  *         A millisecond (1000) should be divisible by this number without remain.
  */
-#define NC_TIMEOUT_STEP 20
+#define NC_TIMEOUT_STEP 50
 
 /**
  * @brief Set RPC callback to a schema node.

@@ -1185,7 +1185,8 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
 static int
 nc_open_netconf_channel(struct nc_session *session, int timeout)
 {
-    int elapsed_usec = 0, ret;
+    int ret;
+    struct timespec ts_timeout, ts_cur;
 
     /* message callback is executed twice to give chance for the channel to be
      * created if timeout == 0 (it takes 2 messages, channel-open, subsystem-request) */
@@ -1231,6 +1232,10 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
         return 1;
     }
 
+    if (timeout > -1) {
+        nc_gettimespec(&ts_timeout);
+        nc_addtimespec(&ts_timeout, timeout);
+    }
     while (1) {
         if (!nc_session_is_connected(session)) {
             ERR("Communication socket unexpectedly closed (libssh).");
@@ -1256,14 +1261,15 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
             return 1;
         }
 
-        if ((timeout != -1) && (elapsed_usec / 1000 >= timeout)) {
-            /* timeout */
-            ERR("Failed to start \"netconf\" SSH subsystem for too long, disconnecting.");
-            break;
-        }
-
         usleep(NC_TIMEOUT_STEP);
-        elapsed_usec += NC_TIMEOUT_STEP;
+        if (timeout > -1) {
+            nc_gettimespec(&ts_cur);
+            if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
+                /* timeout */
+                ERR("Failed to start \"netconf\" SSH subsystem for too long, disconnecting.");
+                break;
+            }
+        }
     }
 
     return 0;
@@ -1320,7 +1326,8 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 {
     ssh_bind sbind;
     struct nc_server_ssh_opts *opts;
-    int libssh_auth_methods = 0, elapsed_usec = 0, ret;
+    int libssh_auth_methods = 0, ret;
+    struct timespec ts_timeout, ts_cur;
 
     opts = session->data;
 
@@ -1374,12 +1381,18 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 
     ssh_set_blocking(session->ti.libssh.session, 0);
 
+    if (timeout > -1) {
+        nc_gettimespec(&ts_timeout);
+        nc_addtimespec(&ts_timeout, timeout);
+    }
     while ((ret = ssh_handle_key_exchange(session->ti.libssh.session)) == SSH_AGAIN) {
         /* this tends to take longer */
         usleep(NC_TIMEOUT_STEP * 20);
-        elapsed_usec += NC_TIMEOUT_STEP * 20;
-        if ((timeout > -1) && (elapsed_usec / 1000 >= timeout)) {
-            break;
+        if (timeout > -1) {
+            nc_gettimespec(&ts_cur);
+            if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
+                break;
+            }
         }
     }
     if (ret == SSH_AGAIN) {
@@ -1391,8 +1404,11 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     }
 
     /* authenticate */
-    elapsed_usec = 0;
-    do {
+    if (opts->auth_timeout) {
+        nc_gettimespec(&ts_timeout);
+        nc_addtimespec(&ts_timeout, opts->auth_timeout * 1000);
+    }
+    while (1) {
         if (!nc_session_is_connected(session)) {
             ERR("Communication SSH socket unexpectedly closed.");
             return -1;
@@ -1404,18 +1420,24 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
             return -1;
         }
 
+        if (session->flags & NC_SESSION_SSH_AUTHENTICATED) {
+            break;
+        }
+
         if (session->opts.server.ssh_auth_attempts >= opts->auth_attempts) {
             ERR("Too many failed authentication attempts of user \"%s\".", session->username);
             return -1;
         }
 
-        if (session->flags & NC_SESSION_SSH_AUTHENTICATED) {
-            break;
-        }
-
         usleep(NC_TIMEOUT_STEP);
-        elapsed_usec += NC_TIMEOUT_STEP;
-    } while (!opts->auth_timeout || (elapsed_usec / 1000000 < opts->auth_timeout));
+        if (opts->auth_timeout) {
+            nc_gettimespec(&ts_cur);
+            if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
+                /* timeout */
+                break;
+            }
+        }
+    }
 
     if (!(session->flags & NC_SESSION_SSH_AUTHENTICATED)) {
         /* timeout */
@@ -1428,7 +1450,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     }
 
     /* open channel */
-    ret = nc_open_netconf_channel(session, opts->auth_timeout ? (opts->auth_timeout * 1000 - elapsed_usec / 1000) : -1);
+    ret = nc_open_netconf_channel(session, timeout);
     if (ret < 1) {
         return ret;
     }

@@ -575,7 +575,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
 {
     struct nc_session *session = NULL;
     int sock, verify, ret;
-    uint32_t elapsed_usec = 0;
+    struct timespec ts_timeout, ts_cur;
 
     if (!tls_opts.cert_path || (!tls_opts.ca_file && !tls_opts.ca_dir)) {
         ERRINIT;
@@ -632,11 +632,13 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     SSL_set_mode(session->ti.tls, SSL_MODE_AUTO_RETRY);
 
     /* connect and perform the handshake */
+    nc_gettimespec(&ts_timeout);
+    nc_addtimespec(&ts_timeout, NC_TRANSPORT_TIMEOUT);
     tlsauth_ch = 0;
     while (((ret = SSL_connect(session->ti.tls)) == -1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
         usleep(NC_TIMEOUT_STEP);
-        elapsed_usec += NC_TIMEOUT_STEP;
-        if (elapsed_usec / 1000 >= NC_TRANSPORT_TIMEOUT) {
+        nc_gettimespec(&ts_cur);
+        if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
             ERR("SSL_connect timeout.");
             goto fail;
         }
@@ -775,9 +777,10 @@ fail:
 struct nc_session *
 nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout)
 {
-    int verify, ret, elapsed_usec = 0;
+    int verify, ret;
     SSL *tls;
     struct nc_session *session;
+    struct timespec ts_timeout, ts_cur;
 
     if (nc_client_tls_update_opts(&tls_ch_opts)) {
         close(sock);
@@ -796,14 +799,20 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
     SSL_set_mode(tls, SSL_MODE_AUTO_RETRY);
 
     /* connect and perform the handshake */
+    if (timeout > -1) {
+        nc_gettimespec(&ts_timeout);
+        nc_addtimespec(&ts_timeout, timeout);
+    }
     tlsauth_ch = 1;
     while (((ret = SSL_connect(tls)) == -1) && (SSL_get_error(tls, ret) == SSL_ERROR_WANT_READ)) {
         usleep(NC_TIMEOUT_STEP);
-        elapsed_usec += NC_TIMEOUT_STEP;
-        if ((timeout > -1) && (elapsed_usec / 1000 >= timeout)) {
-            ERR("SSL_connect timeout.");
-            SSL_free(tls);
-            return NULL;
+        if (timeout > -1) {
+            nc_gettimespec(&ts_cur);
+            if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
+                ERR("SSL_connect timeout.");
+                SSL_free(tls);
+                return NULL;
+            }
         }
     }
     if (ret != 1) {

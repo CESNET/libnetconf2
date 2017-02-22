@@ -1100,7 +1100,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
     char msg[256];
     NC_SESSION_TERM_REASON term_reason;
     struct pollfd pfd;
-    struct timespec begin_ts, cur_ts;
+    struct timespec ts_timeout, ts_cur;
     struct nc_session *cur_session;
     struct nc_server_rpc *rpc = NULL;
 #ifdef NC_ENABLED_SSH
@@ -1132,9 +1132,12 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
             goto finish;
         }
 
+    /* check timeout of all the sessions */
+    nc_gettimespec(&ts_cur);
+    for (i = 0; i < ps->session_count; ++i) {
         /* TODO invalidate only sessions without subscription */
         if (!(ps->sessions[i]->flags & NC_SESSION_CALLHOME) && server_opts.idle_timeout
-                && (begin_ts.tv_sec >= ps->sessions[i]->opts.server.last_rpc + server_opts.idle_timeout)) {
+                && (ts_cur.tv_sec >= ps->sessions[i]->opts.server.last_rpc + server_opts.idle_timeout)) {
             ERR("Session %u: session idle timeout elapsed.", ps->sessions[i]->id);
             ps->sessions[i]->status = NC_STATUS_INVALID;
             ps->sessions[i]->term_reason = NC_SESSION_TERM_TIMEOUT;
@@ -1146,7 +1149,12 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
         }
     }
 
-    /* poll on all the sessions one-by-one */
+    if (timeout > -1) {
+        nc_gettimespec(&ts_timeout);
+        nc_addtimespec(&ts_timeout, timeout);
+    }
+
+    /* poll all the sessions one-by-one */
     do {
         /* loop from i to j */
         if (ps->last_event_session == ps->session_count - 1) {

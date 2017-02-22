@@ -242,13 +242,20 @@ struct nc_server_opts {
 
 /**
  * Timeout in msec for transport-related data to arrive (ssh_handle_key_exchange(), SSL_accept(), SSL_connect()).
+ * It can be quite a lot on slow machines (waiting for TLS cert-to-name resolution, ...).
  */
-#define NC_TRANSPORT_TIMEOUT 2000
+#define NC_TRANSPORT_TIMEOUT 5000
+
+/**
+ * Timeout in msec for acquiring a lock of a session (used with a condition, so higher numbers could be required
+ * only in case of extreme concurrency).
+ */
+#define NC_SESSION_LOCK_TIMEOUT 500
 
 /**
  * Timeout in msec for acquiring a lock of a session that is supposed to be freed.
  */
-#define NC_SESSION_FREE_LOCK_TIMEOUT 5000
+#define NC_SESSION_FREE_LOCK_TIMEOUT 1000
 
 /**
  * Timeout in msec for acquiring a lock of a pollsession structure.
@@ -400,7 +407,9 @@ int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *absti
 
 int nc_gettimespec(struct timespec *ts);
 
-uint32_t nc_difftimespec(struct timespec *ts1, struct timespec *ts2);
+int32_t nc_difftimespec(struct timespec *ts1, struct timespec *ts2);
+
+void nc_addtimespec(struct timespec *ts, uint32_t msec);
 
 int nc_timedlock(pthread_mutex_t *lock, int timeout, const char *func);
 

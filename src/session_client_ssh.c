@@ -28,6 +28,8 @@
 #include <sys/stat.h>
 #include <pwd.h>
 #include <unistd.h>
+#include <pthread.h>
+#include <time.h>
 
 #ifdef ENABLE_DNSSEC
 #   include <validator/validator.h>
@@ -945,20 +947,23 @@ nc_client_ssh_ch_del_bind(const char *address, uint16_t port)
 static int
 connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts, int timeout)
 {
-    int j, ret_auth, userauthlist, ret, elapsed_usec = 0;
+    int j, ret_auth, userauthlist, ret;
     NC_SSH_AUTH_TYPE auth;
     int16_t pref;
     const char* prompt;
     char *s, *answer, echo;
     ssh_key pubkey, privkey;
     ssh_session ssh_sess;
+    struct timespec ts_timeout, ts_cur;
 
     ssh_sess = session->ti.libssh.session;
 
+    nc_gettimespec(&ts_timeout);
+    nc_addtimespec(&ts_timeout, NC_TRANSPORT_TIMEOUT);
     while ((ret = ssh_connect(ssh_sess)) == SSH_AGAIN) {
         usleep(NC_TIMEOUT_STEP);
-        elapsed_usec += NC_TIMEOUT_STEP;
-        if (elapsed_usec / 1000 >= NC_TRANSPORT_TIMEOUT) {
+        nc_gettimespec(&ts_cur);
+        if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
             break;
         }
     }
@@ -976,12 +981,17 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
         return -1;
     }
 
-    elapsed_usec = 0;
+    if (timeout > -1) {
+        nc_gettimespec(&ts_timeout);
+        nc_addtimespec(&ts_timeout, timeout);
+    }
     while ((ret_auth = ssh_userauth_none(ssh_sess, NULL)) == SSH_AUTH_AGAIN) {
         usleep(NC_TIMEOUT_STEP);
-        elapsed_usec += NC_TIMEOUT_STEP;
-        if ((timeout > -1) && (elapsed_usec / 1000 >= timeout)) {
-            break;
+        if (timeout > -1) {
+            nc_gettimespec(&ts_cur);
+            if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
+                break;
+            }
         }
     }
     if (ret_auth == SSH_AUTH_AGAIN) {
@@ -1037,12 +1047,17 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
             VRB("Password authentication (host \"%s\", user \"%s\").", session->host, session->username);
             s = opts->auth_password(session->username, session->host);
 
-            elapsed_usec = 0;
+            if (timeout > -1) {
+                nc_gettimespec(&ts_timeout);
+                nc_addtimespec(&ts_timeout, timeout);
+            }
             while ((ret_auth = ssh_userauth_password(ssh_sess, session->username, s)) == SSH_AUTH_AGAIN) {
                 usleep(NC_TIMEOUT_STEP);
-                elapsed_usec += NC_TIMEOUT_STEP;
-                if ((timeout > -1) && (elapsed_usec / 1000 >= timeout)) {
-                    break;
+                if (timeout > -1) {
+                    nc_gettimespec(&ts_cur);
+                    if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
+                        break;
+                    }
                 }
             }
             memset(s, 0, strlen(s));
@@ -1054,14 +1069,19 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
 
             VRB("Keyboard-interactive authentication.");
 
-            elapsed_usec = 0;
+            if (timeout > -1) {
+                nc_gettimespec(&ts_timeout);
+                nc_addtimespec(&ts_timeout, timeout);
+            }
             while (((ret_auth = ssh_userauth_kbdint(ssh_sess, NULL, NULL)) == SSH_AUTH_INFO)
                     || (ret_auth == SSH_AUTH_AGAIN)) {
                 if (ret_auth == SSH_AUTH_AGAIN) {
                     usleep(NC_TIMEOUT_STEP);
-                    elapsed_usec += NC_TIMEOUT_STEP;
-                    if ((timeout > -1) && (elapsed_usec / 1000 >= timeout)) {
-                        break;
+                    if (timeout > -1) {
+                        nc_gettimespec(&ts_cur);
+                        if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
+                            break;
+                        }
                     }
                     continue;
                 }
@@ -1089,7 +1109,10 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
                 if (ret_auth == SSH_AUTH_ERROR) {
                     break;
                 }
-                elapsed_usec = 0;
+                if (timeout > -1) {
+                    nc_gettimespec(&ts_timeout);
+                    nc_addtimespec(&ts_timeout, timeout);
+                }
             }
             break;
 
@@ -1118,13 +1141,17 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
                     continue;
                 }
 
-                elapsed_usec = 0;
+                if (timeout > -1) {
+                    nc_gettimespec(&ts_timeout);
+                    nc_addtimespec(&ts_timeout, timeout);
+                }
                 while ((ret_auth = ssh_userauth_try_publickey(ssh_sess, NULL, pubkey)) == SSH_AUTH_AGAIN) {
                     usleep(NC_TIMEOUT_STEP);
-                    elapsed_usec += NC_TIMEOUT_STEP;
-                    if ((timeout > -1) && (elapsed_usec / 1000 >= timeout)) {
-                        ssh_key_free(pubkey);
-                        break;
+                    if (timeout > -1) {
+                        nc_gettimespec(&ts_cur);
+                        if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
+                            break;
+                        }
                     }
                 }
                 ssh_key_free(pubkey);
@@ -1154,13 +1181,17 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
                     continue;
                 }
 
-                elapsed_usec = 0;
+                if (timeout > -1) {
+                    nc_gettimespec(&ts_timeout);
+                    nc_addtimespec(&ts_timeout, timeout);
+                }
                 while ((ret_auth = ssh_userauth_publickey(ssh_sess, NULL, privkey)) == SSH_AUTH_AGAIN) {
                     usleep(NC_TIMEOUT_STEP);
-                    elapsed_usec += NC_TIMEOUT_STEP;
-                    if ((timeout > -1) && (elapsed_usec / 1000 >= timeout)) {
-                        ssh_key_free(privkey);
-                        break;
+                    if (timeout > -1) {
+                        nc_gettimespec(&ts_cur);
+                        if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
+                            break;
+                        }
                     }
                 }
                 ssh_key_free(privkey);
@@ -1204,7 +1235,8 @@ static int
 open_netconf_channel(struct nc_session *session, int timeout)
 {
     ssh_session ssh_sess;
-    int ret, elapsed_usec = 0;
+    int ret;
+    struct timespec ts_timeout, ts_cur;
 
     ssh_sess = session->ti.libssh.session;
 
@@ -1219,12 +1251,18 @@ open_netconf_channel(struct nc_session *session, int timeout)
     }
 
     /* open a channel */
+    if (timeout > -1) {
+        nc_gettimespec(&ts_timeout);
+        nc_addtimespec(&ts_timeout, timeout);
+    }
     session->ti.libssh.channel = ssh_channel_new(ssh_sess);
     while ((ret = ssh_channel_open_session(session->ti.libssh.channel)) == SSH_AGAIN) {
         usleep(NC_TIMEOUT_STEP);
-        elapsed_usec += NC_TIMEOUT_STEP;
-        if ((timeout > -1) && (elapsed_usec / 1000 >= timeout)) {
-            break;
+        if (timeout > -1) {
+            nc_gettimespec(&ts_cur);
+            if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
+                break;
+            }
         }
     }
     if (ret == SSH_AGAIN) {
@@ -1240,12 +1278,17 @@ open_netconf_channel(struct nc_session *session, int timeout)
     }
 
     /* execute the NETCONF subsystem on the channel */
-    elapsed_usec = 0;
+    if (timeout > -1) {
+        nc_gettimespec(&ts_timeout);
+        nc_addtimespec(&ts_timeout, timeout);
+    }
     while ((ret = ssh_channel_request_subsystem(session->ti.libssh.channel, "netconf")) == SSH_AGAIN) {
         usleep(NC_TIMEOUT_STEP);
-        elapsed_usec += NC_TIMEOUT_STEP;
-        if ((timeout > -1) && (elapsed_usec / 1000 >= timeout)) {
-            break;
+        if (timeout > -1) {
+            nc_gettimespec(&ts_cur);
+            if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
+                break;
+            }
         }
     }
     if (ret == SSH_AGAIN) {
