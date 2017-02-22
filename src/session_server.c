@@ -210,6 +210,7 @@ fail:
 int
 nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host, uint16_t *port, uint16_t *idx)
 {
+    sigset_t sigmask, origmask;
     uint16_t i, j, pfd_count;
     struct pollfd *pfd;
     struct sockaddr_storage saddr;
@@ -242,7 +243,11 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
 
     if (sock == -1) {
         /* poll for a new connection */
+        sigfillset(&sigmask);
+        pthread_sigmask(SIG_SETMASK, &sigmask, &origmask);
         ret = poll(pfd, pfd_count, timeout);
+        pthread_sigmask(SIG_SETMASK, &origmask, NULL);
+
         if (!ret) {
             /* we timeouted */
             free(pfd);
