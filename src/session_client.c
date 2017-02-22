@@ -376,7 +376,7 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     }
 
     /* prepare session structure */
-    session = calloc(1, sizeof *session);
+    session = nc_new_session(0);
     if (!session) {
         ERRMEM;
         return NULL;
@@ -386,6 +386,10 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
 
     /* transport specific data */
     session->ti_type = NC_TI_FD;
+    pthread_mutex_init(session->ti_lock, NULL);
+    pthread_cond_init(session->ti_cond, NULL);
+    *session->ti_inuse = 0;
+
     session->ti.fd.in = fdin;
     session->ti.fd.out = fdout;
 
@@ -484,7 +488,7 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
     struct nc_msg_cont *cont, **cont_ptr;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
 
-    r = nc_timedlock(session->ti_lock, timeout, __func__);
+    r = nc_session_lock(session, timeout, __func__);
     if (r == -1) {
         /* error */
         return NC_MSG_ERROR;
@@ -529,7 +533,7 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
         *cont_ptr = malloc(sizeof **cont_ptr);
         if (!*cont_ptr) {
             ERRMEM;
-            pthread_mutex_unlock(session->ti_lock);
+            nc_session_unlock(session, timeout, __func__);
             lyxml_free(session->ctx, xml);
             return NC_MSG_ERROR;
         }
@@ -554,7 +558,7 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
         *cont_ptr = malloc(sizeof **cont_ptr);
         if (!cont_ptr) {
             ERRMEM;
-            pthread_mutex_unlock(session->ti_lock);
+            nc_session_unlock(session, timeout, __func__);
             lyxml_free(session->ctx, xml);
             return NC_MSG_ERROR;
         }
@@ -562,7 +566,7 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
         (*cont_ptr)->next = NULL;
     }
 
-    pthread_mutex_unlock(session->ti_lock);
+    nc_session_unlock(session, timeout, __func__);
 
     switch (msgtype) {
     case NC_MSG_NOTIF:
@@ -1791,7 +1795,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         return NC_MSG_ERROR;
     }
 
-    ret = nc_timedlock(session->ti_lock, timeout, __func__);
+    ret = nc_session_lock(session, timeout, __func__);
     if (ret == -1) {
         /* error */
         r = NC_MSG_ERROR;
@@ -1803,7 +1807,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         r = nc_send_msg(session, data);
         cur_msgid = session->opts.client.msgid;
     }
-    pthread_mutex_unlock(session->ti_lock);
+    nc_session_unlock(session, timeout, __func__);
 
     lyd_free(data);
 

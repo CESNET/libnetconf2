@@ -1321,7 +1321,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client
     }
 
     /* prepare session structure */
-    session = calloc(1, sizeof *session);
+    session = nc_new_session(0);
     if (!session) {
         ERRMEM;
         return NULL;
@@ -1330,12 +1330,9 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client
     session->side = NC_CLIENT;
 
     /* transport lock */
-    session->ti_lock = malloc(sizeof *session->ti_lock);
-    if (!session->ti_lock) {
-        ERRMEM;
-        goto fail;
-    }
     pthread_mutex_init(session->ti_lock, NULL);
+    pthread_cond_init(session->ti_cond, NULL);
+    *session->ti_inuse = 0;
 
     session->ti_type = NC_TI_LIBSSH;
     session->ti.libssh.session = ssh_session;
@@ -1491,7 +1488,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     }
 
     /* prepare session structure */
-    session = calloc(1, sizeof *session);
+    session = nc_new_session(0);
     if (!session) {
         ERRMEM;
         return NULL;
@@ -1500,12 +1497,9 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     session->side = NC_CLIENT;
 
     /* transport lock */
-    session->ti_lock = malloc(sizeof *session->ti_lock);
-    if (!session->ti_lock) {
-        ERRMEM;
-        goto fail;
-    }
     pthread_mutex_init(session->ti_lock, NULL);
+    pthread_cond_init(session->ti_cond, NULL);
+    *session->ti_inuse = 0;
 
     /* other transport-specific data */
     session->ti_type = NC_TI_LIBSSH;
@@ -1600,7 +1594,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     }
 
     /* prepare session structure */
-    new_session = calloc(1, sizeof *new_session);
+    new_session = nc_new_session(1);
     if (!new_session) {
         ERRMEM;
         return NULL;
@@ -1611,10 +1605,14 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     /* share some parameters including the session lock */
     new_session->ti_type = NC_TI_LIBSSH;
     new_session->ti_lock = session->ti_lock;
+    new_session->ti_cond = session->ti_cond;
+    new_session->ti_inuse = session->ti_inuse;
     new_session->ti.libssh.session = session->ti.libssh.session;
 
     /* create the channel safely */
-    pthread_mutex_lock(new_session->ti_lock);
+    if (nc_session_lock(new_session, -1, __func__)) {
+        goto fail;
+    }
 
     /* open a channel */
     if (open_netconf_channel(new_session, NC_TRANSPORT_TIMEOUT) != 1) {
@@ -1639,7 +1637,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     }
     new_session->status = NC_STATUS_RUNNING;
 
-    pthread_mutex_unlock(new_session->ti_lock);
+    nc_session_unlock(new_session, NC_SESSION_LOCK_TIMEOUT, __func__);
 
     if (nc_ctx_check_and_fill(new_session) == -1) {
         goto fail;

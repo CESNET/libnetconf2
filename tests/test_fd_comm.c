@@ -80,6 +80,10 @@ setup_sessions(void **state)
     server_session->ti_type = NC_TI_FD;
     server_session->ti_lock = malloc(sizeof *server_session->ti_lock);
     pthread_mutex_init(server_session->ti_lock, NULL);
+    server_session->ti_cond = malloc(sizeof *server_session->ti_cond);
+    pthread_cond_init(server_session->ti_cond, NULL);
+    server_session->ti_inuse = malloc(sizeof *server_session->ti_inuse);
+    *server_session->ti_inuse = 0;
     server_session->ti.fd.in = sock[0];
     server_session->ti.fd.out = sock[0];
     server_session->ctx = ctx;
@@ -93,6 +97,10 @@ setup_sessions(void **state)
     client_session->ti_type = NC_TI_FD;
     client_session->ti_lock = malloc(sizeof *client_session->ti_lock);
     pthread_mutex_init(client_session->ti_lock, NULL);
+    client_session->ti_cond = malloc(sizeof *client_session->ti_cond);
+    pthread_cond_init(client_session->ti_cond, NULL);
+    client_session->ti_inuse = malloc(sizeof *client_session->ti_inuse);
+    *client_session->ti_inuse = 0;
     client_session->ti.fd.in = sock[1];
     client_session->ti.fd.out = sock[1];
     client_session->ctx = ctx;
@@ -109,12 +117,18 @@ teardown_sessions(void **state)
 
     close(server_session->ti.fd.in);
     pthread_mutex_destroy(server_session->ti_lock);
+    pthread_cond_destroy(server_session->ti_cond);
     free(server_session->ti_lock);
+    free(server_session->ti_cond);
+    free((int *)server_session->ti_inuse);
     free(server_session);
 
     close(client_session->ti.fd.in);
     pthread_mutex_destroy(client_session->ti_lock);
+    pthread_cond_destroy(client_session->ti_cond);
     free(client_session->ti_lock);
+    free(client_session->ti_cond);
+    free((int *)client_session->ti_inuse);
     free(client_session);
 
     return 0;

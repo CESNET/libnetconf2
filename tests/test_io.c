@@ -47,8 +47,6 @@ setup_write(void **state)
     w = malloc(sizeof *w);
     w->session = calloc(1, sizeof *w->session);
     w->session->ctx = ly_ctx_new(TESTS_DIR"../schemas");
-    w->session->ti_lock = malloc(sizeof *w->session->ti_lock);
-    pthread_mutex_init(w->session->ti_lock, NULL);
 
     /* ietf-netconf */
     fd = open(TESTS_DIR"../schemas/ietf-netconf.yin", O_RDONLY);
@@ -64,6 +62,12 @@ setup_write(void **state)
     w->session->version = NC_VERSION_10;
     w->session->opts.client.msgid = 999;
     w->session->ti_type = NC_TI_FD;
+    w->session->ti_lock = malloc(sizeof *w->session->ti_lock);
+    pthread_mutex_init(w->session->ti_lock, NULL);
+    w->session->ti_cond = malloc(sizeof *w->session->ti_cond);
+    pthread_cond_init(w->session->ti_cond, NULL);
+    w->session->ti_inuse = malloc(sizeof *w->session->ti_inuse);
+    *w->session->ti_inuse = 0;
     w->session->ti.fd.in = STDIN_FILENO;
     w->session->ti.fd.out = STDOUT_FILENO;
 

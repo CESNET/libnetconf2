@@ -106,11 +106,11 @@
  * documentation. _libnetconf2_ thread-safety information is below.
  *
  * Client is __NOT__ thread-safe and there is no access control in the client
- * functions at all. Server is __MOSTLY__ thread-safe meaning you can set all the
+ * functions at all. Server is __FULLY__ thread-safe meaning you can set all the
  * options simultaneously while listening for or accepting new sessions or
- * polling the existing ones. It should even be safe to poll one session in
- * several threads, but it is definitely discouraged. Generally, servers can
- * use more threads without any problems as long as they keep their workflow sane
+ * polling the existing ones. It is even safe to poll one session in several
+ * pollsession structures or one pollsession structure in several threads. Generally,
+ * servers can use more threads without any problems as long as they keep their workflow sane
  * (behavior such as freeing sessions only after no thread uses them or similar).
  *
  * Functions List

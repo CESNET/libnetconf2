@@ -597,7 +597,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     }
 
     /* prepare session structure */
-    session = calloc(1, sizeof *session);
+    session = nc_new_session(0);
     if (!session) {
         ERRMEM;
         return NULL;
@@ -606,12 +606,9 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     session->side = NC_CLIENT;
 
     /* transport lock */
-    session->ti_lock = malloc(sizeof *session->ti_lock);
-    if (!session->ti_lock) {
-        ERRMEM;
-        goto fail;
-    }
     pthread_mutex_init(session->ti_lock, NULL);
+    pthread_cond_init(session->ti_cond, NULL);
+    *session->ti_inuse = 0;
 
     /* fill the session */
     session->ti_type = NC_TI_OPENSSL;
@@ -721,7 +718,7 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     }
 
     /* prepare session structure */
-    session = calloc(1, sizeof *session);
+    session = nc_new_session(0);
     if (!session) {
         ERRMEM;
         return NULL;
@@ -730,12 +727,9 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     session->side = NC_CLIENT;
 
     /* transport lock */
-    session->ti_lock = malloc(sizeof *session->ti_lock);
-    if (!session->ti_lock) {
-        ERRMEM;
-        goto fail;
-    }
     pthread_mutex_init(session->ti_lock, NULL);
+    pthread_cond_init(session->ti_cond, NULL);
+    *session->ti_inuse = 0;
 
     session->ti_type = NC_TI_OPENSSL;
     session->ti.tls = tls;

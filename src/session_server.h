@@ -251,7 +251,7 @@ uint16_t nc_ps_session_count(struct nc_pollsession *ps);
  *                    infinite waiting.
  * @param[in] session Session that was processed and that specific return bits concern.
  *                    Can be NULL.
- * @return Bitfield of NC_PSPOLL_* macros, almost any combination can be returned.
+ * @return Bitfield of NC_PSPOLL_* macros.
  */
 int nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session);
 
@@ -259,7 +259,7 @@ int nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **sessi
  * @brief Remove sessions from a pollsession structure and
  *        call nc_session_free() on them.
  *
- * Calling this function with \p all false makes sense if nc_ps_poll() returned 3.
+ * Calling this function with \p all false makes sense if nc_ps_poll() returned #NC_PSPOLL_SESSION_TERM.
  *
  * @param[in] ps Pollsession structure to clear.
  * @param[in] all Whether to free all sessions, or only the invalid ones.
@@ -331,7 +331,7 @@ NC_MSG_TYPE nc_accept(int timeout, struct nc_session **session);
 
 /**
  * @brief Accept a new NETCONF session on an SSH session of a running NETCONF \p orig_session.
- *        Call this function only when nc_ps_poll() returns NC_PSPOLL_SSH_CHANNEL on \p orig_session.
+ *        Call this function only when nc_ps_poll() returns #NC_PSPOLL_SSH_CHANNEL on \p orig_session.
  *
  * @param[in] orig_session Session that has a new SSH channel ready.
  * @param[out] session New session.
@@ -342,7 +342,7 @@ NC_MSG_TYPE nc_session_accept_ssh_channel(struct nc_session *orig_session, struc
 
 /**
  * @brief Accept a new NETCONF session on an SSH session of a running NETCONF session
- *        that was polled in \p ps. Call this function only when nc_ps_poll() on \p ps returns NC_PSPOLL_SSH_CHANNEL.
+ *        that was polled in \p ps. Call this function only when nc_ps_poll() on \p ps returns #NC_PSPOLL_SSH_CHANNEL.
  *        The new session is only returned in \p session, it is not added to \p ps.
  *
  * @param[in] ps Unmodified pollsession structure from the previous nc_ps_poll() call.

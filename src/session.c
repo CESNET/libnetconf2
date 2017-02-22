@@ -128,13 +128,39 @@ pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *abstime)
 }
 #endif
 
+struct nc_session *
+nc_new_session(int not_allocate_ti)
+{
+    struct nc_session *sess;
+
+    sess = calloc(1, sizeof *sess);
+    if (!sess) {
+        return NULL;
+    }
+
+    if (!not_allocate_ti) {
+        sess->ti_lock = malloc(sizeof *sess->ti_lock);
+        sess->ti_cond = malloc(sizeof *sess->ti_cond);
+        sess->ti_inuse = malloc(sizeof *sess->ti_inuse);
+        if (!sess->ti_lock || !sess->ti_cond || !sess->ti_inuse) {
+            free(sess->ti_lock);
+            free(sess->ti_cond);
+            free((int *)sess->ti_inuse);
+            free(sess);
+            return NULL;
+        }
+    }
+
+    return sess;
+}
+
 /*
  * @return 1 - success
  *         0 - timeout
  *        -1 - error
  */
 int
-nc_timedlock(pthread_mutex_t *lock, int timeout, const char *func)
+nc_session_lock(struct nc_session *session, int timeout, const char *func)
 {
     int ret;
     struct timespec ts_timeout;
@@ -145,27 +171,117 @@ nc_timedlock(pthread_mutex_t *lock, int timeout, const char *func)
         ts_timeout.tv_sec += timeout / 1000;
         ts_timeout.tv_nsec += (timeout % 1000) * 1000000;
 
-        ret = pthread_mutex_timedlock(lock, &ts_timeout);
+        /* LOCK */
+        ret = pthread_mutex_timedlock(session->ti_lock, &ts_timeout);
+        if (!ret) {
+            while (*session->ti_inuse) {
+                ret = pthread_cond_timedwait(session->ti_cond, session->ti_lock, &ts_timeout);
+                if (ret) {
+                    pthread_mutex_unlock(session->ti_lock);
+                    break;
+                }
+            }
+        }
     } else if (!timeout) {
-        ret = pthread_mutex_trylock(lock);
-        if (ret == EBUSY) {
-            /* equivalent in this case */
-            ret = ETIMEDOUT;
+        if (*session->ti_inuse) {
+            /* immediate timeout */
+            return 0;
+        }
+
+        /* LOCK */
+        ret = pthread_mutex_trylock(session->ti_lock);
+        if (!ret) {
+            /* be extra careful, someone could have been faster */
+            if (*session->ti_inuse) {
+                pthread_mutex_unlock(session->ti_lock);
+                return 0;
+            }
         }
     } else { /* timeout == -1 */
-        ret = pthread_mutex_lock(lock);
+        /* LOCK */
+        ret = pthread_mutex_lock(session->ti_lock);
+        if (!ret) {
+            while (*session->ti_inuse) {
+                ret = pthread_cond_wait(session->ti_cond, session->ti_lock);
+                if (ret) {
+                    pthread_mutex_unlock(session->ti_lock);
+                    break;
+                }
+            }
+        }
     }
 
-    if (ret == ETIMEDOUT) {
-        /* timeout */
-        return 0;
-    } else if (ret) {
+    if (ret) {
+        if ((ret == EBUSY) || (ret == ETIMEDOUT)) {
+            /* timeout */
+            return 0;
+        }
+
         /* error */
-        ERR("Mutex lock failed (%s, %s).", func, strerror(ret));
+        ERR("%s: failed to lock a session (%s).", func, strerror(ret));
         return -1;
     }
 
     /* ok */
+    assert(*session->ti_inuse == 0);
+    *session->ti_inuse = 1;
+
+    /* UNLOCK */
+    ret = pthread_mutex_unlock(session->ti_lock);
+    if (ret) {
+        /* error */
+        ERR("%s: faile to unlock a session (%s).", func, strerror(ret));
+        return -1;
+    }
+
+    return 1;
+}
+
+int
+nc_session_unlock(struct nc_session *session, int timeout, const char *func)
+{
+    int ret;
+    struct timespec ts_timeout;
+
+    assert(*session->ti_inuse);
+
+    if (timeout > 0) {
+        nc_gettimespec(&ts_timeout);
+
+        ts_timeout.tv_sec += timeout / 1000;
+        ts_timeout.tv_nsec += (timeout % 1000) * 1000000;
+
+        /* LOCK */
+        ret = pthread_mutex_timedlock(session->ti_lock, &ts_timeout);
+    } else if (!timeout) {
+        /* LOCK */
+        ret = pthread_mutex_trylock(session->ti_lock);
+    } else { /* timeout == -1 */
+        /* LOCK */
+        ret = pthread_mutex_lock(session->ti_lock);
+    }
+
+    if (ret && (ret != EBUSY) && (ret != ETIMEDOUT)) {
+        /* error */
+        ERR("%s: failed to lock a session (%s).", func, strerror(ret));
+        return -1;
+    } else if (ret) {
+        WRN("%s: session lock timeout, should not happen.");
+    }
+
+    *session->ti_inuse = 0;
+    pthread_cond_signal(session->ti_cond);
+
+    if (!ret) {
+        /* UNLOCK */
+        ret = pthread_mutex_unlock(session->ti_lock);
+        if (ret) {
+            /* error */
+            ERR("%s: failed to unlock a session (%s).", func, strerror(ret));
+            return -1;
+        }
+    }
+
     return 1;
 }
 
@@ -339,7 +455,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     if (session->ti_lock) {
-        r = nc_timedlock(session->ti_lock, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
+        r = nc_session_lock(session, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
         if (r == -1) {
             return;
         } else if (!r) {
@@ -535,11 +651,14 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     /* final cleanup */
     if (session->ti_lock) {
         if (locked) {
-            pthread_mutex_unlock(session->ti_lock);
+            nc_session_unlock(session, NC_SESSION_LOCK_TIMEOUT, __func__);
         }
         if (!multisession) {
             pthread_mutex_destroy(session->ti_lock);
+            pthread_cond_destroy(session->ti_cond);
             free(session->ti_lock);
+            free(session->ti_cond);
+            free((int *)session->ti_inuse);
         }
     }
 
