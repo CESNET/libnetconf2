@@ -246,7 +246,7 @@ struct nc_server_opts {
  * Timeout in msec for transport-related data to arrive (ssh_handle_key_exchange(), SSL_accept(), SSL_connect()).
  * It can be quite a lot on slow machines (waiting for TLS cert-to-name resolution, ...).
  */
-#define NC_TRANSPORT_TIMEOUT 5000
+#define NC_TRANSPORT_TIMEOUT 10000
 
 /**
  * Timeout in msec for acquiring a lock of a session (used with a condition, so higher numbers could be required
