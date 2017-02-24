@@ -561,6 +561,7 @@ nc_session_is_connected(struct nc_session *session)
     }
 
     fds.events = POLLIN;
+    fds.revents = 0;
 
     errno = 0;
     while (((ret = poll(&fds, 1, 0)) == -1) && (errno == EINTR));
@@ -840,7 +841,7 @@ nc_write_error_elem(struct wclb_arg *arg, const char *name, uint16_t nam_len, co
 static void
 nc_write_error(struct wclb_arg *arg, struct nc_server_error *err, const char *prefix)
 {
-    uint16_t i, pref_len;
+    uint16_t i, pref_len = 0;
     char str_sid[11];
 
     if (prefix) {

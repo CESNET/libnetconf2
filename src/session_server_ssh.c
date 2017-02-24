@@ -824,7 +824,7 @@ auth_pubkey_compare_key(ssh_key key)
     uint32_t i;
     ssh_key pub_key;
     const char *username = NULL;
-    int ret;
+    int ret = 0;
 
     /* LOCK */
     pthread_mutex_lock(&server_opts.authkey_lock);
