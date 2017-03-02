@@ -34,6 +34,8 @@ typedef enum NC_VERB_LEVEL {
  *
  * This level is set for libnetconf2 and alo libyang that is used internally. libyang
  * verbose level can be set explicitly, but must be done so after calling this function.
+ * However, if debug verbosity is used, selecting displayed libyang debug message groups
+ * must be done explicitly.
  *
  * @param[in] level Enabled verbosity level (includes all the levels with higher priority).
  */

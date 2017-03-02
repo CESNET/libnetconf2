@@ -468,7 +468,7 @@ nc_err_libyang(void)
             break;
         case LYVE_INATTR:
         case LYVE_MISSATTR:
-        case LYVE_INVALATTR:
+        case LYVE_INMETA:
             str = ly_errmsg();
             stri = strchr(str, '"');
             stri++;
@@ -479,7 +479,7 @@ nc_err_libyang(void)
                 e = nc_err(NC_ERR_UNKNOWN_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath());
             } else if (ly_vecode == LYVE_MISSATTR) {
                 e = nc_err(NC_ERR_MISSING_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath());
-            } else { /* LYVE_INVALATTR */
+            } else { /* LYVE_INMETA */
                 e = nc_err(NC_ERR_BAD_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath());
             }
             free(attr);
