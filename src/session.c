@@ -71,13 +71,8 @@ nc_difftimespec(struct timespec *ts1, struct timespec *ts2)
 {
     int64_t nsec_diff = 0;
 
-    if (ts1->tv_nsec > ts2->tv_nsec) {
-        ts2->tv_nsec += 1000000000L;
-        --ts2->tv_sec;
-    }
-
-    nsec_diff += (ts2->tv_sec - ts1->tv_sec) * 1000000000L;
-    nsec_diff += ts2->tv_nsec - ts1->tv_nsec;
+    nsec_diff += (((int64_t)ts2->tv_sec) - ((int64_t)ts1->tv_sec)) * 1000000000L;
+    nsec_diff += ((int64_t)ts2->tv_nsec) - ((int64_t)ts1->tv_nsec);
 
     return (nsec_diff ? nsec_diff / 1000000L : 0);
 }
