@@ -658,4 +658,23 @@ void nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *ses
  */
 time_t nc_session_get_start_time(const struct nc_session *session);
 
+/**
+ * @brief Set session notification subscription flag.
+ *
+ * It is used only to ignore timeouts, because they are
+ * ignored for sessions with active subscriptions.
+ *
+ * @param[in] session Session to modify.
+ * @param[in] notif_status 0 for no active subscriptions, non-zero for an active subscription.
+ */
+void nc_session_set_notif_status(struct nc_session *session, int notif_status);
+
+/**
+ * @brief Get session notification subscription flag.
+ *
+ * @param[in] session Session to get the information from.
+ * @return 0 for no active subscription, non-zero for an active subscription.
+ */
+int nc_session_get_notif_status(const struct nc_session *session);
+
 #endif /* NC_SESSION_SERVER_H_ */

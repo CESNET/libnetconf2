@@ -1000,7 +1000,7 @@ nc_server_notif_send(struct nc_session *session, struct nc_server_notif *notif, 
     int ret;
 
     /* check parameters */
-    if (!session) {
+    if (!session || (session->side != NC_SERVER) || !session->opts.server.ntf_status) {
         ERRARG("session");
         return NC_MSG_ERROR;
     } else if (!notif || !notif->tree || !notif->eventtime) {
@@ -1129,8 +1129,8 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
     /* check timeout of all the sessions */
     nc_gettimespec(&ts_cur);
     for (i = 0; i < ps->session_count; ++i) {
-        /* TODO invalidate only sessions without subscription */
-        if (!(ps->sessions[i]->flags & NC_SESSION_CALLHOME) && server_opts.idle_timeout
+        if (!(ps->sessions[i]->flags & NC_SESSION_CALLHOME) && !ps->sessions[i]->opts.server.ntf_status
+                && server_opts.idle_timeout
                 && (ts_cur.tv_sec >= ps->sessions[i]->opts.server.last_rpc + server_opts.idle_timeout)) {
             ERR("Session %u: session idle timeout elapsed.", ps->sessions[i]->id);
             ps->sessions[i]->status = NC_STATUS_INVALID;
@@ -2682,8 +2682,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
             idle_timeout = client->conn.period.idle_timeout;
         }
 
-        /* TODO only for sessions without subscriptions */
-        if (idle_timeout && (ts.tv_sec >= session->opts.server.last_rpc + idle_timeout)) {
+        if (!session->opts.server.ntf_status && idle_timeout && (ts.tv_sec >= session->opts.server.last_rpc + idle_timeout)) {
             VRB("Call Home client \"%s\" session %u: session idle timeout elapsed.", client->name, session->id);
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_TIMEOUT;
@@ -2878,4 +2877,26 @@ nc_session_get_start_time(const struct nc_session *session)
     }
 
     return session->opts.server.session_start;
+}
+
+API void
+nc_session_set_notif_status(struct nc_session *session, int notif_status)
+{
+    if (!session || (session->side != NC_SERVER)) {
+        ERRARG("session");
+        return;
+    }
+
+    session->opts.server.ntf_status = (notif_status ? 1 : 0);
+}
+
+API int
+nc_session_get_notif_status(const struct nc_session *session)
+{
+    if (!session || (session->side != NC_SERVER)) {
+        ERRARG("session");
+        return 0;
+    }
+
+    return session->opts.server.ntf_status;
 }
