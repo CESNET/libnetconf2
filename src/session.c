@@ -85,8 +85,8 @@ nc_difftimespec(struct timespec *ts1, struct timespec *ts2)
 void
 nc_addtimespec(struct timespec *ts, uint32_t msec)
 {
-    ts->tv_sec += msec / 1000000L;
-    ts->tv_nsec += (msec % 1000000L) * 1000000L;
+    ts->tv_sec += msec / 1000;
+    ts->tv_nsec += (msec % 1000) * 1000000L;
 
     if (ts->tv_nsec > 1000000000L) {
         ts->tv_sec += ts->tv_nsec / 1000000000L;
