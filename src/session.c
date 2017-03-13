@@ -691,7 +691,7 @@ add_cpblt(struct ly_ctx *ctx, const char *capab, const char ***cpblts, int *size
             len = strlen(capab);
         }
         for (i = 0; i < *count; i++) {
-            if (!strncmp((*cpblts)[i], capab, len)) {
+            if (!strncmp((*cpblts)[i], capab, len) && ((*cpblts)[i][len] == '\0' || (*cpblts)[i][len] == '?')) {
                 /* already present, do not duplicate it */
                 return;
             }
