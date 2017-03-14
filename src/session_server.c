@@ -2653,11 +2653,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
 
     do {
         nc_gettimespec(&ts);
-        ts.tv_nsec += NC_CH_NO_ENDPT_WAIT * 1000000L;
-        if (ts.tv_nsec > 1000000000L) {
-            ts.tv_sec += ts.tv_nsec / 1000000000L;
-            ts.tv_nsec %= 1000000000L;
-        }
+        nc_addtimespec(&ts, NC_CH_NO_ENDPT_WAIT);
 
         ret = pthread_cond_timedwait(session->opts.server.ch_cond, session->opts.server.ch_lock, &ts);
         if (ret && (ret != ETIMEDOUT)) {
