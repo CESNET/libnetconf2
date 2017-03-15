@@ -80,19 +80,27 @@ nc_difftimespec(struct timespec *ts1, struct timespec *ts2)
 void
 nc_addtimespec(struct timespec *ts, uint32_t msec)
 {
+    assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
+
     ts->tv_sec += msec / 1000;
     ts->tv_nsec += (msec % 1000) * 1000000L;
 
-    if (ts->tv_nsec > 1000000000L) {
-        ts->tv_sec += ts->tv_nsec / 1000000000L;
-        ts->tv_nsec %= 1000000000L;
+    if (ts->tv_nsec >= 1000000000L) {
+        ++ts->tv_sec;
+        ts->tv_nsec -= 1000000000L;
+    } else if (ts->tv_nsec < 0) {
+        --ts->tv_sec;
+        ts->tv_nsec += 1000000000L;
     }
+
+    assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
 }
 
 #ifndef HAVE_PTHREAD_MUTEX_TIMEDLOCK
 int
 pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *abstime)
 {
+    int32_t diff;
     int rc;
     struct timespec cur, dur;
 
@@ -100,18 +108,14 @@ pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *abstime)
     while ((rc = pthread_mutex_trylock(mutex)) == EBUSY) {
         nc_gettimespec(&cur);
 
-        if ((cur.tv_sec > abstime->tv_sec) || ((cur.tv_sec == abstime->tv_sec) && (cur.tv_nsec >= abstime->tv_nsec))) {
+        if ((diff = nc_difftimespec(&cur, abstime)) < 1) {
+            /* timeout */
             break;
-        }
-
-        dur.tv_sec = abstime->tv_sec - cur.tv_sec;
-        dur.tv_nsec = abstime->tv_nsec - cur.tv_nsec;
-        if (dur.tv_nsec < 0) {
-            dur.tv_sec--;
-            dur.tv_nsec += 1000000000;
-        }
-
-        if ((dur.tv_sec != 0) || (dur.tv_nsec > 5000000)) {
+        } else if (diff < 5) {
+            /* sleep until timeout */
+            dur = *abstime;
+        } else {
+            /* sleep 5 ms */
             dur.tv_sec = 0;
             dur.tv_nsec = 5000000;
         }
@@ -162,9 +166,7 @@ nc_session_lock(struct nc_session *session, int timeout, const char *func)
 
     if (timeout > 0) {
         nc_gettimespec(&ts_timeout);
-
-        ts_timeout.tv_sec += timeout / 1000;
-        ts_timeout.tv_nsec += (timeout % 1000) * 1000000;
+        nc_addtimespec(&ts_timeout, timeout);
 
         /* LOCK */
         ret = pthread_mutex_timedlock(session->ti_lock, &ts_timeout);
@@ -242,9 +244,7 @@ nc_session_unlock(struct nc_session *session, int timeout, const char *func)
 
     if (timeout > 0) {
         nc_gettimespec(&ts_timeout);
-
-        ts_timeout.tv_sec += timeout / 1000;
-        ts_timeout.tv_nsec += (timeout % 1000) * 1000000;
+        nc_addtimespec(&ts_timeout, timeout);
 
         /* LOCK */
         ret = pthread_mutex_timedlock(session->ti_lock, &ts_timeout);

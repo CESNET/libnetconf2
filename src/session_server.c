@@ -669,11 +669,7 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
     struct timespec ts;
 
     nc_gettimespec(&ts);
-    ts.tv_nsec += NC_PS_LOCK_TIMEOUT * 1000000;
-    while (ts.tv_nsec >= 1000000000L) {
-        ts.tv_nsec -= 1000000000L;
-        ++ts.tv_sec;
-    }
+    nc_addtimespec(&ts, NC_PS_LOCK_TIMEOUT);
 
     /* LOCK */
     ret = pthread_mutex_timedlock(&ps->lock, &ts);
@@ -709,11 +705,7 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
     /* is it our turn? */
     while (ps->queue[ps->queue_begin] != *id) {
         nc_gettimespec(&ts);
-        ts.tv_nsec += NC_PS_LOCK_TIMEOUT * 1000000;
-        while (ts.tv_nsec >= 1000000000L) {
-            ts.tv_nsec -= 1000000000L;
-            ++ts.tv_sec;
-        }
+        nc_addtimespec(&ts, NC_PS_LOCK_TIMEOUT);
 
         ret = pthread_cond_timedwait(&ps->cond, &ps->lock, &ts);
         if (ret) {
@@ -738,11 +730,7 @@ nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func)
     struct timespec ts;
 
     nc_gettimespec(&ts);
-    ts.tv_nsec += NC_PS_LOCK_TIMEOUT * 1000000;
-    while (ts.tv_nsec >= 1000000000L) {
-        ts.tv_nsec -= 1000000000L;
-        ++ts.tv_sec;
-    }
+    nc_addtimespec(&ts, NC_PS_LOCK_TIMEOUT);
 
     /* LOCK */
     ret = pthread_mutex_timedlock(&ps->lock, &ts);
