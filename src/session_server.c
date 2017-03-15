@@ -2864,6 +2864,12 @@ nc_connect_ch_client_dispatch(const char *client_name,
 
 #endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
+API int
+nc_server_endpt_count(void)
+{
+    return server_opts.endpt_count;
+}
+
 API time_t
 nc_session_get_start_time(const struct nc_session *session)
 {

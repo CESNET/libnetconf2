@@ -293,6 +293,15 @@ int nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti);
 int nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti);
 
 /**
+ * @brief Get the number of currently configured listening endpoints.
+ * Note that an ednpoint without address and/or port will be included
+ * even though it is not, in fact, listening.
+ *
+ * @return Number of added listening endpoints.
+ */
+int nc_server_endpt_count(void);
+
+/**
  * @brief Change endpoint listening address.
  *
  * On error the previous listening socket (if any) is left untouched.
