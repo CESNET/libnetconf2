@@ -327,7 +327,9 @@ int nc_server_endpt_set_port(const char *endpt_name, uint16_t port);
  * @brief Accept new sessions on all the listening endpoints.
  *
  * @param[in] timeout Timeout for receiving a new connection in milliseconds, 0 for
- *                    non-blocking call, -1 for infinite waiting.
+ *                    non-blocking call, -1 for infinite waiting. This timeout is also
+ *                    used for receiving all the transport-related data, but is mulptiplied
+ *                    by 10.
  * @param[out] session New session.
  * @return NC_MSG_HELLO on success, NC_MSG_BAD_HELLO on client \<hello\> message
  *         parsing fail, NC_MSG_WOULDBLOCK on timeout, NC_MSG_ERROR on other errors.

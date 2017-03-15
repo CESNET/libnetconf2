@@ -1786,7 +1786,7 @@ nc_accept(int timeout, struct nc_session **session)
 #ifdef NC_ENABLED_SSH
     if (server_opts.endpts[bind_idx].ti == NC_TI_LIBSSH) {
         (*session)->data = server_opts.endpts[bind_idx].opts.ssh;
-        ret = nc_accept_ssh_session(*session, sock, timeout);
+        ret = nc_accept_ssh_session(*session, sock, timeout * 10);
         if (ret < 0) {
             msgtype = NC_MSG_ERROR;
             goto cleanup;
@@ -1799,7 +1799,7 @@ nc_accept(int timeout, struct nc_session **session)
 #ifdef NC_ENABLED_TLS
     if (server_opts.endpts[bind_idx].ti == NC_TI_OPENSSL) {
         (*session)->data = server_opts.endpts[bind_idx].opts.tls;
-        ret = nc_accept_tls_session(*session, sock, timeout);
+        ret = nc_accept_tls_session(*session, sock, timeout * 10);
         if (ret < 0) {
             msgtype = NC_MSG_ERROR;
             goto cleanup;
