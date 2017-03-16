@@ -108,6 +108,14 @@ struct nc_server_reply *nc_server_reply_err(struct nc_server_error *err);
 int nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_error *err);
 
 /**
+ * @brief Get last error from an ERROR rpy-reply object.
+ *
+ * @param[in] reply ERROR reply to read from.
+ * @return Last error, NULL on failure.
+ */
+const struct nc_server_error *nc_server_reply_get_last_err(const struct nc_server_reply *reply);
+
+/**
  * @brief Create a server error structure. Its \<error-message\> is filled with
  * a general description of the specific error.
  *

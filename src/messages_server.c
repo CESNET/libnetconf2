@@ -122,6 +122,23 @@ nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_error *e
     return 0;
 }
 
+API const struct nc_server_error *
+nc_server_reply_get_last_err(const struct nc_server_reply *reply)
+{
+    struct nc_server_reply_error *err_rpl;
+
+    if (!reply || (reply->type != NC_RPL_ERROR)) {
+        ERRARG("reply");
+        return NULL;
+    }
+
+    err_rpl = (struct nc_server_reply_error *)reply;
+    if (!err_rpl->count) {
+        return NULL;
+    }
+    return err_rpl->err[err_rpl->count - 1];
+}
+
 API struct nc_server_error *
 nc_err(int tag, ...)
 {
