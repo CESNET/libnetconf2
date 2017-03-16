@@ -522,7 +522,7 @@ nc_err_libyang(void)
 }
 
 API NC_ERR_TYPE
-nc_err_get_type(struct nc_server_error *err)
+nc_err_get_type(const struct nc_server_error *err)
 {
     if (!err) {
         ERRARG("err");
@@ -533,7 +533,7 @@ nc_err_get_type(struct nc_server_error *err)
 }
 
 API NC_ERR
-nc_err_get_tag(struct nc_server_error *err)
+nc_err_get_tag(const struct nc_server_error *err)
 {
     if (!err) {
         ERRARG("err");
@@ -563,7 +563,7 @@ nc_err_set_app_tag(struct nc_server_error *err, const char *error_app_tag)
 }
 
 API const char *
-nc_err_get_app_tag(struct nc_server_error *err)
+nc_err_get_app_tag(const struct nc_server_error *err)
 {
     if (!err) {
         ERRARG("err");
@@ -593,7 +593,7 @@ nc_err_set_path(struct nc_server_error *err, const char *error_path)
 }
 
 API const char *
-nc_err_get_path(struct nc_server_error *err)
+nc_err_get_path(const struct nc_server_error *err)
 {
     if (!err) {
         ERRARG("err");
@@ -632,7 +632,7 @@ nc_err_set_msg(struct nc_server_error *err, const char *error_message, const cha
 }
 
 API const char *
-nc_err_get_msg(struct nc_server_error *err)
+nc_err_get_msg(const struct nc_server_error *err)
 {
     if (!err) {
         ERRARG("err");

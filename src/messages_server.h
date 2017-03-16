@@ -171,7 +171,7 @@ struct nc_server_error *nc_err_libyang(void);
  * @param[in] err Server error to read from.
  * @return Server error type, 0 on error.
  */
-NC_ERR_TYPE nc_err_get_type(struct nc_server_error *err);
+NC_ERR_TYPE nc_err_get_type(const struct nc_server_error *err);
 
 /**
  * @brief Get the \<error-tag\> of a server error.
@@ -179,7 +179,7 @@ NC_ERR_TYPE nc_err_get_type(struct nc_server_error *err);
  * @param[in] err Server error to read from.
  * @return Server error tag, 0 on error.
  */
-NC_ERR nc_err_get_tag(struct nc_server_error *err);
+NC_ERR nc_err_get_tag(const struct nc_server_error *err);
 
 /**
  * @brief Set the \<error-app-tag\> element of an error. Any previous value will be overwritten.
@@ -196,7 +196,7 @@ int nc_err_set_app_tag(struct nc_server_error *err, const char *error_app_tag);
  * @param[in] err Server error to read from.
  * @return Server error app tag, NULL on error.
  */
-const char *nc_err_get_app_tag(struct nc_server_error *err);
+const char *nc_err_get_app_tag(const struct nc_server_error *err);
 
 /**
  * @brief Set the \<error-path\> element of an error. Any previous value will be overwritten.
@@ -213,7 +213,7 @@ int nc_err_set_path(struct nc_server_error *err, const char *error_path);
  * @param[in] err Server error to read from.
  * @return Server error path, NULL on error.
  */
-const char *nc_err_get_path(struct nc_server_error *err);
+const char *nc_err_get_path(const struct nc_server_error *err);
 
 /**
  * @brief Set the \<error-message\> element of an error. Any previous value will be overwritten.
@@ -231,7 +231,7 @@ int nc_err_set_msg(struct nc_server_error *err, const char *error_message, const
  * @param[in] err Server error to read from.
  * @return Server error message, NULL on error.
  */
-const char *nc_err_get_msg(struct nc_server_error *err);
+const char *nc_err_get_msg(const struct nc_server_error *err);
 
 /**
  * @brief Set the \<session-id\> element of an error. Any previous value will be overwritten.
