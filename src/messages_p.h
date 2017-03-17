@@ -71,6 +71,7 @@ struct nc_server_rpc {
 struct nc_server_notif {
     char *eventtime;        /**< eventTime of the notification */
     struct lyd_node *tree;  /**< libyang data tree of the message */
+    int free;
 };
 
 struct nc_client_reply_error {

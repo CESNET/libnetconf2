@@ -821,7 +821,7 @@ nc_err_free(struct nc_server_error *err)
 }
 
 API struct nc_server_notif *
-nc_server_notif_new(struct lyd_node* event, char *eventtime, int eventtime_const)
+nc_server_notif_new(struct lyd_node* event, char *eventtime, NC_PARAMTYPE paramtype)
 {
     struct nc_server_notif *ntf;
 
@@ -834,12 +834,14 @@ nc_server_notif_new(struct lyd_node* event, char *eventtime, int eventtime_const
     }
 
     ntf = malloc(sizeof *ntf);
-    if (eventtime_const) {
+    if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
         ntf->eventtime = strdup(eventtime);
+        ntf->tree = lyd_dup(event, 1);
     } else {
         ntf->eventtime = eventtime;
+        ntf->tree = event;
     }
-    ntf->tree = event;
+    ntf->free = (paramtype == NC_PARAMTYPE_CONST ? 0 : 1);
 
     return ntf;
 }
@@ -851,7 +853,9 @@ nc_server_notif_free(struct nc_server_notif *notif)
         return;
     }
 
-    lyd_free(notif->tree);
-    free(notif->eventtime);
+    if (notif->free) {
+        lyd_free(notif->tree);
+        free(notif->eventtime);
+    }
     free(notif);
 }
