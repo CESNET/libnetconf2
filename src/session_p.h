@@ -265,12 +265,12 @@ struct nc_server_opts {
 #define NC_PS_LOCK_TIMEOUT 500
 
 /**
- * Time slept in msec if no endpoint is created for a running Call Home client.
+ * Time slept in msec if no endpoint was created for a running Call Home client.
  */
 #define NC_CH_NO_ENDPT_WAIT 1000
 
 /**
- * Time slept in msec if no endpoint is suitable to use for connecting for a running Call Home client.
+ * Time slept in msec after a failed Call Home endpoint session creation.
  */
 #define NC_CH_ENDPT_FAIL_WAIT 1000
 
