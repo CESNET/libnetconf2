@@ -859,3 +859,14 @@ nc_server_notif_free(struct nc_server_notif *notif)
     }
     free(notif);
 }
+
+API const char *
+nc_server_notif_get_time(const struct nc_server_notif *notif)
+{
+    if (!notif) {
+        ERRARG("notif");
+        return NULL;
+    }
+
+    return notif->eventtime;
+}

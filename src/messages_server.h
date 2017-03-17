@@ -326,4 +326,12 @@ NC_MSG_TYPE nc_server_notif_send(struct nc_session *session, struct nc_server_no
  */
 void nc_server_notif_free(struct nc_server_notif *notif);
 
+/**
+ * @brief Get the notification timestamp.
+ *
+ * @param[in] notif Server notification to read from.
+ * @return Datetime timestamp of the notification, NULL on error.
+ */
+const char *nc_server_notif_get_time(const struct nc_server_notif *notif);
+
 #endif /* NC_MESSAGES_SERVER_H_ */
