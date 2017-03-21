@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <pwd.h>
 #include <shadow.h>
 #include <crypt.h>
@@ -34,13 +35,16 @@ base64der_key_to_tmp_file(const char *in, int rsa)
 {
     char path[12] = "/tmp/XXXXXX";
     int fd, written;
+    mode_t umode;
     FILE *file;
 
     if (in == NULL) {
         return NULL;
     }
 
+    umode = umask(0600);
     fd = mkstemp(path);
+    umask(umode);
     if (fd == -1) {
         return NULL;
     }
