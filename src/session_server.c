@@ -1571,6 +1571,8 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
     /* ENDPT LOCK */
     endpt = nc_server_endpt_lock_get(endpt_name, 0, &i);
     if (!endpt) {
+        /* BIND UNLOCK */
+        pthread_mutex_unlock(&server_opts.bind_lock);
         return -1;
     }
 
