@@ -386,7 +386,7 @@ clb_trusted_cert_lists(const char *name, void *UNUSED(user_data), char ***cert_p
         *cert_data_count = 1;
         return 0;
     } else if (!strcmp(name, "client_cert_list")) {
-        *cert_paths = malloc(sizeof *cert_paths);
+        *cert_paths = malloc(sizeof **cert_paths);
         (*cert_paths)[0] = strdup(TESTS_DIR"/data/client.crt");
         *cert_path_count = 1;
         return 0;
