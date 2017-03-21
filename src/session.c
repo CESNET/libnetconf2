@@ -904,7 +904,7 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
                 }
             }
             if (!strcmp(name->value_str, "ietf-yang-library")) {
-                str_len += sprintf(str + str_len, "&module-set-id=%s", module_set_id->value_str);
+                sprintf(str + str_len, "&module-set-id=%s", module_set_id->value_str);
             }
 
             add_cpblt(ctx, str, &cpblts, &size, &count);
