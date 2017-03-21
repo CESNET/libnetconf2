@@ -883,6 +883,36 @@ nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
     return (ret || ret2 ? -1 : 0);
 }
 
+API struct nc_session *
+nc_ps_get_session_by_sid(const struct nc_pollsession *ps, uint32_t sid)
+{
+    uint8_t q_id;
+    uint16_t i;
+    struct nc_session *ret = NULL;
+
+    if (!ps) {
+        ERRARG("ps");
+        return NULL;
+    }
+
+    /* LOCK */
+    if (nc_ps_lock((struct nc_pollsession *)ps, &q_id, __func__)) {
+        return NULL;
+    }
+
+    for (i = 0; i < ps->session_count; ++i) {
+        if (ps->sessions[i]->id == sid) {
+            ret = ps->sessions[i];
+            break;
+        }
+    }
+
+    /* UNLOCK */
+    nc_ps_unlock((struct nc_pollsession *)ps, q_id, __func__);
+
+    return ret;
+}
+
 API uint16_t
 nc_ps_session_count(struct nc_pollsession *ps)
 {

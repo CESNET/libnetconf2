@@ -217,6 +217,15 @@ int nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session);
 int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
 
 /**
+ * @brief Get a session from a pollsession structure matching the session ID.
+ *
+ * @param[in] ps Pollsession structure to read from.
+ * @param[in] sid Session ID of the session.
+ * @return Matching session or NULL on not found.
+ */
+struct nc_session *nc_ps_get_session_by_sid(const struct nc_pollsession *ps, uint32_t sid);
+
+/**
  * @brief Learn the number of sessions in a pollsession structure.
  *
  * Does not lock \p ps structure for efficiency.
