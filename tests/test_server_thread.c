@@ -363,7 +363,7 @@ clb_trusted_cert_lists(const char *name, void *UNUSED(user_data), char ***cert_p
                        char ***cert_data, int *cert_data_count)
 {
     if (!strcmp(name, "trusted_cert_list1")) {
-        *cert_data = malloc(sizeof *cert_data);
+        *cert_data = malloc(sizeof **cert_data);
         (*cert_data)[0] = strdup("MIIDgzCCAmugAwIBAgIJAL+y0WMRGax0MA0GCSqGSIb3DQEBBQUAMFgxCzAJBgNV\n"
             "BAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX\n"
             "aWRnaXRzIFB0eSBMdGQxETAPBgNVBAMMCGNsaWVudGNhMB4XDTE2MDExMTEyMTAx\n"
