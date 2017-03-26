@@ -358,6 +358,9 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
             identifier = ((struct lyd_node_leaf_list *)child)->value_str;
         } else if (!strcmp(child->schema->name, "version")) {
             version = ((struct lyd_node_leaf_list *)child)->value_str;
+            if (version && version[0] == '\0') {
+                version = NULL;
+            }
         } else if (!strcmp(child->schema->name, "format")) {
             format = ((struct lyd_node_leaf_list *)child)->value_str;
         }
