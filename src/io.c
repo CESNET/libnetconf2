@@ -1087,7 +1087,6 @@ nc_write_msg(struct nc_session *session, int type, ...)
             nc_write_clb((void *)&arg, "ok/>", 4, 0);
             break;
         case NC_RPL_DATA:
-            assert(((struct nc_server_reply_data *)reply)->data->schema->nodetype == LYS_RPC);
             switch(((struct nc_server_reply_data *)reply)->wd) {
             case NC_WD_UNKNOWN:
             case NC_WD_EXPLICIT:
