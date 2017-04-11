@@ -18,6 +18,7 @@
 #include <pthread.h>
 #include <sys/time.h>
 #include <time.h>
+#include <ctype.h>
 #include <libyang/libyang.h>
 
 #include "session.h"
@@ -761,8 +762,8 @@ static int
 parse_cpblts(struct lyxml_elem *xml, const char ***list)
 {
     struct lyxml_elem *cpblt;
-    int ver = -1;
-    int i = 0;
+    int ver = -1, i = 0;
+    const char *cpb_start, *cpb_end;
 
     if (list) {
         /* get the storage for server's capabilities */
@@ -787,17 +788,28 @@ parse_cpblts(struct lyxml_elem *xml, const char ***list)
             continue;
         }
 
+        /* skip leading/trailing whitespaces */
+        for (cpb_start = cpblt->content; isspace(cpb_start[0]); ++cpb_start);
+        for (cpb_end = cpblt->content + strlen(cpblt->content); (cpb_end > cpblt->content) && isspace(cpb_end[-1]); --cpb_end);
+        if (!cpb_start[0] || (cpb_end == cpblt->content)) {
+            ERR("Empty capability \"%s\" received.", cpblt->content);
+            return -1;
+        }
+
         /* detect NETCONF version */
-        if (ver < 0 && !strcmp(cpblt->content, "urn:ietf:params:netconf:base:1.0")) {
+        if (ver < 0 && !strncmp(cpb_start, "urn:ietf:params:netconf:base:1.0", cpb_end - cpb_start)) {
             ver = 0;
-        } else if (ver < 1 && !strcmp(cpblt->content, "urn:ietf:params:netconf:base:1.1")) {
+        } else if (ver < 1 && !strncmp(cpb_start, "urn:ietf:params:netconf:base:1.1", cpb_end - cpb_start)) {
             ver = 1;
         }
 
         /* store capabilities */
         if (list) {
-            (*list)[i] = cpblt->content;
-            cpblt->content = NULL;
+            (*list)[i] = strndup(cpb_start, cpb_end - cpb_start);
+            if (!(*list)[i]) {
+                ERRMEM;
+                return -1;
+            }
             i++;
         }
     }
