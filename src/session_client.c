@@ -105,6 +105,12 @@ ctx_check_and_load_model(struct nc_session *session, const char *module_cpblt)
     }
     free(model_name);
 
+    /* make it implemented */
+    if (!module->implemented && lys_set_implemented(module)) {
+        WRN("Failed to implement model \"%s\".", module->name);
+        return 1;
+    }
+
     /* parse features */
     ptr = strstr(module_cpblt, "features=");
     if (ptr) {
