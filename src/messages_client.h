@@ -153,8 +153,11 @@ struct nc_reply {
  * @brief NETCONF client data rpc-reply object
  */
 struct nc_reply_data {
-    NC_RPL type;           /**< NC_RPL_DATA */
-    struct lyd_node *data; /**< libyang data tree */
+    NC_RPL type;            /**< NC_RPL_DATA */
+    struct lyd_node *data;  /**< libyang RPC reply data tree (output of an RPC),
+                                 \<get\> and \<get-config\> replies are special,
+                                 in those cases there is the configuration itself
+                                 and it should be validated as such (using \b LYD_OPT_GET or \b LYD_OPT_GETCONFIG). */
 };
 
 /**
@@ -439,7 +442,7 @@ struct nc_rpc *nc_rpc_getschema(const char *identifier, const char *version, con
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_subscribe(const char *stream_name, const char *filter, const char *start_time,
-								const char *stop_time, NC_PARAMTYPE paramtype);
+                                const char *stop_time, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Free the NETCONF RPC object.

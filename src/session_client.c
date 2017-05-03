@@ -105,6 +105,12 @@ ctx_check_and_load_model(struct nc_session *session, const char *module_cpblt)
     }
     free(model_name);
 
+    /* make it implemented */
+    if (!module->implemented && lys_set_implemented(module)) {
+        WRN("Failed to implement model \"%s\".", module->name);
+        return 1;
+    }
+
     /* parse features */
     ptr = strstr(module_cpblt, "features=");
     if (ptr) {
@@ -216,7 +222,7 @@ libyang_module_clb(const char *mod_name, const char *mod_rev, const char *submod
     }
 
     do {
-        msg = nc_recv_reply(session, rpc, msgid, NC_READ_TIMEOUT * 1000, 0, &reply);
+        msg = nc_recv_reply(session, rpc, msgid, NC_READ_ACT_TIMEOUT * 1000, 0, &reply);
     } while (msg == NC_MSG_NOTIF);
     nc_rpc_free(rpc);
     if (msg == NC_MSG_WOULDBLOCK) {
@@ -284,7 +290,6 @@ libyang_module_clb(const char *mod_name, const char *mod_rev, const char *submod
     return model_data;
 }
 
-/* return 0 - ok, 1 - some models failed to load, -1 - error */
 int
 nc_ctx_check_and_fill(struct nc_session *session)
 {
@@ -293,11 +298,11 @@ nc_ctx_check_and_fill(struct nc_session *session)
     ly_module_imp_clb old_clb = NULL;
     void *old_data = NULL;
 
-    assert(session->cpblts && session->ctx);
+    assert(session->opts.client.cpblts && session->ctx);
 
     /* check if get-schema is supported */
-    for (i = 0; session->cpblts[i]; ++i) {
-        if (!strncmp(session->cpblts[i], "urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring", 51)) {
+    for (i = 0; session->opts.client.cpblts[i]; ++i) {
+        if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring", 51)) {
             get_schema_support = 1;
             break;
         }
@@ -315,7 +320,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     }
 
     /* load base model disregarding whether it's in capabilities (but NETCONF capabilities are used to enable features) */
-    if (ctx_check_and_load_ietf_netconf(session->ctx, session->cpblts)) {
+    if (ctx_check_and_load_ietf_netconf(session->ctx, session->opts.client.cpblts)) {
         if (old_clb) {
             ly_ctx_set_module_imp_clb(session->ctx, old_clb, old_data);
         }
@@ -323,8 +328,8 @@ nc_ctx_check_and_fill(struct nc_session *session)
     }
 
     /* load all other models */
-    for (i = 0; session->cpblts[i]; ++i) {
-        module_cpblt = strstr(session->cpblts[i], "module=");
+    for (i = 0; session->opts.client.cpblts[i]; ++i) {
+        module_cpblt = strstr(session->opts.client.cpblts[i], "module=");
         /* this capability requires a module */
         if (module_cpblt) {
             r = ctx_check_and_load_model(session, module_cpblt);
@@ -377,7 +382,7 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     }
 
     /* prepare session structure */
-    session = calloc(1, sizeof *session);
+    session = nc_new_session(0);
     if (!session) {
         ERRMEM;
         return NULL;
@@ -387,6 +392,10 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
 
     /* transport specific data */
     session->ti_type = NC_TI_FD;
+    pthread_mutex_init(session->ti_lock, NULL);
+    pthread_cond_init(session->ti_cond, NULL);
+    *session->ti_inuse = 0;
+
     session->ti.fd.in = fdin;
     session->ti.fd.out = fdout;
 
@@ -440,20 +449,18 @@ nc_sock_connect(const char* host, uint16_t port)
         return -1;
     }
 
-    for (i = 0, res = res_list; res != NULL; res = res->ai_next) {
+    for (res = res_list; res != NULL; res = res->ai_next) {
         sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
         if (sock == -1) {
             /* socket was not created, try another resource */
-            i = errno;
-            goto errloop;
+            continue;
         }
 
         if (connect(sock, res->ai_addr, res->ai_addrlen) == -1) {
             /* network connection failed, try another resource */
-            i = errno;
             close(sock);
             sock = -1;
-            goto errloop;
+            continue;
         }
 
         /* make the socket non-blocking */
@@ -466,15 +473,9 @@ nc_sock_connect(const char* host, uint16_t port)
 
         /* we're done, network connection established */
         break;
-errloop:
-        VRB("Unable to connect to %s:%s over %s (%s).", host, port_s,
-            (res->ai_family == AF_INET6) ? "IPv6" : "IPv4", strerror(i));
-        continue;
     }
 
-    if (sock == -1) {
-        ERR("Unable to connect to %s:%s.", host, port_s);
-    } else {
+    if (sock != -1) {
         VRB("Successfully connected to %s:%s over %s.", host, port_s, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
     }
     freeaddrinfo(res_list);
@@ -493,7 +494,7 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
     struct nc_msg_cont *cont, **cont_ptr;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
 
-    r = nc_timedlock(session->ti_lock, timeout, __func__);
+    r = nc_session_lock(session, timeout, __func__);
     if (r == -1) {
         /* error */
         return NC_MSG_ERROR;
@@ -503,9 +504,9 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
     }
 
     /* try to get notification from the session's queue */
-    if (!msgid && session->notifs) {
-        cont = session->notifs;
-        session->notifs = cont->next;
+    if (!msgid && session->opts.client.notifs) {
+        cont = session->opts.client.notifs;
+        session->opts.client.notifs = cont->next;
 
         xml = cont->msg;
         free(cont);
@@ -514,9 +515,9 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
     }
 
     /* try to get rpc-reply from the session's queue */
-    if (msgid && session->replies) {
-        cont = session->replies;
-        session->replies = cont->next;
+    if (msgid && session->opts.client.replies) {
+        cont = session->opts.client.replies;
+        session->opts.client.replies = cont->next;
 
         xml = cont->msg;
         free(cont);
@@ -531,14 +532,14 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
 
     /* we read rpc-reply, want a notif */
     if (!msgid && (msgtype == NC_MSG_REPLY)) {
-        cont_ptr = &session->replies;
+        cont_ptr = &session->opts.client.replies;
         while (*cont_ptr) {
             cont_ptr = &((*cont_ptr)->next);
         }
         *cont_ptr = malloc(sizeof **cont_ptr);
         if (!*cont_ptr) {
             ERRMEM;
-            pthread_mutex_unlock(session->ti_lock);
+            nc_session_unlock(session, timeout, __func__);
             lyxml_free(session->ctx, xml);
             return NC_MSG_ERROR;
         }
@@ -548,22 +549,21 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
 
     /* we read notif, want a rpc-reply */
     if (msgid && (msgtype == NC_MSG_NOTIF)) {
-        /* TODO check whether the session is even subscribed */
-        /*if (!session->notif) {
+        if (!session->opts.client.ntf_tid) {
             pthread_mutex_unlock(session->ti_lock);
             ERR("Session %u: received a <notification> but session is not subscribed.", session->id);
             lyxml_free(session->ctx, xml);
             return NC_MSG_ERROR;
-        }*/
+        }
 
-        cont_ptr = &session->notifs;
+        cont_ptr = &session->opts.client.notifs;
         while (*cont_ptr) {
             cont_ptr = &((*cont_ptr)->next);
         }
         *cont_ptr = malloc(sizeof **cont_ptr);
         if (!cont_ptr) {
             ERRMEM;
-            pthread_mutex_unlock(session->ti_lock);
+            nc_session_unlock(session, timeout, __func__);
             lyxml_free(session->ctx, xml);
             return NC_MSG_ERROR;
         }
@@ -571,7 +571,7 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
         (*cont_ptr)->next = NULL;
     }
 
-    pthread_mutex_unlock(session->ti_lock);
+    nc_session_unlock(session, timeout, __func__);
 
     switch (msgtype) {
     case NC_MSG_NOTIF:
@@ -864,8 +864,9 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
             }
 
             /* special treatment */
-            data = lyd_parse_xml(ctx, &xml->child->child, LYD_OPT_DESTRUCT
-                                 | (rpc->type == NC_RPC_GETCONFIG ? LYD_OPT_GETCONFIG : LYD_OPT_GET) | parseroptions);
+            data = lyd_parse_xml(ctx, &xml->child->child,
+                                 LYD_OPT_DESTRUCT | (rpc->type == NC_RPC_GETCONFIG ? LYD_OPT_GETCONFIG : LYD_OPT_GET)
+                                 | parseroptions);
             if (!data) {
                 ERR("Failed to parse <%s> reply.", (rpc->type == NC_RPC_GETCONFIG ? "get-config" : "get"));
                 return NULL;
@@ -952,6 +953,14 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IM
         return -1;
     }
 
+    client_opts.ch_bind_ti = nc_realloc(client_opts.ch_bind_ti, client_opts.ch_bind_count * sizeof *client_opts.ch_bind_ti);
+    if (!client_opts.ch_bind_ti) {
+        ERRMEM;
+        close(sock);
+        return -1;
+    }
+    client_opts.ch_bind_ti[client_opts.ch_bind_count - 1] = ti;
+
     client_opts.ch_binds[client_opts.ch_bind_count - 1].address = strdup(address);
     if (!client_opts.ch_binds[client_opts.ch_bind_count - 1].address) {
         ERRMEM;
@@ -960,7 +969,7 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IM
     }
     client_opts.ch_binds[client_opts.ch_bind_count - 1].port = port;
     client_opts.ch_binds[client_opts.ch_bind_count - 1].sock = sock;
-    client_opts.ch_binds[client_opts.ch_bind_count - 1].ti = ti;
+    client_opts.ch_binds[client_opts.ch_bind_count - 1].pollin = 0;
 
     return 0;
 }
@@ -985,12 +994,18 @@ nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
         for (i = 0; i < client_opts.ch_bind_count; ++i) {
             if ((!address || !strcmp(client_opts.ch_binds[i].address, address))
                     && (!port || (client_opts.ch_binds[i].port == port))
-                    && (!ti || (client_opts.ch_binds[i].ti == ti))) {
+                    && (!ti || (client_opts.ch_bind_ti[i] == ti))) {
                 close(client_opts.ch_binds[i].sock);
                 free((char *)client_opts.ch_binds[i].address);
 
                 --client_opts.ch_bind_count;
-                memcpy(&client_opts.ch_binds[i], &client_opts.ch_binds[client_opts.ch_bind_count], sizeof *client_opts.ch_binds);
+                if (!client_opts.ch_bind_count) {
+                    free(client_opts.ch_binds);
+                    client_opts.ch_binds = NULL;
+                } else if (i < client_opts.ch_bind_count) {
+                    memcpy(&client_opts.ch_binds[i], &client_opts.ch_binds[client_opts.ch_bind_count], sizeof *client_opts.ch_binds);
+                    client_opts.ch_bind_ti[i] = client_opts.ch_bind_ti[client_opts.ch_bind_count];
+                }
 
                 ret = 0;
             }
@@ -1023,12 +1038,12 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
     }
 
 #ifdef NC_ENABLED_SSH
-    if (client_opts.ch_binds[idx].ti == NC_TI_LIBSSH) {
+    if (client_opts.ch_bind_ti[idx] == NC_TI_LIBSSH) {
         *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
     } else
 #endif
 #ifdef NC_ENABLED_TLS
-    if (client_opts.ch_binds[idx].ti == NC_TI_OPENSSL) {
+    if (client_opts.ch_bind_ti[idx] == NC_TI_OPENSSL) {
         *session = nc_accept_callhome_tls_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
     } else
 #endif
@@ -1056,7 +1071,7 @@ nc_session_get_cpblts(const struct nc_session *session)
         return NULL;
     }
 
-    return session->cpblts;
+    return session->opts.client.cpblts;
 }
 
 API const char *
@@ -1073,9 +1088,9 @@ nc_session_cpblt(const struct nc_session *session, const char *capab)
     }
 
     len = strlen(capab);
-    for (i = 0; session->cpblts[i]; ++i) {
-        if (!strncmp(session->cpblts[i], capab, len)) {
-            return session->cpblts[i];
+    for (i = 0; session->opts.client.cpblts[i]; ++i) {
+        if (!strncmp(session->opts.client.cpblts[i], capab, len)) {
+            return session->opts.client.cpblts[i];
         }
     }
 
@@ -1085,12 +1100,12 @@ nc_session_cpblt(const struct nc_session *session, const char *capab)
 API int
 nc_session_ntf_thread_running(const struct nc_session *session)
 {
-    if (!session) {
+    if (!session || (session->side != NC_CLIENT)) {
         ERRARG("session");
         return 0;
     }
 
-    return session->ntf_tid ? 1 : 0;
+    return session->opts.client.ntf_tid ? 1 : 0;
 }
 
 API void
@@ -1141,6 +1156,8 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
     if (!(session->flags & NC_SESSION_CLIENT_NOT_STRICT)) {
         parseroptions &= LYD_OPT_STRICT;
     }
+    /* no mechanism to check external dependencies is provided */
+    parseroptions|= LYD_OPT_NOEXTDEPS;
     *reply = NULL;
 
     msgtype = get_msg(session, timeout, msgid, &xml);
@@ -1198,7 +1215,7 @@ nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
         }
 
         /* notification body */
-        (*notif)->tree = lyd_parse_xml(session->ctx, &xml->child, LYD_OPT_NOTIF | LYD_OPT_DESTRUCT
+        (*notif)->tree = lyd_parse_xml(session->ctx, &xml->child, LYD_OPT_NOTIF | LYD_OPT_DESTRUCT | LYD_OPT_NOEXTDEPS
                                        | (session->flags & NC_SESSION_CLIENT_NOT_STRICT ? 0 : LYD_OPT_STRICT), NULL);
         lyxml_free(session->ctx, xml);
         xml = NULL;
@@ -1234,7 +1251,7 @@ nc_recv_notif_thread(void *arg)
     notif_clb = ntarg->notif_clb;
     free(ntarg);
 
-    while (session->ntf_tid) {
+    while (session->opts.client.ntf_tid) {
         msgtype = nc_recv_notif(session, NC_CLIENT_NOTIF_THREAD_SLEEP / 1000, &notif);
         if (msgtype == NC_MSG_NOTIF) {
             notif_clb(session, notif);
@@ -1252,7 +1269,7 @@ nc_recv_notif_thread(void *arg)
     }
 
     VRB("Session %u: notification thread exit.", session->id);
-    session->ntf_tid = NULL;
+    session->opts.client.ntf_tid = NULL;
     return NULL;
 }
 
@@ -1271,7 +1288,7 @@ nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_s
     } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR("Session %u: invalid session to receive Notifications.", session->id);
         return -1;
-    } else if (session->ntf_tid) {
+    } else if (session->opts.client.ntf_tid) {
         ERR("Session %u: separate notification thread is already running.", session->id);
         return -1;
     }
@@ -1285,19 +1302,19 @@ nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_s
     ntarg->notif_clb = notif_clb;
 
     /* just so that nc_recv_notif_thread() does not immediately exit, the value does not matter */
-    session->ntf_tid = malloc(sizeof *session->ntf_tid);
-    if (!session->ntf_tid) {
+    session->opts.client.ntf_tid = malloc(sizeof *session->opts.client.ntf_tid);
+    if (!session->opts.client.ntf_tid) {
         ERRMEM;
         free(ntarg);
         return -1;
     }
 
-    ret = pthread_create((pthread_t *)session->ntf_tid, NULL, nc_recv_notif_thread, ntarg);
+    ret = pthread_create((pthread_t *)session->opts.client.ntf_tid, NULL, nc_recv_notif_thread, ntarg);
     if (ret) {
         ERR("Session %u: failed to create a new thread (%s).", strerror(errno));
         free(ntarg);
-        free((pthread_t *)session->ntf_tid);
-        session->ntf_tid = NULL;
+        free((pthread_t *)session->opts.client.ntf_tid);
+        session->opts.client.ntf_tid = NULL;
         return -1;
     }
 
@@ -1344,7 +1361,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     if ((rpc->type != NC_RPC_GETSCHEMA) && (rpc->type != NC_RPC_ACT_GENERIC) && (rpc->type != NC_RPC_SUBSCRIBE)) {
         ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL);
         if (!ietfnc) {
-            ERR("Session %u: missing ietf-netconf schema in the context.", session->id);
+            ERR("Session %u: missing \"ietf-netconf\" schema in the context.", session->id);
             return NC_MSG_ERROR;
         }
     }
@@ -1356,7 +1373,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         if (rpc_gen->has_data) {
             data = rpc_gen->content.data;
         } else {
-            data = lyd_parse_mem(session->ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC
+            data = lyd_parse_mem(session->ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | LYD_OPT_NOEXTDEPS
                                  | (session->flags & NC_SESSION_CLIENT_NOT_STRICT ? 0 : LYD_OPT_STRICT), NULL);
         }
         break;
@@ -1390,7 +1407,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
             if (!ietfncwd) {
                 ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
                 if (!ietfncwd) {
-                    ERR("Session %u: missing ietf-netconf-with-defaults schema in the context.", session->id);
+                    ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
                     return NC_MSG_ERROR;
                 }
             }
@@ -1498,7 +1515,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
             if (!ietfncwd) {
                 ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
                 if (!ietfncwd) {
-                    ERR("Session %u: missing ietf-netconf-with-defaults schema in the context.", session->id);
+                    ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
                     return NC_MSG_ERROR;
                 }
             }
@@ -1589,7 +1606,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
             if (!ietfncwd) {
                 ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
                 if (!ietfncwd) {
-                    ERR("Session %u: missing ietf-netconf-with-defaults schema in the context.", session->id);
+                    ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
                     return NC_MSG_ERROR;
                 }
             }
@@ -1695,7 +1712,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_GETSCHEMA:
         ietfncmon = ly_ctx_get_module(session->ctx, "ietf-netconf-monitoring", NULL);
         if (!ietfncmon) {
-            ERR("Session %u: missing ietf-netconf-monitoring schema in the context.", session->id);
+            ERR("Session %u: missing \"ietf-netconf-monitoring\" schema in the context.", session->id);
             return NC_MSG_ERROR;
         }
 
@@ -1726,7 +1743,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_SUBSCRIBE:
         notifs = ly_ctx_get_module(session->ctx, "notifications", NULL);
         if (!notifs) {
-            ERR("Session %u: missing notifications schema in the context.", session->id);
+            ERR("Session %u: missing \"notifications\" schema in the context.", session->id);
             return NC_MSG_ERROR;
         }
 
@@ -1777,12 +1794,13 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         return NC_MSG_ERROR;
     }
 
-    if (lyd_validate(&data, LYD_OPT_RPC | (session->flags & NC_SESSION_CLIENT_NOT_STRICT ? 0 : LYD_OPT_STRICT), NULL)) {
+    if (lyd_validate(&data, LYD_OPT_RPC | LYD_OPT_NOEXTDEPS
+                     | (session->flags & NC_SESSION_CLIENT_NOT_STRICT ? 0 : LYD_OPT_STRICT), NULL)) {
         lyd_free(data);
         return NC_MSG_ERROR;
     }
 
-    ret = nc_timedlock(session->ti_lock, timeout, __func__);
+    ret = nc_session_lock(session, timeout, __func__);
     if (ret == -1) {
         /* error */
         r = NC_MSG_ERROR;
@@ -1792,9 +1810,9 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     } else {
         /* send RPC, store its message ID */
         r = nc_send_msg(session, data);
-        cur_msgid = session->msgid;
+        cur_msgid = session->opts.client.msgid;
     }
-    pthread_mutex_unlock(session->ti_lock);
+    nc_session_unlock(session, timeout, __func__);
 
     lyd_free(data);
 

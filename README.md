@@ -9,31 +9,79 @@ and servers. NETCONF is the [NETwork CONFiguration protocol]
 (http://trac.tools.ietf.org/wg/netconf/trac/wiki) introduced by IETF.
 
 The library provides functions to connect NETCONF client and server to each
-other via SSH and to send, receive and process NETCONF messages. In contrast
-to the [previous libnetconf library](https://github.com/CESNET/libnetconf),
-**libnetconf2** does not include NETCONF datastore implementation. This
-functionality is left specific to the NETCONF server implementation.
+other via SSH and to send, receive and process NETCONF messages.
 
 **libnetconf2** is maintained and further developed by the [Tools for
 Monitoring and Configuration](https://www.liberouter.org/) department of
-[CESNET](http://www.ces.net/). Any testing of the library is welcome. Please
-inform us about your experiences with using **libnetconf2** via the
-[issue tracker](https://github.com/CESNET/libnetconf/issues).
+[CESNET](http://www.ces.net/). Any testing or improving/fixing the library
+is welcome. Please inform us about your experiences with using **libnetconf2**
+via the [issue tracker](https://github.com/CESNET/libnetconf/issues).
+
+Besides the [**libyang**](https://github.com/CESNET/libyang), **libnetconf2** is
+another basic building block for the [**Netopeer2** toolset]
+(https://github.com/CESNET/Netopeer2). For a reference implementation of NETCONF
+client and server, check the **Netopeer2** project.
+
+## libnetconf vs libnetconf2
 
 **libnetconf2** is being developed with experiences gained from the development
-of the [libnetconf](https://github.com/CESNET/libnetconf) library. This
-previous generation of our NETCONF library is built on libxml2, used to
-internally represent all the data. In **libnetconf2**, we have completely
-replaced libxml2 by [libyang](https://github.com/CESNET/libyang). The libyang
-library is much more efficient in work with YANG modeled data (which is the
-case of NETCONF messages) and this advantage then applies also to
-**libnetconf2**. The library is connected with YANG, so for example data
-validation according to the provided YANG schemas is done internally instead
-of using external DSDL tools (as it was in the first generation of libnetconf).
+of the [**libnetconf**](https://github.com/CESNET/libnetconf) library. Here are the
+main differences between the both libraries that would help you to decide which
+of them is more suitable for your needs.
 
-**libnetconf2** is currently being developed, and some (server-side) functions
-are not yet implemented. Feedback and bug reports concerning problems not
-mentioned here are appreciated via the issue tracker.
+### libxml2 vs libyang
+
+To represent the schema and data trees, **libnetconf** uses libxml2, which is
+intended for different purposes - schema and data trees connected with YANG
+have specific needs and restrictions in comparison to more generic XML.
+Therefore, in **libnetconf2**, we have completely replaced libxml2 by [libyang]
+(https://github.com/CESNET/libyang). It is much more efficient in work with
+YANG modeled data (which is the case of NETCONF messages) and this advantage
+then applies also to **libnetconf2**. The library connects data with the YANG
+schemas, so for example the data validation according to the provided YANG
+schemas is done internally by libyang instead of using external and extremely
+slow DSDL tools (as it was in the first generation of libnetconf).
+
+### Datastore
+
+**libnetconf** was trying to be all-in-one, so besides the NETCONF transport,
+it also implements configuration datastores, NETCONF Access Control Module or
+the NETCONF Event Notification storage. In contrast, to allow better design of
+the NETCONF servers, **libnetconf2** is focused strictly to the NETCONF
+transport and message manipulation.
+
+Therefore, all the features from **libnetconf** that are connected to the
+datastore implementation are not available in **libnetconf2**. In the case of
+the Netopeer2 server, all these features (and much more) are implemented as
+part of the server itself or its datastore implementation -
+[**sysrepo**](https://github.com/sysrepo/sysrepo).
+
+### Notifications
+
+While **libnetconf2** is able to send (on the server side) and receive (on the
+client side) the NETCONF Event Notification messages, its generation and storage
+is left up to the server implementation. In case of the Netopeer2 server, the
+Notifications implementation is split between the server itself (managing
+subscriptions) and sysrepo (Events storage).
+
+### Call Home
+
+Similarly as in case of Notifications, **libnetconf2** provides supporting
+functions implementing the Call Home mechanism, but its management (setting the
+connection parameters) is supposed to be done in the server. Again, as a
+reference implementation, you can check the Netopeer2 server.
+
+In contrast to **libnetconf**, **libnetconf2** actually implements more of the
+Call Home functionality.
+
+## Features
+
+* NETCONF v1.0 and v1.1 compliant ([RFC 6241](https://tools.ietf.org/html/rfc6241))
+* NETCONF over SSH ([RFC 6242](https://tools.ietf.org/html/rfc6242)) including Chunked Framing Mechanism
+  * DNSSEC SSH Key Fingerprints ([RFC 4255](https://tools.ietf.org/html/rfc4255))
+* NETCONF over TLS ([RFC 5539bis](https://tools.ietf.org/html/draft-ietf-netconf-rfc5539bis-05))
+* Transport support for NETCONF Event Notifications ([RFC 5277](https://tools.ietf.org/html/rfc5277))
+* NETCONF Call Home ([NETCONF Call Home Draft](https://tools.ietf.org/html/draft-ietf-netconf-call-home-17))
 
 # Installation
 
@@ -173,6 +221,37 @@ The `Debug` mode is currently used as the default one. to switch to the
 ```
 $ cmake -D CMAKE_BUILD_TYPE:String="Release" ..
 ```
+
+### Inactive Read Timeout
+
+It is possible to adjust inactive read timeout. It is used when a new message is
+being read and no new data had arrived for this amount of seconds. 20 is the default value.
+
+```
+$ cmake -D READ_INACTIVE_TIMEOUT:String="20" ..
+```
+
+### Active Read Timeout
+
+Active read timeout is used to limit the maximum number of seconds a message is given
+to arrive in its entirety once a beginning is read. The default is 300 (5 minutes).
+
+```
+$ cmake -D READ_ACTIVE_TIMEOUT:String="300" ..
+```
+
+### PSPoll Thread Count
+
+This value limits the maximum number of threads that can concurrently access
+(wait for access) a single pspoll structure. To simplify, how many threads could
+simultaneously call a function whose parameter is one and the same pspoll structure.
+If using **netopeer2-server**, it will warn that this value needs to be adjusted if
+too small.
+
+```
+$ cmake -D MAX_PSPOLL_THREAD_COUNT:String="6" ..
+```
+
 ### CMake Notes
 
 Note that, with CMake, if you want to change the compiler or its options after

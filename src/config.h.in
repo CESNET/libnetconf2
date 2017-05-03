@@ -3,7 +3,7 @@
  * \author Radek Krejci <rkrejci@cesnet.cz>
  * \brief libnetconf2 various configuration settings.
  *
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2017 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -50,9 +50,19 @@
 #define SCHEMAS_DIR "@CMAKE_INSTALL_PREFIX@/@DATA_INSTALL_DIR@"
 
 /*
- * Partial message read timeout in seconds
- * (also used as nc_pollsession lock timeout and internal <get-schema> RPC reply timeout)
+ * Inactive read timeout
  */
-#define NC_READ_TIMEOUT @READ_TIMEOUT@
+#define NC_READ_INACT_TIMEOUT @READ_INACTIVE_TIMEOUT@
+
+/*
+ * Active read timeout in seconds
+ * (also used for internal <get-schema> RPC reply timeout)
+ */
+#define NC_READ_ACT_TIMEOUT @READ_ACTIVE_TIMEOUT@
+
+/*
+ * pspoll structure queue size (also found in nc_server.h)
+ */
+#define NC_PS_QUEUE_SIZE @MAX_PSPOLL_THREAD_COUNT@
 
 #endif /* NC_CONFIG_H_ */

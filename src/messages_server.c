@@ -19,8 +19,8 @@
 
 #include <libyang/libyang.h>
 
-#include "session_server.h"
 #include "libnetconf.h"
+#include "session_server.h"
 
 extern struct nc_server_opts server_opts;
 
@@ -122,8 +122,25 @@ nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_error *e
     return 0;
 }
 
+API const struct nc_server_error *
+nc_server_reply_get_last_err(const struct nc_server_reply *reply)
+{
+    struct nc_server_reply_error *err_rpl;
+
+    if (!reply || (reply->type != NC_RPL_ERROR)) {
+        ERRARG("reply");
+        return NULL;
+    }
+
+    err_rpl = (struct nc_server_reply_error *)reply;
+    if (!err_rpl->count) {
+        return NULL;
+    }
+    return err_rpl->err[err_rpl->count - 1];
+}
+
 API struct nc_server_error *
-nc_err(NC_ERR tag, ...)
+nc_err(int tag, ...)
 {
     va_list ap;
     struct nc_server_error *ret;
@@ -151,7 +168,7 @@ nc_err(NC_ERR tag, ...)
     case NC_ERR_ACCESS_DENIED:
     case NC_ERR_ROLLBACK_FAILED:
     case NC_ERR_OP_NOT_SUPPORTED:
-        type = va_arg(ap, NC_ERR_TYPE);
+        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
         if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
             ERRARG("type");
             goto fail;
@@ -160,14 +177,14 @@ nc_err(NC_ERR tag, ...)
 
     case NC_ERR_TOO_BIG:
     case NC_ERR_RES_DENIED:
-        type = va_arg(ap, NC_ERR_TYPE);
+        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
         /* nothing to check */
         break;
 
     case NC_ERR_MISSING_ATTR:
     case NC_ERR_BAD_ATTR:
     case NC_ERR_UNKNOWN_ATTR:
-        type = va_arg(ap, NC_ERR_TYPE);
+        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
         arg1 = va_arg(ap, const char *);
         arg2 = va_arg(ap, const char *);
 
@@ -182,7 +199,7 @@ nc_err(NC_ERR tag, ...)
     case NC_ERR_MISSING_ELEM:
     case NC_ERR_BAD_ELEM:
     case NC_ERR_UNKNOWN_ELEM:
-        type = va_arg(ap, NC_ERR_TYPE);
+        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
         arg1 = va_arg(ap, const char *);
 
         if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
@@ -193,7 +210,7 @@ nc_err(NC_ERR tag, ...)
         break;
 
     case NC_ERR_UNKNOWN_NS:
-        type = va_arg(ap, NC_ERR_TYPE);
+        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
         arg1 = va_arg(ap, const char *);
         arg2 = va_arg(ap, const char *);
 
@@ -218,7 +235,7 @@ nc_err(NC_ERR tag, ...)
         break;
 
     case NC_ERR_OP_FAILED:
-        type = va_arg(ap, NC_ERR_TYPE);
+        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
 
         if (type == NC_ERR_TYPE_TRAN) {
             ERRARG("type");
@@ -468,6 +485,7 @@ nc_err_libyang(void)
             break;
         case LYVE_INATTR:
         case LYVE_MISSATTR:
+        case LYVE_INMETA:
             str = ly_errmsg();
             stri = strchr(str, '"');
             stri++;
@@ -476,8 +494,10 @@ nc_err_libyang(void)
             attr = strndup(stri, strj - stri);
             if (ly_vecode == LYVE_INATTR) {
                 e = nc_err(NC_ERR_UNKNOWN_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath());
-            } else {
+            } else if (ly_vecode == LYVE_MISSATTR) {
                 e = nc_err(NC_ERR_MISSING_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath());
+            } else { /* LYVE_INMETA */
+                e = nc_err(NC_ERR_BAD_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath());
             }
             free(attr);
             break;
@@ -502,7 +522,7 @@ nc_err_libyang(void)
 }
 
 API NC_ERR_TYPE
-nc_err_get_type(struct nc_server_error *err)
+nc_err_get_type(const struct nc_server_error *err)
 {
     if (!err) {
         ERRARG("err");
@@ -513,7 +533,7 @@ nc_err_get_type(struct nc_server_error *err)
 }
 
 API NC_ERR
-nc_err_get_tag(struct nc_server_error *err)
+nc_err_get_tag(const struct nc_server_error *err)
 {
     if (!err) {
         ERRARG("err");
@@ -543,7 +563,7 @@ nc_err_set_app_tag(struct nc_server_error *err, const char *error_app_tag)
 }
 
 API const char *
-nc_err_get_app_tag(struct nc_server_error *err)
+nc_err_get_app_tag(const struct nc_server_error *err)
 {
     if (!err) {
         ERRARG("err");
@@ -573,7 +593,7 @@ nc_err_set_path(struct nc_server_error *err, const char *error_path)
 }
 
 API const char *
-nc_err_get_path(struct nc_server_error *err)
+nc_err_get_path(const struct nc_server_error *err)
 {
     if (!err) {
         ERRARG("err");
@@ -612,7 +632,7 @@ nc_err_set_msg(struct nc_server_error *err, const char *error_message, const cha
 }
 
 API const char *
-nc_err_get_msg(struct nc_server_error *err)
+nc_err_get_msg(const struct nc_server_error *err)
 {
     if (!err) {
         ERRARG("err");
@@ -798,4 +818,55 @@ nc_err_free(struct nc_server_error *err)
     }
     free(err->other);
     free(err);
+}
+
+API struct nc_server_notif *
+nc_server_notif_new(struct lyd_node* event, char *eventtime, NC_PARAMTYPE paramtype)
+{
+    struct nc_server_notif *ntf;
+
+    if (!event || event->schema->nodetype != LYS_NOTIF) {
+        ERRARG("event");
+        return NULL;
+    } else if (!eventtime) {
+        ERRARG("eventtime");
+        return NULL;
+    }
+
+    ntf = malloc(sizeof *ntf);
+    if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
+        ntf->eventtime = strdup(eventtime);
+        ntf->tree = lyd_dup(event, 1);
+    } else {
+        ntf->eventtime = eventtime;
+        ntf->tree = event;
+    }
+    ntf->free = (paramtype == NC_PARAMTYPE_CONST ? 0 : 1);
+
+    return ntf;
+}
+
+API void
+nc_server_notif_free(struct nc_server_notif *notif)
+{
+    if (!notif) {
+        return;
+    }
+
+    if (notif->free) {
+        lyd_free(notif->tree);
+        free(notif->eventtime);
+    }
+    free(notif);
+}
+
+API const char *
+nc_server_notif_get_time(const struct nc_server_notif *notif)
+{
+    if (!notif) {
+        ERRARG("notif");
+        return NULL;
+    }
+
+    return notif->eventtime;
 }

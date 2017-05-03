@@ -27,17 +27,17 @@ extern "C" {
 /** @brief Default NETCONF over SSH port */
 #define NC_PORT_SSH 830
 /** @brief Default NETCONF over SSH Call Home port */
-#define NC_PORT_CH_SSH 6666
+#define NC_PORT_CH_SSH 4334
 
 /** @brief Default NETCONF over TLS port */
 #define NC_PORT_TLS 6513
 /** @brief Default NETCONF over TLS Call Home port */
-#define NC_PORT_CH_TLS 6667
+#define NC_PORT_CH_TLS 4335
 
 /** @brief Microseconds after which tasks are repeated until the full timeout elapses.
- *         A second (1000 000) should be divisible by this number without remain.
+ *         A millisecond (1000) should be divisible by this number without remain.
  */
-#define NC_TIMEOUT_STEP 20
+#define NC_TIMEOUT_STEP 50
 
 /**
  * @brief Set RPC callback to a schema node.

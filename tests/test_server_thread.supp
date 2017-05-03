@@ -8,3 +8,8 @@
     Helgrind:Race
     fun:DSA_get_default_method
 }
+{
+    <helgrind_ignores_rwlocks>
+    Helgrind:Race
+    fun:nc_server_endpt_set_address_port
+}
