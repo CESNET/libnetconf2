@@ -67,6 +67,45 @@ static struct nc_client_ssh_opts ssh_ch_opts = {
     .auth_privkey_passphrase = sshauth_privkey_passphrase
 };
 
+static FILE *
+open_tty_noecho(const char *path, struct termios *oldterm)
+{
+    struct termios newterm;
+    FILE *ret;
+
+    if (!(ret = fopen(path, "r"))) {
+        ERR("Unable to open the current terminal (%s).", strerror(errno));
+        return NULL;
+    }
+
+    if (tcgetattr(fileno(ret), oldterm)) {
+        ERR("Unable to get terminal settings (%s).", strerror(errno));
+        fclose(ret);
+        return NULL;
+    }
+
+    newterm = *oldterm;
+    newterm.c_lflag &= ~ECHO;
+    newterm.c_lflag &= ~ICANON;
+    tcflush(fileno(ret), TCIFLUSH);
+    if (tcsetattr(fileno(ret), TCSANOW, &newterm)) {
+        ERR("Unable to change terminal settings for hiding password (%s).", strerror(errno));
+        fclose(ret);
+        return NULL;
+    }
+
+    return ret;
+}
+
+static void
+restore_tty_close(FILE *tty, struct termios *oldterm)
+{
+    if (tcsetattr(fileno(tty), TCSANOW, oldterm) != 0) {
+        ERR("Unable to restore terminal settings (%s).", strerror(errno));
+    }
+    fclose(tty);
+}
+
 static void
 _nc_client_ssh_destroy_opts(struct nc_client_ssh_opts *opts)
 {
@@ -307,55 +346,39 @@ static char *
 sshauth_password(const char *username, const char *hostname)
 {
     char *buf;
-    int buflen = 1024, len = 0;
+    int buflen = 1024, len, ret;
     char c = 0;
-    struct termios newterm, oldterm;
+    struct termios oldterm;
     FILE *tty;
-
-    if (!(tty = fopen("/dev/tty", "r+"))) {
-        ERR("Unable to open the current terminal (%s).", strerror(errno));
-        return NULL;
-    }
-
-    if (tcgetattr(fileno(tty), &oldterm)) {
-        ERR("Unable to get terminal settings (%s).", strerror(errno));
-        fclose(tty);
-        return NULL;
-    }
-
-    fprintf(tty, "%s@%s password: ", username, hostname);
-    fflush(tty);
-
-    /* system("stty -echo"); */
-    newterm = oldterm;
-    newterm.c_lflag &= ~ECHO;
-    newterm.c_lflag &= ~ICANON;
-    tcflush(fileno(tty), TCIFLUSH);
-    if (tcsetattr(fileno(tty), TCSANOW, &newterm)) {
-        ERR("Unable to change terminal settings for hiding password (%s).", strerror(errno));
-        fclose(tty);
-        return NULL;
-    }
 
     buf = malloc(buflen * sizeof *buf);
     if (!buf) {
         ERRMEM;
-        fclose(tty);
         return NULL;
     }
 
+    if ((ret = ttyname_r(STDIN_FILENO, buf, buflen))) {
+        ERR("ttyname_r failed (%s).", strerror(ret));
+        free(buf);
+        return NULL;
+    }
+
+    if (!(tty = open_tty_noecho(buf, &oldterm))) {
+        free(buf);
+        return NULL;
+    }
+
+    fprintf(stdout, "%s@%s password: ", username, hostname);
+    fflush(stdout);
+
+    len = 0;
     while ((fread(&c, 1, 1, tty) == 1) && (c != '\n')) {
         if (len >= buflen - 1) {
             buflen *= 2;
             buf = nc_realloc(buf, buflen * sizeof *buf);
             if (!buf) {
                 ERRMEM;
-
-                /* restore terminal settings */
-                if (tcsetattr(fileno(tty), TCSANOW, &oldterm) != 0) {
-                    ERR("Unable to restore terminal settings (%s).", strerror(errno));
-                }
-                fclose(tty);
+                restore_tty_close(tty, &oldterm);
                 return NULL;
             }
         }
@@ -363,126 +386,19 @@ sshauth_password(const char *username, const char *hostname)
     }
     buf[len++] = 0; /* terminating null byte */
 
-    /* system ("stty echo"); */
-    if (tcsetattr(fileno(tty), TCSANOW, &oldterm)) {
-        ERR("Unable to restore terminal settings (%s).", strerror(errno));
-        /*
-         * terminal probably still hides input characters, but we have password
-         * and anyway we are unable to set terminal to the previous state, so
-         * just continue
-         */
-    }
-    fprintf(tty, "\n");
-
-    fclose(tty);
+    fprintf(stdout, "\n");
+    restore_tty_close(tty, &oldterm);
     return buf;
 }
 
 static char *
 sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo)
 {
-    unsigned int buflen = 8, response_len;
+    unsigned int buflen = 64, cur_len;
     char c = 0;
-    struct termios newterm, oldterm;
-    char *response;
-    FILE *tty;
-
-    if (!(tty = fopen("/dev/tty", "r+"))) {
-        ERR("Unable to open the current terminal (%s).", strerror(errno));
-        return NULL;
-    }
-
-    if (tcgetattr(fileno(tty), &oldterm) != 0) {
-        ERR("Unable to get terminal settings (%s).", strerror(errno));
-        fclose(tty);
-        return NULL;
-    }
-
-    if (auth_name && (!fwrite(auth_name, sizeof(char), strlen(auth_name), tty)
-            || !fwrite("\n", sizeof(char), 1, tty))) {
-        ERR("Writing the auth method name into stdout failed.");
-        fclose(tty);
-        return NULL;
-    }
-
-    if (instruction && (!fwrite(instruction, sizeof(char), strlen(instruction), tty)
-            || !fwrite("\n", sizeof(char), 1, tty))) {
-        ERR("Writing the instruction into stdout failed.");
-        fclose(tty);
-        return NULL;
-    }
-
-    if (!fwrite(prompt, sizeof(char), strlen(prompt), tty)) {
-        ERR("Writing the authentication prompt into stdout failed.");
-        fclose(tty);
-        return NULL;
-    }
-    fflush(tty);
-    if (!echo) {
-        /* system("stty -echo"); */
-        newterm = oldterm;
-        newterm.c_lflag &= ~ECHO;
-        tcflush(fileno(tty), TCIFLUSH);
-        if (tcsetattr(fileno(tty), TCSANOW, &newterm)) {
-            ERR("Unable to change terminal settings for hiding password (%s).", strerror(errno));
-            fclose(tty);
-            return NULL;
-        }
-    }
-
-    response = malloc(buflen * sizeof *response);
-    response_len = 0;
-    if (!response) {
-        ERRMEM;
-        /* restore terminal settings */
-        if (tcsetattr(fileno(tty), TCSANOW, &oldterm)) {
-            ERR("Unable to restore terminal settings (%s).", strerror(errno));
-        }
-        fclose(tty);
-        return NULL;
-    }
-
-    while ((fread(&c, 1, 1, tty) == 1) && (c != '\n')) {
-        if (response_len >= buflen - 1) {
-            buflen *= 2;
-            response = nc_realloc(response, buflen * sizeof *response);
-            if (!response) {
-                ERRMEM;
-
-                /* restore terminal settings */
-                if (tcsetattr(fileno(tty), TCSANOW, &oldterm)) {
-                    ERR("Unable to restore terminal settings (%s).", strerror(errno));
-                }
-                fclose(tty);
-                return NULL;
-            }
-        }
-        response[response_len++] = c;
-    }
-    /* terminating null byte */
-    response[response_len++] = '\0';
-
-    /* system ("stty echo"); */
-    if (tcsetattr(fileno(tty), TCSANOW, &oldterm)) {
-        ERR("Unable to restore terminal settings (%s).", strerror(errno));
-        /*
-         * terminal probably still hides input characters, but we have password
-         * and anyway we are unable to set terminal to the previous state, so
-         * just continue
-         */
-    }
-
-    fprintf(tty, "\n");
-    fclose(tty);
-    return response;
-}
-
-static char *
-sshauth_privkey_passphrase(const char* privkey_path)
-{
-    char c, *buf;
-    int buflen = 1024, len = 0;
-    struct termios newterm, oldterm;
+    int ret;
+    struct termios oldterm;
+    char *buf;
     FILE *tty;
 
     buf = malloc(buflen * sizeof *buf);
@@ -491,65 +407,116 @@ sshauth_privkey_passphrase(const char* privkey_path)
         return NULL;
     }
 
-    if (!(tty = fopen("/dev/tty", "r+"))) {
-        ERR("Unable to open the current terminal (%s).", strerror(errno));
-        goto fail;
+    if ((ret = ttyname_r(STDIN_FILENO, buf, buflen))) {
+        ERR("ttyname_r failed (%s).", strerror(ret));
+        free(buf);
+        return NULL;
     }
 
-    if (tcgetattr(fileno(tty), &oldterm)) {
-        ERR("Unable to get terminal settings (%s).", strerror(errno));
-        goto fail;
+    if (!echo) {
+        if (!(tty = open_tty_noecho(buf, &oldterm))) {
+            free(buf);
+            return NULL;
+        }
+    } else {
+        tty = stdin;
     }
 
-    fprintf(tty, "Enter passphrase for the key '%s':", privkey_path);
-    fflush(tty);
 
-    /* system("stty -echo"); */
-    newterm = oldterm;
-    newterm.c_lflag &= ~ECHO;
-    newterm.c_lflag &= ~ICANON;
-    tcflush(fileno(tty), TCIFLUSH);
-    if (tcsetattr(fileno(tty), TCSANOW, &newterm)) {
-        ERR("Unable to change terminal settings for hiding password (%s).", strerror(errno));
+    if (auth_name && (!fwrite(auth_name, sizeof *auth_name, strlen(auth_name), stdout)
+            || !fwrite("\n", sizeof(char), 1, stdout))) {
+        ERR("Writing the auth method name into stdout failed.");
         goto fail;
     }
+    if (instruction && (!fwrite(instruction, sizeof *auth_name, strlen(instruction), stdout)
+            || !fwrite("\n", sizeof(char), 1, stdout))) {
+        ERR("Writing the instruction into stdout failed.");
+        goto fail;
+    }
+    if (!fwrite(prompt, sizeof *prompt, strlen(prompt), stdout)) {
+        ERR("Writing the authentication prompt into stdout failed.");
+        goto fail;
+    }
+    fflush(stdout);
 
+    cur_len = 0;
+    while ((fread(&c, 1, 1, tty) == 1) && (c != '\n')) {
+        if (cur_len >= buflen - 1) {
+            buflen *= 2;
+            buf = nc_realloc(buf, buflen * sizeof *buf);
+            if (!buf) {
+                ERRMEM;
+                goto fail;
+            }
+        }
+        buf[cur_len++] = c;
+    }
+    /* terminating null byte */
+    buf[cur_len] = '\0';
+
+    fprintf(stdout, "\n");
+    if (!echo) {
+        restore_tty_close(tty, &oldterm);
+    }
+    return buf;
+
+fail:
+    if (!echo) {
+        restore_tty_close(tty, &oldterm);
+    }
+    free(buf);
+    return NULL;
+}
+
+static char *
+sshauth_privkey_passphrase(const char* privkey_path)
+{
+    char c, *buf;
+    int buflen = 1024, len, ret;
+    struct termios oldterm;
+    FILE *tty;
+
+    buf = malloc(buflen * sizeof *buf);
+    if (!buf) {
+        ERRMEM;
+        return NULL;
+    }
+
+    if ((ret = ttyname_r(STDIN_FILENO, buf, buflen))) {
+        ERR("ttyname_r failed (%s).", strerror(ret));
+        free(buf);
+        return NULL;
+    }
+
+    if (!(tty = open_tty_noecho(buf, &oldterm))) {
+        free(buf);
+        return NULL;
+    }
+
+    fprintf(stdout, "Enter passphrase for the key '%s':", privkey_path);
+    fflush(stdout);
+
+    len = 0;
     while ((fread(&c, 1, 1, tty) == 1) && (c != '\n')) {
         if (len >= buflen - 1) {
             buflen *= 2;
             buf = nc_realloc(buf, buflen * sizeof *buf);
             if (!buf) {
                 ERRMEM;
-                /* restore terminal settings */
-                if (tcsetattr(fileno(tty), TCSANOW, &oldterm)) {
-                    ERR("Unable to restore terminal settings (%s).", strerror(errno));
-                }
                 goto fail;
             }
         }
         buf[len++] = (char)c;
     }
-    buf[len++] = 0; /* terminating null byte */
+    buf[len] = 0; /* terminating null byte */
 
-    /* system ("stty echo"); */
-    if (tcsetattr(fileno(tty), TCSANOW, &oldterm)) {
-        ERR("Unable to restore terminal settings (%s).", strerror(errno));
-        /*
-         * terminal probably still hides input characters, but we have password
-         * and anyway we are unable to set terminal to the previous state, so
-         * just continue
-         */
-    }
-    fprintf(tty, "\n");
-
-    fclose(tty);
+    fprintf(stdout, "\n");
+    restore_tty_close(tty, &oldterm);
     return buf;
 
 fail:
+    restore_tty_close(tty, &oldterm);
     free(buf);
-    if (tty) {
-        fclose(tty);
-    }
     return NULL;
 }
 
