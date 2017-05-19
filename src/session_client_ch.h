@@ -24,6 +24,14 @@
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 /**
+ * @defgroup client_ch Client-side Call Home
+ * @ingroup client
+ *
+ * @brief Call Home functionality for client-side applications.
+ * @{
+ */
+
+/**
  * @brief Accept a Call Home connection on any of the listening binds.
  *
  * @param[in] timeout Timeout for receiving a new connection in milliseconds, 0 for
@@ -34,9 +42,19 @@
  */
 int nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session);
 
+/**@} Client-side Call Home */
+
 #endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
 #ifdef NC_ENABLED_SSH
+
+/**
+ * @defgroup client_ch_ssh Client-side Call Home on SSH
+ * @ingroup client_ch
+ *
+ * @brief SSH settings for the Call Home functionality
+ * @{
+ */
 
 /**
  * @brief Set SSH CALL Home authentication hostkey check (knownhosts) callback.
@@ -157,9 +175,19 @@ int nc_client_ssh_ch_set_username(const char *username);
  */
 const char *nc_client_ssh_ch_get_username(void);
 
+/**@} Client-side Call Home on SSH */
+
 #endif /* NC_ENABLED_SSH */
 
 #ifdef NC_ENABLED_TLS
+
+/**
+ * @defgroup client_ch_tls Client-side Call Home on TLS
+ * @ingroup client_ch
+ *
+ * @brief TLS settings for the Call Home functionality
+ * @{
+ */
 
 /**
  * @brief Add a new client bind and start listening on it for TLS Call Home connections.
@@ -237,6 +265,8 @@ int nc_client_tls_ch_set_crl_paths(const char *crl_file, const char *crl_dir);
  *                     Can be NULL.
  */
 void nc_client_tls_ch_get_crl_paths(const char **crl_file, const char **crl_dir);
+
+/**@} Client-side Call Home on TLS */
 
 #endif /* NC_ENABLED_TLS */
 

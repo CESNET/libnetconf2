@@ -24,6 +24,14 @@
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 /**
+ * @defgroup server_ch Server-side Call Home
+ * @ingroup server
+ *
+ * @brief Call Home functionality for server-side applications.
+ * @{
+ */
+
+/**
  * @brief Add a new Call Home client.
  *
  * @param[in] name Arbitrary unique client name.
@@ -168,9 +176,19 @@ int nc_server_ch_client_set_max_attempts(const char *client_name, uint8_t max_at
 int nc_connect_ch_client_dispatch(const char *client_name,
                                   void (*session_clb)(const char *client_name, struct nc_session *new_session));
 
+/** @} Server-side Call Home */
+
 #endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
 #ifdef NC_ENABLED_SSH
+
+/**
+ * @defgroup server_ch_ssh Server-side Call Home on SSH
+ * @ingroup server_ch
+ *
+ * @brief SSH settings for the Call Home functionality
+ * @{
+ */
 
 /**
  * @brief Add Call Home SSH host keys the server will identify itself with. Only the name is set, the key itself
@@ -250,9 +268,19 @@ int nc_server_ssh_ch_client_set_auth_attempts(const char *client_name, uint16_t 
  */
 int nc_server_ssh_ch_client_set_auth_timeout(const char *client_name, uint16_t auth_timeout);
 
+/** @} Server-side Call Home on SSH */
+
 #endif /* NC_ENABLED_SSH */
 
 #ifdef NC_ENABLED_TLS
+
+/**
+ * @defgroup server_ch_tls Server-side Call Home on TLS
+ * @ingroup server_ch
+ *
+ * @brief TLS settings for the Call Home functionality
+ * @{
+ */
 
 /**
  * @brief Set the server Call Home TLS certificate. Only the name is set, the certificate itself
@@ -362,6 +390,8 @@ int nc_server_tls_ch_client_del_ctn(const char *client_name, int64_t id, const c
  */
 int nc_server_tls_ch_client_get_ctn(const char *client_name, uint32_t *id, char **fingerprint,
                                     NC_TLS_CTN_MAPTYPE *map_type, char **name);
+
+/** @} Server-side Call Home on TLS */
 
 #endif /* NC_ENABLED_TLS */
 

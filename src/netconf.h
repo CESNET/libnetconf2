@@ -21,7 +21,14 @@
 extern "C" {
 #endif
 
+/**
+ * @addtogroup misc
+ * @{
+ */
+
+/** @brief Base NETCONF namespace */
 #define NC_NS_BASE  "urn:ietf:params:xml:ns:netconf:base:1.0"
+/** @brief Notifications namespace */
 #define NC_NS_NOTIF "urn:ietf:params:xml:ns:netconf:notification:1.0"
 
 /** @brief Default NETCONF over SSH port */
@@ -121,11 +128,11 @@ typedef enum NC_PARAMTYPE {
 
 /**
  * @brief Free all the dynamically allocated thread-specific libssl/libcrypto
- *        resources.
+ * resources.
  *
- *        This function should be called only if init was called. Call it in every
- *        thread your application creates just before the thread exits. In the last thread
- *        (usually the main one) call only nc_destroy().
+ * This function should be called only if init (nc_client_init(), respectively nc_server_init()) was called.
+ * Call it in every thread your application creates just before the thread exits. In the last thread
+ * (usually the main one) call nc_client_destroy(), respectively nc_server_destroy().
  */
 void nc_thread_destroy(void);
 
@@ -156,6 +163,8 @@ char* nc_time2datetime(time_t time, const char* tz, char *buf);
  * @return time_t value of the given string, -1 on error.
  */
 time_t nc_datetime2time(const char* datetime);
+
+/**@} Miscellaneous */
 
 #ifdef __cplusplus
 }

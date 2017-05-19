@@ -609,4 +609,19 @@
  * - nc_server_ssh_ch_client_set_auth_timeout()
  */
 
+/**
+ * @defgroup misc Miscellaneous
+ * @brief Miscellaneous macros, types, structure and functions for a generic use by both server and client applications.
+ */
+
+/**
+ * @defgroup client Client
+ * @brief NETCONF client functionality.
+ */
+
+/**
+ * @defgroup server Server
+ * @brief NETCONF server functionality.
+ */
+
 #endif /* NC_LIBNETCONF_H_ */

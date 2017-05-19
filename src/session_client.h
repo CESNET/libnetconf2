@@ -34,6 +34,11 @@
 #include "messages_client.h"
 
 /**
+ * @addtogroup client
+ * @{
+ */
+
+/**
  * @brief Set location where libnetconf tries to search for YANG/YIN schemas.
  *
  * The location is searched when connecting to a NETCONF server and building
@@ -62,6 +67,16 @@ void nc_client_init(void);
  */
 void nc_client_destroy(void);
 
+/**@} Client */
+
+/**
+ * @defgroup client_session Client Session
+ * @ingroup client
+ *
+ * @brief Client-side NETCONF session manipulation.
+ * @{
+ */
+
 /**
  * @brief Connect to the NETCONF server via proviaded input/output file descriptors.
  *
@@ -82,7 +97,17 @@ void nc_client_destroy(void);
  */
 struct nc_session *nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx);
 
+/**@} Client Session */
+
 #ifdef NC_ENABLED_SSH
+
+/**
+ * @defgroup client_ssh Client SSH
+ * @ingroup client
+ *
+ * @brief Client-side settings for SSH connections.
+ * @{
+ */
 
 /**
  * @brief Set SSH authentication hostkey check (knownhosts) callback.
@@ -242,9 +267,19 @@ struct nc_session *nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx
  */
 struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx);
 
+/**@} Client SSH */
+
 #endif /* NC_ENABLED_SSH */
 
 #ifdef NC_ENABLED_TLS
+
+/**
+ * @defgroup client_tls Client TLS
+ * @ingroup client
+ *
+ * @brief Client-side settings for TLS connections.
+ * @{
+ */
 
 /**
  * @brief Set client authentication identity - a certificate and a private key.
@@ -339,7 +374,14 @@ struct nc_session *nc_connect_tls(const char *host, uint16_t port, struct ly_ctx
  */
 struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
 
+/**@} Client TLS */
+
 #endif /* NC_ENABLED_TLS */
+
+/**
+ * @addtogroup client_session
+ * @{
+ */
 
 /**
  * @brief Get session capabilities.
@@ -446,5 +488,7 @@ NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int time
  * @param[in] session NETCONF client session.
  */
 void nc_client_session_set_not_strict(struct nc_session *session);
+
+/**@} Client Session */
 
 #endif /* NC_SESSION_CLIENT_H_ */
