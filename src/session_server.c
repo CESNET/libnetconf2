@@ -1150,7 +1150,22 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
     /* check timeout of all the sessions */
     nc_gettimespec(&ts_cur);
     for (i = 0; i < ps->session_count; ++i) {
-        if (!(ps->sessions[i]->flags & NC_SESSION_CALLHOME) && !ps->sessions[i]->opts.server.ntf_status
+        if (ps->sessions[i]->status != NC_STATUS_RUNNING) {
+            /* when the status change occurred an error was printed, no need to print another */
+            if (!(ps->sessions[i]->flags & NC_SESSION_CALLHOME)) {
+                /* ... so the application should have handled it and removed this session before unless
+                 * this is a Call Home session, when it could not */
+                WRN("Session %u: polling an invalid session.", ps->sessions[i]->id);
+            }
+            ret = NC_PSPOLL_SESSION_TERM;
+            if (ps->sessions[i]->term_reason != NC_SESSION_TERM_CLOSED) {
+                ret |= NC_PSPOLL_SESSION_ERROR;
+            }
+            if (session) {
+                *session = ps->sessions[i];
+            }
+            goto ps_unlock_finish;
+        } else if (!(ps->sessions[i]->flags & NC_SESSION_CALLHOME) && !ps->sessions[i]->opts.server.ntf_status
                 && server_opts.idle_timeout
                 && (ts_cur.tv_sec >= ps->sessions[i]->opts.server.last_rpc + server_opts.idle_timeout)) {
             ERR("Session %u: session idle timeout elapsed.", ps->sessions[i]->id);

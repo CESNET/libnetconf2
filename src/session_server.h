@@ -253,7 +253,10 @@ uint16_t nc_ps_session_count(struct nc_pollsession *ps);
  * @brief Poll sessions and process any received RPCs.
  *
  * All the sessions must be running. Only one event on one session
- * is handled in one function call.
+ * is handled in one function call. If this event is a session termination
+ * (#NC_PSPOLL_SESSION_TERM returned), the session must be removed from \p ps
+ * before another call. Otherwise no session will be polled and the same
+ * return value and \p session will be returned.
  *
  * @param[in] ps Pollsession structure to use.
  * @param[in] timeout Poll timeout in milliseconds. 0 for non-blocking call, -1 for
