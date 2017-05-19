@@ -8,8 +8,19 @@
 and servers. NETCONF is the [NETwork CONFiguration protocol]
 (http://trac.tools.ietf.org/wg/netconf/trac/wiki) introduced by IETF.
 
-The library provides functions to connect NETCONF client and server to each
-other via SSH and to send, receive and process NETCONF messages.
+**libnetconf2** is a NETCONF library in C handling NETCONF authentication and all NETCONF RPC communication both server
+and client-side. Note that NETCONF datastore implementation is not a part of this library. The library supports both
+NETCONF 1.0 ([RFC 4741](https://tools.ietf.org/html/rfc4741)) as well as NETCONF 1.1
+([RFC 6241](https://tools.ietf.org/html/rfc6241)). The main features include:
+
+* NETCONF over SSH ([RFC 4742](https://tools.ietf.org/html/rfc4742), [RFC 6242](https://tools.ietf.org/html/rfc6242)),
+  using [libssh](https://www.libssh.org/).
+* NETCONF over TLS ([RFC 7589](https://tools.ietf.org/html/rfc7589)), using [OpenSSL](https://www.openssl.org/).
+  * DNSSEC SSH Key Fingerprints ([RFC 4255](https://tools.ietf.org/html/rfc4255))
+* NETCONF over pre-established transport sessions (using this mechanism the communication can be tunneled through
+  sshd(8), for instance).
+* NETCONF Call Home ([RFC 8071](https://tools.ietf.org/html/rfc8071)).
+* NETCONF Event Notifications ([RFC 5277](https://tools.ietf.org/html/rfc5277)),
 
 **libnetconf2** is maintained and further developed by the [Tools for
 Monitoring and Configuration](https://www.liberouter.org/) department of
@@ -73,15 +84,6 @@ reference implementation, you can check the Netopeer2 server.
 
 In contrast to **libnetconf**, **libnetconf2** actually implements more of the
 Call Home functionality.
-
-## Features
-
-* NETCONF v1.0 and v1.1 compliant ([RFC 6241](https://tools.ietf.org/html/rfc6241))
-* NETCONF over SSH ([RFC 6242](https://tools.ietf.org/html/rfc6242)) including Chunked Framing Mechanism
-  * DNSSEC SSH Key Fingerprints ([RFC 4255](https://tools.ietf.org/html/rfc4255))
-* NETCONF over TLS ([RFC 5539bis](https://tools.ietf.org/html/draft-ietf-netconf-rfc5539bis-05))
-* Transport support for NETCONF Event Notifications ([RFC 5277](https://tools.ietf.org/html/rfc5277))
-* NETCONF Call Home ([NETCONF Call Home Draft](https://tools.ietf.org/html/draft-ietf-netconf-call-home-17))
 
 # Installation
 

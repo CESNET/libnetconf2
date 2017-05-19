@@ -30,19 +30,22 @@
  * @mainpage About
  *
  * libnetconf2 is a NETCONF library in C handling NETCONF authentication and all NETCONF
- * RPC communication both server and client-side. NETCONF datastore and session management is not a part of this library,
- * but it helps a lot with the sessions.
+ * RPC communication both server and client-side. Note that NETCONF datastore implementation
+ * is not a part of this library. The library supports both NETCONF 1.0
+ * ([RFC 4741](https://tools.ietf.org/html/rfc4741)) as well as NETCONF 1.1
+ * ([RFC 6241](https://tools.ietf.org/html/rfc6241)).
  *
  * @section about-features Main Features
  *
- * - Creating SSH (using libssh) or TLS (using OpenSSL) authenticated NETCONF sessions.
+ * - Creating SSH ([RFC 4742](https://tools.ietf.org/html/rfc4742), [RFC 6242](https://tools.ietf.org/html/rfc6242)),
+ *   using [libssh](https://www.libssh.org/), or TLS ([RFC 7589](https://tools.ietf.org/html/rfc7589)),
+ *   using [OpenSSL](https://www.openssl.org/), authenticated NETCONF sessions.
  * - Creating NETCONF sessions with a pre-established transport protocol
  *   (using this mechanism the communication can be tunneled through sshd(8), for instance).
- * - Creating NETCONF Call Home sessions.
- * - Creating, sending, receiving, and replying to RPCs.
- * - Receiving notifications.
- *
- * - \todo Creating and sending notifications.
+ * - Creating NETCONF Call Home sessions ([RFC 8071](https://tools.ietf.org/html/rfc8071)).
+ * - Creating, sending, receiving, and replying to RPCs ([RFC 4741](https://tools.ietf.org/html/rfc4741),
+ *   [RFC 6241](https://tools.ietf.org/html/rfc6241)).
+ * - Creating, sending and receiving NETCONF Event Notifications ([RFC 5277](https://tools.ietf.org/html/rfc5277)),
  *
  * @section about-license License
  *
