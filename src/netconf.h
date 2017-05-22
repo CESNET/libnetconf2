@@ -58,6 +58,7 @@ extern "C" {
  * @brief Enumeration of reasons of the NETCONF session termination as defined in RFC 6470.
  */
 typedef enum NC_SESSION_TERM_REASON {
+    NC_SESSION_TERM_ERR = -1,     /**< error return code for function getting the session termination reason */
     NC_SESSION_TERM_NONE = 0,     /**< session still running */
     NC_SESSION_TERM_CLOSED,       /**< closed by client in a normal fashion */
     NC_SESSION_TERM_KILLED,       /**< session was terminated by \<kill-session\> operation */

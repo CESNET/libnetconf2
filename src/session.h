@@ -51,6 +51,7 @@ typedef enum {
  * @brief Enumeration of possible session statuses
  */
 typedef enum {
+    NC_STATUS_ERR = -1,   /**< error return code for function getting the session status */
     NC_STATUS_STARTING = 0, /**< session is not yet fully initiated */
     NC_STATUS_CLOSING,      /**< session is being closed */
     NC_STATUS_INVALID,      /**< session is not running and is supposed to be closed (nc_session_free()) */

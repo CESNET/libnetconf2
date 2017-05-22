@@ -286,7 +286,7 @@ nc_session_get_status(const struct nc_session *session)
 {
     if (!session) {
         ERRARG("session");
-        return 0;
+        return NC_STATUS_ERR;
     }
 
     return session->status;
@@ -297,7 +297,7 @@ nc_session_get_termreason(const struct nc_session *session)
 {
     if (!session) {
         ERRARG("session");
-        return 0;
+        return NC_SESSION_TERM_ERR;
     }
 
     return session->term_reason;
