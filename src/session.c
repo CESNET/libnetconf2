@@ -935,7 +935,7 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
 }
 
 static int
-parse_cpblts(struct lyxml_elem *xml, const char ***list)
+parse_cpblts(struct lyxml_elem *xml, char ***list)
 {
     struct lyxml_elem *cpblt;
     int ver = -1, i = 0;
