@@ -520,7 +520,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         /* list of server's capabilities */
         if (session->opts.client.cpblts) {
             for (i = 0; session->opts.client.cpblts[i]; i++) {
-                lydict_remove(session->ctx, session->opts.client.cpblts[i]);
+                free(session->opts.client.cpblts[i]);
             }
             free(session->opts.client.cpblts);
         }
