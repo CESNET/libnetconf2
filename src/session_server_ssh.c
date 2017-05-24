@@ -1520,7 +1520,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
 {
     uint8_t q_id;
     NC_MSG_TYPE msgtype;
-    struct nc_session *new_session = NULL;
+    struct nc_session *new_session = NULL, *cur_session;
     uint16_t i;
 
     if (!ps) {
@@ -1537,11 +1537,12 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     }
 
     for (i = 0; i < ps->session_count; ++i) {
-        if ((ps->sessions[i]->status == NC_STATUS_RUNNING) && (ps->sessions[i]->ti_type == NC_TI_LIBSSH)
-                && ps->sessions[i]->ti.libssh.next) {
+        cur_session = ps->sessions[i].session;
+        if ((cur_session->status == NC_STATUS_RUNNING) && (cur_session->ti_type == NC_TI_LIBSSH)
+                && cur_session->ti.libssh.next) {
             /* an SSH session with more channels */
-            for (new_session = ps->sessions[i]->ti.libssh.next;
-                    new_session != ps->sessions[i];
+            for (new_session = cur_session->ti.libssh.next;
+                    new_session != cur_session;
                     new_session = new_session->ti.libssh.next) {
                 if ((new_session->status == NC_STATUS_STARTING) && new_session->ti.libssh.channel
                         && (new_session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
@@ -1549,7 +1550,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
                     break;
                 }
             }
-            if (new_session != ps->sessions[i]) {
+            if (new_session != cur_session) {
                 break;
             }
 
