@@ -149,7 +149,7 @@ ctx_check_and_load_model(struct nc_session *session, const char *module_cpblt)
 
 /* SCHEMAS_DIR used as the last resort */
 static int
-ctx_check_and_load_ietf_netconf(struct ly_ctx *ctx, const char **cpblts)
+ctx_check_and_load_ietf_netconf(struct ly_ctx *ctx, char **cpblts)
 {
     int i;
     const struct lys_module *ietfnc;
@@ -1063,7 +1063,7 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
 
 #endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
-API const char **
+API const char * const *
 nc_session_get_cpblts(const struct nc_session *session)
 {
     if (!session) {
@@ -1071,7 +1071,7 @@ nc_session_get_cpblts(const struct nc_session *session)
         return NULL;
     }
 
-    return session->opts.client.cpblts;
+    return (const char * const *)session->opts.client.cpblts;
 }
 
 API const char *
