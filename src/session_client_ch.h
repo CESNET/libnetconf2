@@ -211,8 +211,13 @@ int nc_client_ssh_ch_get_keypair(int idx, const char **pub_key, const char **pri
 /**
  * @brief Set SSH Call Home authentication method preference.
  *
- * @param[in] auth_type Authentication method to modify the prefrence of.
- * @param[in] pref Preference of \p auth_type. Negative values disable the method.
+ * The default preference is as follows:
+ * - public key authentication (3)
+ * - password authentication (2)
+ * - interactive authentication (1)
+ *
+ * @param[in] auth_type Authentication method to modify the preference of.
+ * @param[in] pref Preference of \p auth_type. Higher number increases priority, negative values disable the method.
  */
 void nc_client_ssh_ch_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref);
 

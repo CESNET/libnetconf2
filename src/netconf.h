@@ -125,20 +125,6 @@ typedef enum NC_PARAMTYPE {
     NC_PARAMTYPE_DUP_AND_FREE /**< make a copy of the argument, free afterwards */
 } NC_PARAMTYPE;
 
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
-
-/**
- * @brief Free all the dynamically allocated thread-specific libssl/libcrypto
- * resources.
- *
- * This function should be called only if init (nc_client_init(), respectively nc_server_init()) was called.
- * Call it in every thread your application creates just before the thread exits. In the last thread
- * (usually the main one) call nc_client_destroy(), respectively nc_server_destroy().
- */
-void nc_thread_destroy(void);
-
-#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
-
 /**
  * @brief Transform given time_t (seconds since the epoch) into the RFC 3339 format
  * accepted by NETCONF functions.

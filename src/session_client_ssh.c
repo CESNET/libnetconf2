@@ -44,28 +44,11 @@
 #include "session_client_ch.h"
 #include "libnetconf.h"
 
-static int sshauth_hostkey_check(const char *hostname, ssh_session session, void *priv);
-static char *sshauth_password(const char *username, const char *hostname, void *priv);
-static char *sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo, void *priv);
-static char *sshauth_privkey_passphrase(const char* privkey_path, void *priv);
+struct nc_client_context *nc_client_context_location(void);
 
-extern struct nc_client_opts client_opts;
-
-static struct nc_client_ssh_opts ssh_opts = {
-    .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 1}},
-    .auth_hostkey_check = sshauth_hostkey_check,
-    .auth_password = sshauth_password,
-    .auth_interactive = sshauth_interactive,
-    .auth_privkey_passphrase = sshauth_privkey_passphrase
-};
-
-static struct nc_client_ssh_opts ssh_ch_opts = {
-    .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}},
-    .auth_hostkey_check = sshauth_hostkey_check,
-    .auth_password = sshauth_password,
-    .auth_interactive = sshauth_interactive,
-    .auth_privkey_passphrase = sshauth_privkey_passphrase
-};
+#define client_opts nc_client_context_location()->opts
+#define ssh_opts nc_client_context_location()->ssh_opts
+#define ssh_ch_opts nc_client_context_location()->ssh_ch_opts
 
 static FILE *
 open_tty_noecho(const char *path, struct termios *oldterm)
@@ -221,7 +204,7 @@ finish:
 
 #endif /* ENABLE_DNSSEC */
 
-static int
+int
 sshauth_hostkey_check(const char *hostname, ssh_session session, void *UNUSED(priv))
 {
     char *hexa;
@@ -342,7 +325,7 @@ fail:
     return -1;
 }
 
-static char *
+char *
 sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
 {
     char *buf;
@@ -391,7 +374,7 @@ sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
     return buf;
 }
 
-static char *
+char *
 sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo, void *UNUSED(priv))
 {
     unsigned int buflen = 64, cur_len;
@@ -468,7 +451,7 @@ fail:
     return NULL;
 }
 
-static char *
+char *
 sshauth_privkey_passphrase(const char* privkey_path, void *UNUSED(priv))
 {
     char c, *buf;

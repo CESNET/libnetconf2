@@ -29,9 +29,11 @@
 #include "session_client_ch.h"
 #include "libnetconf.h"
 
-extern struct nc_client_opts client_opts;
-static struct nc_client_tls_opts tls_opts;
-static struct nc_client_tls_opts tls_ch_opts;
+struct nc_client_context *nc_client_context_location(void);
+
+#define client_opts nc_client_context_location()->opts
+#define tls_opts nc_client_context_location()->tls_opts
+#define tls_ch_opts nc_client_context_location()->tls_ch_opts
 
 static int tlsauth_ch;
 

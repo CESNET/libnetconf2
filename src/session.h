@@ -201,4 +201,18 @@ void *nc_session_get_data(const struct nc_session *session);
  */
 void nc_session_free(struct nc_session *session, void (*data_free)(void *));
 
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+
+/**
+ * @brief Free all the dynamically allocated thread-specific libssl/libcrypto
+ * resources.
+ *
+ * This function should be called only if init (nc_client_init(), respectively nc_server_init()) was called.
+ * Call it in every thread your application creates just before the thread exits. In the last thread
+ * (usually the main one) call nc_client_destroy(), respectively nc_server_destroy().
+ */
+void nc_thread_destroy(void);
+
+#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
+
 #endif /* NC_SESSION_H_ */

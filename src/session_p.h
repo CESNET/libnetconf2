@@ -136,6 +136,19 @@ struct nc_client_opts {
     uint16_t ch_bind_count;
 };
 
+/* ACCESS unlocked */
+struct nc_client_context {
+    struct nc_client_opts opts;
+#ifdef NC_ENABLED_SSH
+    struct nc_client_ssh_opts ssh_opts;
+    struct nc_client_ssh_opts ssh_ch_opts;
+#endif /* NC_ENABLED_SSH */
+#ifdef NC_ENABLED_TLS
+    struct nc_client_tls_opts tls_opts;
+    struct nc_client_tls_opts tls_ch_opts;
+#endif /* NC_ENABLED_TLS */
+};
+
 struct nc_server_opts {
     /* ACCESS unlocked (dictionary locked internally in libyang) */
     struct ly_ctx *ctx;

@@ -22,6 +22,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -35,7 +36,119 @@
 
 static const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "candidate"};
 
-struct nc_client_opts client_opts;
+#ifdef NC_ENABLED_SSH
+int sshauth_hostkey_check(const char *hostname, ssh_session session, void *priv);
+char *sshauth_password(const char *username, const char *hostname, void *priv);
+char *sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo, void *priv);
+char *sshauth_privkey_passphrase(const char* privkey_path, void *priv);
+#endif /* NC_ENABLED_SSH */
+
+static pthread_once_t nc_client_context_once = PTHREAD_ONCE_INIT;
+static pthread_key_t nc_client_context_key;
+#ifdef __linux__
+static struct nc_client_context context_main = {
+    /* .opts zeroed */
+#ifdef NC_ENABLED_SSH
+    .ssh_opts = {
+        .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 1}},
+        .auth_hostkey_check = sshauth_hostkey_check,
+        .auth_password = sshauth_password,
+        .auth_interactive = sshauth_interactive,
+        .auth_privkey_passphrase = sshauth_privkey_passphrase
+    },
+    .ssh_ch_opts = {
+        .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}},
+        .auth_hostkey_check = sshauth_hostkey_check,
+        .auth_password = sshauth_password,
+        .auth_interactive = sshauth_interactive,
+        .auth_privkey_passphrase = sshauth_privkey_passphrase
+    }
+#endif /* NC_ENABLED_SSH */
+    /* .tls_ structures zeroed */
+};
+#endif
+
+static void
+nc_client_context_free(void *ptr)
+{
+    struct nc_client_context *c = (struct nc_client_context *)ptr;
+
+#ifdef __linux__
+    /* in __linux__ we use static memory in the main thread,
+     * so this check is for programs terminating the main()
+     * function by pthread_exit() :)
+     */
+    if (c != &context_main)
+#endif
+    {
+        nc_client_set_schema_searchpath(NULL);
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+        nc_client_ch_del_bind(NULL, 0, 0);
+#endif
+#ifdef NC_ENABLED_SSH
+        nc_client_ssh_destroy_opts();
+#endif
+#ifdef NC_ENABLED_TLS
+        nc_client_tls_destroy_opts();
+#endif
+        free(c);
+    }
+}
+
+static void
+nc_client_context_createkey(void)
+{
+    int r;
+
+    /* initiate */
+    while ((r = pthread_key_create(&nc_client_context_key, nc_client_context_free)) == EAGAIN);
+    pthread_setspecific(nc_client_context_key, NULL);
+}
+
+struct nc_client_context *
+nc_client_context_location(void)
+{
+    struct nc_client_context *e;
+
+    pthread_once(&nc_client_context_once, nc_client_context_createkey);
+    e = pthread_getspecific(nc_client_context_key);
+    if (!e) {
+        /* prepare ly_err storage */
+#ifdef __linux__
+        if (getpid() == syscall(SYS_gettid)) {
+            /* main thread - use global variable instead of thread-specific variable. */
+            e = &context_main;
+        } else
+#endif /* __linux__ */
+        {
+            e = calloc(1, sizeof *e);
+            /* set default values */
+#ifdef NC_ENABLED_SSH
+            e->ssh_opts.auth_pref[0].type = NC_SSH_AUTH_INTERACTIVE;
+            e->ssh_opts.auth_pref[0].value = 3;
+            e->ssh_opts.auth_pref[1].type = NC_SSH_AUTH_PASSWORD;
+            e->ssh_opts.auth_pref[1].value = 2;
+            e->ssh_opts.auth_pref[2].type = NC_SSH_AUTH_PUBLICKEY;
+            e->ssh_opts.auth_pref[2].value = 1;
+            e->ssh_opts.auth_hostkey_check = sshauth_hostkey_check;
+            e->ssh_opts.auth_password = sshauth_password;
+            e->ssh_opts.auth_interactive = sshauth_interactive;
+            e->ssh_opts.auth_privkey_passphrase = sshauth_privkey_passphrase;
+
+            /* callhome settings are the same except the inverted auth methods preferences */
+            memcpy(&e->ssh_ch_opts, &e->ssh_opts, sizeof e->ssh_ch_opts);
+            e->ssh_ch_opts.auth_pref[0].value = 1;
+            e->ssh_ch_opts.auth_pref[1].value = 2;
+            e->ssh_ch_opts.auth_pref[2].value = 3;
+#endif /* NC_ENABLED_SSH */
+        }
+        pthread_setspecific(nc_client_context_key, e);
+    }
+
+    return e;
+}
+
+#define client_opts nc_client_context_location()->opts
 
 API int
 nc_client_set_schema_searchpath(const char *path)
@@ -1117,16 +1230,6 @@ nc_client_init(void)
 API void
 nc_client_destroy(void)
 {
-    nc_client_set_schema_searchpath(NULL);
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
-    nc_client_ch_del_bind(NULL, 0, 0);
-#endif
-#ifdef NC_ENABLED_SSH
-    nc_client_ssh_destroy_opts();
-#endif
-#ifdef NC_ENABLED_TLS
-    nc_client_tls_destroy_opts();
-#endif
     nc_destroy();
 }
 
