@@ -54,10 +54,16 @@ struct nc_client_ssh_opts {
     uint16_t key_count;
 
     /* SSH authentication callbacks */
-    int (*auth_hostkey_check)(const char *hostname, ssh_session session);
-    char *(*auth_password)(const char *, const char *);
-    char *(*auth_interactive)(const char *, const char *, const char *, int);
-    char *(*auth_privkey_passphrase)(const char *);
+    int (*auth_hostkey_check)(const char *, ssh_session, void *);
+    char *(*auth_password)(const char *, const char *, void *);
+    char *(*auth_interactive)(const char *, const char *, const char *, int, void *);
+    char *(*auth_privkey_passphrase)(const char *, void *);
+
+    /* private data for the callbacks */
+    void *auth_hostkey_check_priv;
+    void *auth_password_priv;
+    void *auth_interactive_priv;
+    void *auth_privkey_passphrase_priv;
 
     char *username;
 };

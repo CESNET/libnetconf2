@@ -44,10 +44,10 @@
 #include "session_client_ch.h"
 #include "libnetconf.h"
 
-static int sshauth_hostkey_check(const char *hostname, ssh_session session);
-static char *sshauth_password(const char *username, const char *hostname);
-static char *sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo);
-static char *sshauth_privkey_passphrase(const char* privkey_path);
+static int sshauth_hostkey_check(const char *hostname, ssh_session session, void *priv);
+static char *sshauth_password(const char *username, const char *hostname, void *priv);
+static char *sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo, void *priv);
+static char *sshauth_privkey_passphrase(const char* privkey_path, void *priv);
 
 extern struct nc_client_opts client_opts;
 
@@ -222,7 +222,7 @@ finish:
 #endif /* ENABLE_DNSSEC */
 
 static int
-sshauth_hostkey_check(const char *hostname, ssh_session session)
+sshauth_hostkey_check(const char *hostname, ssh_session session, void *UNUSED(priv))
 {
     char *hexa;
     int c, state, ret;
@@ -343,7 +343,7 @@ fail:
 }
 
 static char *
-sshauth_password(const char *username, const char *hostname)
+sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
 {
     char *buf;
     int buflen = 1024, len, ret;
@@ -392,7 +392,7 @@ sshauth_password(const char *username, const char *hostname)
 }
 
 static char *
-sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo)
+sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo, void *UNUSED(priv))
 {
     unsigned int buflen = 64, cur_len;
     char c = 0;
@@ -469,7 +469,7 @@ fail:
 }
 
 static char *
-sshauth_privkey_passphrase(const char* privkey_path)
+sshauth_privkey_passphrase(const char* privkey_path, void *UNUSED(priv))
 {
     char c, *buf;
     int buflen = 1024, len, ret;
@@ -521,99 +521,222 @@ fail:
 }
 
 static void
-_nc_client_ssh_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session),
-                                     struct nc_client_ssh_opts *opts)
+_nc_client_ssh_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
+                                          void *priv, struct nc_client_ssh_opts *opts)
 {
     if (auth_hostkey_check) {
         opts->auth_hostkey_check = auth_hostkey_check;
+        opts->auth_hostkey_check_priv = priv;
     } else {
         opts->auth_hostkey_check = sshauth_hostkey_check;
+        opts->auth_hostkey_check_priv = NULL;
     }
 }
 
-API void
-nc_client_ssh_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session))
+static void
+_nc_client_ssh_get_auth_hostkey_check_clb(int (**auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
+                                         void **priv, struct nc_client_ssh_opts *opts)
 {
-    _nc_client_ssh_set_auth_hostkey_check_clb(auth_hostkey_check, &ssh_opts);
+    if (auth_hostkey_check) {
+        (*auth_hostkey_check) = opts->auth_hostkey_check == sshauth_hostkey_check ? NULL : opts->auth_hostkey_check;
+    }
+    if (priv) {
+        (*priv) = opts->auth_hostkey_check_priv;
+    }
+}
+
+
+API void
+nc_client_ssh_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
+                                         void *priv)
+{
+    _nc_client_ssh_set_auth_hostkey_check_clb(auth_hostkey_check, priv, &ssh_opts);
 }
 
 API void
-nc_client_ssh_ch_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session))
+nc_client_ssh_ch_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
+                                            void *priv)
 {
-    _nc_client_ssh_set_auth_hostkey_check_clb(auth_hostkey_check, &ssh_ch_opts);
+    _nc_client_ssh_set_auth_hostkey_check_clb(auth_hostkey_check, priv, &ssh_ch_opts);
 }
 
+API void
+nc_client_ssh_get_auth_hostkey_check_clb(int (**auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
+                                         void **priv)
+{
+    _nc_client_ssh_get_auth_hostkey_check_clb(auth_hostkey_check, priv, &ssh_opts);
+}
+
+API void
+nc_client_ssh_ch_get_auth_hostkey_check_clb(int (**auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
+                                            void **priv)
+{
+    _nc_client_ssh_get_auth_hostkey_check_clb(auth_hostkey_check, priv, &ssh_ch_opts);
+}
 
 static void
-_nc_client_ssh_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname),
-                                     struct nc_client_ssh_opts *opts)
+_nc_client_ssh_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname, void *priv),
+                                     void *priv, struct nc_client_ssh_opts *opts)
 {
     if (auth_password) {
         opts->auth_password = auth_password;
+        opts->auth_password_priv = priv;
     } else {
         opts->auth_password = sshauth_password;
+        opts->auth_password_priv = NULL;
+    }
+}
+
+static void
+_nc_client_ssh_get_auth_password_clb(char *(**auth_password)(const char *username, const char *hostname, void *priv),
+                                     void **priv, struct nc_client_ssh_opts *opts)
+{
+    if (auth_password) {
+        (*auth_password) = opts->auth_password == sshauth_password ? NULL : opts->auth_password;
+    }
+    if (priv) {
+        (*priv) = opts->auth_password_priv;
     }
 }
 
 API void
-nc_client_ssh_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname))
+nc_client_ssh_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname, void *priv),
+                                    void *priv)
 {
-    _nc_client_ssh_set_auth_password_clb(auth_password, &ssh_opts);
+    _nc_client_ssh_set_auth_password_clb(auth_password, priv, &ssh_opts);
 }
 
 API void
-nc_client_ssh_ch_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname))
+nc_client_ssh_ch_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname, void *priv),
+                                       void *priv)
 {
-    _nc_client_ssh_set_auth_password_clb(auth_password, &ssh_ch_opts);
+    _nc_client_ssh_set_auth_password_clb(auth_password, priv, &ssh_ch_opts);
+}
+
+API void
+nc_client_ssh_get_auth_password_clb(char *(**auth_password)(const char *username, const char *hostname, void *priv),
+                                    void **priv)
+{
+    _nc_client_ssh_get_auth_password_clb(auth_password, priv, &ssh_opts);
+}
+
+API void
+nc_client_ssh_ch_get_auth_password_clb(char *(**auth_password)(const char *username, const char *hostname, void *priv),
+                                       void **priv)
+{
+    _nc_client_ssh_get_auth_password_clb(auth_password, priv, &ssh_ch_opts);
 }
 
 static void
 _nc_client_ssh_set_auth_interactive_clb(char *(*auth_interactive)(const char *auth_name, const char *instruction,
-                                                                  const char *prompt, int echo),
-                                        struct nc_client_ssh_opts *opts)
+                                                                  const char *prompt, int echo, void *priv),
+                                        void *priv, struct nc_client_ssh_opts *opts)
 {
     if (auth_interactive) {
         opts->auth_interactive = auth_interactive;
+        opts->auth_interactive_priv = priv;
     } else {
         opts->auth_interactive = sshauth_interactive;
+        opts->auth_interactive_priv = NULL;
+    }
+}
+
+static void
+_nc_client_ssh_get_auth_interactive_clb(char *(**auth_interactive)(const char *auth_name, const char *instruction,
+                                                                  const char *prompt, int echo, void *priv),
+                                        void **priv, struct nc_client_ssh_opts *opts)
+{
+    if (auth_interactive) {
+        (*auth_interactive) = opts->auth_interactive == sshauth_interactive ? NULL : opts->auth_interactive;
+    }
+    if (priv) {
+        (*priv) = opts->auth_interactive_priv;
     }
 }
 
 API void
 nc_client_ssh_set_auth_interactive_clb(char *(*auth_interactive)(const char *auth_name, const char *instruction,
-                                                                  const char *prompt, int echo))
+                                                                  const char *prompt, int echo, void *priv),
+                                       void *priv)
 {
-    _nc_client_ssh_set_auth_interactive_clb(auth_interactive, &ssh_opts);
+    _nc_client_ssh_set_auth_interactive_clb(auth_interactive, priv, &ssh_opts);
 }
 
 API void
 nc_client_ssh_ch_set_auth_interactive_clb(char *(*auth_interactive)(const char *auth_name, const char *instruction,
-                                                                  const char *prompt, int echo))
+                                                                  const char *prompt, int echo, void *priv),
+                                          void *priv)
 {
-    _nc_client_ssh_set_auth_interactive_clb(auth_interactive, &ssh_ch_opts);
+    _nc_client_ssh_set_auth_interactive_clb(auth_interactive, priv, &ssh_ch_opts);
+}
+
+API void
+nc_client_ssh_get_auth_interactive_clb(char *(**auth_interactive)(const char *auth_name, const char *instruction,
+                                                                  const char *prompt, int echo, void *priv),
+                                       void **priv)
+{
+    _nc_client_ssh_get_auth_interactive_clb(auth_interactive, priv, &ssh_opts);
+}
+
+API void
+nc_client_ssh_ch_get_auth_interactive_clb(char *(**auth_interactive)(const char *auth_name, const char *instruction,
+                                                                  const char *prompt, int echo, void *priv),
+                                          void **priv)
+{
+    _nc_client_ssh_get_auth_interactive_clb(auth_interactive, priv, &ssh_ch_opts);
 }
 
 static void
-_nc_client_ssh_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path),
-                                        struct nc_client_ssh_opts *opts)
+_nc_client_ssh_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path, void *priv),
+                                               void *priv, struct nc_client_ssh_opts *opts)
 {
     if (auth_privkey_passphrase) {
         opts->auth_privkey_passphrase = auth_privkey_passphrase;
+        opts->auth_privkey_passphrase_priv = priv;
     } else {
         opts->auth_privkey_passphrase = sshauth_privkey_passphrase;
+        opts->auth_privkey_passphrase_priv = NULL;
+    }
+}
+
+static void
+_nc_client_ssh_get_auth_privkey_passphrase_clb(char *(**auth_privkey_passphrase)(const char *privkey_path, void *priv),
+                                               void **priv, struct nc_client_ssh_opts *opts)
+{
+    if (auth_privkey_passphrase) {
+        (*auth_privkey_passphrase) = opts->auth_privkey_passphrase == sshauth_privkey_passphrase ? NULL : opts->auth_privkey_passphrase;
+    }
+    if (priv) {
+        (*priv) = opts->auth_privkey_passphrase_priv;
     }
 }
 
 API void
-nc_client_ssh_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path))
+nc_client_ssh_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path, void *priv),
+                                              void *priv)
 {
-    _nc_client_ssh_set_auth_privkey_passphrase_clb(auth_privkey_passphrase, &ssh_opts);
+    _nc_client_ssh_set_auth_privkey_passphrase_clb(auth_privkey_passphrase, priv, &ssh_opts);
 }
 
 API void
-nc_client_ssh_ch_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path))
+nc_client_ssh_ch_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path, void *priv),
+                                                 void *priv)
 {
-    _nc_client_ssh_set_auth_privkey_passphrase_clb(auth_privkey_passphrase, &ssh_ch_opts);
+    _nc_client_ssh_set_auth_privkey_passphrase_clb(auth_privkey_passphrase, priv, &ssh_ch_opts);
+}
+
+API void
+nc_client_ssh_get_auth_privkey_passphrase_clb(char *(**auth_privkey_passphrase)(const char *privkey_path, void *priv),
+                                              void **priv)
+{
+    _nc_client_ssh_get_auth_privkey_passphrase_clb(auth_privkey_passphrase, priv, &ssh_opts);
+}
+
+API void
+nc_client_ssh_ch_get_auth_privkey_passphrase_clb(char *(**auth_privkey_passphrase)(const char *privkey_path, void *priv),
+                                                 void **priv)
+{
+    _nc_client_ssh_get_auth_privkey_passphrase_clb(auth_privkey_passphrase, priv, &ssh_ch_opts);
 }
 
 static int
@@ -943,7 +1066,7 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
         return -1;
     }
 
-    if (opts->auth_hostkey_check(session->host, ssh_sess)) {
+    if (opts->auth_hostkey_check(session->host, ssh_sess, opts->auth_hostkey_check_priv)) {
         ERR("Checking the host key failed.");
         return -1;
     }
@@ -1012,7 +1135,7 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
             userauthlist &= ~SSH_AUTH_METHOD_PASSWORD;
 
             VRB("Password authentication (host \"%s\", user \"%s\").", session->host, session->username);
-            s = opts->auth_password(session->username, session->host);
+            s = opts->auth_password(session->username, session->host, opts->auth_password_priv);
 
             if (timeout > -1) {
                 nc_gettimespec(&ts_timeout);
@@ -1065,7 +1188,7 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
 
                     answer = opts->auth_interactive(ssh_userauth_kbdint_getname(ssh_sess),
                                                     ssh_userauth_kbdint_getinstruction(ssh_sess),
-                                                    prompt, echo);
+                                                    prompt, echo, opts->auth_interactive_priv);
                     if (ssh_userauth_kbdint_setanswer(ssh_sess, j, answer) < 0) {
                         free(answer);
                         ret_auth = SSH_AUTH_ERROR;
@@ -1130,7 +1253,7 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
                 }
 
                 if (opts->keys[j].privkey_crypt) {
-                    s = opts->auth_privkey_passphrase(opts->keys[j].privkey_path);
+                    s = opts->auth_privkey_passphrase(opts->keys[j].privkey_path, opts->auth_privkey_passphrase_priv);
                 } else {
                     s = NULL;
                 }

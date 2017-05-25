@@ -57,38 +57,102 @@ int nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **sess
  */
 
 /**
- * @brief Set SSH CALL Home authentication hostkey check (knownhosts) callback.
+ * @brief Set SSH Call Home authentication hostkey check (knownhosts) callback.
+ *
+ * Repetitive calling causes replacing of the previous callback and its private data. Caller is responsible for
+ * freeing the private data when necessary (the private data can be obtained by
+ * nc_client_ssh_ch_get_auth_hostkey_check_clb()).
  *
  * @param[in] auth_hostkey_check Function to call, returns 0 on success, non-zero in error.
  *                               If NULL, the default callback is set.
+ * @param[in] priv Optional private data to be passed to the callback function.
  */
-void nc_client_ssh_ch_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session));
+void nc_client_ssh_ch_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
+                                                 void *priv);
 
+/**
+ * @brief Get currently set SSH Call Home authentication hostkey check (knownhosts) callback and its private data
+ * previously set by nc_client_ssh_ch_set_auth_hostkey_check_clb().
+ *
+ * @param[out] auth_hostkey_check Currently set callback, NULL in case of the default callback.
+ * @param[out] priv Currently set (optional) private data to be passed to the callback function.
+ */
+void nc_client_ssh_ch_get_auth_hostkey_check_clb(int (**auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
+                                                 void **priv);
 /**
  * @brief Set SSH Call Home password authentication callback.
  *
+ * Repetitive calling causes replacing of the previous callback and its private data. Caller is responsible for
+ * freeing the private data when necessary (the private data can be obtained by
+ * nc_client_ssh_ch_get_auth_password_clb()).
+ *
  * @param[in] auth_password Function to call, returns the password for username\@hostname.
  *                          If NULL, the default callback is set.
+ * @param[in] priv Optional private data to be passed to the callback function.
  */
-void nc_client_ssh_ch_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname));
+void nc_client_ssh_ch_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname, void *priv),
+                                            void *priv);
+
+/**
+ * @brief Get currently set SSH Call Home password authentication callback and its private data
+ * previously set by nc_client_ssh_ch_set_auth_password_clb().
+ *
+ * @param[out] auth_password Currently set callback, NULL in case of the default callback.
+ * @param[out] priv Currently set (optional) private data to be passed to the callback function.
+ */
+void nc_client_ssh_ch_get_auth_password_clb(char *(**auth_password)(const char *username, const char *hostname, void *priv),
+                                            void **priv);
 
 /**
  * @brief Set SSH Call Home interactive authentication callback.
  *
+ * Repetitive calling causes replacing of the previous callback and its private data. Caller is responsible for
+ * freeing the private data when necessary (the private data can be obtained by
+ * nc_client_ssh_ch_get_auth_interactive_clb()).
+ *
  * @param[in] auth_interactive Function to call for every question, returns the answer for
  *                             authentication name with instruction and echoing prompt.
  *                             If NULL, the default callback is set.
+ * @param[in] priv Optional private data to be passed to the callback function.
  */
 void nc_client_ssh_ch_set_auth_interactive_clb(char *(*auth_interactive)(const char *auth_name, const char *instruction,
-                                                                         const char *prompt, int echo));
+                                                                         const char *prompt, int echo, void *priv),
+                                               void *priv);
+
+/**
+ * @brief Get currently set SSH Call Home interactive authentication callback and its private data
+ * previously set by nc_client_ssh_ch_set_auth_interactive_clb().
+ *
+ * @param[out] auth_interactive Currently set callback, NULL in case of the default callback.
+ * @param[out] priv Currently set (optional) private data to be passed to the callback function.
+ */
+void nc_client_ssh_ch_get_auth_interactive_clb(char *(**auth_interactive)(const char *auth_name, const char *instruction,
+                                                                         const char *prompt, int echo, void *priv),
+                                               void **priv);
 
 /**
  * @brief Set SSH Call Home publickey authentication encrypted private key passphrase callback.
  *
+ * Repetitive calling causes replacing of the previous callback and its private data. Caller is responsible for
+ * freeing the private data when necessary (the private data can be obtained by
+ * nc_client_ssh_ch_get_auth_privkey_passphrase_clb()).
+ *
  * @param[in] auth_privkey_passphrase Function to call for every question, returns
  *                                    the passphrase for the specific private key.
+ * @param[in] priv Optional private data to be passed to the callback function.
  */
-void nc_client_ssh_ch_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path));
+void nc_client_ssh_ch_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path, void *priv),
+                                                      void *priv);
+
+/**
+ * @brief Get currently set SSH Call Home publickey authentication encrypted private key passphrase callback and its
+ * private data previously set by nc_client_ssh_ch_set_auth_privkey_passphrase_clb().
+ *
+ * @param[out] auth_privkey_passphrase Currently set callback, NULL in case of the default callback.
+ * @param[out] priv Currently set (optional) private data to be passed to the callback function.
+ */
+void nc_client_ssh_ch_get_auth_privkey_passphrase_clb(char *(**auth_privkey_passphrase)(const char *privkey_path, void *priv),
+                                                      void **priv);
 
 /**
  * @brief Add a new client bind and start listening on it for SSH Call Home connections.
