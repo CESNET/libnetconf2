@@ -358,7 +358,7 @@ struct nc_session {
         struct {
             /* client side only data */
             uint64_t msgid;
-            const char **cpblts;           /**< list of server's capabilities on client side */
+            const char **cpblts;           /**< NULL terminated list of server's capabilities on client side */
             struct nc_msg_cont *replies;   /**< queue for RPC replies received instead of notifications */
             struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
             volatile pthread_t *ntf_tid;   /**< running notifications receiving thread */
