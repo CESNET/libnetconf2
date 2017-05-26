@@ -377,7 +377,7 @@ struct nc_session {
         struct {
             /* client side only data */
             uint64_t msgid;
-            const char **cpblts;           /**< NULL terminated list of server's capabilities on client side */
+            char **cpblts;                 /**< list of server's capabilities on client side */
             struct nc_msg_cont *replies;   /**< queue for RPC replies received instead of notifications */
             struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
             volatile pthread_t *ntf_tid;   /**< running notifications receiving thread */
@@ -414,9 +414,18 @@ struct nc_session {
     } opts;
 };
 
+enum nc_ps_session_state {
+    NC_PS_STATE_NONE = 0,      /**< session is not being worked with */
+    NC_PS_STATE_BUSY,          /**< session is being polled or communicated on (and locked) */
+    NC_PS_STATE_INVALID        /**< session is invalid and was already returned by another poll */
+};
+
 /* ACCESS locked */
 struct nc_pollsession {
-    struct nc_session **sessions;
+    struct {
+        struct nc_session *session;
+        enum nc_ps_session_state state;
+    } *sessions;
     uint16_t session_count;
     uint16_t last_event_session;
 

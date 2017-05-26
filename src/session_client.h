@@ -459,7 +459,7 @@ struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
  * @param[in] session Session to get the information from.
  * @return NULL-terminated array of the \p session capabilities.
  */
-const char **nc_session_get_cpblts(const struct nc_session *session);
+const char * const *nc_session_get_cpblts(const struct nc_session *session);
 
 /**
  * @brief Check capability presence in a session.
