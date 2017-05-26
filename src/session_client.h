@@ -57,6 +57,28 @@ int nc_client_set_schema_searchpath(const char *path);
 const char *nc_client_get_schema_searchpath(void);
 
 /**
+ * @brief Use the provided thread-specific client's context in the current thread.
+ *
+ * Note that from this point the context is shared with the thread from which the context was taken and any
+ * nc_client_*set* functions and functions creating connection in these threads should be protected from the
+ * concurrent execution.
+ *
+ * Context contains schema searchpath, call home binds, TLS and SSH authentication data (username, keys,
+ * various certificates and callbacks).
+ *
+ * @param[in] context Client's thread-specific context provided by nc_client_get_thread_context().
+ */
+void nc_client_set_thread_context(void *context);
+
+/**
+ * @brief Get thread-specific client context for sharing with some other thread using
+ * nc_client_set_thread_context().
+ *
+ * @return Pointer to the client's context of the current thread.
+ */
+void *nc_client_get_thread_context(void);
+
+/**
  * @brief Initialize libssh and/or libssl/libcrypto for use in the client.
  */
 void nc_client_init(void);

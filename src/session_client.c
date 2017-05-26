@@ -62,9 +62,10 @@ static struct nc_client_context context_main = {
         .auth_password = sshauth_password,
         .auth_interactive = sshauth_interactive,
         .auth_privkey_passphrase = sshauth_privkey_passphrase
-    }
+    },
 #endif /* NC_ENABLED_SSH */
     /* .tls_ structures zeroed */
+    .refcount = 0
 };
 #endif
 
@@ -72,6 +73,11 @@ static void
 nc_client_context_free(void *ptr)
 {
     struct nc_client_context *c = (struct nc_client_context *)ptr;
+
+    if (--(c->refcount)) {
+        /* still used */
+        return;
+    }
 
 #ifdef __linux__
     /* in __linux__ we use static memory in the main thread,
@@ -81,6 +87,7 @@ nc_client_context_free(void *ptr)
     if (c != &context_main)
 #endif
     {
+        /* for the main thread the same is done in nc_client_destroy() */
         nc_client_set_schema_searchpath(NULL);
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
         nc_client_ch_del_bind(NULL, 0, 0);
@@ -123,6 +130,7 @@ nc_client_context_location(void)
         {
             e = calloc(1, sizeof *e);
             /* set default values */
+            e->refcount = 1;
 #ifdef NC_ENABLED_SSH
             e->ssh_opts.auth_pref[0].type = NC_SSH_AUTH_INTERACTIVE;
             e->ssh_opts.auth_pref[0].value = 3;
@@ -149,6 +157,35 @@ nc_client_context_location(void)
 }
 
 #define client_opts nc_client_context_location()->opts
+
+API void *
+nc_client_get_thread_context(void)
+{
+    return nc_client_context_location();
+}
+
+API void
+nc_client_set_thread_context(void *context)
+{
+    struct nc_client_context *old, *new;
+
+    if (!context) {
+        ERRARG(context);
+        return;
+    }
+
+    new = (struct nc_client_context *)context;
+    old = nc_client_context_location();
+    if (old == new) {
+        /* nothing to change */
+        return;
+    }
+
+    /* replace old by new, increase reference counter in the newly set context */
+    nc_client_context_free(old);
+    new->refcount++;
+    pthread_setspecific(nc_client_context_key, new);
+}
 
 API int
 nc_client_set_schema_searchpath(const char *path)
@@ -1230,6 +1267,16 @@ nc_client_init(void)
 API void
 nc_client_destroy(void)
 {
+    nc_client_set_schema_searchpath(NULL);
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+    nc_client_ch_del_bind(NULL, 0, 0);
+#endif
+#ifdef NC_ENABLED_SSH
+    nc_client_ssh_destroy_opts();
+#endif
+#ifdef NC_ENABLED_TLS
+    nc_client_tls_destroy_opts();
+#endif
     nc_destroy();
 }
 

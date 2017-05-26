@@ -138,6 +138,7 @@ struct nc_client_opts {
 
 /* ACCESS unlocked */
 struct nc_client_context {
+    unsigned int refcount;
     struct nc_client_opts opts;
 #ifdef NC_ENABLED_SSH
     struct nc_client_ssh_opts ssh_opts;

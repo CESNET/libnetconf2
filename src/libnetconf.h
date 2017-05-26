@@ -82,25 +82,12 @@
  * @page howtoinit Init and Thread-safety Information
  *
  * Before working with the library, it must be initialized using nc_client_init()
- * or nc_server_init(). Optionally, a client can use nc_client_set_schema_searchpath()
- * to set the path to a directory with modules that will be loaded from there if they
- * could not be downloaded from the server (it does not support \<get-schema\>).
- * However, to be able to create at least the \<get-schema\> RPC, this directory must
- * contain the module _ietf-netconf-monitoring_. If this directory is not set,
- * the default _libnetconf2_ schema directory is used that includes this module
- * and a few others.
- *
- * Based on how the library was compiled, also _libssh_ and/or
- * _libssh_/_libcrypto_ are initialized (for multi-threaded use) too. It is advised
- * to compile _libnetconf2_, for instance, with TLS support even if you do not want
- * to use _lnc2_ TLS functions, but only use _libssl/libcrypto_ functions in your
- * application. You can then use _libnetconf2_ cleanup function and do not
- * trouble yourself with the cleanup.
- *
- * To prevent any reachable memory at the end of your application, there
- * are complementary destroy functions available. If your application is
- * multi-threaded, call the destroy functions in the last thread, after all
- * the other threads have ended. In every other thread you should call
+ * or nc_server_init(). Based on how the library was compiled, also _libssh_ and/or
+ * _libssh_/_libcrypto_ are initialized (for multi-threaded use) too. To prevent
+ * any reachable memory at the end of your application, there are complementary
+ * destroy functions (nc_server_destroy() and nc_client_destroy() available. If your
+ * application is multi-threaded, call the destroy functions in the main thread,
+ * after all the other threads have ended. In every other thread you should call
  * nc_thread_destroy() just before it exits.
  *
  * If _libnetconf2_ is used in accordance with this information, there should
@@ -108,9 +95,33 @@
  * of _libssh_, _libssl_, and _libcrypto_, please refer to the corresponding project
  * documentation. _libnetconf2_ thread-safety information is below.
  *
- * Client is __NOT__ thread-safe and there is no access control in the client
- * functions at all. Server is __FULLY__ thread-safe meaning you can set all the
- * options simultaneously while listening for or accepting new sessions or
+ * Client
+ * ------
+ *
+ * Optionally, a client can use nc_client_set_schema_searchpath()
+ * to set the path to a directory with modules that will be loaded from there if they
+ * could not be downloaded from the server (it does not support \<get-schema\>).
+ * However, to be able to create at least the \<get-schema\> RPC, this directory must
+ * contain the module _ietf-netconf-monitoring_. If this directory is not set,
+ * the default _libnetconf2_ schema directory is used that includes this module
+ * and a few others.
+ *
+ * There are many other @ref howtoclientssh "SSH", @ref howtoclienttls "TLS" and @ref howtoclientch
+ * "Call Home" getter/setter functions to manipulate with various settings. All these settings (including
+ * the searchpath) are internally placed in a thread-specific context so they are independent and
+ * initialized to the default values within each new thread. However, the context can be shared among
+ * the threads using nc_client_get_thread_context() and nc_client_set_thread_context() functions. In such
+ * a case, be careful and avoid concurrent execution of the mentioned setters/getters and functions
+ * creating connection (no matter if it is a standard NETCONF connection or Call Home).
+ *
+ * In the client, it is thread-safe to work with distinguish NETCONF sessions since the client
+ * settings are thread-specific as described above.
+ *
+ * Server
+ * ------
+ *
+ * Server is __FULLY__ thread-safe meaning you can set all the (thread-shared in contrast to
+ * client) options simultaneously while listening for or accepting new sessions or
  * polling the existing ones. It is even safe to poll one session in several
  * pollsession structures or one pollsession structure in several threads. Generally,
  * servers can use more threads without any problems as long as they keep their workflow sane
@@ -124,8 +135,11 @@
  * - nc_client_init()
  * - nc_client_destroy()
  *
- * - nc_client_set_schema_searchpath()
  * - nc_client_get_schema_searchpath()
+ * - nc_client_set_schema_searchpath()
+ *
+ * - nc_client_get_thread_context()
+ * - nc_client_set_thread_context()
  *
  * Available in __nc_server.h__.
  *
@@ -151,6 +165,7 @@
  * have setters and getters so that there is no need to duplicate them in
  * a client.
  *
+ * @anchor howtoclientssh
  * SSH
  * ===
  *
@@ -195,7 +210,7 @@
  * - nc_connect_libssh()
  * - nc_connect_ssh_channel()
  *
- *
+ * @anchor howtoclienttls
  * TLS
  * ===
  *
@@ -240,6 +255,7 @@
  * - nc_connect_inout()
  *
  *
+ * @anchor howtoclientch
  * Call Home
  * =========
  *

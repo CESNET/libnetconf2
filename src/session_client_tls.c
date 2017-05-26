@@ -241,6 +241,8 @@ _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts)
     free(opts->crl_file);
     free(opts->crl_dir);
     X509_STORE_free(opts->crl_store);
+
+    memset(opts, 0, sizeof *opts);
 }
 
 void

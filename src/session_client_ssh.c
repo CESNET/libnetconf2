@@ -100,6 +100,8 @@ _nc_client_ssh_destroy_opts(struct nc_client_ssh_opts *opts)
     }
     free(opts->keys);
     free(opts->username);
+    opts->keys = NULL;
+    opts->username = NULL;
 }
 
 void
