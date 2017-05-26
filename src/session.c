@@ -68,7 +68,7 @@ nc_gettimespec(struct timespec *ts)
 
 /* ts1 < ts2 -> +, ts1 > ts2 -> -, returns milliseconds */
 int32_t
-nc_difftimespec(struct timespec *ts1, struct timespec *ts2)
+nc_difftimespec(const struct timespec *ts1, const struct timespec *ts2)
 {
     int64_t nsec_diff = 0;
 
