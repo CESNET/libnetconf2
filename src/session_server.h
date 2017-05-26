@@ -245,8 +245,8 @@ uint16_t nc_ps_session_count(struct nc_pollsession *ps);
 #define NC_PSPOLL_ERROR 0x0080         /**< Other fatal errors (they are printed). */
 
 #ifdef NC_ENABLED_SSH
-#   define NC_PSPOLL_SSH_MSG 0x0080       /**< SSH message received (and processed, if relevant, only with SSH support). */
-#   define NC_PSPOLL_SSH_CHANNEL 0x0100   /**< New SSH channel opened on an existing session (only with SSH support). */
+#   define NC_PSPOLL_SSH_MSG 0x00100      /**< SSH message received (and processed, if relevant, only with SSH support). */
+#   define NC_PSPOLL_SSH_CHANNEL 0x0200   /**< New SSH channel opened on an existing session (only with SSH support). */
 #endif
 
 /**
