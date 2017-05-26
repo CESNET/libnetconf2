@@ -112,7 +112,7 @@ if(ENABLE_SSH)
 endif()
 
 # dependencies - openssl
-if(ENABLE_TLS OR ENABLE_DNSSEC)
+if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
     find_package(OpenSSL REQUIRED)
     if (ENABLE_TLS)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_TLS")
