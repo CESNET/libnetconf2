@@ -1,0 +1,22 @@
+from distutils.core import setup, Extension
+
+netconf2Module = Extension("netconf2",
+                           sources=["${CMAKE_CURRENT_SOURCE_DIR}/netconf.c", "${CMAKE_CURRENT_SOURCE_DIR}/session.c", 
+                                    "${CMAKE_CURRENT_SOURCE_DIR}/ssh.c", "${CMAKE_CURRENT_SOURCE_DIR}/tls.c"],
+                           depends=["${CMAKE_CURRENT_SOURCE_DIR}/netconf.h"],
+                           libraries=["netconf2"],
+                           extra_compile_args=["-Wall", "-I${CMAKE_CURRENT_SOURCE_DIR}/../src/", ],
+                           extra_link_args=["-L${CMAKE_CURRENT_BINARY_DIR}/.."],
+                        )
+
+setup(name='netconf2',
+      version='${LIBNETCONF2_VERSION}',
+      author='Radek Krejci',
+      author_email='rkrejci@cesnet.cz',
+      description='libnetconf2 Python bindings.',
+      long_description = 'TBD',
+      url='https://github.com/CESNET/libnetconf2',
+      ext_modules=[netconf2Module],
+      platforms=['Linux'],
+      license='BSD License',
+      )
