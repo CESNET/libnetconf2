@@ -45,6 +45,7 @@
 #include "libnetconf.h"
 
 struct nc_client_context *nc_client_context_location(void);
+int nc_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx);
 
 #define client_opts nc_client_context_location()->opts
 #define ssh_opts nc_client_context_location()->ssh_opts
@@ -1485,22 +1486,10 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client
      * SSH session is established and netconf channel opened, create a NETCONF session. (Application layer)
      */
 
-    /* assign context (dicionary needed for handshake) */
-    if (!ctx) {
-        if (client_opts.schema_searchpath) {
-            ctx = ly_ctx_new(client_opts.schema_searchpath);
-        } else {
-            ctx = ly_ctx_new(SCHEMAS_DIR);
-        }
-        /* definitely should not happen, but be ready */
-        if (!ctx && !(ctx = ly_ctx_new(NULL))) {
-            /* that's just it */
-            goto fail;
-        }
-    } else {
-        session->flags |= NC_SESSION_SHAREDCTX;
+    if (nc_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
+        goto fail;
     }
-    session->ctx = ctx;
+    ctx = session->ctx;
 
     /* NETCONF handshake */
     if (nc_handshake(session) != NC_MSG_HELLO) {
@@ -1613,22 +1602,10 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
         goto fail;
     }
 
-    /* assign context (dicionary needed for handshake) */
-    if (!ctx) {
-        if (client_opts.schema_searchpath) {
-            ctx = ly_ctx_new(client_opts.schema_searchpath);
-        } else {
-            ctx = ly_ctx_new(SCHEMAS_DIR);
-        }
-        /* definitely should not happen, but be ready */
-        if (!ctx && !(ctx = ly_ctx_new(NULL))) {
-            /* that's just it */
-            goto fail;
-        }
-    } else {
-        session->flags |= NC_SESSION_SHAREDCTX;
+    if (nc_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
+        goto fail;
     }
-    session->ctx = ctx;
+    ctx = session->ctx;
 
     /* NETCONF handshake */
     if (nc_handshake(session) != NC_MSG_HELLO) {
@@ -1694,17 +1671,10 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
         goto fail;
     }
 
-    /* assign context (dicionary needed for handshake) */
-    if (!ctx) {
-        if (client_opts.schema_searchpath) {
-            ctx = ly_ctx_new(client_opts.schema_searchpath);
-        } else {
-            ctx = ly_ctx_new(SCHEMAS_DIR);
-        }
-    } else {
-        new_session->flags |= NC_SESSION_SHAREDCTX;
+    if (nc_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
+        goto fail;
     }
-    new_session->ctx = ctx;
+    ctx = session->ctx;
 
     /* NETCONF handshake */
     if (nc_handshake(new_session) != NC_MSG_HELLO) {

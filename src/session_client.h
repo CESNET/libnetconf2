@@ -44,6 +44,12 @@
  * The location is searched when connecting to a NETCONF server and building
  * YANG context for further processing of the NETCONF messages and data.
  *
+ * The searchpath is also used to store schemas retreived via \<get-schema\>
+ * operation - if the schema is not found in searchpath neither via schema
+ * callback provided via nc_client_set_schema_callback() and server supports
+ * the NETCONF \<get-schema\> operation, the schema is retrieved this way and
+ * stored into the searchpath (if specified).
+ *
  * @param[in] path Directory where to search for YANG/YIN schemas.
  * @return 0 on success, 1 on (memory allocation) failure.
  */
@@ -57,13 +63,33 @@ int nc_client_set_schema_searchpath(const char *path);
 const char *nc_client_get_schema_searchpath(void);
 
 /**
+ * @brief Set callback function to get missing schemas.
+ *
+ * @param[in] clb Callback responsible for returning the missing model.
+ * @param[in] user_data Arbitrary data that will always be passed to the callback \p clb.
+ * @return 0 on success, 1 on (memory allocation) failure.
+ */
+int nc_client_set_schema_callback(ly_module_imp_clb clb, void *user_data);
+
+/**
+ * @brief Get callback function used to get missing schemas.
+ *
+ * @param[out] user_data Optionally return the private data set with the callback.
+ * Note that the caller is responsible for freeing the private data, so before
+ * changing the callback, private data used for the previous callback should be
+ * freed.
+ * @return Pointer to the set callback, NULL if no such callback was set.
+ */
+ly_module_imp_clb nc_client_get_schema_callback(void **user_data);
+
+/**
  * @brief Use the provided thread-specific client's context in the current thread.
  *
  * Note that from this point the context is shared with the thread from which the context was taken and any
  * nc_client_*set* functions and functions creating connection in these threads should be protected from the
  * concurrent execution.
  *
- * Context contains schema searchpath, call home binds, TLS and SSH authentication data (username, keys,
+ * Context contains schema searchpath/callback, call home binds, TLS and SSH authentication data (username, keys,
  * various certificates and callbacks).
  *
  * @param[in] context Client's thread-specific context provided by nc_client_get_thread_context().

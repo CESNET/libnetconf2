@@ -98,17 +98,18 @@
  * Client
  * ------
  *
- * Optionally, a client can use nc_client_set_schema_searchpath()
- * to set the path to a directory with modules that will be loaded from there if they
- * could not be downloaded from the server (it does not support \<get-schema\>).
- * However, to be able to create at least the \<get-schema\> RPC, this directory must
- * contain the module _ietf-netconf-monitoring_. If this directory is not set,
- * the default _libnetconf2_ schema directory is used that includes this module
- * and a few others.
+ * Optionally, a client can specify two alternative ways to get schemas needed when connecting
+ * with a server. The primary way is to read local files in searchpath (and its subdirectories)
+ * specified via nc_client_set_schema_searchpath(). Alternatively, _libnetconf2_ can use callback
+ * provided via nc_client_set_schema_callback(). If these ways do not succeed and the server
+ * implements NETCONF \<get-schema\> operation, the schema is retrieved from the server and stored
+ * localy into the searchpath (if specified) for a future use. If none of these methods succeed to
+ * load particular schema, the data from this schema are ignored during the communication with the
+ * server.
  *
- * There are many other @ref howtoclientssh "SSH", @ref howtoclienttls "TLS" and @ref howtoclientch
- * "Call Home" getter/setter functions to manipulate with various settings. All these settings (including
- * the searchpath) are internally placed in a thread-specific context so they are independent and
+ * Besides the mentioned setters, there are many other @ref howtoclientssh "SSH", @ref howtoclienttls "TLS"
+ * and @ref howtoclientch "Call Home" getter/setter functions to manipulate with various settings. All these
+ * settings are internally placed in a thread-specific context so they are independent and
  * initialized to the default values within each new thread. However, the context can be shared among
  * the threads using nc_client_get_thread_context() and nc_client_set_thread_context() functions. In such
  * a case, be careful and avoid concurrent execution of the mentioned setters/getters and functions
@@ -137,6 +138,8 @@
  *
  * - nc_client_get_schema_searchpath()
  * - nc_client_set_schema_searchpath()
+ * - nc_client_get_schema_callback()
+ * - nc_client_set_schema_callback()
  *
  * - nc_client_get_thread_context()
  * - nc_client_set_thread_context()

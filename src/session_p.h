@@ -125,6 +125,8 @@ struct nc_server_tls_opts {
 /* ACCESS unlocked */
 struct nc_client_opts {
     char *schema_searchpath;
+    ly_module_imp_clb schema_clb;
+    void *schema_clb_data;
 
     struct nc_bind {
         const char *address;
