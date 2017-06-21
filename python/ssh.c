@@ -29,6 +29,11 @@ ncSSHFree(ncSSHObject *self)
     Py_XDECREF(self->pubkeys);  /* PyList */
     Py_XDECREF(self->privkeys); /* PyList */
 
+    Py_XDECREF(self->clb_password);
+    Py_XDECREF(self->clb_password_data);
+    Py_XDECREF(self->clb_interactive);
+    Py_XDECREF(self->clb_interactive_data);
+
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
@@ -55,15 +60,22 @@ ncSSHInit(ncSSHObject *self, PyObject *args, PyObject *kwds)
     }
 
     /* username and password */
+    Py_XDECREF(self->username);
+    Py_XDECREF(self->password);
+
     if (user) {
         Py_XDECREF(self->username);
         Py_INCREF(user);
         self->username = user;
+    } else {
+        self->username = NULL;
     }
     if (password) {
         Py_XDECREF(self->password);
         Py_INCREF(password);
         self->password = password;
+    } else {
+        self->password = NULL;
     }
 
     /* keys */
@@ -99,6 +111,12 @@ ncSSHInit(ncSSHObject *self, PyObject *args, PyObject *kwds)
 
     /* check that the keys pairs together */
 
+    /* forget callbacks */
+    Py_CLEAR(self->clb_password);
+    Py_CLEAR(self->clb_password_data);
+    Py_CLEAR(self->clb_interactive);
+    Py_CLEAR(self->clb_interactive_data);
+
     return 0;
 
 error:
@@ -107,6 +125,10 @@ error:
     Py_CLEAR(self->password);
     Py_CLEAR(self->pubkeys);
     Py_CLEAR(self->privkeys);
+    Py_CLEAR(self->clb_password);
+    Py_CLEAR(self->clb_password_data);
+    Py_CLEAR(self->clb_interactive);
+    Py_CLEAR(self->clb_interactive_data);
 
     return -1;
 }
@@ -174,7 +196,7 @@ ncSSHSetPassword(ncSSHObject *self, PyObject *value, void *closure)
     if (!value) {
         Py_XDECREF(self->password);
     } else if (!PyUnicode_Check(value)) {
-        PyErr_SetString(PyExc_TypeError, "The attribute value must be a string.");
+        PyErr_SetString(PyExc_TypeError, "The value must be a string.");
         return -1;
     } else {
         Py_XDECREF(self->password);
@@ -183,6 +205,70 @@ ncSSHSetPassword(ncSSHObject *self, PyObject *value, void *closure)
     self->password = value;
 
     return 0;
+}
+
+static PyObject *
+ncSSHSetAuthPasswordClb(ncSSHObject *self, PyObject *args, PyObject *keywords)
+{
+    PyObject *clb, *data;
+    static char *kwlist[] = {"func", "priv", NULL};
+
+    if (!PyArg_ParseTupleAndKeywords(args, keywords, "O|O:ncSSHSetAuthPasswordClb", kwlist, &clb, &data)) {
+        return NULL;
+    }
+
+    if (!clb) {
+        Py_XDECREF(self->clb_password);
+        Py_XDECREF(self->clb_password_data);
+        data = NULL;
+    } else if (!PyCallable_Check(clb)) {
+        PyErr_SetString(PyExc_TypeError, "The callback must be a function.");
+        return NULL;
+    } else {
+        Py_XDECREF(self->clb_password);
+        Py_XDECREF(self->clb_password_data);
+
+        Py_INCREF(clb);
+        if (data) {
+            Py_INCREF(data);
+        }
+    }
+    self->clb_password = clb;
+    self->clb_password_data = data;
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+ncSSHSetAuthInteractiveClb(ncSSHObject *self, PyObject *args, PyObject *keywords)
+{
+    PyObject *clb, *data;
+    static char *kwlist[] = {"func", "priv", NULL};
+
+    if (!PyArg_ParseTupleAndKeywords(args, keywords, "O|O:ncSSHSetAuthInteractiveClb", kwlist, &clb, &data)) {
+        return NULL;
+    }
+
+    if (!clb) {
+        Py_XDECREF(self->clb_interactive);
+        Py_XDECREF(self->clb_interactive_data);
+        data = NULL;
+    } else if (!PyCallable_Check(clb)) {
+        PyErr_SetString(PyExc_TypeError, "The callback must be a function.");
+        return NULL;
+    } else {
+        Py_XDECREF(self->clb_interactive);
+        Py_XDECREF(self->clb_interactive_data);
+
+        Py_INCREF(clb);
+        if (data) {
+            Py_INCREF(data);
+        }
+    }
+    self->clb_interactive = clb;
+    self->clb_interactive_data = data;
+
+    Py_RETURN_NONE;
 }
 
 /*
@@ -195,6 +281,13 @@ static PyGetSetDef ncSSHGetSetters[] = {
     {NULL} /* Sentinel */
 };
 
+static PyMethodDef ncSSHMethods[] = {
+        {"setAuthPasswordClb", (PyCFunction)ncSSHSetAuthPasswordClb, METH_VARARGS | METH_KEYWORDS,
+         "SSH password authentication callback."},
+        {"setAuthInteractiveClb", (PyCFunction)ncSSHSetAuthInteractiveClb, METH_VARARGS | METH_KEYWORDS,
+         "SSH keyboard-interactive authentication callback."},
+        {NULL, NULL, 0, NULL}
+};
 
 PyDoc_STRVAR(ncSSHDoc,
              "Settings for SSH authentication\n"
@@ -234,7 +327,7 @@ PyTypeObject ncSSHType = {
     0,                         /* tp_weaklistoffset */
     0,                         /* tp_iter */
     0,                         /* tp_iternext */
-    0,                         /* tp_methods */
+    ncSSHMethods,              /* tp_methods */
     0,                         /* tp_members */
     ncSSHGetSetters,           /* tp_getset */
     0,                         /* tp_base */

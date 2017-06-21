@@ -20,6 +20,7 @@
 #include <string.h>
 #include <libyang/libyang.h>
 
+#include "../src/config.h"
 #include "netconf.h"
 
 typedef struct {
@@ -34,12 +35,68 @@ auth_password_clb(const char *UNUSED(username), const char *UNUSED(hostname), vo
     /* password is provided as priv when setting up the callback */
     return strdup((char *)priv);
 }
+
+char *
+auth_password_pyclb(const char *username, const char *hostname, void *priv)
+{
+    PyObject *arglist, *result;
+    ncSSHObject *ssh = (ncSSHObject*)priv;
+    char *password = NULL;
+
+    arglist = Py_BuildValue("(ssO)", username, hostname, ssh->clb_password_data ? ssh->clb_password_data : Py_None);
+    if (!arglist) {
+        PyErr_Print();
+        return NULL;
+    }
+    result = PyObject_CallObject(ssh->clb_password, arglist);
+    Py_DECREF(arglist);
+
+    if (result) {
+        if (!PyUnicode_Check(result)) {
+            PyErr_SetString(PyExc_TypeError, "Invalid password authentication callback result.");
+        } else {
+            password = strdup(PyUnicode_AsUTF8(result));
+            Py_DECREF(result);
+        }
+    }
+
+    return password;
+}
+
 char *
 auth_interactive_clb(const char *UNUSED(auth_name), const char *UNUSED(instruction), const char *UNUSED(prompt),
                      int UNUSED(echo), void *priv)
 {
     /* password is provided as priv when setting up the callback */
     return strdup((char *)priv);
+}
+
+char *
+auth_interactive_pyclb(const char *auth_name, const char *instruction, const char *prompt, int UNUSED(echo), void *priv)
+{
+    PyObject *arglist, *result;
+    ncSSHObject *ssh = (ncSSHObject*)priv;
+    char *password = NULL;
+
+    arglist = Py_BuildValue("(sssO)", auth_name, instruction, prompt, ssh->clb_password_data ? ssh->clb_password_data : Py_None);
+    if (!arglist) {
+        PyErr_Print();
+        return NULL;
+    }
+    result = PyObject_CallObject(ssh->clb_interactive, arglist);
+    Py_DECREF(arglist);
+
+    if (result) {
+        if (!PyUnicode_Check(result)) {
+            PyErr_SetString(PyExc_TypeError, "Invalid password authentication callback result.");
+        } else {
+            password = strdup(PyUnicode_AsUTF8(result));
+            Py_DECREF(result);
+        }
+    }
+
+    return password;
+
 }
 
 char *
@@ -118,6 +175,13 @@ ncSessionInit(ncSessionObject *self, PyObject *args, PyObject *kwds)
                                                        (void *)PyUnicode_AsUTF8(((ncSSHObject*)transport)->password));
                 nc_client_ssh_set_auth_privkey_passphrase_clb(&auth_privkey_passphrase_clb,
                                                               (void *)PyUnicode_AsUTF8(((ncSSHObject*)transport)->password));
+            } else {
+                if (((ncSSHObject *)transport)->clb_password) {
+                    nc_client_ssh_set_auth_password_clb(&auth_password_pyclb, (void *)transport);
+                }
+                if (((ncSSHObject *)transport)->clb_interactive) {
+                    nc_client_ssh_set_auth_interactive_clb(&auth_interactive_pyclb, (void *)transport);
+                }
             }
         }
 

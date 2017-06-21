@@ -49,6 +49,11 @@ typedef struct {
     PyObject *password;  /* plaintext password for authentication or unlocking a private key */
     PyObject *pubkeys;   /* public keys for the key authentication, both pubkey and privkey must be set */
     PyObject *privkeys;  /* private key for the key authentication, both pubkey and privkey must be set */
+
+    PyObject *clb_password;          /* callback for SSH password authentication */
+    PyObject *clb_password_data;     /* private data for the SSH password authentication callback */
+    PyObject *clb_interactive;       /* callback for SSH keyboard-interactive authentication */
+    PyObject *clb_interactive_data;  /* private data for the SSH keyboard-interactive authentication callback */
 } ncSSHObject;
 
 typedef struct {
