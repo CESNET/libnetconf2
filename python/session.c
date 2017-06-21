@@ -77,7 +77,7 @@ ncSessionNew(PyTypeObject *type, PyObject *args, PyObject *kwds)
         self->session = NULL;
 
         /* prepare libyang context or use the one already present in the session */
-        self->ctx = ly_ctx_new(NULL);
+        self->ctx = ly_ctx_new(SCHEMAS_DIR);
         if (!self->ctx) {
             Py_DECREF(self);
             return NULL;
