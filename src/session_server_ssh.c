@@ -1316,7 +1316,7 @@ nc_ssh_bind_add_hostkeys(ssh_bind sbind, const char **hostkeys, uint8_t hostkey_
         free(privkey_data);
 
         if (ret != SSH_OK) {
-            ERR("Failed to set hostkey \"%s\" (%s).", hostkeys[i], ssh_get_error(sbind));
+            ERR("Failed to set hostkey \"%s\" (%d: %s).", hostkeys[i], ret, ssh_get_error(sbind));
             return -1;
         }
     }
