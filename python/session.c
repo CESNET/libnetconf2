@@ -26,6 +26,7 @@
 typedef struct {
     PyObject_HEAD
     struct ly_ctx *ctx;
+    unsigned int *ctx_counter;
     struct nc_session *session;
 } ncSessionObject;
 
@@ -115,7 +116,12 @@ ncSessionFree(ncSessionObject *self)
     PyErr_Fetch(&err_type, &err_value, &err_traceback);
 
     nc_session_free(self->session, NULL);
-    ly_ctx_destroy(self->ctx, NULL);
+
+    (*self->ctx_counter)--;
+    if (!(*self->ctx_counter)) {
+        ly_ctx_destroy(self->ctx, NULL);
+        free(self->ctx_counter);
+    }
 
     /* restore the saved exception state */
     PyErr_Restore(err_type, err_value, err_traceback);
@@ -132,6 +138,7 @@ ncSessionNew(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (self != NULL) {
         /* NULL initiation */
         self->session = NULL;
+        self->ctx_counter = calloc(1, sizeof *self->ctx_counter);
 
         /* prepare libyang context or use the one already present in the session */
         self->ctx = ly_ctx_new(SCHEMAS_DIR);
@@ -139,6 +146,7 @@ ncSessionNew(PyTypeObject *type, PyObject *args, PyObject *kwds)
             Py_DECREF(self);
             return NULL;
         }
+        (*self->ctx_counter)++;
     }
 
     return (PyObject *)self;
@@ -211,6 +219,33 @@ ncSessionInit(ncSessionObject *self, PyObject *args, PyObject *kwds)
     self->session = session;
 
     return 0;
+}
+
+static PyObject *
+newChannel(PyObject *self)
+{
+    ncSessionObject *new;
+
+    if (nc_session_get_ti(((ncSessionObject *)self)->session) != NC_TI_LIBSSH) {
+        PyErr_SetString(PyExc_TypeError, "The session must be on SSH.");
+        return NULL;
+    }
+
+    new = (ncSessionObject *)self->ob_type->tp_alloc(self->ob_type, 0);
+    if (!new) {
+        return NULL;
+    }
+
+    new->ctx = ((ncSessionObject *)self)->ctx;
+    new->session = nc_connect_ssh_channel(((ncSessionObject *)self)->session, new->ctx);
+    if (!new->session) {
+        Py_DECREF(new);
+        return NULL;
+    }
+
+    new->ctx_counter = ((ncSessionObject *)self)->ctx_counter;
+    (*new->ctx_counter)++;
+    return (PyObject*)new;
 }
 
 static PyObject *
@@ -332,6 +367,10 @@ static PyMemberDef ncSessionMembers[] = {
 };
 
 static PyMethodDef ncSessionMethods[] = {
+    {"newChannel", (PyCFunction)newChannel, METH_NOARGS,
+     "newChannel()\n--\n\n"
+     "Create another NETCONF session on existing SSH session using separated SSH channel\n\n"
+     ":returns: New netconf2.Session instance.\n"},
     {NULL}  /* Sentinel */
 };
 
