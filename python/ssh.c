@@ -283,20 +283,17 @@ static PyGetSetDef ncSSHGetSetters[] = {
 
 static PyMethodDef ncSSHMethods[] = {
         {"setAuthPasswordClb", (PyCFunction)ncSSHSetAuthPasswordClb, METH_VARARGS | METH_KEYWORDS,
-         "SSH password authentication callback."},
+         "SSH password authentication callback.\n\n"
+         "setAuthPasswordClb(func, priv=None)\n"},
         {"setAuthInteractiveClb", (PyCFunction)ncSSHSetAuthInteractiveClb, METH_VARARGS | METH_KEYWORDS,
-         "SSH keyboard-interactive authentication callback."},
+         "setAuthInteractiveClb(func, priv=None)\n--\n\n"
+         "SSH keyboard-interactive authentication callback.\n\n"},
         {NULL, NULL, 0, NULL}
 };
 
 PyDoc_STRVAR(ncSSHDoc,
-             "Settings for SSH authentication\n"
-             "netconf2.SSH([user, password]) -> password authentication of the specified user\n"
-             "netconf2.SSH([user, password]) -> password authentication of the specified user\n"
-             "Arguments:\n"
-             "\thost         - address of the server (default localhost)\n"
-             "\tport         - port where to connect to (default 830)\n"
-             "\ttransport    - NETCONF transport protocol (default SSH), supported SSH or TLS\n");
+             "Settings for SSH authentication.\n\n"
+             "Arguments: (user=None, password=None)\n");
 
 PyTypeObject ncSSHType = {
     PyVarObject_HEAD_INIT(NULL, 0)

@@ -160,12 +160,8 @@ static PyGetSetDef ncTLSGetSetters[] = {
 };
 
 PyDoc_STRVAR(ncTLSDoc,
-             "Settings for TLS authentication\n"
-             "netconf2.TLS([cert, key, ca_file, crl_file]) -> certificate TLS authentication with trusted and revocated certificates in files\n"
-             "netconf2.SSH([cert, key, ca_dir, crl_dir]) -> certificate TLS authentication with trusted and revocated certificates in directories\n"
-             "Arguments:\n"
-             "\tcert      - client certificate file\n"
-             "\tkey       - private key for the client certificate\n");
+             "Settings for TLS authentication\n\n"
+             "Arguments: (cert=None, key=None, ca_file=None, ca_dir=None, crl_file=None, crl_dir=None)\n");
 
 PyTypeObject ncTLSType = {
     PyVarObject_HEAD_INIT(NULL, 0)

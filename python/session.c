@@ -336,12 +336,8 @@ static PyMethodDef ncSessionMethods[] = {
 };
 
 PyDoc_STRVAR(sessionDoc,
-             "Create the NETCONF Session\n"
-             "netconf2.Session([host, port, transport]) -> connect to the NETCONF server\n"
-             "Arguments:\n"
-             "\thost         - address of the server (default localhost)\n"
-             "\tport         - port where to connect to (default 830)\n"
-             "\ttransport    - NETCONF transport protocol (default SSH), supported SSH or TLS\n");
+             "The NETCONF Session object.\n\n"
+             "Arguments: (host='localhost', port=830, transport=None)\n");
 
 PyTypeObject ncSessionType = {
     PyVarObject_HEAD_INIT(NULL, 0)

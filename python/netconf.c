@@ -54,7 +54,7 @@ setSyslog(PyObject *self, PyObject *args, PyObject *keywds)
 	char* name = NULL;
 	static char* logname = NULL;
 	static int option = LOG_PID;
-	static int facility = LOG_DAEMON;
+	static int facility = LOG_USER;
 
 	static char *kwlist[] = {"enabled", "name", "option", "facility", NULL};
 
@@ -99,15 +99,39 @@ setVerbosity(PyObject *self, PyObject *args, PyObject *keywds)
 }
 
 static PyMethodDef netconf2Methods[] = {
-		{"setVerbosity", (PyCFunction)setVerbosity, METH_VARARGS | METH_KEYWORDS, "Set verbose level (0-3)."},
-		{"setSyslog", (PyCFunction)setSyslog, METH_VARARGS | METH_KEYWORDS, "Set application settings for syslog."},
+		{"setVerbosity", (PyCFunction)setVerbosity, METH_VARARGS | METH_KEYWORDS,
+		 "setVerbosity(level)\n--\n\n"
+		 "Set verbose level\n\n"
+		 ":param level: Verbosity level (0 - errors, 1 - warnings, 2 - verbose, 3 - debug)\n"
+		 ":type level: int\n"
+		 ":returns: None\n"},
+		{"setSyslog", (PyCFunction)setSyslog, METH_VARARGS | METH_KEYWORDS,
+		 "setSyslog(enabled[, name=None][, option=LOG_PID][, facility=LOG_USER])\n--\n\n"
+		 "Set application settings for syslog.\n\n"
+		 ":param enabled: Flag to enable/disable logging into syslog.\n"
+		 ":type enabled: bool\n"
+		 ":param name: Identifier (program name is set by default).\n"
+		 ":type name: string\n"
+		 ":param option: ORed value of syslog options (LOG_PID by default).\n"
+		 ":type option: int\n"
+		 ":param facility: Type of the program logging the message (LOG_USER by default).\n"
+		 ":type facility: int\n"
+		 ":returns: None\n\n"
+		 ".. seealso:: syslog.openlog\n"},
 		{NULL, NULL, 0, NULL}
 };
+
+static char netconf2Docs[] =
+    "NETCONF Protocol client-side implementation using libnetconf2\n"
+    "\n"
+    "netconf2 is a wrapper around libnetconf2 functions designed for NETCONF\n"
+    "clients. it provides a higher level API than the original libnetconf2 to\n"
+    "better fit the usage in Python.\n";
 
 static struct PyModuleDef ncModule = {
 		PyModuleDef_HEAD_INIT,
 		"netconf2",
-		"NETCONF Protocol implementation using libnetconf2",
+		netconf2Docs,
 		-1,
 		netconf2Methods,
 };

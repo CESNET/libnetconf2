@@ -11,6 +11,8 @@ if (PYTHON)
     endif()
 
     configure_file(${SETUP_PY_IN} ${SETUP_PY})
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/docs/Makefile.in ${CMAKE_CURRENT_SOURCE_DIR}/docs/Makefile)
 	add_custom_target(pyapi ALL COMMAND ${PYTHON} ${SETUP_PY} build -b ${PYAPI_BUILD_DIR} ${DEBUG})
+	add_custom_target(pyapidoc COMMAND make -f ${CMAKE_CURRENT_SOURCE_DIR}/docs/Makefile html)
     install(CODE "execute_process(COMMAND ${PYTHON} ${SETUP_PY} build -b ${PYAPI_BUILD_DIR} install --prefix=${CMAKE_INSTALL_PREFIX})")
 endif()
