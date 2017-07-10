@@ -1312,11 +1312,14 @@ nc_ssh_bind_add_hostkeys(ssh_bind sbind, const char **hostkeys, uint8_t hostkey_
         if (privkey_data && unlink(privkey_path)) {
             WRN("Removing a temporary host key file \"%s\" failed (%s).", privkey_path, strerror(errno));
         }
-        free(privkey_path);
         free(privkey_data);
 
         if (ret != SSH_OK) {
-            ERR("Failed to set hostkey \"%s\" (%d: %s).", hostkeys[i], ret, ssh_get_error(sbind));
+            ERR("Failed to set hostkey \"%s\" (%s).", hostkeys[i], privkey_path);
+        }
+        free(privkey_path);
+
+        if (ret != SSH_OK) {
             return -1;
         }
     }
