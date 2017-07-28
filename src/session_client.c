@@ -627,7 +627,7 @@ nc_ctx_fill_yl(struct nc_session *session, ly_module_imp_clb user_clb, void *use
         goto cleanup;
     }
 
-    modules = lyd_find_xpath(data_rpl->data, "/ietf-yang-library:modules-state/module");
+    modules = lyd_find_path(data_rpl->data, "/ietf-yang-library:modules-state/module");
     if (!modules || !modules->number) {
         ERR("No yang-library modules information for session %u.", session->id);
         goto cleanup;

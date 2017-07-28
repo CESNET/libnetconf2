@@ -351,7 +351,6 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
     const struct lys_module *module;
     struct nc_server_error *err;
     struct lyd_node *child, *data = NULL;
-    const struct lys_node *sdata = NULL;
 
     LY_TREE_FOR(rpc->child, child) {
         if (!strcmp(child->schema->name, "identifier")) {
@@ -399,13 +398,6 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
         return NULL;
     }
 
-    sdata = ly_ctx_get_node(server_opts.ctx, NULL, "/ietf-netconf-monitoring:get-schema/output/data");
-    if (!sdata) {
-        ERRINT;
-        free(model_data);
-        return NULL;
-    }
-
     data = lyd_new_path(NULL, server_opts.ctx, "/ietf-netconf-monitoring:get-schema/data", model_data,
                         LYD_ANYDATA_STRING, LYD_PATH_OPT_OUTPUT);
     if (!data || lyd_validate(&data, LYD_OPT_RPCREPLY, NULL)) {
@@ -427,7 +419,8 @@ nc_clb_default_close_session(struct lyd_node *UNUSED(rpc), struct nc_session *se
 API int
 nc_server_init(struct ly_ctx *ctx)
 {
-    const struct lys_node *rpc;
+    struct ly_set *set;
+    const struct lys_module *mod;
 
     if (!ctx) {
         ERRARG("ctx");
@@ -437,15 +430,23 @@ nc_server_init(struct ly_ctx *ctx)
     nc_init();
 
     /* set default <get-schema> callback if not specified */
-    rpc = ly_ctx_get_node(ctx, NULL, "/ietf-netconf-monitoring:get-schema");
-    if (rpc && !rpc->priv) {
-        lys_set_private(rpc, nc_clb_default_get_schema);
+    mod = ly_ctx_get_module(ctx, "ietf-netconf-monitoring", NULL);
+    if (mod) {
+        set = lys_find_path(mod, NULL, "/get-schema");
+        if (!set->set.s[0]->priv) {
+            lys_set_private(set->set.s[0], nc_clb_default_get_schema);
+        }
+        ly_set_free(set);
     }
 
     /* set default <close-session> callback if not specififed */
-    rpc = ly_ctx_get_node(ctx, NULL, "/ietf-netconf:close-session");
-    if (rpc && !rpc->priv) {
-        lys_set_private(rpc, nc_clb_default_close_session);
+    mod = ly_ctx_get_module(ctx, "ietf-netconf", NULL);
+    if (mod) {
+        set = lys_find_path(mod, NULL, "/close-session");
+        if (!set->set.s[0]->priv) {
+            lys_set_private(set->set.s[0], nc_clb_default_close_session);
+        }
+        ly_set_free(set);
     }
 
     server_opts.ctx = ctx;
@@ -1324,7 +1325,8 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                 ret = NC_PSPOLL_ERROR;
             } else if (r == 1) {
                 /* no one else is currently working with the session, so we can, otherwise skip it */
-                if (ps->sessions[i].state == NC_PS_STATE_NONE) {
+                switch (ps->sessions[i].state) {
+                case NC_PS_STATE_NONE:
                     if (cur_session->status == NC_STATUS_RUNNING) {
                         /* session is fine, work with it */
                         ps->sessions[i].state = NC_PS_STATE_BUSY;
@@ -1358,9 +1360,16 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                         }
                         ps->sessions[i].state = NC_PS_STATE_INVALID;
                     }
-                } else if (ps->sessions[i].state == NC_PS_STATE_BUSY) {
+                    break;
+                case NC_PS_STATE_BUSY:
                     /* it definitely should not be busy because we have the lock */
                     ERRINT;
+                    ret = NC_PSPOLL_ERROR;
+                    break;
+                case NC_PS_STATE_INVALID:
+                    /* skip this session */
+                    ret = NC_PSPOLL_TIMEOUT;
+                    break;
                 }
 
                 /* keep the session locked only in this one case */
