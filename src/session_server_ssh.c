@@ -751,7 +751,9 @@ static int
 auth_password_compare_pwd(const char *pass_hash, const char *pass_clear)
 {
     char *new_pass_hash;
+#if defined(HAVE_CRYPT_R)
     struct crypt_data cdata;
+#endif
 
     if (!pass_hash[0]) {
         if (!pass_clear[0]) {
@@ -764,8 +766,12 @@ auth_password_compare_pwd(const char *pass_hash, const char *pass_clear)
         }
     }
 
+#if defined(HAVE_CRYPT_R)
     cdata.initialized = 0;
     new_pass_hash = crypt_r(pass_clear, pass_hash, &cdata);
+#else
+    new_pass_hash = crypt(pass_clear, pass_hash);
+#endif
     return strcmp(new_pass_hash, pass_hash);
 }
 
