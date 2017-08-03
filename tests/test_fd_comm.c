@@ -324,8 +324,7 @@ main(void)
 {
     int ret;
     const struct lys_module *module;
-    struct ly_set *set;
-    uint16_t i;
+    const struct lys_node *node;
 
     /* create ctx */
     ctx = ly_ctx_new(TESTS_DIR"../schemas");
@@ -339,15 +338,13 @@ main(void)
     assert_non_null(module);
 
     /* set RPC callbacks */
-    set = lys_find_path(module, NULL, "/*");
-    for (i = 0; i < set->number; ++i) {
-        if (!strcmp(set->set.s[i]->name, "get")) {
-            lys_set_private(set->set.s[i], my_get_rpc_clb);
-        } else if (!strcmp(set->set.s[i]->name, "get-config")) {
-            lys_set_private(set->set.s[i], my_getconfig_rpc_clb);
-        }
-    }
-    ly_set_free(set);
+    node = ly_ctx_get_node(module->ctx, NULL, "/ietf-netconf:get", 0);
+    assert_non_null(node);
+    lys_set_private(node, my_get_rpc_clb);
+
+    node = ly_ctx_get_node(module->ctx, NULL, "/ietf-netconf:get-config", 0);
+    assert_non_null(node);
+    lys_set_private(node, my_getconfig_rpc_clb);
 
     nc_server_init(ctx);
 
