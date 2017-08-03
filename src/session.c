@@ -42,6 +42,7 @@
 
 /* in seconds */
 #define NC_CLIENT_HELLO_TIMEOUT 60
+#define NC_SERVER_HELLO_TIMEOUT 60
 
 /* in milliseconds */
 #define NC_CLOSE_REPLY_TIMEOUT 200
@@ -1135,7 +1136,7 @@ nc_recv_server_hello(struct nc_session *session)
     int ver = -1;
     int flag = 0;
 
-    msgtype = nc_read_msg_poll(session, (server_opts.hello_timeout ? server_opts.hello_timeout * 1000 : -1), &xml);
+    msgtype = nc_read_msg_poll(session, (server_opts.hello_timeout ? server_opts.hello_timeout * 1000 : NC_SERVER_HELLO_TIMEOUT * 1000), &xml);
 
     switch (msgtype) {
     case NC_MSG_HELLO:
