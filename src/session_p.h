@@ -334,6 +334,7 @@ struct nc_msg_cont {
 struct nc_session {
     NC_STATUS status;            /**< status of the session */
     NC_SESSION_TERM_REASON term_reason; /**< reason of termination, if status is NC_STATUS_INVALID */
+    uint32_t killed_by;          /**< session responsible for termination, if term_reason is NC_SESSION_TERM_KILLED */
     NC_SIDE side;                /**< side of the session: client or server */
 
     /* NETCONF data */

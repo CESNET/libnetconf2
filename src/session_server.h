@@ -56,6 +56,22 @@ typedef struct nc_server_reply *(*nc_rpc_clb)(struct lyd_node *rpc, struct nc_se
 void nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REASON reason);
 
 /**
+ * @brief Set the session-id of the session responsible for this session's termination.
+ *
+ * @param[in] session Session to modify. Must have term_reason set to #NC_SESSION_TERM_KILLED.
+ * @param[in] sid SID of the killing session.
+ */
+void nc_session_set_killed_by(struct nc_session *session, uint32_t sid);
+
+/**
+ * @brief Set the status of a session.
+ *
+ * @param[in] session Session to modify.
+ * @param[in] status Status of the session.
+ */
+void nc_session_set_status(struct nc_session *session, NC_STATUS status);
+
+/**
  * @brief Set a global nc_rpc_clb that is called if the particular RPC request is
  * received and the private field in the corresponding RPC schema node is NULL.
  *

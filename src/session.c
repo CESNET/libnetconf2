@@ -294,7 +294,7 @@ nc_session_get_status(const struct nc_session *session)
 }
 
 API NC_SESSION_TERM_REASON
-nc_session_get_termreason(const struct nc_session *session)
+nc_session_get_term_reason(const struct nc_session *session)
 {
     if (!session) {
         ERRARG("session");
@@ -302,6 +302,17 @@ nc_session_get_termreason(const struct nc_session *session)
     }
 
     return session->term_reason;
+}
+
+API uint32_t
+nc_session_get_killed_by(const struct nc_session *session)
+{
+    if (!session) {
+        ERRARG("session");
+        return 0;
+    }
+
+    return session->killed_by;
 }
 
 API uint32_t

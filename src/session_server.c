@@ -126,7 +126,38 @@ nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REASON re
         return;
     }
 
+    if ((reason != NC_SESSION_TERM_KILLED) && (session->term_reason == NC_SESSION_TERM_KILLED)) {
+        session->killed_by = 0;
+    }
     session->term_reason = reason;
+}
+
+API void
+nc_session_set_killed_by(struct nc_session *session, uint32_t sid)
+{
+    if (!session || (session->term_reason != NC_SESSION_TERM_KILLED)) {
+        ERRARG("session");
+        return;
+    } else if (!sid) {
+        ERRARG("sid");
+        return;
+    }
+
+    session->killed_by = sid;
+}
+
+API void
+nc_session_set_status(struct nc_session *session, NC_STATUS status)
+{
+    if (!session) {
+        ERRARG("session");
+        return;
+    } else if (!status) {
+        ERRARG("status");
+        return;
+    }
+
+    session->status = status;
 }
 
 int

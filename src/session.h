@@ -119,7 +119,15 @@ NC_STATUS nc_session_get_status(const struct nc_session *session);
  * @param[in] session Session to get the information from.
  * @return Session termination reason enum value.
  */
-NC_SESSION_TERM_REASON nc_session_get_termreason(const struct nc_session *session);
+NC_SESSION_TERM_REASON nc_session_get_term_reason(const struct nc_session *session);
+
+/**
+ * @brief Get session killer session ID.
+ *
+ * @param[in] session Session to get the information from.
+ * @return Session killer ID.
+ */
+uint32_t nc_session_get_killed_by(const struct nc_session *session);
 
 /**
  * @brief Get session ID.
