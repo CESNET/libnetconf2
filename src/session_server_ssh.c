@@ -28,6 +28,10 @@
 #include "session_server_ch.h"
 #include "libnetconf.h"
 
+#if !defined(HAVE_CRYPT_R)
+pthread_mutex_t crypt_lock = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
 extern struct nc_server_opts server_opts;
 
 static char *
@@ -770,7 +774,9 @@ auth_password_compare_pwd(const char *pass_hash, const char *pass_clear)
     cdata.initialized = 0;
     new_pass_hash = crypt_r(pass_clear, pass_hash, &cdata);
 #else
+    pthread_mutex_lock(&crypt_lock);
     new_pass_hash = crypt(pass_clear, pass_hash);
+    pthread_mutex_unlock(&crypt_lock);
 #endif
     return strcmp(new_pass_hash, pass_hash);
 }
