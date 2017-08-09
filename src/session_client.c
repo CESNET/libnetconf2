@@ -696,7 +696,12 @@ parse:
             /* unset callback back to use searchpath */
             ly_ctx_set_module_imp_clb(session->ctx, NULL, NULL);
         } else { /* !mod && !implemented - will be loaded automatically, but remember to set features in the end */
-            assert(!imports_flag);
+            if (imports_flag) {
+                ERR("Module \"%s@%s\" is supposed to be imported, but no other module imports it.",
+                    name, revision ? revision : "<latest>");
+                ret = -1;
+                goto cleanup;
+            }
             ly_set_add(imports, modules->set.d[u], LY_SET_OPT_USEASLIST);
             continue;
         }
