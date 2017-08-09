@@ -2061,6 +2061,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
                 ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
                 if (!ietfncwd) {
                     ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
+                    lyd_free(data);
                     return NC_MSG_ERROR;
                 }
             }
