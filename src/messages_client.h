@@ -216,7 +216,7 @@ struct nc_rpc *nc_rpc_act_generic_xml(const char *xml_str, NC_PARAMTYPE paramtyp
  * needed NETCONF capabilities for the RPC.
  *
  * @param[in] source Source datastore being queried.
- * @param[in] filter Optional filter data, an XML subtree or XPath expression.
+ * @param[in] filter Optional filter data, an XML subtree or XPath expression (with JSON prefixes).
  * @param[in] wd_mode Optional with-defaults capability mode.
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
@@ -317,7 +317,7 @@ struct nc_rpc *nc_rpc_unlock(NC_DATASTORE target);
  * check. Created object can be sent via any NETCONF session which supports all the
  * needed NETCONF capabilities for the RPC.
  *
- * @param[in] filter Optional filter data, an XML subtree or XPath expression.
+ * @param[in] filter Optional filter data, an XML subtree or XPath expression (with JSON prefixes).
  * @param[in] wd_mode Optional with-defaults capability mode.
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
@@ -428,7 +428,7 @@ struct nc_rpc *nc_rpc_getschema(const char *identifier, const char *version, con
  * needed NETCONF capabilities for the RPC.
  *
  * @param[in] stream_name Optional name of a NETCONF stream to subscribe to.
- * @param[in] filter Optional filter data, an XML subtree or XPath expression.
+ * @param[in] filter Optional filter data, an XML subtree or XPath expression (with JSON prefixes).
  * @param[in] start_time Optional YANG datetime identifying the start of the subscription.
  * @param[in] stop_time Optional YANG datetime identifying the end of the subscription.
  * @param[in] paramtype How to further manage data parameters.
