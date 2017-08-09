@@ -816,12 +816,18 @@ nc_ps_new(void)
 API void
 nc_ps_free(struct nc_pollsession *ps)
 {
+    uint16_t i;
+
     if (!ps) {
         return;
     }
 
     if (ps->queue_len) {
         ERR("FATAL: Freeing a pollsession structure that is currently being worked with!");
+    }
+
+    for (i = 0; i < ps->session_count; i++) {
+        free(ps->sessions[i]);
     }
 
     free(ps->sessions);
@@ -857,8 +863,16 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
         nc_ps_unlock(ps, q_id, __func__);
         return -1;
     }
-    ps->sessions[ps->session_count - 1].session = session;
-    ps->sessions[ps->session_count - 1].state = NC_PS_STATE_NONE;
+    ps->sessions[ps->session_count - 1] = calloc(1, sizeof **ps->sessions);
+    if (!ps->sessions[ps->session_count - 1]) {
+        ERRMEM;
+        --ps->session_count;
+        /* UNLOCK */
+        nc_ps_unlock(ps, q_id, __func__);
+        return -1;
+    }
+    ps->sessions[ps->session_count - 1]->session = session;
+    ps->sessions[ps->session_count - 1]->state = NC_PS_STATE_NONE;
 
     /* UNLOCK */
     return nc_ps_unlock(ps, q_id, __func__);
@@ -874,12 +888,14 @@ _nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session, int in
         goto remove;
     }
     for (i = 0; i < ps->session_count; ++i) {
-        if (ps->sessions[i].session == session) {
+        if (ps->sessions[i]->session == session) {
 remove:
             --ps->session_count;
-            if (i < ps->session_count) {
+            if (i <= ps->session_count) {
+                free(ps->sessions[i]);
                 ps->sessions[i] = ps->sessions[ps->session_count];
-            } else if (!ps->session_count) {
+            }
+            if (!ps->session_count) {
                 free(ps->sessions);
                 ps->sessions = NULL;
             }
@@ -936,8 +952,8 @@ nc_ps_get_session_by_sid(const struct nc_pollsession *ps, uint32_t sid)
     }
 
     for (i = 0; i < ps->session_count; ++i) {
-        if (ps->sessions[i].session->id == sid) {
-            ret = ps->sessions[i].session;
+        if (ps->sessions[i]->session->id == sid) {
+            ret = ps->sessions[i]->session;
             break;
         }
     }
@@ -1314,6 +1330,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
     char msg[256];
     struct timespec ts_timeout, ts_cur;
     struct nc_session *cur_session;
+    struct nc_ps_session *cur_ps_session;
     struct nc_server_rpc *rpc = NULL;
 
     if (!ps) {
@@ -1347,7 +1364,8 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
             i = j = ps->last_event_session + 1;
         }
         do {
-            cur_session = ps->sessions[i].session;
+            cur_ps_session = ps->sessions[i];
+            cur_session = cur_ps_session->session;
 
             /* SESSION LOCK */
             r = nc_session_lock(cur_session, 0, __func__);
@@ -1355,27 +1373,27 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                 ret = NC_PSPOLL_ERROR;
             } else if (r == 1) {
                 /* no one else is currently working with the session, so we can, otherwise skip it */
-                if (ps->sessions[i].state == NC_PS_STATE_NONE) {
+                if (cur_ps_session->state == NC_PS_STATE_NONE) {
                     if (cur_session->status == NC_STATUS_RUNNING) {
                         /* session is fine, work with it */
-                        ps->sessions[i].state = NC_PS_STATE_BUSY;
+                        cur_ps_session->state = NC_PS_STATE_BUSY;
 
                         ret = nc_ps_poll_session(cur_session, ts_cur.tv_sec, msg);
                         switch (ret) {
                         case NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR:
                             ERR("Session %u: %s.", cur_session->id, msg);
-                            ps->sessions[i].state = NC_PS_STATE_INVALID;
+                            cur_ps_session->state = NC_PS_STATE_INVALID;
                             break;
                         case NC_PSPOLL_ERROR:
                             ERR("Session %u: %s.", cur_session->id, msg);
-                            ps->sessions[i].state = NC_PS_STATE_NONE;
+                            cur_ps_session->state = NC_PS_STATE_NONE;
                             break;
                         case NC_PSPOLL_TIMEOUT:
 #ifdef NC_ENABLED_SSH
                         case NC_PSPOLL_SSH_CHANNEL:
                         case NC_PSPOLL_SSH_MSG:
 #endif
-                            ps->sessions[i].state = NC_PS_STATE_NONE;
+                            cur_ps_session->state = NC_PS_STATE_NONE;
                             break;
                         case NC_PSPOLL_RPC:
                             /* let's keep the state busy, we are not done with this session */
@@ -1387,9 +1405,9 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                         if (cur_session->term_reason != NC_SESSION_TERM_CLOSED) {
                             ret |= NC_PSPOLL_SESSION_ERROR;
                         }
-                        ps->sessions[i].state = NC_PS_STATE_INVALID;
+                        cur_ps_session->state = NC_PS_STATE_INVALID;
                     }
-                } else if (ps->sessions[i].state == NC_PS_STATE_BUSY) {
+                } else if (cur_ps_session->state == NC_PS_STATE_BUSY) {
                     /* it definitely should not be busy because we have the lock */
                     ERRINT;
                 }
@@ -1456,9 +1474,9 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
         if (ret & (NC_PSPOLL_ERROR | NC_PSPOLL_BAD_RPC)) {
             if (cur_session->status != NC_STATUS_RUNNING) {
                 ret |= NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
-                ps->sessions[i].state = NC_PS_STATE_INVALID;
+                cur_ps_session->state = NC_PS_STATE_INVALID;
             } else {
-                ps->sessions[i].state = NC_PS_STATE_NONE;
+                cur_ps_session->state = NC_PS_STATE_NONE;
             }
         } else {
             cur_session->opts.server.last_rpc = time(NULL);
@@ -1472,9 +1490,9 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                 if (!(cur_session->term_reason & (NC_SESSION_TERM_CLOSED | NC_SESSION_TERM_KILLED))) {
                     ret |= NC_PSPOLL_SESSION_ERROR;
                 }
-                ps->sessions[i].state = NC_PS_STATE_INVALID;
+                cur_ps_session->state = NC_PS_STATE_INVALID;
             } else {
-                ps->sessions[i].state = NC_PS_STATE_NONE;
+                cur_ps_session->state = NC_PS_STATE_NONE;
             }
         }
 
@@ -1504,7 +1522,8 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
 
     if (all) {
         for (i = 0; i < ps->session_count; i++) {
-            nc_session_free(ps->sessions[i].session, data_free);
+            nc_session_free(ps->sessions[i]->session, data_free);
+            free(ps->sessions[i]);
         }
         free(ps->sessions);
         ps->sessions = NULL;
@@ -1512,8 +1531,8 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
         ps->last_event_session = 0;
     } else {
         for (i = 0; i < ps->session_count; ) {
-            if (ps->sessions[i].session->status != NC_STATUS_RUNNING) {
-                session = ps->sessions[i].session;
+            if (ps->sessions[i]->session->status != NC_STATUS_RUNNING) {
+                session = ps->sessions[i]->session;
                 _nc_ps_del_session(ps, NULL, i);
                 nc_session_free(session, data_free);
                 continue;

@@ -1540,7 +1540,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     }
 
     for (i = 0; i < ps->session_count; ++i) {
-        cur_session = ps->sessions[i].session;
+        cur_session = ps->sessions[i]->session;
         if ((cur_session->status == NC_STATUS_RUNNING) && (cur_session->ti_type == NC_TI_LIBSSH)
                 && cur_session->ti.libssh.next) {
             /* an SSH session with more channels */
