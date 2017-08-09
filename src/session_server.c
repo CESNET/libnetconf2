@@ -1392,6 +1392,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                 } else if (ps->sessions[i].state == NC_PS_STATE_BUSY) {
                     /* it definitely should not be busy because we have the lock */
                     ERRINT;
+                    ret = NC_PSPOLL_ERROR;
                 }
 
                 /* keep the session locked only in this one case */
