@@ -424,12 +424,14 @@ enum nc_ps_session_state {
     NC_PS_STATE_INVALID        /**< session is invalid and was already returned by another poll */
 };
 
+struct nc_ps_session {
+    struct nc_session *session;
+    enum nc_ps_session_state state;
+};
+
 /* ACCESS locked */
 struct nc_pollsession {
-    struct {
-        struct nc_session *session;
-        enum nc_ps_session_state state;
-    } *sessions;
+    struct nc_ps_session **sessions;
     uint16_t session_count;
     uint16_t last_event_session;
 

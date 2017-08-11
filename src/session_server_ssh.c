@@ -28,6 +28,10 @@
 #include "session_server_ch.h"
 #include "libnetconf.h"
 
+#if !defined(HAVE_CRYPT_R)
+pthread_mutex_t crypt_lock = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
 extern struct nc_server_opts server_opts;
 
 static char *
@@ -751,7 +755,9 @@ static int
 auth_password_compare_pwd(const char *pass_hash, const char *pass_clear)
 {
     char *new_pass_hash;
+#if defined(HAVE_CRYPT_R)
     struct crypt_data cdata;
+#endif
 
     if (!pass_hash[0]) {
         if (!pass_clear[0]) {
@@ -764,8 +770,14 @@ auth_password_compare_pwd(const char *pass_hash, const char *pass_clear)
         }
     }
 
+#if defined(HAVE_CRYPT_R)
     cdata.initialized = 0;
     new_pass_hash = crypt_r(pass_clear, pass_hash, &cdata);
+#else
+    pthread_mutex_lock(&crypt_lock);
+    new_pass_hash = crypt(pass_clear, pass_hash);
+    pthread_mutex_unlock(&crypt_lock);
+#endif
     return strcmp(new_pass_hash, pass_hash);
 }
 
@@ -1540,7 +1552,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     }
 
     for (i = 0; i < ps->session_count; ++i) {
-        cur_session = ps->sessions[i].session;
+        cur_session = ps->sessions[i]->session;
         if ((cur_session->status == NC_STATUS_RUNNING) && (cur_session->ti_type == NC_TI_LIBSSH)
                 && cur_session->ti.libssh.next) {
             /* an SSH session with more channels */
