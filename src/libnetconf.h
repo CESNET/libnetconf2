@@ -30,19 +30,22 @@
  * @mainpage About
  *
  * libnetconf2 is a NETCONF library in C handling NETCONF authentication and all NETCONF
- * RPC communication both server and client-side. NETCONF datastore and session management is not a part of this library,
- * but it helps a lot with the sessions.
+ * RPC communication both server and client-side. Note that NETCONF datastore implementation
+ * is not a part of this library. The library supports both NETCONF 1.0
+ * ([RFC 4741](https://tools.ietf.org/html/rfc4741)) as well as NETCONF 1.1
+ * ([RFC 6241](https://tools.ietf.org/html/rfc6241)).
  *
  * @section about-features Main Features
  *
- * - Creating SSH (using libssh) or TLS (using OpenSSL) authenticated NETCONF sessions.
+ * - Creating SSH ([RFC 4742](https://tools.ietf.org/html/rfc4742), [RFC 6242](https://tools.ietf.org/html/rfc6242)),
+ *   using [libssh](https://www.libssh.org/), or TLS ([RFC 7589](https://tools.ietf.org/html/rfc7589)),
+ *   using [OpenSSL](https://www.openssl.org/), authenticated NETCONF sessions.
  * - Creating NETCONF sessions with a pre-established transport protocol
  *   (using this mechanism the communication can be tunneled through sshd(8), for instance).
- * - Creating NETCONF Call Home sessions.
- * - Creating, sending, receiving, and replying to RPCs.
- * - Receiving notifications.
- *
- * - \todo Creating and sending notifications.
+ * - Creating NETCONF Call Home sessions ([RFC 8071](https://tools.ietf.org/html/rfc8071)).
+ * - Creating, sending, receiving, and replying to RPCs ([RFC 4741](https://tools.ietf.org/html/rfc4741),
+ *   [RFC 6241](https://tools.ietf.org/html/rfc6241)).
+ * - Creating, sending and receiving NETCONF Event Notifications ([RFC 5277](https://tools.ietf.org/html/rfc5277)),
  *
  * @section about-license License
  *
@@ -79,25 +82,12 @@
  * @page howtoinit Init and Thread-safety Information
  *
  * Before working with the library, it must be initialized using nc_client_init()
- * or nc_server_init(). Optionally, a client can use nc_client_set_schema_searchpath()
- * to set the path to a directory with modules that will be loaded from there if they
- * could not be downloaded from the server (it does not support \<get-schema\>).
- * However, to be able to create at least the \<get-schema\> RPC, this directory must
- * contain the module _ietf-netconf-monitoring_. If this directory is not set,
- * the default _libnetconf2_ schema directory is used that includes this module
- * and a few others.
- *
- * Based on how the library was compiled, also _libssh_ and/or
- * _libssh_/_libcrypto_ are initialized (for multi-threaded use) too. It is advised
- * to compile _libnetconf2_, for instance, with TLS support even if you do not want
- * to use _lnc2_ TLS functions, but only use _libssl/libcrypto_ functions in your
- * application. You can then use _libnetconf2_ cleanup function and do not
- * trouble yourself with the cleanup.
- *
- * To prevent any reachable memory at the end of your application, there
- * are complementary destroy functions available. If your application is
- * multi-threaded, call the destroy functions in the last thread, after all
- * the other threads have ended. In every other thread you should call
+ * or nc_server_init(). Based on how the library was compiled, also _libssh_ and/or
+ * _libssh_/_libcrypto_ are initialized (for multi-threaded use) too. To prevent
+ * any reachable memory at the end of your application, there are complementary
+ * destroy functions (nc_server_destroy() and nc_client_destroy() available. If your
+ * application is multi-threaded, call the destroy functions in the main thread,
+ * after all the other threads have ended. In every other thread you should call
  * nc_thread_destroy() just before it exits.
  *
  * If _libnetconf2_ is used in accordance with this information, there should
@@ -105,9 +95,34 @@
  * of _libssh_, _libssl_, and _libcrypto_, please refer to the corresponding project
  * documentation. _libnetconf2_ thread-safety information is below.
  *
- * Client is __NOT__ thread-safe and there is no access control in the client
- * functions at all. Server is __FULLY__ thread-safe meaning you can set all the
- * options simultaneously while listening for or accepting new sessions or
+ * Client
+ * ------
+ *
+ * Optionally, a client can specify two alternative ways to get schemas needed when connecting
+ * with a server. The primary way is to read local files in searchpath (and its subdirectories)
+ * specified via nc_client_set_schema_searchpath(). Alternatively, _libnetconf2_ can use callback
+ * provided via nc_client_set_schema_callback(). If these ways do not succeed and the server
+ * implements NETCONF \<get-schema\> operation, the schema is retrieved from the server and stored
+ * localy into the searchpath (if specified) for a future use. If none of these methods succeed to
+ * load particular schema, the data from this schema are ignored during the communication with the
+ * server.
+ *
+ * Besides the mentioned setters, there are many other @ref howtoclientssh "SSH", @ref howtoclienttls "TLS"
+ * and @ref howtoclientch "Call Home" getter/setter functions to manipulate with various settings. All these
+ * settings are internally placed in a thread-specific context so they are independent and
+ * initialized to the default values within each new thread. However, the context can be shared among
+ * the threads using nc_client_get_thread_context() and nc_client_set_thread_context() functions. In such
+ * a case, be careful and avoid concurrent execution of the mentioned setters/getters and functions
+ * creating connection (no matter if it is a standard NETCONF connection or Call Home).
+ *
+ * In the client, it is thread-safe to work with distinguish NETCONF sessions since the client
+ * settings are thread-specific as described above.
+ *
+ * Server
+ * ------
+ *
+ * Server is __FULLY__ thread-safe meaning you can set all the (thread-shared in contrast to
+ * client) options simultaneously while listening for or accepting new sessions or
  * polling the existing ones. It is even safe to poll one session in several
  * pollsession structures or one pollsession structure in several threads. Generally,
  * servers can use more threads without any problems as long as they keep their workflow sane
@@ -121,8 +136,13 @@
  * - nc_client_init()
  * - nc_client_destroy()
  *
- * - nc_client_set_schema_searchpath()
  * - nc_client_get_schema_searchpath()
+ * - nc_client_set_schema_searchpath()
+ * - nc_client_get_schema_callback()
+ * - nc_client_set_schema_callback()
+ *
+ * - nc_client_get_thread_context()
+ * - nc_client_set_thread_context()
  *
  * Available in __nc_server.h__.
  *
@@ -148,6 +168,7 @@
  * have setters and getters so that there is no need to duplicate them in
  * a client.
  *
+ * @anchor howtoclientssh
  * SSH
  * ===
  *
@@ -192,7 +213,7 @@
  * - nc_connect_libssh()
  * - nc_connect_ssh_channel()
  *
- *
+ * @anchor howtoclienttls
  * TLS
  * ===
  *
@@ -237,6 +258,7 @@
  * - nc_connect_inout()
  *
  *
+ * @anchor howtoclientch
  * Call Home
  * =========
  *
@@ -604,6 +626,21 @@
  * - nc_server_ch_client_period_set_reconnect_timeout()
  * - nc_server_ssh_endpt_set_auth_timeout()
  * - nc_server_ssh_ch_client_set_auth_timeout()
+ */
+
+/**
+ * @defgroup misc Miscellaneous
+ * @brief Miscellaneous macros, types, structure and functions for a generic use by both server and client applications.
+ */
+
+/**
+ * @defgroup client Client
+ * @brief NETCONF client functionality.
+ */
+
+/**
+ * @defgroup server Server
+ * @brief NETCONF server functionality.
  */
 
 #endif /* NC_LIBNETCONF_H_ */

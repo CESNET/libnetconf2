@@ -223,10 +223,11 @@ ssh_endpt_del_authkey_thread(void *arg)
 }
 
 static int
-ssh_hostkey_check_clb(const char *hostname, ssh_session session)
+ssh_hostkey_check_clb(const char *hostname, ssh_session session, void *priv)
 {
     (void)hostname;
     (void)session;
+    (void)priv;
 
     return 0;
 }
@@ -243,7 +244,7 @@ ssh_client_thread(void *arg)
     nc_assert(!strncmp(buf, "ssh_ready", 9));
 
     /* skip the knownhost check */
-    nc_client_ssh_set_auth_hostkey_check_clb(ssh_hostkey_check_clb);
+    nc_client_ssh_set_auth_hostkey_check_clb(ssh_hostkey_check_clb, NULL);
 
     ret = nc_client_ssh_set_username("test");
     nc_assert(!ret);

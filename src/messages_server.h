@@ -21,6 +21,14 @@
 #include "session.h"
 
 /**
+ * @defgroup server_msg Server Messages
+ * @ingroup server
+ *
+ * @brief Functions to create NETCONF Event notifications and replies to the NETCONF RPCs (or actions).
+ * @{
+ */
+
+/**
  * @brief Enumeration of NETCONF errors
  */
 typedef enum NC_ERROR {
@@ -303,7 +311,7 @@ void nc_err_free(struct nc_server_error *err);
  * @return Newly created structure of the Event Notification object to be sent to the clients via nc_server_send_notif()
  * and freed using nc_server_notif_free().
  */
-struct nc_server_notif *nc_server_notif_new(struct lyd_node* event, char *eventtime, NC_PARAMTYPE paramtype);
+struct nc_server_notif *nc_server_notif_new(struct lyd_node *event, char *eventtime, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Send NETCONF Event Notification via the session.
@@ -333,5 +341,7 @@ void nc_server_notif_free(struct nc_server_notif *notif);
  * @return Datetime timestamp of the notification, NULL on error.
  */
 const char *nc_server_notif_get_time(const struct nc_server_notif *notif);
+
+/**@} Client Messages */
 
 #endif /* NC_MESSAGES_SERVER_H_ */

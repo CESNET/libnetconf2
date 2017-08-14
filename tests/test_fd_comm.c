@@ -338,11 +338,11 @@ main(void)
     assert_non_null(module);
 
     /* set RPC callbacks */
-    node = ly_ctx_get_node(module->ctx, NULL, "/ietf-netconf:get");
+    node = ly_ctx_get_node(module->ctx, NULL, "/ietf-netconf:get", 0);
     assert_non_null(node);
     lys_set_private(node, my_get_rpc_clb);
 
-    node = ly_ctx_get_node(module->ctx, NULL, "/ietf-netconf:get-config");
+    node = ly_ctx_get_node(module->ctx, NULL, "/ietf-netconf:get-config", 0);
     assert_non_null(node);
     lys_set_private(node, my_getconfig_rpc_clb);
 

@@ -42,6 +42,7 @@
 
 /* in seconds */
 #define NC_CLIENT_HELLO_TIMEOUT 60
+#define NC_SERVER_HELLO_TIMEOUT 60
 
 /* in milliseconds */
 #define NC_CLOSE_REPLY_TIMEOUT 200
@@ -68,7 +69,7 @@ nc_gettimespec(struct timespec *ts)
 
 /* ts1 < ts2 -> +, ts1 > ts2 -> -, returns milliseconds */
 int32_t
-nc_difftimespec(struct timespec *ts1, struct timespec *ts2)
+nc_difftimespec(const struct timespec *ts1, const struct timespec *ts2)
 {
     int64_t nsec_diff = 0;
 
@@ -286,21 +287,32 @@ nc_session_get_status(const struct nc_session *session)
 {
     if (!session) {
         ERRARG("session");
-        return 0;
+        return NC_STATUS_ERR;
     }
 
     return session->status;
 }
 
 API NC_SESSION_TERM_REASON
-nc_session_get_termreason(const struct nc_session *session)
+nc_session_get_term_reason(const struct nc_session *session)
+{
+    if (!session) {
+        ERRARG("session");
+        return NC_SESSION_TERM_ERR;
+    }
+
+    return session->term_reason;
+}
+
+API uint32_t
+nc_session_get_killed_by(const struct nc_session *session)
 {
     if (!session) {
         ERRARG("session");
         return 0;
     }
 
-    return session->term_reason;
+    return session->killed_by;
 }
 
 API uint32_t
@@ -1135,7 +1147,7 @@ nc_recv_server_hello(struct nc_session *session)
     int ver = -1;
     int flag = 0;
 
-    msgtype = nc_read_msg_poll(session, (server_opts.hello_timeout ? server_opts.hello_timeout * 1000 : -1), &xml);
+    msgtype = nc_read_msg_poll(session, (server_opts.hello_timeout ? server_opts.hello_timeout * 1000 : NC_SERVER_HELLO_TIMEOUT * 1000), &xml);
 
     switch (msgtype) {
     case NC_MSG_HELLO:

@@ -21,7 +21,14 @@
 extern "C" {
 #endif
 
+/**
+ * @addtogroup misc
+ * @{
+ */
+
+/** @brief Base NETCONF namespace */
 #define NC_NS_BASE  "urn:ietf:params:xml:ns:netconf:base:1.0"
+/** @brief Notifications namespace */
 #define NC_NS_NOTIF "urn:ietf:params:xml:ns:netconf:notification:1.0"
 
 /** @brief Default NETCONF over SSH port */
@@ -51,6 +58,7 @@ extern "C" {
  * @brief Enumeration of reasons of the NETCONF session termination as defined in RFC 6470.
  */
 typedef enum NC_SESSION_TERM_REASON {
+    NC_SESSION_TERM_ERR = -1,     /**< error return code for function getting the session termination reason */
     NC_SESSION_TERM_NONE = 0,     /**< session still running */
     NC_SESSION_TERM_CLOSED,       /**< closed by client in a normal fashion */
     NC_SESSION_TERM_KILLED,       /**< session was terminated by \<kill-session\> operation */
@@ -117,20 +125,6 @@ typedef enum NC_PARAMTYPE {
     NC_PARAMTYPE_DUP_AND_FREE /**< make a copy of the argument, free afterwards */
 } NC_PARAMTYPE;
 
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
-
-/**
- * @brief Free all the dynamically allocated thread-specific libssl/libcrypto
- *        resources.
- *
- *        This function should be called only if init was called. Call it in every
- *        thread your application creates just before the thread exits. In the last thread
- *        (usually the main one) call only nc_destroy().
- */
-void nc_thread_destroy(void);
-
-#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
-
 /**
  * @brief Transform given time_t (seconds since the epoch) into the RFC 3339 format
  * accepted by NETCONF functions.
@@ -156,6 +150,8 @@ char* nc_time2datetime(time_t time, const char* tz, char *buf);
  * @return time_t value of the given string, -1 on error.
  */
 time_t nc_datetime2time(const char* datetime);
+
+/**@} Miscellaneous */
 
 #ifdef __cplusplus
 }

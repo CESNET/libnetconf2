@@ -26,10 +26,20 @@
 #include "netconf.h"
 
 /**
+ * @defgroup server_session Server Session
+ * @ingroup server
+ *
+ * @brief Server-side NETCONF session manipulation.
+ * @{
+ */
+
+/**
  * @brief Prototype of callbacks that are called if some RPCs are received.
  *
  * If \p session termination reason is changed in the callback, one last reply
  * is sent and then the session is considered invalid.
+ *
+ * The callback is set via nc_set_global_rpc_clb().
  *
  * @param[in] rpc Parsed client RPC request.
  * @param[in] session Session the RPC arrived on.
@@ -44,6 +54,37 @@ typedef struct nc_server_reply *(*nc_rpc_clb)(struct lyd_node *rpc, struct nc_se
  * @param[in] reason Reason of termination.
  */
 void nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REASON reason);
+
+/**
+ * @brief Set the session-id of the session responsible for this session's termination.
+ *
+ * @param[in] session Session to modify. Must have term_reason set to #NC_SESSION_TERM_KILLED.
+ * @param[in] sid SID of the killing session.
+ */
+void nc_session_set_killed_by(struct nc_session *session, uint32_t sid);
+
+/**
+ * @brief Set the status of a session.
+ *
+ * @param[in] session Session to modify.
+ * @param[in] status Status of the session.
+ */
+void nc_session_set_status(struct nc_session *session, NC_STATUS status);
+
+/**
+ * @brief Set a global nc_rpc_clb that is called if the particular RPC request is
+ * received and the private field in the corresponding RPC schema node is NULL.
+ *
+ * @param[in] clb An user-defined nc_rpc_clb function callback, NULL to default.
+ */
+void nc_set_global_rpc_clb(nc_rpc_clb clb);
+
+/**@} Server Session */
+
+/**
+ * @addtogroup server
+ * @{
+ */
 
 /**
  * @brief Initialize libssh and/or libssl/libcrypto and the server using a libyang context.
@@ -161,6 +202,13 @@ uint16_t nc_server_get_idle_timeout(void);
  */
 const char **nc_server_get_cpblts(struct ly_ctx *ctx);
 
+/**@} Server */
+
+/**
+ * @addtogroup server_session
+ * @{
+ */
+
 /**
  * @brief Accept a new session on a pre-established transport session.
  *
@@ -172,14 +220,6 @@ const char **nc_server_get_cpblts(struct ly_ctx *ctx);
  *         parsing fail, NC_MSG_WOULDBLOCK on timeout, NC_MSG_ERROR on other errors.
  */
 NC_MSG_TYPE nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **session);
-
-/**
- * @brief Set a global nc_rpc_clb that is called if the particular RPC request is
- * received and the private field in the corresponding RPC schema node is NULL.
- *
- * @param[in] clb An user-defined nc_rpc_clb function callback, NULL to default.
- */
-void nc_set_global_rpc_clb(nc_rpc_clb clb);
 
 /**
  * @brief Create an empty structure for polling sessions.
@@ -279,11 +319,18 @@ void nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *));
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
+/**@} Server Session */
+
+/**
+ * @addtogroup server
+ * @{
+ */
+
 /**
  * @brief Add a new endpoint.
  *
  * Before the endpoint can accept any connections, its address and port must
- * be set.
+ * be set via nc_server_endpt_set_address() and nc_server_endpt_set_port().
  *
  * @param[in] name Arbitrary unique endpoint name.
  * @param[in] ti Transport protocol to use.
@@ -333,6 +380,12 @@ int nc_server_endpt_set_address(const char *endpt_name, const char *address);
  */
 int nc_server_endpt_set_port(const char *endpt_name, uint16_t port);
 
+/**@} Server */
+
+/**
+ * @addtogroup server_session
+ */
+
 /**
  * @brief Accept new sessions on all the listening endpoints.
  *
@@ -374,6 +427,16 @@ NC_MSG_TYPE nc_session_accept_ssh_channel(struct nc_session *orig_session, struc
  *         parsing fail, NC_MSG_WOULDBLOCK on timeout, NC_MSG_ERROR on other errors.
  */
 NC_MSG_TYPE nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session);
+
+/**@} Server Session */
+
+/**
+ * @defgroup server_ssh Server SSH
+ * @ingroup server
+ *
+ * @brief Server-side settings for SSH connections.
+ * @{
+ */
 
 /**
  * @brief Add an authorized client SSH public key. This public key can be used for
@@ -504,9 +567,19 @@ int nc_server_ssh_endpt_set_auth_attempts(const char *endpt_name, uint16_t auth_
  */
 int nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_timeout);
 
+/**@} Server SSH */
+
 #endif /* NC_ENABLED_SSH */
 
 #ifdef NC_ENABLED_TLS
+
+/**
+ * @defgroup server_tls Server TLS
+ * @ingroup server
+ *
+ * @brief Server-side settings for TLS connections.
+ * @{
+ */
 
 /**
  * @brief Set the server TLS certificate. Only the name is set, the certificate itself
@@ -671,7 +744,14 @@ const X509 *nc_session_get_client_cert(const struct nc_session *session);
  */
 void nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *session));
 
+/**@} Server TLS */
+
 #endif /* NC_ENABLED_TLS */
+
+/**
+ * @addtogroup server_session
+ * @{
+ */
 
 /**
  * @brief Get session start time.
@@ -699,5 +779,7 @@ void nc_session_set_notif_status(struct nc_session *session, int notif_status);
  * @return 0 for no active subscription, non-zero for an active subscription.
  */
 int nc_session_get_notif_status(const struct nc_session *session);
+
+/**@} Server Session */
 
 #endif /* NC_SESSION_SERVER_H_ */

@@ -34,10 +34,21 @@
 #include "messages_client.h"
 
 /**
+ * @addtogroup client
+ * @{
+ */
+
+/**
  * @brief Set location where libnetconf tries to search for YANG/YIN schemas.
  *
  * The location is searched when connecting to a NETCONF server and building
  * YANG context for further processing of the NETCONF messages and data.
+ *
+ * The searchpath is also used to store schemas retreived via \<get-schema\>
+ * operation - if the schema is not found in searchpath neither via schema
+ * callback provided via nc_client_set_schema_callback() and server supports
+ * the NETCONF \<get-schema\> operation, the schema is retrieved this way and
+ * stored into the searchpath (if specified).
  *
  * @param[in] path Directory where to search for YANG/YIN schemas.
  * @return 0 on success, 1 on (memory allocation) failure.
@@ -52,6 +63,48 @@ int nc_client_set_schema_searchpath(const char *path);
 const char *nc_client_get_schema_searchpath(void);
 
 /**
+ * @brief Set callback function to get missing schemas.
+ *
+ * @param[in] clb Callback responsible for returning the missing model.
+ * @param[in] user_data Arbitrary data that will always be passed to the callback \p clb.
+ * @return 0 on success, 1 on (memory allocation) failure.
+ */
+int nc_client_set_schema_callback(ly_module_imp_clb clb, void *user_data);
+
+/**
+ * @brief Get callback function used to get missing schemas.
+ *
+ * @param[out] user_data Optionally return the private data set with the callback.
+ * Note that the caller is responsible for freeing the private data, so before
+ * changing the callback, private data used for the previous callback should be
+ * freed.
+ * @return Pointer to the set callback, NULL if no such callback was set.
+ */
+ly_module_imp_clb nc_client_get_schema_callback(void **user_data);
+
+/**
+ * @brief Use the provided thread-specific client's context in the current thread.
+ *
+ * Note that from this point the context is shared with the thread from which the context was taken and any
+ * nc_client_*set* functions and functions creating connection in these threads should be protected from the
+ * concurrent execution.
+ *
+ * Context contains schema searchpath/callback, call home binds, TLS and SSH authentication data (username, keys,
+ * various certificates and callbacks).
+ *
+ * @param[in] context Client's thread-specific context provided by nc_client_get_thread_context().
+ */
+void nc_client_set_thread_context(void *context);
+
+/**
+ * @brief Get thread-specific client context for sharing with some other thread using
+ * nc_client_set_thread_context().
+ *
+ * @return Pointer to the client's context of the current thread.
+ */
+void *nc_client_get_thread_context(void);
+
+/**
  * @brief Initialize libssh and/or libssl/libcrypto for use in the client.
  */
 void nc_client_init(void);
@@ -61,6 +114,16 @@ void nc_client_init(void);
  *        the client options, for both SSH and TLS, and for Call Home too.
  */
 void nc_client_destroy(void);
+
+/**@} Client */
+
+/**
+ * @defgroup client_session Client Session
+ * @ingroup client
+ *
+ * @brief Client-side NETCONF session manipulation.
+ * @{
+ */
 
 /**
  * @brief Connect to the NETCONF server via proviaded input/output file descriptors.
@@ -82,41 +145,116 @@ void nc_client_destroy(void);
  */
 struct nc_session *nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx);
 
+/**@} Client Session */
+
 #ifdef NC_ENABLED_SSH
+
+/**
+ * @defgroup client_ssh Client SSH
+ * @ingroup client
+ *
+ * @brief Client-side settings for SSH connections.
+ * @{
+ */
 
 /**
  * @brief Set SSH authentication hostkey check (knownhosts) callback.
  *
+ * Repetitive calling causes replacing of the previous callback and its private data. Caller is responsible for
+ * freeing the private data when necessary (the private data can be obtained by
+ * nc_client_ssh_get_auth_hostkey_check_clb()).
+ *
  * @param[in] auth_hostkey_check Function to call, returns 0 on success, non-zero in error.
  *                               If NULL, the default callback is set.
+ * @param[in] priv Optional private data to be passed to the callback function.
  */
-void nc_client_ssh_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session));
+void nc_client_ssh_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
+                                              void *priv);
+
+/**
+ * @brief Get currently set SSH authentication hostkey check (knownhosts) callback and its private data previously set
+ * by nc_client_ssh_set_auth_hostkey_check_clb().
+ *
+ * @param[out] auth_hostkey_check Currently set callback, NULL in case of the default callback.
+ * @param[out] priv Currently set (optional) private data to be passed to the callback function.
+ */
+void nc_client_ssh_get_auth_hostkey_check_clb(int (**auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
+                                              void **priv);
 
 /**
  * @brief Set SSH password authentication callback.
  *
+ * Repetitive calling causes replacing of the previous callback and its private data. Caller is responsible for
+ * freeing the private data when necessary (the private data can be obtained by
+ * nc_client_ssh_get_auth_password_clb()).
+ *
  * @param[in] auth_password Function to call, returns the password for username\@hostname.
  *                          If NULL, the default callback is set.
+ * @param[in] priv Optional private data to be passed to the callback function.
  */
-void nc_client_ssh_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname));
+void nc_client_ssh_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname, void *priv),
+                                         void *priv);
+
+/**
+ * @brief Get currently set SSH password authentication callback and its private data previously set
+ * by nc_client_ssh_set_auth_password_clb().
+ *
+ * @param[out] auth_password Currently set callback, NULL in case of the default callback.
+ * @param[out] priv Currently set (optional) private data to be passed to the callback function.
+ */
+void nc_client_ssh_get_auth_password_clb(char *(**auth_password)(const char *username, const char *hostname, void *priv),
+                                         void **priv);
 
 /**
  * @brief Set SSH interactive authentication callback.
  *
+ * Repetitive calling causes replacing of the previous callback and its private data. Caller is responsible for
+ * freeing the private data when necessary (the private data can be obtained by
+ * nc_client_ssh_get_auth_interactive_clb()).
+ *
  * @param[in] auth_interactive Function to call for every question, returns the answer for
  *                             authentication name with instruction and echoing prompt.
  *                             If NULL, the default callback is set.
+ * @param[in] priv Optional private data to be passed to the callback function.
  */
 void nc_client_ssh_set_auth_interactive_clb(char *(*auth_interactive)(const char *auth_name, const char *instruction,
-                                                                      const char *prompt, int echo));
+                                                                      const char *prompt, int echo, void *priv),
+                                            void *priv);
+
+/**
+ * @brief Get currently set SSH interactive authentication callback and its private data previously set
+ * by nc_client_ssh_set_auth_interactive_clb().
+ *
+ * @param[out] auth_interactive Currently set callback, NULL in case of the default callback.
+ * @param[out] priv Currently set (optional) private data to be passed to the callback function.
+ */
+void nc_client_ssh_get_auth_interactive_clb(char *(**auth_interactive)(const char *auth_name, const char *instruction,
+                                                                       const char *prompt, int echo, void *priv),
+                                            void **priv);
 
 /**
  * @brief Set SSH publickey authentication encrypted private key passphrase callback.
  *
+ * Repetitive calling causes replacing of the previous callback and its private data. Caller is responsible for
+ * freeing the private data when necessary (the private data can be obtained by
+ * nc_client_ssh_get_auth_privkey_passphrase_clb()).
+ *
  * @param[in] auth_privkey_passphrase Function to call for every question, returns
  *                                    the passphrase for the specific private key.
+ * @param[in] priv Optional private data to be passed to the callback function.
  */
-void nc_client_ssh_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path));
+void nc_client_ssh_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path, void *priv),
+                                                   void *priv);
+
+/**
+ * @brief Get currently set SSH publickey authentication encrypted private key passphrase callback and its private data
+ * previously set by nc_client_ssh_set_auth_privkey_passphrase_clb().
+ *
+ * @param[out] auth_privkey_passphrase Currently set callback, NULL in case of the default callback.
+ * @param[out] priv Currently set (optional) private data to be passed to the callback function.
+ */
+void nc_client_ssh_get_auth_privkey_passphrase_clb(char *(**auth_privkey_passphrase)(const char *privkey_path, void *priv),
+                                                   void **priv);
 
 /**
  * @brief Add an SSH public and private key pair to be used for client authentication.
@@ -157,8 +295,13 @@ int nc_client_ssh_get_keypair(int idx, const char **pub_key, const char **priv_k
 /**
  * @brief Set SSH authentication method preference.
  *
- * @param[in] auth_type Authentication method to modify the prefrence of.
- * @param[in] pref Preference of \p auth_type. Negative values disable the method.
+ * The default preference is as follows:
+ * - interactive authentication (3)
+ * - password authentication (2)
+ * - public key authentication (1)
+ *
+ * @param[in] auth_type Authentication method to modify the preference of.
+ * @param[in] pref Preference of \p auth_type. Higher number increases priority, negative values disable the method.
  */
 void nc_client_ssh_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref);
 
@@ -242,9 +385,19 @@ struct nc_session *nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx
  */
 struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx);
 
+/**@} Client SSH */
+
 #endif /* NC_ENABLED_SSH */
 
 #ifdef NC_ENABLED_TLS
+
+/**
+ * @defgroup client_tls Client TLS
+ * @ingroup client
+ *
+ * @brief Client-side settings for TLS connections.
+ * @{
+ */
 
 /**
  * @brief Set client authentication identity - a certificate and a private key.
@@ -339,13 +492,20 @@ struct nc_session *nc_connect_tls(const char *host, uint16_t port, struct ly_ctx
  */
 struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
 
+/**@} Client TLS */
+
 #endif /* NC_ENABLED_TLS */
+
+/**
+ * @addtogroup client_session
+ * @{
+ */
 
 /**
  * @brief Get session capabilities.
  *
  * @param[in] session Session to get the information from.
- * @return Session capabilities.
+ * @return NULL-terminated array of the \p session capabilities.
  */
 const char * const *nc_session_get_cpblts(const struct nc_session *session);
 
@@ -446,5 +606,7 @@ NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int time
  * @param[in] session NETCONF client session.
  */
 void nc_client_session_set_not_strict(struct nc_session *session);
+
+/**@} Client Session */
 
 #endif /* NC_SESSION_CLIENT_H_ */

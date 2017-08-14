@@ -29,9 +29,12 @@
 #include "session_client_ch.h"
 #include "libnetconf.h"
 
-extern struct nc_client_opts client_opts;
-static struct nc_client_tls_opts tls_opts;
-static struct nc_client_tls_opts tls_ch_opts;
+struct nc_client_context *nc_client_context_location(void);
+int nc_session_new_ctx( struct nc_session *session, struct ly_ctx *ctx);
+
+#define client_opts nc_client_context_location()->opts
+#define tls_opts nc_client_context_location()->tls_opts
+#define tls_ch_opts nc_client_context_location()->tls_ch_opts
 
 static int tlsauth_ch;
 
@@ -239,6 +242,8 @@ _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts)
     free(opts->crl_file);
     free(opts->crl_dir);
     X509_STORE_free(opts->crl_store);
+
+    memset(opts, 0, sizeof *opts);
 }
 
 void
@@ -665,22 +670,10 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
         WRN("Server certificate verification problem (%s).", X509_verify_cert_error_string(verify));
     }
 
-    /* assign context (dicionary needed for handshake) */
-    if (!ctx) {
-        if (client_opts.schema_searchpath) {
-            ctx = ly_ctx_new(client_opts.schema_searchpath);
-        } else {
-            ctx = ly_ctx_new(SCHEMAS_DIR);
-        }
-        /* definitely should not happen, but be ready */
-        if (!ctx && !(ctx = ly_ctx_new(NULL))) {
-            /* that's just it */
-            goto fail;
-        }
-    } else {
-        session->flags |= NC_SESSION_SHAREDCTX;
+    if (nc_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
+        goto fail;
     }
-    session->ctx = ctx;
+    ctx = session->ctx;
 
     /* NETCONF handshake */
     if (nc_handshake(session) != NC_MSG_HELLO) {
@@ -734,22 +727,10 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     session->ti_type = NC_TI_OPENSSL;
     session->ti.tls = tls;
 
-    /* assign context (dicionary needed for handshake) */
-    if (!ctx) {
-        if (client_opts.schema_searchpath) {
-            ctx = ly_ctx_new(client_opts.schema_searchpath);
-        } else {
-            ctx = ly_ctx_new(SCHEMAS_DIR);
-        }
-        /* definitely should not happen, but be ready */
-        if (!ctx && !(ctx = ly_ctx_new(NULL))) {
-            /* that's just it */
-            goto fail;
-        }
-    } else {
-        session->flags |= NC_SESSION_SHAREDCTX;
+    if (nc_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
+        goto fail;
     }
-    session->ctx = ctx;
+    ctx = session->ctx;
 
     /* NETCONF handshake */
     if (nc_handshake(session) != NC_MSG_HELLO) {

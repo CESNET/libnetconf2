@@ -54,10 +54,16 @@ struct nc_client_ssh_opts {
     uint16_t key_count;
 
     /* SSH authentication callbacks */
-    int (*auth_hostkey_check)(const char *hostname, ssh_session session);
-    char *(*auth_password)(const char *, const char *);
-    char *(*auth_interactive)(const char *, const char *, const char *, int);
-    char *(*auth_privkey_passphrase)(const char *);
+    int (*auth_hostkey_check)(const char *, ssh_session, void *);
+    char *(*auth_password)(const char *, const char *, void *);
+    char *(*auth_interactive)(const char *, const char *, const char *, int, void *);
+    char *(*auth_privkey_passphrase)(const char *, void *);
+
+    /* private data for the callbacks */
+    void *auth_hostkey_check_priv;
+    void *auth_password_priv;
+    void *auth_interactive_priv;
+    void *auth_privkey_passphrase_priv;
 
     char *username;
 };
@@ -119,6 +125,8 @@ struct nc_server_tls_opts {
 /* ACCESS unlocked */
 struct nc_client_opts {
     char *schema_searchpath;
+    ly_module_imp_clb schema_clb;
+    void *schema_clb_data;
 
     struct nc_bind {
         const char *address;
@@ -128,6 +136,20 @@ struct nc_client_opts {
     } *ch_binds;
     NC_TRANSPORT_IMPL *ch_bind_ti;
     uint16_t ch_bind_count;
+};
+
+/* ACCESS unlocked */
+struct nc_client_context {
+    unsigned int refcount;
+    struct nc_client_opts opts;
+#ifdef NC_ENABLED_SSH
+    struct nc_client_ssh_opts ssh_opts;
+    struct nc_client_ssh_opts ssh_ch_opts;
+#endif /* NC_ENABLED_SSH */
+#ifdef NC_ENABLED_TLS
+    struct nc_client_tls_opts tls_opts;
+    struct nc_client_tls_opts tls_ch_opts;
+#endif /* NC_ENABLED_TLS */
 };
 
 struct nc_server_opts {
@@ -312,6 +334,7 @@ struct nc_msg_cont {
 struct nc_session {
     NC_STATUS status;            /**< status of the session */
     NC_SESSION_TERM_REASON term_reason; /**< reason of termination, if status is NC_STATUS_INVALID */
+    uint32_t killed_by;          /**< session responsible for termination, if term_reason is NC_SESSION_TERM_KILLED */
     NC_SIDE side;                /**< side of the session: client or server */
 
     /* NETCONF data */
@@ -401,12 +424,14 @@ enum nc_ps_session_state {
     NC_PS_STATE_INVALID        /**< session is invalid and was already returned by another poll */
 };
 
+struct nc_ps_session {
+    struct nc_session *session;
+    enum nc_ps_session_state state;
+};
+
 /* ACCESS locked */
 struct nc_pollsession {
-    struct {
-        struct nc_session *session;
-        enum nc_ps_session_state state;
-    } *sessions;
+    struct nc_ps_session **sessions;
     uint16_t session_count;
     uint16_t last_event_session;
 
@@ -432,7 +457,7 @@ int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *absti
 
 int nc_gettimespec(struct timespec *ts);
 
-int32_t nc_difftimespec(struct timespec *ts1, struct timespec *ts2);
+int32_t nc_difftimespec(const struct timespec *ts1, const struct timespec *ts2);
 
 void nc_addtimespec(struct timespec *ts, uint32_t msec);
 
