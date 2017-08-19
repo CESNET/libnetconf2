@@ -11,7 +11,7 @@
  *
  *     https://opensource.org/licenses/BSD-3-Clause
  */
-#define _POSIX_SOUCE /* signals */
+#define _GNU_SOURCE /* signals, threads */
 
 #include <stdint.h>
 #include <stdlib.h>

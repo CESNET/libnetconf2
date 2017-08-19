@@ -12,8 +12,7 @@
  *     https://opensource.org/licenses/BSD-3-Clause
  */
 
-#define _GNU_SOURCE /* asprintf */
-#define _POSIX_SOUCE /* signals */
+#define _GNU_SOURCE /* asprintf, signals */
 #include <assert.h>
 #include <errno.h>
 #include <poll.h>
