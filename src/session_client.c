@@ -1715,6 +1715,9 @@ nc_recv_notif_thread(void *arg)
                 break;
             }
             nc_notif_free(notif);
+        } else if ((msgtype == NC_MSG_NOTIF) && (session->status != NC_STATUS_RUNNING)) {
+            /* quit this thread once the session is broken */
+            break;
         }
 
         usleep(NC_CLIENT_NOTIF_THREAD_SLEEP);
