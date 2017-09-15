@@ -2423,7 +2423,7 @@ nc_server_ch_client_persist_set_idle_timeout(const char *client_name, uint32_t i
     }
 
     if (client->conn_type != NC_CH_PERSIST) {
-        ERR("Call Home client \"%s\" is not of persistent connection type.");
+        ERR("Call Home client \"%s\" is not of persistent connection type.", client_name);
         /* UNLOCK */
         nc_server_ch_client_unlock(client);
         return -1;
@@ -2457,7 +2457,7 @@ nc_server_ch_client_persist_set_keep_alive_max_wait(const char *client_name, uin
     }
 
     if (client->conn_type != NC_CH_PERSIST) {
-        ERR("Call Home client \"%s\" is not of persistent connection type.");
+        ERR("Call Home client \"%s\" is not of persistent connection type.", client_name);
         /* UNLOCK */
         nc_server_ch_client_unlock(client);
         return -1;
@@ -2488,7 +2488,7 @@ nc_server_ch_client_persist_set_keep_alive_max_attempts(const char *client_name,
     }
 
     if (client->conn_type != NC_CH_PERSIST) {
-        ERR("Call Home client \"%s\" is not of persistent connection type.");
+        ERR("Call Home client \"%s\" is not of persistent connection type.", client_name);
         /* UNLOCK */
         nc_server_ch_client_unlock(client);
         return -1;
@@ -2519,7 +2519,7 @@ nc_server_ch_client_period_set_idle_timeout(const char *client_name, uint16_t id
     }
 
     if (client->conn_type != NC_CH_PERIOD) {
-        ERR("Call Home client \"%s\" is not of periodic connection type.");
+        ERR("Call Home client \"%s\" is not of periodic connection type.", client_name);
         /* UNLOCK */
         nc_server_ch_client_unlock(client);
         return -1;
