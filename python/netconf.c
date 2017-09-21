@@ -98,6 +98,23 @@ setVerbosity(PyObject *self, PyObject *args, PyObject *keywds)
 	Py_RETURN_NONE;
 }
 
+static PyObject *
+setSearchpath(PyObject *self, PyObject *args, PyObject *keywds)
+{
+    char *path;
+    static char *kwlist[] = {"path", NULL};
+
+    if (!PyArg_ParseTupleAndKeywords(args, keywds, "s", kwlist, &path)) {
+        return NULL;
+    }
+
+    if (nc_client_set_schema_searchpath(path)) {
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}
+
 static PyMethodDef netconf2Methods[] = {
 		{"setVerbosity", (PyCFunction)setVerbosity, METH_VARARGS | METH_KEYWORDS,
 		 "setVerbosity(level)\n--\n\n"
@@ -118,6 +135,13 @@ static PyMethodDef netconf2Methods[] = {
 		 ":type facility: int\n"
 		 ":returns: None\n\n"
 		 ".. seealso:: syslog.openlog\n"},
+		{"setSearchpath", (PyCFunction)setSearchpath, METH_VARARGS | METH_KEYWORDS,
+		 "setSearchpath(path)\n--\n\n"
+		 "Set location where YANG/YIN schemas are searched and where the schemas\n"
+		 "retrieved via <get-schema> opration are stored.\n\n"
+		 ":param path: Search directory.\n"
+		 ":type path: string\n"
+		 ":returns: None\n"},
 		{NULL, NULL, 0, NULL}
 };
 
