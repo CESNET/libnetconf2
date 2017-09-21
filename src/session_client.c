@@ -193,7 +193,7 @@ nc_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx)
 {
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = ly_ctx_new(NULL);
+        ctx = ly_ctx_new(NULL, 0);
         if (!ctx) {
             return EXIT_FAILURE;
         }
@@ -270,7 +270,7 @@ ctx_check_and_load_ietf_netconf(struct ly_ctx *ctx, char **cpblts)
     int i;
     const struct lys_module *ietfnc;
 
-    ietfnc = ly_ctx_get_module(ctx, "ietf-netconf", NULL);
+    ietfnc = ly_ctx_get_module(ctx, "ietf-netconf", NULL, 1);
     if (!ietfnc) {
         ietfnc = ly_ctx_load_module(ctx, "ietf-netconf", NULL);
         if (!ietfnc) {
@@ -465,7 +465,7 @@ nc_ctx_fill_cpblts(struct nc_session *session, ly_module_imp_clb user_clb, void 
             revision = strndup(ptr, ptr2 - ptr);
         }
 
-        mod = ly_ctx_get_module(session->ctx, name, revision);
+        mod = ly_ctx_get_module(session->ctx, name, revision, 0);
         if (mod) {
             if (!mod->implemented) {
                 /* make the present module implemented */
@@ -659,7 +659,7 @@ parse:
             }
         }
 
-        mod = ly_ctx_get_module(session->ctx, name, revision);
+        mod = ly_ctx_get_module(session->ctx, name, revision, 0);
         if (mod) {
             if (implemented && !mod->implemented) {
                 /* make the present module implemented */
@@ -776,7 +776,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     }
 
     /* get-schema is supported, load local ietf-netconf-monitoring so we can create <get-schema> RPCs */
-    if (get_schema_support && !ly_ctx_get_module(session->ctx, "ietf-netconf-monitoring", NULL)) {
+    if (get_schema_support && !ly_ctx_get_module(session->ctx, "ietf-netconf-monitoring", NULL, 1)) {
         if (!lys_parse_path(session->ctx, SCHEMAS_DIR"/ietf-netconf-monitoring.yin", LYS_IN_YIN)) {
             WRN("Loading NETCONF monitoring schema failed, cannot use <get-schema>.");
             get_schema_support = 0;
@@ -855,9 +855,9 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
 
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = ly_ctx_new(SCHEMAS_DIR);
+        ctx = ly_ctx_new(SCHEMAS_DIR, 0);
         /* definitely should not happen, but be ready */
-        if (!ctx && !(ctx = ly_ctx_new(NULL))) {
+        if (!ctx && !(ctx = ly_ctx_new(NULL, 0))) {
             /* that's just it */
             goto fail;
         }
@@ -1328,7 +1328,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
             break;
 
         case NC_RPC_GETSCHEMA:
-            rpc_act = lyd_new(NULL, ly_ctx_get_module(ctx, "ietf-netconf-monitoring", NULL), "get-schema");
+            rpc_act = lyd_new(NULL, ly_ctx_get_module(ctx, "ietf-netconf-monitoring", NULL, 1), "get-schema");
             if (!rpc_act) {
                 ERRINT;
                 return NULL;
@@ -1814,7 +1814,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     }
 
     if ((rpc->type != NC_RPC_GETSCHEMA) && (rpc->type != NC_RPC_ACT_GENERIC) && (rpc->type != NC_RPC_SUBSCRIBE)) {
-        ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL);
+        ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL, 1);
         if (!ietfnc) {
             ERR("Session %u: missing \"ietf-netconf\" schema in the context.", session->id);
             return NC_MSG_ERROR;
@@ -1860,7 +1860,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         if (rpc_gc->wd_mode) {
             if (!ietfncwd) {
-                ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
+                ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL, 1);
                 if (!ietfncwd) {
                     ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
                     return NC_MSG_ERROR;
@@ -1968,7 +1968,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         if (rpc_cp->wd_mode) {
             if (!ietfncwd) {
-                ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
+                ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL, 1);
                 if (!ietfncwd) {
                     ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
                     return NC_MSG_ERROR;
@@ -2059,7 +2059,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         if (rpc_g->wd_mode) {
             if (!ietfncwd) {
-                ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL);
+                ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL, 1);
                 if (!ietfncwd) {
                     ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
                     lyd_free(data);
@@ -2166,7 +2166,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         break;
 
     case NC_RPC_GETSCHEMA:
-        ietfncmon = ly_ctx_get_module(session->ctx, "ietf-netconf-monitoring", NULL);
+        ietfncmon = ly_ctx_get_module(session->ctx, "ietf-netconf-monitoring", NULL, 1);
         if (!ietfncmon) {
             ERR("Session %u: missing \"ietf-netconf-monitoring\" schema in the context.", session->id);
             return NC_MSG_ERROR;
@@ -2197,7 +2197,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         break;
 
     case NC_RPC_SUBSCRIBE:
-        notifs = ly_ctx_get_module(session->ctx, "notifications", NULL);
+        notifs = ly_ctx_get_module(session->ctx, "notifications", NULL, 1);
         if (!notifs) {
             ERR("Session %u: missing \"notifications\" schema in the context.", session->id);
             return NC_MSG_ERROR;

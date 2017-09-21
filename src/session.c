@@ -498,7 +498,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         }
 
         /* send closing info to the other side */
-        ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL);
+        ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL, 1);
         if (!ietfnc) {
             WRN("Session %u: missing ietf-netconf schema in context, unable to send <close-session>.", session->id);
         } else {
@@ -763,7 +763,7 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
 
     /* capabilities */
 
-    mod = ly_ctx_get_module(ctx, "ietf-netconf", NULL);
+    mod = ly_ctx_get_module(ctx, "ietf-netconf", NULL, 1);
     if (mod) {
         if (lys_features_state(mod, "writable-running") == 1) {
             add_cpblt(ctx, "urn:ietf:params:netconf:capability:writable-running:1.0", &cpblts, &size, &count);
@@ -791,7 +791,7 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
         }
     }
 
-    mod = ly_ctx_get_module(ctx, "ietf-netconf-with-defaults", NULL);
+    mod = ly_ctx_get_module(ctx, "ietf-netconf-with-defaults", NULL, 1);
     if (mod) {
         if (!server_opts.wd_basic_mode) {
             VRB("with-defaults capability will not be advertised even though \"ietf-netconf-with-defaults\" model is present, unknown basic-mode.");
@@ -839,7 +839,7 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
     }
 
     /* models */
-    LY_TREE_FOR(yanglib->child, child) {
+    LY_TREE_FOR(yanglib->prev->child, child) {
         if (!module_set_id) {
             if (strcmp(child->prev->schema->name, "module-set-id")) {
                 ERRINT;

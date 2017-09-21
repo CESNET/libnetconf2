@@ -668,7 +668,7 @@ main(void)
 
     client_fork();
 
-    ctx = ly_ctx_new(TESTS_DIR"/../schemas");
+    ctx = ly_ctx_new(TESTS_DIR"/../schemas", 0);
     nc_assert(ctx);
     ly_ctx_load_module(ctx, "ietf-netconf", NULL);
     nc_server_init(ctx);

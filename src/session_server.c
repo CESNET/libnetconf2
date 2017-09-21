@@ -405,7 +405,7 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
     }
 
     /* check and get module with the name identifier */
-    module = ly_ctx_get_module(server_opts.ctx, identifier, version);
+    module = ly_ctx_get_module(server_opts.ctx, identifier, version, 0);
     if (!module) {
         module = (const struct lys_module *)ly_ctx_get_submodule(server_opts.ctx, NULL, NULL, identifier, version);
     }
