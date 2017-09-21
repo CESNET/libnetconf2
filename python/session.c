@@ -138,15 +138,8 @@ ncSessionNew(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (self != NULL) {
         /* NULL initiation */
         self->session = NULL;
+        self->ctx = NULL;
         self->ctx_counter = calloc(1, sizeof *self->ctx_counter);
-
-        /* prepare libyang context or use the one already present in the session */
-        self->ctx = ly_ctx_new(SCHEMAS_DIR);
-        if (!self->ctx) {
-            Py_DECREF(self);
-            return NULL;
-        }
-        (*self->ctx_counter)++;
     }
 
     return (PyObject *)self;
@@ -169,7 +162,7 @@ ncSessionInit(ncSessionObject *self, PyObject *args, PyObject *kwds)
 
     /* connect */
     if (transport && PyObject_TypeCheck(transport, &ncTLSType)) {
-        session = nc_connect_tls(host, port, self->ctx);
+        session = nc_connect_tls(host, port, NULL);
     } else {
         if (transport) {
             /* set SSH parameters */
@@ -194,8 +187,7 @@ ncSessionInit(ncSessionObject *self, PyObject *args, PyObject *kwds)
         }
 
         /* create connection */
-        session = nc_connect_ssh(host, port, self->ctx);
-
+        session = nc_connect_ssh(host, port, NULL);
         /* cleanup */
         if (transport) {
             if (((ncSSHObject*)transport)->username) {
@@ -213,6 +205,9 @@ ncSessionInit(ncSessionObject *self, PyObject *args, PyObject *kwds)
     if (!session) {
         return -1;
     }
+
+    /* get the internally created context for this session */
+    self->ctx = nc_session_get_ctx(session);
 
     /* replace the previous (if any) data in the session object */
     nc_session_free(self->session, NULL);
