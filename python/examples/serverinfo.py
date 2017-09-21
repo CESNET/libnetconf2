@@ -44,7 +44,7 @@ except Exception as e:
 #
 # print the list of the NETCONF server capabilities
 #
-print("\nNETCONF server capabilities from " + (host if host else "localhost") + ":" + (port if port else "830") + ":")
+print("\nNETCONF server capabilities from " + (host if host else "localhost") + ":" + (str(port) if port else "830") + " (session ID " + str(session.id) + "):")
 for c in session.capabilities:
 	print(c)
 
