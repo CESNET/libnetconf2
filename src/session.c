@@ -755,7 +755,7 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
     cpblts = malloc(size * sizeof *cpblts);
     if (!cpblts) {
         ERRMEM;
-        return NULL;
+        goto error;
     }
     cpblts[0] = lydict_insert(ctx, "urn:ietf:params:netconf:base:1.0", 0);
     cpblts[1] = lydict_insert(ctx, "urn:ietf:params:netconf:base:1.1", 0);
@@ -843,9 +843,7 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
         if (!module_set_id) {
             if (strcmp(child->prev->schema->name, "module-set-id")) {
                 ERRINT;
-                free(cpblts);
-                free(deviations);
-                return NULL;
+                goto error;
             }
             module_set_id = (struct lyd_node_leaf_list *)child->prev;
         }
@@ -861,18 +859,14 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
                     features = nc_realloc(features, ++feat_count * sizeof *features);
                     if (!features) {
                         ERRMEM;
-                        free(cpblts);
-                        free(deviations);
-                        return NULL;
+                        goto error;
                     }
                     features[feat_count - 1] = (struct lyd_node_leaf_list *)child2;
                 } else if (!strcmp(child2->schema->name, "deviation")) {
                     deviations = nc_realloc(deviations, ++dev_count * sizeof *deviations);
                     if (!deviations) {
                         ERRMEM;
-                        free(cpblts);
-                        free(features);
-                        return NULL;
+                        goto error;
                     }
                 }
             }
@@ -938,12 +932,20 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
         }
     }
 
-    lyd_free(yanglib);
+    lyd_free_withsiblings(yanglib);
 
     /* ending NULL capability */
     add_cpblt(ctx, NULL, &cpblts, &size, &count);
 
     return cpblts;
+
+error:
+
+    free(cpblts);
+    free(features);
+    free(deviations);
+    lyd_free_withsiblings(yanglib);
+    return NULL;
 }
 
 static int
