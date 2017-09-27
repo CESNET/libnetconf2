@@ -104,14 +104,6 @@ set(CMAKE_REQUIRED_LIBRARIES pthread)
 check_function_exists(pthread_spin_lock HAVE_SPINLOCK)
 check_function_exists(pthread_mutex_timedlock HAVE_PTHREAD_MUTEX_TIMEDLOCK)
 
-# dependencies - libssh
-if(ENABLE_SSH)
-    find_package(LibSSH 0.6.4 REQUIRED)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH ${LIBSSH_DEFINITIONS}")
-    target_link_libraries(netconf2 ${LIBSSH_LIBRARIES} -L${SSH_LIBRARY} -lssh_threads -lcrypt)
-    include_directories(${LIBSSH_INCLUDE_DIRS})
-endif()
-
 # dependencies - openssl
 if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
     find_package(OpenSSL REQUIRED)
@@ -120,6 +112,14 @@ if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
     endif()
     target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
     include_directories(${OPENSSL_INCLUDE_DIR})
+endif()
+
+# dependencies - libssh
+if(ENABLE_SSH)
+    find_package(LibSSH 0.6.4 REQUIRED)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH")
+    target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lssh_threads -lcrypt)
+    include_directories(${LIBSSH_INCLUDE_DIRS})
 endif()
 
 # dependencies - libval
