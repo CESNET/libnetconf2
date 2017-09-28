@@ -5,8 +5,8 @@
 [![Coverity Scan Build Status](https://scan.coverity.com/projects/7642/badge.svg)](https://scan.coverity.com/projects/7642)
 
 **libnetconf2** is a NETCONF library in C intended for building NETCONF clients
-and servers. NETCONF is the [NETwork CONFiguration protocol]
-(http://trac.tools.ietf.org/wg/netconf/trac/wiki) introduced by IETF.
+and servers. NETCONF is the [NETwork CONFiguration protocol](http://trac.tools.ietf.org/wg/netconf/trac/wiki)
+introduced by IETF.
 
 **libnetconf2** is a NETCONF library in C handling NETCONF authentication and all NETCONF RPC communication both server
 and client-side. Note that NETCONF datastore implementation is not a part of this library. The library supports both
@@ -29,9 +29,9 @@ is welcome. Please inform us about your experiences with using **libnetconf2**
 via the [issue tracker](https://github.com/CESNET/libnetconf/issues).
 
 Besides the [**libyang**](https://github.com/CESNET/libyang), **libnetconf2** is
-another basic building block for the [**Netopeer2** toolset]
-(https://github.com/CESNET/Netopeer2). For a reference implementation of NETCONF
-client and server, check the **Netopeer2** project.
+another basic building block for the [**Netopeer2** toolset](https://github.com/CESNET/Netopeer2).
+For a reference implementation of NETCONF client and server, check the
+**Netopeer2** project.
 
 ## libnetconf vs libnetconf2
 
@@ -45,9 +45,9 @@ of them is more suitable for your needs.
 To represent the schema and data trees, **libnetconf** uses libxml2, which is
 intended for different purposes - schema and data trees connected with YANG
 have specific needs and restrictions in comparison to more generic XML.
-Therefore, in **libnetconf2**, we have completely replaced libxml2 by [libyang]
-(https://github.com/CESNET/libyang). It is much more efficient in work with
-YANG modeled data (which is the case of NETCONF messages) and this advantage
+Therefore, in **libnetconf2**, we have completely replaced libxml2 by 
+[libyang](https://github.com/CESNET/libyang). It is much more efficient in work
+with YANG modeled data (which is the case of NETCONF messages) and this advantage
 then applies also to **libnetconf2**. The library connects data with the YANG
 schemas, so for example the data validation according to the provided YANG
 schemas is done internally by libyang instead of using external and extremely
