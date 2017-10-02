@@ -621,8 +621,7 @@ nc_ctx_fill_yl(struct nc_session *session, ly_module_imp_clb user_clb, void *use
     }
 
     data_rpl = (struct nc_reply_data *)reply;
-    if (!data_rpl->data || strcmp(data_rpl->data->schema->module->name, "ietf-yang-library") ||
-        strcmp(data_rpl->data->schema->name, "modules-state")) {
+    if (!data_rpl->data || strcmp(data_rpl->data->schema->module->name, "ietf-yang-library")) {
         ERR("Session %u: unexpected data in reply to a yang-library <get> RPC.", session->id);
         goto cleanup;
     }
