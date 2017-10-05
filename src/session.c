@@ -50,7 +50,20 @@
 extern struct nc_server_opts server_opts;
 
 int
-nc_gettimespec(struct timespec *ts)
+nc_gettimespec_mono(struct timespec *ts)
+{
+#ifdef CLOCK_MONOTONIC_RAW
+    return clock_gettime(CLOCK_MONOTONIC_RAW, ts);
+#elif defined(CLOCK_MONOTONIC)
+    return clock_gettime(CLOCK_MONOTONIC, ts);
+#else
+    /* no monotonic clock available, return realtime */
+    return nc_gettimespec_real(ts);
+#endif
+}
+
+int
+nc_gettimespec_real(struct timespec *ts)
 {
 #ifdef CLOCK_REALTIME
     return clock_gettime(CLOCK_REALTIME, ts);
@@ -167,7 +180,7 @@ nc_session_lock(struct nc_session *session, int timeout, const char *func)
     struct timespec ts_timeout;
 
     if (timeout > 0) {
-        nc_gettimespec(&ts_timeout);
+        nc_gettimespec_real(&ts_timeout);
         nc_addtimespec(&ts_timeout, timeout);
 
         /* LOCK */
@@ -245,7 +258,7 @@ nc_session_unlock(struct nc_session *session, int timeout, const char *func)
     assert(*session->ti_inuse);
 
     if (timeout > 0) {
-        nc_gettimespec(&ts_timeout);
+        nc_gettimespec_real(&ts_timeout);
         nc_addtimespec(&ts_timeout, timeout);
 
         /* LOCK */

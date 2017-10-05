@@ -1920,13 +1920,13 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     pthread_setspecific(verify_key, session);
 
     if (timeout > -1) {
-        nc_gettimespec(&ts_timeout);
+        nc_gettimespec_mono(&ts_timeout);
         nc_addtimespec(&ts_timeout, timeout);
     }
     while (((ret = SSL_accept(session->ti.tls)) == -1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
         usleep(NC_TIMEOUT_STEP);
         if (timeout > -1) {
-            nc_gettimespec(&ts_cur);
+            nc_gettimespec_mono(&ts_cur);
             if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
                 ERR("SSL_accept timeout.");
                 return 0;

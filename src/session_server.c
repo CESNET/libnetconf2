@@ -702,7 +702,7 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
     uint8_t queue_last;
     struct timespec ts;
 
-    nc_gettimespec(&ts);
+    nc_gettimespec_real(&ts);
     nc_addtimespec(&ts, NC_PS_LOCK_TIMEOUT);
 
     /* LOCK */
@@ -738,7 +738,7 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
 
     /* is it our turn? */
     while (ps->queue[ps->queue_begin] != *id) {
-        nc_gettimespec(&ts);
+        nc_gettimespec_real(&ts);
         nc_addtimespec(&ts, NC_PS_LOCK_TIMEOUT);
 
         ret = pthread_cond_timedwait(&ps->cond, &ps->lock, &ts);
@@ -763,7 +763,7 @@ nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func)
     int ret;
     struct timespec ts;
 
-    nc_gettimespec(&ts);
+    nc_gettimespec_real(&ts);
     nc_addtimespec(&ts, NC_PS_LOCK_TIMEOUT);
 
     /* LOCK */
@@ -1349,9 +1349,9 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
     }
 
     /* fill timespecs */
-    nc_gettimespec(&ts_cur);
+    nc_gettimespec_mono(&ts_cur);
     if (timeout > -1) {
-        nc_gettimespec(&ts_timeout);
+        nc_gettimespec_mono(&ts_timeout);
         nc_addtimespec(&ts_timeout, timeout);
     }
 
@@ -1439,7 +1439,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
         if (ret == NC_PSPOLL_TIMEOUT) {
             usleep(NC_TIMEOUT_STEP);
             /* update current time */
-            nc_gettimespec(&ts_cur);
+            nc_gettimespec_mono(&ts_cur);
 
             if ((timeout > -1) && (nc_difftimespec(&ts_cur, &ts_timeout) < 1)) {
                 /* final timeout */
@@ -2767,7 +2767,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
     data->session_clb(data->client_name, session);
 
     do {
-        nc_gettimespec(&ts);
+        nc_gettimespec_real(&ts);
         nc_addtimespec(&ts, NC_CH_NO_ENDPT_WAIT);
 
         ret = pthread_cond_timedwait(session->opts.server.ch_cond, session->opts.server.ch_lock, &ts);

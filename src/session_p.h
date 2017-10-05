@@ -455,7 +455,9 @@ NC_MSG_TYPE nc_send_msg(struct nc_session *session, struct lyd_node *op);
 int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *abstime);
 #endif
 
-int nc_gettimespec(struct timespec *ts);
+int nc_gettimespec_mono(struct timespec *ts);
+
+int nc_gettimespec_real(struct timespec *ts);
 
 int32_t nc_difftimespec(const struct timespec *ts1, const struct timespec *ts2);
 
