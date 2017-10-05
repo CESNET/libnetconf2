@@ -1249,7 +1249,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
     }
 
     if (timeout > -1) {
-        nc_gettimespec(&ts_timeout);
+        nc_gettimespec_mono(&ts_timeout);
         nc_addtimespec(&ts_timeout, timeout);
     }
     while (1) {
@@ -1277,7 +1277,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
 
         usleep(NC_TIMEOUT_STEP);
         if (timeout > -1) {
-            nc_gettimespec(&ts_cur);
+            nc_gettimespec_mono(&ts_cur);
             if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
                 /* timeout */
                 ERR("Failed to start \"netconf\" SSH subsystem for too long, disconnecting.");
@@ -1399,14 +1399,14 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     ssh_set_blocking(session->ti.libssh.session, 0);
 
     if (timeout > -1) {
-        nc_gettimespec(&ts_timeout);
+        nc_gettimespec_mono(&ts_timeout);
         nc_addtimespec(&ts_timeout, timeout);
     }
     while ((ret = ssh_handle_key_exchange(session->ti.libssh.session)) == SSH_AGAIN) {
         /* this tends to take longer */
         usleep(NC_TIMEOUT_STEP * 20);
         if (timeout > -1) {
-            nc_gettimespec(&ts_cur);
+            nc_gettimespec_mono(&ts_cur);
             if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
                 break;
             }
@@ -1422,7 +1422,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 
     /* authenticate */
     if (opts->auth_timeout) {
-        nc_gettimespec(&ts_timeout);
+        nc_gettimespec_mono(&ts_timeout);
         nc_addtimespec(&ts_timeout, opts->auth_timeout * 1000);
     }
     while (1) {
@@ -1448,7 +1448,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 
         usleep(NC_TIMEOUT_STEP);
         if (opts->auth_timeout) {
-            nc_gettimespec(&ts_cur);
+            nc_gettimespec_mono(&ts_cur);
             if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
                 /* timeout */
                 break;

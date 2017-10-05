@@ -1034,11 +1034,11 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
 
     ssh_sess = session->ti.libssh.session;
 
-    nc_gettimespec(&ts_timeout);
+    nc_gettimespec_mono(&ts_timeout);
     nc_addtimespec(&ts_timeout, NC_TRANSPORT_TIMEOUT);
     while ((ret = ssh_connect(ssh_sess)) == SSH_AGAIN) {
         usleep(NC_TIMEOUT_STEP);
-        nc_gettimespec(&ts_cur);
+        nc_gettimespec_mono(&ts_cur);
         if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
             break;
         }
@@ -1058,13 +1058,13 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
     }
 
     if (timeout > -1) {
-        nc_gettimespec(&ts_timeout);
+        nc_gettimespec_mono(&ts_timeout);
         nc_addtimespec(&ts_timeout, timeout);
     }
     while ((ret_auth = ssh_userauth_none(ssh_sess, NULL)) == SSH_AUTH_AGAIN) {
         usleep(NC_TIMEOUT_STEP);
         if (timeout > -1) {
-            nc_gettimespec(&ts_cur);
+            nc_gettimespec_mono(&ts_cur);
             if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
                 break;
             }
@@ -1124,13 +1124,13 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
             s = opts->auth_password(session->username, session->host, opts->auth_password_priv);
 
             if (timeout > -1) {
-                nc_gettimespec(&ts_timeout);
+                nc_gettimespec_mono(&ts_timeout);
                 nc_addtimespec(&ts_timeout, timeout);
             }
             while ((ret_auth = ssh_userauth_password(ssh_sess, session->username, s)) == SSH_AUTH_AGAIN) {
                 usleep(NC_TIMEOUT_STEP);
                 if (timeout > -1) {
-                    nc_gettimespec(&ts_cur);
+                    nc_gettimespec_mono(&ts_cur);
                     if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
                         break;
                     }
@@ -1146,7 +1146,7 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
             VRB("Keyboard-interactive authentication.");
 
             if (timeout > -1) {
-                nc_gettimespec(&ts_timeout);
+                nc_gettimespec_mono(&ts_timeout);
                 nc_addtimespec(&ts_timeout, timeout);
             }
             while (((ret_auth = ssh_userauth_kbdint(ssh_sess, NULL, NULL)) == SSH_AUTH_INFO)
@@ -1154,7 +1154,7 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
                 if (ret_auth == SSH_AUTH_AGAIN) {
                     usleep(NC_TIMEOUT_STEP);
                     if (timeout > -1) {
-                        nc_gettimespec(&ts_cur);
+                        nc_gettimespec_mono(&ts_cur);
                         if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
                             break;
                         }
@@ -1186,7 +1186,7 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
                     break;
                 }
                 if (timeout > -1) {
-                    nc_gettimespec(&ts_timeout);
+                    nc_gettimespec_mono(&ts_timeout);
                     nc_addtimespec(&ts_timeout, timeout);
                 }
             }
@@ -1218,13 +1218,13 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
                 }
 
                 if (timeout > -1) {
-                    nc_gettimespec(&ts_timeout);
+                    nc_gettimespec_mono(&ts_timeout);
                     nc_addtimespec(&ts_timeout, timeout);
                 }
                 while ((ret_auth = ssh_userauth_try_publickey(ssh_sess, NULL, pubkey)) == SSH_AUTH_AGAIN) {
                     usleep(NC_TIMEOUT_STEP);
                     if (timeout > -1) {
-                        nc_gettimespec(&ts_cur);
+                        nc_gettimespec_mono(&ts_cur);
                         if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
                             break;
                         }
@@ -1258,13 +1258,13 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
                 }
 
                 if (timeout > -1) {
-                    nc_gettimespec(&ts_timeout);
+                    nc_gettimespec_mono(&ts_timeout);
                     nc_addtimespec(&ts_timeout, timeout);
                 }
                 while ((ret_auth = ssh_userauth_publickey(ssh_sess, NULL, privkey)) == SSH_AUTH_AGAIN) {
                     usleep(NC_TIMEOUT_STEP);
                     if (timeout > -1) {
-                        nc_gettimespec(&ts_cur);
+                        nc_gettimespec_mono(&ts_cur);
                         if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
                             break;
                         }
@@ -1328,14 +1328,14 @@ open_netconf_channel(struct nc_session *session, int timeout)
 
     /* open a channel */
     if (timeout > -1) {
-        nc_gettimespec(&ts_timeout);
+        nc_gettimespec_mono(&ts_timeout);
         nc_addtimespec(&ts_timeout, timeout);
     }
     session->ti.libssh.channel = ssh_channel_new(ssh_sess);
     while ((ret = ssh_channel_open_session(session->ti.libssh.channel)) == SSH_AGAIN) {
         usleep(NC_TIMEOUT_STEP);
         if (timeout > -1) {
-            nc_gettimespec(&ts_cur);
+            nc_gettimespec_mono(&ts_cur);
             if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
                 break;
             }
@@ -1355,13 +1355,13 @@ open_netconf_channel(struct nc_session *session, int timeout)
 
     /* execute the NETCONF subsystem on the channel */
     if (timeout > -1) {
-        nc_gettimespec(&ts_timeout);
+        nc_gettimespec_mono(&ts_timeout);
         nc_addtimespec(&ts_timeout, timeout);
     }
     while ((ret = ssh_channel_request_subsystem(session->ti.libssh.channel, "netconf")) == SSH_AGAIN) {
         usleep(NC_TIMEOUT_STEP);
         if (timeout > -1) {
-            nc_gettimespec(&ts_cur);
+            nc_gettimespec_mono(&ts_cur);
             if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
                 break;
             }
