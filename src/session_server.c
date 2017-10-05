@@ -601,6 +601,7 @@ API NC_MSG_TYPE
 nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **session)
 {
     NC_MSG_TYPE msgtype;
+    struct timespec ts_cur;
 
     if (!server_opts.ctx) {
         ERRINIT;
@@ -654,7 +655,12 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
         *session = NULL;
         return msgtype;
     }
-    (*session)->opts.server.session_start = (*session)->opts.server.last_rpc = time(NULL);
+
+    nc_gettimespec_mono(&ts_cur);
+    (*session)->opts.server.last_rpc = ts_cur.tv_sec;
+    nc_gettimespec_real(&ts_cur);
+    (*session)->opts.server.session_start = ts_cur.tv_sec;
+
     (*session)->status = NC_STATUS_RUNNING;
 
     return msgtype;
@@ -1173,7 +1179,7 @@ nc_server_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
  *          NC_PSPOLL_SSH_MSG
  */
 static int
-nc_ps_poll_session(struct nc_session *session, time_t now, char *msg)
+nc_ps_poll_session(struct nc_session *session, time_t now_mono, char *msg)
 {
     struct pollfd pfd;
     int r, ret;
@@ -1183,7 +1189,7 @@ nc_ps_poll_session(struct nc_session *session, time_t now, char *msg)
 
     /* check timeout first */
     if (!(session->flags & NC_SESSION_CALLHOME) && !session->opts.server.ntf_status && server_opts.idle_timeout
-            && (now >= session->opts.server.last_rpc + server_opts.idle_timeout)) {
+            && (now_mono >= session->opts.server.last_rpc + server_opts.idle_timeout)) {
         sprintf(msg, "session idle timeout elapsed");
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_TIMEOUT;
@@ -1480,7 +1486,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                 cur_ps_session->state = NC_PS_STATE_NONE;
             }
         } else {
-            cur_session->opts.server.last_rpc = time(NULL);
+            cur_session->opts.server.last_rpc = ts_cur.tv_sec;
 
             /* process RPC, not needed afterwards */
             ret |= nc_server_send_reply(cur_session, rpc);
@@ -1850,6 +1856,7 @@ nc_accept(int timeout, struct nc_session **session)
     int sock, ret;
     char *host = NULL;
     uint16_t port, bind_idx;
+    struct timespec ts_cur;
 
     if (!server_opts.ctx) {
         ERRINIT;
@@ -1962,7 +1969,11 @@ nc_accept(int timeout, struct nc_session **session)
         *session = NULL;
         return msgtype;
     }
-    (*session)->opts.server.session_start = (*session)->opts.server.last_rpc = time(NULL);
+
+    nc_gettimespec_mono(&ts_cur);
+    (*session)->opts.server.last_rpc = ts_cur.tv_sec;
+    nc_gettimespec_real(&ts_cur);
+    (*session)->opts.server.session_start = ts_cur.tv_sec;
     (*session)->status = NC_STATUS_RUNNING;
 
     return msgtype;
@@ -2624,6 +2635,7 @@ nc_connect_ch_client_endpt(struct nc_ch_client *client, struct nc_ch_endpt *endp
 {
     NC_MSG_TYPE msgtype;
     int sock, ret;
+    struct timespec ts_cur;
 
     sock = nc_sock_connect(endpt->address, endpt->port);
     if (sock < 0) {
@@ -2698,7 +2710,11 @@ nc_connect_ch_client_endpt(struct nc_ch_client *client, struct nc_ch_endpt *endp
     if (msgtype != NC_MSG_HELLO) {
         goto fail;
     }
-    (*session)->opts.server.session_start = (*session)->opts.server.last_rpc = time(NULL);
+
+    nc_gettimespec_mono(&ts_cur);
+    (*session)->opts.server.last_rpc = ts_cur.tv_sec;
+    nc_gettimespec_real(&ts_cur);
+    (*session)->opts.server.session_start = ts_cur.tv_sec;
     (*session)->status = NC_STATUS_RUNNING;
 
     return msgtype;
@@ -2793,6 +2809,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
             idle_timeout = client->conn.period.idle_timeout;
         }
 
+        nc_gettimespec_mono(&ts);
         if (!session->opts.server.ntf_status && idle_timeout && (ts.tv_sec >= session->opts.server.last_rpc + idle_timeout)) {
             VRB("Call Home client \"%s\" session %u: session idle timeout elapsed.", client->name, session->id);
             session->status = NC_STATUS_INVALID;
