@@ -392,8 +392,8 @@ struct nc_session {
         } client;
         struct {
             /* server side only data */
-            time_t session_start;          /**< time the session was created */
-            time_t last_rpc;               /**< time the last RPC was received on this session */
+            time_t session_start;          /**< real time the session was created */
+            time_t last_rpc;               /**< monotonic time (seconds) the last RPC was received on this session */
             int ntf_status;                /**< flag whether the session is subscribed to any stream */
             pthread_mutex_t *ch_lock;      /**< Call Home thread lock */
             pthread_cond_t *ch_cond;       /**< Call Home thread condition */

@@ -22,6 +22,7 @@
 #include <shadow.h>
 #include <crypt.h>
 #include <errno.h>
+#include <time.h>
 
 #include "session_server.h"
 #include "session_server_ch.h"
@@ -1481,6 +1482,7 @@ nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session
 {
     NC_MSG_TYPE msgtype;
     struct nc_session *new_session = NULL;
+    struct timespec ts_cur;
 
     if (!orig_session) {
         ERRARG("orig_session");
@@ -1522,7 +1524,10 @@ nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session
         return msgtype;
     }
 
-    new_session->opts.server.session_start = new_session->opts.server.last_rpc = time(NULL);
+    nc_gettimespec_real(&ts_cur);
+    new_session->opts.server.session_start = ts_cur.tv_sec;
+    nc_gettimespec_mono(&ts_cur);
+    new_session->opts.server.last_rpc = ts_cur.tv_sec;
     new_session->status = NC_STATUS_RUNNING;
     *session = new_session;
 
@@ -1535,6 +1540,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     uint8_t q_id;
     NC_MSG_TYPE msgtype;
     struct nc_session *new_session = NULL, *cur_session;
+    struct timespec ts_cur;
     uint16_t i;
 
     if (!ps) {
@@ -1591,7 +1597,10 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
         return msgtype;
     }
 
-    new_session->opts.server.session_start = new_session->opts.server.last_rpc = time(NULL);
+    nc_gettimespec_real(&ts_cur);
+    new_session->opts.server.session_start = ts_cur.tv_sec;
+    nc_gettimespec_mono(&ts_cur);
+    new_session->opts.server.last_rpc = ts_cur.tv_sec;
     new_session->status = NC_STATUS_RUNNING;
     *session = new_session;
 
