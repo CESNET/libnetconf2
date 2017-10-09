@@ -941,10 +941,9 @@ nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
 }
 
 API struct nc_session *
-nc_ps_get_session_by_sid(const struct nc_pollsession *ps, uint32_t sid)
+nc_ps_get_session(const struct nc_pollsession *ps, uint16_t idx)
 {
     uint8_t q_id;
-    uint16_t i;
     struct nc_session *ret = NULL;
 
     if (!ps) {
@@ -957,11 +956,8 @@ nc_ps_get_session_by_sid(const struct nc_pollsession *ps, uint32_t sid)
         return NULL;
     }
 
-    for (i = 0; i < ps->session_count; ++i) {
-        if (ps->sessions[i]->session->id == sid) {
-            ret = ps->sessions[i]->session;
-            break;
-        }
+    if (idx < ps->session_count) {
+        ret = ps->sessions[idx]->session;
     }
 
     /* UNLOCK */
