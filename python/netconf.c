@@ -215,6 +215,9 @@ PyInit_netconf2(void)
     PyModule_AddStringConstant(nc, "TRANSPORT_SSH", NETCONF_TRANSPORT_SSH);
     PyModule_AddStringConstant(nc, "TRANSPORT_TLS", NETCONF_TRANSPORT_TLS);
 */
+    PyModule_AddIntConstant(nc, "DATASTORE_RUNNING", NC_DATASTORE_RUNNING);
+    PyModule_AddIntConstant(nc, "DATASTORE_STARTUP", NC_DATASTORE_STARTUP);
+    PyModule_AddIntConstant(nc, "DATASTORE_CANDIDATE", NC_DATASTORE_CANDIDATE);
 
 	/* init libnetconf exceptions for use in clb_print() */
 	libnetconf2Error = PyErr_NewExceptionWithDoc("netconf.Error",
