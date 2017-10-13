@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include <libyang/libyang.h>
+#include <libyang/swigpyrun.h>
 
 #include "netconf.h"
 #include "session.h"
@@ -69,11 +70,19 @@ recv_reply:
 static PyObject *
 err_reply_converter(struct nc_client_reply_error *reply)
 {
-    ncErrObject *result;
+    uint32_t i = 0;
+    ncErrObject *e;
+    PyObject *result;
 
-    result = PyObject_New(ncErrObject, &ncErrType);
-    result->ctx = reply->ctx;
-    result->err = reply->err;
+    result = PyList_New(reply->count);
+    for (i = 0; i < reply->count; i++) {
+        e = PyObject_New(ncErrObject, &ncErrType);
+        e->ctx = reply->ctx;
+        e->err = malloc(sizeof *e->err);
+        memcpy(e->err, &reply->err[i], sizeof *e->err);
+        PyList_SET_ITEM(result, i, (PyObject*)e);
+    }
+    free(reply->err); /* pointers to the data were moved, so we are freeing just a container for the data */
     reply->err = NULL;
 
     return (PyObject*)result;
@@ -84,8 +93,7 @@ err_reply_converter(struct nc_client_reply_error *reply)
 static PyObject *
 process_reply_data(struct nc_reply *reply)
 {
-    struct lyd_node *data;
-    //PyObject *result;
+    PyObject *result, *data = NULL, *module;
 
     /* check the type of the received reply message */
     if (reply->type != NC_RPL_DATA) {
@@ -94,19 +102,40 @@ process_reply_data(struct nc_reply *reply)
         } else {
             PyErr_SetString(libnetconf2Error, "Unexpected reply received.");
         }
-        nc_reply_free(reply);
-        return NULL;
+        goto error;
     }
 
+    //lyd_print_file(stdout, ((struct nc_reply_data*)reply)->data, LYD_XML, LYP_FORMAT);
+
     /* process the received data */
-    data = ((struct nc_reply_data*)reply)->data;
+    data = SWIG_NewPointerObj(((struct nc_reply_data*)reply)->data, SWIG_Python_TypeQuery("lyd_node*"), 0);
+    if (!data) {
+        PyErr_SetString(libnetconf2Error, "Building Python object from data reply failed.");
+        goto error;
+    }
     ((struct nc_reply_data*)reply)->data = NULL;
+
+    module = PyImport_ImportModule("libyang");
+    if (module == NULL) {
+        PyErr_SetString(libnetconf2Error, "Could not import libyang module");
+        goto error;
+    }
+
+    result = PyObject_CallMethod(module, "create_new_Data_Node", "(O)", data);
+    Py_DECREF(module);
+    Py_DECREF(data);
+    if (result == NULL) {
+        PyErr_SetString(libnetconf2Error, "Could not create Data_Node object.");
+        goto error;
+    }
+
     nc_reply_free(reply);
+    return result;
 
-    lyd_print_file(stdout, data, LYD_XML, LYP_FORMAT);
-
-    Py_RETURN_NONE;
-    //return result;
+error:
+    Py_XDECREF(data);
+    nc_reply_free(reply);
+    return NULL;
 }
 
 PyObject *

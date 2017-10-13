@@ -167,6 +167,11 @@ PyInit_netconf2(void)
 {
 	PyObject *nc;
 
+    /* import libyang Python module to have it available */
+    if (!PyImport_ImportModule("libyang")) {
+        return NULL;
+    }
+
 	/* initiate libnetconf2 client part */
 	nc_client_init();
 
