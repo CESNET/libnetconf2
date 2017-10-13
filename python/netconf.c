@@ -184,11 +184,12 @@ PyInit_netconf2(void)
     if (PyType_Ready(&ncSSHType) == -1) {
         return NULL;
     }
-
+/*
     ncTLSType.tp_new = PyType_GenericNew;
     if (PyType_Ready(&ncTLSType) == -1) {
         return NULL;
     }
+*/
 
 	/* create netconf as the Python module */
 	nc = PyModule_Create(&ncModule);
@@ -198,9 +199,10 @@ PyInit_netconf2(void)
 
     Py_INCREF(&ncSSHType);
     PyModule_AddObject(nc, "SSH", (PyObject *)&ncSSHType);
-
+/*
     Py_INCREF(&ncTLSType);
     PyModule_AddObject(nc, "TLS", (PyObject *)&ncTLSType);
+*/
 
     Py_INCREF(&ncSessionType);
     PyModule_AddObject(nc, "Session", (PyObject *)&ncSessionType);
