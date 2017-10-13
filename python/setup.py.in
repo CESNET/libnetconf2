@@ -5,7 +5,8 @@ netconf2Module = Extension("netconf2",
                                     "${CMAKE_CURRENT_SOURCE_DIR}/session.c", 
                                     "${CMAKE_CURRENT_SOURCE_DIR}/ssh.c",
                                     "${CMAKE_CURRENT_SOURCE_DIR}/tls.c",
-                                    "${CMAKE_CURRENT_SOURCE_DIR}/rpc.c"
+                                    "${CMAKE_CURRENT_SOURCE_DIR}/rpc.c",
+                                    "${CMAKE_CURRENT_SOURCE_DIR}/err.c"
                                    ],
                            depends=["${CMAKE_CURRENT_SOURCE_DIR}/netconf.h",
                                     "${CMAKE_CURRENT_SOURCE_DIR}/session.h",

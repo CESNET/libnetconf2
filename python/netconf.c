@@ -23,6 +23,7 @@
 
 PyObject *libnetconf2Error;
 PyObject *libnetconf2Warning;
+PyObject *libnetconf2ReplyError;
 
 /* syslog usage flag */
 static int syslogEnabled = 0;
@@ -190,6 +191,10 @@ PyInit_netconf2(void)
         return NULL;
     }
 */
+    ncErrType.tp_new = PyType_GenericNew;
+    if (PyType_Ready(&ncErrType) == -1) {
+        return NULL;
+    }
 
 	/* create netconf as the Python module */
 	nc = PyModule_Create(&ncModule);
@@ -203,6 +208,8 @@ PyInit_netconf2(void)
     Py_INCREF(&ncTLSType);
     PyModule_AddObject(nc, "TLS", (PyObject *)&ncTLSType);
 */
+    Py_INCREF(&ncErrType);
+    PyModule_AddObject(nc, "ReplyErrorInfo", (PyObject *)&ncErrType);
 
     Py_INCREF(&ncSessionType);
     PyModule_AddObject(nc, "Session", (PyObject *)&ncSessionType);
@@ -222,17 +229,23 @@ PyInit_netconf2(void)
     PyModule_AddIntConstant(nc, "DATASTORE_CANDIDATE", NC_DATASTORE_CANDIDATE);
 
 	/* init libnetconf exceptions for use in clb_print() */
-	libnetconf2Error = PyErr_NewExceptionWithDoc("netconf.Error",
+	libnetconf2Error = PyErr_NewExceptionWithDoc("netconf2.Error",
 	                                             "Error passed from the underlying libnetconf2 library.",
 	                                             NULL, NULL);
 	Py_INCREF(libnetconf2Error);
 	PyModule_AddObject(nc, "Error", libnetconf2Error);
 
-	libnetconf2Warning = PyErr_NewExceptionWithDoc("netconf.Warning",
+	libnetconf2Warning = PyErr_NewExceptionWithDoc("netconf2.Warning",
 	                                               "Warning passed from the underlying libnetconf2 library.",
 	                                               PyExc_Warning, NULL);
 	Py_INCREF(libnetconf2Warning);
 	PyModule_AddObject(nc, "Warning", libnetconf2Warning);
+
+    libnetconf2ReplyError = PyErr_NewExceptionWithDoc("netconf2.ReplyError",
+                                                      "NETCONF error returned from the server.",
+                                                      NULL, NULL);
+    Py_INCREF(libnetconf2ReplyError);
+    PyModule_AddObject(nc, "ReplyError", libnetconf2ReplyError);
 
 	return nc;
 }

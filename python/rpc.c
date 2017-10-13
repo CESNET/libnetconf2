@@ -19,15 +19,16 @@
 #include <string.h>
 
 #include <libyang/libyang.h>
-#include <libyang/swigpyrun.h>
 
 #include "netconf.h"
 #include "session.h"
+#include "messages_p.h"
 
 #define TIMEOUT_SEND 1000  /* 1 second */
 #define TIMEOUT_RECV 10000 /* 10 second */
 
 extern PyObject *libnetconf2Error;
+extern PyObject *libnetconf2ReplyError;
 
 static struct nc_reply *
 rpc_send_recv(struct nc_session *session, struct nc_rpc *rpc)
@@ -66,15 +67,30 @@ recv_reply:
 }
 
 static PyObject *
+err_reply_converter(struct nc_client_reply_error *reply)
+{
+    ncErrObject *result;
+
+    result = PyObject_New(ncErrObject, &ncErrType);
+    result->ctx = reply->ctx;
+    result->err = reply->err;
+    reply->err = NULL;
+
+    return (PyObject*)result;
+}
+
+#define RAISE_REPLY_ERROR(reply) PyErr_SetObject(libnetconf2ReplyError,err_reply_converter((struct nc_client_reply_error *)reply))
+
+static PyObject *
 process_reply_data(struct nc_reply *reply)
 {
     struct lyd_node *data;
-    PyObject *result;
+    //PyObject *result;
 
     /* check the type of the received reply message */
     if (reply->type != NC_RPL_DATA) {
         if (reply->type == NC_RPL_ERROR) {
-            PyErr_SetString(libnetconf2Error, ((struct nc_reply_error*)reply)->err->message);
+            RAISE_REPLY_ERROR(reply);
         } else {
             PyErr_SetString(libnetconf2Error, "Unexpected reply received.");
         }
@@ -89,12 +105,8 @@ process_reply_data(struct nc_reply *reply)
 
     lyd_print_file(stdout, data, LYD_XML, LYP_FORMAT);
 
-    result = SWIG_NewPointerObj(data, SWIG_Python_TypeQuery("std::shared_ptr<Data_Node>*"), SWIG_POINTER_DISOWN);
-    if (!result) {
-        PyErr_SetString(libnetconf2Error, "Building Python object from lyd_node* failed");
-    }
-
-    return result;
+    Py_RETURN_NONE;
+    //return result;
 }
 
 PyObject *
