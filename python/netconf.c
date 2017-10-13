@@ -31,72 +31,80 @@ static int syslogEnabled = 0;
 static void
 clb_print(NC_VERB_LEVEL level, const char* msg)
 {
-	switch (level) {
-	case NC_VERB_ERROR:
-		PyErr_SetString(libnetconf2Error, msg);
-		if (syslogEnabled) {syslog(LOG_ERR, "%s", msg);}
-		break;
-	case NC_VERB_WARNING:
-		if (syslogEnabled) {syslog(LOG_WARNING, "%s", msg);}
-		PyErr_WarnEx(libnetconf2Warning, msg, 1);
-		break;
-	case NC_VERB_VERBOSE:
-		if (syslogEnabled) {syslog(LOG_INFO, "%s", msg);}
-		break;
-	case NC_VERB_DEBUG:
-		if (syslogEnabled) {syslog(LOG_DEBUG, "%s", msg);}
-		break;
-	}
+    switch (level) {
+    case NC_VERB_ERROR:
+        PyErr_SetString(libnetconf2Error, msg);
+        if (syslogEnabled) {
+            syslog(LOG_ERR, "%s", msg);
+        }
+        break;
+    case NC_VERB_WARNING:
+        if (syslogEnabled) {
+            syslog(LOG_WARNING, "%s", msg);
+        }
+        PyErr_WarnEx(libnetconf2Warning, msg, 1);
+        break;
+    case NC_VERB_VERBOSE:
+        if (syslogEnabled) {
+            syslog(LOG_INFO, "%s", msg);
+        }
+        break;
+    case NC_VERB_DEBUG:
+        if (syslogEnabled) {
+            syslog(LOG_DEBUG, "%s", msg);
+        }
+        break;
+    }
 }
 
 static PyObject *
 setSyslog(PyObject *self, PyObject *args, PyObject *keywds)
 {
-	char* name = NULL;
-	static char* logname = NULL;
-	static int option = LOG_PID;
-	static int facility = LOG_USER;
+    char* name = NULL;
+    static char* logname = NULL;
+    static int option = LOG_PID;
+    static int facility = LOG_USER;
 
-	static char *kwlist[] = {"enabled", "name", "option", "facility", NULL};
+    static char *kwlist[] = {"enabled", "name", "option", "facility", NULL};
 
-	if (! PyArg_ParseTupleAndKeywords(args, keywds, "p|sii", kwlist, &syslogEnabled, &name, &option, &facility)) {
-		return NULL;
-	}
+    if (!PyArg_ParseTupleAndKeywords(args, keywds, "p|sii", kwlist, &syslogEnabled, &name, &option, &facility)) {
+        return NULL;
+    }
 
-	if (name) {
-		free(logname);
-		logname = strdup(name);
-	} else {
-		free(logname);
-		logname = NULL;
-	}
-	closelog();
-	openlog(logname, option, facility);
+    if (name) {
+        free(logname);
+        logname = strdup(name);
+    } else {
+        free(logname);
+        logname = NULL;
+    }
+    closelog();
+    openlog(logname, option, facility);
 
-	Py_RETURN_NONE;
+    Py_RETURN_NONE;
 }
 
 static PyObject *
 setVerbosity(PyObject *self, PyObject *args, PyObject *keywds)
 {
-	int level = NC_VERB_ERROR; /* 0 */
+    int level = NC_VERB_ERROR; /* 0 */
 
-	static char *kwlist[] = {"level", NULL};
+    static char *kwlist[] = {"level", NULL};
 
-	if (! PyArg_ParseTupleAndKeywords(args, keywds, "i", kwlist, &level)) {
-		return NULL;
-	}
+    if (!PyArg_ParseTupleAndKeywords(args, keywds, "i", kwlist, &level)) {
+        return NULL;
+    }
 
-	/* normalize level value if not from the enum */
-	if (level < NC_VERB_ERROR) {
-		nc_verbosity(NC_VERB_ERROR);
-	} else if (level > NC_VERB_DEBUG) {
-		nc_verbosity(NC_VERB_DEBUG);
-	} else {
-		nc_verbosity(level);
-	}
+    /* normalize level value if not from the enum */
+    if (level < NC_VERB_ERROR) {
+        nc_verbosity(NC_VERB_ERROR);
+    } else if (level > NC_VERB_DEBUG) {
+        nc_verbosity(NC_VERB_DEBUG);
+    } else {
+        nc_verbosity(level);
+    }
 
-	Py_RETURN_NONE;
+    Py_RETURN_NONE;
 }
 
 static PyObject *
@@ -117,33 +125,33 @@ setSearchpath(PyObject *self, PyObject *args, PyObject *keywds)
 }
 
 static PyMethodDef netconf2Methods[] = {
-		{"setVerbosity", (PyCFunction)setVerbosity, METH_VARARGS | METH_KEYWORDS,
-		 "setVerbosity(level)\n--\n\n"
-		 "Set verbose level\n\n"
-		 ":param level: Verbosity level (0 - errors, 1 - warnings, 2 - verbose, 3 - debug)\n"
-		 ":type level: int\n"
-		 ":returns: None\n"},
-		{"setSyslog", (PyCFunction)setSyslog, METH_VARARGS | METH_KEYWORDS,
-		 "setSyslog(enabled[, name=None][, option=LOG_PID][, facility=LOG_USER])\n--\n\n"
-		 "Set application settings for syslog.\n\n"
-		 ":param enabled: Flag to enable/disable logging into syslog.\n"
-		 ":type enabled: bool\n"
-		 ":param name: Identifier (program name is set by default).\n"
-		 ":type name: string\n"
-		 ":param option: ORed value of syslog options (LOG_PID by default).\n"
-		 ":type option: int\n"
-		 ":param facility: Type of the program logging the message (LOG_USER by default).\n"
-		 ":type facility: int\n"
-		 ":returns: None\n\n"
-		 ".. seealso:: syslog.openlog\n"},
-		{"setSearchpath", (PyCFunction)setSearchpath, METH_VARARGS | METH_KEYWORDS,
-		 "setSearchpath(path)\n--\n\n"
-		 "Set location where YANG/YIN schemas are searched and where the schemas\n"
-		 "retrieved via <get-schema> opration are stored.\n\n"
-		 ":param path: Search directory.\n"
-		 ":type path: string\n"
-		 ":returns: None\n"},
-		{NULL, NULL, 0, NULL}
+    {"setVerbosity", (PyCFunction)setVerbosity, METH_VARARGS | METH_KEYWORDS,
+     "setVerbosity(level)\n--\n\n"
+     "Set verbose level\n\n"
+     ":param level: Verbosity level (0 - errors, 1 - warnings, 2 - verbose, 3 - debug)\n"
+     ":type level: int\n"
+     ":returns: None\n"},
+    {"setSyslog", (PyCFunction)setSyslog, METH_VARARGS | METH_KEYWORDS,
+     "setSyslog(enabled[, name=None][, option=LOG_PID][, facility=LOG_USER])\n--\n\n"
+     "Set application settings for syslog.\n\n"
+     ":param enabled: Flag to enable/disable logging into syslog.\n"
+     ":type enabled: bool\n"
+     ":param name: Identifier (program name is set by default).\n"
+     ":type name: string\n"
+     ":param option: ORed value of syslog options (LOG_PID by default).\n"
+     ":type option: int\n"
+     ":param facility: Type of the program logging the message (LOG_USER by default).\n"
+     ":type facility: int\n"
+     ":returns: None\n\n"
+     ".. seealso:: syslog.openlog\n"},
+    {"setSearchpath", (PyCFunction)setSearchpath, METH_VARARGS | METH_KEYWORDS,
+     "setSearchpath(path)\n--\n\n"
+     "Set location where YANG/YIN schemas are searched and where the schemas\n"
+     "retrieved via <get-schema> opration are stored.\n\n"
+     ":param path: Search directory.\n"
+     ":type path: string\n"
+     ":returns: None\n"},
+    {NULL, NULL, 0, NULL}
 };
 
 static char netconf2Docs[] =
@@ -154,33 +162,33 @@ static char netconf2Docs[] =
     "better fit the usage in Python.\n";
 
 static struct PyModuleDef ncModule = {
-		PyModuleDef_HEAD_INIT,
-		"netconf2",
-		netconf2Docs,
-		-1,
-		netconf2Methods,
+    PyModuleDef_HEAD_INIT,
+    "netconf2",
+    netconf2Docs,
+    -1,
+    netconf2Methods,
 };
 
 /* module initializer */
 PyMODINIT_FUNC
 PyInit_netconf2(void)
 {
-	PyObject *nc;
+    PyObject *nc;
 
     /* import libyang Python module to have it available */
     if (!PyImport_ImportModule("libyang")) {
         return NULL;
     }
 
-	/* initiate libnetconf2 client part */
-	nc_client_init();
+    /* initiate libnetconf2 client part */
+    nc_client_init();
 
-	/* set schema searchpath
-	 * nc_client_set_schema_searchpath()
-	 */
+    /* set schema searchpath
+     * nc_client_set_schema_searchpath()
+     */
 
-	/* set print callback */
-	nc_set_print_clb(clb_print);
+    /* set print callback */
+    nc_set_print_clb(clb_print);
 
     if (PyType_Ready(&ncSessionType) == -1) {
         return NULL;
@@ -201,11 +209,11 @@ PyInit_netconf2(void)
         return NULL;
     }
 
-	/* create netconf as the Python module */
-	nc = PyModule_Create(&ncModule);
-	if (nc == NULL) {
-		return NULL;
-	}
+    /* create netconf as the Python module */
+    nc = PyModule_Create(&ncModule);
+    if (nc == NULL) {
+        return NULL;
+    }
 
     Py_INCREF(&ncSSHType);
     PyModule_AddObject(nc, "SSH", (PyObject *)&ncSSHType);
@@ -233,24 +241,24 @@ PyInit_netconf2(void)
     PyModule_AddIntConstant(nc, "DATASTORE_STARTUP", NC_DATASTORE_STARTUP);
     PyModule_AddIntConstant(nc, "DATASTORE_CANDIDATE", NC_DATASTORE_CANDIDATE);
 
-	/* init libnetconf exceptions for use in clb_print() */
-	libnetconf2Error = PyErr_NewExceptionWithDoc("netconf2.Error",
-	                                             "Error passed from the underlying libnetconf2 library.",
-	                                             NULL, NULL);
-	Py_INCREF(libnetconf2Error);
-	PyModule_AddObject(nc, "Error", libnetconf2Error);
+    /* init libnetconf exceptions for use in clb_print() */
+    libnetconf2Error = PyErr_NewExceptionWithDoc("netconf2.Error",
+                    "Error passed from the underlying libnetconf2 library.",
+                    NULL, NULL);
+    Py_INCREF(libnetconf2Error);
+    PyModule_AddObject(nc, "Error", libnetconf2Error);
 
-	libnetconf2Warning = PyErr_NewExceptionWithDoc("netconf2.Warning",
-	                                               "Warning passed from the underlying libnetconf2 library.",
-	                                               PyExc_Warning, NULL);
-	Py_INCREF(libnetconf2Warning);
-	PyModule_AddObject(nc, "Warning", libnetconf2Warning);
+    libnetconf2Warning = PyErr_NewExceptionWithDoc("netconf2.Warning",
+                    "Warning passed from the underlying libnetconf2 library.",
+                    PyExc_Warning, NULL);
+    Py_INCREF(libnetconf2Warning);
+    PyModule_AddObject(nc, "Warning", libnetconf2Warning);
 
     libnetconf2ReplyError = PyErr_NewExceptionWithDoc("netconf2.ReplyError",
-                                                      "NETCONF error returned from the server.",
-                                                      NULL, NULL);
+                    "NETCONF error returned from the server.",
+                    NULL, NULL);
     Py_INCREF(libnetconf2ReplyError);
     PyModule_AddObject(nc, "ReplyError", libnetconf2ReplyError);
 
-	return nc;
+    return nc;
 }
