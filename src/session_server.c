@@ -1375,7 +1375,8 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                 ret = NC_PSPOLL_ERROR;
             } else if (r == 1) {
                 /* no one else is currently working with the session, so we can, otherwise skip it */
-                if (cur_ps_session->state == NC_PS_STATE_NONE) {
+                switch (cur_ps_session->state) {
+                case NC_PS_STATE_NONE:
                     if (cur_session->status == NC_STATUS_RUNNING) {
                         /* session is fine, work with it */
                         cur_ps_session->state = NC_PS_STATE_BUSY;
@@ -1409,10 +1410,16 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                         }
                         cur_ps_session->state = NC_PS_STATE_INVALID;
                     }
-                } else if (cur_ps_session->state == NC_PS_STATE_BUSY) {
+                    break;
+                case NC_PS_STATE_BUSY:
                     /* it definitely should not be busy because we have the lock */
                     ERRINT;
                     ret = NC_PSPOLL_ERROR;
+                    break;
+                case NC_PS_STATE_INVALID:
+                    /* we got it locked, but it will be freed, let it be */
+                    ret = NC_PSPOLL_TIMEOUT;
+                    break;
                 }
 
                 /* keep the session locked only in this one case */
