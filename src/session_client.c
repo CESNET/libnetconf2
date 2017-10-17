@@ -503,6 +503,13 @@ nc_ctx_fill_cpblts(struct nc_session *session, ly_module_imp_clb user_clb, void 
         }
 
         if (!mod) {
+            if (session->status != NC_STATUS_RUNNING) {
+                /* something bad heppened, discard the session */
+                ERR("Session %d: invalid session, discarding.", nc_session_get_id(session));
+                ret = 1;
+                goto cleanup;
+            }
+
             /* all loading ways failed, the schema will be ignored in the received data */
             WRN("Failed to load schema \"%s@%s\".", name, revision ? revision : "<latest>");
             session->flags |= NC_SESSION_CLIENT_NOT_STRICT;
@@ -583,7 +590,7 @@ nc_ctx_fill_yl(struct nc_session *session, ly_module_imp_clb user_clb, void *use
         usleep(1000);
     }
     if (msg == NC_MSG_ERROR) {
-        ERR("Session %u: failed to send request for yang-library data, trying to use capabilities list.",
+        ERR("Session %u: failed to send request for yang-library data.",
             session->id);
         goto cleanup;
     }
@@ -742,6 +749,11 @@ cleanup:
     ly_set_free(imports);
     ly_set_free(features);
 
+    if (session->status != NC_STATUS_RUNNING) {
+        ERR("Session %d: invalid session, discarding.", nc_session_get_id(session));
+        ret = -1;
+    }
+
     return ret;
 }
 
@@ -795,14 +807,14 @@ nc_ctx_check_and_fill(struct nc_session *session)
         if (r == -1) {
             goto cleanup;
         } else if (r == 1) {
+            VRB("Session %d: trying to use capabilities instead of ietf-yang-library data.", nc_session_get_id(session));
             /* try to use standard capabilities */
             goto capabilities;
         }
     } else {
 capabilities:
 
-        r = nc_ctx_fill_cpblts(session, old_clb, old_data);
-        if (r) {
+        if (nc_ctx_fill_cpblts(session, old_clb, old_data)) {
             goto cleanup;
         }
     }
