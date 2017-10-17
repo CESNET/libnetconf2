@@ -12,6 +12,7 @@
  *     https://opensource.org/licenses/BSD-3-Clause
  */
 
+#include <assert.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -618,11 +619,48 @@ nc_rpc_free(struct nc_rpc *rpc)
 }
 
 API void
+nc_client_err_clean(struct nc_err *err, struct ly_ctx *ctx)
+{
+    int i;
+
+    assert(ctx);
+
+    if (!err) {
+        return;
+    }
+
+    lydict_remove(ctx, err->type);
+    lydict_remove(ctx, err->tag);
+    lydict_remove(ctx, err->severity);
+    lydict_remove(ctx, err->apptag);
+    lydict_remove(ctx, err->path);
+    lydict_remove(ctx, err->message);
+    lydict_remove(ctx, err->message_lang);
+    lydict_remove(ctx, err->sid);
+    for (i = 0; i < err->attr_count; ++i) {
+        lydict_remove(ctx, err->attr[i]);
+    }
+    free(err->attr);
+    for (i = 0; i < err->elem_count; ++i) {
+        lydict_remove(ctx, err->elem[i]);
+    }
+    free(err->elem);
+    for (i = 0; i < err->ns_count; ++i) {
+        lydict_remove(ctx, err->ns[i]);
+    }
+    free(err->ns);
+    for (i = 0; i < err->other_count; ++i) {
+        lyxml_free(ctx, err->other[i]);
+    }
+    free(err->other);
+}
+
+API void
 nc_reply_free(struct nc_reply *reply)
 {
     struct nc_client_reply_error *error;
     struct nc_reply_data *data;
-    uint32_t i, j;
+    uint32_t i;
 
     if (!reply) {
         return;
@@ -641,30 +679,7 @@ nc_reply_free(struct nc_reply *reply)
     case NC_RPL_ERROR:
         error = (struct nc_client_reply_error *)reply;
         for (i = 0; i < error->count; ++i) {
-            lydict_remove(error->ctx, error->err[i].type);
-            lydict_remove(error->ctx, error->err[i].tag);
-            lydict_remove(error->ctx, error->err[i].severity);
-            lydict_remove(error->ctx, error->err[i].apptag);
-            lydict_remove(error->ctx, error->err[i].path);
-            lydict_remove(error->ctx, error->err[i].message);
-            lydict_remove(error->ctx, error->err[i].message_lang);
-            lydict_remove(error->ctx, error->err[i].sid);
-            for (j = 0; j < error->err[i].attr_count; ++j) {
-                lydict_remove(error->ctx, error->err[i].attr[j]);
-            }
-            free(error->err[i].attr);
-            for (j = 0; j < error->err[i].elem_count; ++j) {
-                lydict_remove(error->ctx, error->err[i].elem[j]);
-            }
-            free(error->err[i].elem);
-            for (j = 0; j < error->err[i].ns_count; ++j) {
-                lydict_remove(error->ctx, error->err[i].ns[j]);
-            }
-            free(error->err[i].ns);
-            for (j = 0; j < error->err[i].other_count; ++j) {
-                lyxml_free(error->ctx, error->err[i].other[j]);
-            }
-            free(error->err[i].other);
+            nc_client_err_clean(&error->err[i], error->ctx);
         }
         free(error->err);
         break;

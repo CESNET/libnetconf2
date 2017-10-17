@@ -188,4 +188,6 @@ struct nc_rpc_subscribe {
 
 void nc_server_rpc_free(struct nc_server_rpc *rpc, struct ly_ctx *ctx);
 
+void nc_client_err_clean(struct nc_err *err, struct ly_ctx *ctx);
+
 #endif /* NC_MESSAGES_P_H_ */

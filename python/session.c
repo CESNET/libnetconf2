@@ -22,13 +22,8 @@
 
 #include "../src/config.h"
 #include "netconf.h"
-
-typedef struct {
-    PyObject_HEAD
-    struct ly_ctx *ctx;
-    unsigned int *ctx_counter;
-    struct nc_session *session;
-} ncSessionObject;
+#include "session.h"
+#include "rpc.h"
 
 char *
 auth_password_clb(const char *UNUSED(username), const char *UNUSED(hostname), void *priv)
@@ -366,6 +361,15 @@ static PyMethodDef ncSessionMethods[] = {
      "newChannel()\n--\n\n"
      "Create another NETCONF session on existing SSH session using separated SSH channel\n\n"
      ":returns: New netconf2.Session instance.\n"},
+    /* RPCs */
+    {"rpcGet", (PyCFunction)ncRPCGet, METH_VARARGS | METH_KEYWORDS,
+     "Send NETCONF <get> operation on the Session.\n\n"
+     "ncRPCGet(subtree=None, xpath=None)\n"
+     ":returns: Reply from the server.\n"},
+     {"rpcGetConfig", (PyCFunction)ncRPCGetConfig, METH_VARARGS | METH_KEYWORDS,
+      "Send NETCONF <get-config> operation on the Session.\n\n"
+      "ncRPCGetConfig(datastore, subtree=None, xpath=None)\n"
+      ":returns: Reply from the server.\n"},
     {NULL}  /* Sentinel */
 };
 

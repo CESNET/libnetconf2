@@ -66,9 +66,16 @@ typedef struct {
     PyObject *crl_dir;    /* path to the directory with the CRL certificate(s) used to check for revocated server certificates */
 } ncTLSObject;
 
+typedef struct {
+    PyObject_HEAD
+    struct nc_err *err;
+    struct ly_ctx *ctx;
+} ncErrObject;
+
 extern PyTypeObject ncSSHType;
 extern PyTypeObject ncTLSType;
 extern PyTypeObject ncSessionType;
+extern PyTypeObject ncErrType;
 
 #ifdef __cplusplus
 }
