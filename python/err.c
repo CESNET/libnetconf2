@@ -33,7 +33,73 @@ ncErrFree(ncErrObject *self)
 static PyObject *
 ncErrStr(ncErrObject *self)
 {
-    return PyUnicode_FromFormat("NETCONF error-reply: %s", self->err->message);
+    uint16_t u, f = 0;
+    char *str = NULL;
+
+    if (self->err->type) {
+        asprintf(&str, "\"type\":\"%s\"", self->err->type);
+    }
+    if (self->err->tag) {
+        asprintf(&str, "%s%s\"tag\":\"%s\"", str ? str : "", str ? "," : "", self->err->tag);
+    }
+    if (self->err->severity) {
+        asprintf(&str, "%s%s\"severity\":\"%s\"", str ? str : "", str ? "," : "", self->err->severity);
+    }
+    if (self->err->apptag) {
+        asprintf(&str, "%s%s\"app-tag\":\"%s\"", str ? str : "", str ? "," : "", self->err->apptag);
+    }
+    if (self->err->path) {
+        asprintf(&str, "%s%s\"path\":\"%s\"", str ? str : "", str ? "," : "", self->err->path);
+    }
+    if (self->err->message) {
+        asprintf(&str, "%s%s\"message\":\"%s", str ? str : "", str ? "," : "", self->err->message);
+        if (self->err->message_lang) {
+            asprintf(&str, "%s (%s)\"", str, self->err->message_lang);
+        } else {
+            asprintf(&str, "%s\"", str);
+        }
+    }
+    if (self->err->sid || self->err->attr || self->err->elem || self->err->ns || self->err->other) {
+        asprintf(&str, "%s%s\"info\":{", str ? str : "", str ? "," : "");
+
+        if (self->err->sid) {
+            asprintf(&str, "%s%s\"session-id\":\"%s\"", str, f ? "," : "", self->err->sid);
+            f = 1;
+        }
+        if (self->err->attr_count) {
+            asprintf(&str, "%s%s\"bad-attr\":[", str, f ? "," : "");
+            for (u = 0; u < self->err->attr_count; u++) {
+                asprintf(&str, "%s%s\"%s\"", str, u ? "," : "", self->err->attr[u]);
+            }
+            asprintf(&str, "%s]", str);
+            f = 1;
+        }
+        if (self->err->elem_count) {
+            asprintf(&str, "%s%s\"bad-element\":[", str, f ? "," : "");
+            for (u = 0; u < self->err->elem_count; u++) {
+                asprintf(&str, "%s%s\"%s\"", str, u ? "," : "", self->err->elem[u]);
+            }
+            asprintf(&str, "%s]", str);
+            f = 1;
+        }
+        if (self->err->ns_count) {
+            asprintf(&str, "%s%s\"bad-namespace\":[", str, f ? "," : "");
+            for (u = 0; u < self->err->ns_count; u++) {
+                asprintf(&str, "%s%s\"%s\"", str, u ? "," : "", self->err->ns[u]);
+            }
+            asprintf(&str, "%s]", str);
+            f = 1;
+        }
+        if (self->err->other_count) {
+            for (u = 0; u < self->err->other_count; u++) {
+                asprintf(&str, "%s%s\"%s\":\"%s\"", str, f ? "," : "", self->err->other[u]->name, self->err->other[u]->content);
+            }
+            f = 1;
+        }
+
+        asprintf(&str, "%s}", str);
+    }
+    return PyUnicode_FromFormat("{%s}", str);
 }
 
 /*
@@ -59,12 +125,120 @@ ncErrGetTag(ncErrObject *self, void *closure)
 }
 
 static PyObject *
+ncErrGetSeverity(ncErrObject *self, void *closure)
+{
+    if (!self->err->severity) {
+        Py_RETURN_NONE;
+    }
+    return PyUnicode_FromString(self->err->severity);
+}
+
+static PyObject *
+ncErrGetAppTag(ncErrObject *self, void *closure)
+{
+    if (!self->err->apptag) {
+        Py_RETURN_NONE;
+    }
+    return PyUnicode_FromString(self->err->apptag);
+}
+
+static PyObject *
+ncErrGetPath(ncErrObject *self, void *closure)
+{
+    if (!self->err->path) {
+        Py_RETURN_NONE;
+    }
+    return PyUnicode_FromString(self->err->path);
+}
+
+static PyObject *
 ncErrGetMessage(ncErrObject *self, void *closure)
 {
     if (!self->err->message) {
         Py_RETURN_NONE;
     }
     return PyUnicode_FromString(self->err->message);
+}
+
+static PyObject *
+ncErrGetMessageLang(ncErrObject *self, void *closure)
+{
+    if (!self->err->message_lang) {
+        Py_RETURN_NONE;
+    }
+    return PyUnicode_FromString(self->err->message_lang);
+}
+
+static PyObject *
+ncErrGetSID(ncErrObject *self, void *closure)
+{
+    if (!self->err->sid) {
+        Py_RETURN_NONE;
+    }
+    return PyUnicode_FromString(self->err->sid);
+}
+
+static PyObject *
+ncErrGetBadAttr(ncErrObject *self, void *closure)
+{
+    PyObject *list;
+    uint16_t u;
+
+    if (!self->err->attr_count) {
+        Py_RETURN_NONE;
+    }
+
+    list = PyList_New(self->err->attr_count);
+    if (!list) {
+        return NULL;
+    }
+    for (u = 0; u < self->err->attr_count; u++) {
+        PyList_SET_ITEM(list, u, PyUnicode_FromString(self->err->attr[u]));
+    }
+
+    return list;
+}
+
+static PyObject *
+ncErrGetBadElem(ncErrObject *self, void *closure)
+{
+    PyObject *list;
+    uint16_t u;
+
+    if (!self->err->elem_count) {
+        Py_RETURN_NONE;
+    }
+
+    list = PyList_New(self->err->elem_count);
+    if (!list) {
+        return NULL;
+    }
+    for (u = 0; u < self->err->elem_count; u++) {
+        PyList_SET_ITEM(list, u, PyUnicode_FromString(self->err->elem[u]));
+    }
+
+    return list;
+}
+
+static PyObject *
+ncErrGetBadNS(ncErrObject *self, void *closure)
+{
+    PyObject *list;
+    uint16_t u;
+
+    if (!self->err->ns_count) {
+        Py_RETURN_NONE;
+    }
+
+    list = PyList_New(self->err->ns_count);
+    if (!list) {
+        return NULL;
+    }
+    for (u = 0; u < self->err->ns_count; u++) {
+        PyList_SET_ITEM(list, u, PyUnicode_FromString(self->err->ns[u]));
+    }
+
+    return list;
 }
 
 /*
@@ -74,7 +248,15 @@ ncErrGetMessage(ncErrObject *self, void *closure)
 static PyGetSetDef ncErrGetSetters[] = {
     {"type", (getter)ncErrGetType, NULL, "<error-type>", NULL},
     {"tag", (getter)ncErrGetTag, NULL, "<error-tag>", NULL},
+    {"severity", (getter)ncErrGetSeverity, NULL, "<error-severity>", NULL},
+    {"app-tag", (getter)ncErrGetAppTag, NULL, "<error-app-tag>", NULL},
+    {"path", (getter)ncErrGetPath, NULL, "<error-path>", NULL},
     {"message", (getter)ncErrGetMessage, NULL, "<error-message>", NULL},
+    {"lang", (getter)ncErrGetMessageLang, NULL, "<error-message xml:lang=\" \">", NULL},
+    {"session-id", (getter)ncErrGetSID, NULL, "<error-info><session-id/></error-info>", NULL},
+    {"bad-attr", (getter)ncErrGetBadAttr, NULL, "<error-info><bad-attr/></error-info>", NULL},
+    {"bad-elem", (getter)ncErrGetBadElem, NULL, "<error-info><bad-element/></error-info>", NULL},
+    {"bad-namespace", (getter)ncErrGetBadNS, NULL, "<error-info><bad-namespace/></error-info>", NULL},
     {NULL} /* Sentinel */
 };
 
