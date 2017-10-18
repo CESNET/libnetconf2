@@ -881,6 +881,7 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
                         ERRMEM;
                         goto error;
                     }
+                    deviations[dev_count - 1] = (struct lyd_node_leaf_list *)child2;
                 }
             }
 
@@ -911,7 +912,16 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
                 strcat(str, "&deviations=");
                 str_len += 12;
                 for (i = 0; i < dev_count; ++i) {
-                    if (str_len + 1 + strlen(deviations[i]->value_str) >= NC_CPBLT_BUF_LEN) {
+                    LY_TREE_FOR(((struct lyd_node *)deviations[i])->child, child2) {
+                        if (!strcmp(child2->schema->name, "name"))
+                            break;
+                    }
+                    if (!child2) {
+                        ERRINT;
+                        continue;
+                    }
+
+                    if (str_len + 1 + strlen(((struct lyd_node_leaf_list *)child2)->value_str) >= NC_CPBLT_BUF_LEN) {
                         ERRINT;
                         break;
                     }
@@ -919,8 +929,8 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
                         strcat(str, ",");
                         ++str_len;
                     }
-                    strcat(str, deviations[i]->value_str);
-                    str_len += strlen(deviations[i]->value_str);
+                    strcat(str, ((struct lyd_node_leaf_list *)child2)->value_str);
+                    str_len += strlen(((struct lyd_node_leaf_list *)child2)->value_str);
                 }
             }
             if (!strcmp(name->value_str, "ietf-yang-library")) {
