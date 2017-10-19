@@ -1662,7 +1662,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     new_session->ti.libssh.session = session->ti.libssh.session;
 
     /* create the channel safely */
-    if (nc_session_lock(new_session, -1, __func__)) {
+    if (nc_session_lock(new_session, -1, __func__) != 1) {
         goto fail;
     }
 
@@ -1671,7 +1671,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
         goto fail;
     }
 
-    if (nc_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
+    if (nc_session_new_ctx(new_session, ctx) != EXIT_SUCCESS) {
         goto fail;
     }
     ctx = session->ctx;
