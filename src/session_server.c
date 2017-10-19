@@ -1196,49 +1196,39 @@ nc_ps_poll_session(struct nc_session *session, time_t now_mono, char *msg)
 #ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
         r = ssh_channel_poll_timeout(session->ti.libssh.channel, 0, 0);
-        if (r < 1) {
-            if (r == SSH_EOF) {
-                sprintf(msg, "SSH channel unexpected EOF");
-                session->status = NC_STATUS_INVALID;
-                session->term_reason = NC_SESSION_TERM_DROPPED;
-                ret = NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
-            } else if (r == SSH_ERROR) {
-                sprintf(msg, "SSH channel poll error (%s)", ssh_get_error(session->ti.libssh.session));
-                session->status = NC_STATUS_INVALID;
-                session->term_reason = NC_SESSION_TERM_OTHER;
-                ret = NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
-            } else {
-                ret = NC_PSPOLL_TIMEOUT;
-            }
-            break;
-        }
-
-        /* we have some data, but it may be just an SSH message */
-        r = ssh_execute_message_callbacks(session->ti.libssh.session);
-        if (r != SSH_OK) {
-            sprintf(msg, "failed to receive SSH messages (%s)", ssh_get_error(session->ti.libssh.session));
+        if (r == SSH_EOF) {
+            sprintf(msg, "SSH channel unexpected EOF");
+            session->status = NC_STATUS_INVALID;
+            session->term_reason = NC_SESSION_TERM_DROPPED;
+            ret = NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
+        } else if (r == SSH_ERROR) {
+            sprintf(msg, "SSH channel poll error (%s)", ssh_get_error(session->ti.libssh.session));
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_OTHER;
             ret = NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
-        } else if (session->flags & NC_SESSION_SSH_NEW_MSG) {
-            /* new SSH message */
-            session->flags &= ~NC_SESSION_SSH_NEW_MSG;
-            if (session->ti.libssh.next) {
-                for (new = session->ti.libssh.next; new != session; new = new->ti.libssh.next) {
-                    if ((new->status == NC_STATUS_STARTING) && new->ti.libssh.channel
-                            && (new->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
-                        /* new NETCONF SSH channel */
-                        ret = NC_PSPOLL_SSH_CHANNEL;
+        } else if (!r) {
+            if (session->flags & NC_SESSION_SSH_NEW_MSG) {
+                /* new SSH message */
+                session->flags &= ~NC_SESSION_SSH_NEW_MSG;
+                if (session->ti.libssh.next) {
+                    for (new = session->ti.libssh.next; new != session; new = new->ti.libssh.next) {
+                        if ((new->status == NC_STATUS_STARTING) && new->ti.libssh.channel
+                                && (new->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
+                            /* new NETCONF SSH channel */
+                            ret = NC_PSPOLL_SSH_CHANNEL;
+                            break;
+                        }
+                    }
+                    if (new != session) {
                         break;
                     }
                 }
-                if (new != session) {
-                    break;
-                }
-            }
 
-            /* just some SSH message */
-            ret = NC_PSPOLL_SSH_MSG;
+                /* just some SSH message */
+                ret = NC_PSPOLL_SSH_MSG;
+            } else {
+                ret = NC_PSPOLL_TIMEOUT;
+            }
         } else {
             /* we have some application data */
             ret = NC_PSPOLL_RPC;

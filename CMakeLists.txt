@@ -116,7 +116,7 @@ endif()
 
 # dependencies - libssh
 if(ENABLE_SSH)
-    find_package(LibSSH 0.6.4 REQUIRED)
+    find_package(LibSSH 0.7.0 REQUIRED)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH")
     target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lssh_threads -lcrypt)
     include_directories(${LIBSSH_INCLUDE_DIRS})
