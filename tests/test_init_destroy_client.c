@@ -29,7 +29,7 @@
 #include <cmocka.h>
 #include <libyang/libyang.h>
 
-#include "config.h"
+#include "tests/config.h"
 #include <session_client.h>
 
 static int

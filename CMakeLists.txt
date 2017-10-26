@@ -46,6 +46,8 @@ if(ENABLE_DNSSEC AND NOT ENABLE_SSH)
     set(ENABLE_DNSSEC OFF)
 endif()
 
+include_directories(${PROJECT_BINARY_DIR}/src)
+
 # source files
 set(libsrc
     src/io.c
@@ -192,7 +194,7 @@ if(ENABLE_BUILD_TESTS)
     endif(CMOCKA_FOUND)
 endif()
 
-configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_SOURCE_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)
+configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)
 configure_file(nc_client.h.in nc_client.h)
 configure_file(nc_server.h.in nc_server.h)
 

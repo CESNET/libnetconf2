@@ -33,7 +33,7 @@
 #include <session_server.h>
 #include <session_p.h>
 #include <messages_p.h>
-#include "config.h"
+#include "tests/config.h"
 
 struct nc_session *server_session;
 struct nc_session *client_session;

@@ -24,5 +24,5 @@ if (ENABLE_VALGRIND_TESTS)
     endif()
 endif()
 
-include_directories(${CMAKE_SOURCE_DIR}/src)
-configure_file("${PROJECT_SOURCE_DIR}/tests/config.h.in" "${PROJECT_SOURCE_DIR}/tests/config.h" ESCAPE_QUOTES @ONLY)
+include_directories(${CMAKE_SOURCE_DIR}/src ${PROJECT_BINARY_DIR})
+configure_file("${PROJECT_SOURCE_DIR}/tests/config.h.in" "${PROJECT_BINARY_DIR}/tests/config.h" ESCAPE_QUOTES @ONLY)

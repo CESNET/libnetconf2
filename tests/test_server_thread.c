@@ -25,7 +25,7 @@
 #include <session_client.h>
 #include <session_server.h>
 #include <log.h>
-#include "config.h"
+#include "tests/config.h"
 
 /* millisec */
 #define NC_ACCEPT_TIMEOUT 5000

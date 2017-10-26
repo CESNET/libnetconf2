@@ -30,7 +30,7 @@
 #include <messages_p.h>
 #include <session_p.h>
 #include <session_client.h>
-#include "config.h"
+#include "tests/config.h"
 
 struct wr {
     struct nc_session *session;

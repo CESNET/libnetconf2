@@ -21,7 +21,7 @@
 
 #include <libnetconf.h>
 
-#include "config.h"
+#include "tests/config.h"
 
 static void
 test_2time(void **state)
