@@ -146,7 +146,7 @@ ncSessionInit(ncSessionObject *self, PyObject *args, PyObject *kwds)
     const char *host = NULL;
     PyObject *transport = NULL;
     unsigned short port = 0;
-    struct nc_session *session;
+    struct nc_session *session = NULL;
 
     char *kwlist[] = {"host", "port", "transport", NULL};
 
@@ -156,9 +156,14 @@ ncSessionInit(ncSessionObject *self, PyObject *args, PyObject *kwds)
     }
 
     /* connect */
+#ifdef NC_ENABLED_TLS
     if (transport && PyObject_TypeCheck(transport, &ncTLSType)) {
         session = nc_connect_tls(host, port, NULL);
     } else {
+#else /* !NC_ENABLED_TLS */
+    {
+#endif
+#ifdef NC_ENABLED_SSH
         if (transport) {
             /* set SSH parameters */
             if (((ncSSHObject*)transport)->username) {
@@ -194,6 +199,7 @@ ncSessionInit(ncSessionObject *self, PyObject *args, PyObject *kwds)
                 nc_client_ssh_set_auth_privkey_passphrase_clb(NULL, NULL);
             }
         }
+#endif /* NC_ENABLED_SSH */
     }
 
     /* check the result */
@@ -210,6 +216,8 @@ ncSessionInit(ncSessionObject *self, PyObject *args, PyObject *kwds)
 
     return 0;
 }
+
+#ifdef NC_ENABLED_SSH
 
 static PyObject *
 newChannel(PyObject *self)
@@ -237,6 +245,8 @@ newChannel(PyObject *self)
     (*new->ctx_counter)++;
     return (PyObject*)new;
 }
+
+#endif /* NC_ENABLED_SSH */
 
 static PyObject *
 ncSessionStr(ncSessionObject *self)
@@ -298,10 +308,14 @@ ncSessionGetTransport(ncSessionObject *self, void *closure)
 {
     NC_TRANSPORT_IMPL ti = nc_session_get_ti(self->session);
     switch (ti) {
+#ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
         return PyUnicode_FromString("SSH");
+#endif /* NC_ENABLED_SSH */
+#ifdef NC_ENABLEd_TLS
     case NC_TI_OPENSSL:
         return PyUnicode_FromString("TLS");
+#endif /* NC_ENABLED_TLS */
     default:
         return PyUnicode_FromString("unknown");
     }
@@ -357,10 +371,12 @@ static PyMemberDef ncSessionMembers[] = {
 };
 
 static PyMethodDef ncSessionMethods[] = {
+#ifdef NC_ENABLED_SSH
     {"newChannel", (PyCFunction)newChannel, METH_NOARGS,
      "newChannel()\n--\n\n"
      "Create another NETCONF session on existing SSH session using separated SSH channel\n\n"
      ":returns: New netconf2.Session instance.\n"},
+#endif /* NC_ENABLED_SSH */
     /* RPCs */
     {"rpcGet", (PyCFunction)ncRPCGet, METH_VARARGS | METH_KEYWORDS,
      "Send NETCONF <get> operation on the Session.\n\n"

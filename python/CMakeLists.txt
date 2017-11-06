@@ -10,6 +10,14 @@ if (PYTHON)
         set(DEBUG "--debug")
     endif()
 
+    if(ENABLE_SSH)
+        set(SSH_DEFINE ",\"-DNC_ENABLED_SSH\"")
+    endif()
+
+    if(ENABLE_TLS)
+        set(TLS_DEFINE ",\"-DNC_ENABLED_TLS\"")
+    endif()
+
     configure_file(${SETUP_PY_IN} ${SETUP_PY})
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/docs/Makefile.in ${CMAKE_CURRENT_SOURCE_DIR}/docs/Makefile)
 	add_custom_target(pyapi ALL COMMAND ${PYTHON} ${SETUP_PY} build -b ${PYAPI_BUILD_DIR} ${DEBUG})

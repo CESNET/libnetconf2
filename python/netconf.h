@@ -19,13 +19,6 @@
 extern "C" {
 #endif
 
-#ifndef NC_ENABLED_SSH
-#define NC_ENABLED_SSH
-#endif
-#ifndef NC_ENABLED_TLS
-#define NC_ENABLED_TLS
-#endif
-
 #include "../src/netconf.h"
 #include "../src/log.h"
 #include "../src/messages_client.h"

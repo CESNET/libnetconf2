@@ -16,7 +16,6 @@
 #include <Python.h>
 
 /* standard headers */
-#include <nc_client.h>
 #include <syslog.h>
 
 #include "netconf.h"

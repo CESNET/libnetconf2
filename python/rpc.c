@@ -21,9 +21,9 @@
 #include <libyang/libyang.h>
 #include <libyang/swigpyrun.h>
 
+#include "../src/messages_p.h"
 #include "netconf.h"
 #include "session.h"
-#include "messages_p.h"
 
 #define TIMEOUT_SEND 1000  /* 1 second */
 #define TIMEOUT_RECV 10000 /* 10 second */
