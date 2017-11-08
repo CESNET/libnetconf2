@@ -18,12 +18,76 @@
 
 /* standard headers */
 #include <string.h>
+#include <libssh/libssh.h>
 #include <libyang/libyang.h>
 
 #include "../src/config.h"
 #include "netconf.h"
 #include "session.h"
 #include "rpc.h"
+
+int
+auth_hostkey_check_pyclb(const char *hostname, ssh_session session, void *priv)
+{
+    PyObject *arglist, *result;
+    ncSSHObject *ssh = (ncSSHObject*)priv;
+    int ret = EXIT_FAILURE, rc, state;
+    unsigned char *hash_sha1 = NULL;
+    char *hexa;
+    const char *keytype = NULL;
+    ssh_key srv_pubkey;
+    size_t hlen;
+
+    state = ssh_is_server_known(session);
+    if (state == SSH_SERVER_KNOWN_OK) {
+        /* known host */
+        return EXIT_SUCCESS;
+    } else if (!ssh->clb_hostcheck) {
+        /* no callback, hostkey check failed */
+        return EXIT_FAILURE;
+    }
+
+    /* use the callback set by Python application */
+    rc = ssh_get_publickey(session, &srv_pubkey);
+    if (rc < 0) {
+        PyErr_SetString(PyExc_RuntimeError, "Unable to get server public key.");
+        return -1;
+    }
+
+    keytype = ssh_key_type_to_char(ssh_key_type(srv_pubkey));
+    rc = ssh_get_publickey_hash(srv_pubkey, SSH_PUBLICKEY_HASH_SHA1, &hash_sha1, &hlen);
+    ssh_key_free(srv_pubkey);
+    if (rc < 0) {
+        PyErr_SetString(PyExc_RuntimeError, "Failed to calculate SHA1 hash of the server public key.");
+        return -1;
+    }
+
+    hexa = ssh_get_hexa(hash_sha1, hlen);
+    arglist = Py_BuildValue("(sissO)", hostname, state, keytype, hexa, ssh->clb_hostcheck_data ? ssh->clb_hostcheck_data : Py_None);
+    if (!arglist) {
+        PyErr_Print();
+        ssh_string_free_char(hexa);
+        ssh_clean_pubkey_hash(&hash_sha1);
+        return -1;
+    }
+    result = PyObject_CallObject(ssh->clb_hostcheck, arglist);
+    Py_DECREF(arglist);
+    ssh_string_free_char(hexa);
+    ssh_clean_pubkey_hash(&hash_sha1);
+
+    if (result) {
+        if (!PyBool_Check(result)) {
+            PyErr_SetString(PyExc_TypeError, "Invalid hostkey check callback result.");
+        } else if (result == Py_True) {
+            ret = EXIT_SUCCESS;
+        } else if (result != Py_False) {
+            PyErr_SetString(PyExc_TypeError, "Invalid hostkey check callback result.");
+        }
+        Py_DECREF(result);
+    }
+
+    return ret;
+}
 
 char *
 auth_password_clb(const char *UNUSED(username), const char *UNUSED(hostname), void *priv)
@@ -169,6 +233,9 @@ ncSessionInit(ncSessionObject *self, PyObject *args, PyObject *kwds)
             if (((ncSSHObject*)transport)->username) {
                 nc_client_ssh_set_username(PyUnicode_AsUTF8(((ncSSHObject*)transport)->username));
             }
+
+            nc_client_ssh_set_auth_hostkey_check_clb(&auth_hostkey_check_pyclb, (void *)transport);
+
             if (((ncSSHObject*)transport)->password) {
                 nc_client_ssh_set_auth_password_clb(&auth_password_clb,
                                                     (void *)PyUnicode_AsUTF8(((ncSSHObject*)transport)->password));

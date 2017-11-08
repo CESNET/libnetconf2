@@ -29,6 +29,8 @@ ncSSHFree(ncSSHObject *self)
     Py_XDECREF(self->pubkeys);  /* PyList */
     Py_XDECREF(self->privkeys); /* PyList */
 
+    Py_XDECREF(self->clb_hostcheck);
+    Py_XDECREF(self->clb_hostcheck_data);
     Py_XDECREF(self->clb_password);
     Py_XDECREF(self->clb_password_data);
     Py_XDECREF(self->clb_interactive);
@@ -112,6 +114,8 @@ ncSSHInit(ncSSHObject *self, PyObject *args, PyObject *kwds)
     /* check that the keys pairs together */
 
     /* forget callbacks */
+    Py_CLEAR(self->clb_hostcheck);
+    Py_CLEAR(self->clb_hostcheck_data);
     Py_CLEAR(self->clb_password);
     Py_CLEAR(self->clb_password_data);
     Py_CLEAR(self->clb_interactive);
@@ -125,6 +129,8 @@ error:
     Py_CLEAR(self->password);
     Py_CLEAR(self->pubkeys);
     Py_CLEAR(self->privkeys);
+    Py_CLEAR(self->clb_hostcheck);
+    Py_CLEAR(self->clb_hostcheck_data);
     Py_CLEAR(self->clb_password);
     Py_CLEAR(self->clb_password_data);
     Py_CLEAR(self->clb_interactive);
@@ -208,9 +214,42 @@ ncSSHSetPassword(ncSSHObject *self, PyObject *value, void *closure)
 }
 
 static PyObject *
+ncSSHSetAuthHostkeyCheckClb(ncSSHObject *self, PyObject *args, PyObject *keywords)
+{
+    PyObject *clb, *data = NULL;
+    static char *kwlist[] = {"func", "priv", NULL};
+
+    if (!PyArg_ParseTupleAndKeywords(args, keywords, "O|O:ncSSHSetAuthHostkeyCheckClb", kwlist, &clb, &data)) {
+        return NULL;
+    }
+
+    if (!clb) {
+        Py_XDECREF(self->clb_hostcheck);
+        Py_XDECREF(self->clb_hostcheck_data);
+        data = NULL;
+    } else if (!PyCallable_Check(clb)) {
+        PyErr_SetString(PyExc_TypeError, "The callback must be a function.");
+        return NULL;
+    } else {
+        Py_XDECREF(self->clb_hostcheck);
+        Py_XDECREF(self->clb_hostcheck_data);
+
+        Py_INCREF(clb);
+        if (data) {
+            Py_INCREF(data);
+        }
+    }
+    self->clb_hostcheck = clb;
+    self->clb_hostcheck_data = data;
+
+    Py_RETURN_NONE;
+}
+
+
+static PyObject *
 ncSSHSetAuthPasswordClb(ncSSHObject *self, PyObject *args, PyObject *keywords)
 {
-    PyObject *clb, *data;
+    PyObject *clb, *data = NULL;
     static char *kwlist[] = {"func", "priv", NULL};
 
     if (!PyArg_ParseTupleAndKeywords(args, keywords, "O|O:ncSSHSetAuthPasswordClb", kwlist, &clb, &data)) {
@@ -242,7 +281,7 @@ ncSSHSetAuthPasswordClb(ncSSHObject *self, PyObject *args, PyObject *keywords)
 static PyObject *
 ncSSHSetAuthInteractiveClb(ncSSHObject *self, PyObject *args, PyObject *keywords)
 {
-    PyObject *clb, *data;
+    PyObject *clb, *data = NULL;
     static char *kwlist[] = {"func", "priv", NULL};
 
     if (!PyArg_ParseTupleAndKeywords(args, keywords, "O|O:ncSSHSetAuthInteractiveClb", kwlist, &clb, &data)) {
@@ -282,13 +321,19 @@ static PyGetSetDef ncSSHGetSetters[] = {
 };
 
 static PyMethodDef ncSSHMethods[] = {
-        {"setAuthPasswordClb", (PyCFunction)ncSSHSetAuthPasswordClb, METH_VARARGS | METH_KEYWORDS,
-         "SSH password authentication callback.\n\n"
-         "setAuthPasswordClb(func, priv=None)\n"},
-        {"setAuthInteractiveClb", (PyCFunction)ncSSHSetAuthInteractiveClb, METH_VARARGS | METH_KEYWORDS,
-         "setAuthInteractiveClb(func, priv=None)\n--\n\n"
-         "SSH keyboard-interactive authentication callback.\n\n"},
-        {NULL, NULL, 0, NULL}
+    {"setAuthHostkeyCheckClb", (PyCFunction)ncSSHSetAuthHostkeyCheckClb, METH_VARARGS | METH_KEYWORDS,
+     "SSH Hostkey (fingerprint) check callback.\n\n"
+     "setAuthHostkeyCheckClb(func, priv=None)\n"
+     "with func(str hostname, int state, str keytype, str hexa, priv)\n"
+     "state is SERVER_ERROR (-1), SERVER_NOT_KNOWN (0), SERVER_CHANGED (2), SERVER_FOUND_OTHER (3), SERVER_FILE_NOT_FOUND (4)\n"
+     "callback returns True in case of valid hostkey.\n"},
+    {"setAuthPasswordClb", (PyCFunction)ncSSHSetAuthPasswordClb, METH_VARARGS | METH_KEYWORDS,
+     "SSH password authentication callback.\n\n"
+     "setAuthPasswordClb(func, priv=None)\n"},
+    {"setAuthInteractiveClb", (PyCFunction)ncSSHSetAuthInteractiveClb, METH_VARARGS | METH_KEYWORDS,
+     "setAuthInteractiveClb(func, priv=None)\n--\n\n"
+     "SSH keyboard-interactive authentication callback.\n\n"},
+    {NULL, NULL, 0, NULL}
 };
 
 PyDoc_STRVAR(ncSSHDoc,

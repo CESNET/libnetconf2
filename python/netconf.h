@@ -43,6 +43,8 @@ typedef struct {
     PyObject *pubkeys;   /* public keys for the key authentication, both pubkey and privkey must be set */
     PyObject *privkeys;  /* private key for the key authentication, both pubkey and privkey must be set */
 
+    PyObject *clb_hostcheck;         /* callback to check host key (fingerprint) */
+    PyObject *clb_hostcheck_data;    /* private data for the host key check callback */
     PyObject *clb_password;          /* callback for SSH password authentication */
     PyObject *clb_password_data;     /* private data for the SSH password authentication callback */
     PyObject *clb_interactive;       /* callback for SSH keyboard-interactive authentication */
