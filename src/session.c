@@ -511,7 +511,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         }
 
         /* send closing info to the other side */
-        ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL);
+        ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL, 1);
         if (!ietfnc) {
             WRN("Session %u: missing ietf-netconf schema in context, unable to send <close-session>.", session->id);
         } else {
@@ -768,7 +768,7 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
     cpblts = malloc(size * sizeof *cpblts);
     if (!cpblts) {
         ERRMEM;
-        return NULL;
+        goto error;
     }
     cpblts[0] = lydict_insert(ctx, "urn:ietf:params:netconf:base:1.0", 0);
     cpblts[1] = lydict_insert(ctx, "urn:ietf:params:netconf:base:1.1", 0);
@@ -776,7 +776,7 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
 
     /* capabilities */
 
-    mod = ly_ctx_get_module(ctx, "ietf-netconf", NULL);
+    mod = ly_ctx_get_module(ctx, "ietf-netconf", NULL, 1);
     if (mod) {
         if (lys_features_state(mod, "writable-running") == 1) {
             add_cpblt(ctx, "urn:ietf:params:netconf:capability:writable-running:1.0", &cpblts, &size, &count);
@@ -804,7 +804,7 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
         }
     }
 
-    mod = ly_ctx_get_module(ctx, "ietf-netconf-with-defaults", NULL);
+    mod = ly_ctx_get_module(ctx, "ietf-netconf-with-defaults", NULL, 1);
     if (mod) {
         if (!server_opts.wd_basic_mode) {
             VRB("with-defaults capability will not be advertised even though \"ietf-netconf-with-defaults\" model is present, unknown basic-mode.");
@@ -852,13 +852,11 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
     }
 
     /* models */
-    LY_TREE_FOR(yanglib->child, child) {
+    LY_TREE_FOR(yanglib->prev->child, child) {
         if (!module_set_id) {
             if (strcmp(child->prev->schema->name, "module-set-id")) {
                 ERRINT;
-                free(cpblts);
-                free(deviations);
-                return NULL;
+                goto error;
             }
             module_set_id = (struct lyd_node_leaf_list *)child->prev;
         }
@@ -874,19 +872,16 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
                     features = nc_realloc(features, ++feat_count * sizeof *features);
                     if (!features) {
                         ERRMEM;
-                        free(cpblts);
-                        free(deviations);
-                        return NULL;
+                        goto error;
                     }
                     features[feat_count - 1] = (struct lyd_node_leaf_list *)child2;
                 } else if (!strcmp(child2->schema->name, "deviation")) {
                     deviations = nc_realloc(deviations, ++dev_count * sizeof *deviations);
                     if (!deviations) {
                         ERRMEM;
-                        free(cpblts);
-                        free(features);
-                        return NULL;
+                        goto error;
                     }
+                    deviations[dev_count - 1] = (struct lyd_node_leaf_list *)child2;
                 }
             }
 
@@ -917,7 +912,16 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
                 strcat(str, "&deviations=");
                 str_len += 12;
                 for (i = 0; i < dev_count; ++i) {
-                    if (str_len + 1 + strlen(deviations[i]->value_str) >= NC_CPBLT_BUF_LEN) {
+                    LY_TREE_FOR(((struct lyd_node *)deviations[i])->child, child2) {
+                        if (!strcmp(child2->schema->name, "name"))
+                            break;
+                    }
+                    if (!child2) {
+                        ERRINT;
+                        continue;
+                    }
+
+                    if (str_len + 1 + strlen(((struct lyd_node_leaf_list *)child2)->value_str) >= NC_CPBLT_BUF_LEN) {
                         ERRINT;
                         break;
                     }
@@ -925,8 +929,8 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
                         strcat(str, ",");
                         ++str_len;
                     }
-                    strcat(str, deviations[i]->value_str);
-                    str_len += strlen(deviations[i]->value_str);
+                    strcat(str, ((struct lyd_node_leaf_list *)child2)->value_str);
+                    str_len += strlen(((struct lyd_node_leaf_list *)child2)->value_str);
                 }
             }
             if (!strcmp(name->value_str, "ietf-yang-library")) {
@@ -951,12 +955,20 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
         }
     }
 
-    lyd_free(yanglib);
+    lyd_free_withsiblings(yanglib);
 
     /* ending NULL capability */
     add_cpblt(ctx, NULL, &cpblts, &size, &count);
 
     return cpblts;
+
+error:
+
+    free(cpblts);
+    free(features);
+    free(deviations);
+    lyd_free_withsiblings(yanglib);
+    return NULL;
 }
 
 static int

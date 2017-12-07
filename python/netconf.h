@@ -19,13 +19,6 @@
 extern "C" {
 #endif
 
-#ifndef NC_ENABLED_SSH
-#define NC_ENABLED_SSH
-#endif
-#ifndef NC_ENABLED_TLS
-#define NC_ENABLED_TLS
-#endif
-
 #include "../src/netconf.h"
 #include "../src/log.h"
 #include "../src/messages_client.h"
@@ -50,6 +43,8 @@ typedef struct {
     PyObject *pubkeys;   /* public keys for the key authentication, both pubkey and privkey must be set */
     PyObject *privkeys;  /* private key for the key authentication, both pubkey and privkey must be set */
 
+    PyObject *clb_hostcheck;         /* callback to check host key (fingerprint) */
+    PyObject *clb_hostcheck_data;    /* private data for the host key check callback */
     PyObject *clb_password;          /* callback for SSH password authentication */
     PyObject *clb_password_data;     /* private data for the SSH password authentication callback */
     PyObject *clb_interactive;       /* callback for SSH keyboard-interactive authentication */
@@ -66,9 +61,16 @@ typedef struct {
     PyObject *crl_dir;    /* path to the directory with the CRL certificate(s) used to check for revocated server certificates */
 } ncTLSObject;
 
+typedef struct {
+    PyObject_HEAD
+    struct nc_err *err;
+    struct ly_ctx *ctx;
+} ncErrObject;
+
 extern PyTypeObject ncSSHType;
 extern PyTypeObject ncTLSType;
 extern PyTypeObject ncSessionType;
+extern PyTypeObject ncErrType;
 
 #ifdef __cplusplus
 }

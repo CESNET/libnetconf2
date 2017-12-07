@@ -1,11 +1,19 @@
 from distutils.core import setup, Extension
 
 netconf2Module = Extension("netconf2",
-                           sources=["${CMAKE_CURRENT_SOURCE_DIR}/netconf.c", "${CMAKE_CURRENT_SOURCE_DIR}/session.c", 
-                                    "${CMAKE_CURRENT_SOURCE_DIR}/ssh.c", "${CMAKE_CURRENT_SOURCE_DIR}/tls.c"],
-                           depends=["${CMAKE_CURRENT_SOURCE_DIR}/netconf.h"],
+                           sources=["${CMAKE_CURRENT_SOURCE_DIR}/netconf.c",
+                                    "${CMAKE_CURRENT_SOURCE_DIR}/session.c", 
+                                    "${CMAKE_CURRENT_SOURCE_DIR}/ssh.c",
+                                    "${CMAKE_CURRENT_SOURCE_DIR}/tls.c",
+                                    "${CMAKE_CURRENT_SOURCE_DIR}/rpc.c",
+                                    "${CMAKE_CURRENT_SOURCE_DIR}/err.c"
+                                   ],
+                           depends=["${CMAKE_CURRENT_SOURCE_DIR}/netconf.h",
+                                    "${CMAKE_CURRENT_SOURCE_DIR}/session.h",
+                                    "${CMAKE_CURRENT_COURCE_DIR}/rpc.h"
+                                   ],
                            libraries=["netconf2"],
-                           extra_compile_args=["-Wall", "-I${CMAKE_CURRENT_SOURCE_DIR}/../src/", ],
+                           extra_compile_args=["-Wall", "-I${CMAKE_CURRENT_BINARY_DIR}" @SSH_DEFINE@ @TLS_DEFINE@],
                            extra_link_args=["-L${CMAKE_CURRENT_BINARY_DIR}/.."],
                         )
 

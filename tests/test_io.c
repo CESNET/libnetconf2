@@ -30,7 +30,7 @@
 #include <messages_p.h>
 #include <session_p.h>
 #include <session_client.h>
-#include "config.h"
+#include "tests/config.h"
 
 struct wr {
     struct nc_session *session;
@@ -46,7 +46,7 @@ setup_write(void **state)
 
     w = malloc(sizeof *w);
     w->session = calloc(1, sizeof *w->session);
-    w->session->ctx = ly_ctx_new(TESTS_DIR"../schemas");
+    w->session->ctx = ly_ctx_new(TESTS_DIR"../schemas", 0);
 
     /* ietf-netconf */
     fd = open(TESTS_DIR"../schemas/ietf-netconf.yin", O_RDONLY);

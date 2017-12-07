@@ -456,8 +456,8 @@ nc_read_poll(struct nc_session *session, int timeout)
         }
 
         fds.fd = SSL_get_fd(session->ti.tls);
-        /* fallthrough */
 #endif
+        /* fallthrough */
     case NC_TI_FD:
         if (session->ti_type == NC_TI_FD) {
             fds.fd = session->ti.fd.in;

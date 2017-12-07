@@ -27,8 +27,8 @@ set(CMAKE_C_FLAGS_DEBUG   "-g -O0")
 
 # set version
 set(LIBNETCONF2_MAJOR_VERSION 0)
-set(LIBNETCONF2_MINOR_VERSION 9)
-set(LIBNETCONF2_MICRO_VERSION 25)
+set(LIBNETCONF2_MINOR_VERSION 10)
+set(LIBNETCONF2_MICRO_VERSION 17)
 set(LIBNETCONF2_VERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION}.${LIBNETCONF2_MICRO_VERSION})
 set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION})
 
@@ -45,6 +45,8 @@ if(ENABLE_DNSSEC AND NOT ENABLE_SSH)
     message(WARNING "DNSSEC SSHFP retrieval cannot be used without SSH support.")
     set(ENABLE_DNSSEC OFF)
 endif()
+
+include_directories(${PROJECT_BINARY_DIR}/src)
 
 # source files
 set(libsrc
@@ -192,7 +194,7 @@ if(ENABLE_BUILD_TESTS)
     endif(CMOCKA_FOUND)
 endif()
 
-configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_SOURCE_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)
+configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)
 configure_file(nc_client.h.in nc_client.h)
 configure_file(nc_server.h.in nc_server.h)
 
