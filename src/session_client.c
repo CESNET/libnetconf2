@@ -1161,7 +1161,9 @@ parse_rpc_error(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_err *err)
                 WRN("<rpc-error> <error-message> duplicated.");
             } else {
                 err->message_lang = lyxml_get_attr(iter, "xml:lang", NULL);
-                if (!err->message_lang) {
+                if (err->message_lang) {
+                    err->message_lang = lydict_insert(ctx, err->message_lang, 0);
+                } else {
                     VRB("<rpc-error> <error-message> without the recommended \"xml:lang\" attribute.");
                 }
                 err->message = lydict_insert(ctx, (iter->content ? iter->content : ""), 0);
