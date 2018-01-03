@@ -489,6 +489,9 @@ nc_err_libyang(void)
             str = ly_errmsg();
             stri = strchr(str, '"');
             stri++;
+            if (!strncmp(stri, "<none>:", 7)) {
+                stri += 7;
+            }
             strj = strchr(stri, '"');
             strj--;
             attr = strndup(stri, (strj - stri) + 1);
