@@ -491,7 +491,7 @@ nc_err_libyang(void)
             stri++;
             strj = strchr(stri, '"');
             strj--;
-            attr = strndup(stri, strj - stri);
+            attr = strndup(stri, (strj - stri) + 1);
             if (ly_vecode == LYVE_INATTR) {
                 e = nc_err(NC_ERR_UNKNOWN_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath());
             } else if (ly_vecode == LYVE_MISSATTR) {

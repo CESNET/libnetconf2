@@ -1175,7 +1175,7 @@ parse_rpc_error(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_err *err)
                         } else {
                             err->sid = lydict_insert(ctx, (info->content ? info->content : ""), 0);
                         }
-                    } else if (!strcmp(info->name, "bad-attr")) {
+                    } else if (!strcmp(info->name, "bad-attribute")) {
                         ++err->attr_count;
                         err->attr = nc_realloc(err->attr, err->attr_count * sizeof *err->attr);
                         if (!err->attr) {
