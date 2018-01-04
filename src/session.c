@@ -1334,13 +1334,13 @@ tls_thread_id_func(CRYPTO_THREADID *tid)
 static void
 nc_tls_init(void)
 {
-    int i;
-
     SSL_load_error_strings();
     ERR_load_BIO_strings();
     SSL_library_init();
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
+    int i;
+
     tls_locks = malloc(CRYPTO_num_locks() * sizeof *tls_locks);
     if (!tls_locks) {
         ERRMEM;
@@ -1362,8 +1362,6 @@ nc_tls_init(void)
 static void
 nc_tls_destroy(void)
 {
-    int i;
-
     FIPS_mode_set(0);
     CRYPTO_cleanup_all_ex_data();
     nc_thread_destroy();
@@ -1376,6 +1374,8 @@ nc_tls_destroy(void)
 #endif
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
+    int i;
+
     CRYPTO_THREADID_set_callback(NULL);
     CRYPTO_set_locking_callback(NULL);
     for (i = 0; i < CRYPTO_num_locks(); ++i) {
