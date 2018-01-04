@@ -827,12 +827,41 @@ API struct nc_server_notif *
 nc_server_notif_new(struct lyd_node* event, char *eventtime, NC_PARAMTYPE paramtype)
 {
     struct nc_server_notif *ntf;
+    struct lyd_node *elem;
 
     if (!event) {
         ERRARG("event");
         return NULL;
     } else if (!eventtime) {
         ERRARG("eventtime");
+        return NULL;
+    }
+
+    /* check that there is a notification */
+    for (elem = event; elem && (elem->schema->nodetype != LYS_NOTIF); elem = elem->child) {
+next_node:
+        switch (elem->schema->nodetype) {
+        case LYS_LEAF:
+            /* key, skip it */
+            elem = elem->next;
+            if (!elem) {
+                /* error */
+                break;
+            }
+            goto next_node;
+        case LYS_CONTAINER:
+        case LYS_LIST:
+        case LYS_NOTIF:
+            /* ok */
+            break;
+        default:
+            /* error */
+            elem = NULL;
+            break;
+        }
+    }
+    if (!elem) {
+        ERRARG("event");
         return NULL;
     }
 
