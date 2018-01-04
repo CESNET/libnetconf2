@@ -828,7 +828,7 @@ nc_server_notif_new(struct lyd_node* event, char *eventtime, NC_PARAMTYPE paramt
 {
     struct nc_server_notif *ntf;
 
-    if (!event || event->schema->nodetype != LYS_NOTIF) {
+    if (!event) {
         ERRARG("event");
         return NULL;
     } else if (!eventtime) {
