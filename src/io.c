@@ -1077,7 +1077,7 @@ nc_write_msg(struct nc_session *session, int type, ...)
             nc_write_clb((void *)&arg, ">", 1, 0);
         } else {
             /* but put there at least the correct namespace */
-            nc_write_clb((void *)&arg, "xmlns=\""NC_NS_BASE"\">", 48, 0);
+            nc_write_clb((void *)&arg, " xmlns=\""NC_NS_BASE"\">", 49, 0);
         }
         switch (reply->type) {
         case NC_RPL_OK:
