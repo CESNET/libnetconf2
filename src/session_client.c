@@ -1050,8 +1050,7 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
             /* check message-id */
             str_msgid = lyxml_get_attr(xml, "message-id", NULL);
             if (!str_msgid) {
-                ERR("Session %u: received a <rpc-reply> without a message-id.", session->id);
-                msgtype = NC_MSG_REPLY_ERR_MSGID;
+                WRN("Session %u: received a <rpc-reply> without a message-id.", session->id);
             } else {
                 cur_msgid = strtoul(str_msgid, &ptr, 10);
                 if (cur_msgid != msgid) {
