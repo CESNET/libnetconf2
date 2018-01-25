@@ -20,11 +20,14 @@
 #include <string.h>
 #include <libssh/libssh.h>
 #include <libyang/libyang.h>
+#include <libyang/swigpyrun.h>
 
 #include "../src/config.h"
 #include "netconf.h"
 #include "session.h"
 #include "rpc.h"
+
+extern PyObject *libnetconf2Error;
 
 int
 auth_hostkey_check_pyclb(const char *hostname, ssh_session session, void *priv)
@@ -418,6 +421,40 @@ ncSessionGetVersion(ncSessionObject *self, void *closure)
     }
 }
 
+static PyObject *
+ncSessionGetContext(ncSessionObject *self, void *closure)
+{
+    PyObject *context, *result, *module;
+
+
+    /* process the received data */
+    context = SWIG_NewPointerObj(self->ctx, SWIG_Python_TypeQuery("ly_ctx*"), 0);
+    if (!context) {
+        PyErr_SetString(libnetconf2Error, "Building Python object from context structure failed.");
+        goto error;
+    }
+
+    module = PyImport_ImportModule("libyang");
+    if (module == NULL) {
+        PyErr_SetString(libnetconf2Error, "Could not import libyang module");
+        goto error;
+    }
+
+    result = PyObject_CallMethod(module, "create_new_Context", "(O)", context, NULL);
+    Py_DECREF(module);
+    Py_DECREF(context);
+    if (!result) {
+        PyErr_SetString(libnetconf2Error, "Could not create Context object.");
+        goto error;
+    }
+
+    return result;
+
+error:
+    Py_XDECREF(context);
+    return NULL;
+}
+
 /*
  * Callback structures
  */
@@ -430,6 +467,7 @@ static PyGetSetDef ncSessionGetSetters[] = {
     {"transport", (getter)ncSessionGetTransport, NULL, "Transport protocol used for the NETCONF Session.", NULL},
     {"version", (getter)ncSessionGetVersion, NULL, "NETCONF Protocol version used for the NETCONF Session.", NULL},
     {"capabilities", (getter)ncSessionGetCapabilities, NULL, "Capabilities of the NETCONF Session.", NULL},
+    {"context", (getter)ncSessionGetContext, NULL, "libyang context of the NETCONF Session.", NULL},
     {NULL} /* Sentinel */
 };
 
