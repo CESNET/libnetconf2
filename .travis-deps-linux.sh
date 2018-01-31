@@ -6,6 +6,7 @@ sudo apt-get install -y zlib1g-dev
 sudo apt-get install -y libssl-dev
 sudo apt-get install -y libval-dev
 sudo apt-get install -y valgrind
+sudo apt-get install -y osc
 
 echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-certificates.crt
 

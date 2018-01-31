@@ -1,0 +1,25 @@
+Source: @PACKAGE_NAME@
+Maintainer: CESNET <rkrejci@cesnet.cz>
+Priority: extra
+Standards-Version: 3.8.2
+Build-Depends: debhelper (>= 9), gcc
+Homepage: https://github.com/CESNET/libnetconf2
+
+Package: @PACKAGE_NAME@
+Depends: libyang@COMPAT_PACKAGES@, libssh-4 (>= 0.7.1), ${shlibs:Depends}
+Conflicts: @CONFLICT_PACKAGE_NAME@
+Section: libs
+Architecture: any
+Description: Libnetconf2 is a NETCONF library in C intended for building NETCONF clients and servers.
+
+Package: @PACKAGE_NAME@-dev
+Depends: libyang@COMPAT_PACKAGES@-dev
+Section: libdevel
+Architecture: any
+Description: Headers for libnetconf2 library.
+
+Package: @PACKAGE_NAME@-dbg
+Depends: @PACKAGE_NAME@ (= @LIBNETCONF2_VERSION@)
+Section: debug
+Architecture: any
+Description: Debug symbols for libnetconf2 library.
