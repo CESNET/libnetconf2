@@ -1,0 +1,114 @@
+Name: libnetconf2-experimental
+Version: @LIBNETCONF2_VERSION@
+Release: 0
+Summary: Libnetconf2 library
+Url: https://github.com/CESNET/libnetconf2
+Source: %{url}/archive/@BRANCH@.tar.gz
+License: BSD-3-Clause
+BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}
+
+%define  debug_package %{nil}
+
+Requires:       libnetconf2-@LIBNETCONF2_MAJOR_VERSION@_@LIBNETCONF2_MINOR_VERSION@ = %{version}-%{release}
+BuildRequires:  libyang@COMPAT_PACKAGES@-devel
+BuildRequires:  libssh-devel >= 0.7.1
+BuildRequires:  openssl-devel
+BuildRequires:  valgrind
+BuildRequires:  libcmocka-devel
+BuildRequires:  gcc
+%if 0%{?suse_version}
+BuildRequires:  timezone
+%endif
+
+%package debuginfo
+Summary: Debug symbol for libnetnconf2 library
+Requires: %{name} = %{version}-%{release}
+
+%if 0%{?suse_version}
+%package debugsource
+Summary: Debug information for libnetnconf2 library
+Requires: %{name} = %{version}-%{release}
+
+%description debugsource
+This package provides debug information for package libnetconf2. Debug information is useful when developing applications that use this package or when debugging this package.
+
+%endif
+
+%package -n libnetconf2-@LIBNETCONF2_MAJOR_VERSION@_@LIBNETCONF2_MINOR_VERSION@
+Summary:   Libnetconf2 library
+Requires:  libyang
+
+%package devel
+Summary:    Headers of libnetconf2 library
+Requires:   %{name} = %{version}-%{release}
+Requires:   libssh-devel
+
+%description -n libnetconf2-@LIBNETCONF2_MAJOR_VERSION@_@LIBNETCONF2_MINOR_VERSION@
+Libnetconf2 is a NETCONF library in C intended for building NETCONF clients and servers.
+
+%description devel
+Headers of libnetconf2 library.
+
+%description debuginfo
+This package provides debug information for package libnetconf2. Debug information is useful when developing applications that use this package or when debugging this package.
+
+%description
+Libnetconf2 is a NETCONF library in C intended for building NETCONF clients and servers.
+
+%prep
+%setup -n libnetconf2-@BRANCH@
+
+%build
+cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr -D CMAKE_BUILD_TYPE:String="@BUILD_TYPE@" .
+make
+
+%check
+ctest --output-on-failure
+
+%install
+make DESTDIR=%{buildroot} install
+/usr/lib/rpm/find-debuginfo.sh
+
+%post -n libnetconf2-@LIBNETCONF2_MAJOR_VERSION@_@LIBNETCONF2_MINOR_VERSION@ -p /sbin/ldconfig
+
+%postun -n libnetconf2-@LIBNETCONF2_MAJOR_VERSION@_@LIBNETCONF2_MINOR_VERSION@ -p /sbin/ldconfig
+
+%files
+%{_datadir}/libnetconf2/*
+%dir %{_datadir}/libnetconf2/
+
+%files -n libnetconf2-@LIBNETCONF2_MAJOR_VERSION@_@LIBNETCONF2_MINOR_VERSION@
+%defattr(-,root,root)
+%{_libdir}/libnetconf2.so.*
+
+%files devel
+%defattr(-,root,root)
+%{_libdir}/libnetconf2.so
+%{_libdir}/pkgconfig/libnetconf2.pc
+%{_includedir}/libnetconf2/*
+%{_includedir}/nc_client.h
+%{_includedir}/nc_server.h
+%dir %{_includedir}/libnetconf2/
+
+%if 0%{?suse_version}
+%files debuginfo
+%defattr(-,root,root)
+%{_prefix}/lib/debug/*
+%{_prefix}/lib/debug/.build-id/*
+%{_usrsrc}/debug/*
+
+%files debugsource
+%defattr(-,root,root)
+%{_usrsrc}/debug/*
+
+%else 
+%files debuginfo
+%defattr(-,root,root)
+%{_prefix}/lib/debug/*
+%{_prefix}/lib/debug/.build-id/*
+%{_usrsrc}/debug/*
+
+%endif
+
+%changelog
+

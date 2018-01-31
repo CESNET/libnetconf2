@@ -32,6 +32,7 @@ script:
   - cd $TRAVIS_BUILD_DIR && mkdir build_ssh && cd build_ssh ; cmake $OPENSSLFLAGS -DENABLE_TLS=OFF -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && ctest -V
   - cd $TRAVIS_BUILD_DIR && mkdir build_ssh_tls && cd build_ssh_tls ; cmake $OPENSSLFLAGS -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && ctest -V
   - cd $TRAVIS_BUILD_DIR && mkdir build_all && cd build_all ; cmake $OPENSSLFLAGS -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=ON .. && make -j2 && ctest -V
+  - cd -
 
 after_success:
-  - if [ "$TRAVIS_OS_NAME" = "linux" -a "$CC" = "gcc" ]; then codecov; fi
+  - if [ "$TRAVIS_OS_NAME" = "linux" -a "$CC" = "gcc" ]; then codecov; ./packages/create-package.sh; fi
