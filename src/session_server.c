@@ -417,9 +417,9 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
 
     /* check format */
     if (!format || !strcmp(format, "ietf-netconf-monitoring:yang")) {
-        lys_print_mem(&model_data, module, LYS_OUT_YANG, NULL);
+        lys_print_mem(&model_data, module, LYS_OUT_YANG, NULL, 0, 0);
     } else if (!strcmp(format, "ietf-netconf-monitoring:yin")) {
-        lys_print_mem(&model_data, module, LYS_OUT_YIN, NULL);
+        lys_print_mem(&model_data, module, LYS_OUT_YIN, NULL, 0, 0);
     } else {
         err = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
         nc_err_set_msg(err, "The requested format is not supported.", "en");
