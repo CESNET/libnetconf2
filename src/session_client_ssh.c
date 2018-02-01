@@ -354,11 +354,13 @@ sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
         return NULL;
     }
 
-    fprintf(stdout, "%s@%s password: ", username, hostname);
+    if (fprintf(stdout, "%s@%s password: ", username, hostname) < 1) {
+        goto stdout_fail;
+    }
     fflush(stdout);
 
     len = 0;
-    while ((fread(&c, 1, 1, tty) == 1) && (c != '\n')) {
+    while (((c = fgetc(tty)) != EOF) && (c != '\n')) {
         if (len >= buflen - 1) {
             buflen *= 2;
             buf = nc_realloc(buf, buflen * sizeof *buf);
@@ -375,6 +377,17 @@ sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
     fprintf(stdout, "\n");
     restore_tty_close(tty, &oldterm);
     return buf;
+
+stdout_fail:
+    if (feof(stdout)) {
+        ERR("Writing into stdout failed (End of file).");
+    } else {
+        assert(ferror(stdout));
+        ERR("Writing into stdout failed (%s).", strerror(errno));
+    }
+    restore_tty_close(tty, &oldterm);
+    free(buf);
+    return NULL;
 }
 
 char *
@@ -409,24 +422,19 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
     }
 
 
-    if (auth_name && (!fwrite(auth_name, sizeof *auth_name, strlen(auth_name), stdout)
-            || !fwrite("\n", sizeof(char), 1, stdout))) {
-        ERR("Writing the auth method name into stdout failed.");
-        goto fail;
+    if (auth_name && (fprintf(stdout, "%s\n", auth_name) < 1)) {
+        goto stdout_fail;
     }
-    if (instruction && (!fwrite(instruction, sizeof *auth_name, strlen(instruction), stdout)
-            || !fwrite("\n", sizeof(char), 1, stdout))) {
-        ERR("Writing the instruction into stdout failed.");
-        goto fail;
+    if (instruction && (fprintf(stdout, "%s\n", instruction) < 1)) {
+        goto stdout_fail;
     }
-    if (!fwrite(prompt, sizeof *prompt, strlen(prompt), stdout)) {
-        ERR("Writing the authentication prompt into stdout failed.");
-        goto fail;
+    if (fputs(prompt, stdout) == EOF) {
+        goto stdout_fail;
     }
     fflush(stdout);
 
     cur_len = 0;
-    while ((fread(&c, 1, 1, tty) == 1) && (c != '\n')) {
+    while (((c = fgetc(tty)) != EOF) && (c != '\n')) {
         if (cur_len >= buflen - 1) {
             buflen *= 2;
             buf = nc_realloc(buf, buflen * sizeof *buf);
@@ -446,6 +454,13 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
     }
     return buf;
 
+stdout_fail:
+    if (feof(stdout)) {
+        ERR("Writing into stdout failed (End of file).");
+    } else {
+        assert(ferror(stdout));
+        ERR("Writing into stdout failed (%s).", strerror(errno));
+    }
 fail:
     if (!echo) {
         restore_tty_close(tty, &oldterm);
@@ -479,11 +494,13 @@ sshauth_privkey_passphrase(const char* privkey_path, void *UNUSED(priv))
         return NULL;
     }
 
-    fprintf(stdout, "Enter passphrase for the key '%s':", privkey_path);
+    if (fprintf(stdout, "Enter passphrase for the key '%s':", privkey_path) < 1) {
+        goto stdout_fail;
+    }
     fflush(stdout);
 
     len = 0;
-    while ((fread(&c, 1, 1, tty) == 1) && (c != '\n')) {
+    while (((c = fgetc(tty)) != EOF) && (c != '\n')) {
         if (len >= buflen - 1) {
             buflen *= 2;
             buf = nc_realloc(buf, buflen * sizeof *buf);
@@ -500,6 +517,13 @@ sshauth_privkey_passphrase(const char* privkey_path, void *UNUSED(priv))
     restore_tty_close(tty, &oldterm);
     return buf;
 
+stdout_fail:
+    if (feof(stdout)) {
+        ERR("Writing into stdout failed (End of file).");
+    } else {
+        assert(ferror(stdout));
+        ERR("Writing into stdout failed (%s).", strerror(errno));
+    }
 fail:
     restore_tty_close(tty, &oldterm);
     free(buf);
