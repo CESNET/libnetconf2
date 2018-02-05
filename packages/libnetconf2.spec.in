@@ -1,4 +1,4 @@
-Name: libnetconf2-experimental
+Name: @PACKAGE_NAME@
 Version: @LIBNETCONF2_VERSION@
 Release: 0
 Summary: Libnetconf2 library
