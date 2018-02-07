@@ -667,45 +667,61 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
 }
 
 static void
+nc_ps_queue_add_id(struct nc_pollsession *ps, uint8_t *id)
+{
+    uint8_t q_last;
+
+    if (ps->queue_len == NC_PS_QUEUE_SIZE) {
+        ERRINT;
+        return;
+    }
+
+    /* get a unique queue value (by adding 1 to the last added value, if any) */
+    if (ps->queue_len) {
+        q_last = (ps->queue_begin + ps->queue_len - 1) % NC_PS_QUEUE_SIZE;
+        *id = ps->queue[q_last] + 1;
+    } else {
+        *id = 0;
+    }
+
+    /* add the id into the queue */
+    ++ps->queue_len;
+    q_last = (ps->queue_begin + ps->queue_len - 1) % NC_PS_QUEUE_SIZE;
+    ps->queue[q_last] = *id;
+}
+
+static void
 nc_ps_queue_remove_id(struct nc_pollsession *ps, uint8_t id)
 {
-    uint8_t i, found = 0;
+    uint8_t i, q_idx, found = 0;
 
     for (i = 0; i < ps->queue_len; ++i) {
-        /* idx round buffer adjust */
-        if (ps->queue_begin + i == NC_PS_QUEUE_SIZE) {
-            i = -ps->queue_begin;
-        }
+        /* get the actual queue idx */
+        q_idx = (ps->queue_begin + i) % NC_PS_QUEUE_SIZE;
 
         if (found) {
-            /* move the value back one place */
-            if (ps->queue[ps->queue_begin + i] == id) {
+            if (ps->queue[q_idx] == id) {
                 /* another equal value, simply cannot be */
                 ERRINT;
             }
-
-            if (ps->queue_begin + i == 0) {
-                ps->queue[NC_PS_QUEUE_SIZE - 1] = ps->queue[ps->queue_begin + i];
-            } else {
-                ps->queue[ps->queue_begin + i - 1] = ps->queue[ps->queue_begin + i];
-            }
-        } else if (ps->queue[ps->queue_begin + i] == id) {
+        } else if (ps->queue[q_idx] == id) {
             /* found our id, there can be no more equal valid values */
             found = 1;
         }
     }
-
     if (!found) {
         ERRINT;
     }
+
+    /* remove the id by moving the queue */
     --ps->queue_len;
+    ps->queue_begin = (ps->queue_begin + 1) % NC_PS_QUEUE_SIZE;
 }
 
 int
 nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
 {
     int ret;
-    uint8_t queue_last;
     struct timespec ts;
 
     nc_gettimespec_real(&ts);
@@ -718,29 +734,15 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
         return -1;
     }
 
-    /* get a unique queue value (by adding 1 to the last added value, if any) */
-    if (ps->queue_len) {
-        queue_last = ps->queue_begin + ps->queue_len - 1;
-        if (queue_last > NC_PS_QUEUE_SIZE - 1) {
-            queue_last -= NC_PS_QUEUE_SIZE;
-        }
-        *id = ps->queue[queue_last] + 1;
-    } else {
-        *id = 0;
-    }
-
-    /* add ourselves into the queue */
+    /* check that the queue is long enough */
     if (ps->queue_len == NC_PS_QUEUE_SIZE) {
-        ERR("%s: pollsession queue too small.", func);
+        ERR("%s: pollsession queue size (%d) too small.", func, NC_PS_QUEUE_SIZE);
         pthread_mutex_unlock(&ps->lock);
         return -1;
     }
-    ++ps->queue_len;
-    queue_last = ps->queue_begin + ps->queue_len - 1;
-    if (queue_last > NC_PS_QUEUE_SIZE - 1) {
-        queue_last -= NC_PS_QUEUE_SIZE;
-    }
-    ps->queue[queue_last] = *id;
+
+    /* add ourselves into the queue */
+    nc_ps_queue_add_id(ps, id);
 
     /* is it our turn? */
     while (ps->queue[ps->queue_begin] != *id) {

@@ -439,7 +439,7 @@ struct nc_pollsession {
     pthread_mutex_t lock;
     uint8_t queue[NC_PS_QUEUE_SIZE]; /**< round buffer, queue is empty when queue_len == 0 */
     uint8_t queue_begin;             /**< queue starts on queue[queue_begin] */
-    uint8_t queue_len;               /**< queue ends on queue[queue_begin + queue_len - 1] */
+    uint8_t queue_len;               /**< queue ends on queue[(queue_begin + queue_len - 1) % NC_PS_QUEUE_SIZE] */
 };
 
 struct nc_ntf_thread_arg {
