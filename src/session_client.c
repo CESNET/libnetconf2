@@ -1792,7 +1792,7 @@ API NC_MSG_TYPE
 nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_t *msgid)
 {
     NC_MSG_TYPE r;
-    int ret;
+    int ret, dofree = 1;
     struct nc_rpc_act_generic *rpc_gen;
     struct nc_rpc_getconfig *rpc_gc;
     struct nc_rpc_edit *rpc_e;
@@ -1839,6 +1839,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         if (rpc_gen->has_data) {
             data = rpc_gen->content.data;
+            dofree = 0;
         } else {
             data = lyd_parse_mem(session->ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | LYD_OPT_NOEXTDEPS
                                  | (session->flags & NC_SESSION_CLIENT_NOT_STRICT ? 0 : LYD_OPT_STRICT), NULL);
@@ -2267,7 +2268,9 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
     if (lyd_validate(&data, LYD_OPT_RPC | LYD_OPT_NOEXTDEPS
                      | (session->flags & NC_SESSION_CLIENT_NOT_STRICT ? 0 : LYD_OPT_STRICT), NULL)) {
-        lyd_free(data);
+        if (dofree) {
+            lyd_free(data);
+        }
         return NC_MSG_ERROR;
     }
 
@@ -2285,7 +2288,9 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     }
     nc_session_unlock(session, timeout, __func__);
 
-    lyd_free(data);
+    if (dofree) {
+        lyd_free(data);
+    }
 
     if (r != NC_MSG_RPC) {
         return r;
