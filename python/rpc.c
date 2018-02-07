@@ -31,6 +31,11 @@
 extern PyObject *libnetconf2Error;
 extern PyObject *libnetconf2ReplyError;
 
+static const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "candidate"};
+const char *rpcedit_dfltop2str[] = {NULL, "merge", "replace", "none"};
+const char *rpcedit_testopt2str[] = {NULL, "test-then-set", "set", "test-only"};
+const char *rpcedit_erropt2str[] = {NULL, "stop-on-error", "continue-on-error", "rollback-on-error"};
+
 static struct nc_reply *
 rpc_send_recv(struct nc_session *session, struct nc_rpc *rpc)
 {
@@ -189,4 +194,110 @@ ncRPCGetConfig(ncSessionObject *self, PyObject *args, PyObject *keywords)
     }
 
     return process_reply_data(reply);
+}
+
+PyObject *
+ncRPCEditConfig(ncSessionObject *self, PyObject *args, PyObject *keywords)
+{
+    static char *kwlist[] = {"datastore", "data", "defop", "testopt", "erropt", NULL};
+    struct lyd_node *data = NULL, *node, *content_tree = NULL;
+    char *content_str = NULL;
+    const struct lys_module *ietfnc;
+    NC_DATASTORE datastore;
+    NC_RPC_EDIT_DFLTOP defop = 0;
+    NC_RPC_EDIT_TESTOPT testopt = 0;
+    NC_RPC_EDIT_ERROPT erropt = 0;
+    PyObject *content_o = NULL, *py_lyd_node;
+    struct nc_rpc *rpc;
+    struct nc_reply *reply;
+
+    ietfnc = ly_ctx_get_module(self->ctx, "ietf-netconf", NULL, 1);
+    if (!ietfnc) {
+        PyErr_SetString(libnetconf2Error, "Missing \"ietf-netconf\" schema in the context.");
+        return NULL;
+    }
+
+    if (!PyArg_ParseTupleAndKeywords(args, keywords, "iO|iii:ncRPCEditConfig", kwlist, &datastore, &content_o, &defop, &testopt, &erropt)) {
+        return NULL;
+    }
+
+    if (PyUnicode_Check(content_o)) {
+            content_str = PyUnicode_AsUTF8(content_o);
+    } else if (!strcmp(Py_TYPE(content_o)->tp_name, "Data_Node")) {
+        py_lyd_node = PyObject_CallMethod(content_o, "C_lyd_node", NULL);
+        if (!SWIG_IsOK(SWIG_Python_ConvertPtr(py_lyd_node, (void**)&content_tree, SWIG_Python_TypeQuery("lyd_node *"), SWIG_POINTER_DISOWN))) {
+            PyErr_SetString(PyExc_TypeError, "Invalid object representing <edit-config> content. Data_Node is accepted.");
+            goto error;
+        }
+    } else if (content_o != Py_None) {
+        PyErr_SetString(PyExc_TypeError, "Invalid object representing <edit-config> content. String or Data_Node is accepted.");
+        goto error;
+    }
+
+    data = lyd_new(NULL, ietfnc, "edit-config");
+    node = lyd_new(data, ietfnc, "target");
+    node = lyd_new_leaf(node, ietfnc, ncds2str[datastore], NULL);
+    if (!node) {
+        goto error;
+    }
+
+    if (defop) {
+        node = lyd_new_leaf(data, ietfnc, "default-operation", rpcedit_dfltop2str[defop]);
+        if (!node) {
+            goto error;
+        }
+    }
+
+    if (testopt) {
+        node = lyd_new_leaf(data, ietfnc, "test-option", rpcedit_testopt2str[testopt]);
+        if (!node) {
+            goto error;
+        }
+    }
+
+    if (erropt) {
+        node = lyd_new_leaf(data, ietfnc, "error-option", rpcedit_erropt2str[erropt]);
+        if (!node) {
+            goto error;
+        }
+    }
+
+    if (content_str) {
+        if (!content_str[0] || (content_str[0] == '<')) {
+            node = lyd_new_anydata(data, ietfnc, "config", content_str, LYD_ANYDATA_SXML);
+        } else {
+            node = lyd_new_leaf(data, ietfnc, "url", content_str);
+        }
+    } else if (content_tree) {
+        node = lyd_new_anydata(data, ietfnc, "config", content_tree, LYD_ANYDATA_DATATREE);
+    }
+    if (!node) {
+        goto error;
+    }
+
+    rpc = nc_rpc_act_generic(data, NC_PARAMTYPE_FREE);
+    data = NULL;
+    if (!rpc) {
+        goto error;
+    }
+
+    reply = rpc_send_recv(self->session, rpc);
+    nc_rpc_free(rpc);
+    if (!reply) {
+        goto error;
+    }
+    if (reply->type != NC_RPL_OK) {
+        if (reply->type == NC_RPL_ERROR) {
+            RAISE_REPLY_ERROR(reply);
+        } else {
+            PyErr_SetString(libnetconf2Error, "Unexpected reply received.");
+        }
+        goto error;
+    }
+
+    Py_RETURN_NONE;
+
+error:
+    lyd_free(data);
+    return NULL;
 }

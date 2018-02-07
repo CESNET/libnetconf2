@@ -14,7 +14,7 @@ def password_auth(user, host, data):
 	return getpass.getpass((user if user else os.getlogin()) + '@' + host + ' password : ')
 
 def hostkey_check(hostname, state, keytype, hexa, priv):
-        return True
+	return True
 
 #
 # get know where to connect
@@ -46,9 +46,14 @@ except Exception as e:
 	print(e)
 	sys.exit(1)
 
-# perform <get> and print result
+# prepare config content as string or data tree
+tm = session.context.get_module("turing-machine")
+# config = "<turing-machine xmlns=\"http://example.net/turing-machine\"><transition-function><delta><label>left summand</label><input><state>0</state></input></delta></transition-function></turing-machine>"
+config = ly.Data_Node(session.context, "/turing-machine:turing-machine/transition-function/delta[label='left summand']/input/state", "5", 0, 0)
+
+# perform <edit-config> and print result
 try:
-        data = session.rpcGet()
+        session.rpcEditConfig(nc.DATASTORE_RUNNING, config)
 except nc.ReplyError as e:
         reply = {'success':False, 'error': []}
         for err in e.args[0]:
@@ -56,4 +61,4 @@ except nc.ReplyError as e:
         print(json.dumps(reply))
         sys.exit(1)
 
-print(data.print_mem(ly.LYD_XML, ly.LYP_FORMAT | ly.LYP_WITHSIBLINGS))
+# print(data.print_mem(ly.LYD_XML, ly.LYP_FORMAT | ly.LYP_WITHSIBLINGS))
