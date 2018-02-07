@@ -1,4 +1,4 @@
-Name: libnetconf2-experimental
+Name: @PACKAGE_NAME@
 Version: @LIBNETCONF2_VERSION@
 Release: 0
 Summary: Libnetconf2 library
@@ -7,36 +7,23 @@ Source: %{url}/archive/@BRANCH@.tar.gz
 License: BSD-3-Clause
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}
 
-%define  debug_package %{nil}
-
 Requires:       libnetconf2-@LIBNETCONF2_MAJOR_VERSION@_@LIBNETCONF2_MINOR_VERSION@ = %{version}-%{release}
 BuildRequires:  libyang@COMPAT_PACKAGES@-devel
 BuildRequires:  libssh-devel >= 0.7.1
 BuildRequires:  openssl-devel
 BuildRequires:  valgrind
+BuildRequires:  cmake
 BuildRequires:  libcmocka-devel
 BuildRequires:  gcc
 %if 0%{?suse_version}
 BuildRequires:  timezone
 %endif
-
-%package debuginfo
-Summary: Debug symbol for libnetnconf2 library
-Requires: %{name} = %{version}-%{release}
-
-%if 0%{?suse_version}
-%package debugsource
-Summary: Debug information for libnetnconf2 library
-Requires: %{name} = %{version}-%{release}
-
-%description debugsource
-This package provides debug information for package libnetconf2. Debug information is useful when developing applications that use this package or when debugging this package.
-
-%endif
+Conflicts: @CONFLICT_PACKAGE_NAME@
 
 %package -n libnetconf2-@LIBNETCONF2_MAJOR_VERSION@_@LIBNETCONF2_MINOR_VERSION@
 Summary:   Libnetconf2 library
-Requires:  libyang
+Requires:  libyang@COMPAT_PACKAGES@
+Requires:  %{name} = %{version}-%{release}
 
 %package devel
 Summary:    Headers of libnetconf2 library
@@ -49,9 +36,6 @@ Libnetconf2 is a NETCONF library in C intended for building NETCONF clients and 
 %description devel
 Headers of libnetconf2 library.
 
-%description debuginfo
-This package provides debug information for package libnetconf2. Debug information is useful when developing applications that use this package or when debugging this package.
-
 %description
 Libnetconf2 is a NETCONF library in C intended for building NETCONF clients and servers.
 
@@ -59,7 +43,7 @@ Libnetconf2 is a NETCONF library in C intended for building NETCONF clients and 
 %setup -n libnetconf2-@BRANCH@
 
 %build
-cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr -D CMAKE_BUILD_TYPE:String="@BUILD_TYPE@" .
+cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr -D CMAKE_BUILD_TYPE:String="@BUILD_TYPE@" -D ENABLE_VALGRIND_TESTS:BOOL=FALSE .
 make
 
 %check
@@ -67,7 +51,6 @@ ctest --output-on-failure
 
 %install
 make DESTDIR=%{buildroot} install
-/usr/lib/rpm/find-debuginfo.sh
 
 %post -n libnetconf2-@LIBNETCONF2_MAJOR_VERSION@_@LIBNETCONF2_MINOR_VERSION@ -p /sbin/ldconfig
 
@@ -90,25 +73,4 @@ make DESTDIR=%{buildroot} install
 %{_includedir}/nc_server.h
 %dir %{_includedir}/libnetconf2/
 
-%if 0%{?suse_version}
-%files debuginfo
-%defattr(-,root,root)
-%{_prefix}/lib/debug/*
-%{_prefix}/lib/debug/.build-id/*
-%{_usrsrc}/debug/*
-
-%files debugsource
-%defattr(-,root,root)
-%{_usrsrc}/debug/*
-
-%else 
-%files debuginfo
-%defattr(-,root,root)
-%{_prefix}/lib/debug/*
-%{_prefix}/lib/debug/.build-id/*
-%{_usrsrc}/debug/*
-
-%endif
-
 %changelog
-
