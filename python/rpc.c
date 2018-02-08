@@ -223,7 +223,7 @@ ncRPCEditConfig(ncSessionObject *self, PyObject *args, PyObject *keywords)
 
     if (PyUnicode_Check(content_o)) {
             content_str = PyUnicode_AsUTF8(content_o);
-    } else if (!strcmp(Py_TYPE(content_o)->tp_name, "Data_Node")) {
+    } else if (SWIG_Python_GetSwigThis(content_o)) {
         py_lyd_node = PyObject_CallMethod(content_o, "C_lyd_node", NULL);
         if (!SWIG_IsOK(SWIG_Python_ConvertPtr(py_lyd_node, (void**)&content_tree, SWIG_Python_TypeQuery("lyd_node *"), SWIG_POINTER_DISOWN))) {
             PyErr_SetString(PyExc_TypeError, "Invalid object representing <edit-config> content. Data_Node is accepted.");
