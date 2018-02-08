@@ -3,6 +3,7 @@
 import sys
 import os
 import getpass
+import json
 import libyang as ly
 import netconf2 as nc
 
