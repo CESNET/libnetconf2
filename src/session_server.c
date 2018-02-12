@@ -704,9 +704,18 @@ nc_ps_queue_remove_id(struct nc_pollsession *ps, uint8_t id)
                 /* another equal value, simply cannot be */
                 ERRINT;
             }
+            if (found == 2) {
+                /* move the following values */
+                ps->queue[q_idx ? q_idx - 1 : NC_PS_QUEUE_SIZE - 1] = ps->queue[q_idx];
+            }
         } else if (ps->queue[q_idx] == id) {
             /* found our id, there can be no more equal valid values */
-            found = 1;
+            if (i == 0) {
+                found = 1;
+            } else {
+                /* this is not okay, our id is in the middle of the queue */
+                found = 2;
+            }
         }
     }
     if (!found) {
@@ -714,8 +723,10 @@ nc_ps_queue_remove_id(struct nc_pollsession *ps, uint8_t id)
     }
 
     /* remove the id by moving the queue */
-    --ps->queue_len;
-    ps->queue_begin = (ps->queue_begin + 1) % NC_PS_QUEUE_SIZE;
+    if (found == 1) {
+        --ps->queue_len;
+        ps->queue_begin = (ps->queue_begin + 1) % NC_PS_QUEUE_SIZE;
+    }
 }
 
 int
