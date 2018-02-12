@@ -758,7 +758,7 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
     /* is it our turn? */
     while (ps->queue[ps->queue_begin] != *id) {
         nc_gettimespec_real(&ts);
-        nc_addtimespec(&ts, NC_PS_LOCK_TIMEOUT);
+        nc_addtimespec(&ts, NC_PS_QUEUE_TIMEOUT);
 
         ret = pthread_cond_timedwait(&ps->cond, &ps->lock, &ts);
         if (ret) {
