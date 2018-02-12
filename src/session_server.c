@@ -720,11 +720,12 @@ nc_ps_queue_remove_id(struct nc_pollsession *ps, uint8_t id)
     }
     if (!found) {
         ERRINT;
+        return;
     }
 
-    /* remove the id by moving the queue */
+    --ps->queue_len;
     if (found == 1) {
-        --ps->queue_len;
+        /* remove the id by moving the queue, otherwise all the values in the queue were moved */
         ps->queue_begin = (ps->queue_begin + 1) % NC_PS_QUEUE_SIZE;
     }
 }
