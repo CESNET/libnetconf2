@@ -434,9 +434,9 @@ ncSessionGetContext(ncSessionObject *self, void *closure)
         goto error;
     }
 
-    module = PyImport_ImportModule("libyang");
+    module = PyImport_ImportModule("yang");
     if (module == NULL) {
-        PyErr_SetString(libnetconf2Error, "Could not import libyang module");
+        PyErr_SetString(libnetconf2Error, "Could not import libyang python module");
         goto error;
     }
 

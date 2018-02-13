@@ -175,7 +175,7 @@ PyInit_netconf2(void)
     PyObject *nc;
 
     /* import libyang Python module to have it available */
-    if (!PyImport_ImportModule("libyang")) {
+    if (!PyImport_ImportModule("yang")) {
         return NULL;
     }
 
