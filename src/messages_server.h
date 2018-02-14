@@ -169,9 +169,10 @@ struct nc_server_error *nc_err(int tag, ...);
  * The function should be used immediately when a libyang function fails to generate
  * NETCONF error structure based on internal libyang error information (ly_errno, ly_errmsg, ...)
  *
+ * @param[in] ctx Libyang context to read the error from.
  * @return Server error structure, NULL on error.
  */
-struct nc_server_error *nc_err_libyang(void);
+struct nc_server_error *nc_err_libyang(struct ly_ctx *ctx);
 
 /**
  * @brief Get the \<error-type\> of a server error.

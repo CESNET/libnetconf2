@@ -1031,7 +1031,7 @@ nc_server_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
                                      LYD_OPT_RPC | LYD_OPT_DESTRUCT | LYD_OPT_NOEXTDEPS | LYD_OPT_STRICT, NULL);
         if (!(*rpc)->tree) {
             /* parsing RPC failed */
-            reply = nc_server_reply_err(nc_err_libyang());
+            reply = nc_server_reply_err(nc_err_libyang(server_opts.ctx));
             ret = nc_write_msg(session, NC_MSG_REPLY, xml, reply);
             nc_server_reply_free(reply);
             if (ret == -1) {
