@@ -352,7 +352,7 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
                 ERRMEM;
             }
         } else if (saddr.ss_family == AF_INET6) {
-            *host = malloc(40);
+            *host = malloc(INET6_ADDRSTRLEN);
             if (*host) {
                 if (!inet_ntop(AF_INET6, ((struct sockaddr_in6 *)&saddr)->sin6_addr.s6_addr, *host, 40)) {
                     ERR("inet_ntop failed (%s).", strerror(errno));
