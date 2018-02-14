@@ -12,6 +12,9 @@ def interactive_auth(name, instruct, prompt, data):
 def password_auth(user, host, data):
 	return getpass.getpass((user if user else os.getlogin()) + '@' + host + ' password : ')
 
+def hostkey_check(hostname, state, keytype, hexa, priv):
+        return True
+
 #
 # get know where to connect
 #
@@ -31,6 +34,7 @@ else:
 	ssh = nc.SSH()
 ssh.setAuthInteractiveClb(interactive_auth)
 ssh.setAuthPasswordClb(password_auth)
+ssh.setAuthHostkeyCheckClb(hostkey_check)
 
 #
 # create NETCONF session to the server

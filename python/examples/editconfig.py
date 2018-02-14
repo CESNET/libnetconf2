@@ -4,7 +4,7 @@ import sys
 import os
 import getpass
 import json
-import libyang as ly
+import yang
 import netconf2 as nc
 
 def interactive_auth(name, instruct, prompt, data):
@@ -50,7 +50,7 @@ except Exception as e:
 # prepare config content as string or data tree
 tm = session.context.get_module("turing-machine")
 # config = "<turing-machine xmlns=\"http://example.net/turing-machine\"><transition-function><delta><label>left summand</label><input><state>0</state></input></delta></transition-function></turing-machine>"
-config = ly.Data_Node(session.context, "/turing-machine:turing-machine/transition-function/delta[label='left summand']/input/state", "5", 0, 0)
+config = yang.Data_Node(session.context, "/turing-machine:turing-machine/transition-function/delta[label='left summand']/input/state", "5", 0, 0)
 
 # perform <edit-config> and print result
 try:

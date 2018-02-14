@@ -3,7 +3,7 @@
 import sys
 import os
 import getpass
-import libyang as ly
+import yang
 import netconf2 as nc
 
 def interactive_auth(name, instruct, prompt, data):
@@ -56,4 +56,4 @@ except nc.ReplyError as e:
         print(json.dumps(reply))
         sys.exit(1)
 
-print(data.print_mem(ly.LYD_XML, ly.LYP_FORMAT | ly.LYP_WITHSIBLINGS))
+print(data.print_mem(yang.LYD_XML, yang.LYP_FORMAT | yang.LYP_WITHSIBLINGS))

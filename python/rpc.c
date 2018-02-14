@@ -120,9 +120,9 @@ process_reply_data(struct nc_reply *reply)
     }
     ((struct nc_reply_data*)reply)->data = NULL;
 
-    module = PyImport_ImportModule("libyang");
+    module = PyImport_ImportModule("yang");
     if (module == NULL) {
-        PyErr_SetString(libnetconf2Error, "Could not import libyang module");
+        PyErr_SetString(libnetconf2Error, "Could not import libyang python module");
         goto error;
     }
 
