@@ -425,12 +425,68 @@ getschema_module_clb(const char *mod_name, const char *mod_rev, const char *subm
     return model_data;
 }
 
+static int
+nc_ctx_load_module(struct nc_session *session, const char *name, const char *revision, int implement,
+                   ly_module_imp_clb user_clb, void *user_data, const struct lys_module **mod)
+{
+    int ret = 0;
+    struct ly_err_item *eitem;
+
+    *mod = ly_ctx_get_module(session->ctx, name, revision, 0);
+    if (*mod) {
+        if (implement && !(*mod)->implemented) {
+            /* make the present module implemented */
+            if (lys_set_implemented(*mod)) {
+                ERR("Failed to implement model \"%s\".", (*mod)->name);
+                ret = -1;
+            }
+        }
+    } else if (!(*mod) && implement) {
+        /* missing implemented module, load it ... */
+
+        /* clear all the errors and just collect them for now */
+        ly_err_clean(session->ctx, NULL);
+        ly_log_options(LY_LOSTORE);
+
+        /* 1) using only searchpaths */
+        *mod = ly_ctx_load_module(session->ctx, name, revision);
+
+        /* 2) using user callback */
+        if (!(*mod) && user_clb) {
+            ly_ctx_set_module_imp_clb(session->ctx, user_clb, user_data);
+            *mod = ly_ctx_load_module(session->ctx, name, revision);
+        }
+
+        /* 3) using get-schema callback */
+        if (!(*mod)) {
+            ly_ctx_set_module_imp_clb(session->ctx, &getschema_module_clb, session);
+            *mod = ly_ctx_load_module(session->ctx, name, revision);
+        }
+
+        /* unset callback back to use searchpath */
+        ly_ctx_set_module_imp_clb(session->ctx, NULL, NULL);
+
+        /* print errors on definite failure */
+        if (!(*mod)) {
+            for (eitem = ly_err_first(session->ctx); eitem && eitem->next; eitem = eitem->next) {
+                ly_err_print(eitem);
+            }
+            ret = -1;
+        }
+
+        /* clean the errors and restore logging */
+        ly_err_clean(session->ctx, NULL);
+        ly_log_options(LY_LOLOG | LY_LOSTORE_LAST);
+    }
+
+    return ret;
+}
+
 /* SCHEMAS_DIR not used (implicitly) */
 static int
 nc_ctx_fill_cpblts(struct nc_session *session, ly_module_imp_clb user_clb, void *user_data)
 {
     int ret = 1;
-    LY_LOG_LEVEL verb;
     const struct lys_module *mod;
     char *ptr, *ptr2;
     const char *module_cpblt;
@@ -465,41 +521,9 @@ nc_ctx_fill_cpblts(struct nc_session *session, ly_module_imp_clb user_clb, void 
             revision = strndup(ptr, ptr2 - ptr);
         }
 
-        mod = ly_ctx_get_module(session->ctx, name, revision, 0);
-        if (mod) {
-            if (!mod->implemented) {
-                /* make the present module implemented */
-                if (lys_set_implemented(mod)) {
-                    ERR("Failed to implement model \"%s\".", mod->name);
-                    goto cleanup;
-                }
-            }
-        } else {
-            /* missing implemented module, load it ... */
-
-            /* expecting errors here */
-            verb = ly_verb(LY_LLSILENT);
-
-            /* 1) using only searchpaths */
-            mod = ly_ctx_load_module(session->ctx, name, revision);
-
-            /* 2) using user callback */
-            if (!mod && user_clb) {
-                ly_ctx_set_module_imp_clb(session->ctx, user_clb, user_data);
-                mod = ly_ctx_load_module(session->ctx, name, revision);
-            }
-
-            /* 3) using get-schema callback */
-            if (!mod) {
-                ly_ctx_set_module_imp_clb(session->ctx, &getschema_module_clb, session);
-                mod = ly_ctx_load_module(session->ctx, name, revision);
-            }
-
-            /* revert the changed verbosity level */
-            ly_verb(verb);
-
-            /* unset callback back to use searchpath */
-            ly_ctx_set_module_imp_clb(session->ctx, NULL, NULL);
+        if (nc_ctx_load_module(session, name, revision, 1, user_clb, user_data, &mod)) {
+            ret = 1;
+            goto cleanup;
         }
 
         if (!mod) {
@@ -513,8 +537,6 @@ nc_ctx_fill_cpblts(struct nc_session *session, ly_module_imp_clb user_clb, void 
             /* all loading ways failed, the schema will be ignored in the received data */
             WRN("Failed to load schema \"%s@%s\".", name, revision ? revision : "<latest>");
             session->flags |= NC_SESSION_CLIENT_NOT_STRICT;
-
-            /* TODO: maybe re-print hidden error messages */
         } else {
             /* set features - first disable all to enable specified then */
             lys_features_disable(mod, "*");
@@ -566,7 +588,6 @@ static int
 nc_ctx_fill_yl(struct nc_session *session, ly_module_imp_clb user_clb, void *user_data)
 {
     int ret = 1;
-    LY_LOG_LEVEL verb;
     struct nc_rpc *rpc = NULL;
     struct nc_reply *reply = NULL;
     struct nc_reply_error *error_rpl;
@@ -665,43 +686,13 @@ parse:
             }
         }
 
-        mod = ly_ctx_get_module(session->ctx, name, revision, 0);
-        if (mod) {
-            if (implemented && !mod->implemented) {
-                /* make the present module implemented */
-                if (lys_set_implemented(mod)) {
-                    ERR("Failed to implement model \"%s\".", mod->name);
-                    ret = -1; /* fatal error, not caused just by missing schema but by something in the context */
-                    goto cleanup;
-                }
-            }
-        } else if (!mod && implemented) {
-            /* missing implemented module, load it ... */
+        if (nc_ctx_load_module(session, name, revision, implemented, user_clb, user_data, &mod)) {
+            ret = -1;
+            goto cleanup;
+        }
 
-            /* expecting errors here */
-            verb = ly_verb(LY_LLSILENT);
-
-            /* 1) using only searchpaths */
-            mod = ly_ctx_load_module(session->ctx, name, revision);
-
-            /* 2) using user callback */
-            if (!mod && user_clb) {
-                ly_ctx_set_module_imp_clb(session->ctx, user_clb, user_data);
-                mod = ly_ctx_load_module(session->ctx, name, revision);
-            }
-
-            /* 3) using get-schema callback */
-            if (!mod) {
-                ly_ctx_set_module_imp_clb(session->ctx, &getschema_module_clb, session);
-                mod = ly_ctx_load_module(session->ctx, name, revision);
-            }
-
-            /* revert the changed verbosity level */
-            ly_verb(verb);
-
-            /* unset callback back to use searchpath */
-            ly_ctx_set_module_imp_clb(session->ctx, NULL, NULL);
-        } else { /* !mod && !implemented - will be loaded automatically, but remember to set features in the end */
+        if (!mod) { /* !mod && !implemented - will be loaded automatically, but remember to set features in the end */
+            assert(!implemented);
             if (imports_flag) {
                 ERR("Module \"%s@%s\" is supposed to be imported, but no other module imports it.",
                     name, revision ? revision : "<latest>");
@@ -716,8 +707,6 @@ parse:
             /* all loading ways failed, the schema will be ignored in the received data */
             WRN("Failed to load schema \"%s@%s\".", name, revision ? revision : "<latest>");
             session->flags |= NC_SESSION_CLIENT_NOT_STRICT;
-
-            /* TODO: maybe re-print hidden error messages */
         } else {
             /* set features - first disable all to enable specified then */
             lys_features_disable(mod, "*");
