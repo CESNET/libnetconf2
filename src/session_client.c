@@ -202,7 +202,7 @@ nc_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx)
         if (client_opts.schema_searchpath) {
             ly_ctx_set_searchdir(ctx, client_opts.schema_searchpath);
         }
-        ly_ctx_set_searchdir(ctx, SCHEMAS_DIR);
+        ly_ctx_set_searchdir(ctx, NC_SCHEMAS_DIR);
 
         /* set callback for getting schemas, if provided */
         ly_ctx_set_module_imp_clb(ctx, client_opts.schema_clb, client_opts.schema_clb_data);
@@ -263,7 +263,7 @@ nc_client_get_schema_callback(void **user_data)
     return client_opts.schema_clb;
 }
 
-/* SCHEMAS_DIR used as the last resort */
+/* NC_SCHEMAS_DIR used as the last resort */
 static int
 ctx_check_and_load_ietf_netconf(struct ly_ctx *ctx, char **cpblts)
 {
@@ -274,7 +274,7 @@ ctx_check_and_load_ietf_netconf(struct ly_ctx *ctx, char **cpblts)
     if (!ietfnc) {
         ietfnc = ly_ctx_load_module(ctx, "ietf-netconf", NULL);
         if (!ietfnc) {
-            ietfnc = lys_parse_path(ctx, SCHEMAS_DIR"/ietf-netconf.yin", LYS_IN_YIN);
+            ietfnc = lys_parse_path(ctx, NC_SCHEMAS_DIR"/ietf-netconf.yin", LYS_IN_YIN);
         }
     }
     if (!ietfnc) {
@@ -485,7 +485,7 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
     return ret;
 }
 
-/* SCHEMAS_DIR not used (implicitly) */
+/* NC_SCHEMAS_DIR not used (implicitly) */
 static int
 nc_ctx_fill_cpblts(struct nc_session *session, ly_module_imp_clb user_clb, void *user_data)
 {
@@ -780,7 +780,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
 
     /* get-schema is supported, load local ietf-netconf-monitoring so we can create <get-schema> RPCs */
     if (get_schema_support && !ly_ctx_get_module(session->ctx, "ietf-netconf-monitoring", NULL, 1)) {
-        if (!lys_parse_path(session->ctx, SCHEMAS_DIR"/ietf-netconf-monitoring.yin", LYS_IN_YIN)) {
+        if (!lys_parse_path(session->ctx, NC_SCHEMAS_DIR"/ietf-netconf-monitoring.yin", LYS_IN_YIN)) {
             WRN("Loading NETCONF monitoring schema failed, cannot use <get-schema>.");
             get_schema_support = 0;
         }
@@ -858,7 +858,7 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
 
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = ly_ctx_new(SCHEMAS_DIR, 0);
+        ctx = ly_ctx_new(NC_SCHEMAS_DIR, 0);
         /* definitely should not happen, but be ready */
         if (!ctx && !(ctx = ly_ctx_new(NULL, 0))) {
             /* that's just it */
