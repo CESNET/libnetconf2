@@ -409,17 +409,20 @@ getschema_module_clb(const char *mod_name, const char *mod_rev, const char *subm
     /* try to store the model_data into local schema repository */
     if (model_data) {
         searchdirs = ly_ctx_get_searchdirs(session->ctx);
-        asprintf(&filename, "%s/%s%s%s.yang", searchdirs ? searchdirs[0] : ".", mod_name,
-                 mod_rev ? "@" : "", mod_rev ? mod_rev : "");
-        output = fopen(filename, "w");
-        if (!output) {
-            WRN("Unable to store \"%s\" as a local copy of schema retreived via <get-schema> (%s).",
-                filename, strerror(errno));
+        if (asprintf(&filename, "%s/%s%s%s.yang", searchdirs ? searchdirs[0] : ".", mod_name,
+                     mod_rev ? "@" : "", mod_rev ? mod_rev : "") == -1) {
+            ERRMEM;
         } else {
-            fputs(model_data, output);
-            fclose(output);
+            output = fopen(filename, "w");
+            if (!output) {
+                WRN("Unable to store \"%s\" as a local copy of schema retreived via <get-schema> (%s).",
+                    filename, strerror(errno));
+            } else {
+                fputs(model_data, output);
+                fclose(output);
+            }
+            free(filename);
         }
-        free(filename);
     }
 
     return model_data;

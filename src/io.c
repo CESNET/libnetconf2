@@ -550,7 +550,7 @@ nc_session_is_connected(struct nc_session *session)
         fds.fd = SSL_get_fd(session->ti.tls);
         break;
 #endif
-    case NC_TI_NONE:
+    default:
         ERRINT;
         return 0;
     }
