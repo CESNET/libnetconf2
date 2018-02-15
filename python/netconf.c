@@ -172,6 +172,7 @@ static struct PyModuleDef ncModule = {
 PyMODINIT_FUNC
 PyInit_netconf2(void)
 {
+    void* clb;
     PyObject *nc;
 
     /* import libyang Python module to have it available */
@@ -187,7 +188,9 @@ PyInit_netconf2(void)
      */
 
     /* set print callback */
+    clb = ly_get_log_clb();
     nc_set_print_clb(clb_print);
+    ly_set_log_clb(clb, 1);
 
     if (PyType_Ready(&ncSessionType) == -1) {
         return NULL;
