@@ -332,8 +332,7 @@ char *
 sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
 {
     char *buf;
-    int buflen = 1024, len, ret;
-    char c = 0;
+    int c, buflen = 1024, len, ret;
     struct termios oldterm;
     FILE *tty;
 
@@ -370,7 +369,7 @@ sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
                 return NULL;
             }
         }
-        buf[len++] = c;
+        buf[len++] = (char)c;
     }
     buf[len++] = 0; /* terminating null byte */
 
@@ -394,8 +393,7 @@ char *
 sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo, void *UNUSED(priv))
 {
     unsigned int buflen = 64, cur_len;
-    char c = 0;
-    int ret;
+    int ret, c;
     struct termios oldterm;
     char *buf;
     FILE *tty;
@@ -443,7 +441,7 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
                 goto fail;
             }
         }
-        buf[cur_len++] = c;
+        buf[cur_len++] = (char)c;
     }
     /* terminating null byte */
     buf[cur_len] = '\0';
@@ -472,8 +470,8 @@ fail:
 char *
 sshauth_privkey_passphrase(const char* privkey_path, void *UNUSED(priv))
 {
-    char c, *buf;
-    int buflen = 1024, len, ret;
+    char *buf;
+    int c, buflen = 1024, len, ret;
     struct termios oldterm;
     FILE *tty;
 

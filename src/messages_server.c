@@ -846,7 +846,8 @@ next_node:
             elem = elem->next;
             if (!elem) {
                 /* error */
-                break;
+                ERRARG("event");
+                return NULL;
             }
             goto next_node;
         case LYS_CONTAINER:
@@ -856,8 +857,8 @@ next_node:
             break;
         default:
             /* error */
-            elem = NULL;
-            break;
+            ERRARG("event");
+            return NULL;
         }
     }
     if (!elem) {
