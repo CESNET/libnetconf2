@@ -4,7 +4,6 @@ set -e
 #install dependencies using homebrew
 brew update
 brew upgrade openssl
-brew upgrade pcre
 
 # libssh
 wget https://git.libssh.org/projects/libssh.git/snapshot/libssh-0.7.5.tar.gz
