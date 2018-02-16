@@ -13,6 +13,9 @@ if(NOT UNIX)
     message(FATAL_ERROR "Only *nix like systems are supported.")
 endif()
 
+# osx specific
+set(CMAKE_MACOSX_RPATH TRUE)
+
 set(INCLUDE_INSTALL_SUBDIR ${CMAKE_INSTALL_INCLUDEDIR}/libnetconf2)
 set(DATA_INSTALL_DIR ${CMAKE_INSTALL_DATADIR}/libnetconf2)
 
