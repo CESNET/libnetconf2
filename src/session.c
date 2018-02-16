@@ -121,7 +121,7 @@ pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *abstime)
 
     /* Try to acquire the lock and, if we fail, sleep for 5ms. */
     while ((rc = pthread_mutex_trylock(mutex)) == EBUSY) {
-        nc_gettimespec(&cur);
+        nc_gettimespec_real(&cur);
 
         if ((diff = nc_difftimespec(&cur, abstime)) < 1) {
             /* timeout */
