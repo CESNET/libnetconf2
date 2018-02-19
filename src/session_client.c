@@ -464,12 +464,21 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
         if (!(*mod)) {
             ly_ctx_set_module_imp_clb(session->ctx, &getschema_module_clb, session);
             *mod = ly_ctx_load_module(session->ctx, name, revision);
+            if (*mod) {
+                /* print get-schema warning */
+                eitem = ly_err_first(session->ctx);
+                if (eitem && (eitem->prev->level == LY_LLWRN)) {
+                    ly_log_options(LY_LOLOG);
+                    ly_err_print(eitem->prev);
+                }
+            }
         }
 
         /* unset callback back to use searchpath */
         ly_ctx_set_module_imp_clb(session->ctx, NULL, NULL);
 
-        /* print errors on definite failure */
+        /* restore logging options, then print errors on definite failure */
+        ly_log_options(LY_LOLOG | LY_LOSTORE_LAST);
         if (!(*mod)) {
             for (eitem = ly_err_first(session->ctx); eitem && eitem->next; eitem = eitem->next) {
                 ly_err_print(eitem);
@@ -477,9 +486,8 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
             ret = -1;
         }
 
-        /* clean the errors and restore logging */
+        /* clean the errors */
         ly_err_clean(session->ctx, NULL);
-        ly_log_options(LY_LOLOG | LY_LOSTORE_LAST);
     }
 
     return ret;
