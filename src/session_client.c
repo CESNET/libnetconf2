@@ -532,10 +532,8 @@ nc_ctx_fill_cpblts(struct nc_session *session, ly_module_imp_clb user_clb, void 
             revision = strndup(ptr, ptr2 - ptr);
         }
 
-        if (nc_ctx_load_module(session, name, revision, 1, user_clb, user_data, &mod)) {
-            ret = 1;
-            goto cleanup;
-        }
+        /* we can continue even if it fails */
+        nc_ctx_load_module(session, name, revision, 1, user_clb, user_data, &mod);
 
         if (!mod) {
             if (session->status != NC_STATUS_RUNNING) {
@@ -697,10 +695,8 @@ parse:
             }
         }
 
-        if (nc_ctx_load_module(session, name, revision, implemented, user_clb, user_data, &mod)) {
-            ret = -1;
-            goto cleanup;
-        }
+        /* continue even on fail */
+        nc_ctx_load_module(session, name, revision, implemented, user_clb, user_data, &mod);
 
         if (!mod) { /* !mod && !implemented - will be loaded automatically, but remember to set features in the end */
             assert(!implemented);
