@@ -322,7 +322,6 @@ getschema_module_clb(const char *mod_name, const char *mod_rev, const char *subm
     char *model_data = NULL;
     uint64_t msgid;
     char *filename = NULL;
-    const char * const *searchdirs;
     FILE *output;
 
     if (submod_name) {
@@ -407,9 +406,8 @@ getschema_module_clb(const char *mod_name, const char *mod_rev, const char *subm
     *format = LYS_IN_YANG;
 
     /* try to store the model_data into local schema repository */
-    if (model_data) {
-        searchdirs = ly_ctx_get_searchdirs(session->ctx);
-        if (asprintf(&filename, "%s/%s%s%s.yang", searchdirs ? searchdirs[0] : ".", mod_name,
+    if (model_data && client_opts.schema_searchpath) {
+        if (asprintf(&filename, "%s/%s%s%s.yang", client_opts.schema_searchpath, mod_name,
                      mod_rev ? "@" : "", mod_rev ? mod_rev : "") == -1) {
             ERRMEM;
         } else {
