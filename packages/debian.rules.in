@@ -7,10 +7,11 @@ export DH_VERBOSE=1
 	dh $@
 
 override_dh_strip:
-	dh_strip --dbg-package=@PACKAGE_NAME@-dbg
+	dh_strip -p@PACKAGE_NAME@ --dbg-package=@PACKAGE_NAME@-dbg
+	dh_strip -ppython3-netconf2@COMPAT_PACKAGES@ --dbg-package=python3-netconf2@COMPAT_PACKAGES@-dbg
 
 override_dh_auto_configure:
-	cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr -D CMAKE_BUILD_TYPE:String="@BUILD_TYPE@" .
+	cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr -DENABLE_PYTHON=ON -DCMAKE_BUILD_TYPE:String="@BUILD_TYPE@" .
 
 override_dh_auto_test:
 	ctest --output-on-failure
