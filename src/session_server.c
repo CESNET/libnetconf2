@@ -2799,6 +2799,11 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
             goto ch_client_remove;
         }
 
+        if (session->status == NC_STATUS_CLOSING) {
+            /* session is being freed, finish thread */
+            goto ch_client_remove;
+        }
+
         /* check whether the client was not removed */
         /* LOCK */
         client = nc_server_ch_client_lock(data->client_name, 0, NULL);
@@ -2834,12 +2839,9 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
     return 0;
 
 ch_client_remove:
-    /* make the session a standard one */
     pthread_cond_destroy(session->opts.server.ch_cond);
     free(session->opts.server.ch_cond);
     session->opts.server.ch_cond = NULL;
-
-    session->flags &= ~NC_SESSION_CALLHOME;
 
     /* CH UNLOCK */
     pthread_mutex_unlock(session->opts.server.ch_lock);
@@ -2847,6 +2849,9 @@ ch_client_remove:
     pthread_mutex_destroy(session->opts.server.ch_lock);
     free(session->opts.server.ch_lock);
     session->opts.server.ch_lock = NULL;
+
+    /* make the session a standard one */
+    session->flags &= ~NC_SESSION_CALLHOME;
 
     return 1;
 }
