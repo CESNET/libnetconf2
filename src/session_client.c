@@ -930,6 +930,15 @@ nc_sock_connect(const char* host, uint16_t port)
             return -1;
         }
 
+        /* enable keep-alive */
+        i = 1;
+        if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &i, sizeof i) == -1) {
+            ERR("Setsockopt failed (%s).", strerror(errno));
+            close(sock);
+            freeaddrinfo(res_list);
+            return -1;
+        }
+
         /* we're done, network connection established */
         break;
     }

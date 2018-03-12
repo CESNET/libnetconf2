@@ -184,7 +184,7 @@ nc_sock_listen(const char *address, uint16_t port)
         goto fail;
     }
 
-    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void *)&optVal, optLen)) {
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void *)&optVal, optLen) == -1) {
         ERR("Could not set socket SO_REUSEADDR socket option (%s).", strerror(errno));
         goto fail;
     }
@@ -326,6 +326,14 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
     /* make the socket non-blocking */
     if (((flags = fcntl(ret, F_GETFL)) == -1) || (fcntl(ret, F_SETFL, flags | O_NONBLOCK) == -1)) {
         ERR("Fcntl failed (%s).", strerror(errno));
+        close(ret);
+        return -1;
+    }
+
+    /* enable keep-alive */
+    flags = 1;
+    if (setsockopt(ret, SOL_SOCKET, SO_KEEPALIVE, &flags, sizeof flags) == -1) {
+        ERR("Setsockopt failed (%s).", strerror(errno));
         close(ret);
         return -1;
     }
