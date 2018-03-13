@@ -2773,7 +2773,7 @@ nc_server_ch_client_with_endpt_lock(const char *name)
 static int
 nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct nc_ch_client_thread_arg *data)
 {
-    int ret;
+    int ret = 0, r;
     uint32_t idle_timeout;
     struct timespec ts;
     struct nc_ch_client *client;
@@ -2801,15 +2801,16 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
         nc_gettimespec_real(&ts);
         nc_addtimespec(&ts, NC_CH_NO_ENDPT_WAIT);
 
-        ret = pthread_cond_timedwait(session->opts.server.ch_cond, session->opts.server.ch_lock, &ts);
-        if (ret && (ret != ETIMEDOUT)) {
-            ERR("Pthread condition timedwait failed (%s).", strerror(ret));
-            goto ch_client_remove;
-        }
-
-        if (session->status == NC_STATUS_CLOSING) {
-            /* session is being freed, finish thread */
-            goto ch_client_remove;
+        r = pthread_cond_timedwait(session->opts.server.ch_cond, session->opts.server.ch_lock, &ts);
+        if (!r) {
+            /* we were woken up, something probably happened */
+            if (session->status != NC_STATUS_RUNNING) {
+                break;
+            }
+        } else if (r != ETIMEDOUT) {
+            ERR("Pthread condition timedwait failed (%s).", strerror(r));
+            ret = -1;
+            break;
         }
 
         /* check whether the client was not removed */
@@ -2819,7 +2820,8 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
             /* client was removed, finish thread */
             VRB("Call Home client \"%s\" removed, but an established session will not be terminated.",
                 data->client_name);
-            goto ch_client_remove;
+            ret = 1;
+            break;
         }
 
         if (client->conn_type == NC_CH_PERSIST) {
@@ -2841,27 +2843,15 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
 
     } while (session->status == NC_STATUS_RUNNING);
 
-    /* CH UNLOCK */
-    pthread_mutex_unlock(session->opts.server.ch_lock);
-
-    return 0;
-
-ch_client_remove:
-    pthread_cond_destroy(session->opts.server.ch_cond);
-    free(session->opts.server.ch_cond);
-    session->opts.server.ch_cond = NULL;
+    if (session->status == NC_STATUS_CLOSING) {
+        /* signal to nc_session_free() that we registered session being freed, otherwise it matters not */
+        session->flags &= ~NC_SESSION_CALLHOME;
+    }
 
     /* CH UNLOCK */
     pthread_mutex_unlock(session->opts.server.ch_lock);
 
-    pthread_mutex_destroy(session->opts.server.ch_lock);
-    free(session->opts.server.ch_lock);
-    session->opts.server.ch_lock = NULL;
-
-    /* make the session a standard one */
-    session->flags &= ~NC_SESSION_CALLHOME;
-
-    return 1;
+    return ret;
 }
 
 static void *
@@ -2974,7 +2964,8 @@ cleanup:
 
 API int
 nc_connect_ch_client_dispatch(const char *client_name,
-                              void (*session_clb)(const char *client_name, struct nc_session *new_session)) {
+                              void (*session_clb)(const char *client_name, struct nc_session *new_session))
+{
     int ret;
     pthread_t tid;
     struct nc_ch_client_thread_arg *arg;

@@ -568,6 +568,16 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
         /* CH UNLOCK */
         pthread_mutex_unlock(session->opts.server.ch_lock);
+
+        /* wait for CH thread to actually wake up */
+        i = (NC_SESSION_FREE_LOCK_TIMEOUT * 1000) / NC_TIMEOUT_STEP;
+        while (i && (session->flags & NC_SESSION_CALLHOME)) {
+            usleep(NC_TIMEOUT_STEP);
+            --i;
+        }
+        if (session->flags & NC_SESSION_CALLHOME) {
+            ERR("Session %u: Call Home thread failed to wake up in a timely manner, fatal synchronization problem.", session->id);
+        }
     }
 
     connected = nc_session_is_connected(session);
@@ -688,13 +698,14 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     if (session->side == NC_SERVER) {
-        i = (NC_SESSION_FREE_LOCK_TIMEOUT * 1000) / NC_TIMEOUT_STEP;
-        while (i && (session->flags & NC_SESSION_CALLHOME)) {
-            usleep(NC_TIMEOUT_STEP);
-            --i;
+        /* free CH synchronization structures if used */
+        if (session->opts.server.ch_cond) {
+            pthread_cond_destroy(session->opts.server.ch_cond);
+            free(session->opts.server.ch_cond);
         }
-        if (session->flags & NC_SESSION_CALLHOME) {
-            ERR("Session %u: Call Home thread failed to exit in a timely manner, fatal synchronization problem.", session->id);
+        if (session->opts.server.ch_lock) {
+            pthread_mutex_destroy(session->opts.server.ch_lock);
+            free(session->opts.server.ch_lock);
         }
     }
 
