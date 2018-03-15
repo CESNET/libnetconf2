@@ -2779,8 +2779,8 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
     struct nc_ch_client *client;
 
     /* session created, initialize condition */
-    session->opts.server.ch_lock = malloc(sizeof *session->opts.server.ch_lock);
-    session->opts.server.ch_cond = malloc(sizeof *session->opts.server.ch_cond);
+    session->opts.server.ch_lock = calloc(1, sizeof *session->opts.server.ch_lock);
+    session->opts.server.ch_cond = calloc(1, sizeof *session->opts.server.ch_cond);
     if (!session->opts.server.ch_lock || !session->opts.server.ch_cond) {
         ERRMEM;
         nc_session_free(session, NULL);
@@ -2843,13 +2843,13 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
 
     } while (session->status == NC_STATUS_RUNNING);
 
+    /* CH UNLOCK */
+    pthread_mutex_unlock(session->opts.server.ch_lock);
+
     if (session->status == NC_STATUS_CLOSING) {
         /* signal to nc_session_free() that we registered session being freed, otherwise it matters not */
         session->flags &= ~NC_SESSION_CALLHOME;
     }
-
-    /* CH UNLOCK */
-    pthread_mutex_unlock(session->opts.server.ch_lock);
 
     return ret;
 }
