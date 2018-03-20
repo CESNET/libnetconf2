@@ -77,6 +77,6 @@ make DESTDIR=%{buildroot} install
 
 %files -n python3-netconf2@COMPAT_PACKAGES@
 %defattr(-,root,root)
-%{_libdir}/python*
+/usr/lib*/python*/*-packages/*
 
 %changelog
