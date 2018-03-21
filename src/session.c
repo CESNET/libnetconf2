@@ -452,7 +452,7 @@ nc_send_msg(struct nc_session *session, struct lyd_node *op)
 API void
 nc_session_free(struct nc_session *session, void (*data_free)(void *))
 {
-    int r, i, locked;
+    int r, i, locked, sock = -1;
     int connected; /* flag to indicate whether the transport socket is still connected */
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
     pthread_t tid;
@@ -632,6 +632,8 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
                     free(siter);
                 } while (session->ti.libssh.next != session);
             }
+            /* remember sock so we can close it */
+            sock = ssh_get_fd(session->ti.libssh.session);
             if (connected) {
                 ssh_disconnect(session->ti.libssh.session);
             }
@@ -663,6 +665,9 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
 #ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
+        /* remember sock so we can close it */
+        sock = SSL_get_fd(session->ti.tls);
+
         if (connected) {
             SSL_shutdown(session->ti.tls);
         }
@@ -676,6 +681,11 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     case NC_TI_NONE:
         ERRINT;
         break;
+    }
+
+    /* close socket separately */
+    if (sock > -1) {
+        close(sock);
     }
 
     lydict_remove(session->ctx, session->username);
