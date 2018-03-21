@@ -450,7 +450,7 @@ nc_send_msg(struct nc_session *session, struct lyd_node *op)
 API void
 nc_session_free(struct nc_session *session, void (*data_free)(void *))
 {
-    int r, i, locked;
+    int r, i, locked, sock;
     int connected; /* flag to indicate whether the transport socket is still connected */
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
     pthread_t tid;
@@ -665,6 +665,11 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
             SSL_shutdown(session->ti.tls);
         }
         SSL_free(session->ti.tls);
+        /* SSL_shutdown doesn't close the socket, we need to close it here.*/
+        sock=SSL_get_fd(session->ti.tls);
+        if(sock > 0) {
+            close(sock);
+        }
 
         if (session->side == NC_SERVER) {
             X509_free(session->opts.server.client_cert);
