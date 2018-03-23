@@ -510,6 +510,10 @@ nc_server_destroy(void)
     nc_server_del_endpt(NULL, 0);
 #endif
 #ifdef NC_ENABLED_SSH
+    if (server_opts.passwd_auth_data && server_opts.passwd_auth_data_free) {
+        server_opts.passwd_auth_data_free(server_opts.passwd_auth_data);
+    }
+
     nc_server_ssh_del_authkey(NULL, NULL, 0, NULL);
 
     if (server_opts.hostkey_data && server_opts.hostkey_data_free) {

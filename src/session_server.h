@@ -483,6 +483,18 @@ int nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64
 int nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name, int16_t idx);
 
 /**
+ * @brief Set the callback for SSH password authentication. If none is set, local system users are used.
+ *
+ * @param[in] passwd_auth_clb Callback that should authenticate the user. Username can be directly obtained from \p session.
+ *                            Zero return indicates success, non-zero an error.
+ * @param[in] user_data Optional arbitrary user data that will be passed to \p passwd_auth_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
+ */
+void nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_session *session, const char *password,
+                                                              void *user_data),
+                                       void *user_data, void (*free_user_data)(void *user_data));
+
+/**
  * @brief Set the callback for retrieving host keys. Any RSA, DSA, and ECDSA keys can be added. However,
  *        a maximum of one key of each type will be used during SSH authentication, later keys replacing
  *        the earlier ones.

@@ -785,20 +785,27 @@ static void
 nc_sshcb_auth_password(struct nc_session *session, ssh_message msg)
 {
     char *pass_hash;
+    int auth_ret = 1;
 
-    pass_hash = auth_password_get_pwd_hash(session->username);
-    if (pass_hash && !auth_password_compare_pwd(pass_hash, ssh_message_auth_password(msg))) {
-        VRB("User \"%s\" authenticated.", session->username);
-        ssh_message_auth_reply_success(msg, 0);
-        session->flags |= NC_SESSION_SSH_AUTHENTICATED;
-        free(pass_hash);
-        return;
+    if (server_opts.passwd_auth_clb) {
+        auth_ret = server_opts.passwd_auth_clb(session, ssh_message_auth_password(msg), server_opts.passwd_auth_data);
+    } else {
+        pass_hash = auth_password_get_pwd_hash(session->username);
+        if (pass_hash) {
+            auth_ret = auth_password_compare_pwd(pass_hash, ssh_message_auth_password(msg));
+            free(pass_hash);
+        }
     }
 
-    free(pass_hash);
-    ++session->opts.server.ssh_auth_attempts;
-    VRB("Failed user \"%s\" authentication attempt (#%d).", session->username, session->opts.server.ssh_auth_attempts);
-    ssh_message_reply_default(msg);
+    if (!auth_ret) {
+        session->flags |= NC_SESSION_SSH_AUTHENTICATED;
+        VRB("User \"%s\" authenticated.", session->username);
+        ssh_message_auth_reply_success(msg, 0);
+    } else {
+        ++session->opts.server.ssh_auth_attempts;
+        VRB("Failed user \"%s\" authentication attempt (#%d).", session->username, session->opts.server.ssh_auth_attempts);
+        ssh_message_reply_default(msg);
+    }
 }
 
 static void

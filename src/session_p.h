@@ -165,6 +165,11 @@ struct nc_server_opts {
     /* ACCESS unlocked */
     uint16_t hello_timeout;
     uint16_t idle_timeout;
+#ifdef NC_ENABLED_SSH
+    int (*passwd_auth_clb)(const struct nc_session *session, const char *password, void *user_data);
+    void *passwd_auth_data;
+    void (*passwd_auth_data_free)(void *data);
+#endif
 #ifdef NC_ENABLED_TLS
     int (*user_verify_clb)(const struct nc_session *session);
 
