@@ -57,7 +57,7 @@ open_tty_noecho(const char *path, struct termios *oldterm)
     struct termios newterm;
     FILE *ret;
 
-    if (!(ret = fopen(path, "r"))) {
+    if (!(ret = fopen(path, "a+"))) {
         ERR("Unable to open the current terminal (%s).", strerror(errno));
         return NULL;
     }
@@ -332,7 +332,7 @@ char *
 sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
 {
     char *buf;
-    int buflen = 1024, len, ret;
+    int buflen = 1024, len;
     char c = 0;
     struct termios oldterm;
     FILE *tty;
@@ -343,19 +343,13 @@ sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
         return NULL;
     }
 
-    if ((ret = ttyname_r(STDIN_FILENO, buf, buflen))) {
-        ERR("ttyname_r failed (%s).", strerror(ret));
+    if (!(tty = open_tty_noecho("/dev/tty", &oldterm))) {
         free(buf);
         return NULL;
     }
 
-    if (!(tty = open_tty_noecho(buf, &oldterm))) {
-        free(buf);
-        return NULL;
-    }
-
-    fprintf(stdout, "%s@%s password: ", username, hostname);
-    fflush(stdout);
+    fprintf(tty, "%s@%s password: ", username, hostname);
+    fflush(tty);
 
     len = 0;
     while ((fread(&c, 1, 1, tty) == 1) && (c != '\n')) {
@@ -372,7 +366,7 @@ sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
     }
     buf[len++] = 0; /* terminating null byte */
 
-    fprintf(stdout, "\n");
+    fprintf(tty, "\n");
     restore_tty_close(tty, &oldterm);
     return buf;
 }
@@ -382,10 +376,9 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
 {
     unsigned int buflen = 64, cur_len;
     char c = 0;
-    int ret;
     struct termios oldterm;
     char *buf;
-    FILE *tty;
+    FILE *ttyin, *ttyout;
 
     buf = malloc(buflen * sizeof *buf);
     if (!buf) {
@@ -393,40 +386,35 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
         return NULL;
     }
 
-    if ((ret = ttyname_r(STDIN_FILENO, buf, buflen))) {
-        ERR("ttyname_r failed (%s).", strerror(ret));
-        free(buf);
-        return NULL;
-    }
-
     if (!echo) {
-        if (!(tty = open_tty_noecho(buf, &oldterm))) {
+        if (!(ttyin = ttyout = open_tty_noecho("/dev/tty", &oldterm))) {
             free(buf);
             return NULL;
         }
     } else {
-        tty = stdin;
+        ttyin = stdin;
+        ttyout = stdout;
     }
 
 
-    if (auth_name && (!fwrite(auth_name, sizeof *auth_name, strlen(auth_name), stdout)
-            || !fwrite("\n", sizeof(char), 1, stdout))) {
-        ERR("Writing the auth method name into stdout failed.");
+    if (auth_name && (!fwrite(auth_name, sizeof *auth_name, strlen(auth_name), ttyout)
+            || !fwrite("\n", sizeof(char), 1, ttyout))) {
+        ERR("Writing the auth method name into tty failed.");
         goto fail;
     }
-    if (instruction && (!fwrite(instruction, sizeof *auth_name, strlen(instruction), stdout)
-            || !fwrite("\n", sizeof(char), 1, stdout))) {
-        ERR("Writing the instruction into stdout failed.");
+    if (instruction && (!fwrite(instruction, sizeof *auth_name, strlen(instruction), ttyout)
+            || !fwrite("\n", sizeof(char), 1, ttyout))) {
+        ERR("Writing the instruction into tty failed.");
         goto fail;
     }
-    if (!fwrite(prompt, sizeof *prompt, strlen(prompt), stdout)) {
-        ERR("Writing the authentication prompt into stdout failed.");
+    if (!fwrite(prompt, sizeof *prompt, strlen(prompt), ttyout)) {
+        ERR("Writing the authentication prompt into tty failed.");
         goto fail;
     }
-    fflush(stdout);
+    fflush(ttyout);
 
     cur_len = 0;
-    while ((fread(&c, 1, 1, tty) == 1) && (c != '\n')) {
+    while ((fread(&c, 1, 1, ttyin) == 1) && (c != '\n')) {
         if (cur_len >= buflen - 1) {
             buflen *= 2;
             buf = nc_realloc(buf, buflen * sizeof *buf);
@@ -440,15 +428,15 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
     /* terminating null byte */
     buf[cur_len] = '\0';
 
-    fprintf(stdout, "\n");
+    fprintf(ttyout, "\n");
     if (!echo) {
-        restore_tty_close(tty, &oldterm);
+        restore_tty_close(ttyin, &oldterm);
     }
     return buf;
 
 fail:
     if (!echo) {
-        restore_tty_close(tty, &oldterm);
+        restore_tty_close(ttyin, &oldterm);
     }
     free(buf);
     return NULL;
@@ -1122,6 +1110,10 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
 
             VRB("Password authentication (host \"%s\", user \"%s\").", session->host, session->username);
             s = opts->auth_password(session->username, session->host, opts->auth_password_priv);
+            if (s == NULL) {
+                ERR("Unable to get password");
+                return -1;
+            }
 
             if (timeout > -1) {
                 nc_gettimespec_mono(&ts_timeout);
