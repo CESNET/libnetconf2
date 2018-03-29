@@ -291,7 +291,7 @@ hostkey_not_known:
 
         do {
             if (fscanf(stdin, "%4s", answer) == EOF) {
-                ERR("fscanf() failed (%s).", strerror(errno));
+                ERR("fscanf() failed (%s).", ferror(stdin) ? strerror(errno) : "EOF");
                 goto fail;
             }
             while (((c = getchar()) != EOF) && (c != '\n'));
