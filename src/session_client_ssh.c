@@ -58,12 +58,12 @@ open_tty_noecho(const char *path, struct termios *oldterm)
     FILE *ret;
 
     if (!(ret = fopen(path, "r"))) {
-        ERR("Unable to open the current terminal (%s).", strerror(errno));
+        ERR("Unable to open the current terminal \"%s\" (%s).", path, strerror(errno));
         return NULL;
     }
 
     if (tcgetattr(fileno(ret), oldterm)) {
-        ERR("Unable to get terminal settings (%s).", strerror(errno));
+        ERR("Unable to get terminal \"%s\" settings (%s).", path, strerror(errno));
         fclose(ret);
         return NULL;
     }
@@ -73,7 +73,7 @@ open_tty_noecho(const char *path, struct termios *oldterm)
     newterm.c_lflag &= ~ICANON;
     tcflush(fileno(ret), TCIFLUSH);
     if (tcsetattr(fileno(ret), TCSANOW, &newterm)) {
-        ERR("Unable to change terminal settings for hiding password (%s).", strerror(errno));
+        ERR("Unable to change terminal \"%s\" settings for hiding password (%s).", path, strerror(errno));
         fclose(ret);
         return NULL;
     }
@@ -348,7 +348,11 @@ sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
         return NULL;
     }
 
-    if (!(tty = open_tty_noecho(buf, &oldterm))) {
+    tty = open_tty_noecho(buf, &oldterm);
+    if (!tty) {
+        tty = open_tty_noecho("/dev/tty", &oldterm);
+    }
+    if (!tty) {
         free(buf);
         return NULL;
     }
@@ -411,7 +415,11 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
     }
 
     if (!echo) {
-        if (!(tty = open_tty_noecho(buf, &oldterm))) {
+        tty = open_tty_noecho(buf, &oldterm);
+        if (!tty) {
+            open_tty_noecho("/dev/tty", &oldterm);
+        }
+        if (!tty) {
             free(buf);
             return NULL;
         }
@@ -487,7 +495,11 @@ sshauth_privkey_passphrase(const char* privkey_path, void *UNUSED(priv))
         return NULL;
     }
 
-    if (!(tty = open_tty_noecho(buf, &oldterm))) {
+    tty = open_tty_noecho(buf, &oldterm);
+    if (!tty) {
+        tty = open_tty_noecho("/dev/tty", &oldterm);
+    }
+    if (!tty) {
         free(buf);
         return NULL;
     }
@@ -1144,6 +1156,10 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
 
             VRB("Password authentication (host \"%s\", user \"%s\").", session->host, session->username);
             s = opts->auth_password(session->username, session->host, opts->auth_password_priv);
+            if (s == NULL) {
+                ERR("Unable to get the password.");
+                return -1;
+            }
 
             if (timeout > -1) {
                 nc_gettimespec_mono(&ts_timeout);
