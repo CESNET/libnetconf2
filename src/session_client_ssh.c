@@ -58,7 +58,7 @@ open_tty_noecho(const char *path, struct termios *oldterm)
     FILE *ret;
 
     if (!(ret = fopen(path, "r"))) {
-        ERR("Unable to open the current terminal \"%s\" (%s).", path, strerror(errno));
+        ERR("Unable to open terminal \"%s\" for reading (%s).", path, strerror(errno));
         return NULL;
     }
 
@@ -81,13 +81,75 @@ open_tty_noecho(const char *path, struct termios *oldterm)
     return ret;
 }
 
-static void
-restore_tty_close(FILE *tty, struct termios *oldterm)
+static FILE *
+nc_open_in(int echo, struct termios *oldterm)
 {
-    if (tcsetattr(fileno(tty), TCSANOW, oldterm) != 0) {
-        ERR("Unable to restore terminal settings (%s).", strerror(errno));
+    char buf[512];
+    int buflen = 512, ret;
+    FILE *in;
+
+    if (!echo) {
+        in = open_tty_noecho("/dev/tty", oldterm);
+    } else {
+        in = fopen("/dev/tty", "r");
+        if (!in) {
+            ERR("Unable to open terminal \"/dev/tty\" for reading (%s).", strerror(errno));
+        }
     }
-    fclose(tty);
+
+    if (!in) {
+        if ((ret = ttyname_r(STDIN_FILENO, buf, buflen))) {
+            ERR("ttyname_r failed (%s).", strerror(ret));
+            return NULL;
+        }
+
+        if (!echo) {
+            in = open_tty_noecho(buf, oldterm);
+        } else {
+            in = fopen(buf, "r");
+            if (!in) {
+                ERR("Unable to open terminal \"%s\" for reading (%s).", buf, strerror(errno));
+            }
+        }
+    }
+
+    return in;
+}
+
+static FILE *
+nc_open_out(void)
+{
+    char buf[512];
+    int buflen = 512, ret;
+    FILE *out;
+
+    out = fopen("/dev/tty", "w");
+    if (!out) {
+        ERR("Unable to open terminal \"/dev/tty\" for writing (%s).", strerror(errno));
+
+        if ((ret = ttyname_r(STDOUT_FILENO, buf, buflen))) {
+            ERR("ttyname_r failed (%s).", strerror(ret));
+            return NULL;
+        }
+
+        out = fopen(buf, "w");
+        if (!out) {
+            ERR("Unable to open terminal \"%s\" for writing (%s).", buf, strerror(errno));
+        }
+    }
+
+    return out;
+}
+
+static void
+nc_close_inout(FILE *inout, int echo, struct termios *oldterm)
+{
+    if (inout) {
+        if (!echo && (tcsetattr(fileno(inout), TCSANOW, oldterm) != 0)) {
+            ERR("Unable to restore terminal settings (%s).", strerror(errno));
+        }
+        fclose(inout);
+    }
 }
 
 static void
@@ -210,13 +272,14 @@ finish:
 int
 sshauth_hostkey_check(const char *hostname, ssh_session session, void *UNUSED(priv))
 {
-    char *hexa;
+    char *hexa = NULL;
     int c, state, ret;
     ssh_key srv_pubkey;
     unsigned char *hash_sha1 = NULL;
     size_t hlen;
     enum ssh_keytypes_e srv_pubkey_type;
     char answer[5];
+    FILE *out = NULL, *in = NULL;
 
     state = ssh_is_server_known(session);
 
@@ -242,7 +305,7 @@ sshauth_hostkey_check(const char *hostname, ssh_session session, void *UNUSED(pr
 
     case SSH_SERVER_KNOWN_CHANGED:
         ERR("Remote host key changed, the connection will be terminated!");
-        goto fail;
+        goto error;
 
     case SSH_SERVER_FOUND_OTHER:
         WRN("Remote host key is not known, but a key of another type for this host is known. Continue with caution.");
@@ -275,28 +338,51 @@ hostkey_not_known:
         }
 #endif
 
+        if (!(in = nc_open_in(1, NULL))) {
+            goto error;
+        }
+        if (!(out = nc_open_out())) {
+            goto error;
+        }
+
         /* try to get result from user */
-        fprintf(stdout, "The authenticity of the host \'%s\' cannot be established.\n", hostname);
-        fprintf(stdout, "%s key fingerprint is %s.\n", ssh_key_type_to_char(srv_pubkey_type), hexa);
+        if (fprintf(out, "The authenticity of the host \'%s\' cannot be established.\n", hostname) < 1) {
+            ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+            goto error;
+        }
+        if (fprintf(out, "%s key fingerprint is %s.\n", ssh_key_type_to_char(srv_pubkey_type), hexa) < 1) {
+            ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+            goto error;
+        }
 
 #ifdef ENABLE_DNSSEC
         if (ret == 2) {
-            fprintf(stdout, "No matching host key fingerprint found using DNS.\n");
+            if (fprintf(out, "No matching host key fingerprint found using DNS.\n") < 1) {
+                ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+                goto error;
+            }
         } else if (ret == 1) {
-            fprintf(stdout, "Matching host key fingerprint found using DNS.\n");
+            if (fprintf(out, "Matching host key fingerprint found using DNS.\n") < 1) {
+                ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+                goto error;
+            }
         }
 #endif
 
-        fprintf(stdout, "Are you sure you want to continue connecting (yes/no)? ");
+        if (fprintf(out, "Are you sure you want to continue connecting (yes/no)? ") < 1) {
+            ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+            goto error;
+        }
+        fflush(out);
 
         do {
-            if (fscanf(stdin, "%4s", answer) == EOF) {
-                ERR("fscanf() failed (%s).", ferror(stdin) ? strerror(errno) : "EOF");
-                goto fail;
+            if (fscanf(in, "%4s", answer) == EOF) {
+                ERR("Reading from input failed (%s).", feof(in) ? "EOF" : strerror(errno));
+                goto error;
             }
-            while (((c = getchar()) != EOF) && (c != '\n'));
+            while (((c = getc(in)) != EOF) && (c != '\n'));
 
-            fflush(stdin);
+            fflush(in);
             if (!strcmp("yes", answer)) {
                 /* store the key into the host file */
                 ret = ssh_write_knownhost(session);
@@ -304,25 +390,31 @@ hostkey_not_known:
                     WRN("Adding the known host \"%s\" failed (%s).", hostname, ssh_get_error(session));
                 }
             } else if (!strcmp("no", answer)) {
-                goto fail;
+                goto error;
             } else {
-                fprintf(stdout, "Please type 'yes' or 'no': ");
+                if (fprintf(out, "Please type 'yes' or 'no': ") < 1) {
+                    ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+                    goto error;
+                }
             }
         } while (strcmp(answer, "yes") && strcmp(answer, "no"));
 
         break;
 
     case SSH_SERVER_ERROR:
-        ssh_clean_pubkey_hash(&hash_sha1);
-        fprintf(stderr,"%s",ssh_get_error(session));
-        return -1;
+        fprintf(out, "SSH error: %s", ssh_get_error(session));
+        goto error;
     }
 
+    nc_close_inout(in, 1, NULL);
+    nc_close_inout(out, 1, NULL);
     ssh_clean_pubkey_hash(&hash_sha1);
     ssh_string_free_char(hexa);
     return 0;
 
-fail:
+error:
+    nc_close_inout(in, 1, NULL);
+    nc_close_inout(out, 1, NULL);
     ssh_clean_pubkey_hash(&hash_sha1);
     ssh_string_free_char(hexa);
     return -1;
@@ -331,10 +423,10 @@ fail:
 char *
 sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
 {
-    char *buf;
-    int c, buflen = 1024, len, ret;
+    char *buf = NULL;
+    int c, buflen = 1024, len;
     struct termios oldterm;
-    FILE *tty;
+    FILE *in = NULL, *out = NULL;
 
     buf = malloc(buflen * sizeof *buf);
     if (!buf) {
@@ -342,53 +434,42 @@ sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
         return NULL;
     }
 
-    if ((ret = ttyname_r(STDIN_FILENO, buf, buflen))) {
-        ERR("ttyname_r failed (%s).", strerror(ret));
-        free(buf);
-        return NULL;
+    if (!(in = nc_open_in(0, &oldterm))) {
+        goto error;
+    }
+    if (!(out = nc_open_out())) {
+        goto error;
     }
 
-    tty = open_tty_noecho(buf, &oldterm);
-    if (!tty) {
-        tty = open_tty_noecho("/dev/tty", &oldterm);
+    if (fprintf(out, "%s@%s password: ", username, hostname) < 1) {
+        ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+        goto error;
     }
-    if (!tty) {
-        free(buf);
-        return NULL;
-    }
-
-    if (fprintf(stdout, "%s@%s password: ", username, hostname) < 1) {
-        goto stdout_fail;
-    }
-    fflush(stdout);
+    fflush(out);
 
     len = 0;
-    while (((c = fgetc(tty)) != EOF) && (c != '\n')) {
+    while (((c = fgetc(in)) != EOF) && (c != '\n')) {
         if (len >= buflen - 1) {
             buflen *= 2;
             buf = nc_realloc(buf, buflen * sizeof *buf);
             if (!buf) {
                 ERRMEM;
-                restore_tty_close(tty, &oldterm);
-                return NULL;
+                goto error;
             }
         }
         buf[len++] = (char)c;
     }
     buf[len++] = 0; /* terminating null byte */
 
-    fprintf(stdout, "\n");
-    restore_tty_close(tty, &oldterm);
+    fprintf(out, "\n");
+
+    nc_close_inout(in, 0, &oldterm);
+    nc_close_inout(out, 1, NULL);
     return buf;
 
-stdout_fail:
-    if (feof(stdout)) {
-        ERR("Writing into stdout failed (End of file).");
-    } else {
-        assert(ferror(stdout));
-        ERR("Writing into stdout failed (%s).", strerror(errno));
-    }
-    restore_tty_close(tty, &oldterm);
+error:
+    nc_close_inout(in, 0, &oldterm);
+    nc_close_inout(out, 1, NULL);
     free(buf);
     return NULL;
 }
@@ -397,10 +478,10 @@ char *
 sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo, void *UNUSED(priv))
 {
     unsigned int buflen = 64, cur_len;
-    int ret, c;
+    int c;
     struct termios oldterm;
-    char *buf;
-    FILE *tty;
+    char *buf = NULL;
+    FILE *in = NULL, *out = NULL;
 
     buf = malloc(buflen * sizeof *buf);
     if (!buf) {
@@ -408,45 +489,35 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
         return NULL;
     }
 
-    if ((ret = ttyname_r(STDIN_FILENO, buf, buflen))) {
-        ERR("ttyname_r failed (%s).", strerror(ret));
-        free(buf);
-        return NULL;
+    if (!(in = nc_open_in(echo, &oldterm))) {
+        goto error;
+    }
+    if (!(out = nc_open_out())) {
+        goto error;
     }
 
-    if (!echo) {
-        tty = open_tty_noecho(buf, &oldterm);
-        if (!tty) {
-            open_tty_noecho("/dev/tty", &oldterm);
-        }
-        if (!tty) {
-            free(buf);
-            return NULL;
-        }
-    } else {
-        tty = stdin;
+    if (auth_name && (fprintf(out, "%s\n", auth_name) < 1)) {
+        ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+        goto error;
     }
-
-
-    if (auth_name && (fprintf(stdout, "%s\n", auth_name) < 1)) {
-        goto stdout_fail;
+    if (instruction && (fprintf(out, "%s\n", instruction) < 1)) {
+        ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+        goto error;
     }
-    if (instruction && (fprintf(stdout, "%s\n", instruction) < 1)) {
-        goto stdout_fail;
+    if (fputs(prompt, out) == EOF) {
+        ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+        goto error;
     }
-    if (fputs(prompt, stdout) == EOF) {
-        goto stdout_fail;
-    }
-    fflush(stdout);
+    fflush(out);
 
     cur_len = 0;
-    while (((c = fgetc(tty)) != EOF) && (c != '\n')) {
+    while (((c = fgetc(in)) != EOF) && (c != '\n')) {
         if (cur_len >= buflen - 1) {
             buflen *= 2;
             buf = nc_realloc(buf, buflen * sizeof *buf);
             if (!buf) {
                 ERRMEM;
-                goto fail;
+                goto error;
             }
         }
         buf[cur_len++] = (char)c;
@@ -454,23 +525,15 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
     /* terminating null byte */
     buf[cur_len] = '\0';
 
-    fprintf(stdout, "\n");
-    if (!echo) {
-        restore_tty_close(tty, &oldterm);
-    }
+    fprintf(out, "\n");
+
+    nc_close_inout(in, echo, &oldterm);
+    nc_close_inout(out, 1, NULL);
     return buf;
 
-stdout_fail:
-    if (feof(stdout)) {
-        ERR("Writing into stdout failed (End of file).");
-    } else {
-        assert(ferror(stdout));
-        ERR("Writing into stdout failed (%s).", strerror(errno));
-    }
-fail:
-    if (!echo) {
-        restore_tty_close(tty, &oldterm);
-    }
+error:
+    nc_close_inout(in, echo, &oldterm);
+    nc_close_inout(out, 1, NULL);
     free(buf);
     return NULL;
 }
@@ -478,10 +541,10 @@ fail:
 char *
 sshauth_privkey_passphrase(const char* privkey_path, void *UNUSED(priv))
 {
-    char *buf;
-    int c, buflen = 1024, len, ret;
+    char *buf = NULL;
+    int c, buflen = 1024, len;
     struct termios oldterm;
-    FILE *tty;
+    FILE *in = NULL, *out = NULL;
 
     buf = malloc(buflen * sizeof *buf);
     if (!buf) {
@@ -489,53 +552,42 @@ sshauth_privkey_passphrase(const char* privkey_path, void *UNUSED(priv))
         return NULL;
     }
 
-    if ((ret = ttyname_r(STDIN_FILENO, buf, buflen))) {
-        ERR("ttyname_r failed (%s).", strerror(ret));
-        free(buf);
-        return NULL;
+    if (!(in = nc_open_in(0, &oldterm))) {
+        goto error;
+    }
+    if (!(out = nc_open_out())) {
+        goto error;
     }
 
-    tty = open_tty_noecho(buf, &oldterm);
-    if (!tty) {
-        tty = open_tty_noecho("/dev/tty", &oldterm);
+    if (fprintf(out, "Enter passphrase for the key '%s': ", privkey_path) < 1) {
+        ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+        goto error;
     }
-    if (!tty) {
-        free(buf);
-        return NULL;
-    }
-
-    if (fprintf(stdout, "Enter passphrase for the key '%s':", privkey_path) < 1) {
-        goto stdout_fail;
-    }
-    fflush(stdout);
+    fflush(out);
 
     len = 0;
-    while (((c = fgetc(tty)) != EOF) && (c != '\n')) {
+    while (((c = fgetc(in)) != EOF) && (c != '\n')) {
         if (len >= buflen - 1) {
             buflen *= 2;
             buf = nc_realloc(buf, buflen * sizeof *buf);
             if (!buf) {
                 ERRMEM;
-                goto fail;
+                goto error;
             }
         }
         buf[len++] = (char)c;
     }
     buf[len] = 0; /* terminating null byte */
 
-    fprintf(stdout, "\n");
-    restore_tty_close(tty, &oldterm);
+    fprintf(out, "\n");
+
+    nc_close_inout(in, 0, &oldterm);
+    nc_close_inout(out, 1, NULL);
     return buf;
 
-stdout_fail:
-    if (feof(stdout)) {
-        ERR("Writing into stdout failed (End of file).");
-    } else {
-        assert(ferror(stdout));
-        ERR("Writing into stdout failed (%s).", strerror(errno));
-    }
-fail:
-    restore_tty_close(tty, &oldterm);
+error:
+    nc_close_inout(in, 0, &oldterm);
+    nc_close_inout(out, 1, NULL);
     free(buf);
     return NULL;
 }
