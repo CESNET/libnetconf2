@@ -133,6 +133,15 @@ nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name, int16_
     return ret;
 }
 
+API void
+nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_session *session, const char *password, void *user_data),
+                                  void *user_data, void (*free_user_data)(void *user_data))
+{
+    server_opts.passwd_auth_clb = passwd_auth_clb;
+    server_opts.passwd_auth_data = user_data;
+    server_opts.passwd_auth_data_free = free_user_data;
+}
+
 API int
 nc_server_ssh_ch_client_add_hostkey(const char *client_name, const char *name, int16_t idx)
 {
