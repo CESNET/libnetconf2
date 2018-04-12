@@ -193,7 +193,7 @@ nc_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx)
 {
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = ly_ctx_new(NULL, 0);
+        ctx = ly_ctx_new(NULL, LY_CTX_NOYANGLIBRARY);
         if (!ctx) {
             return EXIT_FAILURE;
         }
@@ -757,6 +757,8 @@ nc_ctx_check_and_fill(struct nc_session *session)
     int i, get_schema_support = 0, yanglib_support = 0, ret = -1, r;
     ly_module_imp_clb old_clb = NULL;
     void *old_data = NULL;
+    const struct lys_module *mod = NULL;
+    char *revision;
 
     assert(session->opts.client.cpblts && session->ctx);
 
@@ -768,18 +770,17 @@ nc_ctx_check_and_fill(struct nc_session *session)
     /* check if get-schema is supported */
     for (i = 0; session->opts.client.cpblts[i]; ++i) {
         if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring?", 52)) {
-            get_schema_support = 1;
+            get_schema_support = 1 + i;
             if (yanglib_support) {
                 break;
             }
         } else if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:xml:ns:yang:ietf-yang-library?", 46)) {
-            yanglib_support = 1;
+            yanglib_support = 1 + i;
             if (get_schema_support) {
                 break;
             }
         }
     }
-
     /* get-schema is supported, load local ietf-netconf-monitoring so we can create <get-schema> RPCs */
     if (get_schema_support && !ly_ctx_get_module(session->ctx, "ietf-netconf-monitoring", NULL, 1)) {
         if (!lys_parse_path(session->ctx, NC_SCHEMAS_DIR"/ietf-netconf-monitoring.yin", LYS_IN_YIN)) {
@@ -787,12 +788,27 @@ nc_ctx_check_and_fill(struct nc_session *session)
             get_schema_support = 0;
         }
     }
-    /* yang-library present does not need to be checked, it is one of the libyang's internal modules,
-     * so it is always present */
 
     /* load base model disregarding whether it's in capabilities (but NETCONF capabilities are used to enable features) */
     if (ctx_check_and_load_ietf_netconf(session->ctx, session->opts.client.cpblts)) {
         goto cleanup;
+    }
+
+    if (yanglib_support && get_schema_support) {
+        /* use get schema to get server's ietf-yang-library */
+        revision = strstr(session->opts.client.cpblts[yanglib_support - 1], "revision=");
+        if (!revision) {
+            WRN("Loading NETCONF ietf-yang-library schema failed, missing revision in NETCONF <hello> message.");
+            WRN("Unable to automatically use <get-schema>.");
+            yanglib_support = 0;
+        } else {
+            revision = strndup(&revision[9], 10);
+            if (nc_ctx_load_module(session, "ietf-yang-library", revision, 1, old_clb, old_data, &mod)) {
+                WRN("Loading NETCONF ietf-yang-library schema failed, unable to automatically use <get-schema>.");
+                yanglib_support = 0;
+            }
+            free(revision);
+        }
     }
 
     if (yanglib_support && get_schema_support) {
