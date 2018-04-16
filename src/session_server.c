@@ -2283,15 +2283,33 @@ nc_server_ch_client_del_endpt(const char *client_name, const char *endpt_name)
                 lydict_remove(server_opts.ctx, client->ch_endpts[i].name);
                 lydict_remove(server_opts.ctx, client->ch_endpts[i].address);
 
-                /* move last endpoint to the empty space */
+                /* Reduce the endpoints count. */
                 --client->ch_endpt_count;
-                if (i < client->ch_endpt_count) {
-                    memcpy(&client->ch_endpts[i], &client->ch_endpts[client->ch_endpt_count], sizeof *client->ch_endpts);
-                } else if (!server_opts.ch_client_count) {
-                    free(server_opts.ch_clients);
-                    server_opts.ch_clients = NULL;
+                if (client->ch_endpt_count==0) {
+                    /* Deleting the last endpoint */
+                    free(client->ch_endpts);
+                    client->ch_endpts=NULL;
                 }
+                else {
+                    /* move last endpoint to the empty space */
+                    if (i < client->ch_endpt_count) {
+                        memcpy(&client->ch_endpts[i], &client->ch_endpts[client->ch_endpt_count], sizeof *client->ch_endpts);
+                    }
 
+                    /* Shrink the memory */
+                    struct nc_ch_endpt *realloc_ch_endpoints = malloc((client->ch_endpt_count * (sizeof(*client->ch_endpts))));
+                    if (!realloc_ch_endpoints) {
+                        ERRMEM;
+                        /* UNLOCK */
+                        nc_server_ch_client_unlock(client);
+                        free(client->ch_endpts);
+                        client->ch_endpts=NULL;
+                        return -1;
+                    }
+                    memcpy(realloc_ch_endpoints, client->ch_endpts, (client->ch_endpt_count * (sizeof(*client->ch_endpts))));
+                    free(client->ch_endpts);
+                    client->ch_endpts = realloc_ch_endpoints;
+                }
                 ret = 0;
                 break;
             }
@@ -2656,6 +2674,10 @@ nc_connect_ch_client_endpt(struct nc_ch_client *client, struct nc_ch_endpt *endp
     int sock, ret;
     struct timespec ts_cur;
 
+    if (!client || !endpt || !session) {
+        return NC_MSG_ERROR;
+    }
+
     sock = nc_sock_connect(endpt->address, endpt->port);
     if (sock < 0) {
         return NC_MSG_ERROR;
@@ -2947,14 +2969,36 @@ nc_ch_client_thread(void *arg)
                     free(cur_endpt_name);
                     cur_endpt_name = strdup(cur_endpt->name);
                 } else {
-                    /* cur_endpoint was removed or is the last, either way start with the first one */
+                    /* cur_endpt was removed or is the last, either way start with the first one */
                     cur_endpt = &client->ch_endpts[0];
                     free(cur_endpt_name);
                     cur_endpt_name = strdup(cur_endpt->name);
                 }
 
                 cur_attempts = 0;
-            } /* else we keep the current one */
+            }
+            else {
+                /* Else we use the current endpoint for the next round.
+                 * Still, we need to check whether the cur_endpt is moved (realloc'ed)
+                 * or deleted when handling endpoint add/delete/moves.
+                 * Therefore, we can't just use the previous pointer as it is.
+                 */
+                for (i = 0; i < client->ch_endpt_count; ++i) {
+                    if (!strcmp(client->ch_endpts[i].name, cur_endpt_name)) {
+                        break;
+                    }
+                }
+                /* The last endpoint doesn't exist in the list now,
+                 * start from the beginning of the list. */
+                if (i == client->ch_endpt_count) {
+                    VRB("%s: The last endpoint doesn't exist in the list now Start from Beg..", __func__);
+                    i = 0;
+                    cur_attempts = 0;
+                }
+                cur_endpt = &client->ch_endpts[i];
+                free(cur_endpt_name);
+                cur_endpt_name = strdup(cur_endpt->name);
+            }
         }
     }
 
