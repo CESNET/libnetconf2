@@ -2935,19 +2935,30 @@ nc_ch_client_thread(void *arg)
             }
 
             ++cur_attempts;
-            if (cur_attempts == client->max_attempts) {
-                for (i = 0; i < client->ch_endpt_count; ++i) {
-                    if (!strcmp(client->ch_endpts[i].name, cur_endpt_name)) {
-                        break;
-                    }
+
+            /* try to find our endpoint again */
+            for (i = 0; i < client->ch_endpt_count; ++i) {
+                if (!strcmp(client->ch_endpts[i].name, cur_endpt_name)) {
+                    break;
                 }
+            }
+
+            if (i < client->ch_endpt_count) {
+                /* endpoint was removed, start with the first one */
+                cur_endpt = &client->ch_endpts[0];
+                free(cur_endpt_name);
+                cur_endpt_name = strdup(cur_endpt->name);
+
+                cur_attempts = 0;
+            } else if (cur_attempts == client->max_attempts) {
+                /* we have tried to connect to this endpoint enough times */
                 if (i < client->ch_endpt_count - 1) {
                     /* just go to the next endpoint */
                     cur_endpt = &client->ch_endpts[i + 1];
                     free(cur_endpt_name);
                     cur_endpt_name = strdup(cur_endpt->name);
                 } else {
-                    /* cur_endpoint was removed or is the last, either way start with the first one */
+                    /* cur_endpoint is the last, start with the first one */
                     cur_endpt = &client->ch_endpts[0];
                     free(cur_endpt_name);
                     cur_endpt_name = strdup(cur_endpt->name);
