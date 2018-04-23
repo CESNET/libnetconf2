@@ -696,8 +696,7 @@ parse:
         /* continue even on fail */
         nc_ctx_load_module(session, name, revision, implemented, user_clb, user_data, &mod);
 
-        if (!mod) { /* !mod && !implemented - will be loaded automatically, but remember to set features in the end */
-            assert(!implemented);
+        if (!mod && !implemented) { /* will be loaded automatically, but remember to set features in the end */
             if (imports_flag) {
                 ERR("Module \"%s@%s\" is supposed to be imported, but no other module imports it.",
                     name, revision ? revision : "<latest>");
