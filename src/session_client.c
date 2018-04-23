@@ -689,7 +689,7 @@ parse:
             } else if (!strcmp(iter->schema->name, "conformance-type")) {
                 implemented = !strcmp(((struct lyd_node_leaf_list *)iter)->value_str, "implement");
             } else if (!strcmp(iter->schema->name, "feature")) {
-                ly_set_add(features, (void*)((struct lyd_node_leaf_list *)iter)->value_str, LY_SET_OPT_USEASLIST);
+                ly_set_add(features, (void *)((struct lyd_node_leaf_list *)iter)->value_str, LY_SET_OPT_USEASLIST);
             }
         }
 
