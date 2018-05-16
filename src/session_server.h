@@ -192,7 +192,7 @@ void nc_server_set_idle_timeout(uint16_t idle_timeout);
 uint16_t nc_server_get_idle_timeout(void);
 
 /**
- * @brief Get all the server capabilities as will be sent to every client.
+ * @brief Get all the server capabilities including all the schemas.
  *
  * A few capabilities (with-defaults, interleave) depend on the current
  * server options.
@@ -201,6 +201,19 @@ uint16_t nc_server_get_idle_timeout(void);
  * @return Array of capabilities stored in the \p ctx dictionary, NULL on error.
  */
 const char **nc_server_get_cpblts(struct ly_ctx *ctx);
+
+/**
+ * @brief Get the server capabilities including the schemas with the specified YANG version.
+ *
+ * A few capabilities (with-defaults, interleave) depend on the current
+ * server options.
+ *
+ * @param[in] ctx Context to read most capabilities from.
+ * @param[in] version YANG version of the schemas to be included in result, with
+ * LYS_VERSION_UNDEF the result is the same as from nc_server_get_cpblts().
+ * @return Array of capabilities stored in the \p ctx dictionary, NULL on error.
+ */
+const char **nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version);
 
 /**@} Server */
 

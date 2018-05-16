@@ -766,25 +766,18 @@ add_cpblt(struct ly_ctx *ctx, const char *capab, const char ***cpblts, int *size
 }
 
 API const char **
-nc_server_get_cpblts(struct ly_ctx *ctx)
+nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
 {
-    struct lyd_node *child, *child2, *yanglib;
-    struct lyd_node_leaf_list **features = NULL, **deviations = NULL, *ns = NULL, *rev = NULL, *name = NULL, *module_set_id = NULL;
     const char **cpblts;
-    const struct lys_module *mod;
-    int size = 10, count, feat_count = 0, dev_count = 0, i, str_len;
-    unsigned int u;
-#define NC_CPBLT_BUF_LEN 512
+    const struct lys_module *mod, *devmod;
+    int size = 10, count, features_count = 0, dev_count = 0, i, str_len, len;
+    unsigned int u, v, module_set_id;
+    char *s;
+#define NC_CPBLT_BUF_LEN 4096
     char str[NC_CPBLT_BUF_LEN];
 
     if (!ctx) {
         ERRARG("ctx");
-        return NULL;
-    }
-
-    yanglib = ly_ctx_info(ctx);
-    if (!yanglib) {
-        ERR("Failed to get ietf-yang-library data from the context.");
         return NULL;
     }
 
@@ -875,110 +868,88 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
     }
 
     /* models */
-    LY_TREE_FOR(yanglib->prev->child, child) {
-        if (!module_set_id) {
-            if (strcmp(child->prev->schema->name, "module-set-id")) {
-                ERRINT;
-                goto error;
-            }
-            module_set_id = (struct lyd_node_leaf_list *)child->prev;
-        }
-        if (!strcmp(child->schema->name, "module")) {
-            LY_TREE_FOR(child->child, child2) {
-                if (!strcmp(child2->schema->name, "namespace")) {
-                    ns = (struct lyd_node_leaf_list *)child2;
-                } else if (!strcmp(child2->schema->name, "name")) {
-                    name = (struct lyd_node_leaf_list *)child2;
-                } else if (!strcmp(child2->schema->name, "revision")) {
-                    rev = (struct lyd_node_leaf_list *)child2;
-                } else if (!strcmp(child2->schema->name, "feature")) {
-                    features = nc_realloc(features, ++feat_count * sizeof *features);
-                    if (!features) {
-                        ERRMEM;
-                        goto error;
-                    }
-                    features[feat_count - 1] = (struct lyd_node_leaf_list *)child2;
-                } else if (!strcmp(child2->schema->name, "deviation")) {
-                    deviations = nc_realloc(deviations, ++dev_count * sizeof *deviations);
-                    if (!deviations) {
-                        ERRMEM;
-                        goto error;
-                    }
-                    deviations[dev_count - 1] = (struct lyd_node_leaf_list *)child2;
-                }
-            }
-
-            if (!ns || !name || !rev) {
-                ERRINT;
-                continue;
-            }
-
-            str_len = sprintf(str, "%s?module=%s%s%s", ns->value_str, name->value_str,
-                              rev->value_str[0] ? "&revision=" : "", rev->value_str);
-            if (feat_count) {
-                strcat(str, "&features=");
-                str_len += 10;
-                for (i = 0; i < feat_count; ++i) {
-                    if (str_len + 1 + strlen(features[i]->value_str) >= NC_CPBLT_BUF_LEN) {
-                        ERRINT;
-                        break;
-                    }
-                    if (i) {
-                        strcat(str, ",");
-                        ++str_len;
-                    }
-                    strcat(str, features[i]->value_str);
-                    str_len += strlen(features[i]->value_str);
-                }
-            }
-            if (dev_count) {
-                strcat(str, "&deviations=");
-                str_len += 12;
-                for (i = 0; i < dev_count; ++i) {
-                    LY_TREE_FOR(((struct lyd_node *)deviations[i])->child, child2) {
-                        if (!strcmp(child2->schema->name, "name"))
-                            break;
-                    }
-                    if (!child2) {
-                        ERRINT;
-                        continue;
-                    }
-
-                    if (str_len + 1 + strlen(((struct lyd_node_leaf_list *)child2)->value_str) >= NC_CPBLT_BUF_LEN) {
-                        ERRINT;
-                        break;
-                    }
-                    if (i) {
-                        strcat(str, ",");
-                        ++str_len;
-                    }
-                    strcat(str, ((struct lyd_node_leaf_list *)child2)->value_str);
-                    str_len += strlen(((struct lyd_node_leaf_list *)child2)->value_str);
-                }
-            }
-            if (!strcmp(name->value_str, "ietf-yang-library")) {
-                sprintf(str + str_len, "&module-set-id=%s", module_set_id->value_str);
-            }
-
+    u = module_set_id = 0;
+    while ((mod = ly_ctx_get_module_iter(ctx, &u))) {
+        VRB("HELLO module %s", mod->name);
+        if (!strcmp(mod->name, "ietf-yang-library")) {
+            /* ietf-yang-library is always part of the list, but it is specific since it is 1.1 schema */
+            str_len = sprintf(str, "%s?%s%s&module-set-id=%u", mod->ns, mod->rev_size ? "revision=" : "",
+                              mod->rev_size ? mod->rev[0].date : "", ly_ctx_get_module_set_id(ctx));
             add_cpblt(ctx, str, &cpblts, &size, &count);
+            continue;
+        } else if (mod->type) {
+            /* skip submodules */
+            continue;
+        } else if (version == LYS_VERSION_1 && mod->version > version) {
+            /* skip YANG 1.1 schemas */
+            continue;
+        } else if (version == LYS_VERSION_1_1 && mod->version != version) {
+            /* skip YANG 1.0 schemas */
+            continue;
+        }
 
-            ns = NULL;
-            name = NULL;
-            rev = NULL;
-            if (features || feat_count) {
-                free(features);
-                features = NULL;
-                feat_count = 0;
-            }
-            if (deviations || dev_count) {
-                free(deviations);
-                deviations = NULL;
-                dev_count = 0;
+        str_len = sprintf(str, "%s?module=%s%s%s", mod->ns, mod->name,
+                          mod->rev_size ? "&revision=" : "", mod->rev_size ? mod->rev[0].date : "");
+
+        if (mod->features_size) {
+            features_count = 0;
+            for (i = 0; i < mod->features_size; ++i) {
+                if (!(mod->features[i].flags & LYS_FENABLED)) {
+                    continue;
+                }
+                if (!features_count) {
+                    strcat(str, "&features=");
+                    str_len += 10;
+                }
+                len = strlen(mod->features[i].name);
+                if (str_len + 1 + len >= NC_CPBLT_BUF_LEN) {
+                    ERRINT;
+                    break;
+                }
+                if (i) {
+                    strcat(str, ",");
+                    ++str_len;
+                }
+                strcat(str, mod->features[i].name);
+                str_len += len;
+                features_count++;
             }
         }
-    }
 
-    lyd_free_withsiblings(yanglib);
+        if (mod->deviated) {
+            strcat(str, "&deviations=");
+            str_len += 12;
+            dev_count = 0;
+            while ((devmod = ly_ctx_get_module_iter(ctx, &v))) {
+                if (devmod == mod) {
+                    continue;
+                }
+
+                for (i = 0; i < devmod->deviation_size; ++i) {
+                    s = strstr(devmod->deviation[i].target_name, mod->name);
+                    if (s && s[strlen(mod->name)] == ':') {
+                        /* we have the module deviating the module being processed */
+                        len = strlen(devmod->name);
+                        if (str_len + 1 + len >= NC_CPBLT_BUF_LEN) {
+                            ERRINT;
+                            break;
+                        }
+                        if (dev_count) {
+                            strcat(str, ",");
+                            ++str_len;
+                        }
+                        strcat(str, devmod->name);
+                        str_len += len;
+                        dev_count++;
+
+                        break;
+                    }
+                }
+            }
+        }
+
+        add_cpblt(ctx, str, &cpblts, &size, &count);
+    }
 
     /* ending NULL capability */
     add_cpblt(ctx, NULL, &cpblts, &size, &count);
@@ -988,10 +959,13 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
 error:
 
     free(cpblts);
-    free(features);
-    free(deviations);
-    lyd_free_withsiblings(yanglib);
     return NULL;
+}
+
+API const char **
+nc_server_get_cpblts(struct ly_ctx *ctx)
+{
+    return nc_server_get_cpblts_version(ctx, LYS_VERSION_UNDEF);
 }
 
 static int
@@ -1093,7 +1067,7 @@ nc_send_server_hello(struct nc_session *session)
     int r, i;
     const char **cpblts;
 
-    cpblts = nc_server_get_cpblts(session->ctx);
+    cpblts = nc_server_get_cpblts_version(session->ctx, LYS_VERSION_1);
 
     r = nc_write_msg(session, NC_MSG_HELLO, cpblts, &session->id);
 
