@@ -428,7 +428,7 @@ getschema_module_clb(const char *mod_name, const char *mod_rev, const char *subm
 
 static int
 nc_ctx_load_module(struct nc_session *session, const char *name, const char *revision, int implement,
-                   ly_module_imp_clb user_clb, void *user_data, const struct lys_module **mod)
+                   ly_module_imp_clb user_clb, void *user_data, int has_get_schema, const struct lys_module **mod)
 {
     int ret = 0;
     struct ly_err_item *eitem;
@@ -459,7 +459,7 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
         }
 
         /* 3) using get-schema callback */
-        if (!(*mod)) {
+        if (has_get_schema && !(*mod)) {
             ly_ctx_set_module_imp_clb(session->ctx, &getschema_module_clb, session);
             *mod = ly_ctx_load_module(session->ctx, name, revision);
             if (*mod) {
@@ -493,7 +493,7 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
 
 /* NC_SCHEMAS_DIR not used (implicitly) */
 static int
-nc_ctx_fill_cpblts(struct nc_session *session, ly_module_imp_clb user_clb, void *user_data)
+nc_ctx_fill_cpblts(struct nc_session *session, ly_module_imp_clb user_clb, void *user_data, int has_get_schema)
 {
     int ret = 1;
     const struct lys_module *mod;
@@ -531,7 +531,7 @@ nc_ctx_fill_cpblts(struct nc_session *session, ly_module_imp_clb user_clb, void 
         }
 
         /* we can continue even if it fails */
-        nc_ctx_load_module(session, name, revision, 1, user_clb, user_data, &mod);
+        nc_ctx_load_module(session, name, revision, 1, user_clb, user_data, has_get_schema, &mod);
 
         if (!mod) {
             if (session->status != NC_STATUS_RUNNING) {
@@ -592,7 +592,7 @@ cleanup:
 }
 
 static int
-nc_ctx_fill_yl(struct nc_session *session, ly_module_imp_clb user_clb, void *user_data)
+nc_ctx_fill_yl(struct nc_session *session, ly_module_imp_clb user_clb, void *user_data, int has_get_schema)
 {
     int ret = 1;
     struct nc_rpc *rpc = NULL;
@@ -694,7 +694,7 @@ parse:
         }
 
         /* continue even on fail */
-        nc_ctx_load_module(session, name, revision, implemented, user_clb, user_data, &mod);
+        nc_ctx_load_module(session, name, revision, implemented, user_clb, user_data, has_get_schema, &mod);
 
         if (!mod && !implemented) { /* will be loaded automatically, but remember to set features in the end */
             if (imports_flag) {
@@ -802,7 +802,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
             yanglib_support = 0;
         } else {
             revision = strndup(&revision[9], 10);
-            if (nc_ctx_load_module(session, "ietf-yang-library", revision, 1, old_clb, old_data, &mod)) {
+            if (nc_ctx_load_module(session, "ietf-yang-library", revision, 1, old_clb, old_data, 1, &mod)) {
                 WRN("Loading NETCONF ietf-yang-library schema failed, unable to automatically use <get-schema>.");
                 yanglib_support = 0;
             }
@@ -810,9 +810,9 @@ nc_ctx_check_and_fill(struct nc_session *session)
         }
     }
 
-    if (yanglib_support && get_schema_support) {
+    if (yanglib_support) {
         /* load schemas according to the ietf-yang-library data, which are more precise than capabilities list */
-        r = nc_ctx_fill_yl(session, old_clb, old_data);
+        r = nc_ctx_fill_yl(session, old_clb, old_data, get_schema_support);
         if (r == -1) {
             goto cleanup;
         } else if (r == 1) {
@@ -823,7 +823,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     } else {
 capabilities:
 
-        if (nc_ctx_fill_cpblts(session, old_clb, old_data)) {
+        if (nc_ctx_fill_cpblts(session, old_clb, old_data, get_schema_support)) {
             goto cleanup;
         }
     }
