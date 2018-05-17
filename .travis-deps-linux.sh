@@ -18,9 +18,9 @@ cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
 cd ../..
 
 # CMocka
-wget https://cmocka.org/files/1.0/cmocka-1.0.1.tar.xz
-tar -xJf cmocka-1.0.1.tar.xz
-mkdir cmocka-1.0.1/build && cd cmocka-1.0.1/build
+wget https://cmocka.org/files/1.1/cmocka-1.1.1.tar.xz
+tar -xJf cmocka-1.1.1.tar.xz
+mkdir cmocka-1.1.1/build && cd cmocka-1.1.1/build
 cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
 cd ../..
 
