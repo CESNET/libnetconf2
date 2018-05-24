@@ -402,7 +402,7 @@ hostkey_not_known:
         break;
 
     case SSH_SERVER_ERROR:
-        fprintf(out, "SSH error: %s", ssh_get_error(session));
+        ERR("SSH error: %s", ssh_get_error(session));
         goto error;
     }
 
