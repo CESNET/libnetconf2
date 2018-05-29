@@ -990,7 +990,7 @@ nc_sshcb_channel_subsystem(struct nc_session *session, ssh_channel channel, cons
         session->flags |= NC_SESSION_SSH_SUBSYS_NETCONF;
     } else {
         /* additional channel subsystem request, new session is ready as far as SSH is concerned */
-        new_session = nc_new_session(1);
+        new_session = nc_new_session(NC_SERVER, 1);
         if (!new_session) {
             ERRMEM;
             return -1;
@@ -1005,11 +1005,8 @@ nc_sshcb_channel_subsystem(struct nc_session *session, ssh_channel channel, cons
         session->ti.libssh.next = new_session;
 
         new_session->status = NC_STATUS_STARTING;
-        new_session->side = NC_SERVER;
         new_session->ti_type = NC_TI_LIBSSH;
-        new_session->ti_lock = session->ti_lock;
-        new_session->ti_cond = session->ti_cond;
-        new_session->ti_inuse = session->ti_inuse;
+        new_session->io_lock = session->io_lock;
         new_session->ti.libssh.channel = channel;
         new_session->ti.libssh.session = session->ti.libssh.session;
         new_session->username = lydict_insert(server_opts.ctx, session->username, 0);
@@ -1230,27 +1227,18 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
             return -1;
         }
 
-        ret = nc_session_lock(session, timeout, __func__);
-        if (ret != 1) {
-            return ret;
-        }
-
         ret = ssh_execute_message_callbacks(session->ti.libssh.session);
         if (ret != SSH_OK) {
             ERR("Failed to receive SSH messages on a session (%s).",
                 ssh_get_error(session->ti.libssh.session));
-            nc_session_unlock(session, timeout, __func__);
             return -1;
         }
 
         if (!session->ti.libssh.channel) {
-            /* we did not receive channel-open, timeout */
-            nc_session_unlock(session, timeout, __func__);
             return 0;
         }
 
         ret = ssh_execute_message_callbacks(session->ti.libssh.session);
-        nc_session_unlock(session, timeout, __func__);
         if (ret != SSH_OK) {
             ERR("Failed to receive SSH messages on a session (%s).",
                 ssh_get_error(session->ti.libssh.session));
@@ -1275,13 +1263,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
             return -1;
         }
 
-        ret = nc_session_lock(session, timeout, __func__);
-        if (ret != 1) {
-            return ret;
-        }
-
         ret = ssh_execute_message_callbacks(session->ti.libssh.session);
-        nc_session_unlock(session, timeout, __func__);
         if (ret != SSH_OK) {
             ERR("Failed to receive SSH messages on a session (%s).",
                 ssh_get_error(session->ti.libssh.session));
@@ -1535,7 +1517,7 @@ nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session
     pthread_spin_unlock(&server_opts.sid_lock);
 
     /* NETCONF handshake */
-    msgtype = nc_handshake(new_session);
+    msgtype = nc_handshake_io(new_session);
     if (msgtype != NC_MSG_HELLO) {
         return msgtype;
     }
@@ -1608,7 +1590,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     pthread_spin_unlock(&server_opts.sid_lock);
 
     /* NETCONF handshake */
-    msgtype = nc_handshake(new_session);
+    msgtype = nc_handshake_io(new_session);
     if (msgtype != NC_MSG_HELLO) {
         return msgtype;
     }

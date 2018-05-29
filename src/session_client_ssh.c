@@ -1487,19 +1487,12 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client
     }
 
     /* prepare session structure */
-    session = nc_new_session(0);
+    session = nc_new_session(NC_CLIENT, 0);
     if (!session) {
         ERRMEM;
         return NULL;
     }
     session->status = NC_STATUS_STARTING;
-    session->side = NC_CLIENT;
-
-    /* transport lock */
-    pthread_mutex_init(session->ti_lock, NULL);
-    pthread_cond_init(session->ti_cond, NULL);
-    *session->ti_inuse = 0;
-
     session->ti_type = NC_TI_LIBSSH;
     session->ti.libssh.session = ssh_session;
 
@@ -1582,7 +1575,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client
     ctx = session->ctx;
 
     /* NETCONF handshake */
-    if (nc_handshake(session) != NC_MSG_HELLO) {
+    if (nc_handshake_io(session) != NC_MSG_HELLO) {
         goto fail;
     }
     session->status = NC_STATUS_RUNNING;
@@ -1642,20 +1635,14 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     }
 
     /* prepare session structure */
-    session = nc_new_session(0);
+    session = nc_new_session(NC_CLIENT, 0);
     if (!session) {
         ERRMEM;
         return NULL;
     }
     session->status = NC_STATUS_STARTING;
-    session->side = NC_CLIENT;
 
-    /* transport lock */
-    pthread_mutex_init(session->ti_lock, NULL);
-    pthread_cond_init(session->ti_cond, NULL);
-    *session->ti_inuse = 0;
-
-    /* other transport-specific data */
+    /* transport-specific data */
     session->ti_type = NC_TI_LIBSSH;
     session->ti.libssh.session = ssh_new();
     if (!session->ti.libssh.session) {
@@ -1698,7 +1685,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     ctx = session->ctx;
 
     /* NETCONF handshake */
-    if (nc_handshake(session) != NC_MSG_HELLO) {
+    if (nc_handshake_io(session) != NC_MSG_HELLO) {
         goto fail;
     }
     session->status = NC_STATUS_RUNNING;
@@ -1736,30 +1723,26 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     }
 
     /* prepare session structure */
-    new_session = nc_new_session(1);
+    new_session = nc_new_session(NC_CLIENT, 1);
     if (!new_session) {
         ERRMEM;
         return NULL;
     }
     new_session->status = NC_STATUS_STARTING;
-    new_session->side = NC_CLIENT;
 
-    /* share some parameters including the session lock */
+    /* share some parameters including the IO lock (we are using one socket for both sessions) */
     new_session->ti_type = NC_TI_LIBSSH;
-    new_session->ti_lock = session->ti_lock;
-    new_session->ti_cond = session->ti_cond;
-    new_session->ti_inuse = session->ti_inuse;
     new_session->ti.libssh.session = session->ti.libssh.session;
+    new_session->io_lock = session->io_lock;
 
     /* create the channel safely */
-    if (nc_session_lock(new_session, -1, __func__) != 1) {
+    if (nc_session_io_lock(new_session, -1, __func__) != 1) {
         goto fail;
     }
-
-    /* open a channel */
     if (open_netconf_channel(new_session, NC_TRANSPORT_TIMEOUT) != 1) {
         goto fail;
     }
+    nc_session_io_unlock(new_session, __func__);
 
     if (nc_session_new_ctx(new_session, ctx) != EXIT_SUCCESS) {
         goto fail;
@@ -1767,12 +1750,12 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     ctx = session->ctx;
 
     /* NETCONF handshake */
-    if (nc_handshake(new_session) != NC_MSG_HELLO) {
+    if (nc_handshake_io(new_session) != NC_MSG_HELLO) {
         goto fail;
     }
     new_session->status = NC_STATUS_RUNNING;
 
-    nc_session_unlock(new_session, NC_SESSION_LOCK_TIMEOUT, __func__);
+    nc_session_io_unlock(new_session, __func__);
 
     if (nc_ctx_check_and_fill(new_session) == -1) {
         goto fail;

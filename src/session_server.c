@@ -633,18 +633,12 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
     }
 
     /* prepare session structure */
-    *session = nc_new_session(0);
+    *session = nc_new_session(NC_SERVER, 0);
     if (!(*session)) {
         ERRMEM;
         return NC_MSG_ERROR;
     }
     (*session)->status = NC_STATUS_STARTING;
-    (*session)->side = NC_SERVER;
-
-    /* transport lock */
-    pthread_mutex_init((*session)->ti_lock, NULL);
-    pthread_cond_init((*session)->ti_cond, NULL);
-    *(*session)->ti_inuse = 0;
 
     /* transport specific data */
     (*session)->ti_type = NC_TI_FD;
@@ -661,7 +655,7 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
     pthread_spin_unlock(&server_opts.sid_lock);
 
     /* NETCONF handshake */
-    msgtype = nc_handshake(*session);
+    msgtype = nc_handshake_io(*session);
     if (msgtype != NC_MSG_HELLO) {
         nc_session_free(*session, NULL);
         *session = NULL;
@@ -1003,14 +997,14 @@ nc_ps_session_count(struct nc_pollsession *ps)
     return ps->session_count;
 }
 
-/* must be called holding the session lock!
+/* should be called holding the session RPC lock! IO lock will be acquired as needed
  * returns: NC_PSPOLL_ERROR,
  *          NC_PSPOLL_BAD_RPC,
  *          NC_PSPOLL_BAD_RPC | NC_PSPOLL_REPLY_ERROR,
  *          NC_PSPOLL_RPC
  */
 static int
-nc_server_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
+nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_server_rpc **rpc)
 {
     struct lyxml_elem *xml = NULL;
     NC_MSG_TYPE msgtype;
@@ -1028,7 +1022,7 @@ nc_server_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
         return NC_PSPOLL_ERROR;
     }
 
-    msgtype = nc_read_msg(session, &xml);
+    msgtype = nc_read_msg_io(session, io_timeout, &xml, 0);
 
     switch (msgtype) {
     case NC_MSG_RPC:
@@ -1044,7 +1038,7 @@ nc_server_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
         if (!(*rpc)->tree) {
             /* parsing RPC failed */
             reply = nc_server_reply_err(nc_err_libyang(server_opts.ctx));
-            ret = nc_write_msg(session, NC_MSG_REPLY, xml, reply);
+            ret = nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, xml, reply);
             nc_server_reply_free(reply);
             if (ret == -1) {
                 ERR("Session %u: failed to write reply.", session->id);
@@ -1069,7 +1063,7 @@ nc_server_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
         goto error;
     default:
         /* NC_MSG_ERROR,
-         * NC_MSG_WOULDBLOCK and NC_MSG_NONE is not returned by nc_read_msg()
+         * NC_MSG_WOULDBLOCK and NC_MSG_NONE is not returned by nc_read_msg_io()
          */
         ret = NC_PSPOLL_ERROR;
         break;
@@ -1093,8 +1087,7 @@ nc_set_global_rpc_clb(nc_rpc_clb clb)
 API NC_MSG_TYPE
 nc_server_notif_send(struct nc_session *session, struct nc_server_notif *notif, int timeout)
 {
-    NC_MSG_TYPE result = NC_MSG_NOTIF;
-    int ret;
+    NC_MSG_TYPE ret;
 
     /* check parameters */
     if (!session || (session->side != NC_SERVER) || !session->opts.server.ntf_status) {
@@ -1105,39 +1098,30 @@ nc_server_notif_send(struct nc_session *session, struct nc_server_notif *notif, 
         return NC_MSG_ERROR;
     }
 
-    /* reading an RPC and sending a reply must be atomic (no other RPC should be read) */
-    ret = nc_session_lock(session, timeout, __func__);
-    if (ret < 0) {
-        return NC_MSG_ERROR;
-    } else if (!ret) {
-        return NC_MSG_WOULDBLOCK;
-    }
-
-    ret = nc_write_msg(session, NC_MSG_NOTIF, notif);
-    if (ret == -1) {
+    /* we do not need RPC lock for this, IO lock will be acquired properly */
+    ret = nc_write_msg_io(session, timeout, NC_MSG_NOTIF, notif);
+    if (ret == NC_MSG_ERROR) {
         ERR("Session %u: failed to write notification.", session->id);
-        result = NC_MSG_ERROR;
     }
 
-    nc_session_unlock(session, timeout, __func__);
-
-    return result;
+    return ret;
 }
 
-/* must be called holding the session lock!
+/* must be called holding the session RPC lock! IO lock will be acquired as needed
  * returns: NC_PSPOLL_ERROR,
  *          NC_PSPOLL_ERROR | NC_PSPOLL_REPLY_ERROR,
  *          NC_PSPOLL_REPLY_ERROR,
  *          0
  */
 static int
-nc_server_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
+nc_server_send_reply_io(struct nc_session *session, int io_timeout, struct nc_server_rpc *rpc)
 {
     nc_rpc_clb clb;
     struct nc_server_reply *reply;
     struct lys_node *rpc_act = NULL;
     struct lyd_node *next, *elem;
-    int ret = 0, r;
+    int ret = 0;
+    NC_MSG_TYPE r;
 
     if (!rpc) {
         ERRINT;
@@ -1173,13 +1157,13 @@ nc_server_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
     if (!reply) {
         reply = nc_server_reply_err(nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP));
     }
-    r = nc_write_msg(session, NC_MSG_REPLY, rpc->root, reply);
+    r = nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, rpc->root, reply);
     if (reply->type == NC_RPL_ERROR) {
         ret |= NC_PSPOLL_REPLY_ERROR;
     }
     nc_server_reply_free(reply);
 
-    if (r == -1) {
+    if (r != NC_MSG_REPLY) {
         ERR("Session %u: failed to write reply.", session->id);
         ret |= NC_PSPOLL_ERROR;
     }
@@ -1192,7 +1176,7 @@ nc_server_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
     return ret;
 }
 
-/* session must be running and session lock held!
+/* session must be running and session RPC lock held!
  * returns: NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR, (msg filled)
  *          NC_PSPOLL_ERROR, (msg filled)
  *          NC_PSPOLL_TIMEOUT,
@@ -1201,7 +1185,7 @@ nc_server_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
  *          NC_PSPOLL_SSH_MSG
  */
 static int
-nc_ps_poll_session(struct nc_session *session, time_t now_mono, char *msg)
+nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mono, char *msg)
 {
     struct pollfd pfd;
     int r, ret;
@@ -1216,6 +1200,14 @@ nc_ps_poll_session(struct nc_session *session, time_t now_mono, char *msg)
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_TIMEOUT;
         return NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
+    }
+
+    r = nc_session_io_lock(session, io_timeout, __func__);
+    if (r < 0) {
+        sprintf(msg, "session IO lock failed to be acquired");
+        return NC_PSPOLL_ERROR;
+    } else if (!r) {
+        return NC_PSPOLL_TIMEOUT;
     }
 
     switch (session->ti_type) {
@@ -1336,6 +1328,7 @@ nc_ps_poll_session(struct nc_session *session, time_t now_mono, char *msg)
         break;
     }
 
+    nc_session_io_unlock(session, __func__);
     return ret;
 }
 
@@ -1385,8 +1378,8 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
             cur_ps_session = ps->sessions[i];
             cur_session = cur_ps_session->session;
 
-            /* SESSION LOCK */
-            r = nc_session_lock(cur_session, 0, __func__);
+            /* SESSION RPC LOCK */
+            r = nc_session_rpc_lock(cur_session, 0, __func__);
             if (r == -1) {
                 ret = NC_PSPOLL_ERROR;
             } else if (r == 1) {
@@ -1397,7 +1390,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                         /* session is fine, work with it */
                         cur_ps_session->state = NC_PS_STATE_BUSY;
 
-                        ret = nc_ps_poll_session(cur_session, ts_cur.tv_sec, msg);
+                        ret = nc_ps_poll_session_io(cur_session, NC_SESSION_LOCK_TIMEOUT, ts_cur.tv_sec, msg);
                         switch (ret) {
                         case NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR:
                             ERR("Session %u: %s.", cur_session->id, msg);
@@ -1438,10 +1431,10 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                     break;
                 }
 
-                /* keep the session locked only in this one case */
+                /* keep RPC lock in this one case */
                 if (ret != NC_PSPOLL_RPC) {
-                    /* SESSION UNLOCK */
-                    nc_session_unlock(cur_session, NC_SESSION_LOCK_TIMEOUT, __func__);
+                    /* SESSION RPC UNLOCK */
+                    nc_session_rpc_unlock(cur_session, NC_SESSION_LOCK_TIMEOUT, __func__);
                 }
             } else {
                 /* timeout */
@@ -1494,9 +1487,9 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
     /* PS UNLOCK */
     nc_ps_unlock(ps, q_id, __func__);
 
-    /* we have some data available and the session is locked */
+    /* we have some data available and the session is RPC locked (but not IO locked) */
     if (ret == NC_PSPOLL_RPC) {
-        ret = nc_server_recv_rpc(cur_session, &rpc);
+        ret = nc_server_recv_rpc_io(cur_session, timeout, &rpc);
         if (ret & (NC_PSPOLL_ERROR | NC_PSPOLL_BAD_RPC)) {
             if (cur_session->status != NC_STATUS_RUNNING) {
                 ret |= NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
@@ -1508,7 +1501,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
             cur_session->opts.server.last_rpc = ts_cur.tv_sec;
 
             /* process RPC, not needed afterwards */
-            ret |= nc_server_send_reply(cur_session, rpc);
+            ret |= nc_server_send_reply_io(cur_session, timeout, rpc);
             nc_server_rpc_free(rpc, server_opts.ctx);
 
             if (cur_session->status != NC_STATUS_RUNNING) {
@@ -1522,8 +1515,8 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
             }
         }
 
-        /* SESSION UNLOCK */
-        nc_session_unlock(cur_session, NC_SESSION_LOCK_TIMEOUT, __func__);
+        /* SESSION RPC UNLOCK */
+        nc_session_rpc_unlock(cur_session, NC_SESSION_LOCK_TIMEOUT, __func__);
     }
 
     return ret;
@@ -1915,7 +1908,7 @@ nc_accept(int timeout, struct nc_session **session)
 
     sock = ret;
 
-    *session = nc_new_session(0);
+    *session = nc_new_session(NC_SERVER, 0);
     if (!(*session)) {
         ERRMEM;
         close(sock);
@@ -1924,16 +1917,10 @@ nc_accept(int timeout, struct nc_session **session)
         goto cleanup;
     }
     (*session)->status = NC_STATUS_STARTING;
-    (*session)->side = NC_SERVER;
     (*session)->ctx = server_opts.ctx;
     (*session)->flags = NC_SESSION_SHAREDCTX;
     (*session)->host = lydict_insert_zc(server_opts.ctx, host);
     (*session)->port = port;
-
-    /* transport lock */
-    pthread_mutex_init((*session)->ti_lock, NULL);
-    pthread_cond_init((*session)->ti_cond, NULL);
-    *(*session)->ti_inuse = 0;
 
     /* sock gets assigned to session or closed */
 #ifdef NC_ENABLED_SSH
@@ -1982,7 +1969,7 @@ nc_accept(int timeout, struct nc_session **session)
     pthread_spin_unlock(&server_opts.sid_lock);
 
     /* NETCONF handshake */
-    msgtype = nc_handshake(*session);
+    msgtype = nc_handshake_io(*session);
     if (msgtype != NC_MSG_HELLO) {
         nc_session_free(*session, NULL);
         *session = NULL;
@@ -2661,23 +2648,17 @@ nc_connect_ch_client_endpt(struct nc_ch_client *client, struct nc_ch_endpt *endp
         return NC_MSG_ERROR;
     }
 
-    *session = nc_new_session(0);
+    *session = nc_new_session(NC_SERVER, 0);
     if (!(*session)) {
         ERRMEM;
         close(sock);
         return NC_MSG_ERROR;
     }
     (*session)->status = NC_STATUS_STARTING;
-    (*session)->side = NC_SERVER;
     (*session)->ctx = server_opts.ctx;
     (*session)->flags = NC_SESSION_SHAREDCTX;
     (*session)->host = lydict_insert(server_opts.ctx, endpt->address, 0);
     (*session)->port = endpt->port;
-
-    /* transport lock */
-    pthread_mutex_init((*session)->ti_lock, NULL);
-    pthread_cond_init((*session)->ti_cond, NULL);
-    *(*session)->ti_inuse = 0;
 
     /* sock gets assigned to session or closed */
 #ifdef NC_ENABLED_SSH
@@ -2725,7 +2706,7 @@ nc_connect_ch_client_endpt(struct nc_ch_client *client, struct nc_ch_endpt *endp
     pthread_spin_unlock(&server_opts.sid_lock);
 
     /* NETCONF handshake */
-    msgtype = nc_handshake(*session);
+    msgtype = nc_handshake_io(*session);
     if (msgtype != NC_MSG_HELLO) {
         goto fail;
     }

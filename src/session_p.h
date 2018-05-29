@@ -354,11 +354,9 @@ struct nc_session {
 
     /* Transport implementation */
     NC_TRANSPORT_IMPL ti_type;   /**< transport implementation type to select items from ti union */
-    pthread_mutex_t *ti_lock;    /**< lock to access ti. Note that in case of libssh TI, it can be shared with other
-                                      NETCONF sessions on the same SSH session (but different SSH channel) */
-    pthread_cond_t *ti_cond;     /**< ti_inuse condition */
-    volatile int *ti_inuse;      /**< variable indicating whether TI is being communicated on or not, protected by
-                                      ti_cond and ti_lock */
+    pthread_mutex_t *io_lock;    /**< input/output lock, note that in case of libssh TI, it will be shared
+                                      with other NETCONF sessions on the same SSH session (but different SSH channel) */
+
     union {
         struct {
             int in;              /**< input file descriptor */
@@ -406,6 +404,12 @@ struct nc_session {
             time_t session_start;          /**< real time the session was created */
             time_t last_rpc;               /**< monotonic time (seconds) the last RPC was received on this session */
             int ntf_status;                /**< flag whether the session is subscribed to any stream */
+
+            pthread_mutex_t *rpc_lock;   /**< lock indicating RPC processing, this lock is always locked before io_lock!! */
+            pthread_cond_t *rpc_cond;    /**< RPC condition (tied with rpc_lock and rpc_inuse) */
+            volatile int *rpc_inuse;     /**< variable indicating whether there is RPC being processed or not (tied with
+                                              rpc_cond and rpc_lock) */
+
             pthread_mutex_t *ch_lock;      /**< Call Home thread lock */
             pthread_cond_t *ch_cond;       /**< Call Home thread condition */
 
@@ -460,7 +464,7 @@ struct nc_ntf_thread_arg {
 
 void *nc_realloc(void *ptr, size_t size);
 
-NC_MSG_TYPE nc_send_msg(struct nc_session *session, struct lyd_node *op);
+NC_MSG_TYPE nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op);
 
 #ifndef HAVE_PTHREAD_MUTEX_TIMEDLOCK
 int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *abstime);
@@ -474,11 +478,15 @@ int32_t nc_difftimespec(const struct timespec *ts1, const struct timespec *ts2);
 
 void nc_addtimespec(struct timespec *ts, uint32_t msec);
 
-struct nc_session *nc_new_session(int not_allocate_ti);
+struct nc_session *nc_new_session(NC_SIDE side, int shared_ti);
 
-int nc_session_lock(struct nc_session *session, int timeout, const char *func);
+int nc_session_rpc_lock(struct nc_session *session, int timeout, const char *func);
 
-int nc_session_unlock(struct nc_session *session, int timeout, const char *func);
+int nc_session_rpc_unlock(struct nc_session *session, int timeout, const char *func);
+
+int nc_session_io_lock(struct nc_session *session, int timeout, const char *func);
+
+int nc_session_io_unlock(struct nc_session *session, const char *func);
 
 int nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func);
 
@@ -501,7 +509,7 @@ int nc_ctx_check_and_fill(struct nc_session *session);
  * @return NC_MSG_HELLO on success, NC_MSG_BAD_HELLO on client \<hello\> message parsing fail
  * (server-side only), NC_MSG_WOULDBLOCK on timeout, NC_MSG_ERROR on other error.
  */
-NC_MSG_TYPE nc_handshake(struct nc_session *session);
+NC_MSG_TYPE nc_handshake_io(struct nc_session *session);
 
 /**
  * @brief Create a socket connection.
@@ -680,14 +688,14 @@ void nc_client_tls_destroy_opts(void);
  * libyang XML tree and the message type is detected from the top level element.
  *
  * @param[in] session NETCONF session from which the message is being read.
- * @param[in] timeout Timeout in milliseconds. Negative value means infinite timeout,
+ * @param[in] io_timeout Timeout in milliseconds. Negative value means infinite timeout,
  *            zero value causes to return immediately.
  * @param[out] data XML tree built from the read data.
  * @return Type of the read message. #NC_MSG_WOULDBLOCK is returned if timeout is positive
  * (or zero) value and it passed out without any data on the wire. #NC_MSG_ERROR is
  * returned on error and #NC_MSG_NONE is never returned by this function.
  */
-NC_MSG_TYPE nc_read_msg_poll(struct nc_session* session, int timeout, struct lyxml_elem **data);
+NC_MSG_TYPE nc_read_msg_poll_io(struct nc_session* session, int io_timeout, struct lyxml_elem **data);
 
 /**
  * @brief Read message from the wire.
@@ -696,17 +704,23 @@ NC_MSG_TYPE nc_read_msg_poll(struct nc_session* session, int timeout, struct lyx
  * libyang XML tree and the message type is detected from the top level element.
  *
  * @param[in] session NETCONF session from which the message is being read.
+ * @param[in] io_timeout Timeout in milliseconds. Negative value means infinite timeout,
+ *            zero value causes to return immediately.
  * @param[out] data XML tree built from the read data.
+ * @param[in] passing_io_lock True if \p session IO lock is already held. This function always unlocks
+ *            it before returning!
  * @return Type of the read message. #NC_MSG_WOULDBLOCK is returned if timeout is positive
  * (or zero) value and it passed out without any data on the wire. #NC_MSG_ERROR is
  * returned on error and #NC_MSG_NONE is never returned by this function.
  */
-NC_MSG_TYPE nc_read_msg(struct nc_session* session, struct lyxml_elem **data);
+NC_MSG_TYPE nc_read_msg_io(struct nc_session* session, int io_timeout, struct lyxml_elem **data, int passing_io_lock);
 
 /**
  * @brief Write message into wire.
  *
  * @param[in] session NETCONF session to which the message will be written.
+ * @param[in] io_timeout Timeout in milliseconds. Negative value means infinite timeout,
+ *            zero value causes to return immediately.
  * @param[in] type The type of the message to write, specified as #NC_MSG_TYPE value. According to the type, the
  * specific additional parameters are required or accepted:
  * - #NC_MSG_RPC
@@ -719,10 +733,16 @@ NC_MSG_TYPE nc_read_msg(struct nc_session* session, struct lyxml_elem **data);
  *   - `struct lyxml_node *rpc_elem;` - root of the RPC object to reply to. Required parameter.
  *   - `struct nc_server_reply *reply;` - RPC reply. Required parameter.
  * - #NC_MSG_NOTIF
- *   - TODO: content
- * @return 0 on success
+ *   - `struct nc_server_notif *notif;` - notification object. Required parameter.
+ * - #NC_MSG_HELLO
+ *   - `const char **capabs;` - capabilities array ended with NULL. Required parameter.
+ *   - `uint32_t *sid;` - session ID to be included in the hello message. Optional parameter.
+ *
+ * @return Type of the written message. #NC_MSG_WOULDBLOCK is returned if timeout is positive
+ * (or zero) value and IO lock could not be acquired in that time. #NC_MSG_ERROR is
+ * returned on error and #NC_MSG_NONE is never returned by this function.
  */
-int nc_write_msg(struct nc_session *session, int type, ...);
+NC_MSG_TYPE nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...);
 
 /**
  * @brief Check whether a session is still connected (on transport layer).
