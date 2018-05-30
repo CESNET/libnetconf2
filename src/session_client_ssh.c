@@ -1755,8 +1755,6 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     }
     new_session->status = NC_STATUS_RUNNING;
 
-    nc_session_io_unlock(new_session, __func__);
-
     if (nc_ctx_check_and_fill(new_session) == -1) {
         goto fail;
     }
