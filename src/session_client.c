@@ -1027,7 +1027,7 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
             cont_ptr = &((*cont_ptr)->next);
         }
         *cont_ptr = malloc(sizeof **cont_ptr);
-        if (!cont_ptr) {
+        if (!*cont_ptr) {
             ERRMEM;
             lyxml_free(session->ctx, xml);
             return NC_MSG_ERROR;
