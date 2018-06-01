@@ -504,6 +504,9 @@ nc_server_destroy(void)
         lydict_remove(server_opts.ctx, server_opts.capabilities[i]);
     }
     free(server_opts.capabilities);
+    server_opts.capabilities = NULL;
+    server_opts.capabilities_count = 0;
+
     pthread_spin_destroy(&server_opts.sid_lock);
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
@@ -513,20 +516,28 @@ nc_server_destroy(void)
     if (server_opts.passwd_auth_data && server_opts.passwd_auth_data_free) {
         server_opts.passwd_auth_data_free(server_opts.passwd_auth_data);
     }
+    server_opts.passwd_auth_data = NULL;
+    server_opts.passwd_auth_data_free = NULL;
 
     nc_server_ssh_del_authkey(NULL, NULL, 0, NULL);
 
     if (server_opts.hostkey_data && server_opts.hostkey_data_free) {
         server_opts.hostkey_data_free(server_opts.hostkey_data);
     }
+    server_opts.hostkey_data = NULL;
+    server_opts.hostkey_data_free = NULL;
 #endif
 #ifdef NC_ENABLED_TLS
     if (server_opts.server_cert_data && server_opts.server_cert_data_free) {
         server_opts.server_cert_data_free(server_opts.server_cert_data);
     }
+    server_opts.server_cert_data = NULL;
+    server_opts.server_cert_data_free = NULL;
     if (server_opts.trusted_cert_list_data && server_opts.trusted_cert_list_data_free) {
         server_opts.trusted_cert_list_data_free(server_opts.trusted_cert_list_data);
     }
+    server_opts.trusted_cert_list_data = NULL;
+    server_opts.trusted_cert_list_data_free = NULL;
 #endif
     nc_destroy();
 }
