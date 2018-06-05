@@ -831,7 +831,7 @@ nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
     } else {
         if (ssh_userauth_kbdint_getnanswers(session->ti.libssh.session) != 1) {// failed session
             ssh_message_reply_default(msg);
-            return auth_ret;
+            return;
         }
         // Check the authentication type
         if (server_opts.interactive_auth_clb)
