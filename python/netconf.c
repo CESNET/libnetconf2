@@ -172,10 +172,11 @@ static struct PyModuleDef ncModule = {
 PyMODINIT_FUNC
 PyInit_netconf2(void)
 {
+    void* clb;
     PyObject *nc;
 
     /* import libyang Python module to have it available */
-    if (!PyImport_ImportModule("libyang")) {
+    if (!PyImport_ImportModule("yang")) {
         return NULL;
     }
 
@@ -187,7 +188,9 @@ PyInit_netconf2(void)
      */
 
     /* set print callback */
+    clb = ly_get_log_clb();
     nc_set_print_clb(clb_print);
+    ly_set_log_clb(clb, 1);
 
     if (PyType_Ready(&ncSessionType) == -1) {
         return NULL;
@@ -239,6 +242,18 @@ PyInit_netconf2(void)
     PyModule_AddIntConstant(nc, "DATASTORE_RUNNING", NC_DATASTORE_RUNNING);
     PyModule_AddIntConstant(nc, "DATASTORE_STARTUP", NC_DATASTORE_STARTUP);
     PyModule_AddIntConstant(nc, "DATASTORE_CANDIDATE", NC_DATASTORE_CANDIDATE);
+
+    PyModule_AddIntConstant(nc, "RPC_EDIT_ERROPT_STOP", NC_RPC_EDIT_ERROPT_STOP);
+    PyModule_AddIntConstant(nc, "RPC_EDIT_ERROPT_CONTINUE", NC_RPC_EDIT_ERROPT_CONTINUE);
+    PyModule_AddIntConstant(nc, "RPC_EDIT_ERROPT_ROLLBACK", NC_RPC_EDIT_ERROPT_ROLLBACK);
+
+    PyModule_AddIntConstant(nc, "RPC_EDIT_TESTOPT_TESTSET", NC_RPC_EDIT_TESTOPT_TESTSET);
+    PyModule_AddIntConstant(nc, "RPC_EDIT_TESTOPT_SET", NC_RPC_EDIT_TESTOPT_SET);
+    PyModule_AddIntConstant(nc, "RPC_EDIT_TESTOPT_TEST", NC_RPC_EDIT_TESTOPT_TEST);
+
+    PyModule_AddIntConstant(nc, "RPC_EDIT_DFLTOP_MERGE", NC_RPC_EDIT_DFLTOP_MERGE);
+    PyModule_AddIntConstant(nc, "RPC_EDIT_DFLTOP_REPLACE", NC_RPC_EDIT_DFLTOP_REPLACE);
+    PyModule_AddIntConstant(nc, "RPC_EDIT_DFLTOP_NONE", NC_RPC_EDIT_DFLTOP_NONE);
 
     /* init libnetconf exceptions for use in clb_print() */
     libnetconf2Error = PyErr_NewExceptionWithDoc("netconf2.Error",

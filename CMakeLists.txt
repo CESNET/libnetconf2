@@ -13,6 +13,9 @@ if(NOT UNIX)
     message(FATAL_ERROR "Only *nix like systems are supported.")
 endif()
 
+# osx specific
+set(CMAKE_MACOSX_RPATH TRUE)
+
 set(INCLUDE_INSTALL_SUBDIR ${CMAKE_INSTALL_INCLUDEDIR}/libnetconf2)
 set(DATA_INSTALL_DIR ${CMAKE_INSTALL_DATADIR}/libnetconf2)
 
@@ -28,8 +31,8 @@ set(CMAKE_C_FLAGS_DEBUG   "-g -O0")
 
 # set version
 set(LIBNETCONF2_MAJOR_VERSION 0)
-set(LIBNETCONF2_MINOR_VERSION 10)
-set(LIBNETCONF2_MICRO_VERSION 30)
+set(LIBNETCONF2_MINOR_VERSION 11)
+set(LIBNETCONF2_MICRO_VERSION 37)
 set(LIBNETCONF2_VERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION}.${LIBNETCONF2_MICRO_VERSION})
 set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION})
 
@@ -41,6 +44,7 @@ option(ENABLE_PYTHON "Include bindings for Python 3" OFF)
 set(READ_INACTIVE_TIMEOUT 20 CACHE STRING "Maximum number of seconds waiting for new data once some data have arrived")
 set(READ_ACTIVE_TIMEOUT 300 CACHE STRING "Maximum number of seconds for receiving a full message")
 set(MAX_PSPOLL_THREAD_COUNT 6 CACHE STRING "Maximum number of threads that could simultaneously access a ps_poll structure")
+set(SCHEMAS_DIR "${CMAKE_INSTALL_PREFIX}/${DATA_INSTALL_DIR}" CACHE STRING "Directory with internal lnc2 schemas")
 
 if(ENABLE_DNSSEC AND NOT ENABLE_SSH)
     message(WARNING "DNSSEC SSHFP retrieval cannot be used without SSH support.")

@@ -30,11 +30,30 @@ ncErrFree(ncErrObject *self)
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
+static char *
+escape_quotes(char *strbuf, size_t strbuf_size, const char *text)
+{
+    size_t i, o;
+    for (i = o = 0; i < strbuf_size; i++) {
+        if (text[i] == '"') {
+            strbuf[o++] = '\\';
+        }
+        strbuf[o++] = text[i];
+        if (!text[i]) {
+            /* end of the text */
+            break;
+        }
+    }
+    return strbuf;
+}
+
 static PyObject *
 ncErrStr(ncErrObject *self)
 {
     uint16_t u, f = 0;
     char *str = NULL;
+#define BUFSIZE 4096
+    char buf[BUFSIZE];
 
     if (self->err->type) {
         asprintf(&str, "\"type\":\"%s\"", self->err->type);
@@ -46,13 +65,13 @@ ncErrStr(ncErrObject *self)
         asprintf(&str, "%s%s\"severity\":\"%s\"", str ? str : "", str ? "," : "", self->err->severity);
     }
     if (self->err->apptag) {
-        asprintf(&str, "%s%s\"app-tag\":\"%s\"", str ? str : "", str ? "," : "", self->err->apptag);
+        asprintf(&str, "%s%s\"app-tag\":\"%s\"", str ? str : "", str ? "," : "", escape_quotes(buf, BUFSIZE, self->err->apptag));
     }
     if (self->err->path) {
-        asprintf(&str, "%s%s\"path\":\"%s\"", str ? str : "", str ? "," : "", self->err->path);
+        asprintf(&str, "%s%s\"path\":\"%s\"", str ? str : "", str ? "," : "", escape_quotes(buf, BUFSIZE, self->err->path));
     }
     if (self->err->message) {
-        asprintf(&str, "%s%s\"message\":\"%s", str ? str : "", str ? "," : "", self->err->message);
+        asprintf(&str, "%s%s\"message\":\"%s", str ? str : "", str ? "," : "", escape_quotes(buf, BUFSIZE, self->err->message));
         if (self->err->message_lang) {
             asprintf(&str, "%s (%s)\"", str, self->err->message_lang);
         } else {
@@ -92,7 +111,8 @@ ncErrStr(ncErrObject *self)
         }
         if (self->err->other_count) {
             for (u = 0; u < self->err->other_count; u++) {
-                asprintf(&str, "%s%s\"%s\":\"%s\"", str, f ? "," : "", self->err->other[u]->name, self->err->other[u]->content);
+                asprintf(&str, "%s%s\"%s\":\"%s\"", str, f ? "," : "", self->err->other[u]->name,
+                         escape_quotes(buf, BUFSIZE, self->err->other[u]->content));
             }
             f = 1;
         }

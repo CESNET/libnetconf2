@@ -434,9 +434,9 @@ ncSessionGetContext(ncSessionObject *self, void *closure)
         goto error;
     }
 
-    module = PyImport_ImportModule("libyang");
+    module = PyImport_ImportModule("yang");
     if (module == NULL) {
-        PyErr_SetString(libnetconf2Error, "Could not import libyang module");
+        PyErr_SetString(libnetconf2Error, "Could not import libyang python module");
         goto error;
     }
 
@@ -487,10 +487,14 @@ static PyMethodDef ncSessionMethods[] = {
      "Send NETCONF <get> operation on the Session.\n\n"
      "ncRPCGet(subtree=None, xpath=None)\n"
      ":returns: Reply from the server.\n"},
-     {"rpcGetConfig", (PyCFunction)ncRPCGetConfig, METH_VARARGS | METH_KEYWORDS,
-      "Send NETCONF <get-config> operation on the Session.\n\n"
-      "ncRPCGetConfig(datastore, subtree=None, xpath=None)\n"
-      ":returns: Reply from the server.\n"},
+    {"rpcGetConfig", (PyCFunction)ncRPCGetConfig, METH_VARARGS | METH_KEYWORDS,
+     "Send NETCONF <get-config> operation on the Session.\n\n"
+     "ncRPCGetConfig(datastore, subtree=None, xpath=None)\n"
+     ":returns: Reply from the server.\n"},
+    {"rpcEditConfig", (PyCFunction)ncRPCEditConfig, METH_VARARGS | METH_KEYWORDS,
+     "Send NETCONF <edit-config> operation on the Session.\n\n"
+     "ncRPCEditConfig(datastore, data, defop=None, testopt=None, erropt=None)\n"
+     ":returns: None\n"},
     {NULL}  /* Sentinel */
 };
 

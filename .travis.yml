@@ -10,6 +10,14 @@ matrix:
       dist: trusty
       sudo: required
       compiler: gcc
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+      env:
+        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
     - os: osx
       compiler: gcc
   allow_failures:
@@ -21,17 +29,18 @@ branches:
     - devel
 
 before_install:
+  - eval "${MATRIX_EVAL}"
   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then bash .travis-deps-linux.sh; fi
   - if [ "$TRAVIS_OS_NAME" = "linux" -a "$CC" = "gcc" ]; then pip install --user codecov; export CFLAGS="-coverage"; fi
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then bash .travis-deps-osx.sh; fi
 
 script:
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export OPENSSLFLAGS="-DOPENSSL_LIBRARIES=/usr/local/opt/openssl/lib -DOPENSSL_INCLUDE_DIR=/usr/local/opt/openssl/include"; fi
-  - cd $TRAVIS_BUILD_DIR && mkdir build_none && cd build_none ; cmake -DENABLE_TLS=OFF -DENABLE_SSH=OFF -DENABLE_DNSSEC=OFF .. && make -j2 && ctest -V
-  - cd $TRAVIS_BUILD_DIR && mkdir build_tls && cd build_tls ; cmake $OPENSSLFLAGS -DENABLE_TLS=ON -DENABLE_SSH=OFF -DENABLE_DNSSEC=OFF .. && make -j2 && ctest -V
-  - cd $TRAVIS_BUILD_DIR && mkdir build_ssh && cd build_ssh ; cmake $OPENSSLFLAGS -DENABLE_TLS=OFF -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && ctest -V
-  - cd $TRAVIS_BUILD_DIR && mkdir build_ssh_tls && cd build_ssh_tls ; cmake $OPENSSLFLAGS -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && ctest -V
-  - cd $TRAVIS_BUILD_DIR && mkdir build_all && cd build_all ; cmake $OPENSSLFLAGS -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=ON .. && make -j2 && ctest -V
+  - cd $TRAVIS_BUILD_DIR && mkdir build_none && cd build_none ; cmake -DENABLE_TLS=OFF -DENABLE_SSH=OFF -DENABLE_DNSSEC=OFF .. && make -j2 && ctest --output-on-failure
+  - cd $TRAVIS_BUILD_DIR && mkdir build_tls && cd build_tls ; cmake $OPENSSLFLAGS -DENABLE_TLS=ON -DENABLE_SSH=OFF -DENABLE_DNSSEC=OFF .. && make -j2 && ctest --output-on-failure
+  - cd $TRAVIS_BUILD_DIR && mkdir build_ssh && cd build_ssh ; cmake $OPENSSLFLAGS -DENABLE_TLS=OFF -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && ctest --output-on-failure
+  - cd $TRAVIS_BUILD_DIR && mkdir build_ssh_tls && cd build_ssh_tls ; cmake $OPENSSLFLAGS -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=OFF .. && make -j2 && ctest --output-on-failure
+  - cd $TRAVIS_BUILD_DIR && mkdir build_all && cd build_all ; cmake $OPENSSLFLAGS -DENABLE_TLS=ON -DENABLE_SSH=ON -DENABLE_DNSSEC=ON .. && make -j2 && ctest --output-on-failure
   - cd -
 
 after_success:

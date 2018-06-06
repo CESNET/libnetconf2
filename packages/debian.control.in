@@ -23,3 +23,15 @@ Depends: @PACKAGE_NAME@ (= @LIBNETCONF2_VERSION@)
 Section: debug
 Architecture: any
 Description: Debug symbols for libnetconf2 library.
+
+Package: python3-netconf2@COMPAT_PACKAGES@
+Depends: @PACKAGE_NAME@ (= @LIBNETCONF2_VERSION@)
+Section: libs
+Architecture: any
+Description: Bindings of libyang library to python3 language.
+
+Package: python3-netconf2@COMPAT_PACKAGES@-dbg
+Depends: python3-netconf2@COMPAT_PACKAGES@ (= @LIBNETCONF2_VERSION@)
+Section: debug
+Architecture: any
+Description: Debug symbols of python3 bidings of libnetconf2 library.

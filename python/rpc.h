@@ -21,6 +21,7 @@ extern "C" {
 
 PyObject *ncRPCGet(ncSSHObject *self, PyObject *args, PyObject *keywords);
 PyObject *ncRPCGetConfig(ncSSHObject *self, PyObject *args, PyObject *keywords);
+PyObject *ncRPCEditConfig(ncSSHObject *self, PyObject *args, PyObject *keywords);
 
 #ifdef __cplusplus
 }

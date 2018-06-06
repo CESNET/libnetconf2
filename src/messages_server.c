@@ -361,7 +361,7 @@ error:
 }
 
 API struct nc_server_error *
-nc_err_libyang(void)
+nc_err_libyang(struct ly_ctx *ctx)
 {
     struct nc_server_error *e;
     struct lyxml_elem *elem;
@@ -373,15 +373,15 @@ nc_err_libyang(void)
         /* LY_SUCCESS */
         return NULL;
     } else if (ly_errno == LY_EVALID) {
-        switch (ly_vecode) {
+        switch (ly_vecode(ctx)) {
         /* RFC 6020 section 13 errors */
         case LYVE_NOUNIQ:
             e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
             nc_err_set_app_tag(e, "data-not-unique");
-            nc_err_set_path(e, ly_errpath());
+            nc_err_set_path(e, ly_errpath(ctx));
 
             /* parse the message and get all the information we need */
-            str = ly_errmsg();
+            str = ly_errmsg(ctx);
             uniqi = strchr(str, '"');
             uniqi++;
             uniqj = strchr(uniqi, '"');
@@ -431,17 +431,17 @@ nc_err_libyang(void)
         case LYVE_NOMAX:
             e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
             nc_err_set_app_tag(e, "too-many-elements");
-            nc_err_set_path(e, ly_errpath());
+            nc_err_set_path(e, ly_errpath(ctx));
             break;
         case LYVE_NOMIN:
             e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
             nc_err_set_app_tag(e, "too-few-elements");
-            nc_err_set_path(e, ly_errpath());
+            nc_err_set_path(e, ly_errpath(ctx));
             break;
         case LYVE_NOMUST:
             e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
-            if (ly_errapptag()[0]) {
-                nc_err_set_app_tag(e, ly_errapptag());
+            if (ly_errapptag(ctx)) {
+                nc_err_set_app_tag(e, ly_errapptag(ctx));
             } else {
                 nc_err_set_app_tag(e, "must-violation");
             }
@@ -450,14 +450,14 @@ nc_err_libyang(void)
         case LYVE_NOLEAFREF:
             e = nc_err(NC_ERR_DATA_MISSING);
             nc_err_set_app_tag(e, "instance-required");
-            nc_err_set_path(e, ly_errpath());
+            nc_err_set_path(e, ly_errpath(ctx));
             break;
         case LYVE_NOMANDCHOICE:
             e = nc_err(NC_ERR_DATA_MISSING);
             nc_err_set_app_tag(e, "missing-choice");
-            nc_err_set_path(e, ly_errpath());
+            nc_err_set_path(e, ly_errpath(ctx));
 
-            str = ly_errmsg();
+            str = ly_errmsg(ctx);
             stri = strchr(str, '"');
             stri++;
             strj = strchr(stri, '"');
@@ -467,26 +467,26 @@ nc_err_libyang(void)
             }
             break;
         case LYVE_INELEM:
-            str = ly_errpath();
+            str = ly_errpath(ctx);
             if (!strcmp(str, "/")) {
                 e = nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_APP);
                 /* keep default message */
                 return e;
             } else {
-                e = nc_err(NC_ERR_UNKNOWN_ELEM, NC_ERR_TYPE_PROT, ly_errpath());
+                e = nc_err(NC_ERR_UNKNOWN_ELEM, NC_ERR_TYPE_PROT, ly_errpath(ctx));
             }
             break;
         case LYVE_MISSELEM:
         case LYVE_INORDER:
-            e = nc_err(NC_ERR_MISSING_ELEM, NC_ERR_TYPE_PROT, ly_errpath());
+            e = nc_err(NC_ERR_MISSING_ELEM, NC_ERR_TYPE_PROT, ly_errpath(ctx));
             break;
         case LYVE_INVAL:
-            e = nc_err(NC_ERR_BAD_ELEM, NC_ERR_TYPE_PROT, ly_errpath());
+            e = nc_err(NC_ERR_BAD_ELEM, NC_ERR_TYPE_PROT, ly_errpath(ctx));
             break;
         case LYVE_INATTR:
         case LYVE_MISSATTR:
         case LYVE_INMETA:
-            str = ly_errmsg();
+            str = ly_errmsg(ctx);
             stri = strchr(str, '"');
             stri++;
             if (!strncmp(stri, "<none>:", 7)) {
@@ -495,12 +495,12 @@ nc_err_libyang(void)
             strj = strchr(stri, '"');
             strj--;
             attr = strndup(stri, (strj - stri) + 1);
-            if (ly_vecode == LYVE_INATTR) {
-                e = nc_err(NC_ERR_UNKNOWN_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath());
-            } else if (ly_vecode == LYVE_MISSATTR) {
-                e = nc_err(NC_ERR_MISSING_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath());
+            if (ly_vecode(ctx) == LYVE_INATTR) {
+                e = nc_err(NC_ERR_UNKNOWN_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath(ctx));
+            } else if (ly_vecode(ctx) == LYVE_MISSATTR) {
+                e = nc_err(NC_ERR_MISSING_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath(ctx));
             } else { /* LYVE_INMETA */
-                e = nc_err(NC_ERR_BAD_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath());
+                e = nc_err(NC_ERR_BAD_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath(ctx));
             }
             free(attr);
             break;
@@ -508,8 +508,8 @@ nc_err_libyang(void)
         case LYVE_NOWHEN:
             e = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_PROT);
             /* LYVE_NOCONSTR (length, range, pattern) can have a specific error-app-tag */
-            if (ly_errapptag()[0]) {
-                nc_err_set_app_tag(e, ly_errapptag());
+            if (ly_errapptag(ctx)) {
+                nc_err_set_app_tag(e, ly_errapptag(ctx));
             }
             break;
         default:
@@ -520,7 +520,7 @@ nc_err_libyang(void)
         /* non-validation (internal) error */
         e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
     }
-    nc_err_set_msg(e, ly_errmsg(), "en");
+    nc_err_set_msg(e, ly_errmsg(ctx), "en");
     return e;
 }
 
@@ -846,7 +846,8 @@ next_node:
             elem = elem->next;
             if (!elem) {
                 /* error */
-                break;
+                ERRARG("event");
+                return NULL;
             }
             goto next_node;
         case LYS_CONTAINER:
@@ -856,8 +857,8 @@ next_node:
             break;
         default:
             /* error */
-            elem = NULL;
-            break;
+            ERRARG("event");
+            return NULL;
         }
     }
     if (!elem) {

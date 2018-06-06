@@ -193,7 +193,7 @@ nc_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx)
 {
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = ly_ctx_new(NULL, 0);
+        ctx = ly_ctx_new(NULL, LY_CTX_NOYANGLIBRARY);
         if (!ctx) {
             return EXIT_FAILURE;
         }
@@ -202,7 +202,7 @@ nc_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx)
         if (client_opts.schema_searchpath) {
             ly_ctx_set_searchdir(ctx, client_opts.schema_searchpath);
         }
-        ly_ctx_set_searchdir(ctx, SCHEMAS_DIR);
+        ly_ctx_set_searchdir(ctx, NC_SCHEMAS_DIR);
 
         /* set callback for getting schemas, if provided */
         ly_ctx_set_module_imp_clb(ctx, client_opts.schema_clb, client_opts.schema_clb_data);
@@ -263,7 +263,7 @@ nc_client_get_schema_callback(void **user_data)
     return client_opts.schema_clb;
 }
 
-/* SCHEMAS_DIR used as the last resort */
+/* NC_SCHEMAS_DIR used as the last resort */
 static int
 ctx_check_and_load_ietf_netconf(struct ly_ctx *ctx, char **cpblts)
 {
@@ -274,7 +274,7 @@ ctx_check_and_load_ietf_netconf(struct ly_ctx *ctx, char **cpblts)
     if (!ietfnc) {
         ietfnc = ly_ctx_load_module(ctx, "ietf-netconf", NULL);
         if (!ietfnc) {
-            ietfnc = lys_parse_path(ctx, SCHEMAS_DIR"/ietf-netconf.yin", LYS_IN_YIN);
+            ietfnc = lys_parse_path(ctx, NC_SCHEMAS_DIR"/ietf-netconf.yin", LYS_IN_YIN);
         }
     }
     if (!ietfnc) {
@@ -322,7 +322,6 @@ getschema_module_clb(const char *mod_name, const char *mod_rev, const char *subm
     char *model_data = NULL;
     uint64_t msgid;
     char *filename = NULL;
-    const char * const *searchdirs;
     FILE *output;
 
     if (submod_name) {
@@ -407,30 +406,96 @@ getschema_module_clb(const char *mod_name, const char *mod_rev, const char *subm
     *format = LYS_IN_YANG;
 
     /* try to store the model_data into local schema repository */
-    if (model_data) {
-        searchdirs = ly_ctx_get_searchdirs(session->ctx);
-        asprintf(&filename, "%s/%s%s%s.yang", searchdirs ? searchdirs[0] : ".", mod_name,
-                 mod_rev ? "@" : "", mod_rev ? mod_rev : "");
-        output = fopen(filename, "w");
-        if (!output) {
-            WRN("Unable to store \"%s\" as a local copy of schema retreived via <get-schema> (%s).",
-                filename, strerror(errno));
+    if (model_data && client_opts.schema_searchpath) {
+        if (asprintf(&filename, "%s/%s%s%s.yang", client_opts.schema_searchpath, mod_name,
+                     mod_rev ? "@" : "", mod_rev ? mod_rev : "") == -1) {
+            ERRMEM;
         } else {
-            fputs(model_data, output);
-            fclose(output);
+            output = fopen(filename, "w");
+            if (!output) {
+                WRN("Unable to store \"%s\" as a local copy of schema retreived via <get-schema> (%s).",
+                    filename, strerror(errno));
+            } else {
+                fputs(model_data, output);
+                fclose(output);
+            }
+            free(filename);
         }
-        free(filename);
     }
 
     return model_data;
 }
 
-/* SCHEMAS_DIR not used (implicitly) */
 static int
-nc_ctx_fill_cpblts(struct nc_session *session, ly_module_imp_clb user_clb, void *user_data)
+nc_ctx_load_module(struct nc_session *session, const char *name, const char *revision, int implement,
+                   ly_module_imp_clb user_clb, void *user_data, int has_get_schema, const struct lys_module **mod)
+{
+    int ret = 0;
+    struct ly_err_item *eitem;
+
+    *mod = ly_ctx_get_module(session->ctx, name, revision, 0);
+    if (*mod) {
+        if (implement && !(*mod)->implemented) {
+            /* make the present module implemented */
+            if (lys_set_implemented(*mod)) {
+                ERR("Failed to implement model \"%s\".", (*mod)->name);
+                ret = -1;
+            }
+        }
+    } else if (!(*mod) && implement) {
+        /* missing implemented module, load it ... */
+
+        /* clear all the errors and just collect them for now */
+        ly_err_clean(session->ctx, NULL);
+        ly_log_options(LY_LOSTORE);
+
+        /* 1) using only searchpaths */
+        *mod = ly_ctx_load_module(session->ctx, name, revision);
+
+        /* 2) using user callback */
+        if (!(*mod) && user_clb) {
+            ly_ctx_set_module_imp_clb(session->ctx, user_clb, user_data);
+            *mod = ly_ctx_load_module(session->ctx, name, revision);
+        }
+
+        /* 3) using get-schema callback */
+        if (has_get_schema && !(*mod)) {
+            ly_ctx_set_module_imp_clb(session->ctx, &getschema_module_clb, session);
+            *mod = ly_ctx_load_module(session->ctx, name, revision);
+            if (*mod) {
+                /* print get-schema warning */
+                eitem = ly_err_first(session->ctx);
+                if (eitem && (eitem->prev->level == LY_LLWRN)) {
+                    ly_log_options(LY_LOLOG);
+                    ly_err_print(eitem->prev);
+                }
+            }
+        }
+
+        /* unset callback back to use searchpath */
+        ly_ctx_set_module_imp_clb(session->ctx, NULL, NULL);
+
+        /* restore logging options, then print errors on definite failure */
+        ly_log_options(LY_LOLOG | LY_LOSTORE_LAST);
+        if (!(*mod)) {
+            for (eitem = ly_err_first(session->ctx); eitem && eitem->next; eitem = eitem->next) {
+                ly_err_print(eitem);
+            }
+            ret = -1;
+        }
+
+        /* clean the errors */
+        ly_err_clean(session->ctx, NULL);
+    }
+
+    return ret;
+}
+
+/* NC_SCHEMAS_DIR not used (implicitly) */
+static int
+nc_ctx_fill_cpblts(struct nc_session *session, ly_module_imp_clb user_clb, void *user_data, int has_get_schema)
 {
     int ret = 1;
-    LY_LOG_LEVEL verb;
     const struct lys_module *mod;
     char *ptr, *ptr2;
     const char *module_cpblt;
@@ -465,42 +530,8 @@ nc_ctx_fill_cpblts(struct nc_session *session, ly_module_imp_clb user_clb, void 
             revision = strndup(ptr, ptr2 - ptr);
         }
 
-        mod = ly_ctx_get_module(session->ctx, name, revision, 0);
-        if (mod) {
-            if (!mod->implemented) {
-                /* make the present module implemented */
-                if (lys_set_implemented(mod)) {
-                    ERR("Failed to implement model \"%s\".", mod->name);
-                    goto cleanup;
-                }
-            }
-        } else {
-            /* missing implemented module, load it ... */
-
-            /* expecting errors here */
-            verb = ly_verb(LY_LLSILENT);
-
-            /* 1) using only searchpaths */
-            mod = ly_ctx_load_module(session->ctx, name, revision);
-
-            /* 2) using user callback */
-            if (!mod && user_clb) {
-                ly_ctx_set_module_imp_clb(session->ctx, user_clb, user_data);
-                mod = ly_ctx_load_module(session->ctx, name, revision);
-            }
-
-            /* 3) using get-schema callback */
-            if (!mod) {
-                ly_ctx_set_module_imp_clb(session->ctx, &getschema_module_clb, session);
-                mod = ly_ctx_load_module(session->ctx, name, revision);
-            }
-
-            /* revert the changed verbosity level */
-            ly_verb(verb);
-
-            /* unset callback back to use searchpath */
-            ly_ctx_set_module_imp_clb(session->ctx, NULL, NULL);
-        }
+        /* we can continue even if it fails */
+        nc_ctx_load_module(session, name, revision, 1, user_clb, user_data, has_get_schema, &mod);
 
         if (!mod) {
             if (session->status != NC_STATUS_RUNNING) {
@@ -513,8 +544,6 @@ nc_ctx_fill_cpblts(struct nc_session *session, ly_module_imp_clb user_clb, void 
             /* all loading ways failed, the schema will be ignored in the received data */
             WRN("Failed to load schema \"%s@%s\".", name, revision ? revision : "<latest>");
             session->flags |= NC_SESSION_CLIENT_NOT_STRICT;
-
-            /* TODO: maybe re-print hidden error messages */
         } else {
             /* set features - first disable all to enable specified then */
             lys_features_disable(mod, "*");
@@ -563,10 +592,9 @@ cleanup:
 }
 
 static int
-nc_ctx_fill_yl(struct nc_session *session, ly_module_imp_clb user_clb, void *user_data)
+nc_ctx_fill_yl(struct nc_session *session, ly_module_imp_clb user_clb, void *user_data, int has_get_schema)
 {
     int ret = 1;
-    LY_LOG_LEVEL verb;
     struct nc_rpc *rpc = NULL;
     struct nc_reply *reply = NULL;
     struct nc_reply_error *error_rpl;
@@ -661,47 +689,14 @@ parse:
             } else if (!strcmp(iter->schema->name, "conformance-type")) {
                 implemented = !strcmp(((struct lyd_node_leaf_list *)iter)->value_str, "implement");
             } else if (!strcmp(iter->schema->name, "feature")) {
-                ly_set_add(features, (void*)((struct lyd_node_leaf_list *)iter)->value_str, LY_SET_OPT_USEASLIST);
+                ly_set_add(features, (void *)((struct lyd_node_leaf_list *)iter)->value_str, LY_SET_OPT_USEASLIST);
             }
         }
 
-        mod = ly_ctx_get_module(session->ctx, name, revision, 0);
-        if (mod) {
-            if (implemented && !mod->implemented) {
-                /* make the present module implemented */
-                if (lys_set_implemented(mod)) {
-                    ERR("Failed to implement model \"%s\".", mod->name);
-                    ret = -1; /* fatal error, not caused just by missing schema but by something in the context */
-                    goto cleanup;
-                }
-            }
-        } else if (!mod && implemented) {
-            /* missing implemented module, load it ... */
+        /* continue even on fail */
+        nc_ctx_load_module(session, name, revision, implemented, user_clb, user_data, has_get_schema, &mod);
 
-            /* expecting errors here */
-            verb = ly_verb(LY_LLSILENT);
-
-            /* 1) using only searchpaths */
-            mod = ly_ctx_load_module(session->ctx, name, revision);
-
-            /* 2) using user callback */
-            if (!mod && user_clb) {
-                ly_ctx_set_module_imp_clb(session->ctx, user_clb, user_data);
-                mod = ly_ctx_load_module(session->ctx, name, revision);
-            }
-
-            /* 3) using get-schema callback */
-            if (!mod) {
-                ly_ctx_set_module_imp_clb(session->ctx, &getschema_module_clb, session);
-                mod = ly_ctx_load_module(session->ctx, name, revision);
-            }
-
-            /* revert the changed verbosity level */
-            ly_verb(verb);
-
-            /* unset callback back to use searchpath */
-            ly_ctx_set_module_imp_clb(session->ctx, NULL, NULL);
-        } else { /* !mod && !implemented - will be loaded automatically, but remember to set features in the end */
+        if (!mod && !implemented) { /* will be loaded automatically, but remember to set features in the end */
             if (imports_flag) {
                 ERR("Module \"%s@%s\" is supposed to be imported, but no other module imports it.",
                     name, revision ? revision : "<latest>");
@@ -716,8 +711,6 @@ parse:
             /* all loading ways failed, the schema will be ignored in the received data */
             WRN("Failed to load schema \"%s@%s\".", name, revision ? revision : "<latest>");
             session->flags |= NC_SESSION_CLIENT_NOT_STRICT;
-
-            /* TODO: maybe re-print hidden error messages */
         } else {
             /* set features - first disable all to enable specified then */
             lys_features_disable(mod, "*");
@@ -763,6 +756,8 @@ nc_ctx_check_and_fill(struct nc_session *session)
     int i, get_schema_support = 0, yanglib_support = 0, ret = -1, r;
     ly_module_imp_clb old_clb = NULL;
     void *old_data = NULL;
+    const struct lys_module *mod = NULL;
+    char *revision;
 
     assert(session->opts.client.cpblts && session->ctx);
 
@@ -774,27 +769,24 @@ nc_ctx_check_and_fill(struct nc_session *session)
     /* check if get-schema is supported */
     for (i = 0; session->opts.client.cpblts[i]; ++i) {
         if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring?", 52)) {
-            get_schema_support = 1;
+            get_schema_support = 1 + i;
             if (yanglib_support) {
                 break;
             }
         } else if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:xml:ns:yang:ietf-yang-library?", 46)) {
-            yanglib_support = 1;
+            yanglib_support = 1 + i;
             if (get_schema_support) {
                 break;
             }
         }
     }
-
     /* get-schema is supported, load local ietf-netconf-monitoring so we can create <get-schema> RPCs */
     if (get_schema_support && !ly_ctx_get_module(session->ctx, "ietf-netconf-monitoring", NULL, 1)) {
-        if (!lys_parse_path(session->ctx, SCHEMAS_DIR"/ietf-netconf-monitoring.yin", LYS_IN_YIN)) {
+        if (!lys_parse_path(session->ctx, NC_SCHEMAS_DIR"/ietf-netconf-monitoring.yin", LYS_IN_YIN)) {
             WRN("Loading NETCONF monitoring schema failed, cannot use <get-schema>.");
             get_schema_support = 0;
         }
     }
-    /* yang-library present does not need to be checked, it is one of the libyang's internal modules,
-     * so it is always present */
 
     /* load base model disregarding whether it's in capabilities (but NETCONF capabilities are used to enable features) */
     if (ctx_check_and_load_ietf_netconf(session->ctx, session->opts.client.cpblts)) {
@@ -802,8 +794,25 @@ nc_ctx_check_and_fill(struct nc_session *session)
     }
 
     if (yanglib_support && get_schema_support) {
+        /* use get schema to get server's ietf-yang-library */
+        revision = strstr(session->opts.client.cpblts[yanglib_support - 1], "revision=");
+        if (!revision) {
+            WRN("Loading NETCONF ietf-yang-library schema failed, missing revision in NETCONF <hello> message.");
+            WRN("Unable to automatically use <get-schema>.");
+            yanglib_support = 0;
+        } else {
+            revision = strndup(&revision[9], 10);
+            if (nc_ctx_load_module(session, "ietf-yang-library", revision, 1, old_clb, old_data, 1, &mod)) {
+                WRN("Loading NETCONF ietf-yang-library schema failed, unable to automatically use <get-schema>.");
+                yanglib_support = 0;
+            }
+            free(revision);
+        }
+    }
+
+    if (yanglib_support) {
         /* load schemas according to the ietf-yang-library data, which are more precise than capabilities list */
-        r = nc_ctx_fill_yl(session, old_clb, old_data);
+        r = nc_ctx_fill_yl(session, old_clb, old_data, get_schema_support);
         if (r == -1) {
             goto cleanup;
         } else if (r == 1) {
@@ -814,7 +823,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     } else {
 capabilities:
 
-        if (nc_ctx_fill_cpblts(session, old_clb, old_data)) {
+        if (nc_ctx_fill_cpblts(session, old_clb, old_data, get_schema_support)) {
             goto cleanup;
         }
     }
@@ -847,26 +856,21 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     }
 
     /* prepare session structure */
-    session = nc_new_session(0);
+    session = nc_new_session(NC_CLIENT, 0);
     if (!session) {
         ERRMEM;
         return NULL;
     }
     session->status = NC_STATUS_STARTING;
-    session->side = NC_CLIENT;
 
     /* transport specific data */
     session->ti_type = NC_TI_FD;
-    pthread_mutex_init(session->ti_lock, NULL);
-    pthread_cond_init(session->ti_cond, NULL);
-    *session->ti_inuse = 0;
-
     session->ti.fd.in = fdin;
     session->ti.fd.out = fdout;
 
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = ly_ctx_new(SCHEMAS_DIR, 0);
+        ctx = ly_ctx_new(NC_SCHEMAS_DIR, 0);
         /* definitely should not happen, but be ready */
         if (!ctx && !(ctx = ly_ctx_new(NULL, 0))) {
             /* that's just it */
@@ -878,7 +882,7 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     session->ctx = ctx;
 
     /* NETCONF handshake */
-    if (nc_handshake(session) != NC_MSG_HELLO) {
+    if (nc_handshake_io(session) != NC_MSG_HELLO) {
         goto fail;
     }
     session->status = NC_STATUS_RUNNING;
@@ -936,6 +940,15 @@ nc_sock_connect(const char* host, uint16_t port)
             return -1;
         }
 
+        /* enable keep-alive */
+        i = 1;
+        if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &i, sizeof i) == -1) {
+            ERR("Setsockopt failed (%s).", strerror(errno));
+            close(sock);
+            freeaddrinfo(res_list);
+            return -1;
+        }
+
         /* we're done, network connection established */
         break;
     }
@@ -951,22 +964,12 @@ nc_sock_connect(const char* host, uint16_t port)
 static NC_MSG_TYPE
 get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_elem **msg)
 {
-    int r;
     char *ptr;
     const char *str_msgid;
     uint64_t cur_msgid;
     struct lyxml_elem *xml;
     struct nc_msg_cont *cont, **cont_ptr;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
-
-    r = nc_session_lock(session, timeout, __func__);
-    if (r == -1) {
-        /* error */
-        return NC_MSG_ERROR;
-    } else if (!r) {
-        /* timeout */
-        return NC_MSG_WOULDBLOCK;
-    }
 
     /* try to get notification from the session's queue */
     if (!msgid && session->opts.client.notifs) {
@@ -992,7 +995,7 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
 
     if (!msgtype) {
         /* read message from wire */
-        msgtype = nc_read_msg_poll(session, timeout, &xml);
+        msgtype = nc_read_msg_poll_io(session, timeout, &xml);
     }
 
     /* we read rpc-reply, want a notif */
@@ -1004,7 +1007,6 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
         *cont_ptr = malloc(sizeof **cont_ptr);
         if (!*cont_ptr) {
             ERRMEM;
-            nc_session_unlock(session, timeout, __func__);
             lyxml_free(session->ctx, xml);
             return NC_MSG_ERROR;
         }
@@ -1015,7 +1017,6 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
     /* we read notif, want a rpc-reply */
     if (msgid && (msgtype == NC_MSG_NOTIF)) {
         if (!session->opts.client.ntf_tid) {
-            pthread_mutex_unlock(session->ti_lock);
             ERR("Session %u: received a <notification> but session is not subscribed.", session->id);
             lyxml_free(session->ctx, xml);
             return NC_MSG_ERROR;
@@ -1026,17 +1027,14 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
             cont_ptr = &((*cont_ptr)->next);
         }
         *cont_ptr = malloc(sizeof **cont_ptr);
-        if (!cont_ptr) {
+        if (!*cont_ptr) {
             ERRMEM;
-            nc_session_unlock(session, timeout, __func__);
             lyxml_free(session->ctx, xml);
             return NC_MSG_ERROR;
         }
         (*cont_ptr)->msg = xml;
         (*cont_ptr)->next = NULL;
     }
-
-    nc_session_unlock(session, timeout, __func__);
 
     switch (msgtype) {
     case NC_MSG_NOTIF:
@@ -1711,11 +1709,17 @@ nc_recv_notif_thread(void *arg)
     void (*notif_clb)(struct nc_session *session, const struct nc_notif *notif);
     struct nc_notif *notif;
     NC_MSG_TYPE msgtype;
+    pthread_t *ntf_tid;
+
+    pthread_detach(pthread_self());
 
     ntarg = (struct nc_ntf_thread_arg *)arg;
     session = ntarg->session;
     notif_clb = ntarg->notif_clb;
     free(ntarg);
+
+    /* remember our allocated tid, we will be freeing it */
+    ntf_tid = (pthread_t *)session->opts.client.ntf_tid;
 
     while (session->opts.client.ntf_tid) {
         msgtype = nc_recv_notif(session, NC_CLIENT_NOTIF_THREAD_SLEEP / 1000, &notif);
@@ -1737,6 +1741,7 @@ nc_recv_notif_thread(void *arg)
 
     VRB("Session %u: notification thread exit.", session->id);
     session->opts.client.ntf_tid = NULL;
+    free(ntf_tid);
     return NULL;
 }
 
@@ -1792,7 +1797,7 @@ API NC_MSG_TYPE
 nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_t *msgid)
 {
     NC_MSG_TYPE r;
-    int ret, dofree = 1;
+    int dofree = 1;
     struct nc_rpc_act_generic *rpc_gen;
     struct nc_rpc_getconfig *rpc_gc;
     struct nc_rpc_edit *rpc_e;
@@ -2083,9 +2088,6 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
                 }
             }
             switch (rpc_g->wd_mode) {
-            case NC_WD_UNKNOWN:
-                /* cannot get here */
-                break;
             case NC_WD_ALL:
                 node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all");
                 break;
@@ -2097,6 +2099,10 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
                 break;
             case NC_WD_EXPLICIT:
                 node = lyd_new_leaf(data, ietfncwd, "with-defaults", "explicit");
+                break;
+            default:
+                /* cannot get here */
+                node = NULL;
                 break;
             }
             if (!node) {
@@ -2266,6 +2272,11 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         return NC_MSG_ERROR;
     }
 
+    if (!data) {
+        /* error was already printed */
+        return NC_MSG_ERROR;
+    }
+
     if (lyd_validate(&data, LYD_OPT_RPC | LYD_OPT_NOEXTDEPS
                      | (session->flags & NC_SESSION_CLIENT_NOT_STRICT ? 0 : LYD_OPT_STRICT), NULL)) {
         if (dofree) {
@@ -2274,30 +2285,18 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         return NC_MSG_ERROR;
     }
 
-    ret = nc_session_lock(session, timeout, __func__);
-    if (ret == -1) {
-        /* error */
-        r = NC_MSG_ERROR;
-    } else if (!ret) {
-        /* blocking */
-        r = NC_MSG_WOULDBLOCK;
-    } else {
-        /* send RPC, store its message ID */
-        r = nc_send_msg(session, data);
-        cur_msgid = session->opts.client.msgid;
-    }
-    nc_session_unlock(session, timeout, __func__);
+    /* send RPC, store its message ID */
+    r = nc_send_msg_io(session, timeout, data);
+    cur_msgid = session->opts.client.msgid;
 
     if (dofree) {
         lyd_free(data);
     }
 
-    if (r != NC_MSG_RPC) {
-        return r;
+    if (r == NC_MSG_RPC) {
+        *msgid = cur_msgid;
     }
-
-    *msgid = cur_msgid;
-    return NC_MSG_RPC;
+    return r;
 }
 
 API void

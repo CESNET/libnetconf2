@@ -4,7 +4,6 @@ set -e
 #install dependencies using homebrew
 brew update
 brew upgrade openssl
-brew upgrade pcre
 
 # libssh
 wget https://git.libssh.org/projects/libssh.git/snapshot/libssh-0.7.5.tar.gz
@@ -19,7 +18,8 @@ mkdir cmocka/build && cd cmocka/build
 cmake .. && make -j2 && sudo make install
 cd ../..
 
-git clone -b $TRAVIS_BRANCH https://github.com/CESNET/libyang.git
+if [[ "$TRAVIS_BRANCH" = "master" ]]; then LY_BRANCH="master"; else LY_BRANCH="devel"; fi
+git clone -b $LY_BRANCH https://github.com/CESNET/libyang.git
 mkdir libyang/build && cd libyang/build
 cmake .. && make -j2 && sudo make install
 cd ../..

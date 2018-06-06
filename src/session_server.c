@@ -184,7 +184,7 @@ nc_sock_listen(const char *address, uint16_t port)
         goto fail;
     }
 
-    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void *)&optVal, optLen)) {
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void *)&optVal, optLen) == -1) {
         ERR("Could not set socket SO_REUSEADDR socket option (%s).", strerror(errno));
         goto fail;
     }
@@ -330,6 +330,14 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
         return -1;
     }
 
+    /* enable keep-alive */
+    flags = 1;
+    if (setsockopt(ret, SOL_SOCKET, SO_KEEPALIVE, &flags, sizeof flags) == -1) {
+        ERR("Setsockopt failed (%s).", strerror(errno));
+        close(ret);
+        return -1;
+    }
+
     if (idx) {
         *idx = i;
     }
@@ -352,7 +360,7 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
                 ERRMEM;
             }
         } else if (saddr.ss_family == AF_INET6) {
-            *host = malloc(40);
+            *host = malloc(INET6_ADDRSTRLEN);
             if (*host) {
                 if (!inet_ntop(AF_INET6, ((struct sockaddr_in6 *)&saddr)->sin6_addr.s6_addr, *host, 40)) {
                     ERR("inet_ntop failed (%s).", strerror(errno));
@@ -417,9 +425,9 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
 
     /* check format */
     if (!format || !strcmp(format, "ietf-netconf-monitoring:yang")) {
-        lys_print_mem(&model_data, module, LYS_OUT_YANG, NULL);
+        lys_print_mem(&model_data, module, LYS_OUT_YANG, NULL, 0, 0);
     } else if (!strcmp(format, "ietf-netconf-monitoring:yin")) {
-        lys_print_mem(&model_data, module, LYS_OUT_YIN, NULL);
+        lys_print_mem(&model_data, module, LYS_OUT_YIN, NULL, 0, 0);
     } else {
         err = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
         nc_err_set_msg(err, "The requested format is not supported.", "en");
@@ -496,25 +504,40 @@ nc_server_destroy(void)
         lydict_remove(server_opts.ctx, server_opts.capabilities[i]);
     }
     free(server_opts.capabilities);
+    server_opts.capabilities = NULL;
+    server_opts.capabilities_count = 0;
+
     pthread_spin_destroy(&server_opts.sid_lock);
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
     nc_server_del_endpt(NULL, 0);
 #endif
 #ifdef NC_ENABLED_SSH
+    if (server_opts.passwd_auth_data && server_opts.passwd_auth_data_free) {
+        server_opts.passwd_auth_data_free(server_opts.passwd_auth_data);
+    }
+    server_opts.passwd_auth_data = NULL;
+    server_opts.passwd_auth_data_free = NULL;
+
     nc_server_ssh_del_authkey(NULL, NULL, 0, NULL);
 
     if (server_opts.hostkey_data && server_opts.hostkey_data_free) {
         server_opts.hostkey_data_free(server_opts.hostkey_data);
     }
+    server_opts.hostkey_data = NULL;
+    server_opts.hostkey_data_free = NULL;
 #endif
 #ifdef NC_ENABLED_TLS
     if (server_opts.server_cert_data && server_opts.server_cert_data_free) {
         server_opts.server_cert_data_free(server_opts.server_cert_data);
     }
+    server_opts.server_cert_data = NULL;
+    server_opts.server_cert_data_free = NULL;
     if (server_opts.trusted_cert_list_data && server_opts.trusted_cert_list_data_free) {
         server_opts.trusted_cert_list_data_free(server_opts.trusted_cert_list_data);
     }
+    server_opts.trusted_cert_list_data = NULL;
+    server_opts.trusted_cert_list_data_free = NULL;
 #endif
     nc_destroy();
 }
@@ -621,18 +644,12 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
     }
 
     /* prepare session structure */
-    *session = nc_new_session(0);
+    *session = nc_new_session(NC_SERVER, 0);
     if (!(*session)) {
         ERRMEM;
         return NC_MSG_ERROR;
     }
     (*session)->status = NC_STATUS_STARTING;
-    (*session)->side = NC_SERVER;
-
-    /* transport lock */
-    pthread_mutex_init((*session)->ti_lock, NULL);
-    pthread_cond_init((*session)->ti_cond, NULL);
-    *(*session)->ti_inuse = 0;
 
     /* transport specific data */
     (*session)->ti_type = NC_TI_FD;
@@ -649,7 +666,7 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
     pthread_spin_unlock(&server_opts.sid_lock);
 
     /* NETCONF handshake */
-    msgtype = nc_handshake(*session);
+    msgtype = nc_handshake_io(*session);
     if (msgtype != NC_MSG_HELLO) {
         nc_session_free(*session, NULL);
         *session = NULL;
@@ -667,45 +684,73 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
 }
 
 static void
+nc_ps_queue_add_id(struct nc_pollsession *ps, uint8_t *id)
+{
+    uint8_t q_last;
+
+    if (ps->queue_len == NC_PS_QUEUE_SIZE) {
+        ERRINT;
+        return;
+    }
+
+    /* get a unique queue value (by adding 1 to the last added value, if any) */
+    if (ps->queue_len) {
+        q_last = (ps->queue_begin + ps->queue_len - 1) % NC_PS_QUEUE_SIZE;
+        *id = ps->queue[q_last] + 1;
+    } else {
+        *id = 0;
+    }
+
+    /* add the id into the queue */
+    ++ps->queue_len;
+    q_last = (ps->queue_begin + ps->queue_len - 1) % NC_PS_QUEUE_SIZE;
+    ps->queue[q_last] = *id;
+}
+
+static void
 nc_ps_queue_remove_id(struct nc_pollsession *ps, uint8_t id)
 {
-    uint8_t i, found = 0;
+    uint8_t i, q_idx, found = 0;
 
     for (i = 0; i < ps->queue_len; ++i) {
-        /* idx round buffer adjust */
-        if (ps->queue_begin + i == NC_PS_QUEUE_SIZE) {
-            i = -ps->queue_begin;
-        }
+        /* get the actual queue idx */
+        q_idx = (ps->queue_begin + i) % NC_PS_QUEUE_SIZE;
 
         if (found) {
-            /* move the value back one place */
-            if (ps->queue[ps->queue_begin + i] == id) {
+            if (ps->queue[q_idx] == id) {
                 /* another equal value, simply cannot be */
                 ERRINT;
             }
-
-            if (ps->queue_begin + i == 0) {
-                ps->queue[NC_PS_QUEUE_SIZE - 1] = ps->queue[ps->queue_begin + i];
-            } else {
-                ps->queue[ps->queue_begin + i - 1] = ps->queue[ps->queue_begin + i];
+            if (found == 2) {
+                /* move the following values */
+                ps->queue[q_idx ? q_idx - 1 : NC_PS_QUEUE_SIZE - 1] = ps->queue[q_idx];
             }
-        } else if (ps->queue[ps->queue_begin + i] == id) {
+        } else if (ps->queue[q_idx] == id) {
             /* found our id, there can be no more equal valid values */
-            found = 1;
+            if (i == 0) {
+                found = 1;
+            } else {
+                /* this is not okay, our id is in the middle of the queue */
+                found = 2;
+            }
         }
     }
-
     if (!found) {
         ERRINT;
+        return;
     }
+
     --ps->queue_len;
+    if (found == 1) {
+        /* remove the id by moving the queue, otherwise all the values in the queue were moved */
+        ps->queue_begin = (ps->queue_begin + 1) % NC_PS_QUEUE_SIZE;
+    }
 }
 
 int
 nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
 {
     int ret;
-    uint8_t queue_last;
     struct timespec ts;
 
     nc_gettimespec_real(&ts);
@@ -718,34 +763,20 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
         return -1;
     }
 
-    /* get a unique queue value (by adding 1 to the last added value, if any) */
-    if (ps->queue_len) {
-        queue_last = ps->queue_begin + ps->queue_len - 1;
-        if (queue_last > NC_PS_QUEUE_SIZE - 1) {
-            queue_last -= NC_PS_QUEUE_SIZE;
-        }
-        *id = ps->queue[queue_last] + 1;
-    } else {
-        *id = 0;
-    }
-
-    /* add ourselves into the queue */
+    /* check that the queue is long enough */
     if (ps->queue_len == NC_PS_QUEUE_SIZE) {
-        ERR("%s: pollsession queue too small.", func);
+        ERR("%s: pollsession queue size (%d) too small.", func, NC_PS_QUEUE_SIZE);
         pthread_mutex_unlock(&ps->lock);
         return -1;
     }
-    ++ps->queue_len;
-    queue_last = ps->queue_begin + ps->queue_len - 1;
-    if (queue_last > NC_PS_QUEUE_SIZE - 1) {
-        queue_last -= NC_PS_QUEUE_SIZE;
-    }
-    ps->queue[queue_last] = *id;
+
+    /* add ourselves into the queue */
+    nc_ps_queue_add_id(ps, id);
 
     /* is it our turn? */
     while (ps->queue[ps->queue_begin] != *id) {
         nc_gettimespec_real(&ts);
-        nc_addtimespec(&ts, NC_PS_LOCK_TIMEOUT);
+        nc_addtimespec(&ts, NC_PS_QUEUE_TIMEOUT);
 
         ret = pthread_cond_timedwait(&ps->cond, &ps->lock, &ts);
         if (ret) {
@@ -977,14 +1008,14 @@ nc_ps_session_count(struct nc_pollsession *ps)
     return ps->session_count;
 }
 
-/* must be called holding the session lock!
+/* should be called holding the session RPC lock! IO lock will be acquired as needed
  * returns: NC_PSPOLL_ERROR,
  *          NC_PSPOLL_BAD_RPC,
  *          NC_PSPOLL_BAD_RPC | NC_PSPOLL_REPLY_ERROR,
  *          NC_PSPOLL_RPC
  */
 static int
-nc_server_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
+nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_server_rpc **rpc)
 {
     struct lyxml_elem *xml = NULL;
     NC_MSG_TYPE msgtype;
@@ -1002,7 +1033,7 @@ nc_server_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
         return NC_PSPOLL_ERROR;
     }
 
-    msgtype = nc_read_msg(session, &xml);
+    msgtype = nc_read_msg_io(session, io_timeout, &xml, 0);
 
     switch (msgtype) {
     case NC_MSG_RPC:
@@ -1017,8 +1048,8 @@ nc_server_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
                                      LYD_OPT_RPC | LYD_OPT_DESTRUCT | LYD_OPT_NOEXTDEPS | LYD_OPT_STRICT, NULL);
         if (!(*rpc)->tree) {
             /* parsing RPC failed */
-            reply = nc_server_reply_err(nc_err_libyang());
-            ret = nc_write_msg(session, NC_MSG_REPLY, xml, reply);
+            reply = nc_server_reply_err(nc_err_libyang(server_opts.ctx));
+            ret = nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, xml, reply);
             nc_server_reply_free(reply);
             if (ret == -1) {
                 ERR("Session %u: failed to write reply.", session->id);
@@ -1043,7 +1074,7 @@ nc_server_recv_rpc(struct nc_session *session, struct nc_server_rpc **rpc)
         goto error;
     default:
         /* NC_MSG_ERROR,
-         * NC_MSG_WOULDBLOCK and NC_MSG_NONE is not returned by nc_read_msg()
+         * NC_MSG_WOULDBLOCK and NC_MSG_NONE is not returned by nc_read_msg_io()
          */
         ret = NC_PSPOLL_ERROR;
         break;
@@ -1067,8 +1098,7 @@ nc_set_global_rpc_clb(nc_rpc_clb clb)
 API NC_MSG_TYPE
 nc_server_notif_send(struct nc_session *session, struct nc_server_notif *notif, int timeout)
 {
-    NC_MSG_TYPE result = NC_MSG_NOTIF;
-    int ret;
+    NC_MSG_TYPE ret;
 
     /* check parameters */
     if (!session || (session->side != NC_SERVER) || !session->opts.server.ntf_status) {
@@ -1079,39 +1109,30 @@ nc_server_notif_send(struct nc_session *session, struct nc_server_notif *notif, 
         return NC_MSG_ERROR;
     }
 
-    /* reading an RPC and sending a reply must be atomic (no other RPC should be read) */
-    ret = nc_session_lock(session, timeout, __func__);
-    if (ret < 0) {
-        return NC_MSG_ERROR;
-    } else if (!ret) {
-        return NC_MSG_WOULDBLOCK;
-    }
-
-    ret = nc_write_msg(session, NC_MSG_NOTIF, notif);
-    if (ret == -1) {
+    /* we do not need RPC lock for this, IO lock will be acquired properly */
+    ret = nc_write_msg_io(session, timeout, NC_MSG_NOTIF, notif);
+    if (ret == NC_MSG_ERROR) {
         ERR("Session %u: failed to write notification.", session->id);
-        result = NC_MSG_ERROR;
     }
 
-    nc_session_unlock(session, timeout, __func__);
-
-    return result;
+    return ret;
 }
 
-/* must be called holding the session lock!
+/* must be called holding the session RPC lock! IO lock will be acquired as needed
  * returns: NC_PSPOLL_ERROR,
  *          NC_PSPOLL_ERROR | NC_PSPOLL_REPLY_ERROR,
  *          NC_PSPOLL_REPLY_ERROR,
  *          0
  */
 static int
-nc_server_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
+nc_server_send_reply_io(struct nc_session *session, int io_timeout, struct nc_server_rpc *rpc)
 {
     nc_rpc_clb clb;
     struct nc_server_reply *reply;
     struct lys_node *rpc_act = NULL;
     struct lyd_node *next, *elem;
-    int ret = 0, r;
+    int ret = 0;
+    NC_MSG_TYPE r;
 
     if (!rpc) {
         ERRINT;
@@ -1147,13 +1168,13 @@ nc_server_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
     if (!reply) {
         reply = nc_server_reply_err(nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP));
     }
-    r = nc_write_msg(session, NC_MSG_REPLY, rpc->root, reply);
+    r = nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, rpc->root, reply);
     if (reply->type == NC_RPL_ERROR) {
         ret |= NC_PSPOLL_REPLY_ERROR;
     }
     nc_server_reply_free(reply);
 
-    if (r == -1) {
+    if (r != NC_MSG_REPLY) {
         ERR("Session %u: failed to write reply.", session->id);
         ret |= NC_PSPOLL_ERROR;
     }
@@ -1166,7 +1187,7 @@ nc_server_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
     return ret;
 }
 
-/* session must be running and session lock held!
+/* session must be running and session RPC lock held!
  * returns: NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR, (msg filled)
  *          NC_PSPOLL_ERROR, (msg filled)
  *          NC_PSPOLL_TIMEOUT,
@@ -1175,10 +1196,10 @@ nc_server_send_reply(struct nc_session *session, struct nc_server_rpc *rpc)
  *          NC_PSPOLL_SSH_MSG
  */
 static int
-nc_ps_poll_session(struct nc_session *session, time_t now_mono, char *msg)
+nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mono, char *msg)
 {
     struct pollfd pfd;
-    int r, ret;
+    int r, ret = 0;
 #ifdef NC_ENABLED_SSH
     struct nc_session *new;
 #endif
@@ -1190,6 +1211,14 @@ nc_ps_poll_session(struct nc_session *session, time_t now_mono, char *msg)
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_TIMEOUT;
         return NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
+    }
+
+    r = nc_session_io_lock(session, io_timeout, __func__);
+    if (r < 0) {
+        sprintf(msg, "session IO lock failed to be acquired");
+        return NC_PSPOLL_ERROR;
+    } else if (!r) {
+        return NC_PSPOLL_TIMEOUT;
     }
 
     switch (session->ti_type) {
@@ -1310,6 +1339,7 @@ nc_ps_poll_session(struct nc_session *session, time_t now_mono, char *msg)
         break;
     }
 
+    nc_session_io_unlock(session, __func__);
     return ret;
 }
 
@@ -1359,8 +1389,8 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
             cur_ps_session = ps->sessions[i];
             cur_session = cur_ps_session->session;
 
-            /* SESSION LOCK */
-            r = nc_session_lock(cur_session, 0, __func__);
+            /* SESSION RPC LOCK */
+            r = nc_session_rpc_lock(cur_session, 0, __func__);
             if (r == -1) {
                 ret = NC_PSPOLL_ERROR;
             } else if (r == 1) {
@@ -1371,7 +1401,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                         /* session is fine, work with it */
                         cur_ps_session->state = NC_PS_STATE_BUSY;
 
-                        ret = nc_ps_poll_session(cur_session, ts_cur.tv_sec, msg);
+                        ret = nc_ps_poll_session_io(cur_session, NC_SESSION_LOCK_TIMEOUT, ts_cur.tv_sec, msg);
                         switch (ret) {
                         case NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR:
                             ERR("Session %u: %s.", cur_session->id, msg);
@@ -1412,10 +1442,10 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                     break;
                 }
 
-                /* keep the session locked only in this one case */
+                /* keep RPC lock in this one case */
                 if (ret != NC_PSPOLL_RPC) {
-                    /* SESSION UNLOCK */
-                    nc_session_unlock(cur_session, NC_SESSION_LOCK_TIMEOUT, __func__);
+                    /* SESSION RPC UNLOCK */
+                    nc_session_rpc_unlock(cur_session, NC_SESSION_LOCK_TIMEOUT, __func__);
                 }
             } else {
                 /* timeout */
@@ -1468,9 +1498,9 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
     /* PS UNLOCK */
     nc_ps_unlock(ps, q_id, __func__);
 
-    /* we have some data available and the session is locked */
+    /* we have some data available and the session is RPC locked (but not IO locked) */
     if (ret == NC_PSPOLL_RPC) {
-        ret = nc_server_recv_rpc(cur_session, &rpc);
+        ret = nc_server_recv_rpc_io(cur_session, timeout, &rpc);
         if (ret & (NC_PSPOLL_ERROR | NC_PSPOLL_BAD_RPC)) {
             if (cur_session->status != NC_STATUS_RUNNING) {
                 ret |= NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
@@ -1482,7 +1512,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
             cur_session->opts.server.last_rpc = ts_cur.tv_sec;
 
             /* process RPC, not needed afterwards */
-            ret |= nc_server_send_reply(cur_session, rpc);
+            ret |= nc_server_send_reply_io(cur_session, timeout, rpc);
             nc_server_rpc_free(rpc, server_opts.ctx);
 
             if (cur_session->status != NC_STATUS_RUNNING) {
@@ -1496,8 +1526,8 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
             }
         }
 
-        /* SESSION UNLOCK */
-        nc_session_unlock(cur_session, NC_SESSION_LOCK_TIMEOUT, __func__);
+        /* SESSION RPC UNLOCK */
+        nc_session_rpc_unlock(cur_session, NC_SESSION_LOCK_TIMEOUT, __func__);
     }
 
     return ret;
@@ -1889,7 +1919,7 @@ nc_accept(int timeout, struct nc_session **session)
 
     sock = ret;
 
-    *session = nc_new_session(0);
+    *session = nc_new_session(NC_SERVER, 0);
     if (!(*session)) {
         ERRMEM;
         close(sock);
@@ -1898,16 +1928,10 @@ nc_accept(int timeout, struct nc_session **session)
         goto cleanup;
     }
     (*session)->status = NC_STATUS_STARTING;
-    (*session)->side = NC_SERVER;
     (*session)->ctx = server_opts.ctx;
     (*session)->flags = NC_SESSION_SHAREDCTX;
     (*session)->host = lydict_insert_zc(server_opts.ctx, host);
     (*session)->port = port;
-
-    /* transport lock */
-    pthread_mutex_init((*session)->ti_lock, NULL);
-    pthread_cond_init((*session)->ti_cond, NULL);
-    *(*session)->ti_inuse = 0;
 
     /* sock gets assigned to session or closed */
 #ifdef NC_ENABLED_SSH
@@ -1956,7 +1980,7 @@ nc_accept(int timeout, struct nc_session **session)
     pthread_spin_unlock(&server_opts.sid_lock);
 
     /* NETCONF handshake */
-    msgtype = nc_handshake(*session);
+    msgtype = nc_handshake_io(*session);
     if (msgtype != NC_MSG_HELLO) {
         nc_session_free(*session, NULL);
         *session = NULL;
@@ -2635,23 +2659,17 @@ nc_connect_ch_client_endpt(struct nc_ch_client *client, struct nc_ch_endpt *endp
         return NC_MSG_ERROR;
     }
 
-    *session = nc_new_session(0);
+    *session = nc_new_session(NC_SERVER, 0);
     if (!(*session)) {
         ERRMEM;
         close(sock);
         return NC_MSG_ERROR;
     }
     (*session)->status = NC_STATUS_STARTING;
-    (*session)->side = NC_SERVER;
     (*session)->ctx = server_opts.ctx;
     (*session)->flags = NC_SESSION_SHAREDCTX;
     (*session)->host = lydict_insert(server_opts.ctx, endpt->address, 0);
     (*session)->port = endpt->port;
-
-    /* transport lock */
-    pthread_mutex_init((*session)->ti_lock, NULL);
-    pthread_cond_init((*session)->ti_cond, NULL);
-    *(*session)->ti_inuse = 0;
 
     /* sock gets assigned to session or closed */
 #ifdef NC_ENABLED_SSH
@@ -2699,7 +2717,7 @@ nc_connect_ch_client_endpt(struct nc_ch_client *client, struct nc_ch_endpt *endp
     pthread_spin_unlock(&server_opts.sid_lock);
 
     /* NETCONF handshake */
-    msgtype = nc_handshake(*session);
+    msgtype = nc_handshake_io(*session);
     if (msgtype != NC_MSG_HELLO) {
         goto fail;
     }
@@ -2751,14 +2769,14 @@ nc_server_ch_client_with_endpt_lock(const char *name)
 static int
 nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct nc_ch_client_thread_arg *data)
 {
-    int ret;
+    int ret = 0, r;
     uint32_t idle_timeout;
     struct timespec ts;
     struct nc_ch_client *client;
 
     /* session created, initialize condition */
-    session->opts.server.ch_lock = malloc(sizeof *session->opts.server.ch_lock);
-    session->opts.server.ch_cond = malloc(sizeof *session->opts.server.ch_cond);
+    session->opts.server.ch_lock = calloc(1, sizeof *session->opts.server.ch_lock);
+    session->opts.server.ch_cond = calloc(1, sizeof *session->opts.server.ch_cond);
     if (!session->opts.server.ch_lock || !session->opts.server.ch_cond) {
         ERRMEM;
         nc_session_free(session, NULL);
@@ -2779,10 +2797,16 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
         nc_gettimespec_real(&ts);
         nc_addtimespec(&ts, NC_CH_NO_ENDPT_WAIT);
 
-        ret = pthread_cond_timedwait(session->opts.server.ch_cond, session->opts.server.ch_lock, &ts);
-        if (ret && (ret != ETIMEDOUT)) {
-            ERR("Pthread condition timedwait failed (%s).", strerror(ret));
-            goto ch_client_remove;
+        r = pthread_cond_timedwait(session->opts.server.ch_cond, session->opts.server.ch_lock, &ts);
+        if (!r) {
+            /* we were woken up, something probably happened */
+            if (session->status != NC_STATUS_RUNNING) {
+                break;
+            }
+        } else if (r != ETIMEDOUT) {
+            ERR("Pthread condition timedwait failed (%s).", strerror(r));
+            ret = -1;
+            break;
         }
 
         /* check whether the client was not removed */
@@ -2792,7 +2816,8 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
             /* client was removed, finish thread */
             VRB("Call Home client \"%s\" removed, but an established session will not be terminated.",
                 data->client_name);
-            goto ch_client_remove;
+            ret = 1;
+            break;
         }
 
         if (client->conn_type == NC_CH_PERSIST) {
@@ -2817,24 +2842,12 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
     /* CH UNLOCK */
     pthread_mutex_unlock(session->opts.server.ch_lock);
 
-    return 0;
+    if (session->status == NC_STATUS_CLOSING) {
+        /* signal to nc_session_free() that we registered session being freed, otherwise it matters not */
+        session->flags &= ~NC_SESSION_CALLHOME;
+    }
 
-ch_client_remove:
-    /* make the session a standard one */
-    pthread_cond_destroy(session->opts.server.ch_cond);
-    free(session->opts.server.ch_cond);
-    session->opts.server.ch_cond = NULL;
-
-    session->flags &= ~NC_SESSION_CALLHOME;
-
-    /* CH UNLOCK */
-    pthread_mutex_unlock(session->opts.server.ch_lock);
-
-    pthread_mutex_destroy(session->opts.server.ch_lock);
-    free(session->opts.server.ch_lock);
-    session->opts.server.ch_lock = NULL;
-
-    return 1;
+    return ret;
 }
 
 static void *
@@ -2914,19 +2927,30 @@ nc_ch_client_thread(void *arg)
             }
 
             ++cur_attempts;
-            if (cur_attempts == client->max_attempts) {
-                for (i = 0; i < client->ch_endpt_count; ++i) {
-                    if (!strcmp(client->ch_endpts[i].name, cur_endpt_name)) {
-                        break;
-                    }
+
+            /* try to find our endpoint again */
+            for (i = 0; i < client->ch_endpt_count; ++i) {
+                if (!strcmp(client->ch_endpts[i].name, cur_endpt_name)) {
+                    break;
                 }
+            }
+
+            if (i < client->ch_endpt_count) {
+                /* endpoint was removed, start with the first one */
+                cur_endpt = &client->ch_endpts[0];
+                free(cur_endpt_name);
+                cur_endpt_name = strdup(cur_endpt->name);
+
+                cur_attempts = 0;
+            } else if (cur_attempts == client->max_attempts) {
+                /* we have tried to connect to this endpoint enough times */
                 if (i < client->ch_endpt_count - 1) {
                     /* just go to the next endpoint */
                     cur_endpt = &client->ch_endpts[i + 1];
                     free(cur_endpt_name);
                     cur_endpt_name = strdup(cur_endpt->name);
                 } else {
-                    /* cur_endpoint was removed or is the last, either way start with the first one */
+                    /* cur_endpoint is the last, start with the first one */
                     cur_endpt = &client->ch_endpts[0];
                     free(cur_endpt_name);
                     cur_endpt_name = strdup(cur_endpt->name);
@@ -2947,7 +2971,8 @@ cleanup:
 
 API int
 nc_connect_ch_client_dispatch(const char *client_name,
-                              void (*session_clb)(const char *client_name, struct nc_session *new_session)) {
+                              void (*session_clb)(const char *client_name, struct nc_session *new_session))
+{
     int ret;
     pthread_t tid;
     struct nc_ch_client_thread_arg *arg;

@@ -3,7 +3,7 @@
  * \author Michal Vasko <mvasko@cesnet.cz>
  * \brief libnetconf2 - general session functions
  *
- * Copyright (c) 2015 - 2017 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2018 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -11,11 +11,13 @@
  *
  *     https://opensource.org/licenses/BSD-3-Clause
  */
+#define _DEFAULT_SOURCE
 
 #include <assert.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <pthread.h>
 #include <sys/time.h>
 #include <time.h>
@@ -121,7 +123,7 @@ pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *abstime)
 
     /* Try to acquire the lock and, if we fail, sleep for 5ms. */
     while ((rc = pthread_mutex_trylock(mutex)) == EBUSY) {
-        nc_gettimespec(&cur);
+        nc_gettimespec_real(&cur);
 
         if ((diff = nc_difftimespec(&cur, abstime)) < 1) {
             /* timeout */
@@ -143,7 +145,7 @@ pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *abstime)
 #endif
 
 struct nc_session *
-nc_new_session(int not_allocate_ti)
+nc_new_session(NC_SIDE side, int shared_ti)
 {
     struct nc_session *sess;
 
@@ -152,20 +154,38 @@ nc_new_session(int not_allocate_ti)
         return NULL;
     }
 
-    if (!not_allocate_ti) {
-        sess->ti_lock = malloc(sizeof *sess->ti_lock);
-        sess->ti_cond = malloc(sizeof *sess->ti_cond);
-        sess->ti_inuse = malloc(sizeof *sess->ti_inuse);
-        if (!sess->ti_lock || !sess->ti_cond || !sess->ti_inuse) {
-            free(sess->ti_lock);
-            free(sess->ti_cond);
-            free((int *)sess->ti_inuse);
-            free(sess);
-            return NULL;
+    sess->side = side;
+
+    if (side == NC_SERVER) {
+        sess->opts.server.rpc_lock = malloc(sizeof *sess->opts.server.rpc_lock);
+        sess->opts.server.rpc_cond = malloc(sizeof *sess->opts.server.rpc_cond);
+        sess->opts.server.rpc_inuse = malloc(sizeof *sess->opts.server.rpc_inuse);
+        if (!sess->opts.server.rpc_lock || !sess->opts.server.rpc_cond || !sess->opts.server.rpc_inuse) {
+            goto error;
         }
+        pthread_mutex_init(sess->opts.server.rpc_lock, NULL);
+        pthread_cond_init(sess->opts.server.rpc_cond, NULL);
+        *sess->opts.server.rpc_inuse = 0;
+    }
+
+    if (!shared_ti) {
+        sess->io_lock = malloc(sizeof *sess->io_lock);
+        if (!sess->io_lock) {
+            goto error;
+        }
+        pthread_mutex_init(sess->io_lock, NULL);
     }
 
     return sess;
+
+error:
+    if (side == NC_SERVER) {
+        free(sess->opts.server.rpc_lock);
+        free(sess->opts.server.rpc_cond);
+        free((int *)sess->opts.server.rpc_inuse);
+    }
+    free(sess);
+    return NULL;
 }
 
 /*
@@ -174,49 +194,54 @@ nc_new_session(int not_allocate_ti)
  *        -1 - error
  */
 int
-nc_session_lock(struct nc_session *session, int timeout, const char *func)
+nc_session_rpc_lock(struct nc_session *session, int timeout, const char *func)
 {
     int ret;
     struct timespec ts_timeout;
+
+    if (session->side != NC_SERVER) {
+        ERRINT;
+        return -1;
+    }
 
     if (timeout > 0) {
         nc_gettimespec_real(&ts_timeout);
         nc_addtimespec(&ts_timeout, timeout);
 
         /* LOCK */
-        ret = pthread_mutex_timedlock(session->ti_lock, &ts_timeout);
+        ret = pthread_mutex_timedlock(session->opts.server.rpc_lock, &ts_timeout);
         if (!ret) {
-            while (*session->ti_inuse) {
-                ret = pthread_cond_timedwait(session->ti_cond, session->ti_lock, &ts_timeout);
+            while (*session->opts.server.rpc_inuse) {
+                ret = pthread_cond_timedwait(session->opts.server.rpc_cond, session->opts.server.rpc_lock, &ts_timeout);
                 if (ret) {
-                    pthread_mutex_unlock(session->ti_lock);
+                    pthread_mutex_unlock(session->opts.server.rpc_lock);
                     break;
                 }
             }
         }
     } else if (!timeout) {
-        if (*session->ti_inuse) {
+        if (*session->opts.server.rpc_inuse) {
             /* immediate timeout */
             return 0;
         }
 
         /* LOCK */
-        ret = pthread_mutex_trylock(session->ti_lock);
+        ret = pthread_mutex_trylock(session->opts.server.rpc_lock);
         if (!ret) {
             /* be extra careful, someone could have been faster */
-            if (*session->ti_inuse) {
-                pthread_mutex_unlock(session->ti_lock);
+            if (*session->opts.server.rpc_inuse) {
+                pthread_mutex_unlock(session->opts.server.rpc_lock);
                 return 0;
             }
         }
     } else { /* timeout == -1 */
         /* LOCK */
-        ret = pthread_mutex_lock(session->ti_lock);
+        ret = pthread_mutex_lock(session->opts.server.rpc_lock);
         if (!ret) {
-            while (*session->ti_inuse) {
-                ret = pthread_cond_wait(session->ti_cond, session->ti_lock);
+            while (*session->opts.server.rpc_inuse) {
+                ret = pthread_cond_wait(session->opts.server.rpc_cond, session->opts.server.rpc_lock);
                 if (ret) {
-                    pthread_mutex_unlock(session->ti_lock);
+                    pthread_mutex_unlock(session->opts.server.rpc_lock);
                     break;
                 }
             }
@@ -230,19 +255,19 @@ nc_session_lock(struct nc_session *session, int timeout, const char *func)
         }
 
         /* error */
-        ERR("%s: failed to lock a session (%s).", func, strerror(ret));
+        ERR("%s: failed to RPC lock a session (%s).", func, strerror(ret));
         return -1;
     }
 
     /* ok */
-    assert(*session->ti_inuse == 0);
-    *session->ti_inuse = 1;
+    assert(*session->opts.server.rpc_inuse == 0);
+    *session->opts.server.rpc_inuse = 1;
 
     /* UNLOCK */
-    ret = pthread_mutex_unlock(session->ti_lock);
+    ret = pthread_mutex_unlock(session->opts.server.rpc_lock);
     if (ret) {
         /* error */
-        ERR("%s: faile to unlock a session (%s).", func, strerror(ret));
+        ERR("%s: faile to RPC unlock a session (%s).", func, strerror(ret));
         return -1;
     }
 
@@ -250,46 +275,102 @@ nc_session_lock(struct nc_session *session, int timeout, const char *func)
 }
 
 int
-nc_session_unlock(struct nc_session *session, int timeout, const char *func)
+nc_session_rpc_unlock(struct nc_session *session, int timeout, const char *func)
 {
     int ret;
     struct timespec ts_timeout;
 
-    assert(*session->ti_inuse);
+    if (session->side != NC_SERVER) {
+        ERRINT;
+        return -1;
+    }
+
+    assert(*session->opts.server.rpc_inuse);
 
     if (timeout > 0) {
         nc_gettimespec_real(&ts_timeout);
         nc_addtimespec(&ts_timeout, timeout);
 
         /* LOCK */
-        ret = pthread_mutex_timedlock(session->ti_lock, &ts_timeout);
+        ret = pthread_mutex_timedlock(session->opts.server.rpc_lock, &ts_timeout);
     } else if (!timeout) {
         /* LOCK */
-        ret = pthread_mutex_trylock(session->ti_lock);
+        ret = pthread_mutex_trylock(session->opts.server.rpc_lock);
     } else { /* timeout == -1 */
         /* LOCK */
-        ret = pthread_mutex_lock(session->ti_lock);
+        ret = pthread_mutex_lock(session->opts.server.rpc_lock);
     }
 
     if (ret && (ret != EBUSY) && (ret != ETIMEDOUT)) {
         /* error */
-        ERR("%s: failed to lock a session (%s).", func, strerror(ret));
+        ERR("%s: failed to RPC lock a session (%s).", func, strerror(ret));
         return -1;
     } else if (ret) {
-        WRN("%s: session lock timeout, should not happen.");
+        WRN("%s: session RPC lock timeout, should not happen.");
     }
 
-    *session->ti_inuse = 0;
-    pthread_cond_signal(session->ti_cond);
+    *session->opts.server.rpc_inuse = 0;
+    pthread_cond_signal(session->opts.server.rpc_cond);
 
     if (!ret) {
         /* UNLOCK */
-        ret = pthread_mutex_unlock(session->ti_lock);
+        ret = pthread_mutex_unlock(session->opts.server.rpc_lock);
         if (ret) {
             /* error */
-            ERR("%s: failed to unlock a session (%s).", func, strerror(ret));
+            ERR("%s: failed to RPC unlock a session (%s).", func, strerror(ret));
             return -1;
         }
+    }
+
+    return 1;
+}
+
+/*
+ * @return 1 - success
+ *         0 - timeout
+ *        -1 - error
+ */
+int
+nc_session_io_lock(struct nc_session *session, int timeout, const char *func)
+{
+    int ret;
+    struct timespec ts_timeout;
+
+    if (timeout > 0) {
+        nc_gettimespec_real(&ts_timeout);
+        nc_addtimespec(&ts_timeout, timeout);
+
+        ret = pthread_mutex_timedlock(session->io_lock, &ts_timeout);
+    } else if (!timeout) {
+        ret = pthread_mutex_trylock(session->io_lock);
+    } else { /* timeout == -1 */
+        ret = pthread_mutex_lock(session->opts.server.rpc_lock);
+    }
+
+    if (ret) {
+        if ((ret == EBUSY) || (ret == ETIMEDOUT)) {
+            /* timeout */
+            return 0;
+        }
+
+        /* error */
+        ERR("%s: failed to IO lock a session (%s).", func, strerror(ret));
+        return -1;
+    }
+
+    return 1;
+}
+
+int
+nc_session_io_unlock(struct nc_session *session, const char *func)
+{
+    int ret;
+
+    ret = pthread_mutex_unlock(session->io_lock);
+    if (ret) {
+        /* error */
+        ERR("%s: failed to IO unlock a session (%s).", func, strerror(ret));
+        return -1;
     }
 
     return 1;
@@ -428,32 +509,23 @@ nc_session_get_data(const struct nc_session *session)
 }
 
 NC_MSG_TYPE
-nc_send_msg(struct nc_session *session, struct lyd_node *op)
+nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op)
 {
-    int r;
-
     if (session->ctx != op->schema->module->ctx) {
         ERR("Session %u: RPC \"%s\" was created in different context than that of the session.",
             session->id, op->schema->name);
         return NC_MSG_ERROR;
     }
 
-    r = nc_write_msg(session, NC_MSG_RPC, op, NULL);
-
-    if (r) {
-        return NC_MSG_ERROR;
-    }
-
-    return NC_MSG_RPC;
+    return nc_write_msg_io(session, io_timeout, NC_MSG_RPC, op, NULL);
 }
 
 API void
 nc_session_free(struct nc_session *session, void (*data_free)(void *))
 {
-    int r, i, locked;
+    int r, i, rpc_locked = 0, sock = -1;
     int connected; /* flag to indicate whether the transport socket is still connected */
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
-    pthread_t tid;
     struct nc_session *siter;
     struct nc_msg_cont *contiter;
     struct lyxml_elem *rpl, *child;
@@ -467,30 +539,20 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     /* stop notifications loop if any */
     if ((session->side == NC_CLIENT) && session->opts.client.ntf_tid) {
-        tid = *session->opts.client.ntf_tid;
-        free((pthread_t *)session->opts.client.ntf_tid);
         session->opts.client.ntf_tid = NULL;
         /* the thread now knows it should quit */
-
-        pthread_join(tid, NULL);
     }
 
-    if (session->ti_lock) {
-        r = nc_session_lock(session, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
+    if ((session->side == NC_SERVER) && session->opts.server.rpc_lock) {
+        r = nc_session_rpc_lock(session, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
         if (r == -1) {
             return;
-        } else if (!r) {
-            /* we failed to lock it, too bad */
-            locked = 0;
-        } else {
-            locked = 1;
-        }
-    } else {
-        ERRINT;
-        return;
+        } else if (r) {
+            rpc_locked = 1;
+        } /* else failed to lock it, too bad */
     }
 
-    if ((session->side == NC_CLIENT) && (session->status == NC_STATUS_RUNNING) && locked) {
+    if ((session->side == NC_CLIENT) && (session->status == NC_STATUS_RUNNING)) {
         /* cleanup message queues */
         /* notifications */
         for (contiter = session->opts.client.notifs; contiter; ) {
@@ -516,9 +578,9 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
             WRN("Session %u: missing ietf-netconf schema in context, unable to send <close-session>.", session->id);
         } else {
             close_rpc = lyd_new(NULL, ietfnc, "close-session");
-            nc_send_msg(session, close_rpc);
+            nc_send_msg_io(session, NC_SESSION_FREE_LOCK_TIMEOUT, close_rpc);
             lyd_free(close_rpc);
-            switch (nc_read_msg_poll(session, NC_CLOSE_REPLY_TIMEOUT, &rpl)) {
+            switch (nc_read_msg_poll_io(session, NC_CLOSE_REPLY_TIMEOUT, &rpl)) {
             case NC_MSG_REPLY:
                 LY_TREE_FOR(rpl->child, child) {
                     if (!strcmp(child->name, "ok") && child->ns && !strcmp(child->ns->value, NC_NS_BASE)) {
@@ -568,6 +630,16 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
         /* CH UNLOCK */
         pthread_mutex_unlock(session->opts.server.ch_lock);
+
+        /* wait for CH thread to actually wake up */
+        i = (NC_SESSION_FREE_LOCK_TIMEOUT * 1000) / NC_TIMEOUT_STEP;
+        while (i && (session->flags & NC_SESSION_CALLHOME)) {
+            usleep(NC_TIMEOUT_STEP);
+            --i;
+        }
+        if (session->flags & NC_SESSION_CALLHOME) {
+            ERR("Session %u: Call Home thread failed to wake up in a timely manner, fatal synchronization problem.", session->id);
+        }
     }
 
     connected = nc_session_is_connected(session);
@@ -620,6 +692,8 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
                     free(siter);
                 } while (session->ti.libssh.next != session);
             }
+            /* remember sock so we can close it */
+            sock = ssh_get_fd(session->ti.libssh.session);
             if (connected) {
                 ssh_disconnect(session->ti.libssh.session);
             }
@@ -651,6 +725,9 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
 #ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
+        /* remember sock so we can close it */
+        sock = SSL_get_fd(session->ti.tls);
+
         if (connected) {
             SSL_shutdown(session->ti.tls);
         }
@@ -666,21 +743,29 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         break;
     }
 
+    /* close socket separately */
+    if (sock > -1) {
+        close(sock);
+    }
+
     lydict_remove(session->ctx, session->username);
     lydict_remove(session->ctx, session->host);
 
     /* final cleanup */
-    if (session->ti_lock) {
-        if (locked) {
-            nc_session_unlock(session, NC_SESSION_LOCK_TIMEOUT, __func__);
+    if ((session->side == NC_SERVER) && session->opts.server.rpc_lock) {
+        if (rpc_locked) {
+            nc_session_rpc_unlock(session, NC_SESSION_LOCK_TIMEOUT, __func__);
         }
-        if (!multisession) {
-            pthread_mutex_destroy(session->ti_lock);
-            pthread_cond_destroy(session->ti_cond);
-            free(session->ti_lock);
-            free(session->ti_cond);
-            free((int *)session->ti_inuse);
-        }
+        pthread_mutex_destroy(session->opts.server.rpc_lock);
+        pthread_cond_destroy(session->opts.server.rpc_cond);
+        free(session->opts.server.rpc_lock);
+        free(session->opts.server.rpc_cond);
+        free((int *)session->opts.server.rpc_inuse);
+    }
+
+    if (session->io_lock && !multisession) {
+        pthread_mutex_destroy(session->io_lock);
+        free(session->io_lock);
     }
 
     if (!(session->flags & NC_SESSION_SHAREDCTX)) {
@@ -688,6 +773,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     if (session->side == NC_SERVER) {
+        /* free CH synchronization structures if used */
         if (session->opts.server.ch_cond) {
             pthread_cond_destroy(session->opts.server.ch_cond);
             free(session->opts.server.ch_cond);
@@ -743,25 +829,18 @@ add_cpblt(struct ly_ctx *ctx, const char *capab, const char ***cpblts, int *size
 }
 
 API const char **
-nc_server_get_cpblts(struct ly_ctx *ctx)
+nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
 {
-    struct lyd_node *child, *child2, *yanglib;
-    struct lyd_node_leaf_list **features = NULL, **deviations = NULL, *ns = NULL, *rev = NULL, *name = NULL, *module_set_id = NULL;
     const char **cpblts;
-    const struct lys_module *mod;
-    int size = 10, count, feat_count = 0, dev_count = 0, i, str_len;
-    unsigned int u;
-#define NC_CPBLT_BUF_LEN 512
+    const struct lys_module *mod, *devmod;
+    int size = 10, count, features_count = 0, dev_count = 0, i, str_len, len;
+    unsigned int u, v, module_set_id;
+    char *s;
+#define NC_CPBLT_BUF_LEN 4096
     char str[NC_CPBLT_BUF_LEN];
 
     if (!ctx) {
         ERRARG("ctx");
-        return NULL;
-    }
-
-    yanglib = ly_ctx_info(ctx);
-    if (!yanglib) {
-        ERR("Failed to get ietf-yang-library data from the context.");
         return NULL;
     }
 
@@ -852,110 +931,88 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
     }
 
     /* models */
-    LY_TREE_FOR(yanglib->prev->child, child) {
-        if (!module_set_id) {
-            if (strcmp(child->prev->schema->name, "module-set-id")) {
-                ERRINT;
-                goto error;
-            }
-            module_set_id = (struct lyd_node_leaf_list *)child->prev;
-        }
-        if (!strcmp(child->schema->name, "module")) {
-            LY_TREE_FOR(child->child, child2) {
-                if (!strcmp(child2->schema->name, "namespace")) {
-                    ns = (struct lyd_node_leaf_list *)child2;
-                } else if (!strcmp(child2->schema->name, "name")) {
-                    name = (struct lyd_node_leaf_list *)child2;
-                } else if (!strcmp(child2->schema->name, "revision")) {
-                    rev = (struct lyd_node_leaf_list *)child2;
-                } else if (!strcmp(child2->schema->name, "feature")) {
-                    features = nc_realloc(features, ++feat_count * sizeof *features);
-                    if (!features) {
-                        ERRMEM;
-                        goto error;
-                    }
-                    features[feat_count - 1] = (struct lyd_node_leaf_list *)child2;
-                } else if (!strcmp(child2->schema->name, "deviation")) {
-                    deviations = nc_realloc(deviations, ++dev_count * sizeof *deviations);
-                    if (!deviations) {
-                        ERRMEM;
-                        goto error;
-                    }
-                    deviations[dev_count - 1] = (struct lyd_node_leaf_list *)child2;
-                }
-            }
-
-            if (!ns || !name || !rev) {
-                ERRINT;
-                continue;
-            }
-
-            str_len = sprintf(str, "%s?module=%s%s%s", ns->value_str, name->value_str,
-                              rev->value_str[0] ? "&revision=" : "", rev->value_str);
-            if (feat_count) {
-                strcat(str, "&features=");
-                str_len += 10;
-                for (i = 0; i < feat_count; ++i) {
-                    if (str_len + 1 + strlen(features[i]->value_str) >= NC_CPBLT_BUF_LEN) {
-                        ERRINT;
-                        break;
-                    }
-                    if (i) {
-                        strcat(str, ",");
-                        ++str_len;
-                    }
-                    strcat(str, features[i]->value_str);
-                    str_len += strlen(features[i]->value_str);
-                }
-            }
-            if (dev_count) {
-                strcat(str, "&deviations=");
-                str_len += 12;
-                for (i = 0; i < dev_count; ++i) {
-                    LY_TREE_FOR(((struct lyd_node *)deviations[i])->child, child2) {
-                        if (!strcmp(child2->schema->name, "name"))
-                            break;
-                    }
-                    if (!child2) {
-                        ERRINT;
-                        continue;
-                    }
-
-                    if (str_len + 1 + strlen(((struct lyd_node_leaf_list *)child2)->value_str) >= NC_CPBLT_BUF_LEN) {
-                        ERRINT;
-                        break;
-                    }
-                    if (i) {
-                        strcat(str, ",");
-                        ++str_len;
-                    }
-                    strcat(str, ((struct lyd_node_leaf_list *)child2)->value_str);
-                    str_len += strlen(((struct lyd_node_leaf_list *)child2)->value_str);
-                }
-            }
-            if (!strcmp(name->value_str, "ietf-yang-library")) {
-                sprintf(str + str_len, "&module-set-id=%s", module_set_id->value_str);
-            }
-
+    u = module_set_id = 0;
+    while ((mod = ly_ctx_get_module_iter(ctx, &u))) {
+        VRB("HELLO module %s", mod->name);
+        if (!strcmp(mod->name, "ietf-yang-library")) {
+            /* ietf-yang-library is always part of the list, but it is specific since it is 1.1 schema */
+            sprintf(str, "%s?%s%s&module-set-id=%u", mod->ns, mod->rev_size ? "revision=" : "",
+                    mod->rev_size ? mod->rev[0].date : "", ly_ctx_get_module_set_id(ctx));
             add_cpblt(ctx, str, &cpblts, &size, &count);
+            continue;
+        } else if (mod->type) {
+            /* skip submodules */
+            continue;
+        } else if (version == LYS_VERSION_1 && mod->version > version) {
+            /* skip YANG 1.1 schemas */
+            continue;
+        } else if (version == LYS_VERSION_1_1 && mod->version != version) {
+            /* skip YANG 1.0 schemas */
+            continue;
+        }
 
-            ns = NULL;
-            name = NULL;
-            rev = NULL;
-            if (features || feat_count) {
-                free(features);
-                features = NULL;
-                feat_count = 0;
-            }
-            if (deviations || dev_count) {
-                free(deviations);
-                deviations = NULL;
-                dev_count = 0;
+        str_len = sprintf(str, "%s?module=%s%s%s", mod->ns, mod->name,
+                          mod->rev_size ? "&revision=" : "", mod->rev_size ? mod->rev[0].date : "");
+
+        if (mod->features_size) {
+            features_count = 0;
+            for (i = 0; i < mod->features_size; ++i) {
+                if (!(mod->features[i].flags & LYS_FENABLED)) {
+                    continue;
+                }
+                if (!features_count) {
+                    strcat(str, "&features=");
+                    str_len += 10;
+                }
+                len = strlen(mod->features[i].name);
+                if (str_len + 1 + len >= NC_CPBLT_BUF_LEN) {
+                    ERRINT;
+                    break;
+                }
+                if (i) {
+                    strcat(str, ",");
+                    ++str_len;
+                }
+                strcat(str, mod->features[i].name);
+                str_len += len;
+                features_count++;
             }
         }
-    }
 
-    lyd_free_withsiblings(yanglib);
+        if (mod->deviated) {
+            strcat(str, "&deviations=");
+            str_len += 12;
+            dev_count = 0;
+            while ((devmod = ly_ctx_get_module_iter(ctx, &v))) {
+                if (devmod == mod) {
+                    continue;
+                }
+
+                for (i = 0; i < devmod->deviation_size; ++i) {
+                    s = strstr(devmod->deviation[i].target_name, mod->name);
+                    if (s && s[strlen(mod->name)] == ':') {
+                        /* we have the module deviating the module being processed */
+                        len = strlen(devmod->name);
+                        if (str_len + 1 + len >= NC_CPBLT_BUF_LEN) {
+                            ERRINT;
+                            break;
+                        }
+                        if (dev_count) {
+                            strcat(str, ",");
+                            ++str_len;
+                        }
+                        strcat(str, devmod->name);
+                        str_len += len;
+                        dev_count++;
+
+                        break;
+                    }
+                }
+            }
+        }
+
+        add_cpblt(ctx, str, &cpblts, &size, &count);
+    }
 
     /* ending NULL capability */
     add_cpblt(ctx, NULL, &cpblts, &size, &count);
@@ -965,10 +1022,13 @@ nc_server_get_cpblts(struct ly_ctx *ctx)
 error:
 
     free(cpblts);
-    free(features);
-    free(deviations);
-    lyd_free_withsiblings(yanglib);
     return NULL;
+}
+
+API const char **
+nc_server_get_cpblts(struct ly_ctx *ctx)
+{
+    return nc_server_get_cpblts_version(ctx, LYS_VERSION_UNDEF);
 }
 
 static int
@@ -1035,70 +1095,56 @@ parse_cpblts(struct lyxml_elem *xml, char ***list)
 }
 
 static NC_MSG_TYPE
-nc_send_client_hello(struct nc_session *session)
+nc_send_hello_io(struct nc_session *session)
 {
-    int r, i;
+    NC_MSG_TYPE ret;
+    int i, io_timeout;
     const char **cpblts;
+    uint32_t *sid;
 
-    /* client side hello - send only NETCONF base capabilities */
-    cpblts = malloc(3 * sizeof *cpblts);
-    if (!cpblts) {
-        ERRMEM;
-        return NC_MSG_ERROR;
+    if (session->side == NC_CLIENT) {
+        /* client side hello - send only NETCONF base capabilities */
+        cpblts = malloc(3 * sizeof *cpblts);
+        if (!cpblts) {
+            ERRMEM;
+            return NC_MSG_ERROR;
+        }
+        cpblts[0] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.0", 0);
+        cpblts[1] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.1", 0);
+        cpblts[2] = NULL;
+
+        io_timeout = NC_CLIENT_HELLO_TIMEOUT * 1000;
+        sid = NULL;
+    } else {
+        cpblts = nc_server_get_cpblts_version(session->ctx, LYS_VERSION_1);
+
+        io_timeout = NC_SERVER_HELLO_TIMEOUT * 1000;
+        sid = &session->id;
     }
-    cpblts[0] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.0", 0);
-    cpblts[1] = lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.1", 0);
-    cpblts[2] = NULL;
 
-    r = nc_write_msg(session, NC_MSG_HELLO, cpblts, NULL);
+    ret = nc_write_msg_io(session, io_timeout, NC_MSG_HELLO, cpblts, sid);
 
     for (i = 0; cpblts[i]; ++i) {
         lydict_remove(session->ctx, cpblts[i]);
     }
     free(cpblts);
 
-    if (r) {
-        return NC_MSG_ERROR;
-    }
-
-    return NC_MSG_HELLO;
+    return ret;
 }
 
 static NC_MSG_TYPE
-nc_send_server_hello(struct nc_session *session)
-{
-    int r, i;
-    const char **cpblts;
-
-    cpblts = nc_server_get_cpblts(session->ctx);
-
-    r = nc_write_msg(session, NC_MSG_HELLO, cpblts, &session->id);
-
-    for (i = 0; cpblts[i]; ++i) {
-        lydict_remove(session->ctx, cpblts[i]);
-    }
-    free(cpblts);
-
-    if (r) {
-        return NC_MSG_ERROR;
-    }
-
-    return NC_MSG_HELLO;
-}
-
-static NC_MSG_TYPE
-nc_recv_client_hello(struct nc_session *session)
+nc_recv_client_hello_io(struct nc_session *session)
 {
     struct lyxml_elem *xml = NULL, *node;
-    NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
+    NC_MSG_TYPE msgtype;
     int ver = -1;
     char *str;
     long long int id;
     int flag = 0;
 
-    msgtype = nc_read_msg_poll(session, NC_CLIENT_HELLO_TIMEOUT * 1000, &xml);
+    msgtype = nc_read_msg_poll_io(session, NC_CLIENT_HELLO_TIMEOUT * 1000, &xml);
 
-    switch(msgtype) {
+    switch (msgtype) {
     case NC_MSG_HELLO:
         /* parse <hello> data */
         LY_TREE_FOR(xml->child, node) {
@@ -1165,14 +1211,15 @@ error:
 }
 
 static NC_MSG_TYPE
-nc_recv_server_hello(struct nc_session *session)
+nc_recv_server_hello_io(struct nc_session *session)
 {
     struct lyxml_elem *xml = NULL, *node;
     NC_MSG_TYPE msgtype;
     int ver = -1;
     int flag = 0;
 
-    msgtype = nc_read_msg_poll(session, (server_opts.hello_timeout ? server_opts.hello_timeout * 1000 : NC_SERVER_HELLO_TIMEOUT * 1000), &xml);
+    msgtype = nc_read_msg_poll_io(session, (server_opts.hello_timeout ?
+                                            server_opts.hello_timeout * 1000 : NC_SERVER_HELLO_TIMEOUT * 1000), &xml);
 
     switch (msgtype) {
     case NC_MSG_HELLO:
@@ -1215,29 +1262,23 @@ nc_recv_server_hello(struct nc_session *session)
 
 cleanup:
     lyxml_free(session->ctx, xml);
-
     return msgtype;
 }
 
 NC_MSG_TYPE
-nc_handshake(struct nc_session *session)
+nc_handshake_io(struct nc_session *session)
 {
     NC_MSG_TYPE type;
 
-    if (session->side == NC_CLIENT) {
-        type = nc_send_client_hello(session);
-    } else {
-        type = nc_send_server_hello(session);
-    }
-
+    type = nc_send_hello_io(session);
     if (type != NC_MSG_HELLO) {
         return type;
     }
 
     if (session->side == NC_CLIENT) {
-        type = nc_recv_client_hello(session);
+        type = nc_recv_client_hello_io(session);
     } else {
-        type = nc_recv_server_hello(session);
+        type = nc_recv_server_hello_io(session);
     }
 
     return type;

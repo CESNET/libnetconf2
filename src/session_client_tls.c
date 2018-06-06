@@ -602,18 +602,12 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     }
 
     /* prepare session structure */
-    session = nc_new_session(0);
+    session = nc_new_session(NC_CLIENT, 0);
     if (!session) {
         ERRMEM;
         return NULL;
     }
     session->status = NC_STATUS_STARTING;
-    session->side = NC_CLIENT;
-
-    /* transport lock */
-    pthread_mutex_init(session->ti_lock, NULL);
-    pthread_cond_init(session->ti_cond, NULL);
-    *session->ti_inuse = 0;
 
     /* fill the session */
     session->ti_type = NC_TI_OPENSSL;
@@ -676,7 +670,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     ctx = session->ctx;
 
     /* NETCONF handshake */
-    if (nc_handshake(session) != NC_MSG_HELLO) {
+    if (nc_handshake_io(session) != NC_MSG_HELLO) {
         goto fail;
     }
     session->status = NC_STATUS_RUNNING;
@@ -711,19 +705,12 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     }
 
     /* prepare session structure */
-    session = nc_new_session(0);
+    session = nc_new_session(NC_CLIENT, 0);
     if (!session) {
         ERRMEM;
         return NULL;
     }
     session->status = NC_STATUS_STARTING;
-    session->side = NC_CLIENT;
-
-    /* transport lock */
-    pthread_mutex_init(session->ti_lock, NULL);
-    pthread_cond_init(session->ti_cond, NULL);
-    *session->ti_inuse = 0;
-
     session->ti_type = NC_TI_OPENSSL;
     session->ti.tls = tls;
 
@@ -733,7 +720,7 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     ctx = session->ctx;
 
     /* NETCONF handshake */
-    if (nc_handshake(session) != NC_MSG_HELLO) {
+    if (nc_handshake_io(session) != NC_MSG_HELLO) {
         goto fail;
     }
     session->status = NC_STATUS_RUNNING;

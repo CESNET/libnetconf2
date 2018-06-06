@@ -62,12 +62,8 @@ setup_write(void **state)
     w->session->version = NC_VERSION_10;
     w->session->opts.client.msgid = 999;
     w->session->ti_type = NC_TI_FD;
-    w->session->ti_lock = malloc(sizeof *w->session->ti_lock);
-    pthread_mutex_init(w->session->ti_lock, NULL);
-    w->session->ti_cond = malloc(sizeof *w->session->ti_cond);
-    pthread_cond_init(w->session->ti_cond, NULL);
-    w->session->ti_inuse = malloc(sizeof *w->session->ti_inuse);
-    *w->session->ti_inuse = 0;
+    w->session->io_lock = malloc(sizeof *w->session->io_lock);
+    pthread_mutex_init(w->session->io_lock, NULL);
     w->session->ti.fd.in = STDIN_FILENO;
     w->session->ti.fd.out = STDOUT_FILENO;
 
@@ -141,6 +137,12 @@ test_write_rpc_bad(void **state)
     NC_MSG_TYPE type;
 
     w->session->side = NC_SERVER;
+    w->session->opts.server.rpc_lock = malloc(sizeof *w->session->opts.server.rpc_lock);
+    pthread_mutex_init(w->session->opts.server.rpc_lock, NULL);
+    w->session->opts.server.rpc_cond = malloc(sizeof *w->session->opts.server.rpc_cond);
+    pthread_cond_init(w->session->opts.server.rpc_cond, NULL);
+    w->session->opts.server.rpc_inuse = malloc(sizeof *w->session->opts.server.rpc_inuse);
+    *w->session->opts.server.rpc_inuse = 0;
 
     do {
         type = nc_send_rpc(w->session, w->rpc, 1000, &msgid);

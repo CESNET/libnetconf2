@@ -9,3 +9,4 @@ Libs: -L${libdir} -lnetconf2
 Cflags: -I${includedir}
 
 LNC2_MAX_THREAD_COUNT=@MAX_PSPOLL_THREAD_COUNT@
+LNC2_SCHEMAS_DIR=@SCHEMAS_DIR@

@@ -47,7 +47,7 @@
 /*
  * Location of installed basic YIN/YANG schemas
  */
-#define SCHEMAS_DIR "@CMAKE_INSTALL_PREFIX@/@DATA_INSTALL_DIR@"
+#define NC_SCHEMAS_DIR "@SCHEMAS_DIR@"
 
 /*
  * Inactive read timeout
