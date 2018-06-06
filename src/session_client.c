@@ -2088,9 +2088,6 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
                 }
             }
             switch (rpc_g->wd_mode) {
-            case NC_WD_UNKNOWN:
-                /* cannot get here */
-                break;
             case NC_WD_ALL:
                 node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all");
                 break;
@@ -2102,6 +2099,10 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
                 break;
             case NC_WD_EXPLICIT:
                 node = lyd_new_leaf(data, ietfncwd, "with-defaults", "explicit");
+                break;
+            default:
+                /* cannot get here */
+                node = NULL;
                 break;
             }
             if (!node) {

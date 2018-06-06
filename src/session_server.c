@@ -1199,7 +1199,7 @@ static int
 nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mono, char *msg)
 {
     struct pollfd pfd;
-    int r, ret;
+    int r, ret = 0;
 #ifdef NC_ENABLED_SSH
     struct nc_session *new;
 #endif
