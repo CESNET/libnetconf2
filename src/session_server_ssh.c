@@ -787,6 +787,11 @@ auth_password_compare_pwd(const char *pass_hash, const char *pass_clear)
     new_pass_hash = crypt(pass_clear, pass_hash);
     pthread_mutex_unlock(&crypt_lock);
 #endif
+
+    if (!new_pass_hash) {
+        return 1;
+    }
+
     return strcmp(new_pass_hash, pass_hash);
 }
 
