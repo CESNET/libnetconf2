@@ -933,7 +933,6 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
     /* models */
     u = module_set_id = 0;
     while ((mod = ly_ctx_get_module_iter(ctx, &u))) {
-        VRB("HELLO module %s", mod->name);
         if (!strcmp(mod->name, "ietf-yang-library")) {
             /* ietf-yang-library is always part of the list, but it is specific since it is 1.1 schema */
             sprintf(str, "%s?%s%s&module-set-id=%u", mod->ns, mod->rev_size ? "revision=" : "",
