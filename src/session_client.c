@@ -609,7 +609,7 @@ nc_ctx_fill_yl(struct nc_session *session, ly_module_imp_clb user_clb, void *use
     const struct lys_module *mod;
 
     /* get yang-library data from the server */
-    rpc = nc_rpc_get("/ietf-yang-library:*//.", 0, NC_PARAMTYPE_CONST);
+    rpc = nc_rpc_get("/ietf-yang-library:*", 0, NC_PARAMTYPE_CONST);
     if (!rpc) {
         goto cleanup;
     }
