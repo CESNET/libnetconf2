@@ -739,7 +739,6 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         break;
 #endif
     case NC_TI_NONE:
-        ERRINT;
         break;
     }
 

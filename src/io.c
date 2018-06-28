@@ -594,7 +594,6 @@ nc_session_is_connected(struct nc_session *session)
         break;
 #endif
     default:
-        ERRINT;
         return 0;
     }
 
