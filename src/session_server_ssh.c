@@ -843,7 +843,7 @@ nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
     char *pass_hash;
 
     if (server_opts.interactive_auth_clb) {
-        auth_ret = server_opts.interactive_auth_clb(session, msg, server_opts.interactive_auth_clb);  
+        auth_ret = server_opts.interactive_auth_clb(session, msg, server_opts.interactive_auth_data);  
     } else {
         if (!ssh_message_auth_kbdint_is_response(msg)) {
             const char *prompts[] = {"Password: "};
