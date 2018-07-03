@@ -142,6 +142,25 @@ nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_session
     server_opts.passwd_auth_data_free = free_user_data;
 }
 
+API void
+nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session, ssh_message msg, void *user_data),
+                                  void *user_data, void (*free_user_data)(void *user_data))
+{
+    server_opts.interactive_auth_clb = interactive_auth_clb;
+    server_opts.interactive_auth_data = user_data;
+    server_opts.interactive_auth_data_free = free_user_data;
+}
+ 
+API void
+nc_server_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session *session, ssh_key key, void *user_data),
+                                  void *user_data, void (*free_user_data)(void *user_data))
+{
+    server_opts.pubkey_auth_clb = pubkey_auth_clb;
+    server_opts.pubkey_auth_data = user_data;
+    server_opts.pubkey_auth_data_free = free_user_data;
+}
+
+
 API int
 nc_server_ssh_ch_client_add_hostkey(const char *client_name, const char *name, int16_t idx)
 {
@@ -825,33 +844,39 @@ nc_sshcb_auth_password(struct nc_session *session, ssh_message msg)
 static void
 nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
 {
+    int auth_ret = 1;
     char *pass_hash;
 
-    if (!ssh_message_auth_kbdint_is_response(msg)) {
-        const char *prompts[] = {"Password: "};
-        char echo[] = {0};
-
-        ssh_message_auth_interactive_request(msg, "Interactive SSH Authentication", "Type your password:", 1, prompts, echo);
+    if (server_opts.interactive_auth_clb) {
+        auth_ret = server_opts.interactive_auth_clb(session, msg, server_opts.interactive_auth_data);  
     } else {
-        if (ssh_userauth_kbdint_getnanswers(session->ti.libssh.session) != 1) {
-            ssh_message_reply_default(msg);
-            return;
-        }
-        pass_hash = auth_password_get_pwd_hash(session->username);
-        if (!pass_hash) {
-            ssh_message_reply_default(msg);
-            return;
-        }
-        if (!auth_password_compare_pwd(pass_hash, ssh_userauth_kbdint_getanswer(session->ti.libssh.session, 0))) {
-            VRB("User \"%s\" authenticated.", session->username);
-            session->flags |= NC_SESSION_SSH_AUTHENTICATED;
-            ssh_message_auth_reply_success(msg, 0);
+        if (!ssh_message_auth_kbdint_is_response(msg)) {
+            const char *prompts[] = {"Password: "};
+            char echo[] = {0};
+
+            ssh_message_auth_interactive_request(msg, "Interactive SSH Authentication", "Type your password:", 1, prompts, echo);
         } else {
-            ++session->opts.server.ssh_auth_attempts;
-            VRB("Failed user \"%s\" authentication attempt (#%d).", session->username, session->opts.server.ssh_auth_attempts);
-            ssh_message_reply_default(msg);
+            if (ssh_userauth_kbdint_getnanswers(session->ti.libssh.session) != 1) {// failed session
+                ssh_message_reply_default(msg);
+                return;
+            }
+            pass_hash = auth_password_get_pwd_hash(session->username);// get hashed password
+            if (pass_hash) {
+                auth_ret = auth_password_compare_pwd(pass_hash, ssh_userauth_kbdint_getanswer(session->ti.libssh.session, 0));
+                free(pass_hash);// free hashed password
+            }
         }
-        free(pass_hash);
+    }
+
+    /* Authenticate message based on outcome */
+    if (!auth_ret) {
+        session->flags |= NC_SESSION_SSH_AUTHENTICATED;
+        VRB("User \"%s\" authenticated.", session->username);
+        ssh_message_auth_reply_success(msg, 0);
+    } else {
+        ++session->opts.server.ssh_auth_attempts;
+        VRB("Failed user \"%s\" authentication attempt (#%d).", session->username, session->opts.server.ssh_auth_attempts);
+        ssh_message_reply_default(msg);
     }
 }
 
@@ -914,12 +939,19 @@ nc_sshcb_auth_pubkey(struct nc_session *session, ssh_message msg)
     const char *username;
     int signature_state;
 
-    if ((username = auth_pubkey_compare_key(ssh_message_auth_pubkey(msg))) == NULL) {
-        VRB("User \"%s\" tried to use an unknown (unauthorized) public key.", session->username);
-        goto fail;
-    } else if (strcmp(session->username, username)) {
-        VRB("User \"%s\" is not the username identified with the presented public key.", session->username);
-        goto fail;
+    if(server_opts.pubkey_auth_clb){
+        if(server_opts.pubkey_auth_clb(session, ssh_message_auth_pubkey(msg), server_opts.pubkey_auth_data)){
+            goto fail;
+        }
+    }
+    else{
+        if ((username = auth_pubkey_compare_key(ssh_message_auth_pubkey(msg))) == NULL) {
+            VRB("User \"%s\" tried to use an unknown (unauthorized) public key.", session->username);
+            goto fail;
+        } else if (strcmp(session->username, username)) {
+            VRB("User \"%s\" is not the username identified with the presented public key.", session->username);
+            goto fail;
+        }
     }
 
     signature_state = ssh_message_auth_publickey_state(msg);
