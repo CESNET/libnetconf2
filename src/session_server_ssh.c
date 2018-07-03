@@ -150,7 +150,7 @@ nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct 
     server_opts.interactive_auth_data = user_data;
     server_opts.interactive_auth_data_free = free_user_data;
 }
- 
+
 API void
 nc_server_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session *session, ssh_key key, void *user_data),
                                   void *user_data, void (*free_user_data)(void *user_data))
@@ -848,7 +848,7 @@ nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
     char *pass_hash;
 
     if (server_opts.interactive_auth_clb) {
-        auth_ret = server_opts.interactive_auth_clb(session, msg, server_opts.interactive_auth_data);  
+        auth_ret = server_opts.interactive_auth_clb(session, msg, server_opts.interactive_auth_data);
     } else {
         if (!ssh_message_auth_kbdint_is_response(msg)) {
             const char *prompts[] = {"Password: "};
@@ -939,12 +939,11 @@ nc_sshcb_auth_pubkey(struct nc_session *session, ssh_message msg)
     const char *username;
     int signature_state;
 
-    if(server_opts.pubkey_auth_clb){
-        if(server_opts.pubkey_auth_clb(session, ssh_message_auth_pubkey(msg), server_opts.pubkey_auth_data)){
+    if (server_opts.pubkey_auth_clb) {
+        if (server_opts.pubkey_auth_clb(session, ssh_message_auth_pubkey(msg), server_opts.pubkey_auth_data)) {
             goto fail;
         }
-    }
-    else{
+    } else {
         if ((username = auth_pubkey_compare_key(ssh_message_auth_pubkey(msg))) == NULL) {
             VRB("User \"%s\" tried to use an unknown (unauthorized) public key.", session->username);
             goto fail;
