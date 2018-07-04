@@ -215,7 +215,7 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint
 
     len = strlen(endtag);
     while (1) {
-        if (limit && count >= limit) {
+        if (limit && count == limit) {
             free(chunk);
             WRN("Session %u: reading limit (%d) reached.", session->id, limit);
             ERR("Session %u: invalid input data (missing \"%s\" sequence).", session->id, endtag);
