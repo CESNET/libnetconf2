@@ -197,7 +197,7 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint
               struct timespec *ts_act_timeout, char **result)
 {
     char *chunk = NULL;
-    size_t size, count = 0, r, len;
+    size_t size, count = 0, r, len, i, matched = 0;
 
     assert(session);
     assert(endtag);
@@ -215,7 +215,7 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint
 
     len = strlen(endtag);
     while (1) {
-        if (limit && count == limit) {
+        if (limit && count >= limit) {
             free(chunk);
             WRN("Session %u: reading limit (%d) reached.", session->id, limit);
             ERR("Session %u: invalid input data (missing \"%s\" sequence).", session->id, endtag);
@@ -223,7 +223,7 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint
         }
 
         /* resize buffer if needed */
-        if (count == size) {
+        if ((count + (len - matched)) >= size) {
             /* get more memory */
             size = size + BUFFERSIZE;
             chunk = realloc(chunk, (size + 1) * sizeof *chunk);
@@ -234,20 +234,27 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint
         }
 
         /* get another character */
-        r = nc_read(session, &(chunk[count]), 1, inact_timeout, ts_act_timeout);
-        if (r != 1) {
+        r = nc_read(session, &(chunk[count]), len - matched, inact_timeout, ts_act_timeout);
+        if (r != len - matched) {
             free(chunk);
             return -1;
         }
 
-        count++;
+        count += len - matched;
 
-        /* check endtag */
-        if (count >= len) {
-            if (!strncmp(endtag, &(chunk[count - len]), len)) {
-                /* endtag found */
+        for (i = len - matched; i > 0; i--) {
+            if (!strncmp(&endtag[matched], &(chunk[count - i]), i)) {
+                /*part of endtag found */
+                matched += i;
                 break;
+            } else {
+                matched = 0;
             }
+        }
+
+        /* whole endtag found */
+        if (matched == len) {
+            break;
         }
     }
 
@@ -1264,3 +1271,4 @@ nc_realloc(void *ptr, size_t size)
 
     return ret;
 }
+
