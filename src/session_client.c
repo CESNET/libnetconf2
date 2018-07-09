@@ -1232,7 +1232,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
     struct nc_reply_data *data_rpl;
     struct nc_reply *reply = NULL;
     struct nc_rpc_act_generic *rpc_gen;
-    int i;
+    int i, dofree = 1;
 
     if (!xml->child) {
         ERR("An empty <rpc-reply>.");
@@ -1300,6 +1300,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
 
             if (rpc_gen->has_data) {
                 rpc_act = rpc_gen->content.data;
+                dofree = 0;
             } else {
                 rpc_act = lyd_parse_mem(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | parseroptions, NULL);
                 if (!rpc_act) {
@@ -1373,7 +1374,8 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
             /* <get>, <get-config> */
             data_rpl->data = data;
         }
-        lyd_free_withsiblings(rpc_act);
+        if (dofree)
+            lyd_free_withsiblings(rpc_act);
         if (!data_rpl->data) {
             ERR("Failed to parse <rpc-reply>.");
             free(data_rpl);
