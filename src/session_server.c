@@ -337,24 +337,30 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
     }
 
     /* enable keep-alive */
+#ifdef TCP_KEEPIDLE
     flags = 1;
     if (setsockopt(ret, IPPROTO_TCP, TCP_KEEPIDLE, &flags, sizeof flags) == -1) {
         ERR("Setsockopt failed (%s).", strerror(errno));
         close(ret);
         return -1;
     }
+#endif
+#ifdef TCP_KEEPINTVL
     flags = 5;
     if (setsockopt(ret, IPPROTO_TCP, TCP_KEEPINTVL, &flags, sizeof flags) == -1) {
         ERR("Setsockopt failed (%s).", strerror(errno));
         close(ret);
         return -1;
     }
+#endif
+#ifdef TCP_KEEPCNT
     flags = 10;
     if (setsockopt(ret, IPPROTO_TCP, TCP_KEEPCNT, &flags, sizeof flags) == -1) {
         ERR("Setsockopt failed (%s).", strerror(errno));
         close(ret);
         return -1;
     }
+#endif
 
     if (idx) {
         *idx = i;
