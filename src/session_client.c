@@ -935,18 +935,7 @@ nc_sock_connect(const char* host, uint16_t port)
         /* make the socket non-blocking */
         if (((flags = fcntl(sock, F_GETFL)) == -1) || (fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
             ERR("Fcntl failed (%s).", strerror(errno));
-            close(sock);
-            freeaddrinfo(res_list);
-            return -1;
-        }
-
-        /* enable keep-alive */
-        i = 1;
-        if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &i, sizeof i) == -1) {
-            ERR("Setsockopt failed (%s).", strerror(errno));
-            close(sock);
-            freeaddrinfo(res_list);
-            return -1;
+            goto error;
         }
 
         /* we're done, network connection established */
@@ -959,6 +948,13 @@ nc_sock_connect(const char* host, uint16_t port)
     freeaddrinfo(res_list);
 
     return sock;
+
+error:
+    if (sock > -1) {
+        close(sock);
+    }
+    freeaddrinfo(res_list);
+    return -1;
 }
 
 static NC_MSG_TYPE
