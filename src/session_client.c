@@ -1299,7 +1299,11 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
             rpc_gen = (struct nc_rpc_act_generic *)rpc;
 
             if (rpc_gen->has_data) {
-                rpc_act = rpc_gen->content.data;
+                rpc_act = lyd_dup(rpc_gen->content.data, 1);
+                if (!rpc_act) {
+                    ERR("Failed to duplicate a generic RPC/action.");
+                    return NULL;
+                }
             } else {
                 rpc_act = lyd_parse_mem(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | parseroptions, NULL);
                 if (!rpc_act) {
