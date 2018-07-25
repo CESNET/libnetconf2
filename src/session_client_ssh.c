@@ -1105,11 +1105,16 @@ nc_client_ssh_ch_del_bind(const char *address, uint16_t port)
 
 /* Establish a secure SSH connection and authenticate.
  * Host, port, username, and a connected socket is expected to be set.
+ *
+ * return values
+ *  -1  failure
+ *   0  try again
+ *   1  success
  */
 static int
 connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts, int timeout)
 {
-    int j, ret_auth, userauthlist, ret;
+    int j, ret_auth, userauthlist, ret, attempt = 0;
     NC_SSH_AUTH_TYPE auth;
     int16_t pref;
     const char* prompt;
@@ -1162,6 +1167,9 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
     } else if (ret_auth == SSH_AUTH_ERROR) {
         ERR("Authentication failed (%s).", ssh_get_error(ssh_sess));
         return -1;
+    } else if (ret_auth == SSH_AUTH_SUCCESS) {
+        WRN("Server accepts \"none\" authentication method.")
+        return 1;
     }
 
     /* check what authentication methods are available */
@@ -1197,7 +1205,11 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
         }
 
         if (!auth) {
-            ERR("Unable to authenticate to the remote server (no supported authentication methods left).");
+            if (!attempt) {
+                ERR("Unable to authenticate to the remote server (no supported authentication methods detected).");
+            } else {
+                ERR("Unable to authenticate to the remote server (all attempts via supported authentication methods failed).");
+            }
             return -1;
         }
 
@@ -1389,6 +1401,8 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
             ERRINT;
             return -1;
         }
+
+        attempt++;
     } while (ret_auth != SSH_AUTH_SUCCESS);
 
     return 1;

@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -163,8 +164,7 @@ nc_session_set_status(struct nc_session *session, NC_STATUS status)
 int
 nc_sock_listen(const char *address, uint16_t port)
 {
-    const int optVal = 1;
-    const socklen_t optLen = sizeof(optVal);
+    int opt;
     int is_ipv4, sock;
     struct sockaddr_storage saddr;
 
@@ -184,8 +184,14 @@ nc_sock_listen(const char *address, uint16_t port)
         goto fail;
     }
 
-    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void *)&optVal, optLen) == -1) {
-        ERR("Could not set socket SO_REUSEADDR socket option (%s).", strerror(errno));
+    opt = 1;
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof opt) == -1) {
+        ERR("Could not set SO_REUSEADDR socket option (%s).", strerror(errno));
+        goto fail;
+    }
+    opt = 1;
+    if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof opt) == -1) {
+        ERR("Could not set SO_KEEPALIVE option (%s).", strerror(errno));
         goto fail;
     }
 
@@ -331,12 +337,30 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
     }
 
     /* enable keep-alive */
+#ifdef TCP_KEEPIDLE
     flags = 1;
-    if (setsockopt(ret, SOL_SOCKET, SO_KEEPALIVE, &flags, sizeof flags) == -1) {
+    if (setsockopt(ret, IPPROTO_TCP, TCP_KEEPIDLE, &flags, sizeof flags) == -1) {
         ERR("Setsockopt failed (%s).", strerror(errno));
         close(ret);
         return -1;
     }
+#endif
+#ifdef TCP_KEEPINTVL
+    flags = 5;
+    if (setsockopt(ret, IPPROTO_TCP, TCP_KEEPINTVL, &flags, sizeof flags) == -1) {
+        ERR("Setsockopt failed (%s).", strerror(errno));
+        close(ret);
+        return -1;
+    }
+#endif
+#ifdef TCP_KEEPCNT
+    flags = 10;
+    if (setsockopt(ret, IPPROTO_TCP, TCP_KEEPCNT, &flags, sizeof flags) == -1) {
+        ERR("Setsockopt failed (%s).", strerror(errno));
+        close(ret);
+        return -1;
+    }
+#endif
 
     if (idx) {
         *idx = i;

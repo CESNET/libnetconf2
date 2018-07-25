@@ -898,6 +898,87 @@ fail:
     return NULL;
 }
 
+/*
+   Helper for a non-blocking connect (which is required because of the locking
+   concept for e.g. call home settings). For more details see nc_sock_connect().
+ */
+static int
+_non_blocking_connect(int timeout, int* sock_pending, struct addrinfo *res)
+{
+    int i=1, flags, ret=0;
+    int sock = -1;
+    fd_set  wset;
+    struct timeval ts;
+    int error = 0;
+    socklen_t len = sizeof(int);
+
+    if (sock_pending && *sock_pending != -1) {
+        VRB("Trying to connect the pending socket=%d.", *sock_pending );
+        sock = *sock_pending;
+    } else {
+        assert(res);
+        VRB("Trying to connect via %s.", (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
+        /* Connect to a server */
+        sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        if (sock == -1) {
+            ERR("socket couldn't be created.", strerror(errno));
+            return -1;
+        }
+        /* make the socket non-blocking */
+        if (((flags = fcntl(sock, F_GETFL)) == -1) || (fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
+            ERR("Fcntl failed (%s).", strerror(errno));
+            goto cleanup;
+        }
+        /* non-blocking connect! */
+        if (connect(sock, res->ai_addr, res->ai_addrlen) < 0) {
+            if (errno != EINPROGRESS) {
+                /* network connection failed, try another resource */
+                ERR("connect failed: (%s).", strerror(errno));
+                goto cleanup;
+            }
+        }
+        /* check the usability of the socket */
+        if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
+            ERR("getsockopt failed: (%s).", strerror(errno));
+            goto cleanup;
+        }
+        if (error == ECONNREFUSED) {
+            /* network connection failed, try another resource */
+            VRB("getsockopt error: (%s).", strerror(error));
+            goto cleanup;
+        }
+    }
+    ts.tv_sec = timeout;
+    ts.tv_usec = 0;
+
+    FD_ZERO(&wset);
+    FD_SET(sock, &wset);
+
+    if ((ret = select(sock + 1, NULL, &wset, NULL, (timeout != -1) ? &ts : NULL)) < 0) {
+        ERR("select failed: (%s).", strerror(errno));
+        goto cleanup;
+    }
+
+    if (ret == 0) {   //we had a timeout
+        VRB("timed out after %ds (%s).", timeout, strerror(errno));
+        if (sock_pending) {
+            /* no sock-close, we'll try it again */
+            *sock_pending = sock;
+        } else {
+            close(sock);
+        }
+        return -1;
+    }
+    return sock;
+
+cleanup:
+    if (sock_pending) {
+        *sock_pending = -1;
+    }
+    close(sock);
+    return -1;
+}
+
 /* A given timeout value limits the time how long the function blocks. If it has to block
    only for some seconds, a socket connection might not yet have been fully established.
    Therefore the active (pending) socket will be stored in *sock_pending, but the return
@@ -909,15 +990,10 @@ fail:
 int
 nc_sock_connect(const char* host, uint16_t port, int timeout, int* sock_pending)
 {
-    int i, flags, ret=0;
+    int i;
     int sock = sock_pending?*sock_pending:-1;
-    fd_set  wset;
     struct addrinfo hints, *res_list, *res;
     char port_s[6]; /* length of string representation of short int */
-    struct timeval  ts;
-
-    ts.tv_sec = timeout;
-    ts.tv_usec = 0;
 
     VRB("nc_sock_connect(%s, %u, %d, %d)", host, port, timeout, sock);
 
@@ -936,68 +1012,20 @@ nc_sock_connect(const char* host, uint16_t port, int timeout, int* sock_pending)
         }
 
         for (res = res_list; res != NULL; res = res->ai_next) {
-            sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-            if (sock == -1) {
-                /* socket was not created, try another resource */
+            sock = _non_blocking_connect(timeout, sock_pending, res);
+            if (sock == -1 && (!sock_pending || *sock_pending == -1)) {
+                /* try the next resource */
                 continue;
             }
-            /* make the socket non-blocking */
-            if (((flags = fcntl(sock, F_GETFL)) == -1) || (fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
-                ERR("Fcntl failed (%s).", strerror(errno));
-                close(sock);
-                freeaddrinfo(res_list);
-                return -1;
-            }
-            /* enable keep-alive */
-            i = 1;
-            if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &i, sizeof i) == -1) {
-                ERR("Setsockopt failed (%s).", strerror(errno));
-                close(sock);
-                freeaddrinfo(res_list);
-                return -1;
-            }
-            /* non-blocking connect! */
-            if (connect(sock, res->ai_addr, res->ai_addrlen) < 0) {
-                if (errno != EINPROGRESS) {
-                    /* network connection failed, try another resource */
-                    VRB("connect failed: (%s).", strerror(errno));
-                    close(sock);
-                    sock = -1;
-                    continue;
-                }
-            }
+            VRB("Successfully connected to %s:%s over %s.", host, port_s, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
+            break;
         }
         freeaddrinfo(res_list);
-    }
-    /* new socket or pending socket */
-    if (sock != -1) {
 
-        FD_ZERO(&wset);
-        FD_SET(sock, &wset);
-
-        if ((ret = select(sock + 1, NULL, &wset, NULL, (timeout != -1) ? &ts : NULL)) < 0) {
-            ERR("select failed: (%s).", strerror(errno));
-            close(sock);
-            return -1;
-        }
-
-        if (ret == 0) {   //we had a timeout
-            VRB("timed out after %ds (%s).", timeout, strerror(errno));
-            /* in that case we need to store it as pending for another attempt */
-            if (sock_pending) {
-                *sock_pending = sock;
-            } else {
-                close(sock);
-            }
-            return -1;
-        }
-
-        if (!FD_ISSET(sock, &wset)) {
-            ERR("FD_ISSET failed: (%s).", strerror(errno));
-            close(sock);
-            return -1;
-        }
-        VRB("Successfully connected to %s:%s.", host, port_s);
+    } else {
+        /* try to get a connection with the pending socket */
+        assert(sock_pending);
+        sock = _non_blocking_connect(timeout, sock_pending, NULL);
     }
 
     return sock;
@@ -1345,7 +1373,11 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
             rpc_gen = (struct nc_rpc_act_generic *)rpc;
 
             if (rpc_gen->has_data) {
-                rpc_act = rpc_gen->content.data;
+                rpc_act = lyd_dup(rpc_gen->content.data, 1);
+                if (!rpc_act) {
+                    ERR("Failed to duplicate a generic RPC/action.");
+                    return NULL;
+                }
             } else {
                 rpc_act = lyd_parse_mem(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | parseroptions, NULL);
                 if (!rpc_act) {

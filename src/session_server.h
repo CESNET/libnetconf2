@@ -22,6 +22,12 @@
 #   include <openssl/x509.h>
 #endif
 
+#ifdef NC_ENABLED_SSH
+#   include <libssh/libssh.h>
+#   include <libssh/callbacks.h>
+#   include <libssh/server.h>
+#endif
+
 #include "session.h"
 #include "netconf.h"
 
@@ -505,6 +511,29 @@ int nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name, in
  */
 void nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_session *session, const char *password,
                                                               void *user_data),
+                                       void *user_data, void (*free_user_data)(void *user_data));
+
+/**
+ * @brief Set the callback for SSH interactive authentication. If none is set, local system users are used.
+ *
+ * @param[in] interactive_auth_clb Callback that should authenticate the user.
+ *                            Zero return indicates success, non-zero an error.
+ * @param[in] user_data Optional arbitrary user data that will be passed to \p passwd_auth_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
+ */
+void ncserver_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session, const ssh_message msg,
+                                                              void *user_data),
+                                           void *user_data, void (*free_user_data)(void *user_data));
+
+/**
+ * @brief Set the callback for SSH public key authentication. If none is set, local system users are used.
+ *
+ * @param[in] pubkey_auth_clb Callback that should authenticate the user.
+ *                            Zero return indicates success, non-zero an error.
+ * @param[in] user_data Optional arbitrary user data that will be passed to \p passwd_auth_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
+ */
+ void ncserver_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session *session, ssh_key key, void *user_data),
                                        void *user_data, void (*free_user_data)(void *user_data));
 
 /**
