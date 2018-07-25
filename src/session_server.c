@@ -491,6 +491,7 @@ API int
 nc_server_init(struct ly_ctx *ctx)
 {
     const struct lys_node *rpc;
+    pthread_rwlockattr_t  attr;
 
     if (!ctx) {
         ERRARG("ctx");
@@ -516,6 +517,23 @@ nc_server_init(struct ly_ctx *ctx)
     server_opts.new_session_id = 1;
     pthread_spin_init(&server_opts.sid_lock, PTHREAD_PROCESS_PRIVATE);
 
+    errno=0;
+
+    if (pthread_rwlockattr_init(&attr) == 0) {
+        if (pthread_rwlockattr_setkind_np(&attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP) == 0) {
+            if (pthread_rwlock_init(&server_opts.endpt_lock, &attr) != 0) {
+                ERR("%s: failed to init rwlock(%s).", __FUNCTION__, strerror(errno));
+            }
+            if (pthread_rwlock_init(&server_opts.ch_client_lock, &attr) != 0) {
+                ERR("%s: failed to init rwlock(%s).", __FUNCTION__, strerror(errno));
+            }
+        } else {
+            ERR("%s: failed set attribute (%s).", __FUNCTION__, strerror(errno));
+        }
+        pthread_rwlockattr_destroy(&attr);
+    } else {
+        ERR("%s: failed init attribute (%s).", __FUNCTION__, strerror(errno));
+    }
     return 0;
 }
 
@@ -2263,6 +2281,7 @@ nc_server_ch_client_add_endpt(const char *client_name, const char *endpt_name)
     client->ch_endpts[client->ch_endpt_count - 1].name = lydict_insert(server_opts.ctx, endpt_name, 0);
     client->ch_endpts[client->ch_endpt_count - 1].address = NULL;
     client->ch_endpts[client->ch_endpt_count - 1].port = 0;
+    client->ch_endpts[client->ch_endpt_count - 1].sock_pending = -1;
 
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
@@ -2293,6 +2312,9 @@ nc_server_ch_client_del_endpt(const char *client_name, const char *endpt_name)
         for (i = 0; i < client->ch_endpt_count; ++i) {
             lydict_remove(server_opts.ctx, client->ch_endpts[i].name);
             lydict_remove(server_opts.ctx, client->ch_endpts[i].address);
+            if (client->ch_endpts[i].sock_pending != -1) {
+                close(client->ch_endpts[i].sock_pending);
+            }
         }
         free(client->ch_endpts);
         client->ch_endpts = NULL;
@@ -2678,10 +2700,12 @@ nc_connect_ch_client_endpt(struct nc_ch_client *client, struct nc_ch_endpt *endp
     int sock, ret;
     struct timespec ts_cur;
 
-    sock = nc_sock_connect(endpt->address, endpt->port);
+    sock = nc_sock_connect(endpt->address, endpt->port, 5, &endpt->sock_pending);
     if (sock < 0) {
         return NC_MSG_ERROR;
     }
+    /* no need to store the socket as pending any longer */
+    endpt->sock_pending = -1;
 
     *session = nc_new_session(NC_SERVER, 0);
     if (!(*session)) {

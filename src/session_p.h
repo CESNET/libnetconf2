@@ -238,6 +238,7 @@ struct nc_server_opts {
             const char *name;
             const char *address;
             uint16_t port;
+            int sock_pending;
         } *ch_endpts;
         uint16_t ch_endpt_count;
         union {
@@ -524,9 +525,11 @@ NC_MSG_TYPE nc_handshake_io(struct nc_session *session);
  *
  * @param[in] host Hostname to connect to.
  * @param[in] port Port to connect on.
+ * @param[in] timeout for blocking the connect+select call (-1 for infinite).
+ * @param[in] sock_pending for exchanging the pending socket, if the blocking timeout was != -1
  * @return Connected socket or -1 on error.
  */
-int nc_sock_connect(const char *host, uint16_t port);
+int nc_sock_connect(const char *host, uint16_t port, int timeout, int* sock_pending);
 
 /**
  * @brief Accept a new socket connection.
