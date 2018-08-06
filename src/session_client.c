@@ -898,63 +898,137 @@ fail:
     return NULL;
 }
 
-int
-nc_sock_connect(const char* host, uint16_t port)
+/*
+   Helper for a non-blocking connect (which is required because of the locking
+   concept for e.g. call home settings). For more details see nc_sock_connect().
+ */
+static int
+_non_blocking_connect(int timeout, int* sock_pending, struct addrinfo *res)
 {
-    int i, sock = -1, flags;
-    struct addrinfo hints, *res_list, *res;
-    char port_s[6]; /* length of string representation of short int */
+    int flags, ret=0;
+    int sock = -1;
+    fd_set  wset;
+    struct timeval ts;
+    int error = 0;
+    socklen_t len = sizeof(int);
 
-    snprintf(port_s, 6, "%u", port);
-
-    /* Connect to a server */
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    i = getaddrinfo(host, port_s, &hints, &res_list);
-    if (i != 0) {
-        ERR("Unable to translate the host address (%s).", gai_strerror(i));
-        return -1;
-    }
-
-    for (res = res_list; res != NULL; res = res->ai_next) {
+    if (sock_pending && *sock_pending != -1) {
+        VRB("Trying to connect the pending socket=%d.", *sock_pending );
+        sock = *sock_pending;
+    } else {
+        assert(res);
+        VRB("Trying to connect via %s.", (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
+        /* Connect to a server */
         sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
         if (sock == -1) {
-            /* socket was not created, try another resource */
-            continue;
+            ERR("socket couldn't be created.", strerror(errno));
+            return -1;
         }
-
-        if (connect(sock, res->ai_addr, res->ai_addrlen) == -1) {
-            /* network connection failed, try another resource */
-            close(sock);
-            sock = -1;
-            continue;
-        }
-
         /* make the socket non-blocking */
         if (((flags = fcntl(sock, F_GETFL)) == -1) || (fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
             ERR("Fcntl failed (%s).", strerror(errno));
-            goto error;
+            goto cleanup;
         }
+        /* non-blocking connect! */
+        if (connect(sock, res->ai_addr, res->ai_addrlen) < 0) {
+            if (errno != EINPROGRESS) {
+                /* network connection failed, try another resource */
+                ERR("connect failed: (%s).", strerror(errno));
+                goto cleanup;
+            }
+        }
+        /* check the usability of the socket */
+        if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
+            ERR("getsockopt failed: (%s).", strerror(errno));
+            goto cleanup;
+        }
+        if (error == ECONNREFUSED) {
+            /* network connection failed, try another resource */
+            VRB("getsockopt error: (%s).", strerror(error));
+            goto cleanup;
+        }
+    }
+    ts.tv_sec = timeout;
+    ts.tv_usec = 0;
 
-        /* we're done, network connection established */
-        break;
+    FD_ZERO(&wset);
+    FD_SET(sock, &wset);
+
+    if ((ret = select(sock + 1, NULL, &wset, NULL, (timeout != -1) ? &ts : NULL)) < 0) {
+        ERR("select failed: (%s).", strerror(errno));
+        goto cleanup;
     }
 
-    if (sock != -1) {
-        VRB("Successfully connected to %s:%s over %s.", host, port_s, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
+    if (ret == 0) {   //we had a timeout
+        VRB("timed out after %ds (%s).", timeout, strerror(errno));
+        if (sock_pending) {
+            /* no sock-close, we'll try it again */
+            *sock_pending = sock;
+        } else {
+            close(sock);
+        }
+        return -1;
     }
-    freeaddrinfo(res_list);
-
     return sock;
 
-error:
-    if (sock > -1) {
-        close(sock);
+cleanup:
+    if (sock_pending) {
+        *sock_pending = -1;
     }
-    freeaddrinfo(res_list);
+    close(sock);
     return -1;
+}
+
+/* A given timeout value limits the time how long the function blocks. If it has to block
+   only for some seconds, a socket connection might not yet have been fully established.
+   Therefore the active (pending) socket will be stored in *sock_pending, but the return
+   value will be -1. In such a case a subsequent invokation is required, by providing the
+   stored sock_pending, again.
+   In general, if this function returns -1, when a timeout has been given, this function
+   has to be invoked, until it returns a valid socket.
+ */
+int
+nc_sock_connect(const char* host, uint16_t port, int timeout, int* sock_pending)
+{
+    int i;
+    int sock = sock_pending?*sock_pending:-1;
+    struct addrinfo hints, *res_list, *res;
+    char port_s[6]; /* length of string representation of short int */
+
+    VRB("nc_sock_connect(%s, %u, %d, %d)", host, port, timeout, sock);
+
+    /* no pending socket */
+    if (sock == -1) {
+        /* Connect to a server */
+        snprintf(port_s, 6, "%u", port);
+        memset(&hints, 0, sizeof hints);
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_TCP;
+        i = getaddrinfo(host, port_s, &hints, &res_list);
+        if (i != 0) {
+            ERR("Unable to translate the host address (%s).", gai_strerror(i));
+            return -1;
+        }
+
+        for (res = res_list; res != NULL; res = res->ai_next) {
+            sock = _non_blocking_connect(timeout, sock_pending, res);
+            if (sock == -1 && (!sock_pending || *sock_pending == -1)) {
+                /* try the next resource */
+                continue;
+            }
+            VRB("Successfully connected to %s:%s over %s.", host, port_s, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
+            break;
+        }
+        freeaddrinfo(res_list);
+
+    } else {
+        /* try to get a connection with the pending socket */
+        assert(sock_pending);
+        sock = _non_blocking_connect(timeout, sock_pending, NULL);
+    }
+
+    return sock;
 }
 
 static NC_MSG_TYPE
