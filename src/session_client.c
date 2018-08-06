@@ -905,7 +905,7 @@ fail:
 static int
 _non_blocking_connect(int timeout, int* sock_pending, struct addrinfo *res)
 {
-    int i=1, flags, ret=0;
+    int flags, ret=0;
     int sock = -1;
     fd_set  wset;
     struct timeval ts;
