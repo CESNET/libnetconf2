@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <stdbool.h>
 
 #include <libyang/libyang.h>
 
@@ -828,6 +829,7 @@ nc_server_notif_new(struct lyd_node* event, char *eventtime, NC_PARAMTYPE paramt
 {
     struct nc_server_notif *ntf;
     struct lyd_node *elem;
+    bool found_notif = false;
 
     if (!event) {
         ERRARG("event");
@@ -838,7 +840,7 @@ nc_server_notif_new(struct lyd_node* event, char *eventtime, NC_PARAMTYPE paramt
     }
 
     /* check that there is a notification */
-    for (elem = event; elem && (elem->schema->nodetype != LYS_NOTIF); elem = elem->child) {
+    for (elem = event; elem && !found_notif; elem = elem->child) {
 next_node:
         switch (elem->schema->nodetype) {
         case LYS_LEAF:
@@ -852,8 +854,10 @@ next_node:
             goto next_node;
         case LYS_CONTAINER:
         case LYS_LIST:
-        case LYS_NOTIF:
             /* ok */
+            break;
+        case LYS_NOTIF:
+            found_notif = true;
             break;
         default:
             /* error */
@@ -861,7 +865,7 @@ next_node:
             return NULL;
         }
     }
-    if (!elem) {
+    if (!found_notif) {
         ERRARG("event");
         return NULL;
     }
