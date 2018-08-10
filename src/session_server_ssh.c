@@ -855,6 +855,7 @@ nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
             char echo[] = {0};
 
             ssh_message_auth_interactive_request(msg, "Interactive SSH Authentication", "Type your password:", 1, prompts, echo);
+            auth_ret = -1;
         } else {
             if (ssh_userauth_kbdint_getnanswers(session->ti.libssh.session) != 1) {// failed session
                 ssh_message_reply_default(msg);
@@ -862,10 +863,16 @@ nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
             }
             pass_hash = auth_password_get_pwd_hash(session->username);// get hashed password
             if (pass_hash) {
-                auth_ret = auth_password_compare_pwd(pass_hash, ssh_userauth_kbdint_getanswer(session->ti.libssh.session, 0));
+                /* Normalize auth_password_compare_pwd result to 0 or 1 */
+                auth_ret = !!auth_password_compare_pwd(pass_hash, ssh_userauth_kbdint_getanswer(session->ti.libssh.session, 0));
                 free(pass_hash);// free hashed password
             }
         }
+    }
+
+    /* We have already sent a reply */
+    if (auth_ret == -1) {
+        return;
     }
 
     /* Authenticate message based on outcome */
