@@ -369,9 +369,9 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
     /* host was requested */
     if (host) {
         if (saddr.ss_family == AF_INET) {
-            *host = malloc(15);
+            *host = malloc(INET_ADDRSTRLEN);
             if (*host) {
-                if (!inet_ntop(AF_INET, &((struct sockaddr_in *)&saddr)->sin_addr.s_addr, *host, 15)) {
+                if (!inet_ntop(AF_INET, &((struct sockaddr_in *)&saddr)->sin_addr.s_addr, *host, INET_ADDRSTRLEN)) {
                     ERR("inet_ntop failed (%s).", strerror(errno));
                     free(*host);
                     *host = NULL;
@@ -386,7 +386,7 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
         } else if (saddr.ss_family == AF_INET6) {
             *host = malloc(INET6_ADDRSTRLEN);
             if (*host) {
-                if (!inet_ntop(AF_INET6, ((struct sockaddr_in6 *)&saddr)->sin6_addr.s6_addr, *host, 40)) {
+                if (!inet_ntop(AF_INET6, ((struct sockaddr_in6 *)&saddr)->sin6_addr.s6_addr, *host, INET6_ADDRSTRLEN)) {
                     ERR("inet_ntop failed (%s).", strerror(errno));
                     free(*host);
                     *host = NULL;
