@@ -464,10 +464,13 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
             *mod = ly_ctx_load_module(session->ctx, name, revision);
             if (*mod) {
                 /* print get-schema warning */
+                ly_log_options(LY_LOLOG);
                 eitem = ly_err_first(session->ctx);
-                if (eitem && (eitem->prev->level == LY_LLWRN)) {
-                    ly_log_options(LY_LOLOG);
-                    ly_err_print(eitem->prev);
+                while (eitem) {
+                    if (eitem->level == LY_LLWRN) {
+                        ly_err_print(eitem);
+                    }
+                    eitem = eitem->next;
                 }
             }
         }
