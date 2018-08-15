@@ -398,6 +398,8 @@ getschema_module_clb(const char *mod_name, const char *mod_rev, const char *subm
     case LYD_ANYDATA_JSOND:
     case LYD_ANYDATA_SXML:
     case LYD_ANYDATA_SXMLD:
+    case LYD_ANYDATA_LYB:
+    case LYD_ANYDATA_LYBD:
         ERRINT;
         break;
     }
