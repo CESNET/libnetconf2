@@ -296,6 +296,11 @@ struct nc_server_opts {
 #define NC_SESSION_FREE_LOCK_TIMEOUT 1000
 
 /**
+ * Timeout in msec for transmitting on a session.
+ */
+#define NC_IO_LOCK_TIMEOUT 1000
+
+/**
  * Timeout in msec for acquiring a lock of a pollsession structure.
  */
 #define NC_PS_LOCK_TIMEOUT 200
