@@ -713,7 +713,8 @@ build_schema_info_yl(struct nc_session *session)
     c = modules ? modules->number : 0;
     result = calloc(c + 1, sizeof *result);
     if (!result) {
-        return NULL;
+        ERRMEM;
+        goto cleanup;
     }
 
     for (u = 0; u < c; ++u) {
@@ -752,6 +753,10 @@ build_schema_info_cpblts(char **cpblts)
 
     for (u = 0; cpblts[u]; ++u);
     result = calloc(u + 1, sizeof *result);
+    if (!result) {
+        ERRMEM;
+        return NULL;
+    }
 
     for (u = v = 0; cpblts[u]; ++u) {
         module_cpblt = strstr(cpblts[u], "module=");
