@@ -581,7 +581,7 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
 
         /* clear all the errors and just collect them for now */
         ly_err_clean(session->ctx, NULL);
-        //ly_log_options(LY_LOSTORE);
+        ly_log_options(LY_LOSTORE);
 
         /* get module data */
         module_data = retrieve_schema_data(name, revision, NULL, NULL, &clb_data, &format, &free_module_data);
@@ -599,7 +599,7 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
         }
 
         /* restore logging options, then print errors on definite failure */
-        //ly_log_options(LY_LOLOG | LY_LOSTORE_LAST);
+        ly_log_options(LY_LOLOG | LY_LOSTORE_LAST);
         if (!(*mod)) {
             for (eitem = ly_err_first(session->ctx); eitem && eitem->next; eitem = eitem->next) {
                 ly_err_print(eitem);
@@ -648,8 +648,9 @@ free_schema_info(struct schema_info *list)
     free(list);
 }
 
-static struct schema_info *
-build_schema_info_yl(struct nc_session *session)
+
+static int
+build_schema_info_yl(struct nc_session *session, struct schema_info **result)
 {
     struct nc_rpc *rpc = NULL;
     struct nc_reply *reply = NULL;
@@ -658,10 +659,10 @@ build_schema_info_yl(struct nc_session *session)
     NC_MSG_TYPE msg;
     uint64_t msgid;
     struct ly_set *modules = NULL;
-    struct schema_info *result;
     unsigned int u, v, c, submodules_count;
     struct lyd_node *iter, *child;
     struct lys_module *mod;
+    int ret = EXIT_SUCCESS;
 
     /* get yang-library data from the server */
     rpc = nc_rpc_get("/ietf-yang-library:*", 0, NC_PARAMTYPE_CONST);
@@ -673,7 +674,7 @@ build_schema_info_yl(struct nc_session *session)
         usleep(1000);
     }
     if (msg == NC_MSG_ERROR) {
-        ERR("Session %u: failed to send request for yang-library data.",
+        WRN("Session %u: failed to send request for yang-library data.",
             session->id);
         goto cleanup;
     }
@@ -682,16 +683,16 @@ build_schema_info_yl(struct nc_session *session)
         msg = nc_recv_reply(session, rpc, msgid, NC_READ_ACT_TIMEOUT * 1000, 0, &reply);
     } while (msg == NC_MSG_NOTIF);
     if (msg == NC_MSG_WOULDBLOCK) {
-        ERR("Session %u: timeout for receiving reply to a <get> yang-library data expired.", session->id);
+        WRN("Session %u: timeout for receiving reply to a <get> yang-library data expired.", session->id);
         goto cleanup;
     } else if (msg == NC_MSG_ERROR) {
-        ERR("Session %u: failed to receive a reply to <get> of yang-library data.", session->id);
+        WRN("Session %u: failed to receive a reply to <get> of yang-library data.", session->id);
         goto cleanup;
     }
 
     switch (reply->type) {
     case NC_RPL_OK:
-        ERR("Session %u: unexpected reply OK to a yang-library <get> RPC.", session->id);
+        WRN("Session %u: unexpected reply OK to a yang-library <get> RPC.", session->id);
         goto cleanup;
     case NC_RPL_DATA:
         /* fine */
@@ -699,20 +700,20 @@ build_schema_info_yl(struct nc_session *session)
     case NC_RPL_ERROR:
         error_rpl = (struct nc_reply_error *)reply;
         if (error_rpl->count) {
-            ERR("Session %u: error reply to a yang-library <get> RPC (tag \"%s\", message \"%s\").",
+            WRN("Session %u: error reply to a yang-library <get> RPC (tag \"%s\", message \"%s\").",
                 session->id, error_rpl->err[0].tag, error_rpl->err[0].message);
         } else {
-            ERR("Session %u: unexpected reply error to a yang-library <get> RPC.", session->id);
+            WRN("Session %u: unexpected reply error to a yang-library <get> RPC.", session->id);
         }
         goto cleanup;
     case NC_RPL_NOTIF:
-        ERR("Session %u: unexpected reply notification to a yang-library <get> RPC.", session->id);
+        WRN("Session %u: unexpected reply notification to a yang-library <get> RPC.", session->id);
         goto cleanup;
     }
 
     yldata = ((struct nc_reply_data *)reply)->data;
     if (!yldata || strcmp(yldata->schema->module->name, "ietf-yang-library")) {
-        ERR("Session %u: unexpected data in reply to a yang-library <get> RPC.", session->id);
+        WRN("Session %u: unexpected data in reply to a yang-library <get> RPC.", session->id);
         goto cleanup;
     }
 
@@ -723,9 +724,10 @@ build_schema_info_yl(struct nc_session *session)
     }
 
     c = modules ? modules->number : 0;
-    result = calloc(c + 1, sizeof *result);
-    if (!result) {
+    (*result) = calloc(c + 1, sizeof **result);
+    if (!(*result)) {
         ERRMEM;
+        ret = EXIT_FAILURE;
         goto cleanup;
     }
 
@@ -742,22 +744,26 @@ build_schema_info_yl(struct nc_session *session)
                 continue;
             }
             if (!strcmp(iter->schema->name, "name")) {
-                result[u].name = strdup(((struct lyd_node_leaf_list *)iter)->value_str);
+                (*result)[u].name = strdup(((struct lyd_node_leaf_list *)iter)->value_str);
             } else if (!strcmp(iter->schema->name, "revision")) {
-                result[u].revision = strdup(((struct lyd_node_leaf_list *)iter)->value_str);
+                (*result)[u].revision = strdup(((struct lyd_node_leaf_list *)iter)->value_str);
             } else if (!strcmp(iter->schema->name, "conformance-type")) {
-                result[u].implemented = !strcmp(((struct lyd_node_leaf_list *)iter)->value_str, "implement");
+                (*result)[u].implemented = !strcmp(((struct lyd_node_leaf_list *)iter)->value_str, "implement");
             } else if (!strcmp(iter->schema->name, "feature")) {
-                ly_set_add(&result[u].features, (void *)strdup(((struct lyd_node_leaf_list *)iter)->value_str), LY_SET_OPT_USEASLIST);
+                ly_set_add(&(*result)[u].features, (void *)strdup(((struct lyd_node_leaf_list *)iter)->value_str), LY_SET_OPT_USEASLIST);
             } else if (!strcmp(iter->schema->name, "submodule")) {
                 submodules_count++;
             }
         }
 
         if (submodules_count) {
-            result[u].submodules = calloc(submodules_count + 1, sizeof *result[u].submodules);
-            if (!result[u].submodules) {
+            (*result)[u].submodules = calloc(submodules_count + 1, sizeof *(*result)[u].submodules);
+            if (!(*result)[u].submodules) {
                 ERRMEM;
+                free_schema_info(*result);
+                *result = NULL;
+                ret = EXIT_FAILURE;
+                goto cleanup;
             } else {
                 v = 0;
                 LY_TREE_FOR(modules->set.d[u]->child, iter) {
@@ -767,9 +773,9 @@ build_schema_info_yl(struct nc_session *session)
                             if (mod != child->schema->module) {
                                 continue;
                             } else if (!strcmp(child->schema->name, "name")) {
-                                result[u].submodules[v].name = strdup(((struct lyd_node_leaf_list *)child)->value_str);
+                                (*result)[u].submodules[v].name = strdup(((struct lyd_node_leaf_list *)child)->value_str);
                             } else if (!strcmp(child->schema->name, "revision")) {
-                                result[u].submodules[v].name = strdup(((struct lyd_node_leaf_list *)child)->value_str);
+                                (*result)[u].submodules[v].name = strdup(((struct lyd_node_leaf_list *)child)->value_str);
                             }
                         }
                     }
@@ -778,27 +784,31 @@ build_schema_info_yl(struct nc_session *session)
         }
     }
 
-
 cleanup:
     nc_rpc_free(rpc);
     nc_reply_free(reply);
     ly_set_free(modules);
 
-    return result;
+    if (session->status != NC_STATUS_RUNNING) {
+        /* something bad heppened, discard the session */
+        ERR("Session %d: invalid session, discarding.", nc_session_get_id(session));
+        ret = EXIT_FAILURE;
+    }
+
+    return ret;
 }
 
-static struct schema_info *
-build_schema_info_cpblts(char **cpblts)
+static int
+build_schema_info_cpblts(char **cpblts, struct schema_info **result)
 {
     unsigned int u, v;
-    struct schema_info *result;
     char *module_cpblt, *ptr, *ptr2;
 
     for (u = 0; cpblts[u]; ++u);
-    result = calloc(u + 1, sizeof *result);
-    if (!result) {
+    (*result) = calloc(u + 1, sizeof **result);
+    if (!(*result)) {
         ERRMEM;
-        return NULL;
+        return EXIT_FAILURE;
     }
 
     for (u = v = 0; cpblts[u]; ++u) {
@@ -814,7 +824,7 @@ build_schema_info_cpblts(char **cpblts)
         if (!ptr2) {
             ptr2 = ptr + strlen(ptr);
         }
-        result[v].name = strndup(ptr, ptr2 - ptr);
+        (*result)[v].name = strndup(ptr, ptr2 - ptr);
 
         /* get module's revision */
         ptr = strstr(module_cpblt, "revision=");
@@ -824,11 +834,11 @@ build_schema_info_cpblts(char **cpblts)
             if (!ptr2) {
                 ptr2 = ptr + strlen(ptr);
             }
-            result[v].revision = strndup(ptr, ptr2 - ptr);
+            (*result)[v].revision = strndup(ptr, ptr2 - ptr);
         }
 
         /* all are implemented since there is no better information in capabilities list */
-        result[v].implemented = 1;
+        (*result)[v].implemented = 1;
 
         /* get module's features */
         ptr = strstr(module_cpblt, "features=");
@@ -836,16 +846,17 @@ build_schema_info_cpblts(char **cpblts)
             ptr += 9;
             for (ptr2 = ptr; *ptr && *ptr != '&'; ++ptr) {
                 if (*ptr == ',') {
-                    ly_set_add(&result[v].features, (void *)strndup(ptr2, ptr - ptr2), LY_SET_OPT_USEASLIST);
+                    ly_set_add(&(*result)[v].features, (void *)strndup(ptr2, ptr - ptr2), LY_SET_OPT_USEASLIST);
                     ptr2 = ptr + 1;
                 }
             }
             /* the last one */
-            ly_set_add(&result[v].features, (void *)strndup(ptr2, ptr - ptr2), LY_SET_OPT_USEASLIST);
+            ly_set_add(&(*result)[v].features, (void *)strndup(ptr2, ptr - ptr2), LY_SET_OPT_USEASLIST);
         }
         ++v;
     }
-    return result;
+
+    return EXIT_SUCCESS;
 }
 
 static int
@@ -958,7 +969,8 @@ nc_ctx_check_and_fill(struct nc_session *session)
     }
 
     /* get information about server's schemas from capabilities list until we will have yang-library */
-    if (!(server_modules = build_schema_info_cpblts(session->opts.client.cpblts))) {
+    if (build_schema_info_cpblts(session->opts.client.cpblts, &server_modules) || !server_modules) {
+        ERR("Session %u: unable to get server's schema information from the <hello>'s capabilities.", session->id);
         goto cleanup;
     }
 
@@ -999,16 +1011,16 @@ nc_ctx_check_and_fill(struct nc_session *session)
             /* prefer yang-library information, currently we have it from capabilities used for getting correct yang-library schema */
             free_schema_info(server_modules);
         }
-        server_modules = build_schema_info_yl(session);
-        if (!server_modules) {
+        if (build_schema_info_yl(session, &server_modules)) {
+            goto cleanup;
+        } else if (!server_modules) {
             VRB("Session %u: trying to use capabilities instead of ietf-yang-library data.", session->id);
         }
     }
     if (!server_modules) { /* also in case of error of getting yang-library data */
-        server_modules = build_schema_info_cpblts(session->opts.client.cpblts);
-    }
-    if (!server_modules) {
-        goto cleanup;
+        if (build_schema_info_cpblts(session->opts.client.cpblts, &server_modules) || !server_modules) {
+            goto cleanup;
+        }
     }
 
     if (nc_ctx_fill(session, server_modules, old_clb, old_data, get_schema_support)) {
