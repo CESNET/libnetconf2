@@ -420,6 +420,12 @@ malformed_msg:
         /* NETCONF version 1.1 defines sending error reply from the server (RFC 6241 sec. 3) */
         reply = nc_server_reply_err(nc_err(NC_ERR_MALFORMED_MSG));
 
+        if (io_locked) {
+            /* nc_write_msg_io locks and unlocks the lock by itself */
+            nc_session_io_unlock(session, __func__);
+            io_locked = 0;
+        }
+
         if (nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, NULL, reply) != NC_MSG_REPLY) {
             ERR("Session %u: unable to send a \"Malformed message\" error reply, terminating session.", session->id);
             if (session->status != NC_STATUS_INVALID) {
