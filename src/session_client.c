@@ -487,19 +487,19 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *subm
             rev = sub_rev;
         } else if (match) {
             if (!clb_data->schemas[match - 1].submodules) {
-                ERR("Session %u: requested submodule \"%s\" is not known for schema \"%s\" on server side.",
+                WRN("Session %u: Unable to identify revision of the requested submodule \"%s\", in schema \"%s\", from the available server side information.",
                     clb_data->session->id, submod_name, mod_name);
-                return NULL;
-            }
-            for (v = 0; clb_data->schemas[match - 1].submodules[v].name; ++v) {
-                if (!strcmp(submod_name, clb_data->schemas[match - 1].submodules[v].name)) {
-                    rev = sub_rev = clb_data->schemas[match - 1].submodules[v].revision;
+            } else {
+                for (v = 0; clb_data->schemas[match - 1].submodules[v].name; ++v) {
+                    if (!strcmp(submod_name, clb_data->schemas[match - 1].submodules[v].name)) {
+                        rev = sub_rev = clb_data->schemas[match - 1].submodules[v].revision;
+                    }
                 }
-            }
-            if (!rev) {
-                ERR("Session %u: requested submodule \"%s\" is not known for schema \"%s\" on server side.",
-                    clb_data->session->id, submod_name, mod_name);
-                return NULL;
+                if (!rev) {
+                    ERR("Session %u: requested submodule \"%s\" is not known for schema \"%s\" on server side.",
+                        clb_data->session->id, submod_name, mod_name);
+                    return NULL;
+                }
             }
         }
     } else {
@@ -637,6 +637,13 @@ free_schema_info(struct schema_info *list)
             free(list[u].features.set.g[v]);
         }
         free(list[u].features.set.g);
+        if (list[u].submodules) {
+            for (v = 0; list[u].submodules[v].name; ++v) {
+                free(list[u].submodules[v].name);
+                free(list[u].submodules[v].revision);
+            }
+            free(list[u].submodules);
+        }
     }
     free(list);
 }
@@ -652,8 +659,9 @@ build_schema_info_yl(struct nc_session *session)
     uint64_t msgid;
     struct ly_set *modules = NULL;
     struct schema_info *result;
-    unsigned int u, c;
-    struct lyd_node *iter;
+    unsigned int u, v, c, submodules_count;
+    struct lyd_node *iter, *child;
+    struct lys_module *mod;
 
     /* get yang-library data from the server */
     rpc = nc_rpc_get("/ietf-yang-library:*", 0, NC_PARAMTYPE_CONST);
@@ -722,7 +730,13 @@ build_schema_info_yl(struct nc_session *session)
     }
 
     for (u = 0; u < c; ++u) {
+        submodules_count = 0;
+        mod = ((struct lyd_node *)modules->set.d[u])->schema->module;
         LY_TREE_FOR(modules->set.d[u]->child, iter) {
+            if (iter->schema->module != mod) {
+                /* ignore node from other schemas (augments) */
+                continue;
+            }
             if (!((struct lyd_node_leaf_list *)iter)->value_str || !((struct lyd_node_leaf_list *)iter)->value_str[0]) {
                 /* ignore empty nodes */
                 continue;
@@ -735,6 +749,31 @@ build_schema_info_yl(struct nc_session *session)
                 result[u].implemented = !strcmp(((struct lyd_node_leaf_list *)iter)->value_str, "implement");
             } else if (!strcmp(iter->schema->name, "feature")) {
                 ly_set_add(&result[u].features, (void *)strdup(((struct lyd_node_leaf_list *)iter)->value_str), LY_SET_OPT_USEASLIST);
+            } else if (!strcmp(iter->schema->name, "submodule")) {
+                submodules_count++;
+            }
+        }
+
+        if (submodules_count) {
+            result[u].submodules = calloc(submodules_count + 1, sizeof *result[u].submodules);
+            if (!result) {
+                ERRMEM;
+            } else {
+                v = 0;
+                LY_TREE_FOR(modules->set.d[u]->child, iter) {
+                    mod = ((struct lyd_node *)modules->set.d[u])->schema->module;
+                    if (mod == iter->schema->module && !strcmp(iter->schema->name, "submodule")) {
+                        LY_TREE_FOR(iter->child, child) {
+                            if (mod != child->schema->module) {
+                                continue;
+                            } else if (!strcmp(child->schema->name, "name")) {
+                                result[u].submodules[v].name = strdup(((struct lyd_node_leaf_list *)child)->value_str);
+                            } else if (!strcmp(child->schema->name, "revision")) {
+                                result[u].submodules[v].name = strdup(((struct lyd_node_leaf_list *)child)->value_str);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
