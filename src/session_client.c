@@ -709,6 +709,10 @@ build_schema_info_yl(struct nc_session *session)
     }
 
     modules = lyd_find_path(yldata, "/ietf-yang-library:modules-state/module");
+    if (!modules) {
+        /* compatibility with older versions of ietf-yang-library */
+        modules = lyd_find_path(yldata, "/ietf-yang-library:modules/module");
+    }
 
     c = modules ? modules->number : 0;
     result = calloc(c + 1, sizeof *result);
