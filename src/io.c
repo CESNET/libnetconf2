@@ -226,7 +226,7 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint
         if ((count + (len - matched)) >= size) {
             /* get more memory */
             size = size + BUFFERSIZE;
-            chunk = realloc(chunk, (size + 1) * sizeof *chunk);
+            chunk = nc_realloc(chunk, (size + 1) * sizeof *chunk);
             if (!chunk) {
                 ERRMEM;
                 return -1;
@@ -357,7 +357,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, struct lyxml_elem **d
             }
 
             /* realloc message buffer, remember to count terminating null byte */
-            msg = realloc(msg, len + chunk_len + 1);
+            msg = nc_realloc(msg, len + chunk_len + 1);
             if (!msg) {
                 ERRMEM;
                 ret = NC_MSG_ERROR;
