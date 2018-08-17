@@ -476,15 +476,15 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *subm
         name = submod_name;
         if (sub_rev) {
             rev = sub_rev;
-        } else {
-            if (!clb_data->schemas[u].submodules) {
+        } else if (match) {
+            if (!clb_data->schemas[match - 1].submodules) {
                 ERR("Session %u: requested submodule \"%s\" is not known for schema \"%s\" on server side.",
                     clb_data->session->id, submod_name, mod_name);
                 return NULL;
             }
-            for (v = 0; clb_data->schemas[u].submodules[v].name; ++v) {
-                if (!strcmp(submod_name, clb_data->schemas[u].submodules[v].name)) {
-                    rev = sub_rev = clb_data->schemas[u].submodules[v].revision;
+            for (v = 0; clb_data->schemas[match - 1].submodules[v].name; ++v) {
+                if (!strcmp(submod_name, clb_data->schemas[match - 1].submodules[v].name)) {
+                    rev = sub_rev = clb_data->schemas[match - 1].submodules[v].revision;
                 }
             }
             if (!rev) {
