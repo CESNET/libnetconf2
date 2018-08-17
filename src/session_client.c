@@ -650,7 +650,7 @@ build_schema_info_yl(struct nc_session *session)
     struct lyd_node *yldata = NULL;
     NC_MSG_TYPE msg;
     uint64_t msgid;
-    struct ly_set *modules;
+    struct ly_set *modules = NULL;
     struct schema_info *result;
     unsigned int u, c;
     struct lyd_node *iter;
