@@ -756,7 +756,7 @@ build_schema_info_yl(struct nc_session *session)
 
         if (submodules_count) {
             result[u].submodules = calloc(submodules_count + 1, sizeof *result[u].submodules);
-            if (!result) {
+            if (!result[u].submodules) {
                 ERRMEM;
             } else {
                 v = 0;
