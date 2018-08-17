@@ -292,7 +292,9 @@ retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_dat
     long length, l;
     char *model_data = NULL;
 
-    if (lys_search_localfile(ly_ctx_get_searchdirs(clb_data->session->ctx), name, rev, &localfile, format)) {
+    if (lys_search_localfile(ly_ctx_get_searchdirs(clb_data->session->ctx),
+                             !(ly_ctx_get_options(clb_data->session->ctx) & LY_CTX_DISABLE_SEARCHDIR_CWD),
+                             name, rev, &localfile, format)) {
         return NULL;
     }
     if (localfile) {
