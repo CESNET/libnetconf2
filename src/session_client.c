@@ -309,6 +309,13 @@ retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_dat
 
         fseek(f, 0, SEEK_END);
         length = ftell(f);
+        if (length < 0) {
+            ERR("Session %u: unable to get size of schema file \"%s\".",
+                clb_data->session->id, localfile);
+            free(localfile);
+            fclose(f);
+            return NULL;
+        }
         fseek(f, 0, SEEK_SET);
 
         model_data = malloc(length + 1);
