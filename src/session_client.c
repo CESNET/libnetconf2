@@ -1139,16 +1139,6 @@ _non_blocking_connect(int timeout, int* sock_pending, struct addrinfo *res)
                 goto cleanup;
             }
         }
-        /* check the usability of the socket */
-        if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
-            ERR("getsockopt failed: (%s).", strerror(errno));
-            goto cleanup;
-        }
-        if (error == ECONNREFUSED) {
-            /* network connection failed, try another resource */
-            VRB("getsockopt error: (%s).", strerror(error));
-            goto cleanup;
-        }
     }
     ts.tv_sec = timeout;
     ts.tv_usec = 0;
@@ -1170,6 +1160,18 @@ _non_blocking_connect(int timeout, int* sock_pending, struct addrinfo *res)
             close(sock);
         }
         return -1;
+    }
+
+    /* check the usability of the socket */
+    if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
+        ERR("getsockopt failed: (%s).", strerror(errno));
+        goto cleanup;
+    }
+    if (error == ECONNREFUSED) {
+        /* network connection failed, try another resource */
+        VRB("getsockopt error: (%s).", strerror(error));
+        errno = error;
+        goto cleanup;
     }
     return sock;
 
