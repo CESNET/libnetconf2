@@ -939,7 +939,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     void *old_data = NULL;
     const struct lys_module *mod = NULL;
     char *revision;
-    struct schema_info *server_modules = NULL, *sm;
+    struct schema_info *server_modules = NULL, *sm = NULL;
 
     assert(session->opts.client.cpblts && session->ctx);
 
