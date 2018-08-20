@@ -939,7 +939,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     void *old_data = NULL;
     const struct lys_module *mod = NULL;
     char *revision;
-    struct schema_info *server_modules = NULL;
+    struct schema_info *server_modules = NULL, *sm;
 
     assert(session->opts.client.cpblts && session->ctx);
 
@@ -1007,19 +1007,14 @@ nc_ctx_check_and_fill(struct nc_session *session)
 
     /* prepare structured information about server's schemas */
     if (yanglib_support) {
-        if (server_modules) {
+        if (build_schema_info_yl(session, &sm)) {
+            goto cleanup;
+        } else if (!sm) {
+            VRB("Session %u: trying to use capabilities instead of ietf-yang-library data.", session->id);
+        } else {
             /* prefer yang-library information, currently we have it from capabilities used for getting correct yang-library schema */
             free_schema_info(server_modules);
-        }
-        if (build_schema_info_yl(session, &server_modules)) {
-            goto cleanup;
-        } else if (!server_modules) {
-            VRB("Session %u: trying to use capabilities instead of ietf-yang-library data.", session->id);
-        }
-    }
-    if (!server_modules) { /* also in case of error of getting yang-library data */
-        if (build_schema_info_cpblts(session->opts.client.cpblts, &server_modules) || !server_modules) {
-            goto cleanup;
+            server_modules = sm;
         }
     }
 
