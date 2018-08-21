@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <time.h>
+#include <sys/param.h>
 
 #ifdef NC_ENABLED_TLS
 #   include <openssl/err.h>
@@ -1085,6 +1086,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
     arg.len = 0;
 
     /* SESSION IO LOCK */
+    io_timeout = MAX(io_timeout, NC_IO_LOCK_TIMEOUT);
     ret = nc_session_io_lock(session, io_timeout, __func__);
     if (ret < 0) {
         return NC_MSG_ERROR;
