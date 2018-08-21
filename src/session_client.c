@@ -964,7 +964,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
             if (yanglib_support) {
                 break;
             }
-        } else if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:xml:ns:yang:ietf-yang-library?", 46)) {
+        } else if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:netconf:capability:yang-library:1.0", 51)) {
             yanglib_support = 1 + i;
             if (get_schema_support) {
                 break;
