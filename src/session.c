@@ -974,7 +974,7 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
                     ERRINT;
                     break;
                 }
-                if (i) {
+                if (features_count) {
                     strcat(str, ",");
                     ++str_len;
                 }
