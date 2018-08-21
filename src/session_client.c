@@ -665,7 +665,11 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
     int ret = EXIT_SUCCESS;
 
     /* get yang-library data from the server */
-    rpc = nc_rpc_get("/ietf-yang-library:*", 0, NC_PARAMTYPE_CONST);
+    if (nc_session_cpblt(session, "urn:ietf:params:netconf:capability:xpath:1.0")) {
+        rpc = nc_rpc_get("/ietf-yang-library:*", 0, NC_PARAMTYPE_CONST);
+    } else {
+        rpc = nc_rpc_get("<modules-state xmlns=\"urn:ietf:params:xml:ns:yang:ietf-yang-library\"/>", 0, NC_PARAMTYPE_CONST);
+    }
     if (!rpc) {
         goto cleanup;
     }
