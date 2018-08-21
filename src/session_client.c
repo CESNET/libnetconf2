@@ -659,7 +659,7 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
     NC_MSG_TYPE msg;
     uint64_t msgid;
     struct ly_set *modules = NULL;
-    unsigned int u, v, c, submodules_count;
+    unsigned int u, v, submodules_count;
     struct lyd_node *iter, *child;
     struct lys_module *mod;
     int ret = EXIT_SUCCESS;
@@ -723,19 +723,18 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
 
     modules = lyd_find_path(yldata, "/ietf-yang-library:modules-state/module");
     if (!modules) {
-        /* compatibility with older versions of ietf-yang-library */
-        modules = lyd_find_path(yldata, "/ietf-yang-library:modules/module");
+        WRN("Session %u: no module information in reply to a yang-library <get> RPC.", session->id);
+        goto cleanup;
     }
 
-    c = modules ? modules->number : 0;
-    (*result) = calloc(c + 1, sizeof **result);
+    (*result) = calloc(modules->number + 1, sizeof **result);
     if (!(*result)) {
         ERRMEM;
         ret = EXIT_FAILURE;
         goto cleanup;
     }
 
-    for (u = 0; u < c; ++u) {
+    for (u = 0; u < modules->number; ++u) {
         submodules_count = 0;
         mod = ((struct lyd_node *)modules->set.d[u])->schema->module;
         LY_TREE_FOR(modules->set.d[u]->child, iter) {
