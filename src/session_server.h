@@ -521,7 +521,7 @@ void nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_se
  * @param[in] user_data Optional arbitrary user data that will be passed to \p passwd_auth_clb.
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
  */
-void ncserver_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session, const ssh_message msg,
+void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session, const ssh_message msg,
                                                               void *user_data),
                                            void *user_data, void (*free_user_data)(void *user_data));
 
@@ -533,7 +533,7 @@ void ncserver_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const str
  * @param[in] user_data Optional arbitrary user data that will be passed to \p passwd_auth_clb.
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
  */
- void ncserver_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session *session, ssh_key key, void *user_data),
+ void nc_server_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session *session, ssh_key key, void *user_data),
                                        void *user_data, void (*free_user_data)(void *user_data));
 
 /**
