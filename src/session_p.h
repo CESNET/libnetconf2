@@ -186,6 +186,11 @@ struct nc_server_opts {
     void *server_cert_data;
     void (*server_cert_data_free)(void *data);
 
+    int (*server_cert_chain_clb)(const char *name, void *user_data, char ***cert_paths, int *cert_path_count,
+                                 char ***cert_data, int *cert_data_count);
+    void *server_cert_chain_data;
+    void (*server_cert_chain_data_free)(void *data);
+
     int (*trusted_cert_list_clb)(const char *name, void *user_data, char ***cert_paths, int *cert_path_count,
                                  char ***cert_data, int *cert_data_count);
     void *trusted_cert_list_data;

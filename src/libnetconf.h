@@ -394,7 +394,9 @@
  * So, after starting listening on an endpoint  you need to set the server
  * certificate (nc_server_tls_endpt_set_server_cert()). Its actual content
  * together with the matching private key will be loaded using a callback
- * from nc_server_tls_set_server_cert_clb().
+ * from nc_server_tls_set_server_cert_clb(). Additional certificates needed
+ * for the client to verify the server's certificate chain can be loaded using
+ * a callback from nc_server_tls_set_server_cert_chain_clb().
  *
  * To accept client certificates, they must first be considered trusted,
  * which you have three ways of achieving. You can add each of their Certificate Authority
@@ -428,6 +430,7 @@
  * - nc_server_tls_endpt_get_ctn()
  *
  * - nc_server_tls_set_server_cert_clb()
+ * - nc_server_tls_set_server_cert_chain_clb()
  * - nc_server_tls_set_trusted_cert_list_clb()
  *
  * FD

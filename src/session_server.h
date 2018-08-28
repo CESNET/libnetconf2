@@ -664,6 +664,23 @@ void nc_server_tls_set_server_cert_clb(int (*cert_clb)(const char *name, void *u
                                        void *user_data, void (*free_user_data)(void *user_data));
 
 /**
+ * @brief Set the callback for retrieving server certificate chain
+ *
+ * @param[in] cert_chain_clb Callback that should return all the certificates of the chain. Zero return indicates success,
+ *                           non-zero an error. On success, \p cert_paths and \p cert_data are expected to be set or left
+ *                           NULL. Both will be (deeply) freed.
+ *                           - \p cert_paths expect an array of PEM files,
+ *                           - \p cert_path_count number of \p cert_paths array members,
+ *                           - \p cert_data expect an array of base-64 encoded ASN.1 DER cert data,
+ *                           - \p cert_data_count number of \p cert_data array members.
+ * @param[in] user_data Optional arbitrary user data that will be passed to \p cert_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
+ */
+void nc_server_tls_set_server_cert_chain_clb(int (*cert_chain_clb)(const char *name, void *user_data, char ***cert_paths,
+                                                                   int *cert_path_count, char ***cert_data, int *cert_data_count),
+                                             void *user_data, void (*free_user_data)(void *user_data));
+
+/**
  * @brief Add a trusted certificate list. Can be both a CA or a client one. Can be
  *        safely used together with nc_server_tls_endpt_set_trusted_ca_paths().
  *
