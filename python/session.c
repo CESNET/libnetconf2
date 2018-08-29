@@ -159,7 +159,6 @@ auth_interactive_pyclb(const char *auth_name, const char *instruction, const cha
     }
 
     return password;
-
 }
 
 char *
@@ -275,6 +274,10 @@ ncSessionInit(ncSessionObject *self, PyObject *args, PyObject *kwds)
     /* check the result */
     if (!session) {
         return -1;
+    }
+
+    if (PyErr_Occurred()) {
+        PyErr_PrintEx(0);
     }
 
     /* get the internally created context for this session */
