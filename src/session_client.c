@@ -430,6 +430,12 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
     }
     nc_reply_free(reply);
 
+    if (model_data && !model_data[0]) {
+        /* empty data */
+        free(model_data);
+        model_data = NULL;
+    }
+
     /* try to store the model_data into local schema repository */
     if (model_data) {
         *format = LYS_IN_YANG;
