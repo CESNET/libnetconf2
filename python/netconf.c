@@ -27,6 +27,10 @@ PyObject *libnetconf2ReplyError;
 /* syslog usage flag */
 static int syslogEnabled = 0;
 
+/* libyang schema callback */
+static PyObject *schemaCallback = NULL;
+static void *schemaCallbackData = NULL;
+
 static void
 clb_print(NC_VERB_LEVEL level, const char* msg)
 {
@@ -123,6 +127,68 @@ setSearchpath(PyObject *self, PyObject *args, PyObject *keywds)
     Py_RETURN_NONE;
 }
 
+char *
+schemaCallbackWrapper(const char *mod_name, const char *mod_rev, const char *submod_name, const char *sub_rev,
+                      void *user_data, LYS_INFORMAT *format, void (**free_module_data)(void *model_data))
+{
+    PyObject *arglist, *result, *data = NULL;
+    char *str = NULL;
+
+    arglist = Py_BuildValue("(ssssO)", mod_name, mod_rev, submod_name, sub_rev, schemaCallbackData ? schemaCallbackData : Py_None);
+    if (!arglist) {
+        PyErr_Print();
+        return NULL;
+    }
+    result = PyObject_CallObject(schemaCallback, arglist);
+    Py_DECREF(arglist);
+
+    if (result) {
+        if (!PyArg_ParseTuple(result, "iU", format, &data)) {
+            Py_DECREF(result);
+            return NULL;
+        }
+        Py_DECREF(result);
+        *free_module_data = free;
+        str = strdup(PyUnicode_AsUTF8(data));
+        Py_DECREF(data);
+    }
+
+    return str;
+}
+
+static PyObject *
+setSchemaCallback(PyObject *self, PyObject *args, PyObject *keywds)
+{
+    PyObject *clb = NULL, *data = NULL;
+    static char *kwlist[] = {"func", "priv", NULL};
+
+    if (!PyArg_ParseTupleAndKeywords(args, keywds, "O|O:setSchemaCallback", kwlist, &clb, &data)) {
+        return NULL;
+    }
+
+    if (!clb || clb == Py_None) {
+        Py_XDECREF(schemaCallback);
+        Py_XDECREF(schemaCallbackData);
+        data = NULL;
+    } else if (!PyCallable_Check(clb)) {
+        PyErr_SetString(PyExc_TypeError, "The callback must be a function.");
+        return NULL;
+    } else {
+        Py_XDECREF(schemaCallback);
+        Py_XDECREF(schemaCallbackData);
+
+        Py_INCREF(clb);
+        if (data) {
+            Py_INCREF(data);
+        }
+    }
+    nc_client_set_schema_callback(schemaCallbackWrapper, NULL);
+    schemaCallback = clb;
+    schemaCallbackData = data;
+
+    Py_RETURN_NONE;
+}
+
 static PyMethodDef netconf2Methods[] = {
     {"setVerbosity", (PyCFunction)setVerbosity, METH_VARARGS | METH_KEYWORDS,
      "setVerbosity(level)\n--\n\n"
@@ -150,6 +216,11 @@ static PyMethodDef netconf2Methods[] = {
      ":param path: Search directory.\n"
      ":type path: string\n"
      ":returns: None\n"},
+    {"setSchemaCallback", (PyCFunction)setSchemaCallback, METH_VARARGS | METH_KEYWORDS,
+     "Set schema search callaback.\n\n"
+     "setSchemaCallback(func, priv=None)\n"
+     "with func(str mod_name, str mod_rev, str submod_name, str submod_rev, priv)\n"
+     "callback returns tuple of format (e.g. LYS_IN_YANG) and string of the schema content.\n"},
     {NULL, NULL, 0, NULL}
 };
 
