@@ -513,7 +513,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     /* get the last certificate, that is the peer (client) certificate */
     if (!session->opts.server.client_cert) {
         cert_stack = X509_STORE_CTX_get1_chain(x509_ctx);
-        session->opts.server.client_cert = sk_X509_value(cert_stack, sk_X509_num(cert_stack) - 1);
+        session->opts.server.client_cert = sk_X509_value(cert_stack, 0);
         X509_up_ref(session->opts.server.client_cert);
         sk_X509_pop_free(cert_stack, X509_free);
     }
@@ -1406,7 +1406,7 @@ nc_server_tls_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE m
         new->next = opts->ctn;
         opts->ctn = new;
     } else {
-        for (ctn = opts->ctn; ctn->next && ctn->next->id < id; ctn = ctn->next);
+        for (ctn = opts->ctn; ctn->next && ctn->next->id <= id; ctn = ctn->next);
         if (ctn->id == id) {
             /* it exists already */
             new = ctn;
