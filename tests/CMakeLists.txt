@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 2.6)
 
 # list of all the tests
 set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_time test_client_thread)
-set(client_tests test_ssh_connect)
+set(client_tests test_client_ssh)
 
-set(test test_ssh_connect)
+set(test test_client_ssh)
 set(${test}_mock_funcs connect ssh_connect ssh_userauth_none ssh_userauth_kbdint ssh_is_connected ssh_channel_open_session ssh_channel_request_subsystem ssh_channel_is_closed ssh_channel_write ssh_channel_poll_timeout ssh_channel_read)
 set(${test}_wrap_link_flags "-Wl")
 foreach(mock_func IN LISTS ${test}_mock_funcs)
