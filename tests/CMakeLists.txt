@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.6)
 
 # list of all the tests in each directory
 set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_time test_client_thread)
-set(client_tests )
+set(client_tests test_client)
 
 # add -Wl,--wrap flags
 set(test test_client_ssh)
