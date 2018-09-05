@@ -2904,7 +2904,7 @@ nc_ch_client_thread(void *arg)
     struct nc_ch_client_thread_arg *data = (struct nc_ch_client_thread_arg *)arg;
     NC_MSG_TYPE msgtype;
     uint8_t cur_attempts = 0;
-    uint16_t i;
+    uint16_t next_endpt_index;
     char *cur_endpt_name = NULL;
     struct nc_ch_endpt *cur_endpt;
     struct nc_session *session;
@@ -2957,10 +2957,21 @@ nc_ch_client_thread(void *arg)
 
             /* set next endpoint to try */
             if (client->start_with == NC_CH_FIRST_LISTED) {
-                cur_endpt = &client->ch_endpts[0];
-                free(cur_endpt_name);
-                cur_endpt_name = strdup(cur_endpt->name);
-            } /* else we keep the current one */
+                next_endpt_index = 0;
+            }
+            else {
+                /* we keep the current one but due to unlock/lock we have to find it again */
+                for (next_endpt_index = 0; next_endpt_index < client->ch_endpt_count; ++next_endpt_index) {
+                    if (!strcmp(client->ch_endpts[next_endpt_index].name, cur_endpt_name)) {
+                        break;
+                    }
+                }
+                if (next_endpt_index >= client->ch_endpt_count) {
+                    /* endpoint was removed, start with the first one */
+                    next_endpt_index = 0;
+                }
+            }
+
         } else {
             /* UNLOCK */
             nc_server_ch_client_unlock(client);
@@ -2977,36 +2988,33 @@ nc_ch_client_thread(void *arg)
             ++cur_attempts;
 
             /* try to find our endpoint again */
-            for (i = 0; i < client->ch_endpt_count; ++i) {
-                if (!strcmp(client->ch_endpts[i].name, cur_endpt_name)) {
+            for (next_endpt_index = 0; next_endpt_index < client->ch_endpt_count; ++next_endpt_index) {
+                if (!strcmp(client->ch_endpts[next_endpt_index].name, cur_endpt_name)) {
                     break;
                 }
             }
 
-            if (i < client->ch_endpt_count) {
+            if (next_endpt_index >= client->ch_endpt_count) {
                 /* endpoint was removed, start with the first one */
-                cur_endpt = &client->ch_endpts[0];
-                free(cur_endpt_name);
-                cur_endpt_name = strdup(cur_endpt->name);
-
+                next_endpt_index = 0;
                 cur_attempts = 0;
             } else if (cur_attempts == client->max_attempts) {
                 /* we have tried to connect to this endpoint enough times */
-                if (i < client->ch_endpt_count - 1) {
+                if (next_endpt_index < client->ch_endpt_count - 1) {
                     /* just go to the next endpoint */
-                    cur_endpt = &client->ch_endpts[i + 1];
-                    free(cur_endpt_name);
-                    cur_endpt_name = strdup(cur_endpt->name);
+                    ++next_endpt_index;
                 } else {
                     /* cur_endpoint is the last, start with the first one */
-                    cur_endpt = &client->ch_endpts[0];
-                    free(cur_endpt_name);
-                    cur_endpt_name = strdup(cur_endpt->name);
+                    next_endpt_index = 0; 
                 }
 
                 cur_attempts = 0;
             } /* else we keep the current one */
         }
+
+        cur_endpt = &client->ch_endpts[next_endpt_index];
+        free(cur_endpt_name);
+        cur_endpt_name = strdup(cur_endpt->name);
     }
 
 cleanup:
