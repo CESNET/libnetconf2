@@ -2958,8 +2958,7 @@ nc_ch_client_thread(void *arg)
             /* set next endpoint to try */
             if (client->start_with == NC_CH_FIRST_LISTED) {
                 next_endpt_index = 0;
-            }
-            else {
+            } else {
                 /* we keep the current one but due to unlock/lock we have to find it again */
                 for (next_endpt_index = 0; next_endpt_index < client->ch_endpt_count; ++next_endpt_index) {
                     if (!strcmp(client->ch_endpts[next_endpt_index].name, cur_endpt_name)) {
@@ -3005,7 +3004,7 @@ nc_ch_client_thread(void *arg)
                     ++next_endpt_index;
                 } else {
                     /* cur_endpoint is the last, start with the first one */
-                    next_endpt_index = 0; 
+                    next_endpt_index = 0;
                 }
 
                 cur_attempts = 0;
