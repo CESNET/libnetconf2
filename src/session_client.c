@@ -460,9 +460,15 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
     return model_data;
 }
 
+static void free_with_user_data(void *data, void *user_data)
+{
+    free(data);
+    (void)user_data;
+}
+
 static char *
 retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *submod_name, const char *sub_rev,
-                     void *user_data, LYS_INFORMAT *format, void (**free_module_data)(void *model_data))
+                     void *user_data, LYS_INFORMAT *format, void (**free_module_data)(void *model_data, void *user_data))
 {
     struct clb_data_s *clb_data = (struct clb_data_s *)user_data;
     unsigned int u, v, match = 1;
@@ -550,7 +556,7 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *subm
         return clb_data->user_clb(mod_name, mod_rev, submod_name, sub_rev, clb_data->user_data, format, free_module_data);
     }
 
-    *free_module_data = free;
+    *free_module_data = free_with_user_data;
     return model_data;
 }
 
@@ -562,7 +568,7 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
     struct ly_err_item *eitem;
     char *module_data = NULL;
     LYS_INFORMAT format;
-    void (*free_module_data)(void*) = NULL;
+    void (*free_module_data)(void*, void*) = NULL;
     struct clb_data_s clb_data;
 
     *mod = NULL;
@@ -598,7 +604,7 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
 
             *mod = lys_parse_mem(session->ctx, module_data, format);
             if (*free_module_data) {
-                (*free_module_data)(module_data);
+                (*free_module_data)((char*)module_data, user_data);
             }
 
             ly_ctx_set_module_imp_clb(session->ctx, NULL, NULL);
