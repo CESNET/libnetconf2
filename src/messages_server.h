@@ -20,6 +20,9 @@
 #include "netconf.h"
 #include "session.h"
 
+struct lyd_node;
+struct lyxml_elem;
+
 /**
  * @defgroup server_msg Server Messages
  * @ingroup server
