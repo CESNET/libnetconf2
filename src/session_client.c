@@ -466,7 +466,7 @@ static void free_with_user_data(void *data, void *user_data)
     (void)user_data;
 }
 
-static char *
+static const char *
 retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *submod_name, const char *sub_rev,
                      void *user_data, LYS_INFORMAT *format, void (**free_module_data)(void *model_data, void *user_data))
 {
@@ -566,7 +566,7 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
 {
     int ret = 0;
     struct ly_err_item *eitem;
-    char *module_data = NULL;
+    const char *module_data = NULL;
     LYS_INFORMAT format;
     void (*free_module_data)(void*, void*) = NULL;
     struct clb_data_s clb_data;
