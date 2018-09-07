@@ -16,6 +16,7 @@
 #define NC_MESSAGES_SERVER_H_
 
 #include <stdint.h>
+#include <libyang/libyang.h>
 
 #include "netconf.h"
 #include "session.h"
