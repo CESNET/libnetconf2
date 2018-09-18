@@ -53,7 +53,7 @@ base64der_key_to_tmp_file(const char *in, int rsa)
         return NULL;
     }
 
-    file = fdopen(fd, "r");
+    file = fdopen(fd, "w");
     if (!file) {
         close(fd);
         return NULL;
