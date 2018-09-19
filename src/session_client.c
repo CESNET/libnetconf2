@@ -882,6 +882,11 @@ nc_ctx_fill(struct nc_session *session, struct schema_info *modules, ly_module_i
     unsigned int u, v;
 
     for (u = 0; modules[u].name; ++u) {
+        /* skip import-only modules */
+        if (!modules[u].implemented) {
+            continue;
+        }
+
         /* we can continue even if it fails */
         nc_ctx_load_module(session, modules[u].name, modules[u].revision, modules, user_clb, user_data, has_get_schema, &mod);
 
