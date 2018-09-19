@@ -513,7 +513,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     /* get the last certificate, that is the peer (client) certificate */
     if (!session->opts.server.client_cert) {
         cert_stack = X509_STORE_CTX_get1_chain(x509_ctx);
-        session->opts.server.client_cert = sk_X509_value(cert_stack, sk_X509_num(cert_stack) - 1);
+        session->opts.server.client_cert = sk_X509_value(cert_stack, 0);
         X509_up_ref(session->opts.server.client_cert);
         sk_X509_pop_free(cert_stack, X509_free);
     }
@@ -986,6 +986,21 @@ nc_server_tls_set_server_cert_clb(int (*cert_clb)(const char *name, void *user_d
     server_opts.server_cert_data_free = free_user_data;
 }
 
+API void
+nc_server_tls_set_server_cert_chain_clb(int (*cert_chain_clb)(const char *name, void *user_data, char ***cert_paths,
+                                                              int *cert_path_count, char ***cert_data, int *cert_data_count),
+                                        void *user_data, void (*free_user_data)(void *user_data))
+{
+    if (!cert_chain_clb) {
+        ERRARG("cert_chain_clb");
+        return;
+    }
+
+    server_opts.server_cert_chain_clb = cert_chain_clb;
+    server_opts.server_cert_chain_data = user_data;
+    server_opts.server_cert_chain_data_free = free_user_data;
+}
+
 static int
 nc_server_tls_add_trusted_cert_list(const char *name, struct nc_server_tls_opts *opts)
 {
@@ -1391,7 +1406,7 @@ nc_server_tls_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE m
         new->next = opts->ctn;
         opts->ctn = new;
     } else {
-        for (ctn = opts->ctn; ctn->next && ctn->next->id < id; ctn = ctn->next);
+        for (ctn = opts->ctn; ctn->next && ctn->next->id <= id; ctn = ctn->next);
         if (ctn->id == id) {
             /* it exists already */
             new = ctn;
@@ -1705,6 +1720,78 @@ nc_tls_make_verify_key(void)
     pthread_key_create(&verify_key, NULL);
 }
 
+static X509*
+tls_load_cert(const char *cert_path, const char *cert_data)
+{
+    X509 *cert;
+
+    if (cert_path) {
+        cert = pem_to_cert(cert_path);
+    } else {
+        cert = base64der_to_cert(cert_data);
+    }
+
+    if (!cert) {
+        if (cert_path) {
+            ERR("Loading a trusted certificate (path \"%s\") failed (%s).", cert_path,
+                ERR_reason_error_string(ERR_get_error()));
+        } else {
+            ERR("Loading a trusted certificate (data \"%s\") failed (%s).", cert_data,
+                ERR_reason_error_string(ERR_get_error()));
+        }
+    }
+    return cert;
+}
+
+static int
+nc_tls_ctx_set_server_cert_chain(SSL_CTX *tls_ctx, const char *cert_name)
+{
+    char **cert_paths = NULL, **cert_data = NULL;
+    int cert_path_count = 0, cert_data_count = 0, ret = 0, i = 0;
+    X509 *cert = NULL;
+
+    if (!server_opts.server_cert_chain_clb) {
+        /* This is optional, so return OK */
+        return 0;
+    }
+
+    if (server_opts.server_cert_chain_clb(cert_name, server_opts.server_cert_chain_data, &cert_paths,
+                                          &cert_path_count, &cert_data, &cert_data_count)) {
+        ERR("Server certificate chain callback failed.");
+        return -1;
+    }
+
+    for (i = 0; i < cert_path_count; ++i) {
+        cert = tls_load_cert(cert_paths[i], NULL);
+        if (!cert || SSL_CTX_add_extra_chain_cert(tls_ctx, cert) != 1) {
+            ERR("Loading the server certificate chain failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = -1;
+            goto cleanup;
+        }
+    }
+
+    for (i = 0; i < cert_data_count; ++i) {
+        cert = tls_load_cert(NULL, cert_data[i]);
+        if (!cert || SSL_CTX_add_extra_chain_cert(tls_ctx, cert) != 1) {
+            ERR("Loading the server certificate chain failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = -1;
+            goto cleanup;
+        }
+    }
+cleanup:
+    for (i = 0; i < cert_path_count; ++i) {
+        free(cert_paths[i]);
+    }
+    free(cert_paths);
+    for (i = 0; i < cert_data_count; ++i) {
+        free(cert_data[i]);
+    }
+    free(cert_data);
+    /* cert is owned by the SSL_CTX */
+
+    return ret;
+}
+
 static int
 nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
 {
@@ -1759,6 +1846,8 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
         }
     }
 
+    ret = nc_tls_ctx_set_server_cert_chain(tls_ctx, cert_name);
+
 cleanup:
     X509_free(cert);
     EVP_PKEY_free(pkey);
@@ -1772,22 +1861,8 @@ cleanup:
 static void
 tls_store_add_trusted_cert(X509_STORE *cert_store, const char *cert_path, const char *cert_data)
 {
-    X509 *cert;
-
-    if (cert_path) {
-        cert = pem_to_cert(cert_path);
-    } else {
-        cert = base64der_to_cert(cert_data);
-    }
-
+    X509 *cert = tls_load_cert(cert_path, cert_data);
     if (!cert) {
-        if (cert_path) {
-            ERR("Loading a trusted certificate (path \"%s\") failed (%s).", cert_path,
-                ERR_reason_error_string(ERR_get_error()));
-        } else {
-            ERR("Loading a trusted certificate (data \"%s\") failed (%s).", cert_data,
-                ERR_reason_error_string(ERR_get_error()));
-        }
         return;
     }
 

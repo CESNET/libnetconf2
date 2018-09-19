@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 #include <pthread.h>
+#include <stdatomic.h>
 
 #include <libyang/libyang.h>
 
@@ -186,6 +187,11 @@ struct nc_server_opts {
     void *server_cert_data;
     void (*server_cert_data_free)(void *data);
 
+    int (*server_cert_chain_clb)(const char *name, void *user_data, char ***cert_paths, int *cert_path_count,
+                                 char ***cert_data, int *cert_data_count);
+    void *server_cert_chain_data;
+    void (*server_cert_chain_data_free)(void *data);
+
     int (*trusted_cert_list_clb)(const char *name, void *user_data, char ***cert_paths, int *cert_path_count,
                                  char ***cert_data, int *cert_data_count);
     void *trusted_cert_list_data;
@@ -263,14 +269,15 @@ struct nc_server_opts {
         } conn;
         NC_CH_START_WITH start_with;
         uint8_t max_attempts;
+        uint32_t id;
         pthread_mutex_t lock;
     } *ch_clients;
     uint16_t ch_client_count;
     pthread_rwlock_t ch_client_lock;
 
-    /* ACCESS locked with sid_lock */
-    uint32_t new_session_id;
-    pthread_spinlock_t sid_lock;
+    /* Atomic IDs */
+    atomic_uint_fast32_t new_session_id;
+    atomic_uint_fast32_t new_client_id;
 };
 
 /**

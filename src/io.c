@@ -226,7 +226,7 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint
         if ((count + (len - matched)) >= size) {
             /* get more memory */
             size = size + BUFFERSIZE;
-            chunk = realloc(chunk, (size + 1) * sizeof *chunk);
+            chunk = nc_realloc(chunk, (size + 1) * sizeof *chunk);
             if (!chunk) {
                 ERRMEM;
                 return -1;
@@ -357,7 +357,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, struct lyxml_elem **d
             }
 
             /* realloc message buffer, remember to count terminating null byte */
-            msg = realloc(msg, len + chunk_len + 1);
+            msg = nc_realloc(msg, len + chunk_len + 1);
             if (!msg) {
                 ERRMEM;
                 ret = NC_MSG_ERROR;
@@ -419,6 +419,12 @@ malformed_msg:
     if ((session->side == NC_SERVER) && (session->version == NC_VERSION_11)) {
         /* NETCONF version 1.1 defines sending error reply from the server (RFC 6241 sec. 3) */
         reply = nc_server_reply_err(nc_err(NC_ERR_MALFORMED_MSG));
+
+        if (io_locked) {
+            /* nc_write_msg_io locks and unlocks the lock by itself */
+            nc_session_io_unlock(session, __func__);
+            io_locked = 0;
+        }
 
         if (nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, NULL, reply) != NC_MSG_REPLY) {
             ERR("Session %u: unable to send a \"Malformed message\" error reply, terminating session.", session->id);

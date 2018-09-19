@@ -515,7 +515,7 @@ nc_server_init(struct ly_ctx *ctx)
     server_opts.ctx = ctx;
 
     server_opts.new_session_id = 1;
-    pthread_spin_init(&server_opts.sid_lock, PTHREAD_PROCESS_PRIVATE);
+    server_opts.new_client_id = 1;
 
     errno=0;
 
@@ -548,8 +548,6 @@ nc_server_destroy(void)
     free(server_opts.capabilities);
     server_opts.capabilities = NULL;
     server_opts.capabilities_count = 0;
-
-    pthread_spin_destroy(&server_opts.sid_lock);
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
     nc_server_del_endpt(NULL, 0);
@@ -703,9 +701,7 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
     (*session)->ctx = server_opts.ctx;
 
     /* assign new SID atomically */
-    pthread_spin_lock(&server_opts.sid_lock);
-    (*session)->id = server_opts.new_session_id++;
-    pthread_spin_unlock(&server_opts.sid_lock);
+    (*session)->id = atomic_fetch_add(&server_opts.new_session_id, 1);
 
     /* NETCONF handshake */
     msgtype = nc_handshake_io(*session);
@@ -2015,11 +2011,7 @@ nc_accept(int timeout, struct nc_session **session)
     pthread_rwlock_unlock(&server_opts.endpt_lock);
 
     /* assign new SID atomically */
-    /* LOCK */
-    pthread_spin_lock(&server_opts.sid_lock);
-    (*session)->id = server_opts.new_session_id++;
-    /* UNLOCK */
-    pthread_spin_unlock(&server_opts.sid_lock);
+    (*session)->id = atomic_fetch_add(&server_opts.new_session_id, 1);
 
     /* NETCONF handshake */
     msgtype = nc_handshake_io(*session);
@@ -2081,6 +2073,7 @@ nc_server_ch_add_client(const char *name, NC_TRANSPORT_IMPL ti)
         return -1;
     }
     server_opts.ch_clients[server_opts.ch_client_count - 1].name = lydict_insert(server_opts.ctx, name, 0);
+    server_opts.ch_clients[server_opts.ch_client_count - 1].id = atomic_fetch_add(&server_opts.new_client_id, 1);
     server_opts.ch_clients[server_opts.ch_client_count - 1].ti = ti;
     server_opts.ch_clients[server_opts.ch_client_count - 1].ch_endpts = NULL;
     server_opts.ch_clients[server_opts.ch_client_count - 1].ch_endpt_count = 0;
@@ -2758,11 +2751,7 @@ nc_connect_ch_client_endpt(struct nc_ch_client *client, struct nc_ch_endpt *endp
     }
 
     /* assign new SID atomically */
-    /* LOCK */
-    pthread_spin_lock(&server_opts.sid_lock);
-    (*session)->id = server_opts.new_session_id++;
-    /* UNLOCK */
-    pthread_spin_unlock(&server_opts.sid_lock);
+    (*session)->id = atomic_fetch_add(&server_opts.new_session_id, 1);
 
     /* NETCONF handshake */
     msgtype = nc_handshake_io(*session);
@@ -2904,17 +2893,19 @@ nc_ch_client_thread(void *arg)
     struct nc_ch_client_thread_arg *data = (struct nc_ch_client_thread_arg *)arg;
     NC_MSG_TYPE msgtype;
     uint8_t cur_attempts = 0;
-    uint16_t i;
+    uint16_t next_endpt_index;
     char *cur_endpt_name = NULL;
     struct nc_ch_endpt *cur_endpt;
     struct nc_session *session;
     struct nc_ch_client *client;
+    uint32_t client_id;
 
     /* LOCK */
     client = nc_server_ch_client_with_endpt_lock(data->client_name);
     if (!client) {
         goto cleanup;
     }
+    client_id = client->id;
 
     cur_endpt = &client->ch_endpts[0];
     cur_endpt_name = strdup(cur_endpt->name);
@@ -2938,6 +2929,10 @@ nc_ch_client_thread(void *arg)
             if (!client) {
                 goto cleanup;
             }
+            if (client->id != client_id) {
+                nc_server_ch_client_unlock(client);
+                goto cleanup;
+            }
 
             /* session changed status -> it was disconnected for whatever reason,
              * persistent connection immediately tries to reconnect, periodic waits some first */
@@ -2953,14 +2948,28 @@ nc_ch_client_thread(void *arg)
                 if (!client) {
                     goto cleanup;
                 }
+                if (client->id != client_id) {
+                    nc_server_ch_client_unlock(client);
+                    goto cleanup;
+                }
             }
 
             /* set next endpoint to try */
             if (client->start_with == NC_CH_FIRST_LISTED) {
-                cur_endpt = &client->ch_endpts[0];
-                free(cur_endpt_name);
-                cur_endpt_name = strdup(cur_endpt->name);
-            } /* else we keep the current one */
+                next_endpt_index = 0;
+            } else {
+                /* we keep the current one but due to unlock/lock we have to find it again */
+                for (next_endpt_index = 0; next_endpt_index < client->ch_endpt_count; ++next_endpt_index) {
+                    if (!strcmp(client->ch_endpts[next_endpt_index].name, cur_endpt_name)) {
+                        break;
+                    }
+                }
+                if (next_endpt_index >= client->ch_endpt_count) {
+                    /* endpoint was removed, start with the first one */
+                    next_endpt_index = 0;
+                }
+            }
+
         } else {
             /* UNLOCK */
             nc_server_ch_client_unlock(client);
@@ -2973,40 +2982,41 @@ nc_ch_client_thread(void *arg)
             if (!client) {
                 goto cleanup;
             }
+            if (client->id != client_id) {
+                nc_server_ch_client_unlock(client);
+                goto cleanup;
+            }
 
             ++cur_attempts;
 
             /* try to find our endpoint again */
-            for (i = 0; i < client->ch_endpt_count; ++i) {
-                if (!strcmp(client->ch_endpts[i].name, cur_endpt_name)) {
+            for (next_endpt_index = 0; next_endpt_index < client->ch_endpt_count; ++next_endpt_index) {
+                if (!strcmp(client->ch_endpts[next_endpt_index].name, cur_endpt_name)) {
                     break;
                 }
             }
 
-            if (i < client->ch_endpt_count) {
+            if (next_endpt_index >= client->ch_endpt_count) {
                 /* endpoint was removed, start with the first one */
-                cur_endpt = &client->ch_endpts[0];
-                free(cur_endpt_name);
-                cur_endpt_name = strdup(cur_endpt->name);
-
+                next_endpt_index = 0;
                 cur_attempts = 0;
             } else if (cur_attempts == client->max_attempts) {
                 /* we have tried to connect to this endpoint enough times */
-                if (i < client->ch_endpt_count - 1) {
+                if (next_endpt_index < client->ch_endpt_count - 1) {
                     /* just go to the next endpoint */
-                    cur_endpt = &client->ch_endpts[i + 1];
-                    free(cur_endpt_name);
-                    cur_endpt_name = strdup(cur_endpt->name);
+                    ++next_endpt_index;
                 } else {
                     /* cur_endpoint is the last, start with the first one */
-                    cur_endpt = &client->ch_endpts[0];
-                    free(cur_endpt_name);
-                    cur_endpt_name = strdup(cur_endpt->name);
+                    next_endpt_index = 0;
                 }
 
                 cur_attempts = 0;
             } /* else we keep the current one */
         }
+
+        cur_endpt = &client->ch_endpts[next_endpt_index];
+        free(cur_endpt_name);
+        cur_endpt_name = strdup(cur_endpt->name);
     }
 
 cleanup:
