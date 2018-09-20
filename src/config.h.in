@@ -65,4 +65,7 @@
  */
 #define NC_PS_QUEUE_SIZE @MAX_PSPOLL_THREAD_COUNT@
 
+/* Portability feature-check macros. */
+#cmakedefine HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP
+
 #endif /* NC_CONFIG_H_ */

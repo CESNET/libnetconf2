@@ -520,6 +520,7 @@ nc_server_init(struct ly_ctx *ctx)
     errno=0;
 
     if (pthread_rwlockattr_init(&attr) == 0) {
+#if defined(HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
         if (pthread_rwlockattr_setkind_np(&attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP) == 0) {
             if (pthread_rwlock_init(&server_opts.endpt_lock, &attr) != 0) {
                 ERR("%s: failed to init rwlock(%s).", __FUNCTION__, strerror(errno));
@@ -530,6 +531,7 @@ nc_server_init(struct ly_ctx *ctx)
         } else {
             ERR("%s: failed set attribute (%s).", __FUNCTION__, strerror(errno));
         }
+#endif
         pthread_rwlockattr_destroy(&attr);
     } else {
         ERR("%s: failed init attribute (%s).", __FUNCTION__, strerror(errno));

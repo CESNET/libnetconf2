@@ -172,8 +172,10 @@ target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
 
 # check availability for some pthread functions
 set(CMAKE_REQUIRED_LIBRARIES pthread)
+include(CheckFunctionExists)
 check_function_exists(pthread_spin_lock HAVE_SPINLOCK)
 check_function_exists(pthread_mutex_timedlock HAVE_PTHREAD_MUTEX_TIMEDLOCK)
+check_function_exists(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
 
 # dependencies - openssl
 if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
