@@ -130,7 +130,8 @@ pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *abstime)
             break;
         } else if (diff < 5) {
             /* sleep until timeout */
-            dur = *abstime;
+            dur.tv_sec = 0;
+            dur.tv_nsec = (long)diff * 1000000;
         } else {
             /* sleep 5 ms */
             dur.tv_sec = 0;
