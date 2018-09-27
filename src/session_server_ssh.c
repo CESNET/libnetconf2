@@ -1056,8 +1056,7 @@ nc_sshcb_channel_subsystem(struct nc_session *session, ssh_channel channel, cons
         new_session->host = lydict_insert(server_opts.ctx, session->host, 0);
         new_session->port = session->port;
         new_session->ctx = server_opts.ctx;
-        new_session->flags = NC_SESSION_SSH_AUTHENTICATED | NC_SESSION_SSH_SUBSYS_NETCONF | NC_SESSION_SHAREDCTX
-                             | (session->flags & NC_SESSION_CALLHOME ? NC_SESSION_CALLHOME : 0);
+        new_session->flags = NC_SESSION_SSH_AUTHENTICATED | NC_SESSION_SSH_SUBSYS_NETCONF | NC_SESSION_SHAREDCTX;
     }
 
     return 0;
