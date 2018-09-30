@@ -12,6 +12,13 @@ foreach(mock_func IN LISTS ${test}_mock_funcs)
     set(${test}_wrap_link_flags "${${test}_wrap_link_flags},--wrap=${mock_func}")
 endforeach()
 
+set(test test_client_tls)
+set(${test}_mock_funcs connect SSL_connect nc_send_hello_io nc_handshake_io nc_ctx_check_and_fill)
+set(${test}_wrap_link_flags "-Wl")
+foreach(mock_func IN LISTS ${test}_mock_funcs)
+    set(${test}_wrap_link_flags "${${test}_wrap_link_flags},--wrap=${mock_func}")
+endforeach()
+
 #append tests depending on SSH/TLS
 if (ENABLE_SSH OR ENABLE_TLS)
     list(APPEND tests test_server_thread)
@@ -20,7 +27,7 @@ if (ENABLE_SSH OR ENABLE_TLS)
     endif()
 
     if (ENABLE_TLS)
-
+        list(APPEND client_tests test_client_tls)
     endif()
 endif()
 
