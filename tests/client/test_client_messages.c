@@ -32,6 +32,62 @@ teardown_f(void **state)
     return 0;
 }
 
+static void
+test_nc_rpc_act_generic_xml(void **state)
+{
+    (void)state;
+    struct nc_rpc *rpc = NULL;
+    struct nc_rpc_act_generic *generic_rpc = NULL;
+
+    /* create generic rpc with NC_PARAMTYPE_CONST */
+    rpc = nc_rpc_act_generic_xml("xml", NC_PARAMTYPE_CONST);
+    assert_int_equal(nc_rpc_get_type(rpc), NC_RPC_ACT_GENERIC);
+    generic_rpc = (struct nc_rpc_act_generic *)rpc;
+    assert_int_equal(generic_rpc->type, NC_RPC_ACT_GENERIC);
+    assert_int_equal(generic_rpc->has_data, 0);
+    assert_string_equal(generic_rpc->content.xml_str, "xml");
+    nc_rpc_free(rpc);
+
+    /* create generic rpc with NC_PARAMTYPE_FREE */
+    char *str = strdup("str");
+    rpc = nc_rpc_act_generic_xml(str, NC_PARAMTYPE_FREE);
+    assert_int_equal(nc_rpc_get_type(rpc), NC_RPC_ACT_GENERIC);
+    generic_rpc = (struct nc_rpc_act_generic *)rpc;
+    assert_int_equal(generic_rpc->type, NC_RPC_ACT_GENERIC);
+    assert_int_equal(generic_rpc->has_data, 0);
+    assert_string_equal(generic_rpc->content.xml_str, str);
+    nc_rpc_free(rpc);
+
+    /* create generic rpc with NC_PARAMTYPE_DUP_AND_FREE */
+    rpc = nc_rpc_act_generic_xml("xml", NC_PARAMTYPE_DUP_AND_FREE);
+    assert_int_equal(nc_rpc_get_type(rpc), NC_RPC_ACT_GENERIC);
+    generic_rpc = (struct nc_rpc_act_generic *)rpc;
+    assert_int_equal(generic_rpc->type, NC_RPC_ACT_GENERIC);
+    assert_int_equal(generic_rpc->has_data, 0);
+    assert_string_equal(generic_rpc->content.xml_str, "xml");
+    nc_rpc_free(rpc);
+}
+
+static void
+test_nc_rpc_act_generic(void **state)
+{
+    (void)state;
+    struct nc_rpc *rpc = NULL;
+    struct nc_rpc_act_generic *generic_rpc = NULL;
+    struct lyd_node node;
+    node.next = NULL;
+    node.prev = &node;
+
+    rpc = nc_rpc_act_generic(&node, NC_PARAMTYPE_CONST);
+    assert_non_null(rpc);
+    assert_int_equal(nc_rpc_get_type(rpc), NC_RPC_ACT_GENERIC);
+    generic_rpc = (struct nc_rpc_act_generic *)rpc;
+    assert_int_equal(generic_rpc->type, NC_RPC_ACT_GENERIC);
+    assert_int_equal(generic_rpc->has_data, 1);
+    assert_ptr_equal(generic_rpc->content.data, &node);
+    nc_rpc_free(rpc);
+}
+
 /* function to check if values of getconfig rpc are set correctly */
 void
 check_getconfig(struct nc_rpc *rpc, enum NC_DATASTORE_TYPE source, char *filter, NC_WD_MODE wd_mode)
@@ -513,6 +569,8 @@ int
 main(void)
 {
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_nc_rpc_act_generic_xml, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_rpc_act_generic, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_rpc_getconfig, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_rpc_edit, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_rpc_copy, setup_f, teardown_f),
