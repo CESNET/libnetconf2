@@ -402,7 +402,7 @@ test_nc_client_ssh_setting_auth_pref(void **state)
     (void)state;
     int ret;
 
-    /* initiate client */
+    /* initiate client, must be called in first test */
     nc_client_init();
 
     /* check default prefference settings according to documentation */
@@ -617,6 +617,7 @@ test_nc_connect_ssh_bad_hello(void **state)
     session = nc_connect_ssh("127.0.0.1", 8080, NULL);
     assert_null(session);
 
+    /* destroy client, must be called in last test */
     nc_client_destroy();
 }
 

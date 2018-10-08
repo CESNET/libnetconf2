@@ -16,10 +16,10 @@
 #define NC_CONFIG_H_
 
 /*
- * Mark all objects as hidden and export only objects explicitly marked to be part of the public API.
+ * Mark all objects as hidden and export only objects explicitly marked to be part of the public API or
+ * those marked as mock objects for testing purpose
  */
 #define API __attribute__((visibility("default")))
-
 #define MOCK __attribute__((visibility("default")))
 
 #ifdef __GNUC__
