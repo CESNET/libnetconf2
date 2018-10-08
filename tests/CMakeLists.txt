@@ -6,7 +6,10 @@ set(client_tests test_client test_client_messages)
 
 # add -Wl,--wrap flags
 set(test test_client_ssh)
-set(${test}_mock_funcs connect ssh_connect ssh_userauth_none ssh_userauth_kbdint ssh_is_connected ssh_channel_open_session ssh_channel_request_subsystem ssh_channel_is_close ssh_channel_write ssh_channel_poll_timeout ssh_userauth_password nc_handshake_io nc_ctx_check_and_fill ssh_userauth_try_publickey ssh_userauth_publickey)
+set(${test}_mock_funcs connect ssh_connect ssh_userauth_none ssh_userauth_kbdint ssh_is_connected
+                       ssh_channel_open_session ssh_channel_request_subsystem ssh_channel_is_close ssh_channel_write
+                       ssh_channel_poll_timeout ssh_userauth_password nc_handshake_io nc_ctx_check_and_fill
+                       ssh_userauth_try_publickey ssh_userauth_publickey)
 set(${test}_wrap_link_flags "-Wl")
 foreach(mock_func IN LISTS ${test}_mock_funcs)
     set(${test}_wrap_link_flags "${${test}_wrap_link_flags},--wrap=${mock_func}")
@@ -54,11 +57,13 @@ if (ENABLE_VALGRIND_TESTS)
     find_program(valgrind_FOUND valgrind)
     if (valgrind_FOUND)
         foreach (test_name IN LISTS tests)
-            add_test(${test_name}_valgrind valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 --suppressions=${PROJECT_SOURCE_DIR}/tests/ld.supp ${CMAKE_BINARY_DIR}/tests/${test_name})
+            add_test(${test_name}_valgrind valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1
+                                           --suppressions=${PROJECT_SOURCE_DIR}/tests/ld.supp ${CMAKE_BINARY_DIR}/tests/${test_name})
         endforeach()
 
         foreach (test_name IN LISTS client_tests)
-            add_test(${test_name}_valgrind valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 --suppressions=${PROJECT_SOURCE_DIR}/tests/ld.supp ${CMAKE_BINARY_DIR}/tests/${test_name})
+            add_test(${test_name}_valgrind valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1
+                                            --suppressions=${PROJECT_SOURCE_DIR}/tests/ld.supp ${CMAKE_BINARY_DIR}/tests/${test_name})
         endforeach()
     else (valgrind_FOUND)
         Message("-- valgrind executable not found! Disabling memory leaks tests")
