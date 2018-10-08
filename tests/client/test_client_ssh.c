@@ -166,6 +166,26 @@ __wrap_nc_ctx_check_and_fill(struct nc_session *session)
     return (int)mock();
 }
 
+MOCK int
+__wrap_ssh_userauth_try_publickey(ssh_session session, const char *username, const ssh_key pubkey)
+{
+    (void)session;
+    (void)username;
+    (void)pubkey;
+
+    return (int)mock();
+}
+
+MOCK int
+__wrap_ssh_userauth_publickey(ssh_session session, const char *username, const ssh_key privkey)
+{
+    (void)session;
+    (void)username;
+    (void)privkey;
+
+    return (int)mock();
+}
+
 static int
 test_hostkey_clb(const char *hostname, ssh_session session, void *priv)
 {
@@ -517,6 +537,45 @@ test_nc_connect_ssh_password_succesfull(void **state)
 }
 
 static void
+test_nc_connect_ssh_pubkey_succesfull(void **state)
+{
+    (void)state;
+    struct nc_session *session;
+    int ret = 0;
+
+    /* set authentication method to use password authentication */
+    nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PASSWORD, -1);
+    nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PUBLICKEY, 1);
+    nc_client_ssh_set_auth_pref(NC_SSH_AUTH_INTERACTIVE, -1);
+
+    /* add keypair for authentication */
+    ret = nc_client_ssh_add_keypair(TESTS_DIR"/data/key_dsa.pub", TESTS_DIR"/data/key_dsa");
+    assert_int_equal(ret, 0);
+
+    /* fake succesfull connection */
+    will_return(__wrap_connect, 0);
+    will_return(__wrap_ssh_connect, 0);
+    /* do not authenticate using no authentication method */
+    will_return(__wrap_ssh_userauth_none, 1);
+    will_return(__wrap_ssh_userauth_try_publickey, 0);
+    will_return(__wrap_ssh_userauth_publickey, 0);
+    will_return(__wrap_ssh_is_connected, 1);
+    will_return(__wrap_ssh_channel_open_session, 0);
+    will_return(__wrap_ssh_channel_request_subsystem, 0);
+
+    /* fake ssh function for recieving hello message */
+    will_return(__wrap_ssh_is_connected, 1);
+
+    will_return(__wrap_nc_handshake_io, 3);
+    will_return(__wrap_nc_ctx_check_and_fill, 0);
+    session = nc_connect_ssh("127.0.0.1", 8080, NULL);
+    assert_non_null(session);
+
+    /* disconnect */
+    nc_session_free(session, NULL);
+}
+
+static void
 test_nc_connect_connection_failed(void **state)
 {
     (void)state;
@@ -574,6 +633,7 @@ main(void)
         cmocka_unit_test_setup_teardown(test_nc_client_ssh_setting_username, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_connect_ssh_interactive_succesfull, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_connect_ssh_password_succesfull, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_connect_ssh_pubkey_succesfull, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_connect_connection_failed, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_connect_ssh_bad_hello, setup_f, teardown_f),
     };
