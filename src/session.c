@@ -344,7 +344,7 @@ nc_session_io_lock(struct nc_session *session, int timeout, const char *func)
     } else if (!timeout) {
         ret = pthread_mutex_trylock(session->io_lock);
     } else { /* timeout == -1 */
-        ret = pthread_mutex_lock(session->opts.server.rpc_lock);
+        ret = pthread_mutex_lock(session->io_lock);
     }
 
     if (ret) {
