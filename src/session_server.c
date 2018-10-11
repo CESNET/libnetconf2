@@ -1549,10 +1549,8 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
         } else {
             cur_session->opts.server.last_rpc = ts_cur.tv_sec;
 
-            /* process RPC, not needed afterwards */
+            /* process RPC */
             ret |= nc_server_send_reply_io(cur_session, timeout, rpc);
-            nc_server_rpc_free(rpc, server_opts.ctx);
-
             if (cur_session->status != NC_STATUS_RUNNING) {
                 ret |= NC_PSPOLL_SESSION_TERM;
                 if (!(cur_session->term_reason & (NC_SESSION_TERM_CLOSED | NC_SESSION_TERM_KILLED))) {
@@ -1563,6 +1561,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                 cur_ps_session->state = NC_PS_STATE_NONE;
             }
         }
+        nc_server_rpc_free(rpc, server_opts.ctx);
 
         /* SESSION RPC UNLOCK */
         nc_session_rpc_unlock(cur_session, NC_SESSION_LOCK_TIMEOUT, __func__);
