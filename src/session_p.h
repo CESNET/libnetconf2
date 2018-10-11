@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 #include <pthread.h>
+#include <sys/stat.h>
 
 #include <libyang/libyang.h>
 
@@ -120,6 +121,13 @@ struct nc_server_tls_opts {
 };
 
 #endif /* NC_ENABLED_TLS */
+
+/* ACCESS unlocked */
+struct nc_server_unix_opts {
+    mode_t mode;
+    uid_t uid;
+    gid_t gid;
+};
 
 /* ACCESS unlocked */
 struct nc_client_opts {
@@ -228,6 +236,7 @@ struct nc_server_opts {
 #ifdef NC_ENABLED_TLS
             struct nc_server_tls_opts *tls;
 #endif
+            struct nc_server_unix_opts *unixsock;
         } opts;
     } *endpts;
     uint16_t endpt_count;
@@ -376,6 +385,9 @@ struct nc_session {
             int in;              /**< input file descriptor */
             int out;             /**< output file descriptor */
         } fd;                    /**< NC_TI_FD transport implementation structure */
+        struct {
+            int sock;            /**< socket file descriptor */
+        } unixsock;              /**< NC_TI_UNIX transport implementation structure */
 #ifdef NC_ENABLED_SSH
         struct {
             ssh_channel channel;
@@ -392,6 +404,7 @@ struct nc_session {
     const char *username;
     const char *host;
     uint16_t port;
+    const char *path;              /**< socket path in case of unix socket */
 
     /* other */
     struct ly_ctx *ctx;            /**< libyang context of the session */
@@ -550,13 +563,22 @@ int nc_sock_connect(const char *host, uint16_t port, int timeout, int* sock_pend
 int nc_sock_accept(int sock, int timeout, char **peer_host, uint16_t *peer_port);
 
 /**
- * @brief Create a listening socket.
+ * @brief Create a listening socket (AF_INET or AF_INET6).
  *
  * @param[in] address IP address to listen on.
  * @param[in] port Port to listen on.
  * @return Listening socket, -1 on error.
  */
-int nc_sock_listen(const char *address, uint16_t port);
+int nc_sock_listen_inet(const char *address, uint16_t port);
+
+/**
+ * @brief Create a listening socket (AF_UNIX).
+ *
+ * @param[in] address UNIX address to listen on.
+ * @param[in] opts The server options (unix permissions).
+ * @return Listening socket, -1 on error.
+ */
+int nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *opts);
 
 /**
  * @brief Accept a new connection on a listening socket.

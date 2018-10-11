@@ -324,9 +324,14 @@ newChannel(PyObject *self)
 static PyObject *
 ncSessionStr(ncSessionObject *self)
 {
-    return PyUnicode_FromFormat("NETCONF Session %u to %s:%u (%lu references)", nc_session_get_id(self->session),
-                                nc_session_get_host(self->session), nc_session_get_port(self->session),
-                                ((PyObject*)(self))->ob_refcnt);
+    const char *host = nc_session_get_host(self->session);
+    if (host)
+        return PyUnicode_FromFormat("NETCONF Session %u to %s:%u (%lu references)", nc_session_get_id(self->session),
+                                    nc_session_get_host(self->session), nc_session_get_port(self->session),
+                                    ((PyObject*)(self))->ob_refcnt);
+    else
+        return PyUnicode_FromFormat("NETCONF Session %u to %s (%lu references)", nc_session_get_id(self->session),
+                                    nc_session_get_path(self->session), ((PyObject*)(self))->ob_refcnt);
 }
 
 /*
@@ -362,6 +367,12 @@ static PyObject *
 ncSessionGetHost(ncSessionObject *self, void *closure)
 {
     return PyUnicode_FromString(nc_session_get_host(self->session));
+}
+
+static PyObject *
+ncSessionGetPath(ncSessionObject *self, void *closure)
+{
+    return PyUnicode_FromString(nc_session_get_path(self->session));
 }
 
 static PyObject *

@@ -506,6 +506,19 @@ nc_session_get_host(const struct nc_session *session)
     return session->host;
 }
 
+API const char *
+nc_session_get_path(const struct nc_session *session)
+{
+    if (!session) {
+        ERRARG("session");
+        return NULL;
+    }
+    if (session->ti_type != NC_TI_UNIX)
+        return NULL;
+
+    return session->path;
+}
+
 API uint16_t
 nc_session_get_port(const struct nc_session *session)
 {
@@ -698,6 +711,12 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         (void)siter;
         break;
 
+    case NC_TI_UNIX:
+        sock = session->ti.unixsock.sock;
+        (void)connected;
+        (void)siter;
+        break;
+
 #ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
         if (connected) {
@@ -799,6 +818,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     lydict_remove(session->ctx, session->username);
     lydict_remove(session->ctx, session->host);
+    lydict_remove(session->ctx, session->path);
 
     /* final cleanup */
     if ((session->side == NC_SERVER) && session->opts.server.rpc_lock) {

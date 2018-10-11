@@ -65,6 +65,7 @@ typedef enum {
     NC_TI_NONE = 0,   /**< none - session is not connected yet */
     NC_TI_FD,         /**< file descriptors - use standard input/output, transport protocol is implemented
                            outside the current application */
+    NC_TI_UNIX,       /**< unix socket */
 #ifdef NC_ENABLED_SSH
     NC_TI_LIBSSH,     /**< libssh - use libssh library, only for NETCONF over SSH transport */
 #endif
@@ -176,6 +177,14 @@ const char *nc_session_get_host(const struct nc_session *session);
  * @return Session port.
  */
 uint16_t nc_session_get_port(const struct nc_session *session);
+
+/**
+ * @brief Get session path (unix socket only).
+ *
+ * @param[in] session Session to get the information from.
+ * @return Session unix socket path.
+ */
+const char *nc_session_get_path(const struct nc_session *session);
 
 /**
  * @brief Get session context.

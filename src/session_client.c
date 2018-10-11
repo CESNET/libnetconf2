@@ -22,12 +22,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <poll.h>
+#include <pwd.h>
 
 #include <libyang/libyang.h>
 
@@ -1115,6 +1117,101 @@ fail:
     return NULL;
 }
 
+API struct nc_session *
+nc_connect_unix(const char *address, struct ly_ctx *ctx)
+{
+    struct nc_session *session = NULL;
+    struct sockaddr_un sun;
+    const struct passwd *pw;
+    char *username;
+    int sock = -1;
+
+    if (address == NULL) {
+        ERRARG("address");
+        return NULL;
+    }
+
+    pw = getpwuid(geteuid());
+    if (pw == NULL) {
+        ERR("Failed to find username for euid=%u.\n", geteuid());
+        goto fail;
+    }
+
+    sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (sock < 0) {
+        ERR("Failed to create socket (%s).", strerror(errno));
+        goto fail;
+    }
+
+    memset(&sun, 0, sizeof(sun));
+    sun.sun_family = AF_UNIX;
+    snprintf(sun.sun_path, sizeof(sun.sun_path), "%s", address);
+
+    if (connect(sock, (struct sockaddr *)&sun, sizeof(sun)) < 0) {
+        ERR("cannot connect to sock server %s (%s)",
+            address, strerror(errno));
+        goto fail;
+    }
+
+    if (fcntl(sock, F_SETFL, O_NONBLOCK) < 0) {
+        ERR("Fcntl failed (%s).", strerror(errno));
+        goto fail;
+    }
+
+    /* prepare session structure */
+    session = nc_new_session(NC_CLIENT, 0);
+    if (!session) {
+        ERRMEM;
+        goto fail;
+    }
+    session->status = NC_STATUS_STARTING;
+
+    /* transport specific data */
+    session->ti_type = NC_TI_UNIX;
+    session->ti.unixsock.sock = sock;
+    sock = -1; /* do not close sock in fail label anymore */
+
+    /* assign context (dictionary needed for handshake) */
+    if (!ctx) {
+        ctx = ly_ctx_new(NC_SCHEMAS_DIR, LY_CTX_NOYANGLIBRARY);
+        /* definitely should not happen, but be ready */
+        if (!ctx && !(ctx = ly_ctx_new(NULL, 0))) {
+            /* that's just it */
+            goto fail;
+        }
+    } else {
+        session->flags |= NC_SESSION_SHAREDCTX;
+    }
+    session->ctx = ctx;
+
+    session->path = lydict_insert(ctx, address, 0);
+
+    username = strdup(pw->pw_name);
+    if (username == NULL) {
+        ERRMEM;
+        goto fail;
+    }
+    session->username = lydict_insert_zc(ctx, username);
+
+    /* NETCONF handshake */
+    if (nc_handshake_io(session) != NC_MSG_HELLO) {
+        goto fail;
+    }
+    session->status = NC_STATUS_RUNNING;
+
+    if (nc_ctx_check_and_fill(session) == -1) {
+        goto fail;
+    }
+
+    return session;
+
+fail:
+    nc_session_free(session, NULL);
+    if (sock >= 0)
+        close(sock);
+    return NULL;
+}
+
 /*
    Helper for a non-blocking connect (which is required because of the locking
    concept for e.g. call home settings). For more details see nc_sock_connect().
@@ -1707,7 +1804,7 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IM
         return -1;
     }
 
-    sock = nc_sock_listen(address, port);
+    sock = nc_sock_listen_inet(address, port);
     if (sock == -1) {
         return -1;
     }

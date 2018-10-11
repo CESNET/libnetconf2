@@ -145,6 +145,25 @@ void nc_client_destroy(void);
  */
 struct nc_session *nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx);
 
+/**
+ * @brief Connect to the NETCONF server via unix socket.
+ *
+ * Connect to netconf server via an unix socket. Function do not cover authentication
+ * or any other manipulation with the transport layer, it only establish NETCONF session
+ * by sending and processing NETCONF \<hello\> messages.
+ *
+ * @param[in] address Path to the unix socket.
+ * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
+ *                (ignoring what is actually supported by the server side). If not set,
+ *                YANG context is created for the session using \<get-schema\> (if supported
+ *                by the server side) or/and by searching for YANG schemas in the searchpath
+ *                (see nc_client_schema_searchpath()). In every case except not providing context
+ *                to connect to a server supporting \<get-schema\> it is possible that
+ *                the session context will not include all the models supported by the server.
+ * @return Created NETCONF session object or NULL in case of error.
+ */
+struct nc_session *nc_connect_unix(const char *address, struct ly_ctx *ctx);
+
 /**@} Client Session */
 
 #ifdef NC_ENABLED_SSH
