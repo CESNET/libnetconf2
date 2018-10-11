@@ -664,8 +664,11 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         }
         /* There can be multiple NETCONF sessions on the same SSH session (NETCONF session maps to
          * SSH channel). So destroy the SSH session only if there is no other NETCONF session using
-         * it.
+         * it. Also, avoid concurrent free by multiple threads of sessions that share the SSH session.
          */
+        /* SESSION IO LOCK */
+        r = nc_session_io_lock(session, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
+
         multisession = 0;
         if (session->ti.libssh.next) {
             for (siter = session->ti.libssh.next; siter != session; siter = siter->ti.libssh.next) {
@@ -720,6 +723,11 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
                 ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, siter);
                 siter->flags |= NC_SESSION_SSH_MSG_CB;
             }
+        }
+
+        /* SESSION IO UNLOCK */
+        if (r == 1) {
+            nc_session_io_unlock(session, __func__);
         }
         break;
 #endif
