@@ -560,6 +560,7 @@ nc_rpc_free(struct nc_rpc *rpc)
         rpc_copy = (struct nc_rpc_copy *)rpc;
         if (rpc_copy->free) {
             free(rpc_copy->url_config_src);
+            free(rpc_copy->url_trg);
         }
         break;
     case NC_RPC_DELETE:
