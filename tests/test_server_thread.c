@@ -139,20 +139,6 @@ ssh_endpt_set_hostkey_thread(void *arg)
 }
 
 static void *
-ssh_endpt_set_banner_thread(void *arg)
-{
-    (void)arg;
-    int ret;
-
-    pthread_barrier_wait(&barrier);
-
-    ret = nc_server_ssh_endpt_set_banner("main_ssh", "Howdy, partner!");
-    nc_assert(!ret);
-
-    return NULL;
-}
-
-static void *
 ssh_endpt_set_auth_methods_thread(void *arg)
 {
     (void)arg;
@@ -574,7 +560,6 @@ static void *(*thread_funcs[])(void *) = {
     add_endpt_thread,
     del_endpt_thread,
     ssh_endpt_set_hostkey_thread,
-    ssh_endpt_set_banner_thread,
     ssh_endpt_set_auth_methods_thread,
     ssh_endpt_set_auth_attempts_thread,
     ssh_endpt_set_auth_timeout_thread,

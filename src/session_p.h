@@ -74,7 +74,6 @@ struct nc_server_ssh_opts {
     /* SSH bind options */
     const char **hostkeys;
     uint8_t hostkey_count;
-    const char *banner;
 
     int auth_methods;
     uint16_t auth_attempts;

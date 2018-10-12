@@ -425,57 +425,6 @@ nc_server_ssh_ch_client_mod_hostkey(const char *client_name, const char *name, c
 }
 
 static int
-nc_server_ssh_set_banner(const char *banner, struct nc_server_ssh_opts *opts)
-{
-    if (!banner) {
-        ERRARG("banner");
-        return -1;
-    }
-
-    if (opts->banner) {
-        lydict_remove(server_opts.ctx, opts->banner);
-    }
-    opts->banner = lydict_insert(server_opts.ctx, banner, 0);
-    return 0;
-}
-
-API int
-nc_server_ssh_endpt_set_banner(const char *endpt_name, const char *banner)
-{
-    int ret;
-    struct nc_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_LIBSSH, NULL);
-    if (!endpt) {
-        return -1;
-    }
-    ret = nc_server_ssh_set_banner(banner, endpt->opts.ssh);
-    /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
-
-    return ret;
-}
-
-API int
-nc_server_ssh_ch_client_set_banner(const char *client_name, const char *banner)
-{
-    int ret;
-    struct nc_ch_client *client;
-
-    /* LOCK */
-    client = nc_server_ch_client_lock(client_name, NC_TI_LIBSSH, NULL);
-    if (!client) {
-        return -1;
-    }
-    ret = nc_server_ssh_set_banner(banner, client->opts.ssh);
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return ret;
-}
-
-static int
 nc_server_ssh_set_auth_methods(int auth_methods, struct nc_server_ssh_opts *opts)
 {
     if (!(auth_methods & NC_SSH_AUTH_PUBLICKEY) && !(auth_methods & NC_SSH_AUTH_PASSWORD)
@@ -730,10 +679,6 @@ void
 nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts)
 {
     nc_server_ssh_del_hostkey(NULL, -1, opts);
-    if (opts->banner) {
-        lydict_remove(server_opts.ctx, opts->banner);
-        opts->banner = NULL;
-    }
 }
 
 static char *
@@ -1420,9 +1365,6 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         close(sock);
         ssh_bind_free(sbind);
         return -1;
-    }
-    if (opts->banner) {
-        ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_BANNER, opts->banner);
     }
 
     ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, session);

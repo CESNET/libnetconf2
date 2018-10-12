@@ -232,15 +232,6 @@ int nc_server_ssh_ch_client_mov_hostkey(const char *client_name, const char *key
 int nc_server_ssh_ch_client_mod_hostkey(const char *endpt_name, const char *name, const char *new_name);
 
 /**
- * @brief Set Call Home SSH banner the server will send to every client.
- *
- * @param[in] client_name Existing Call Home client name.
- * @param[in] banner SSH banner.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_ch_client_set_banner(const char *client_name, const char *banner);
-
-/**
  * @brief Set accepted Call Home SSH authentication methods. All (publickey, password, interactive)
  *        are supported by default.
  *

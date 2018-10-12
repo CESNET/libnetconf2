@@ -585,15 +585,6 @@ int nc_server_ssh_endpt_mov_hostkey(const char *endpt_name, const char *key_mov,
 int nc_server_ssh_endpt_mod_hostkey(const char *endpt_name, const char *name, const char *new_name);
 
 /**
- * @brief Set endpoint SSH banner the server will send to every client.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] banner SSH banner.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_endpt_set_banner(const char *endpt_name, const char *banner);
-
-/**
  * @brief Set endpoint accepted SSH authentication methods. All (publickey, password, interactive)
  *        are supported by default.
  *
