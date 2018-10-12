@@ -1061,11 +1061,11 @@ parse_cpblts(struct lyxml_elem *xml, char ***list)
     }
 
     LY_TREE_FOR(xml->child, cpblt) {
-        if (strcmp(cpblt->name, "capability") && cpblt->ns && cpblt->ns->value &&
+        if (cpblt->name && strcmp(cpblt->name, "capability") && cpblt->ns && cpblt->ns->value &&
                     !strcmp(cpblt->ns->value, NC_NS_BASE)) {
             ERR("Unexpected <%s> element in client's <hello>.", cpblt->name);
             return -1;
-        } else if (!cpblt->ns || !cpblt->ns->value || strcmp(cpblt->ns->value, NC_NS_BASE)) {
+        } else if (!cpblt->name || !cpblt->ns || !cpblt->ns->value || strcmp(cpblt->ns->value, NC_NS_BASE)) {
             continue;
         }
 
