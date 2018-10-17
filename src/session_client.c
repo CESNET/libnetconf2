@@ -1188,6 +1188,12 @@ _non_blocking_connect(int timeout, int* sock_pending, struct addrinfo *res)
         errno = error;
         goto cleanup;
     }
+
+    /* enable keep-alive */
+    if (nc_sock_enable_keepalive(sock)) {
+        goto cleanup;
+    }
+
     return sock;
 
 cleanup:

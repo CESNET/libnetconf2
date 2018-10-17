@@ -20,8 +20,6 @@
 #include <poll.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -184,14 +182,14 @@ nc_sock_listen(const char *address, uint16_t port)
         goto fail;
     }
 
+    /* these options will be inherited by accepted sockets */
     opt = 1;
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof opt) == -1) {
         ERR("Could not set SO_REUSEADDR socket option (%s).", strerror(errno));
         goto fail;
     }
-    opt = 1;
-    if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof opt) == -1) {
-        ERR("Could not set SO_KEEPALIVE option (%s).", strerror(errno));
+
+    if (nc_sock_enable_keepalive(sock)) {
         goto fail;
     }
 
@@ -335,32 +333,6 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
         close(ret);
         return -1;
     }
-
-    /* enable keep-alive */
-#ifdef TCP_KEEPIDLE
-    flags = 1;
-    if (setsockopt(ret, IPPROTO_TCP, TCP_KEEPIDLE, &flags, sizeof flags) == -1) {
-        ERR("Setsockopt failed (%s).", strerror(errno));
-        close(ret);
-        return -1;
-    }
-#endif
-#ifdef TCP_KEEPINTVL
-    flags = 5;
-    if (setsockopt(ret, IPPROTO_TCP, TCP_KEEPINTVL, &flags, sizeof flags) == -1) {
-        ERR("Setsockopt failed (%s).", strerror(errno));
-        close(ret);
-        return -1;
-    }
-#endif
-#ifdef TCP_KEEPCNT
-    flags = 10;
-    if (setsockopt(ret, IPPROTO_TCP, TCP_KEEPCNT, &flags, sizeof flags) == -1) {
-        ERR("Setsockopt failed (%s).", strerror(errno));
-        close(ret);
-        return -1;
-    }
-#endif
 
     if (idx) {
         *idx = i;

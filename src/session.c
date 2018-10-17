@@ -20,6 +20,10 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <time.h>
 #include <ctype.h>
 #include <libyang/libyang.h>
@@ -111,6 +115,44 @@ nc_addtimespec(struct timespec *ts, uint32_t msec)
     }
 
     assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
+}
+
+int
+nc_sock_enable_keepalive(int sock)
+{
+    int opt;
+
+    opt = 1;
+    if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof opt) == -1) {
+        ERR("Could not set SO_KEEPALIVE option (%s).", strerror(errno));
+        return -1;
+    }
+
+#ifdef TCP_KEEPIDLE
+    opt = 1;
+    if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &opt, sizeof opt) == -1) {
+        ERR("Setsockopt failed (%s).", strerror(errno));
+        return -1;
+    }
+#endif
+
+#ifdef TCP_KEEPINTVL
+    opt = 5;
+    if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &opt, sizeof opt) == -1) {
+        ERR("Setsockopt failed (%s).", strerror(errno));
+        return -1;
+    }
+#endif
+
+#ifdef TCP_KEEPCNT
+    opt = 10;
+    if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &opt, sizeof opt) == -1) {
+        ERR("Setsockopt failed (%s).", strerror(errno));
+        return -1;
+    }
+#endif
+
+    return 0;
 }
 
 #ifndef HAVE_PTHREAD_MUTEX_TIMEDLOCK

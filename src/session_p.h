@@ -493,6 +493,8 @@ int32_t nc_difftimespec(const struct timespec *ts1, const struct timespec *ts2);
 
 void nc_addtimespec(struct timespec *ts, uint32_t msec);
 
+int nc_sock_enable_keepalive(int sock);
+
 struct nc_session *nc_new_session(NC_SIDE side, int shared_ti);
 
 int nc_session_rpc_lock(struct nc_session *session, int timeout, const char *func);
