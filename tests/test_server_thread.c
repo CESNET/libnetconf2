@@ -262,29 +262,29 @@ clb_server_cert(const char *name, void *UNUSED(user_data), char **cert_path, cha
                 char **privkey_data, int *privkey_data_rsa)
 {
     if (!strcmp(name, "server_cert1")) {
-        *cert_data = strdup("MIIEKjCCAxICCQDqSTPpuoUZkzANBgkqhkiG9w0BAQUFADBYMQswCQYDVQQGEwJB\n"
-            "VTETMBEGA1UECAwKU29tZS1TdGF0ZTEhMB8GA1UECgwYSW50ZXJuZXQgV2lkZ2l0\n"
-            "cyBQdHkgTHRkMREwDwYDVQQDDAhzZXJ2ZXJjYTAeFw0xNjAyMDgxMTE0MzdaFw0y\n"
-            "NjAyMDUxMTE0MzdaMFYxCzAJBgNVBAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRl\n"
-            "MSEwHwYDVQQKDBhJbnRlcm5ldCBXaWRnaXRzIFB0eSBMdGQxDzANBgNVBAMMBnNl\n"
-            "cnZlcjCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAOqI7Y3w5r8kD9WZ\n"
-            "CMAaa/e3ig7nm76aIJUR0Xb1bk6X/4FNVQKwEJsBodOYupZvE5FZdZ6DJSMSyQ3F\n"
-            "rJWnlZ+isr7F9B4bELV8Kj6sJGuVAr+mpcH/4rwL3DaXF9Y9Lf7iBgiOHUoip80A\n"
-            "sn9BU4q80JI6w2VHd5ng4TUE67gmpRleIHzViKt3taBrsAJ9bS5bvaE6xOB8zKYG\n"
-            "zRFOsDZrEqqcBsVIWC6EmjO29HS5qj/mXM0ktFGnNDxTZHoRkNgmCE/NH+fNKOFx\n"
-            "raCwlFBpKemAky+GdgngRGiQAVowyAx/nSmCFAalKc+E4ddoFwD/oft6iOvvXqaX\n"
-            "h6368wEQ7Hy48FDcUCbHtUEgK4wMrX9BSrRh6zkXO1tE4ghb0dM2qFDS0ypO3p04\n"
-            "kUPa31mTgLuOH1LzwmlwxOs113mlYKCgqOFR5YaN+nq1HI5RATPo5NvCMpG2RrQW\n"
-            "+ooCr2GtbT0oHmJv8yaBVY0HJ69eLnIv37dfjWvoTiBKBBIisXAD5Nm9rwSjZUSF\n"
-            "u1iyd7u2YrkBCUzZuvt3BOPpX8GgQgagU6BPnac76FF6DMhRUXlBXdTuWsbuH14L\n"
-            "dNIzGjkMZhNL/Tpkf6S/z1iH5VReGc+clTjWGg1XO5fr3mNKBGa7hDydIZRIMbgs\n"
-            "y63DIY7n5dqhNkO30CGmr/9TagVZAgMBAAEwDQYJKoZIhvcNAQEFBQADggEBAEVr\n"
-            "4skCpwuMuR+3WCmH6S17sYzWMYogJCGQdbZtFqmf4W3EDlNClk4HszAeUdmROMj6\n"
-            "MdqNDUnDM/GPxHB4Aje1DZOH1h68CCAl9W32LFRDC0KaUOquuYIG4rnZADJl6P4T\n"
-            "WVlaXfuE2bQjE7iYPhWGNWJtkb7JNIHmB8EAIa4tt3+XJs+vZiSpVDpiP2ucgrCn\n"
-            "BltsK0iOMPDLVlXdk1hpU5HvlMXdBHQebfTiCFDQSX7ViKc4wSJUHDt4CyoCzchY\n"
-            "mbQIcTc7uNDE5chQWV8Z3Vxkp4yuqZM3HdLskoo4IgFDOoj8eCAi+58+YRuKpaEQ\n"
-            "fWt+A9rvlaOApWryMW4=");
+        *cert_data = strdup("MIIEQDCCAygCCQCV65JgDvfWkTANBgkqhkiG9w0BAQsFADBjMQswCQYDVQQGEwJD\n"
+            "WjETMBEGA1UECAwKU29tZS1TdGF0ZTENMAsGA1UEBwwEQnJubzEPMA0GA1UECgwG\n"
+            "Q0VTTkVUMQwwCgYDVQQLDANUTUMxETAPBgNVBAMMCHNlcnZlcmNhMB4XDTE4MTEw\n"
+            "NTA3MzExMFoXDTI4MTEwMjA3MzExMFowYTELMAkGA1UEBhMCQ1oxEzARBgNVBAgM\n"
+            "ClNvbWUtU3RhdGUxDTALBgNVBAcMBEJybm8xDzANBgNVBAoMBkNFU05FVDEMMAoG\n"
+            "A1UECwwDVE1DMQ8wDQYDVQQDDAZzZXJ2ZXIwggIiMA0GCSqGSIb3DQEBAQUAA4IC\n"
+            "DwAwggIKAoICAQDqiO2N8Oa/JA/VmQjAGmv3t4oO55u+miCVEdF29W5Ol/+BTVUC\n"
+            "sBCbAaHTmLqWbxORWXWegyUjEskNxayVp5WforK+xfQeGxC1fCo+rCRrlQK/pqXB\n"
+            "/+K8C9w2lxfWPS3+4gYIjh1KIqfNALJ/QVOKvNCSOsNlR3eZ4OE1BOu4JqUZXiB8\n"
+            "1Yird7Wga7ACfW0uW72hOsTgfMymBs0RTrA2axKqnAbFSFguhJoztvR0uao/5lzN\n"
+            "JLRRpzQ8U2R6EZDYJghPzR/nzSjhca2gsJRQaSnpgJMvhnYJ4ERokAFaMMgMf50p\n"
+            "ghQGpSnPhOHXaBcA/6H7eojr716ml4et+vMBEOx8uPBQ3FAmx7VBICuMDK1/QUq0\n"
+            "Yes5FztbROIIW9HTNqhQ0tMqTt6dOJFD2t9Zk4C7jh9S88JpcMTrNdd5pWCgoKjh\n"
+            "UeWGjfp6tRyOUQEz6OTbwjKRtka0FvqKAq9hrW09KB5ib/MmgVWNByevXi5yL9+3\n"
+            "X41r6E4gSgQSIrFwA+TZva8Eo2VEhbtYsne7tmK5AQlM2br7dwTj6V/BoEIGoFOg\n"
+            "T52nO+hRegzIUVF5QV3U7lrG7h9eC3TSMxo5DGYTS/06ZH+kv89Yh+VUXhnPnJU4\n"
+            "1hoNVzuX695jSgRmu4Q8nSGUSDG4LMutwyGO5+XaoTZDt9Ahpq//U2oFWQIDAQAB\n"
+            "MA0GCSqGSIb3DQEBCwUAA4IBAQAXWHf/MG8RPCyA0rC3RwxmM70ndyKPIJoL4ggU\n"
+            "VgkN66BdpsE4UlWdlp0XL3aauMPxzLn9rq1yRtoHWT4/ucL9iEa6B295JBNjkgW+\n"
+            "ct9/y8060P9BUhY1DTv5DLzitsA4bjRaraIevjATDPfsbHFx9DTNrS5pXHIFbRcz\n"
+            "y3WniYXTKhpfM6m+1X8ogImE968DG8RqAW5YZZtrZW0VF/dhlQp20jEX/8Rv33Bp\n"
+            "RhNEIhPnYAquKCesMMclUtPW+5n2z8rgj5t/ETv4wc5QegpyPfdHNq09bGKB10Sy\n"
+            "sGvC6hP9GKU3R2Jhxih/t88O3WoisFQ8+Tf9s2LuSxUV0bzp");
         *privkey_data = strdup("MIIJKAIBAAKCAgEA6ojtjfDmvyQP1ZkIwBpr97eKDuebvpoglRHRdvVuTpf/gU1V\n"
             "ArAQmwGh05i6lm8TkVl1noMlIxLJDcWslaeVn6KyvsX0HhsQtXwqPqwka5UCv6al\n"
             "wf/ivAvcNpcX1j0t/uIGCI4dSiKnzQCyf0FTirzQkjrDZUd3meDhNQTruCalGV4g\n"
@@ -351,25 +351,26 @@ clb_trusted_cert_lists(const char *name, void *UNUSED(user_data), char ***cert_p
 {
     if (!strcmp(name, "trusted_cert_list1")) {
         *cert_data = malloc(sizeof **cert_data);
-        (*cert_data)[0] = strdup("MIIDgzCCAmugAwIBAgIJAL+y0WMRGax0MA0GCSqGSIb3DQEBBQUAMFgxCzAJBgNV\n"
-            "BAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX\n"
-            "aWRnaXRzIFB0eSBMdGQxETAPBgNVBAMMCGNsaWVudGNhMB4XDTE2MDExMTEyMTAx\n"
-            "OVoXDTE4MTAzMTEyMTAxOVowWDELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUt\n"
-            "U3RhdGUxITAfBgNVBAoMGEludGVybmV0IFdpZGdpdHMgUHR5IEx0ZDERMA8GA1UE\n"
-            "AwwIY2xpZW50Y2EwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCw7Eyq\n"
-            "5T5tX6tAv5DHHfWNuaD/a3gVIBlGRWMAXkFWWJEa3o6leIjKxoDnL6tcBWNVJ+Gw\n"
-            "32MHerpHY6o5czsEHQ2XsOgodyFqe5cvx0kjQbjYQqnIMrslcdvSYuNe/ItqFP/w\n"
-            "uxb6kQbCYnCQKd/qhdhfoXjIHcnXpZzMCPKQ/uqls7LANJymtQkAuzydlf3+UqoG\n"
-            "4oo04GXK1Dc0A12cgCXxf+kWx7x34ctx2VEvDsJzw6LiZm8czOWjMFcuqqm/+kla\n"
-            "N3+6O7Z1kZlft/KNSrOYtc45xKNoSVrdVwFLkxipVDfOql6/DmWfE8iVmlX3QflO\n"
-            "u3+fzZZQpR5jYzUNAgMBAAGjUDBOMB0GA1UdDgQWBBTjBbQJ6p/mjnjBWXLgXXXW\n"
-            "a3ieoTAfBgNVHSMEGDAWgBTjBbQJ6p/mjnjBWXLgXXXWa3ieoTAMBgNVHRMEBTAD\n"
-            "AQH/MA0GCSqGSIb3DQEBBQUAA4IBAQAZr9b0YTaDV5XZr/QQPP1pvHkN3Ezbm9F4\n"
-            "MiYe4e0QnM9JtjNLDKq1dDnqVDQ/BYdupWWh0398tObFACssWkm4aubPG7LVh5Ck\n"
-            "O8I8i/GHiXYLmYT22hslWe5dFvidUICkTXoj1h5X2vwfBrNTI1+gnVXXw842xCvU\n"
-            "sgq28vGMSXLSYKBNaP/llXNmqW35oLs6CwVuiCL7Go0IDIOmiXN2bssb87hZSw3B\n"
-            "6iwU78wYshJUGZjLaK9PuMvFYJLFWSAePA2Yb+aEv80wMbX1oANSryU7Uf5BJk8V\n"
-            "kO3mlRDh2b1/5Gb5xA2vU2z3ReHdPNy6qSx0Mk4XJvQw9FsVHZ13");
+        (*cert_data)[0] = strdup("MIIDnDCCAoSgAwIBAgIJAIjf7UNx4uabMA0GCSqGSIb3DQEBCwUAMGMxCzAJBgNV\n"
+            "BAYTAkNaMRMwEQYDVQQIDApTb21lLVN0YXRlMQ0wCwYDVQQHDARCcm5vMQ8wDQYD\n"
+            "VQQKDAZDRVNORVQxDDAKBgNVBAsMA1RNQzERMA8GA1UEAwwIc2VydmVyY2EwHhcN\n"
+            "MTgxMTA1MDcyNjM5WhcNMjgxMTAyMDcyNjM5WjBjMQswCQYDVQQGEwJDWjETMBEG\n"
+            "A1UECAwKU29tZS1TdGF0ZTENMAsGA1UEBwwEQnJubzEPMA0GA1UECgwGQ0VTTkVU\n"
+            "MQwwCgYDVQQLDANUTUMxETAPBgNVBAMMCHNlcnZlcmNhMIIBIjANBgkqhkiG9w0B\n"
+            "AQEFAAOCAQ8AMIIBCgKCAQEAyMrKraqraFGklO2itRIEWxfuzWo1IwxZ22aJmeXD\n"
+            "Leomt6893NXelMLaC3swQ+hu49JjiIY81DXvbVgmIgLm7cAz5tHTHuJbfdI4Q6gy\n"
+            "ic4aOpy2s3s1/vYz+1TvEUFCiPXEsJrH72he/z9nBxL8vY6Eg8U8EG8NvKp9zyCK\n"
+            "A7vmNSgQOtuyF18fesYHAnvQjNXO5q6diPXdHOr2bjTRUvARGbWlv4Rvf81RwUkR\n"
+            "sWoF/0pglV/TxnW2MoHnn3apxb/kmH92CQ+GWKxq5SkhvbkYePlA87kgKnDtXl4w\n"
+            "EXIhYwM51kafRhhlAKN+qYeV9teBqGpjsZRYesrh3mXHlQIDAQABo1MwUTAdBgNV\n"
+            "HQ4EFgQU60nJ4q3ItcfaOOBjJSqadAPiMg8wHwYDVR0jBBgwFoAU60nJ4q3Itcfa\n"
+            "OOBjJSqadAPiMg8wDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEA\n"
+            "xIqIQ5SCXnKslZfrXiAEbB5dglxVOSa8me5a/70uHK/27JZ6veeIgRqZ4VgPHnBC\n"
+            "a3m6EHr+mnTjjqSUcGIUiKV3g2Dumw8paqZC+Qv+Ib/NKquS1lO2Ry1wHBtXzn5K\n"
+            "KHHyM1bWMDaDszirw2+pp22VdRrPZNA9NWXheEDYOLyQekyL2CfidhxhaXvUZyWg\n"
+            "alLyF2XRZ5/jAT+NjfWw39EmWPUGk13Jm83OaFc1VdrXNCiD0sGCQ+BTCllDinQv\n"
+            "R08yzd4fzA3YXthvX1dBu1SvqQAGOS7gssRCyv9uWI6MXta25X91eY1ZMz1euJ04\n"
+            "mB8EdyYiZc0kzrb9dv5d0g==");
         *cert_data_count = 1;
         return 0;
     } else if (!strcmp(name, "client_cert_list")) {
@@ -705,7 +706,7 @@ main(void)
     nc_assert(!ret);
     ret = nc_server_tls_endpt_add_trusted_cert_list("main_tls", "client_cert_list");
     nc_assert(!ret);
-    ret = nc_server_tls_endpt_add_ctn("main_tls", 0, "02:D3:03:0E:77:21:E2:14:1F:E5:75:48:98:6B:FD:8A:63:BB:DE:40:34", NC_TLS_CTN_SPECIFIED, "test");
+    ret = nc_server_tls_endpt_add_ctn("main_tls", 0, "02:B3:9F:26:65:76:6B:CC:FC:86:8E:D4:1A:81:64:0F:92:EB:18:AE:FF", NC_TLS_CTN_SPECIFIED, "test");
     nc_assert(!ret);
 
     /* client ready */
