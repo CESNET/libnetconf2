@@ -40,7 +40,6 @@
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
-#   include <openssl/engine.h>
 #   include <openssl/conf.h>
 #   include <openssl/err.h>
 
@@ -1347,7 +1346,6 @@ static void
 nc_ssh_destroy(void)
 {
     FIPS_mode_set(0);
-    ENGINE_cleanup();
     CONF_modules_unload(1);
     nc_thread_destroy();
     ssh_finalize();
