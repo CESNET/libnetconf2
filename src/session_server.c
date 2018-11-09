@@ -673,7 +673,7 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
     (*session)->ctx = server_opts.ctx;
 
     /* assign new SID atomically */
-    (*session)->id = atomic_fetch_add(&server_opts.new_session_id, 1);
+    (*session)->id = ATOMIC_INC(&server_opts.new_session_id);
 
     /* NETCONF handshake */
     msgtype = nc_handshake_io(*session);
@@ -1982,7 +1982,7 @@ nc_accept(int timeout, struct nc_session **session)
     pthread_rwlock_unlock(&server_opts.endpt_lock);
 
     /* assign new SID atomically */
-    (*session)->id = atomic_fetch_add(&server_opts.new_session_id, 1);
+    (*session)->id = ATOMIC_INC(&server_opts.new_session_id);
 
     /* NETCONF handshake */
     msgtype = nc_handshake_io(*session);
@@ -2044,7 +2044,7 @@ nc_server_ch_add_client(const char *name, NC_TRANSPORT_IMPL ti)
         return -1;
     }
     server_opts.ch_clients[server_opts.ch_client_count - 1].name = lydict_insert(server_opts.ctx, name, 0);
-    server_opts.ch_clients[server_opts.ch_client_count - 1].id = atomic_fetch_add(&server_opts.new_client_id, 1);
+    server_opts.ch_clients[server_opts.ch_client_count - 1].id = ATOMIC_INC(&server_opts.new_client_id);
     server_opts.ch_clients[server_opts.ch_client_count - 1].ti = ti;
     server_opts.ch_clients[server_opts.ch_client_count - 1].ch_endpts = NULL;
     server_opts.ch_clients[server_opts.ch_client_count - 1].ch_endpt_count = 0;
@@ -2722,7 +2722,7 @@ nc_connect_ch_client_endpt(struct nc_ch_client *client, struct nc_ch_endpt *endp
     }
 
     /* assign new SID atomically */
-    (*session)->id = atomic_fetch_add(&server_opts.new_session_id, 1);
+    (*session)->id = ATOMIC_INC(&server_opts.new_session_id);
 
     /* NETCONF handshake */
     msgtype = nc_handshake_io(*session);

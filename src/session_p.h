@@ -18,7 +18,16 @@
 
 #include <stdint.h>
 #include <pthread.h>
-#include <stdatomic.h>
+
+#ifdef __STDC_NO_ATOMICS__
+# define ATOMIC_UINT32_T uint32_t
+# define ATOMIC_INC(x) __sync_add_and_fetch(x, 1)
+#else
+# include <stdatomic.h>
+
+# define ATOMIC_UINT32_T atomic_uint_fast32_t
+# define ATOMIC_INC(x) atomic_fetch_add(x, 1)
+#endif
 
 #include <libyang/libyang.h>
 
@@ -275,8 +284,8 @@ struct nc_server_opts {
     pthread_rwlock_t ch_client_lock;
 
     /* Atomic IDs */
-    atomic_uint_fast32_t new_session_id;
-    atomic_uint_fast32_t new_client_id;
+    ATOMIC_UINT32_T new_session_id;
+    ATOMIC_UINT32_T new_client_id;
 };
 
 /**

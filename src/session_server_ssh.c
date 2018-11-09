@@ -1496,7 +1496,7 @@ nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session
     }
 
     /* assign new SID atomically */
-    new_session->id = atomic_fetch_add(&server_opts.new_session_id, 1);
+    new_session->id = ATOMIC_INC(&server_opts.new_session_id);
 
     /* NETCONF handshake */
     msgtype = nc_handshake_io(new_session);
@@ -1567,7 +1567,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     }
 
     /* assign new SID atomically */
-    new_session->id = atomic_fetch_add(&server_opts.new_session_id, 1);
+    new_session->id = ATOMIC_INC(&server_opts.new_session_id);
 
     /* NETCONF handshake */
     msgtype = nc_handshake_io(new_session);
