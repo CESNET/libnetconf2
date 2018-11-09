@@ -11,9 +11,9 @@ sudo apt-get install -y osc
 echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-certificates.crt
 
 # libssh
-wget https://git.libssh.org/projects/libssh.git/snapshot/libssh-0.7.5.tar.gz
-tar -xzf libssh-0.7.5.tar.gz
-mkdir libssh-0.7.5/build && cd libssh-0.7.5/build
+wget https://www.libssh.org/files/0.8/libssh-0.8.5.tar.xz
+tar -xJf libssh-0.8.5.tar.xz
+mkdir libssh-0.8.5/build && cd libssh-0.8.5/build
 cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && make -j2 && sudo make install
 cd ../..
 
