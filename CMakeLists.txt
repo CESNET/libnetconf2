@@ -172,7 +172,7 @@ target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
 
 # check availability for some pthread functions
 set(CMAKE_REQUIRED_LIBRARIES pthread)
-check_function_exists(pthread_spin_lock HAVE_SPINLOCK)
+check_include_file(stdatomic.h HAVE_STDATOMIC)
 check_function_exists(pthread_mutex_timedlock HAVE_PTHREAD_MUTEX_TIMEDLOCK)
 
 # dependencies - openssl

@@ -29,16 +29,17 @@
 #endif
 
 /*
- * Support for spinlocks
+ * Support for atomic variables
  */
-#cmakedefine HAVE_SPINLOCK
-#ifndef HAVE_SPINLOCK
-#  define pthread_spinlock_t pthread_mutex_t
-#  define pthread_spin_init(s, opt) pthread_mutex_init(s, NULL)
-#  define pthread_spin_lock pthread_mutex_lock
-#  define pthread_spin_trylock pthread_mutex_trylock
-#  define pthread_spin_unlock pthread_mutex_unlock
-#  define pthread_spin_destroy pthread_mutex_destroy
+#cmakedefine HAVE_STDATOMIC
+#ifdef HAVE_STDATOMIC
+# include <stdatomic.h>
+
+# define ATOMIC_UINT32_T atomic_uint_fast32_t
+# define ATOMIC_INC(x) atomic_fetch_add(x, 1)
+#else
+# define ATOMIC_UINT32_T uint32_t
+# define ATOMIC_INC(x) __sync_add_and_fetch(x, 1)
 #endif
 
 /*

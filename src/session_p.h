@@ -19,16 +19,6 @@
 #include <stdint.h>
 #include <pthread.h>
 
-#ifdef __STDC_NO_ATOMICS__
-# define ATOMIC_UINT32_T uint32_t
-# define ATOMIC_INC(x) __sync_add_and_fetch(x, 1)
-#else
-# include <stdatomic.h>
-
-# define ATOMIC_UINT32_T atomic_uint_fast32_t
-# define ATOMIC_INC(x) atomic_fetch_add(x, 1)
-#endif
-
 #include <libyang/libyang.h>
 
 #include "libnetconf.h"
