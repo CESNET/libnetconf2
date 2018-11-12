@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 2.6)
 project(libnetconf2 C)
 include(GNUInstallDirs)
-include (CheckFunctionExists)
+include(CheckFunctionExists)
+include(CheckIncludeFiles)
 
 # include custom Modules
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMakeModules/")
