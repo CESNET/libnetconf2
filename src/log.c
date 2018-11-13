@@ -42,10 +42,10 @@ struct {
     NC_VERB_LEVEL level;
     const char *label;
 } verb[] = {
-    {NC_VERB_ERROR, "ERROR"},
-    {NC_VERB_WARNING, "WARNING"},
-    {NC_VERB_VERBOSE, "VERBOSE"},
-    {NC_VERB_DEBUG, "DEBUG"}
+    {NC_VERB_ERROR, "[ERR]"},
+    {NC_VERB_WARNING, "[WRN]"},
+    {NC_VERB_VERBOSE, "[INF]"},
+    {NC_VERB_DEBUG, "[DBG]"}
 };
 
 #ifdef NC_ENABLED_SSH
