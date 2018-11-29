@@ -401,7 +401,7 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
     }
 
     data_rpl = (struct nc_reply_data *)reply;
-    if ((data_rpl->data->schema->nodetype != LYS_RPC) || strcmp(data_rpl->data->schema->name, "get-schema")
+    if (!data_rpl->data || (data_rpl->data->schema->nodetype != LYS_RPC) || strcmp(data_rpl->data->schema->name, "get-schema")
             || !data_rpl->data->child || (data_rpl->data->child->schema->nodetype != LYS_ANYXML)) {
         ERR("Session %u: unexpected data in reply to a <get-schema> RPC.", clb_data->session->id);
         nc_reply_free(reply);
