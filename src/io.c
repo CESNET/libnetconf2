@@ -112,9 +112,10 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
             /* read via OpenSSL */
             r = SSL_read(session->ti.tls, buf + readd, count - readd);
             if (r <= 0) {
-                int x;
-                switch (x = SSL_get_error(session->ti.tls, r)) {
+                int e;
+                switch (e = SSL_get_error(session->ti.tls, r)) {
                 case SSL_ERROR_WANT_READ:
+                case SSL_ERROR_WANT_WRITE:
                     r = 0;
                     break;
                 case SSL_ERROR_ZERO_RETURN:
@@ -122,8 +123,18 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_DROPPED;
                     return -1;
+                case SSL_ERROR_SYSCALL:
+                    ERR("Session %u: SSL socket error (%s).", session->id, strerror(errno));
+                    session->status = NC_STATUS_INVALID;
+                    session->term_reason = NC_SESSION_TERM_OTHER;
+                    return -1;
+                case SSL_ERROR_SSL:
+                    ERR("Session %u: SSL error (%s).", session->id, ERR_reason_error_string(e));
+                    session->status = NC_STATUS_INVALID;
+                    session->term_reason = NC_SESSION_TERM_OTHER;
+                    return -1;
                 default:
-                    ERR("Session %u: reading from the TLS session failed (SSL code %d).", session->id, x);
+                    ERR("Session %u: unknown SSL error occured (err code %d).", session->id, e);
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_OTHER;
                     return -1;
@@ -698,6 +709,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
                     ERR("Session %u: SSL connection was properly closed.", session->id);
                     return -1;
                 case SSL_ERROR_WANT_WRITE:
+                case SSL_ERROR_WANT_READ:
                     c = 0;
                     break;
                 case SSL_ERROR_SYSCALL:
@@ -707,7 +719,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
                     ERR("Session %u: SSL error (%s).", session->id, ERR_reason_error_string(e));
                     return -1;
                 default:
-                    ERR("Session %u: unknown SSL error occured.", session->id);
+                    ERR("Session %u: unknown SSL error occured (err code %d).", session->id, e);
                     return -1;
                 }
             }
