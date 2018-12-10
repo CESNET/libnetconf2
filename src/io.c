@@ -34,6 +34,42 @@
 
 #define BUFFERSIZE 512
 
+#ifdef NC_ENABLED_TLS
+
+static char *
+nc_ssl_error_get_reasons(void)
+{
+    unsigned int e;
+    int reason_size, reason_len;
+    char *reasons = NULL;
+
+    reason_size = 1;
+    reason_len = 0;
+    while ((e = ERR_get_error())) {
+        if (reason_len) {
+            /* add "; " */
+            reason_size += 2;
+            reasons = nc_realloc(reasons, reason_size);
+            if (!reasons) {
+                ERRMEM;
+                return NULL;
+            }
+            reason_len += sprintf(reasons + reason_len, "; ");
+        }
+        reason_size += strlen(ERR_reason_error_string(e));
+        reasons = nc_realloc(reasons, reason_size);
+        if (!reasons) {
+            ERRMEM;
+            return NULL;
+        }
+        reason_len += sprintf(reasons + reason_len, ERR_reason_error_string(e));
+    }
+
+    return reasons;
+}
+
+#endif
+
 static ssize_t
 nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_timeout, struct timespec *ts_act_timeout)
 {
@@ -110,9 +146,12 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
 #ifdef NC_ENABLED_TLS
         case NC_TI_OPENSSL:
             /* read via OpenSSL */
+            ERR_clear_error();
             r = SSL_read(session->ti.tls, buf + readd, count - readd);
             if (r <= 0) {
                 int e;
+                char *reasons;
+
                 switch (e = SSL_get_error(session->ti.tls, r)) {
                 case SSL_ERROR_WANT_READ:
                 case SSL_ERROR_WANT_WRITE:
@@ -129,7 +168,9 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
                     session->term_reason = NC_SESSION_TERM_OTHER;
                     return -1;
                 case SSL_ERROR_SSL:
-                    ERR("Session %u: SSL error (%s).", session->id, ERR_reason_error_string(e));
+                    reasons = nc_ssl_error_get_reasons();
+                    ERR("Session %u: SSL error (%s).", session->id, reasons);
+                    free(reasons);
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_OTHER;
                     return -1;
@@ -704,6 +745,8 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
         case NC_TI_OPENSSL:
             c = SSL_write(session->ti.tls, (char *)(buf + written), count - written);
             if (c < 1) {
+                char *reasons;
+
                 switch ((e = SSL_get_error(session->ti.tls, c))) {
                 case SSL_ERROR_ZERO_RETURN:
                     ERR("Session %u: SSL connection was properly closed.", session->id);
@@ -716,7 +759,9 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
                     ERR("Session %u: SSL socket error (%s).", session->id, strerror(errno));
                     return -1;
                 case SSL_ERROR_SSL:
-                    ERR("Session %u: SSL error (%s).", session->id, ERR_reason_error_string(e));
+                    reasons = nc_ssl_error_get_reasons();
+                    ERR("Session %u: SSL error (%s).", session->id, reasons);
+                    free(reasons);
                     return -1;
                 default:
                     ERR("Session %u: unknown SSL error occured (err code %d).", session->id, e);
