@@ -11,7 +11,7 @@
  *
  *     https://opensource.org/licenses/BSD-3-Clause
  */
-#define _GNU_SOURCE /* signals, threads */
+#define _GNU_SOURCE /* signals, threads, SO_PEERCRED */
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -20,12 +20,16 @@
 #include <poll.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/un.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <time.h>
 #include <signal.h>
+#include <pwd.h>
 
 #include "libnetconf.h"
 #include "session_server.h"
@@ -160,7 +164,7 @@ nc_session_set_status(struct nc_session *session, NC_STATUS status)
 }
 
 int
-nc_sock_listen(const char *address, uint16_t port)
+nc_sock_listen_inet(const char *address, uint16_t port)
 {
     int opt;
     int is_ipv4, sock;
@@ -229,6 +233,57 @@ nc_sock_listen(const char *address, uint16_t port)
 
     if (listen(sock, NC_REVERSE_QUEUE) == -1) {
         ERR("Unable to start listening on \"%s\" port %d (%s).", address, port, strerror(errno));
+        goto fail;
+    }
+
+    return sock;
+
+fail:
+    if (sock > -1) {
+        close(sock);
+    }
+
+    return -1;
+}
+
+int
+nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *opts)
+{
+    struct sockaddr_un sun;
+    int sock = -1;
+
+    sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (sock == -1) {
+        ERR("Failed to create socket (%s).", strerror(errno));
+        goto fail;
+    }
+
+    memset(&sun, 0, sizeof(sun));
+    sun.sun_family = AF_UNIX;
+    snprintf(sun.sun_path, sizeof(sun.sun_path), "%s", address);
+
+    unlink(sun.sun_path);
+    if (bind(sock, (struct sockaddr *)&sun, sizeof(sun)) == -1) {
+        ERR("Could not bind \"%s\" (%s).", address, strerror(errno));
+        goto fail;
+    }
+
+    if (opts->mode != (mode_t)-1) {
+        if (chmod(sun.sun_path, opts->mode) < 0) {
+            ERR("Failed to set unix socket permissions (%s).", strerror(errno));
+            goto fail;
+        }
+    }
+
+    if (opts->uid != (uid_t)-1 || opts->gid != (gid_t)-1) {
+        if (chown(sun.sun_path, opts->uid, opts->gid) < 0) {
+            ERR("Failed to set unix socket uid/gid (%s).", strerror(errno));
+            goto fail;
+        }
+    }
+
+    if (listen(sock, NC_REVERSE_QUEUE) == -1) {
+        ERR("Unable to start listening on \"%s\" (%s).", address, strerror(errno));
         goto fail;
     }
 
@@ -334,6 +389,34 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
         return -1;
     }
 
+    if (saddr.ss_family == AF_INET || saddr.ss_family == AF_INET6) {
+        /* enable keep-alive */
+#ifdef TCP_KEEPIDLE
+        flags = 1;
+        if (setsockopt(ret, IPPROTO_TCP, TCP_KEEPIDLE, &flags, sizeof flags) == -1) {
+            ERR("Setsockopt failed (%s).", strerror(errno));
+            close(ret);
+            return -1;
+        }
+#endif
+#ifdef TCP_KEEPINTVL
+        flags = 5;
+        if (setsockopt(ret, IPPROTO_TCP, TCP_KEEPINTVL, &flags, sizeof flags) == -1) {
+            ERR("Setsockopt failed (%s).", strerror(errno));
+            close(ret);
+            return -1;
+        }
+#endif
+#ifdef TCP_KEEPCNT
+        flags = 10;
+        if (setsockopt(ret, IPPROTO_TCP, TCP_KEEPCNT, &flags, sizeof flags) == -1) {
+            ERR("Setsockopt failed (%s).", strerror(errno));
+            close(ret);
+            return -1;
+        }
+#endif
+    }
+
     if (idx) {
         *idx = i;
     }
@@ -366,6 +449,15 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
 
                 if (port) {
                     *port = ntohs(((struct sockaddr_in6 *)&saddr)->sin6_port);
+                }
+            } else {
+                ERRMEM;
+            }
+        } else if (saddr.ss_family == AF_UNIX) {
+            *host = strdup(((struct sockaddr_un *)&saddr)->sun_path);
+            if (*host) {
+                if (port) {
+                    *port = 0;
                 }
             } else {
                 ERRMEM;
@@ -691,6 +783,45 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
     (*session)->status = NC_STATUS_RUNNING;
 
     return msgtype;
+}
+
+static int
+nc_accept_unix(struct nc_session *session, int sock)
+{
+    const struct passwd *pw;
+    struct ucred ucred;
+    char *username;
+    socklen_t len;
+
+    session->ti_type = NC_TI_UNIX;
+
+    len = sizeof(ucred);
+    if (getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &ucred, &len) < 0) {
+        ERR("Failed to get credentials from unix socket (%s).",
+            strerror(errno));
+        close(sock);
+        return -1;
+    }
+
+    pw = getpwuid(ucred.uid);
+    if (pw == NULL) {
+        ERR("Failed to find username for uid=%u (%s).\n", ucred.uid,
+            strerror(errno));
+        close(sock);
+        return -1;
+    }
+
+    username = strdup(pw->pw_name);
+    if (username == NULL) {
+        ERRMEM;
+        close(sock);
+        return -1;
+    }
+    session->username = lydict_insert_zc(server_opts.ctx, username);
+
+    session->ti.unixsock.sock = sock;
+
+    return 1;
 }
 
 static void
@@ -1316,7 +1447,8 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
         break;
 #endif
     case NC_TI_FD:
-        pfd.fd = session->ti.fd.in;
+    case NC_TI_UNIX:
+        pfd.fd = (session->ti_type == NC_TI_FD) ? session->ti.fd.in : session->ti.unixsock.sock;
         pfd.events = POLLIN;
         pfd.revents = 0;
         r = poll(&pfd, 1, 0);
@@ -1660,6 +1792,17 @@ nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti)
         }
         break;
 #endif
+    case NC_TI_UNIX:
+        server_opts.endpts[server_opts.endpt_count - 1].opts.unixsock = calloc(1, sizeof(struct nc_server_unix_opts));
+        if (!server_opts.endpts[server_opts.endpt_count - 1].opts.unixsock) {
+            ERRMEM;
+            ret = -1;
+            goto cleanup;
+        }
+        server_opts.endpts[server_opts.endpt_count - 1].opts.unixsock->mode = (mode_t)-1;
+        server_opts.endpts[server_opts.endpt_count - 1].opts.unixsock->uid = (uid_t)-1;
+        server_opts.endpts[server_opts.endpt_count - 1].opts.unixsock->gid = (gid_t)-1;
+        break;
     default:
         ERRINT;
         ret = -1;
@@ -1717,10 +1860,18 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
         address = bind->address;
     }
 
+    if (!set_addr && endpt->ti == NC_TI_UNIX) {
+        ret = -1;
+        goto cleanup;
+    }
+
     /* we have all the information we need to create a listening socket */
-    if (address && port) {
+    if (address && (port || endpt->ti == NC_TI_UNIX)) {
         /* create new socket, close the old one */
-        sock = nc_sock_listen(address, port);
+        if (endpt->ti == NC_TI_UNIX)
+            sock = nc_sock_listen_unix(address, endpt->opts.unixsock);
+        else
+            sock = nc_sock_listen_inet(address, port);
         if (sock == -1) {
             ret = -1;
             goto cleanup;
@@ -1772,6 +1923,42 @@ nc_server_endpt_set_port(const char *endpt_name, uint16_t port)
 }
 
 API int
+nc_server_endpt_set_perms(const char *endpt_name, mode_t mode, uid_t uid, gid_t gid)
+{
+    struct nc_endpt *endpt;
+    uint16_t i;
+    int ret = 0;
+
+    if (!endpt_name) {
+        ERRARG("endpt_name");
+        return -1;
+    } else if (mode == 0) {
+        ERRARG("mode");
+        return -1;
+    }
+
+    /* ENDPT LOCK */
+    endpt = nc_server_endpt_lock_get(endpt_name, 0, &i);
+    if (!endpt)
+        return -1;
+
+    if (endpt->ti != NC_TI_UNIX) {
+        ret = -1;
+        goto cleanup;
+    }
+
+    endpt->opts.unixsock->mode = mode;
+    endpt->opts.unixsock->uid = uid;
+    endpt->opts.unixsock->gid = gid;
+
+cleanup:
+    /* ENDPT UNLOCK */
+    pthread_rwlock_unlock(&server_opts.endpt_lock);
+
+    return ret;
+}
+
+API int
 nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti)
 {
     uint32_t i;
@@ -1800,6 +1987,9 @@ nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti)
                 free(server_opts.endpts[i].opts.tls);
                 break;
 #endif
+            case NC_TI_UNIX:
+                free(server_opts.endpts[i].opts.unixsock);
+                break;
             default:
                 ERRINT;
                 /* won't get here ...*/
@@ -1841,6 +2031,9 @@ nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti)
                     free(server_opts.endpts[i].opts.tls);
                     break;
 #endif
+                case NC_TI_UNIX:
+                    free(server_opts.endpts[i].opts.unixsock);
+                    break;
                 default:
                     ERRINT;
                     break;
@@ -1969,7 +2162,14 @@ nc_accept(int timeout, struct nc_session **session)
         }
     } else
 #endif
-    {
+    if (server_opts.endpts[bind_idx].ti == NC_TI_UNIX) {
+        (*session)->data = server_opts.endpts[bind_idx].opts.unixsock;
+        ret = nc_accept_unix(*session, sock);
+        if (ret < 0) {
+            msgtype = NC_MSG_ERROR;
+            goto cleanup;
+        }
+    } else {
         ERRINT;
         close(sock);
         msgtype = NC_MSG_ERROR;

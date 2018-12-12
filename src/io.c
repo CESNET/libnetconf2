@@ -75,6 +75,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
 {
     size_t readd = 0;
     ssize_t r = -1;
+    int fd;
     struct timespec ts_cur, ts_inact_timeout;
 
     assert(session);
@@ -96,22 +97,24 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
             return 0;
 
         case NC_TI_FD:
+        case NC_TI_UNIX:
+            fd = (session->ti_type == NC_TI_FD) ? session->ti.fd.in : session->ti.unixsock.sock;
             /* read via standard file descriptor */
-            r = read(session->ti.fd.in, buf + readd, count - readd);
+            r = read(fd, buf + readd, count - readd);
             if (r < 0) {
                 if ((errno == EAGAIN) || (errno == EINTR)) {
                     r = 0;
                     break;
                 } else {
                     ERR("Session %u: reading from file descriptor (%d) failed (%s).",
-                        session->id, session->ti.fd.in, strerror(errno));
+                        session->id, fd, strerror(errno));
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_OTHER;
                     return -1;
                 }
             } else if (r == 0) {
                 ERR("Session %u: communication file descriptor (%d) unexpectedly closed.",
-                    session->id, session->ti.fd.in);
+                    session->id, fd);
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_DROPPED;
                 return -1;
@@ -552,9 +555,11 @@ nc_read_poll(struct nc_session *session, int io_timeout)
 #endif
         /* fallthrough */
     case NC_TI_FD:
-        if (session->ti_type == NC_TI_FD) {
+    case NC_TI_UNIX:
+        if (session->ti_type == NC_TI_FD)
             fds.fd = session->ti.fd.in;
-        }
+        else if (session->ti_type == NC_TI_UNIX)
+            fds.fd = session->ti.unixsock.sock;
 
         fds.events = POLLIN;
         fds.revents = 0;
@@ -649,6 +654,9 @@ nc_session_is_connected(struct nc_session *session)
     case NC_TI_FD:
         fds.fd = session->ti.fd.in;
         break;
+    case NC_TI_UNIX:
+        fds.fd = session->ti.unixsock.sock;
+        break;
 #ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
         return ssh_is_connected(session->ti.libssh.session);
@@ -692,7 +700,7 @@ struct wclb_arg {
 static int
 nc_write(struct nc_session *session, const void *buf, size_t count)
 {
-    int c;
+    int c, fd;
     size_t written = 0;
 #ifdef NC_ENABLED_TLS
     unsigned long e;
@@ -715,8 +723,12 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
     do {
         switch (session->ti_type) {
         case NC_TI_FD:
-            c = write(session->ti.fd.out, (char *)(buf + written), count - written);
-            if (c < 0) {
+        case NC_TI_UNIX:
+            fd = session->ti_type == NC_TI_FD ? session->ti.fd.out : session->ti.unixsock.sock;
+            c = write(fd, (char *)(buf + written), count - written);
+            if (c < 0 && errno == EAGAIN) {
+                c = 0;
+            } else if (c < 0) {
                 ERR("Session %u: socket error (%s).", session->id, strerror(errno));
                 return -1;
             }

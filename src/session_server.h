@@ -399,6 +399,20 @@ int nc_server_endpt_set_address(const char *endpt_name, const char *address);
  */
 int nc_server_endpt_set_port(const char *endpt_name, uint16_t port);
 
+/**
+ * @brief Change endpoint permissions.
+ *
+ * This is only valid on unix transport endpoint.
+ * On error the previous listening socket (if any) is left untouched.
+ *
+ * @param[in] endpt_name Existing endpoint name.
+ * @param[in] mode New mode, -1 to use default.
+ * @param[in] uid New uid, -1 to use default.
+ * @param[in] gid New gid, -1 to use default.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_endpt_set_perms(const char *endpt_name, mode_t mode, uid_t uid, gid_t gid);
+
 /**@} Server */
 
 /**

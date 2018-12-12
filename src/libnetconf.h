@@ -335,7 +335,9 @@
  *
  * To be able to accept any connections, endpoints must first be added
  * with nc_server_add_endpt() and configured with nc_server_endpt_set_address()
- * and nc_server_endpt_set_port().
+ * and nc_server_endpt_set_port(). For unix sockets, nc_server_endpt_set_perms()
+ * is available to set the unix socket file permissions, and nc_server_endpt_set_port()
+ * is invalid.
  *
  * Functions List
  * --------------
@@ -351,6 +353,7 @@
  * - nc_server_del_endpt()
  * - nc_server_endpt_set_address()
  * - nc_server_endpt_set_port()
+ * - nc_server_endpt_set_perms()
  *
  *
  * SSH
