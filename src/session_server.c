@@ -893,6 +893,15 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
 
         ret = pthread_cond_timedwait(&ps->cond, &ps->lock, &ts);
         if (ret) {
+            /**
+             * This may happen when another thread releases the lock and broadcasts the condition
+             * and this thread had already timed out. When this thread is scheduled, it returns timed out error
+             * but when actually this thread was ready for condition.
+             */
+            if (ps->queue[ps->queue_begin] != *id) {
+                break;
+            }
+            
             ERR("%s: failed to wait for a pollsession condition (%s).", func, strerror(ret));
             /* remove ourselves from the queue */
             nc_ps_queue_remove_id(ps, *id);
