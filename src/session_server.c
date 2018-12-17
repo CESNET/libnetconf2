@@ -898,7 +898,7 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
              * and this thread had already timed out. When this thread is scheduled, it returns timed out error
              * but when actually this thread was ready for condition.
              */
-            if (ps->queue[ps->queue_begin] == *id) {
+            if ((ETIMEDOUT == ret) && (ps->queue[ps->queue_begin] == *id)) {
                 break;
             }
             
