@@ -7,7 +7,7 @@ brew upgrade openssl
 
 # libssh
 wget https://www.libssh.org/files/0.8/libssh-0.8.5.tar.xz
-tar -xJf libssh-0.8.5.tar.gz
+tar -xJf libssh-0.8.5.tar.xz
 mkdir libssh-0.8.5/build && cd libssh-0.8.5/build
 cmake -DOPENSSL_LIBRARIES=/usr/local/opt/openssl/lib -DOPENSSL_INCLUDE_DIR=/usr/local/opt/openssl/include .. && make -j2 && sudo make install
 cd ../..
