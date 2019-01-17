@@ -1669,12 +1669,10 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_PORT, &port_uint);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_TIMEOUT, &timeout);
-    if (ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOSTKEYS,
-                        "ssh-ed25519,ecdsa-sha2-nistp521,ecdsa-sha2-nistp384,"
-                        "ecdsa-sha2-nistp256,ssh-rsa,ssh-dss,ssh-rsa1")) {
-        /* ecdsa is probably not supported... */
-        ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519,ssh-rsa,ssh-dss,ssh-rsa1");
-    }
+    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519,ecdsa-sha2-nistp256,"
+            "ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-rsa,rsa-sha2-512,rsa-sha2-256,ssh-dss");
+    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES, "ssh-ed25519,ecdsa-sha2-nistp256,"
+            "ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-rsa,rsa-sha2-512,rsa-sha2-256,ssh-dss");
 
     /* create and assign communication socket */
     sock = nc_sock_connect(host, port, -1, NULL);
