@@ -15,6 +15,10 @@
 #ifndef NC_SESSION_SERVER_CH_H_
 #define NC_SESSION_SERVER_CH_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <libyang/libyang.h>
 
@@ -385,5 +389,9 @@ int nc_server_tls_ch_client_get_ctn(const char *client_name, uint32_t *id, char 
 /** @} Server-side Call Home on TLS */
 
 #endif /* NC_ENABLED_TLS */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* NC_SESSION_SERVER_CH_H_ */

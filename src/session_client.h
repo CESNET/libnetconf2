@@ -15,6 +15,10 @@
 #ifndef NC_SESSION_CLIENT_H_
 #define NC_SESSION_CLIENT_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <libyang/libyang.h>
 
 #ifdef NC_ENABLED_SSH
@@ -627,5 +631,9 @@ NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int time
 void nc_client_session_set_not_strict(struct nc_session *session);
 
 /**@} Client Session */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* NC_SESSION_CLIENT_H_ */

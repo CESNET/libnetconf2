@@ -15,6 +15,10 @@
 #ifndef NC_SESSION_SERVER_H_
 #define NC_SESSION_SERVER_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <libyang/libyang.h>
 
@@ -857,5 +861,9 @@ void nc_session_set_notif_status(struct nc_session *session, int notif_status);
 int nc_session_get_notif_status(const struct nc_session *session);
 
 /**@} Server Session */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* NC_SESSION_SERVER_H_ */

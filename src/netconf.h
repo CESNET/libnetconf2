@@ -15,11 +15,11 @@
 #ifndef NC_NETCONF_H_
 #define NC_NETCONF_H_
 
-#include <time.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <time.h>
 
 /**
  * @addtogroup misc

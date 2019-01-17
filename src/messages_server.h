@@ -15,6 +15,10 @@
 #ifndef NC_MESSAGES_SERVER_H_
 #define NC_MESSAGES_SERVER_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <libyang/libyang.h>
 
@@ -345,5 +349,9 @@ void nc_server_notif_free(struct nc_server_notif *notif);
 const char *nc_server_notif_get_time(const struct nc_server_notif *notif);
 
 /**@} Client Messages */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* NC_MESSAGES_SERVER_H_ */

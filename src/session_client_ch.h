@@ -15,6 +15,10 @@
 #ifndef NC_SESSION_CLIENT_CH_H_
 #define NC_SESSION_CLIENT_CH_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <libyang/libyang.h>
 
 #include "session.h"
@@ -338,5 +342,9 @@ void nc_client_tls_ch_get_crl_paths(const char **crl_file, const char **crl_dir)
 /**@} Client-side Call Home on TLS */
 
 #endif /* NC_ENABLED_TLS */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* NC_SESSION_CLIENT_CH_H_ */

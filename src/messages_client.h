@@ -16,6 +16,10 @@
 #ifndef NC_MESSAGES_CLIENT_H_
 #define NC_MESSAGES_CLIENT_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 
 #include "netconf.h"
@@ -460,5 +464,9 @@ void nc_reply_free(struct nc_reply *reply);
 void nc_notif_free(struct nc_notif *notif);
 
 /**@} Client Messages */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* NC_MESSAGES_CLIENT_H_ */

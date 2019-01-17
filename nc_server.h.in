@@ -18,10 +18,18 @@
 @SSH_MACRO@
 @TLS_MACRO@
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <libnetconf2/netconf.h>
 #include <libnetconf2/log.h>
 #include <libnetconf2/messages_server.h>
 #include <libnetconf2/session_server.h>
 #include <libnetconf2/session_server_ch.h>
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* NC_SERVER_H_ */

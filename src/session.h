@@ -15,6 +15,10 @@
 #ifndef NC_SESSION_H_
 #define NC_SESSION_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "netconf.h"
 
 #ifdef NC_ENABLED_SSH
@@ -231,5 +235,9 @@ void nc_session_free(struct nc_session *session, void (*data_free)(void *));
 void nc_thread_destroy(void);
 
 #endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* NC_SESSION_H_ */
