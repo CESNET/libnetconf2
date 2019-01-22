@@ -1489,7 +1489,7 @@ open_netconf_channel(struct nc_session *session, int timeout)
 static struct nc_session *
 _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client_ssh_opts *opts, int timeout)
 {
-    char *host = NULL, *username = NULL;
+    char *host = NULL, *username = NULL, *ip_host;
     unsigned short port = 0;
     int sock;
     struct passwd *pw;
@@ -1528,13 +1528,16 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client
         ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
 
         /* create and connect socket */
-        sock = nc_sock_connect(host, port, -1, NULL);
+        sock = nc_sock_connect(host, port, -1, NULL, &ip_host);
         if (sock == -1) {
             ERR("Unable to connect to %s:%u (%s).", host, port, strerror(errno));
             goto fail;
         }
         ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_FD, &sock);
         ssh_set_blocking(session->ti.libssh.session, 0);
+
+        free(host);
+        host = ip_host;
     }
 
     /* was username set? */
@@ -1622,7 +1625,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     const long timeout = NC_SSH_TIMEOUT;
     int sock;
     uint32_t port_uint;
-    char *username;
+    char *username, *ip_host = NULL;
     struct passwd *pw;
     struct nc_session *session = NULL;
 
@@ -1675,7 +1678,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
             "ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-rsa,rsa-sha2-512,rsa-sha2-256,ssh-dss");
 
     /* create and assign communication socket */
-    sock = nc_sock_connect(host, port, -1, NULL);
+    sock = nc_sock_connect(host, port, -1, NULL, &ip_host);
     if (sock == -1) {
         ERR("Unable to connect to %s:%u (%s).", host, port, strerror(errno));
         goto fail;
@@ -1707,13 +1710,14 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     }
 
     /* store information into the dictionary */
-    session->host = lydict_insert(ctx, host, 0);
+    session->host = lydict_insert_zc(ctx, ip_host);
     session->port = port;
     session->username = lydict_insert(ctx, username, 0);
 
     return session;
 
 fail:
+    free(ip_host);
     nc_session_free(session, NULL);
     return NULL;
 }

@@ -1310,18 +1310,20 @@ cleanup:
    has to be invoked, until it returns a valid socket.
  */
 int
-nc_sock_connect(const char* host, uint16_t port, int timeout, int* sock_pending)
+nc_sock_connect(const char *host, uint16_t port, int timeout, int *sock_pending, char **ip_host)
 {
     int i;
-    int sock = sock_pending?*sock_pending:-1;
+    int sock = sock_pending ? *sock_pending : -1;
     struct addrinfo hints, *res_list, *res;
     char port_s[6]; /* length of string representation of short int */
+    char *buf;
+    void *addr;
 
-    VRB("nc_sock_connect(%s, %u, %d, %d)", host, port, timeout, sock);
+    DBG("nc_sock_connect(%s, %u, %d, %d)", host, port, timeout, sock);
 
     /* no pending socket */
     if (sock == -1) {
-        /* Connect to a server */
+        /* connect to a server */
         snprintf(port_s, 6, "%u", port);
         memset(&hints, 0, sizeof hints);
         hints.ai_family = AF_UNSPEC;
@@ -1340,6 +1342,27 @@ nc_sock_connect(const char* host, uint16_t port, int timeout, int* sock_pending)
                 continue;
             }
             VRB("Successfully connected to %s:%s over %s.", host, port_s, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
+            if (ip_host && ((res->ai_family == AF_INET6) || (res->ai_family == AF_INET))) {
+                buf = malloc(INET6_ADDRSTRLEN);
+                if (!buf) {
+                    ERRMEM;
+                    close(sock);
+                    return -1;
+                }
+                if (res->ai_family == AF_INET) {
+                    addr = &((struct sockaddr_in *)res->ai_addr)->sin_addr;
+                } else {
+                    addr = &((struct sockaddr_in6 *)res->ai_addr)->sin6_addr;
+                }
+                if (!inet_ntop(res->ai_family, addr, buf, INET6_ADDRSTRLEN)) {
+                    ERR("Converting host to IP address failed (%s).", strerror(errno));
+                    free(buf);
+                    close(sock);
+                    return -1;
+                }
+
+                *ip_host = buf;
+            }
             break;
         }
         freeaddrinfo(res_list);

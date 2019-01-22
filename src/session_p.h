@@ -546,10 +546,11 @@ NC_MSG_TYPE nc_handshake_io(struct nc_session *session);
  * @param[in] host Hostname to connect to.
  * @param[in] port Port to connect on.
  * @param[in] timeout for blocking the connect+select call (-1 for infinite).
- * @param[in] sock_pending for exchanging the pending socket, if the blocking timeout was != -1
+ * @param[in,out] sock_pending for exchanging the pending socket, if the blocking timeout was != -1
+ * @param[out] ip_host Optional parameter with string IP address of the connected host.
  * @return Connected socket or -1 on error.
  */
-int nc_sock_connect(const char *host, uint16_t port, int timeout, int* sock_pending);
+int nc_sock_connect(const char *host, uint16_t port, int timeout, int* sock_pending, char **ip_host);
 
 /**
  * @brief Accept a new socket connection.

@@ -901,7 +901,7 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
             if ((ETIMEDOUT == ret) && (ps->queue[ps->queue_begin] == *id)) {
                 break;
             }
-            
+
             ERR("%s: failed to wait for a pollsession condition (%s).", func, strerror(ret));
             /* remove ourselves from the queue */
             nc_ps_queue_remove_id(ps, *id);
@@ -2844,8 +2844,9 @@ nc_connect_ch_client_endpt(struct nc_ch_client *client, struct nc_ch_endpt *endp
     NC_MSG_TYPE msgtype;
     int sock, ret;
     struct timespec ts_cur;
+    char *ip_host;
 
-    sock = nc_sock_connect(endpt->address, endpt->port, 5, &endpt->sock_pending);
+    sock = nc_sock_connect(endpt->address, endpt->port, 5, &endpt->sock_pending, &ip_host);
     if (sock < 0) {
         return NC_MSG_ERROR;
     }
@@ -2856,12 +2857,13 @@ nc_connect_ch_client_endpt(struct nc_ch_client *client, struct nc_ch_endpt *endp
     if (!(*session)) {
         ERRMEM;
         close(sock);
+        free(ip_host);
         return NC_MSG_ERROR;
     }
     (*session)->status = NC_STATUS_STARTING;
     (*session)->ctx = server_opts.ctx;
     (*session)->flags = NC_SESSION_SHAREDCTX;
-    (*session)->host = lydict_insert(server_opts.ctx, endpt->address, 0);
+    (*session)->host = lydict_insert_zc(server_opts.ctx, ip_host);
     (*session)->port = endpt->port;
 
     /* sock gets assigned to session or closed */

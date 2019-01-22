@@ -581,6 +581,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     struct nc_session *session = NULL;
     int sock, verify, ret;
     struct timespec ts_timeout, ts_cur;
+    char *ip_host = NULL;
 
     if (!tls_opts.cert_path || (!tls_opts.ca_file && !tls_opts.ca_dir)) {
         ERRINIT;
@@ -617,7 +618,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     }
 
     /* create and assign socket */
-    sock = nc_sock_connect(host, port, -1, NULL);
+    sock = nc_sock_connect(host, port, -1, NULL, &ip_host);
     if (sock == -1) {
         ERR("Unable to connect to %s:%u (%s).", host, port, strerror(errno));
         goto fail;
@@ -680,13 +681,14 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     }
 
     /* store information into session and the dictionary */
-    session->host = lydict_insert(ctx, host, 0);
+    session->host = lydict_insert_zc(ctx, ip_host);
     session->port = port;
     session->username = lydict_insert(ctx, "certificate-based", 0);
 
     return session;
 
 fail:
+    free(ip_host);
     nc_session_free(session, NULL);
     return NULL;
 }
