@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 2.6)
 project(libnetconf2 C)
 include(GNUInstallDirs)
 include(CheckFunctionExists)
+include(CheckCSourceCompiles)
 include(CheckIncludeFile)
 
 # include custom Modules
@@ -194,8 +195,20 @@ if(ENABLE_SSH)
         target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lssh_threads -lcrypt)
     else()
         target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lcrypt)
+        set(CMAKE_REQUIRED_LIBRARIES "ssh;crypt")
     endif()
     include_directories(${LIBSSH_INCLUDE_DIRS})
+
+    set(LIBSSH_SESSION_OPTION_CHECK_CODE
+        "#include <libssh/libssh.h>
+        int main(void) {
+            ssh_session sess;
+            ssh_options_set(sess, SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES, NULL);
+            return 0;
+        }"
+    )
+
+    check_c_source_compiles("${LIBSSH_SESSION_OPTION_CHECK_CODE}" HAVE_LIBSSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES)
 endif()
 
 # dependencies - libval
