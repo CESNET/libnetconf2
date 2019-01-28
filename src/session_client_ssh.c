@@ -1753,6 +1753,16 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     new_session->ti.libssh.session = session->ti.libssh.session;
     new_session->io_lock = session->io_lock;
 
+    /* append to the session ring list */
+    if (!session->ti.libssh.next) {
+        session->ti.libssh.next = new_session;
+        new_session->ti.libssh.next = session;
+    } else {
+        ptr = session->ti.libssh.next;
+        session->ti.libssh.next = new_session;
+        new_session->ti.libssh.next = ptr;
+    }
+
     /* create the channel safely */
     if (nc_session_io_lock(new_session, -1, __func__) != 1) {
         goto fail;
@@ -1781,16 +1791,6 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     new_session->host = lydict_insert(ctx, session->host, 0);
     new_session->port = session->port;
     new_session->username = lydict_insert(ctx, session->username, 0);
-
-    /* append to the session ring list */
-    if (!session->ti.libssh.next) {
-        session->ti.libssh.next = new_session;
-        new_session->ti.libssh.next = session;
-    } else {
-        ptr = session->ti.libssh.next;
-        session->ti.libssh.next = new_session;
-        new_session->ti.libssh.next = ptr;
-    }
 
     return new_session;
 
