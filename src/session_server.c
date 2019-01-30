@@ -192,6 +192,10 @@ nc_sock_listen_inet(const char *address, uint16_t port)
         ERR("Could not set SO_REUSEADDR socket option (%s).", strerror(errno));
         goto fail;
     }
+    if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof opt) == -1) {
+        ERR("Could not set TCP_NODELAY socket option (%s).", strerror(errno));
+        goto fail;
+    }
 
     if (nc_sock_enable_keepalive(sock)) {
         goto fail;

@@ -18,6 +18,7 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1312,11 +1313,10 @@ cleanup:
 int
 nc_sock_connect(const char *host, uint16_t port, int timeout, int *sock_pending, char **ip_host)
 {
-    int i;
+    int i, opt;
     int sock = sock_pending ? *sock_pending : -1;
     struct addrinfo hints, *res_list, *res;
-    char port_s[6]; /* length of string representation of short int */
-    char *buf;
+    char *buf, port_s[6]; /* length of string representation of short int */
     void *addr;
 
     DBG("nc_sock_connect(%s, %u, %d, %d)", host, port, timeout, sock);
@@ -1342,6 +1342,14 @@ nc_sock_connect(const char *host, uint16_t port, int timeout, int *sock_pending,
                 continue;
             }
             VRB("Successfully connected to %s:%s over %s.", host, port_s, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
+
+            opt = 1;
+            if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof opt) == -1) {
+                ERR("Could not set TCP_NODELAY socket option (%s).", strerror(errno));
+                close(sock);
+                return -1;
+            }
+
             if (ip_host && ((res->ai_family == AF_INET6) || (res->ai_family == AF_INET))) {
                 buf = malloc(INET6_ADDRSTRLEN);
                 if (!buf) {
