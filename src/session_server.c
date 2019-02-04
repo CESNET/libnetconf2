@@ -1284,8 +1284,12 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, struct nc_se
     }
 
     if (!rpc_act->priv) {
-        /* no callback, reply with a not-implemented error */
-        reply = nc_server_reply_err(nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_PROT));
+        if (!global_rpc_clb) {
+            /* no callback, reply with a not-implemented error */
+            reply = nc_server_reply_err(nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_PROT));
+        } else {
+          reply = global_rpc_clb(rpc->tree, session);
+        }
     } else {
         clb = (nc_rpc_clb)rpc_act->priv;
         reply = clb(rpc->tree, session);
