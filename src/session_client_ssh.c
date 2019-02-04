@@ -1831,12 +1831,12 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
     } else {
         ssh_options_set(sess, SSH_OPTIONS_USER, ssh_ch_opts.username);
     }
-    if (ssh_options_set(sess, SSH_OPTIONS_HOSTKEYS,
-                        "ssh-ed25519,ecdsa-sha2-nistp521,ecdsa-sha2-nistp384,"
-                        "ecdsa-sha2-nistp256,ssh-rsa,ssh-dss,ssh-rsa1")) {
-        /* ecdsa is probably not supported... */
-        ssh_options_set(sess, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519,ssh-rsa,ssh-dss,ssh-rsa1");
-    }
+    ssh_options_set(sess, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519,ecdsa-sha2-nistp256,"
+            "ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-rsa,rsa-sha2-512,rsa-sha2-256,ssh-dss");
+#ifdef HAVE_LIBSSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES
+    ssh_options_set(sess, SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES, "ssh-ed25519,ecdsa-sha2-nistp256,"
+            "ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-rsa,rsa-sha2-512,rsa-sha2-256,ssh-dss");
+#endif
 
     session = _nc_connect_libssh(sess, ctx, &ssh_ch_opts, timeout);
     if (session) {
