@@ -1661,13 +1661,8 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
     struct nc_rpc_act_generic *rpc_gen;
     int i, data_parsed = 0;
 
-    if (!xml->child) {
-        ERR("An empty <rpc-reply>.");
-        return NULL;
-    }
-
     /* rpc-error */
-    if (!strcmp(xml->child->name, "rpc-error") && xml->child->ns && !strcmp(xml->child->ns->value, NC_NS_BASE)) {
+    if (xml->child && !strcmp(xml->child->name, "rpc-error") && xml->child->ns && !strcmp(xml->child->ns->value, NC_NS_BASE)) {
         /* count and check elements */
         i = 0;
         LY_TREE_FOR(xml->child, iter) {
@@ -1707,7 +1702,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
         }
 
     /* ok */
-    } else if (!strcmp(xml->child->name, "ok") && xml->child->ns && !strcmp(xml->child->ns->value, NC_NS_BASE)) {
+    } else if (xml->child && !strcmp(xml->child->name, "ok") && xml->child->ns && !strcmp(xml->child->ns->value, NC_NS_BASE)) {
         if (xml->child->next) {
             ERR("<rpc-reply> content mismatch (<ok> and <%s>).", xml->child->next->name);
             return NULL;
@@ -1742,7 +1737,8 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
 
         case NC_RPC_GETCONFIG:
         case NC_RPC_GET:
-            if (!xml->child->child) {
+            /* we should definitely have received at least an empty "data" element even on empty reply, but fine */
+            if (!xml->child || !xml->child->child) {
                 /* we did not receive any data */
                 data_rpl = malloc(sizeof *data_rpl);
                 if (!data_rpl) {
@@ -1786,7 +1782,7 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
         case NC_RPC_VALIDATE:
         case NC_RPC_SUBSCRIBE:
             /* there is no output defined */
-            ERR("Unexpected data reply (root elem \"%s\").", xml->child->name);
+            ERR("Unexpected data reply (root elem \"%s\").", xml->child ? xml->child->name : NULL);
             return NULL;
         default:
             ERRINT;
@@ -1804,6 +1800,13 @@ parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int 
         if (!data_parsed) {
             data_rpl->data = lyd_parse_xml(ctx, &xml->child, LYD_OPT_RPCREPLY | LYD_OPT_DESTRUCT | parseroptions,
                                            rpc_act, NULL);
+            if (!ly_errno && !data_rpl->data->child) {
+                ERR("An empty data <rpc-reply>.");
+                lyd_free_withsiblings(rpc_act);
+                lyd_free(data_rpl->data);
+                free(data_rpl);
+                return NULL;
+            }
         } else {
             /* <get>, <get-config> */
             data_rpl->data = data;
