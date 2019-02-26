@@ -3272,3 +3272,18 @@ nc_session_get_notif_status(const struct nc_session *session)
 
     return session->opts.server.ntf_status;
 }
+
+API int
+nc_session_is_callhome(const struct nc_session *session)
+{
+    if (!session || (session->side != NC_SERVER)) {
+        ERRARG("session");
+        return 0;
+    }
+
+    if (session->flags & NC_SESSION_CALLHOME) {
+        return 1;
+    }
+
+    return 0;
+}
