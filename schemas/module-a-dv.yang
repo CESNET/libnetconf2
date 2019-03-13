@@ -1,0 +1,16 @@
+module module-a-dv {
+
+    namespace "urn:jmu:params:xml:ns:yang:module-a-dv";
+    prefix dv;
+    
+    import module-a {
+        prefix a;
+    }
+    
+    description 
+        "Contains some deviations to module-a";
+
+    deviation "/a:top/a:hidden" {
+        deviate not-supported;
+    }
+}

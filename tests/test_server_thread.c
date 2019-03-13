@@ -543,6 +543,9 @@ tls_client_thread(void *arg)
     session = nc_connect_tls("127.0.0.1", 6501, NULL);
     nc_assert(session);
 
+    /* verify some capabilities */
+    nc_assert( nc_session_cpblt(session, "urn:jmu:params:xml:ns:yang:module-a?module=module-a&deviations=module-a-dv,module-a-dv2") );
+
     nc_session_free(session, NULL);
 
     fprintf(stdout, "TLS client finished.\n");
@@ -657,6 +660,12 @@ main(void)
     ctx = ly_ctx_new(TESTS_DIR"/../schemas", 0);
     nc_assert(ctx);
     ly_ctx_load_module(ctx, "ietf-netconf", NULL);
+
+    /* load some application models with deviations */
+    nc_assert( ly_ctx_load_module(ctx, "module-a", NULL) );
+    nc_assert( ly_ctx_load_module(ctx, "module-a-dv", NULL) );
+    nc_assert( ly_ctx_load_module(ctx, "module-a-dv2", NULL) );
+
     nc_server_init(ctx);
 
     pthread_barrier_init(&barrier, NULL, thread_count);
