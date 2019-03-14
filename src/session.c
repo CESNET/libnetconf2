@@ -1052,6 +1052,7 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
             strcat(str, "&deviations=");
             str_len += 12;
             dev_count = 0;
+            v = 0;
             while ((devmod = ly_ctx_get_module_iter(ctx, &v))) {
                 if (devmod == mod) {
                     continue;

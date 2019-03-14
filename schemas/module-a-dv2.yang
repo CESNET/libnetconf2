@@ -1,0 +1,21 @@
+module module-a-dv2 {
+
+    namespace "urn:jmu:params:xml:ns:yang:module-a-dv2";
+    prefix dv2;
+    
+    import module-a {
+        prefix a;
+    }
+    
+    description 
+        "Contains some deviations to module-a";
+
+    deviation "/a:top/a:type" {   
+        deviate add {
+            default "admin";
+            must "count(.) = 1";   
+        }        
+    }   
+    
+}
+
