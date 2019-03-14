@@ -38,7 +38,8 @@
 struct nc_session *server_session;
 struct nc_session *client_session;
 struct ly_ctx *ctx;
-volatile int glob_state;
+pthread_mutex_t state_lock = PTHREAD_MUTEX_INITIALIZER;
+int glob_state;
 
 struct nc_server_reply *
 my_get_rpc_clb(struct lyd_node *rpc, struct nc_session *session)
@@ -71,12 +72,16 @@ my_commit_rpc_clb(struct lyd_node *rpc, struct nc_session *session)
     assert_ptr_equal(session, server_session);
 
     /* update state */
+    pthread_mutex_lock(&state_lock);
     glob_state = 1;
 
     /* wait until the client receives the notification */
     while (glob_state != 3) {
+        pthread_mutex_unlock(&state_lock);
         usleep(100000);
+        pthread_mutex_lock(&state_lock);
     }
+    pthread_mutex_unlock(&state_lock);
 
     return nc_server_reply_ok();
 }
@@ -355,10 +360,14 @@ test_notif_clb(struct nc_session *session, const struct nc_notif *notif)
     assert_string_equal(notif->tree->schema->name, "notificationComplete");
 
     /* client notification received, update state */
+    pthread_mutex_lock(&state_lock);
     while (glob_state != 2) {
+        pthread_mutex_unlock(&state_lock);
         usleep(1000);
+        pthread_mutex_lock(&state_lock);
     }
     glob_state = 3;
+    pthread_mutex_unlock(&state_lock);
 }
 
 static void *
@@ -371,8 +380,11 @@ server_send_notif_thread(void *arg)
     (void)arg;
 
     /* wait for the RPC callback to be called */
+    pthread_mutex_lock(&state_lock);
     while (glob_state != 1) {
+        pthread_mutex_unlock(&state_lock);
         usleep(1000);
+        pthread_mutex_lock(&state_lock);
     }
 
     /* create notif */
@@ -391,6 +403,7 @@ server_send_notif_thread(void *arg)
 
     /* update state */
     glob_state = 2;
+    pthread_mutex_unlock(&state_lock);
 
     return NULL;
 }
@@ -423,7 +436,9 @@ test_send_recv_notif(void)
     nc_ps_add_session(ps, server_session);
 
     /* server will send a notification */
+    pthread_mutex_lock(&state_lock);
     glob_state = 0;
+    pthread_mutex_unlock(&state_lock);
     ret = pthread_create(&tid, NULL, server_send_notif_thread, NULL);
     assert_int_equal(ret, 0);
 
@@ -432,7 +447,9 @@ test_send_recv_notif(void)
     assert_int_equal(ret, NC_PSPOLL_RPC);
 
     /* RPC, notification finished fine */
+    pthread_mutex_lock(&state_lock);
     assert_int_equal(glob_state, 3);
+    pthread_mutex_unlock(&state_lock);
 
     /* server finished */
     ret = pthread_join(tid, NULL);
