@@ -1126,12 +1126,25 @@ nc_ps_get_session(const struct nc_pollsession *ps, uint16_t idx)
 API uint16_t
 nc_ps_session_count(struct nc_pollsession *ps)
 {
+    uint8_t q_id;
+    uint16_t session_count;
+
     if (!ps) {
         ERRARG("ps");
         return 0;
     }
 
-    return ps->session_count;
+    /* LOCK (just for memory barrier so that we read the current value) */
+    if (nc_ps_lock((struct nc_pollsession *)ps, &q_id, __func__)) {
+        return 0;
+    }
+
+    session_count = ps->session_count;
+
+    /* UNLOCK */
+    nc_ps_unlock((struct nc_pollsession *)ps, q_id, __func__);
+
+    return session_count;
 }
 
 /* should be called holding the session RPC lock! IO lock will be acquired as needed
