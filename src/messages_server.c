@@ -446,6 +446,7 @@ nc_err_libyang(struct ly_ctx *ctx)
             } else {
                 nc_err_set_app_tag(e, "must-violation");
             }
+            nc_err_set_path(e, ly_errpath(ctx));
             break;
         case LYVE_NOREQINS:
         case LYVE_NOLEAFREF:
@@ -512,6 +513,7 @@ nc_err_libyang(struct ly_ctx *ctx)
             if (ly_errapptag(ctx)) {
                 nc_err_set_app_tag(e, ly_errapptag(ctx));
             }
+            nc_err_set_path(e, ly_errpath(ctx));
             break;
         default:
             e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
