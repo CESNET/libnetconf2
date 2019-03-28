@@ -648,7 +648,7 @@ nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64, NC
     } else {
         for (i = 0; i < server_opts.authkey_count; ++i) {
             if ((!pubkey_path || !strcmp(server_opts.authkeys[i].path, pubkey_path))
-                    && (!pubkey_base64 || strcmp(server_opts.authkeys[i].base64, pubkey_base64))
+                    && (!pubkey_base64 || !strcmp(server_opts.authkeys[i].base64, pubkey_base64))
                     && (!type || (server_opts.authkeys[i].type == type))
                     && (!username || !strcmp(server_opts.authkeys[i].username, username))) {
                 lydict_remove(server_opts.ctx, server_opts.authkeys[i].path);
