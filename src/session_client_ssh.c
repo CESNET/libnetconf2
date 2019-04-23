@@ -1829,6 +1829,7 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
         pw = getpwuid(getuid());
         if (!pw) {
             ERR("Unknown username for the SSH connection (%s).", strerror(errno));
+            ssh_free(sess);
             return NULL;
         }
         ssh_options_set(sess, SSH_OPTIONS_USER, pw->pw_name);
@@ -1843,9 +1844,11 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
 #endif
 
     session = _nc_connect_libssh(sess, ctx, &ssh_ch_opts, timeout);
-    if (session) {
-        session->flags |= NC_SESSION_CALLHOME;
+    if (!session) {
+        ssh_free(sess);
+        return NULL;
     }
 
+    session->flags |= NC_SESSION_CALLHOME;
     return session;
 }
