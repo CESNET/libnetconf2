@@ -1615,6 +1615,10 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client
     return session;
 
 fail:
+    free(host);
+    session->host = NULL;
+    free(username);
+    session->username = NULL;
     nc_session_free(session, NULL);
     return NULL;
 }
