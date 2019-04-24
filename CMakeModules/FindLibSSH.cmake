@@ -70,11 +70,11 @@ else (LIBSSH_LIBRARY_DIR AND LIBSSH_INCLUDE_DIRS)
   )
 
   if (SSH_FOUND)
-    string(REPLACE "ssh.so" ""
+    string(REPLACE "libssh.so" ""
       LIBSSH_LIBRARY_DIR
       ${SSH_LIBRARY}
     )
-    string(REPLACE "libssh.so" ""
+    string(REPLACE "ssh.so" ""
       LIBSSH_LIBRARY_DIR
       ${LIBSSH_LIBRARY_DIR}
     )
