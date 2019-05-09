@@ -760,6 +760,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
             sock = ssh_get_fd(session->ti.libssh.session);
             if (connected) {
                 ssh_disconnect(session->ti.libssh.session);
+                sock = -1;
             }
             ssh_free(session->ti.libssh.session);
         } else {
