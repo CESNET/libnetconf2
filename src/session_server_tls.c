@@ -135,7 +135,7 @@ pem_to_cert(const char *path)
 }
 
 static EVP_PKEY *
-base64der_to_privatekey(const char *in, int rsa)
+base64der_to_privatekey(const char *in, const char *key_str)
 {
     EVP_PKEY *out;
     char *buf;
@@ -145,7 +145,8 @@ base64der_to_privatekey(const char *in, int rsa)
         return NULL;
     }
 
-    if (asprintf(&buf, "%s%s%s%s%s%s%s", "-----BEGIN ", (rsa ? "RSA" : "DSA"), " PRIVATE KEY-----\n", in, "\n-----END ", (rsa ? "RSA" : "DSA"), " PRIVATE KEY-----") == -1) {
+    if (asprintf(&buf, "%s%s%s%s%s%s%s", "-----BEGIN ", key_str, " PRIVATE KEY-----\n", in, "\n-----END ",
+                key_str, " PRIVATE KEY-----") == -1) {
         return NULL;
     }
     bio = BIO_new_mem_buf(buf, strlen(buf));
@@ -973,7 +974,7 @@ nc_server_tls_ch_client_set_server_cert(const char *client_name, const char *nam
 
 API void
 nc_server_tls_set_server_cert_clb(int (*cert_clb)(const char *name, void *user_data, char **cert_path, char **cert_data,
-                                                  char **privkey_path, char **privkey_data, int *privkey_data_rsa),
+                                                  char **privkey_path, char **privkey_data, NC_SSH_KEY *privkey_type),
                                   void *user_data, void (*free_user_data)(void *user_data))
 {
     if (!cert_clb) {
@@ -1796,7 +1797,8 @@ static int
 nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
 {
     char *cert_path = NULL, *cert_data = NULL, *privkey_path = NULL, *privkey_data = NULL;
-    int privkey_data_rsa = 1, ret = 0;
+    int ret = 0;
+    NC_SSH_KEY privkey_type;
     X509 *cert = NULL;
     EVP_PKEY *pkey = NULL;
 
@@ -1809,7 +1811,7 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
     }
 
     if (server_opts.server_cert_clb(cert_name, server_opts.server_cert_data, &cert_path, &cert_data, &privkey_path,
-                                    &privkey_data, &privkey_data_rsa)) {
+                                    &privkey_data, &privkey_type)) {
         ERR("Server certificate callback failed.");
         return -1;
     }
@@ -1838,7 +1840,7 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
             goto cleanup;
         }
     } else {
-        pkey = base64der_to_privatekey(privkey_data, privkey_data_rsa);
+        pkey = base64der_to_privatekey(privkey_data, nc_keytype2str(privkey_type));
         if (!pkey || (SSL_CTX_use_PrivateKey(tls_ctx, pkey) != 1)) {
             ERR("Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
             ret = -1;

@@ -51,6 +51,11 @@ nc_server_endpt_lock_get(const char *name, NC_TRANSPORT_IMPL ti, uint16_t *idx)
     uint16_t i;
     struct nc_endpt *endpt = NULL;
 
+    if (!name) {
+        ERRARG("endpt_name");
+        return NULL;
+    }
+
     /* WRITE LOCK */
     pthread_rwlock_wrlock(&server_opts.endpt_lock);
 
@@ -80,6 +85,11 @@ nc_server_ch_client_lock(const char *name, NC_TRANSPORT_IMPL ti, uint16_t *idx)
 {
     uint16_t i;
     struct nc_ch_client *client = NULL;
+
+    if (!name) {
+        ERRARG("client_name");
+        return NULL;
+    }
 
     /* READ LOCK */
     pthread_rwlock_rdlock(&server_opts.ch_client_lock);
@@ -468,6 +478,7 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
             format = ((struct lyd_node_leaf_list *)child)->value_str;
         }
     }
+    VRB("Schema \"%s\" was requested.", identifier);
 
     /* check version */
     if (version && (strlen(version) != 10) && strcmp(version, "1.0")) {

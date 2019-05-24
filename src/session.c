@@ -116,6 +116,23 @@ nc_addtimespec(struct timespec *ts, uint32_t msec)
     assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
 }
 
+const char *
+nc_keytype2str(NC_SSH_KEY type)
+{
+    switch (type) {
+    case NC_SSH_DSA:
+        return "DSA";
+    case NC_SSH_RSA:
+        return "RSA";
+    case NC_SSH_ECDSA:
+        return "EC";
+    default:
+        break;
+    }
+
+    return NULL;
+}
+
 int
 nc_sock_enable_keepalive(int sock)
 {

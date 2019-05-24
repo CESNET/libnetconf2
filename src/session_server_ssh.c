@@ -35,7 +35,7 @@ pthread_mutex_t crypt_lock = PTHREAD_MUTEX_INITIALIZER;
 extern struct nc_server_opts server_opts;
 
 static char *
-base64der_key_to_tmp_file(const char *in, int rsa)
+base64der_key_to_tmp_file(const char *in, const char *key_str)
 {
     char path[12] = "/tmp/XXXXXX";
     int fd, written;
@@ -61,11 +61,11 @@ base64der_key_to_tmp_file(const char *in, int rsa)
 
     /* write the key into the file */
     written = fwrite("-----BEGIN ", 1, 11, file);
-    written += fwrite((rsa ? "RSA" : "DSA"), 1, 3, file);
+    written += fwrite(key_str, 1, strlen(key_str), file);
     written += fwrite(" PRIVATE KEY-----\n", 1, 18, file);
     written += fwrite(in, 1, strlen(in), file);
     written += fwrite("\n-----END ", 1, 10, file);
-    written += fwrite((rsa ? "RSA" : "DSA"), 1, 3, file);
+    written += fwrite(key_str, 1, strlen(key_str), file);
     written += fwrite(" PRIVATE KEY-----", 1, 17, file);
 
     fclose(file);
@@ -181,7 +181,7 @@ nc_server_ssh_ch_client_add_hostkey(const char *client_name, const char *name, i
 
 API void
 nc_server_ssh_set_hostkey_clb(int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path,
-                                                 char **privkey_data, int *privkey_data_rsa),
+                                                 char **privkey_data, NC_SSH_KEY *privkey_type),
                               void *user_data, void (*free_user_data)(void *user_data))
 {
     if (!hostkey_clb) {
@@ -427,12 +427,6 @@ nc_server_ssh_ch_client_mod_hostkey(const char *client_name, const char *name, c
 static int
 nc_server_ssh_set_auth_methods(int auth_methods, struct nc_server_ssh_opts *opts)
 {
-    if (!(auth_methods & NC_SSH_AUTH_PUBLICKEY) && !(auth_methods & NC_SSH_AUTH_PASSWORD)
-            && !(auth_methods & NC_SSH_AUTH_INTERACTIVE)) {
-        ERRARG("auth_methods");
-        return -1;
-    }
-
     opts->auth_methods = auth_methods;
     return 0;
 }
@@ -467,6 +461,42 @@ nc_server_ssh_ch_client_set_auth_methods(const char *client_name, int auth_metho
         return -1;
     }
     ret = nc_server_ssh_set_auth_methods(auth_methods, client->opts.ssh);
+    /* UNLOCK */
+    nc_server_ch_client_unlock(client);
+
+    return ret;
+}
+
+API int
+nc_server_ssh_endpt_get_auth_methods(const char *endpt_name)
+{
+    int ret;
+    struct nc_endpt *endpt;
+
+    /* LOCK */
+    endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_LIBSSH, NULL);
+    if (!endpt) {
+        return -1;
+    }
+    ret = endpt->opts.ssh->auth_methods;
+    /* UNLOCK */
+    pthread_rwlock_unlock(&server_opts.endpt_lock);
+
+    return ret;
+}
+
+API int
+nc_server_ssh_ch_client_get_auth_methods(const char *client_name)
+{
+    int ret;
+    struct nc_ch_client *client;
+
+    /* LOCK */
+    client = nc_server_ch_client_lock(client_name, NC_TI_LIBSSH, NULL);
+    if (!client) {
+        return -1;
+    }
+    ret = client->opts.ssh->auth_methods;
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
@@ -1280,7 +1310,8 @@ nc_ssh_bind_add_hostkeys(ssh_bind sbind, const char **hostkeys, uint8_t hostkey_
 {
     uint8_t i;
     char *privkey_path, *privkey_data;
-    int privkey_data_rsa, ret;
+    int ret;
+    NC_SSH_KEY privkey_type;
 
     if (!server_opts.hostkey_clb) {
         ERR("Callback for retrieving SSH host keys not set.");
@@ -1289,13 +1320,13 @@ nc_ssh_bind_add_hostkeys(ssh_bind sbind, const char **hostkeys, uint8_t hostkey_
 
     for (i = 0; i < hostkey_count; ++i) {
         privkey_path = privkey_data = NULL;
-        if (server_opts.hostkey_clb(hostkeys[i], server_opts.hostkey_data, &privkey_path, &privkey_data, &privkey_data_rsa)) {
+        if (server_opts.hostkey_clb(hostkeys[i], server_opts.hostkey_data, &privkey_path, &privkey_data, &privkey_type)) {
             ERR("Host key callback failed.");
             return -1;
         }
 
         if (privkey_data) {
-            privkey_path = base64der_key_to_tmp_file(privkey_data, privkey_data_rsa);
+            privkey_path = base64der_key_to_tmp_file(privkey_data, nc_keytype2str(privkey_type));
             if (!privkey_path) {
                 ERR("Temporarily storing a host key into a file failed (%s).", strerror(errno));
                 free(privkey_data);

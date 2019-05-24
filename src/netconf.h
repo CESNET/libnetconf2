@@ -126,6 +126,15 @@ typedef enum NC_PARAMTYPE {
 } NC_PARAMTYPE;
 
 /**
+ * @brief Enumeration of SSH key types.
+ */
+typedef enum NC_SSH_KEY {
+    NC_SSH_DSA,               /**< DSA SSH key */
+    NC_SSH_RSA,               /**< RSA SSH key */
+    NC_SSH_ECDSA              /**< ECDSA SSH key */
+} NC_SSH_KEY;
+
+/**
  * @brief Transform given time_t (seconds since the epoch) into the RFC 3339 format
  * accepted by NETCONF functions.
  *

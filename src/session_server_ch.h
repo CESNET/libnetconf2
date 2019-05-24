@@ -246,6 +246,14 @@ int nc_server_ssh_ch_client_mod_hostkey(const char *endpt_name, const char *name
 int nc_server_ssh_ch_client_set_auth_methods(const char *client_name, int auth_methods);
 
 /**
+ * @brief Get accepted Call Home SSH authentication methods.
+ *
+ * @param[in] client_name Existing Call Home client name.
+ * @return Accepted authentication methods bit field of NC_SSH_AUTH_TYPE.
+ */
+int nc_server_ssh_ch_client_get_auth_methods(const char *client_name);
+
+/**
  * @brief Set Call Home SSH authentication attempts of every client. 3 by default.
  *
  * @param[in] client_name Existing Call Home client name.

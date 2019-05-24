@@ -509,17 +509,6 @@ int nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64
                               const char *username);
 
 /**
- * @brief Add endpoint SSH host keys the server will identify itself with. Only the name is set, the key itself
- *        wil be retrieved using a callback.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] name Arbitrary name of the host key.
- * @param[in] idx Optional index where to add the key. -1 adds at the end.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name, int16_t idx);
-
-/**
  * @brief Set the callback for SSH password authentication. If none is set, local system users are used.
  *
  * @param[in] passwd_auth_clb Callback that should authenticate the user. Username can be directly obtained from \p session.
@@ -564,13 +553,24 @@ void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const st
  *                        to be set. The one set will be freed.
  *                        - \p privkey_path expects a PEM file,
  *                        - \p privkey_data expects a base-64 encoded ANS.1 DER data,
- *                        - \p privkey_data_rsa flag whether \p privkey_data are the data of an RSA (1) or a DSA (0) key.
+ *                        - \p privkey_type type of the key in \p privkey_data.
  * @param[in] user_data Optional arbitrary user data that will be passed to \p hostkey_clb.
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
  */
 void nc_server_ssh_set_hostkey_clb(int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path,
-                                                      char **privkey_data, int *privkey_data_rsa),
+                                                      char **privkey_data, NC_SSH_KEY *privkey_type),
                                    void *user_data, void (*free_user_data)(void *user_data));
+
+/**
+ * @brief Add endpoint SSH host keys the server will identify itself with. Only the name is set, the key itself
+ *        wil be retrieved using a callback.
+ *
+ * @param[in] endpt_name Existing endpoint name.
+ * @param[in] name Arbitrary name of the host key.
+ * @param[in] idx Optional index where to add the key. -1 adds at the end.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name, int16_t idx);
 
 /**
  * @brief Delete endpoint SSH host key. Their order is preserved.
@@ -611,6 +611,14 @@ int nc_server_ssh_endpt_mod_hostkey(const char *endpt_name, const char *name, co
  * @return 0 on success, -1 on error.
  */
 int nc_server_ssh_endpt_set_auth_methods(const char *endpt_name, int auth_methods);
+
+/**
+ * @brief Get endpoint accepted SSH authentication methods.
+ *
+ * @param[in] endpt_name Existing endpoint name.
+ * @return Accepted authentication methods bit field of NC_SSH_AUTH_TYPE.
+ */
+int nc_server_ssh_endpt_get_auth_methods(const char *endpt_name);
 
 /**
  * @brief Set endpoint SSH authentication attempts of every client. 3 by default.
@@ -664,12 +672,12 @@ int nc_server_tls_endpt_set_server_cert(const char *endpt_name, const char *name
  *                     - \p cert_data expects a base-64 encoded ASN.1 DER data,
  *                     - \p privkey_path expects a PEM file,
  *                     - \p privkey_data expects a base-64 encoded ANS.1 DER data,
- *                     - \p privkey_data_rsa flag whether \p privkey_data are the data of an RSA (1) or a DSA (0) key.
+ *                     - \p privkey_type type of the key in \p privkey_data.
  * @param[in] user_data Optional arbitrary user data that will be passed to \p cert_clb.
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
  */
 void nc_server_tls_set_server_cert_clb(int (*cert_clb)(const char *name, void *user_data, char **cert_path, char **cert_data,
-                                                       char **privkey_path, char **privkey_data, int *privkey_data_rsa),
+                                                       char **privkey_path, char **privkey_data, NC_SSH_KEY *privkey_type),
                                        void *user_data, void (*free_user_data)(void *user_data));
 
 /**

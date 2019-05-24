@@ -189,7 +189,7 @@ struct nc_server_opts {
     int (*user_verify_clb)(const struct nc_session *session);
 
     int (*server_cert_clb)(const char *name, void *user_data, char **cert_path, char **cert_data,char **privkey_path,
-                           char **privkey_data, int *privkey_data_rsa);
+                           char **privkey_data, NC_SSH_KEY *privkey_type);
     void *server_cert_data;
     void (*server_cert_data_free)(void *data);
 
@@ -215,7 +215,7 @@ struct nc_server_opts {
     uint16_t authkey_count;
     pthread_mutex_t authkey_lock;
 
-    int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path, char **privkey_data, int *privkey_data_rsa);
+    int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path, char **privkey_data, NC_SSH_KEY *privkey_type);
     void *hostkey_data;
     void (*hostkey_data_free)(void *data);
 #endif
@@ -504,6 +504,8 @@ int nc_gettimespec_real(struct timespec *ts);
 int32_t nc_difftimespec(const struct timespec *ts1, const struct timespec *ts2);
 
 void nc_addtimespec(struct timespec *ts, uint32_t msec);
+
+const char *nc_keytype2str(NC_SSH_KEY type);
 
 int nc_sock_enable_keepalive(int sock);
 
