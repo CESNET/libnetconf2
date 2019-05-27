@@ -974,8 +974,8 @@ nc_server_tls_ch_client_set_server_cert(const char *client_name, const char *nam
 
 API void
 nc_server_tls_set_server_cert_clb(int (*cert_clb)(const char *name, void *user_data, char **cert_path, char **cert_data,
-                                                  char **privkey_path, char **privkey_data, NC_SSH_KEY *privkey_type),
-                                  void *user_data, void (*free_user_data)(void *user_data))
+        char **privkey_path, char **privkey_data, NC_SSH_KEY_TYPE *privkey_type), void *user_data,
+        void (*free_user_data)(void *user_data))
 {
     if (!cert_clb) {
         ERRARG("cert_clb");
@@ -989,8 +989,7 @@ nc_server_tls_set_server_cert_clb(int (*cert_clb)(const char *name, void *user_d
 
 API void
 nc_server_tls_set_server_cert_chain_clb(int (*cert_chain_clb)(const char *name, void *user_data, char ***cert_paths,
-                                                              int *cert_path_count, char ***cert_data, int *cert_data_count),
-                                        void *user_data, void (*free_user_data)(void *user_data))
+        int *cert_path_count, char ***cert_data, int *cert_data_count), void *user_data, void (*free_user_data)(void *user_data))
 {
     if (!cert_chain_clb) {
         ERRARG("cert_chain_clb");
@@ -1798,7 +1797,7 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
 {
     char *cert_path = NULL, *cert_data = NULL, *privkey_path = NULL, *privkey_data = NULL;
     int ret = 0;
-    NC_SSH_KEY privkey_type;
+    NC_SSH_KEY_TYPE privkey_type;
     X509 *cert = NULL;
     EVP_PKEY *pkey = NULL;
 
@@ -1811,7 +1810,7 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
     }
 
     if (server_opts.server_cert_clb(cert_name, server_opts.server_cert_data, &cert_path, &cert_data, &privkey_path,
-                                    &privkey_data, &privkey_type)) {
+                &privkey_data, &privkey_type)) {
         ERR("Server certificate callback failed.");
         return -1;
     }

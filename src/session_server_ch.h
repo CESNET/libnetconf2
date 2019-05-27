@@ -98,6 +98,29 @@ int nc_server_ch_client_endpt_set_address(const char *client_name, const char *e
 int nc_server_ch_client_endpt_set_port(const char *client_name, const char *endpt_name, uint16_t port);
 
 /**
+ * @brief Change Call Home client endpoint keepalives state. Affects only new connections.
+ *
+ * @param[in] client_name Existing Call Home client name.
+ * @param[in] endpt_name Existing endpoint name of \p client_name.
+ * @param[in] enable Whether to enable or disable keepalives.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_ch_client_endpt_enable_keepalives(const char *client_name, const char *endpt_name, int enable);
+
+/**
+ * @brief Change Call Home client endpoint keepalives parameters. Affects only new connections.
+ *
+ * @param[in] client_name Existing Call Home client name.
+ * @param[in] endpt_name Existing endpoint name of \p client_name.
+ * @param[in] idle_time Keepalive idle time in seconds, 1 by default, -1 to keep previous value.
+ * @param[in] max_probes Keepalive max probes sent, 10 by default, -1 to keep previous value.
+ * @param[in] probe_interval Keepalive probe interval in seconds, 5 by default, -1 to keep previous value.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_ch_client_endpt_set_keepalives(const char *client_name, const char *endpt_name, int idle_time,
+        int max_probes, int probe_interval);
+
+/**
  * @brief Set Call Home client connection type.
  *
  * @param[in] client_name Existing Call Home client name.
@@ -107,31 +130,22 @@ int nc_server_ch_client_endpt_set_port(const char *client_name, const char *endp
 int nc_server_ch_client_set_conn_type(const char *client_name, NC_CH_CONN_TYPE conn_type);
 
 /**
- * @brief Set Call Home client persistent connection idle timeout.
+ * @brief Set Call Home client periodic connection period for reconnecting.
  *
  * @param[in] client_name Existing Call Home client name.
- * @param[in] idle_timeout Call Home persistent idle timeout.
+ * @param[in] period Call Home periodic connection period in minutes.
  * @return 0 on success, -1 on error.
  */
-int nc_server_ch_client_persist_set_idle_timeout(const char *client_name, uint32_t idle_timeout);
+int nc_server_ch_client_periodic_set_period(const char *client_name, uint16_t period);
 
 /**
- * @brief Set Call Home client persistent connection keep-alive max wait time.
+ * @brief Set Call Home client periodic connection period anchor time.
  *
  * @param[in] client_name Existing Call Home client name.
- * @param[in] max_wait Call Home persistent max wait time for keep-alive reply.
+ * @param[in] anchor_time Call Home periodic connection anchor time for the period.
  * @return 0 on success, -1 on error.
  */
-int nc_server_ch_client_persist_set_keep_alive_max_wait(const char *client_name, uint16_t max_wait);
-
-/**
- * @brief Set Call Home client persistent connection keep-alive max attempts.
- *
- * @param[in] client_name Existing Call Home client name.
- * @param[in] max_attempts Call Home persistent keep-alive maximum contact attempts.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ch_client_persist_set_keep_alive_max_attempts(const char *client_name, uint8_t max_attempts);
+int nc_server_ch_client_periodic_set_anchor_time(const char *client_name, time_t anchor_time);
 
 /**
  * @brief Set Call Home client periodic connection idle timeout.
@@ -140,16 +154,7 @@ int nc_server_ch_client_persist_set_keep_alive_max_attempts(const char *client_n
  * @param[in] idle_timeout Call Home periodic idle timeout.
  * @return 0 on success, -1 on error.
  */
-int nc_server_ch_client_period_set_idle_timeout(const char *client_name, uint16_t idle_timeout);
-
-/**
- * @brief Set Call Home client periodic reconnect timeout.
- *
- * @param[in] client_name Existing Call Home client name.
- * @param[in] reconnect_timeout Call Home periodic reconnect timeout.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ch_client_period_set_reconnect_timeout(const char *client_name, uint16_t reconnect_timeout);
+int nc_server_ch_client_periodic_set_idle_timeout(const char *client_name, uint16_t idle_timeout);
 
 /**
  * @brief Set Call Home client start-with policy.

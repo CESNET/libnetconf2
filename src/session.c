@@ -117,14 +117,14 @@ nc_addtimespec(struct timespec *ts, uint32_t msec)
 }
 
 const char *
-nc_keytype2str(NC_SSH_KEY type)
+nc_keytype2str(NC_SSH_KEY_TYPE type)
 {
     switch (type) {
-    case NC_SSH_DSA:
+    case NC_SSH_KEY_DSA:
         return "DSA";
-    case NC_SSH_RSA:
+    case NC_SSH_KEY_RSA:
         return "RSA";
-    case NC_SSH_ECDSA:
+    case NC_SSH_KEY_ECDSA:
         return "EC";
     default:
         break;
@@ -134,35 +134,38 @@ nc_keytype2str(NC_SSH_KEY type)
 }
 
 int
-nc_sock_enable_keepalive(int sock)
+nc_sock_enable_keepalive(int sock, struct nc_keepalives *ka)
 {
     int opt;
 
-    opt = 1;
+    opt = ka->enabled;
     if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof opt) == -1) {
         ERR("Could not set SO_KEEPALIVE option (%s).", strerror(errno));
         return -1;
     }
+    if (!ka->enabled) {
+        return 0;
+    }
 
 #ifdef TCP_KEEPIDLE
-    opt = 1;
+    opt = ka->idle_time;
     if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &opt, sizeof opt) == -1) {
         ERR("Setsockopt failed (%s).", strerror(errno));
         return -1;
     }
 #endif
 
-#ifdef TCP_KEEPINTVL
-    opt = 5;
-    if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &opt, sizeof opt) == -1) {
+#ifdef TCP_KEEPCNT
+    opt = ka->max_probes;
+    if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &opt, sizeof opt) == -1) {
         ERR("Setsockopt failed (%s).", strerror(errno));
         return -1;
     }
 #endif
 
-#ifdef TCP_KEEPCNT
-    opt = 10;
-    if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &opt, sizeof opt) == -1) {
+#ifdef TCP_KEEPINTVL
+    opt = ka->probe_interval;
+    if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &opt, sizeof opt) == -1) {
         ERR("Setsockopt failed (%s).", strerror(errno));
         return -1;
     }

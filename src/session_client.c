@@ -51,7 +51,12 @@ static pthread_once_t nc_client_context_once = PTHREAD_ONCE_INIT;
 static pthread_key_t nc_client_context_key;
 #ifdef __linux__
 static struct nc_client_context context_main = {
-    /* .opts zeroed */
+    .opts.ka = {
+        .enabled = 1,
+        .idle_time = 1,
+        .max_probes = 10,
+        .probe_interval = 5
+    },
 #ifdef NC_ENABLED_SSH
     .ssh_opts = {
         .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 1}},
@@ -1218,7 +1223,7 @@ fail:
    concept for e.g. call home settings). For more details see nc_sock_connect().
  */
 static int
-_non_blocking_connect(int timeout, int* sock_pending, struct addrinfo *res)
+_non_blocking_connect(int timeout, int* sock_pending, struct addrinfo *res, struct nc_keepalives *ka)
 {
     int flags, ret=0;
     int sock = -1;
@@ -1288,7 +1293,7 @@ _non_blocking_connect(int timeout, int* sock_pending, struct addrinfo *res)
     }
 
     /* enable keep-alive */
-    if (nc_sock_enable_keepalive(sock)) {
+    if (nc_sock_enable_keepalive(sock, ka)) {
         goto cleanup;
     }
 
@@ -1311,7 +1316,7 @@ cleanup:
    has to be invoked, until it returns a valid socket.
  */
 int
-nc_sock_connect(const char *host, uint16_t port, int timeout, int *sock_pending, char **ip_host)
+nc_sock_connect(const char *host, uint16_t port, int timeout, struct nc_keepalives *ka, int *sock_pending, char **ip_host)
 {
     int i, opt;
     int sock = sock_pending ? *sock_pending : -1;
@@ -1336,7 +1341,7 @@ nc_sock_connect(const char *host, uint16_t port, int timeout, int *sock_pending,
         }
 
         for (res = res_list; res != NULL; res = res->ai_next) {
-            sock = _non_blocking_connect(timeout, sock_pending, res);
+            sock = _non_blocking_connect(timeout, sock_pending, res, ka);
             if (sock == -1 && (!sock_pending || *sock_pending == -1)) {
                 /* try the next resource */
                 continue;
@@ -1378,7 +1383,7 @@ nc_sock_connect(const char *host, uint16_t port, int timeout, int *sock_pending,
     } else {
         /* try to get a connection with the pending socket */
         assert(sock_pending);
-        sock = _non_blocking_connect(timeout, sock_pending, NULL);
+        sock = _non_blocking_connect(timeout, sock_pending, NULL, ka);
     }
 
     return sock;
@@ -1838,7 +1843,7 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IM
         return -1;
     }
 
-    sock = nc_sock_listen_inet(address, port);
+    sock = nc_sock_listen_inet(address, port, &client_opts.ka);
     if (sock == -1) {
         return -1;
     }

@@ -84,7 +84,7 @@ server_thread(void *arg)
 
 static int
 clb_hostkeys(const char *name, void *UNUSED(user_data), char **privkey_path, char **UNUSED(privkey_data),
-             NC_SSH_KEY *UNUSED(privkey_type))
+             NC_SSH_KEY_TYPE *UNUSED(privkey_type))
 {
     if (!strcmp(name, "key_rsa")) {
         *privkey_path = strdup(TESTS_DIR"/data/key_rsa");
@@ -259,7 +259,7 @@ ssh_client_thread(void *arg)
 
 static int
 clb_server_cert(const char *name, void *UNUSED(user_data), char **cert_path, char **cert_data, char **privkey_path,
-                char **privkey_data, NC_SSH_KEY *privkey_type)
+        char **privkey_data, NC_SSH_KEY_TYPE *privkey_type)
 {
     if (!strcmp(name, "server_cert1")) {
         *cert_data = strdup("MIIEQDCCAygCCQCV65JgDvfWkTANBgkqhkiG9w0BAQsFADBjMQswCQYDVQQGEwJD\n"
@@ -334,7 +334,7 @@ clb_server_cert(const char *name, void *UNUSED(user_data), char **cert_path, cha
             "dOZPvkfqyIKFmbQgYbtD66rHuzNOfJpzqr/WVLO57/zzW8245NKG2B6B0oXkei/K\n"
             "qDY0DAbHR3i3EOj1NPtVI1FC/xX8R9BREaid458bqoHJKuInrGcBjaUI9Cvymv8T\n"
             "bstUgD6NPbJR4Sm6vrLeUqzjWZP3t1+Z6DjXmnpR2vvhMU/FWb//21p/88o=");
-        *privkey_type = NC_SSH_RSA;
+        *privkey_type = NC_SSH_KEY_RSA;
         return 0;
     } else if (!strcmp(name, "main_cert")) {
         *cert_path = strdup(TESTS_DIR"/data/server.crt");
@@ -347,7 +347,7 @@ clb_server_cert(const char *name, void *UNUSED(user_data), char **cert_path, cha
 
 static int
 clb_trusted_cert_lists(const char *name, void *UNUSED(user_data), char ***cert_paths, int *cert_path_count,
-                       char ***cert_data, int *cert_data_count)
+        char ***cert_data, int *cert_data_count)
 {
     if (!strcmp(name, "trusted_cert_list1")) {
         *cert_data = malloc(sizeof **cert_data);

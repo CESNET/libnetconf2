@@ -417,6 +417,26 @@ int nc_server_endpt_set_port(const char *endpt_name, uint16_t port);
  */
 int nc_server_endpt_set_perms(const char *endpt_name, mode_t mode, uid_t uid, gid_t gid);
 
+/**
+ * @brief Change endpoint keepalives state. Affects only new connections.
+ *
+ * @param[in] endpt_name Existing endpoint name.
+ * @param[in] enable Whether to enable or disable keepalives.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_endpt_enable_keepalives(const char *endpt_name, int enable);
+
+/**
+ * @brief Change endpoint keepalives parameters. Affects only new connections.
+ *
+ * @param[in] endpt_name Existing endpoint name.
+ * @param[in] idle_time Keepalive idle time in seconds, 1 by default, -1 to keep previous value.
+ * @param[in] max_probes Keepalive max probes sent, 10 by default, -1 to keep previous value.
+ * @param[in] probe_interval Keepalive probe interval in seconds, 5 by default, -1 to keep previous value.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_endpt_set_keepalives(const char *endpt_name, int idle_time, int max_probes, int probe_interval);
+
 /**@} Server */
 
 /**
@@ -477,7 +497,7 @@ NC_MSG_TYPE nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_sessio
 
 /**
  * @brief Add an authorized client SSH public key. This public key can be used for
- *        publickey authentication (for any SSH connection, even Call Home) afterwards.
+ * publickey authentication (for any SSH connection, even Call Home) afterwards.
  *
  * @param[in] pubkey_base64 Authorized public key binary content encoded in base64.
  * @param[in] type Authorized public key SSH type.
@@ -558,8 +578,7 @@ void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const st
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
  */
 void nc_server_ssh_set_hostkey_clb(int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path,
-                                                      char **privkey_data, NC_SSH_KEY *privkey_type),
-                                   void *user_data, void (*free_user_data)(void *user_data));
+        char **privkey_data, NC_SSH_KEY_TYPE *privkey_type), void *user_data, void (*free_user_data)(void *user_data));
 
 /**
  * @brief Add endpoint SSH host keys the server will identify itself with. Only the name is set, the key itself
@@ -677,8 +696,8 @@ int nc_server_tls_endpt_set_server_cert(const char *endpt_name, const char *name
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
  */
 void nc_server_tls_set_server_cert_clb(int (*cert_clb)(const char *name, void *user_data, char **cert_path, char **cert_data,
-                                                       char **privkey_path, char **privkey_data, NC_SSH_KEY *privkey_type),
-                                       void *user_data, void (*free_user_data)(void *user_data));
+        char **privkey_path, char **privkey_data, NC_SSH_KEY_TYPE *privkey_type), void *user_data,
+        void (*free_user_data)(void *user_data));
 
 /**
  * @brief Set the callback for retrieving server certificate chain
@@ -694,8 +713,7 @@ void nc_server_tls_set_server_cert_clb(int (*cert_clb)(const char *name, void *u
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
  */
 void nc_server_tls_set_server_cert_chain_clb(int (*cert_chain_clb)(const char *name, void *user_data, char ***cert_paths,
-                                                                   int *cert_path_count, char ***cert_data, int *cert_data_count),
-                                             void *user_data, void (*free_user_data)(void *user_data));
+        int *cert_path_count, char ***cert_data, int *cert_data_count), void *user_data, void (*free_user_data)(void *user_data));
 
 /**
  * @brief Add a trusted certificate list. Can be both a CA or a client one. Can be
@@ -721,8 +739,7 @@ int nc_server_tls_endpt_add_trusted_cert_list(const char *endpt_name, const char
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
  */
 void nc_server_tls_set_trusted_cert_list_clb(int (*cert_list_clb)(const char *name, void *user_data, char ***cert_paths,
-                                                                  int *cert_path_count, char ***cert_data, int *cert_data_count),
-                                             void *user_data, void (*free_user_data)(void *user_data));
+        int *cert_path_count, char ***cert_data, int *cert_data_count), void *user_data, void (*free_user_data)(void *user_data));
 
 /**
  * @brief Remove a trusted certificate.

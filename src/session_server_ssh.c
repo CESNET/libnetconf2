@@ -181,8 +181,7 @@ nc_server_ssh_ch_client_add_hostkey(const char *client_name, const char *name, i
 
 API void
 nc_server_ssh_set_hostkey_clb(int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path,
-                                                 char **privkey_data, NC_SSH_KEY *privkey_type),
-                              void *user_data, void (*free_user_data)(void *user_data))
+        char **privkey_data, NC_SSH_KEY_TYPE *privkey_type), void *user_data, void (*free_user_data)(void *user_data))
 {
     if (!hostkey_clb) {
         ERRARG("hostkey_clb");
@@ -1311,7 +1310,7 @@ nc_ssh_bind_add_hostkeys(ssh_bind sbind, const char **hostkeys, uint8_t hostkey_
     uint8_t i;
     char *privkey_path, *privkey_data;
     int ret;
-    NC_SSH_KEY privkey_type;
+    NC_SSH_KEY_TYPE privkey_type;
 
     if (!server_opts.hostkey_clb) {
         ERR("Callback for retrieving SSH host keys not set.");

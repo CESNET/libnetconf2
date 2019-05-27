@@ -207,7 +207,6 @@ if(ENABLE_SSH)
             return 0;
         }"
     )
-
     check_c_source_compiles("${LIBSSH_SESSION_OPTION_CHECK_CODE}" HAVE_LIBSSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES)
 endif()
 

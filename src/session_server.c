@@ -174,7 +174,7 @@ nc_session_set_status(struct nc_session *session, NC_STATUS status)
 }
 
 int
-nc_sock_listen_inet(const char *address, uint16_t port)
+nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives *ka)
 {
     int opt;
     int is_ipv4, sock;
@@ -207,7 +207,7 @@ nc_sock_listen_inet(const char *address, uint16_t port)
         goto fail;
     }
 
-    if (nc_sock_enable_keepalive(sock)) {
+    if (nc_sock_enable_keepalive(sock, ka)) {
         goto fail;
     }
 
@@ -1765,8 +1765,12 @@ nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti)
         ret = -1;
         goto cleanup;
     }
+    memset(&server_opts.endpts[server_opts.endpt_count - 1], 0, sizeof *server_opts.endpts);
     server_opts.endpts[server_opts.endpt_count - 1].name = lydict_insert(server_opts.ctx, name, 0);
     server_opts.endpts[server_opts.endpt_count - 1].ti = ti;
+    server_opts.endpts[server_opts.endpt_count - 1].ka.idle_time = 1;
+    server_opts.endpts[server_opts.endpt_count - 1].ka.max_probes = 10;
+    server_opts.endpts[server_opts.endpt_count - 1].ka.probe_interval = 5;
 
     server_opts.binds = nc_realloc(server_opts.binds, server_opts.endpt_count * sizeof *server_opts.binds);
     if (!server_opts.binds) {
@@ -1775,10 +1779,8 @@ nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti)
         goto cleanup;
     }
 
-    server_opts.binds[server_opts.endpt_count - 1].address = NULL;
-    server_opts.binds[server_opts.endpt_count - 1].port = 0;
+    memset(&server_opts.binds[server_opts.endpt_count - 1], 0, sizeof *server_opts.binds);
     server_opts.binds[server_opts.endpt_count - 1].sock = -1;
-    server_opts.binds[server_opts.endpt_count - 1].pollin = 0;
 
     switch (ti) {
 #ifdef NC_ENABLED_SSH
@@ -1828,145 +1830,6 @@ cleanup:
 
     /* BIND UNLOCK */
     pthread_mutex_unlock(&server_opts.bind_lock);
-
-    return ret;
-}
-
-int
-nc_server_endpt_set_address_port(const char *endpt_name, const char *address, uint16_t port)
-{
-    struct nc_endpt *endpt;
-    struct nc_bind *bind = NULL;
-    uint16_t i;
-    int sock = -1, set_addr, ret = 0;
-
-    if (!endpt_name) {
-        ERRARG("endpt_name");
-        return -1;
-    } else if ((!address && !port) || (address && port)) {
-        ERRARG("address and port");
-        return -1;
-    }
-
-    if (address) {
-        set_addr = 1;
-    } else {
-        set_addr = 0;
-    }
-
-    /* BIND LOCK */
-    pthread_mutex_lock(&server_opts.bind_lock);
-
-    /* ENDPT LOCK */
-    endpt = nc_server_endpt_lock_get(endpt_name, 0, &i);
-    if (!endpt) {
-        /* BIND UNLOCK */
-        pthread_mutex_unlock(&server_opts.bind_lock);
-        return -1;
-    }
-
-    bind = &server_opts.binds[i];
-
-    if (set_addr) {
-        port = bind->port;
-    } else {
-        address = bind->address;
-    }
-
-    if (!set_addr && endpt->ti == NC_TI_UNIX) {
-        ret = -1;
-        goto cleanup;
-    }
-
-    /* we have all the information we need to create a listening socket */
-    if (address && (port || endpt->ti == NC_TI_UNIX)) {
-        /* create new socket, close the old one */
-        if (endpt->ti == NC_TI_UNIX)
-            sock = nc_sock_listen_unix(address, endpt->opts.unixsock);
-        else
-            sock = nc_sock_listen_inet(address, port);
-        if (sock == -1) {
-            ret = -1;
-            goto cleanup;
-        }
-
-        if (bind->sock > -1) {
-            close(bind->sock);
-        }
-        bind->sock = sock;
-    } /* else we are just setting address or port */
-
-    if (set_addr) {
-        lydict_remove(server_opts.ctx, bind->address);
-        bind->address = lydict_insert(server_opts.ctx, address, 0);
-    } else {
-        bind->port = port;
-    }
-
-    if (sock > -1) {
-#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
-        VRB("Listening on %s:%u for %s connections.", address, port, (endpt->ti == NC_TI_LIBSSH ? "SSH" : "TLS"));
-#elif defined(NC_ENABLED_SSH)
-        VRB("Listening on %s:%u for SSH connections.", address, port);
-#else
-        VRB("Listening on %s:%u for TLS connections.", address, port);
-#endif
-    }
-
-cleanup:
-    /* ENDPT UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
-
-    /* BIND UNLOCK */
-    pthread_mutex_unlock(&server_opts.bind_lock);
-
-    return ret;
-}
-
-API int
-nc_server_endpt_set_address(const char *endpt_name, const char *address)
-{
-    return nc_server_endpt_set_address_port(endpt_name, address, 0);
-}
-
-API int
-nc_server_endpt_set_port(const char *endpt_name, uint16_t port)
-{
-    return nc_server_endpt_set_address_port(endpt_name, NULL, port);
-}
-
-API int
-nc_server_endpt_set_perms(const char *endpt_name, mode_t mode, uid_t uid, gid_t gid)
-{
-    struct nc_endpt *endpt;
-    uint16_t i;
-    int ret = 0;
-
-    if (!endpt_name) {
-        ERRARG("endpt_name");
-        return -1;
-    } else if (mode == 0) {
-        ERRARG("mode");
-        return -1;
-    }
-
-    /* ENDPT LOCK */
-    endpt = nc_server_endpt_lock_get(endpt_name, 0, &i);
-    if (!endpt)
-        return -1;
-
-    if (endpt->ti != NC_TI_UNIX) {
-        ret = -1;
-        goto cleanup;
-    }
-
-    endpt->opts.unixsock->mode = mode;
-    endpt->opts.unixsock->uid = uid;
-    endpt->opts.unixsock->gid = gid;
-
-cleanup:
-    /* ENDPT UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
 
     return ret;
 }
@@ -2083,6 +1946,209 @@ nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti)
 
     /* BIND UNLOCK */
     pthread_mutex_unlock(&server_opts.bind_lock);
+
+    return ret;
+}
+
+API int
+nc_server_endpt_count(void)
+{
+    return server_opts.endpt_count;
+}
+
+int
+nc_server_endpt_set_address_port(const char *endpt_name, const char *address, uint16_t port)
+{
+    struct nc_endpt *endpt;
+    struct nc_bind *bind = NULL;
+    uint16_t i;
+    int sock = -1, set_addr, ret = 0;
+
+    if (!endpt_name) {
+        ERRARG("endpt_name");
+        return -1;
+    } else if ((!address && !port) || (address && port)) {
+        ERRARG("address and port");
+        return -1;
+    }
+
+    if (address) {
+        set_addr = 1;
+    } else {
+        set_addr = 0;
+    }
+
+    /* BIND LOCK */
+    pthread_mutex_lock(&server_opts.bind_lock);
+
+    /* ENDPT LOCK */
+    endpt = nc_server_endpt_lock_get(endpt_name, 0, &i);
+    if (!endpt) {
+        /* BIND UNLOCK */
+        pthread_mutex_unlock(&server_opts.bind_lock);
+        return -1;
+    }
+
+    bind = &server_opts.binds[i];
+
+    if (set_addr) {
+        port = bind->port;
+    } else {
+        address = bind->address;
+    }
+
+    if (!set_addr && endpt->ti == NC_TI_UNIX) {
+        ret = -1;
+        goto cleanup;
+    }
+
+    /* we have all the information we need to create a listening socket */
+    if (address && (port || endpt->ti == NC_TI_UNIX)) {
+        /* create new socket, close the old one */
+        if (endpt->ti == NC_TI_UNIX)
+            sock = nc_sock_listen_unix(address, endpt->opts.unixsock);
+        else
+            sock = nc_sock_listen_inet(address, port, &endpt->ka);
+        if (sock == -1) {
+            ret = -1;
+            goto cleanup;
+        }
+
+        if (bind->sock > -1) {
+            close(bind->sock);
+        }
+        bind->sock = sock;
+    } /* else we are just setting address or port */
+
+    if (set_addr) {
+        lydict_remove(server_opts.ctx, bind->address);
+        bind->address = lydict_insert(server_opts.ctx, address, 0);
+    } else {
+        bind->port = port;
+    }
+
+    if (sock > -1) {
+#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
+        VRB("Listening on %s:%u for %s connections.", address, port, (endpt->ti == NC_TI_LIBSSH ? "SSH" : "TLS"));
+#elif defined(NC_ENABLED_SSH)
+        VRB("Listening on %s:%u for SSH connections.", address, port);
+#else
+        VRB("Listening on %s:%u for TLS connections.", address, port);
+#endif
+    }
+
+cleanup:
+    /* ENDPT UNLOCK */
+    pthread_rwlock_unlock(&server_opts.endpt_lock);
+
+    /* BIND UNLOCK */
+    pthread_mutex_unlock(&server_opts.bind_lock);
+
+    return ret;
+}
+
+API int
+nc_server_endpt_set_address(const char *endpt_name, const char *address)
+{
+    return nc_server_endpt_set_address_port(endpt_name, address, 0);
+}
+
+API int
+nc_server_endpt_set_port(const char *endpt_name, uint16_t port)
+{
+    return nc_server_endpt_set_address_port(endpt_name, NULL, port);
+}
+
+API int
+nc_server_endpt_set_perms(const char *endpt_name, mode_t mode, uid_t uid, gid_t gid)
+{
+    struct nc_endpt *endpt;
+    uint16_t i;
+    int ret = 0;
+
+    if (!endpt_name) {
+        ERRARG("endpt_name");
+        return -1;
+    } else if (mode == 0) {
+        ERRARG("mode");
+        return -1;
+    }
+
+    /* ENDPT LOCK */
+    endpt = nc_server_endpt_lock_get(endpt_name, 0, &i);
+    if (!endpt)
+        return -1;
+
+    if (endpt->ti != NC_TI_UNIX) {
+        ret = -1;
+        goto cleanup;
+    }
+
+    endpt->opts.unixsock->mode = mode;
+    endpt->opts.unixsock->uid = uid;
+    endpt->opts.unixsock->gid = gid;
+
+cleanup:
+    /* ENDPT UNLOCK */
+    pthread_rwlock_unlock(&server_opts.endpt_lock);
+
+    return ret;
+}
+
+API int
+nc_server_endpt_enable_keepalives(const char *endpt_name, int enable)
+{
+    struct nc_endpt *endpt;
+    int ret = 0;
+
+    if (!endpt_name) {
+        ERRARG("endpt_name");
+        return -1;
+    }
+
+    /* ENDPT LOCK */
+    endpt = nc_server_endpt_lock_get(endpt_name, 0, NULL);
+    if (!endpt) {
+        return -1;
+    }
+
+    endpt->ka.enabled = (enable ? 1 : 0);
+
+    /* ENDPT UNLOCK */
+    pthread_rwlock_unlock(&server_opts.endpt_lock);
+
+    return ret;
+}
+
+API int
+nc_server_endpt_set_keepalives(const char *endpt_name, int idle_time, int max_probes, int probe_interval)
+{
+    struct nc_endpt *endpt;
+    int ret = 0;
+
+    if (!endpt_name) {
+        ERRARG("endpt_name");
+        return -1;
+    }
+
+    /* ENDPT LOCK */
+    endpt = nc_server_endpt_lock_get(endpt_name, 0, NULL);
+    if (!endpt) {
+        return -1;
+    }
+
+    if (idle_time > -1) {
+        endpt->ka.idle_time = idle_time;
+    }
+    if (max_probes > -1) {
+        endpt->ka.max_probes = max_probes;
+    }
+    if (probe_interval > -1) {
+        endpt->ka.probe_interval = probe_interval;
+    }
+
+    /* ENDPT UNLOCK */
+    pthread_rwlock_unlock(&server_opts.endpt_lock);
 
     return ret;
 }
@@ -2455,10 +2521,12 @@ nc_server_ch_client_add_endpt(const char *client_name, const char *endpt_name)
         return -1;
     }
 
+    memset(&client->ch_endpts[client->ch_endpt_count - 1], 0, sizeof *client->ch_endpts);
     client->ch_endpts[client->ch_endpt_count - 1].name = lydict_insert(server_opts.ctx, endpt_name, 0);
-    client->ch_endpts[client->ch_endpt_count - 1].address = NULL;
-    client->ch_endpts[client->ch_endpt_count - 1].port = 0;
     client->ch_endpts[client->ch_endpt_count - 1].sock_pending = -1;
+    client->ch_endpts[client->ch_endpt_count - 1].ka.idle_time = 1;
+    client->ch_endpts[client->ch_endpt_count - 1].ka.max_probes = 10;
+    client->ch_endpts[client->ch_endpt_count - 1].ka.probe_interval = 5;
 
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
@@ -2613,6 +2681,95 @@ nc_server_ch_client_endpt_set_port(const char *client_name, const char *endpt_na
 }
 
 API int
+nc_server_ch_client_endpt_enable_keepalives(const char *client_name, const char *endpt_name, int enable)
+{
+    uint16_t i;
+    int ret = -1;
+    struct nc_ch_client *client;
+
+    if (!client_name) {
+        ERRARG("client_name");
+        return -1;
+    } else if (!endpt_name) {
+        ERRARG("endpt_name");
+        return -1;
+    }
+
+    /* LOCK */
+    client = nc_server_ch_client_lock(client_name, 0, NULL);
+    if (!client) {
+        return -1;
+    }
+
+    for (i = 0; i < client->ch_endpt_count; ++i) {
+        if (!strcmp(client->ch_endpts[i].name, endpt_name)) {
+            client->ch_endpts[i].ka.enabled = (enable ? 1 : 0);
+
+            ret = 0;
+            break;
+        }
+    }
+
+    /* UNLOCK */
+    nc_server_ch_client_unlock(client);
+
+    if (ret == -1) {
+        ERR("Call Home client \"%s\" endpoint \"%s\" not found.", client_name, endpt_name);
+    }
+
+    return ret;
+}
+
+API int
+nc_server_ch_client_endpt_set_keepalives(const char *client_name, const char *endpt_name, int idle_time, int max_probes,
+        int probe_interval)
+{
+    uint16_t i;
+    int ret = -1;
+    struct nc_ch_client *client;
+
+    if (!client_name) {
+        ERRARG("client_name");
+        return -1;
+    } else if (!endpt_name) {
+        ERRARG("endpt_name");
+        return -1;
+    }
+
+    /* LOCK */
+    client = nc_server_ch_client_lock(client_name, 0, NULL);
+    if (!client) {
+        return -1;
+    }
+
+    for (i = 0; i < client->ch_endpt_count; ++i) {
+        if (!strcmp(client->ch_endpts[i].name, endpt_name)) {
+            if (idle_time > -1) {
+                client->ch_endpts[i].ka.idle_time = idle_time;
+            }
+            if (max_probes > -1) {
+                client->ch_endpts[i].ka.max_probes = max_probes;
+            }
+            if (probe_interval > -1) {
+                client->ch_endpts[i].ka.probe_interval = probe_interval;
+            }
+
+            ret = 0;
+            break;
+        }
+    }
+
+    /* UNLOCK */
+    nc_server_ch_client_unlock(client);
+
+    if (ret == -1) {
+        ERR("Call Home client \"%s\" endpoint \"%s\" not found.", client_name, endpt_name);
+    }
+
+    return ret;
+}
+
+API int
 nc_server_ch_client_set_conn_type(const char *client_name, NC_CH_CONN_TYPE conn_type)
 {
     struct nc_ch_client *client;
@@ -2637,13 +2794,12 @@ nc_server_ch_client_set_conn_type(const char *client_name, NC_CH_CONN_TYPE conn_
         /* set default options */
         switch (conn_type) {
         case NC_CH_PERSIST:
-            client->conn.persist.idle_timeout = 86400;
-            client->conn.persist.ka_max_wait = 30;
-            client->conn.persist.ka_max_attempts = 3;
+            /* no options */
             break;
         case NC_CH_PERIOD:
-            client->conn.period.idle_timeout = 300;
-            client->conn.period.reconnect_timeout = 60;
+            client->conn.period.period = 60;
+            client->conn.period.anchor_time = 0;
+            client->conn.period.idle_timeout = 120;
             break;
         default:
             ERRINT;
@@ -2658,7 +2814,41 @@ nc_server_ch_client_set_conn_type(const char *client_name, NC_CH_CONN_TYPE conn_
 }
 
 API int
-nc_server_ch_client_persist_set_idle_timeout(const char *client_name, uint32_t idle_timeout)
+nc_server_ch_client_periodic_set_period(const char *client_name, uint16_t period)
+{
+    struct nc_ch_client *client;
+
+    if (!client_name) {
+        ERRARG("client_name");
+        return -1;
+    } else if (!period) {
+        ERRARG("period");
+        return -1;
+    }
+
+    /* LOCK */
+    client = nc_server_ch_client_lock(client_name, 0, NULL);
+    if (!client) {
+        return -1;
+    }
+
+    if (client->conn_type != NC_CH_PERIOD) {
+        ERR("Call Home client \"%s\" is not of periodic connection type.");
+        /* UNLOCK */
+        nc_server_ch_client_unlock(client);
+        return -1;
+    }
+
+    client->conn.period.period = period;
+
+    /* UNLOCK */
+    nc_server_ch_client_unlock(client);
+
+    return 0;
+}
+
+API int
+nc_server_ch_client_periodic_set_anchor_time(const char *client_name, time_t anchor_time)
 {
     struct nc_ch_client *client;
 
@@ -2673,14 +2863,14 @@ nc_server_ch_client_persist_set_idle_timeout(const char *client_name, uint32_t i
         return -1;
     }
 
-    if (client->conn_type != NC_CH_PERSIST) {
-        ERR("Call Home client \"%s\" is not of persistent connection type.", client_name);
+    if (client->conn_type != NC_CH_PERIOD) {
+        ERR("Call Home client \"%s\" is not of periodic connection type.");
         /* UNLOCK */
         nc_server_ch_client_unlock(client);
         return -1;
     }
 
-    client->conn.persist.idle_timeout = idle_timeout;
+    client->conn.period.anchor_time = anchor_time;
 
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
@@ -2689,72 +2879,7 @@ nc_server_ch_client_persist_set_idle_timeout(const char *client_name, uint32_t i
 }
 
 API int
-nc_server_ch_client_persist_set_keep_alive_max_wait(const char *client_name, uint16_t max_wait)
-{
-    struct nc_ch_client *client;
-
-    if (!client_name) {
-        ERRARG("client_name");
-        return -1;
-    } else if (!max_wait) {
-        ERRARG("max_wait");
-        return -1;
-    }
-
-    /* LOCK */
-    client = nc_server_ch_client_lock(client_name, 0, NULL);
-    if (!client) {
-        return -1;
-    }
-
-    if (client->conn_type != NC_CH_PERSIST) {
-        ERR("Call Home client \"%s\" is not of persistent connection type.", client_name);
-        /* UNLOCK */
-        nc_server_ch_client_unlock(client);
-        return -1;
-    }
-
-    client->conn.persist.ka_max_wait = max_wait;
-
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return 0;
-}
-
-API int
-nc_server_ch_client_persist_set_keep_alive_max_attempts(const char *client_name, uint8_t max_attempts)
-{
-    struct nc_ch_client *client;
-
-    if (!client_name) {
-        ERRARG("client_name");
-        return -1;
-    }
-
-    /* LOCK */
-    client = nc_server_ch_client_lock(client_name, 0, NULL);
-    if (!client) {
-        return -1;
-    }
-
-    if (client->conn_type != NC_CH_PERSIST) {
-        ERR("Call Home client \"%s\" is not of persistent connection type.", client_name);
-        /* UNLOCK */
-        nc_server_ch_client_unlock(client);
-        return -1;
-    }
-
-    client->conn.persist.ka_max_attempts = max_attempts;
-
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return 0;
-}
-
-API int
-nc_server_ch_client_period_set_idle_timeout(const char *client_name, uint16_t idle_timeout)
+nc_server_ch_client_periodic_set_idle_timeout(const char *client_name, uint16_t idle_timeout)
 {
     struct nc_ch_client *client;
 
@@ -2777,40 +2902,6 @@ nc_server_ch_client_period_set_idle_timeout(const char *client_name, uint16_t id
     }
 
     client->conn.period.idle_timeout = idle_timeout;
-
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return 0;
-}
-
-API int
-nc_server_ch_client_period_set_reconnect_timeout(const char *client_name, uint16_t reconnect_timeout)
-{
-    struct nc_ch_client *client;
-
-    if (!client_name) {
-        ERRARG("client_name");
-        return -1;
-    } else if (!reconnect_timeout) {
-        ERRARG("reconnect_timeout");
-        return -1;
-    }
-
-    /* LOCK */
-    client = nc_server_ch_client_lock(client_name, 0, NULL);
-    if (!client) {
-        return -1;
-    }
-
-    if (client->conn_type != NC_CH_PERIOD) {
-        ERR("Call Home client \"%s\" is not of periodic connection type.");
-        /* UNLOCK */
-        nc_server_ch_client_unlock(client);
-        return -1;
-    }
-
-    client->conn.period.reconnect_timeout = reconnect_timeout;
 
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
@@ -2878,7 +2969,7 @@ nc_connect_ch_client_endpt(struct nc_ch_client *client, struct nc_ch_endpt *endp
     struct timespec ts_cur;
     char *ip_host;
 
-    sock = nc_sock_connect(endpt->address, endpt->port, 5, &endpt->sock_pending, &ip_host);
+    sock = nc_sock_connect(endpt->address, endpt->port, 5, &endpt->ka, &endpt->sock_pending, &ip_host);
     if (sock < 0) {
         return NC_MSG_ERROR;
     }
@@ -3043,11 +3134,10 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
             break;
         }
 
-        if (client->conn_type == NC_CH_PERSIST) {
-            /* TODO keep-alives */
-            idle_timeout = client->conn.persist.idle_timeout;
-        } else {
+        if (client->conn_type == NC_CH_PERIOD) {
             idle_timeout = client->conn.period.idle_timeout;
+        } else {
+            idle_timeout = 0;
         }
 
         nc_gettimespec_mono(&ts);
@@ -3085,6 +3175,7 @@ nc_ch_client_thread(void *arg)
     struct nc_session *session;
     struct nc_ch_client *client;
     uint32_t client_id;
+    time_t reconnect_in;
 
     /* LOCK */
     client = nc_server_ch_client_with_endpt_lock(data->client_name);
@@ -3121,13 +3212,14 @@ nc_ch_client_thread(void *arg)
             }
 
             /* session changed status -> it was disconnected for whatever reason,
-             * persistent connection immediately tries to reconnect, periodic waits some first */
+             * persistent connection immediately tries to reconnect, periodic connects at specific times */
             if (client->conn_type == NC_CH_PERIOD) {
                 /* UNLOCK */
                 nc_server_ch_client_unlock(client);
 
-                /* TODO wake up sometimes to check for new notifications */
-                usleep(client->conn.period.reconnect_timeout * 60 * 1000000);
+                /* sleep until we should reconnect TODO wake up sometimes to check for new notifications */
+                reconnect_in = (time(NULL) - client->conn.period.anchor_time) % (client->conn.period.period * 60);
+                sleep(reconnect_in);
 
                 /* LOCK */
                 client = nc_server_ch_client_with_endpt_lock(data->client_name);
@@ -3143,7 +3235,7 @@ nc_ch_client_thread(void *arg)
             /* set next endpoint to try */
             if (client->start_with == NC_CH_FIRST_LISTED) {
                 next_endpt_index = 0;
-            } else {
+            } else if (client->start_with == NC_CH_LAST_CONNECTED) {
                 /* we keep the current one but due to unlock/lock we have to find it again */
                 for (next_endpt_index = 0; next_endpt_index < client->ch_endpt_count; ++next_endpt_index) {
                     if (!strcmp(client->ch_endpts[next_endpt_index].name, cur_endpt_name)) {
@@ -3154,6 +3246,9 @@ nc_ch_client_thread(void *arg)
                     /* endpoint was removed, start with the first one */
                     next_endpt_index = 0;
                 }
+            } else {
+                /* just get a random index */
+                next_endpt_index = rand() % client->ch_endpt_count;
             }
 
         } else {
@@ -3257,12 +3352,6 @@ nc_connect_ch_client_dispatch(const char *client_name,
 }
 
 #endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
-
-API int
-nc_server_endpt_count(void)
-{
-    return server_opts.endpt_count;
-}
 
 API time_t
 nc_session_get_start_time(const struct nc_session *session)
