@@ -1625,7 +1625,7 @@ nc_server_tls_get_ctn(uint32_t *id, char **fingerprint, NC_TLS_CTN_MAPTYPE *map_
         if (map_type && !(*map_type) && ctn->map_type) {
             *map_type = ctn->map_type;
         }
-        if (name && !(*name) && ctn->name && ctn->name) {
+        if (name && !(*name) && ctn->name) {
             *name = strdup(ctn->name);
         }
 
