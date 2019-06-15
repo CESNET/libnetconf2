@@ -630,8 +630,6 @@ nc_err_set_msg(struct nc_server_error *err, const char *error_message, const cha
     }
     if (lang) {
         err->message_lang = lydict_insert(server_opts.ctx, lang, 0);
-    } else {
-        lang = NULL;
     }
 
     return 0;
