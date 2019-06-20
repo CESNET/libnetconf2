@@ -336,7 +336,8 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, struct lyxml_elem **d
     struct timespec ts_act_timeout;
     struct nc_server_reply *reply;
 
-    assert(session && data);
+    assert(session);
+    assert(data);
     *data = NULL;
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {

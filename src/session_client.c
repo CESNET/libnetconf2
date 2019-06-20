@@ -964,7 +964,8 @@ nc_ctx_check_and_fill(struct nc_session *session)
     char *revision;
     struct schema_info *server_modules = NULL, *sm = NULL;
 
-    assert(session->opts.client.cpblts && session->ctx);
+    assert(session->opts.client.cpblts);
+    assert(session->ctx);
 
     /* store the original user's callback, we will be switching between local search, get-schema and user callback */
     old_clb = ly_ctx_get_module_imp_clb(session->ctx, &old_data);

@@ -100,7 +100,8 @@ nc_difftimespec(const struct timespec *ts1, const struct timespec *ts2)
 void
 nc_addtimespec(struct timespec *ts, uint32_t msec)
 {
-    assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
+    assert(ts->tv_nsec >= 0);
+    assert(ts->tv_nsec < 1000000000L);
 
     ts->tv_sec += msec / 1000;
     ts->tv_nsec += (msec % 1000) * 1000000L;
@@ -113,7 +114,8 @@ nc_addtimespec(struct timespec *ts, uint32_t msec)
         ts->tv_nsec += 1000000000L;
     }
 
-    assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
+    assert(ts->tv_nsec >= 0);
+    assert(ts->tv_nsec < 1000000000L);
 }
 
 int
