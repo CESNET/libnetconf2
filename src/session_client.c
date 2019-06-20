@@ -2060,7 +2060,7 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
 
     msgtype = get_msg(session, timeout, msgid, &xml);
 
-    if ((msgtype == NC_MSG_REPLY) || (msgtype == NC_MSG_REPLY_ERR_MSGID)) {
+    if (msgtype == NC_MSG_REPLY) {
         *reply = parse_reply(session->ctx, xml, rpc, parseroptions);
         lyxml_free(session->ctx, xml);
         if (!(*reply)) {
