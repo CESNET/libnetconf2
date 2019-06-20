@@ -41,7 +41,7 @@ static int
 setup_write(void **state)
 {
     (void) state; /* unused */
-    int fd;
+    int fd, pipes[2];
     struct wr *w;
 
     w = malloc(sizeof *w);
@@ -58,14 +58,16 @@ setup_write(void **state)
     lys_parse_fd(w->session->ctx, fd, LYS_IN_YIN);
     close(fd);
 
+    pipe(pipes);
+
     w->session->status = NC_STATUS_RUNNING;
     w->session->version = NC_VERSION_10;
     w->session->opts.client.msgid = 999;
     w->session->ti_type = NC_TI_FD;
     w->session->io_lock = malloc(sizeof *w->session->io_lock);
     pthread_mutex_init(w->session->io_lock, NULL);
-    w->session->ti.fd.in = STDIN_FILENO;
-    w->session->ti.fd.out = STDOUT_FILENO;
+    w->session->ti.fd.in = pipes[0];
+    w->session->ti.fd.out = pipes[1];
 
     /* get rpc to write */
     w->rpc = nc_rpc_lock(NC_DATASTORE_RUNNING);
@@ -82,7 +84,9 @@ teardown_write(void **state)
     struct wr *w = (struct wr *)*state;
 
     nc_rpc_free(w->rpc);
+    close(w->session->ti.fd.in);
     w->session->ti.fd.in = -1;
+    close(w->session->ti.fd.out);
     w->session->ti.fd.out = -1;
     nc_session_free(w->session, NULL);
     free(w);
