@@ -1223,37 +1223,48 @@ fail:
    concept for e.g. call home settings). For more details see nc_sock_connect().
  */
 static int
-_non_blocking_connect(int timeout, int* sock_pending, struct addrinfo *res, struct nc_keepalives *ka)
+_non_blocking_connect(int timeout, int *sock_pending, struct addrinfo *res, struct nc_keepalives *ka)
 {
-    int flags, ret=0;
+    int flags, ret, error;
     int sock = -1;
-    fd_set  wset;
+    fd_set wset;
     struct timeval ts;
-    int error = 0;
     socklen_t len = sizeof(int);
+    struct in_addr *addr;
+    char str[INET6_ADDRSTRLEN];
 
     if (sock_pending && *sock_pending != -1) {
         VRB("Trying to connect the pending socket=%d.", *sock_pending );
         sock = *sock_pending;
     } else {
         assert(res);
-        VRB("Trying to connect via %s.", (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
-        /* Connect to a server */
+        if (res->ai_family == AF_INET6) {
+            addr = (struct in_addr *) &((struct sockaddr_in6 *)res->ai_addr)->sin6_addr;
+        } else {
+            addr = &((struct sockaddr_in *)res->ai_addr)->sin_addr;
+        }
+        if (!inet_ntop(res->ai_family, addr, str, res->ai_addrlen)) {
+            WRN("inet_ntop() failed (%s).", strerror(errno));
+        } else {
+            VRB("Trying to connect via %s to %s.", (res->ai_family == AF_INET6) ? "IPv6" : "IPv4", str);
+        }
+
+        /* connect to a server */
         sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
         if (sock == -1) {
-            ERR("socket couldn't be created.", strerror(errno));
+            ERR("Socket could not be created (%s).", strerror(errno));
             return -1;
         }
         /* make the socket non-blocking */
         if (((flags = fcntl(sock, F_GETFL)) == -1) || (fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
-            ERR("Fcntl failed (%s).", strerror(errno));
+            ERR("fcntl() failed (%s).", strerror(errno));
             goto cleanup;
         }
         /* non-blocking connect! */
         if (connect(sock, res->ai_addr, res->ai_addrlen) < 0) {
             if (errno != EINPROGRESS) {
                 /* network connection failed, try another resource */
-                ERR("connect failed: (%s).", strerror(errno));
+                ERR("connect() failed (%s).", strerror(errno));
                 goto cleanup;
             }
         }
@@ -1265,12 +1276,13 @@ _non_blocking_connect(int timeout, int* sock_pending, struct addrinfo *res, stru
     FD_SET(sock, &wset);
 
     if ((ret = select(sock + 1, NULL, &wset, NULL, (timeout != -1) ? &ts : NULL)) < 0) {
-        ERR("select failed: (%s).", strerror(errno));
+        ERR("select() failed (%s).", strerror(errno));
         goto cleanup;
     }
 
-    if (ret == 0) {   //we had a timeout
-        VRB("timed out after %ds (%s).", timeout, strerror(errno));
+    if (ret == 0) {
+        /* there was a timeout */
+        VRB("Timed out after %ds (%s).", timeout, strerror(errno));
         if (sock_pending) {
             /* no sock-close, we'll try it again */
             *sock_pending = sock;
@@ -1281,13 +1293,14 @@ _non_blocking_connect(int timeout, int* sock_pending, struct addrinfo *res, stru
     }
 
     /* check the usability of the socket */
+    error = 0;
     if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
-        ERR("getsockopt failed: (%s).", strerror(errno));
+        ERR("getsockopt() failed (%s).", strerror(errno));
         goto cleanup;
     }
     if (error == ECONNREFUSED) {
         /* network connection failed, try another resource */
-        VRB("getsockopt error: (%s).", strerror(error));
+        VRB("getsockopt() error (%s).", strerror(error));
         errno = error;
         goto cleanup;
     }
