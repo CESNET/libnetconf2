@@ -256,23 +256,23 @@ struct nc_server_opts {
      *                modify CH clients - READ lock ch_client_lock + ch_client_lock */
     struct nc_ch_client {
         const char *name;
-        NC_TRANSPORT_IMPL ti;
         struct nc_ch_endpt {
             const char *name;
+            NC_TRANSPORT_IMPL ti;
             const char *address;
             uint16_t port;
             int sock_pending;
             struct nc_keepalives ka;
-        } *ch_endpts;
-        uint16_t ch_endpt_count;
-        union {
+            union {
 #ifdef NC_ENABLED_SSH
-            struct nc_server_ssh_opts *ssh;
+                struct nc_server_ssh_opts *ssh;
 #endif
 #ifdef NC_ENABLED_TLS
-            struct nc_server_tls_opts *tls;
+                struct nc_server_tls_opts *tls;
 #endif
-        } opts;
+            } opts;
+        } *ch_endpts;
+        uint16_t ch_endpt_count;
         NC_CH_CONN_TYPE conn_type;
         union {
             struct {
@@ -616,14 +616,16 @@ int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout
 struct nc_endpt *nc_server_endpt_lock_get(const char *name, NC_TRANSPORT_IMPL ti, uint16_t *idx);
 
 /**
- * @brief Lock CH client structures for reading and the specific client.
+ * @brief Lock CH client structures for reading and lock the specific client.
  *
  * @param[in] name Name of the CH client.
+ * @param[in] endpt_name Endpoint of the CH client.
  * @param[in] ti Expected transport.
- * @param[out] idx Index of the client. Optional.
- * @return CH client structure.
+ * @param[out] client_p Pointer to the CH client.
+ * @return CH endpoint structure.
  */
-struct nc_ch_client *nc_server_ch_client_lock(const char *name, NC_TRANSPORT_IMPL ti, uint16_t *idx);
+struct nc_ch_endpt *nc_server_ch_client_lock(const char *name, const char *endpt_name, NC_TRANSPORT_IMPL ti,
+        struct nc_ch_client **client_p);
 
 /**
  * @brief Unlock CH client strcutures and the specific client.
