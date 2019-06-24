@@ -33,6 +33,7 @@
 
 #include "libnetconf.h"
 #include "session_server.h"
+#include "session_server_ch.h"
 
 struct nc_server_opts server_opts = {
 #ifdef NC_ENABLED_SSH
@@ -618,6 +619,7 @@ nc_server_destroy(void)
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
     nc_server_del_endpt(NULL, 0);
+    nc_server_ch_del_client(NULL);
 #endif
 #ifdef NC_ENABLED_SSH
     if (server_opts.passwd_auth_data && server_opts.passwd_auth_data_free) {
