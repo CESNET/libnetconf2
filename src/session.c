@@ -1445,11 +1445,11 @@ tls_thread_id_func(CRYPTO_THREADID *tid)
 static void
 nc_tls_init(void)
 {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     SSL_load_error_strings();
     ERR_load_BIO_strings();
     SSL_library_init();
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     int i;
 
     tls_locks = malloc(CRYPTO_num_locks() * sizeof *tls_locks);
@@ -1473,6 +1473,7 @@ nc_tls_init(void)
 static void
 nc_tls_destroy(void)
 {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     FIPS_mode_set(0);
     CRYPTO_cleanup_all_ex_data();
     nc_thread_destroy();
@@ -1484,7 +1485,6 @@ nc_tls_destroy(void)
     SSL_COMP_free_compression_methods();
 #endif
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     int i;
 
     CRYPTO_THREADID_set_callback(NULL);
@@ -1507,13 +1507,13 @@ nc_tls_destroy(void)
 static void
 nc_ssh_tls_init(void)
 {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     SSL_load_error_strings();
     ERR_load_BIO_strings();
     SSL_library_init();
 
     nc_ssh_init();
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     CRYPTO_set_dynlock_create_callback(tls_dyn_create_func);
     CRYPTO_set_dynlock_lock_callback(tls_dyn_lock_func);
     CRYPTO_set_dynlock_destroy_callback(tls_dyn_destroy_func);
@@ -1523,6 +1523,7 @@ nc_ssh_tls_init(void)
 static void
 nc_ssh_tls_destroy(void)
 {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     ERR_free_strings();
 #if OPENSSL_VERSION_NUMBER < 0x10002000L // < 1.0.2
     sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
@@ -1532,7 +1533,6 @@ nc_ssh_tls_destroy(void)
 
     nc_ssh_destroy();
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     CRYPTO_set_dynlock_create_callback(NULL);
     CRYPTO_set_dynlock_lock_callback(NULL);
     CRYPTO_set_dynlock_destroy_callback(NULL);
