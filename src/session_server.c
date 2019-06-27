@@ -1812,7 +1812,7 @@ nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti)
         server_opts.endpts[server_opts.endpt_count - 1].opts.ssh->auth_methods =
             NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD | NC_SSH_AUTH_INTERACTIVE;
         server_opts.endpts[server_opts.endpt_count - 1].opts.ssh->auth_attempts = 3;
-        server_opts.endpts[server_opts.endpt_count - 1].opts.ssh->auth_timeout = 10;
+        server_opts.endpts[server_opts.endpt_count - 1].opts.ssh->auth_timeout = 30;
         break;
 #endif
 #ifdef NC_ENABLED_TLS
@@ -2558,7 +2558,7 @@ nc_server_ch_client_add_endpt(const char *client_name, const char *endpt_name, N
         }
         endpt->opts.ssh->auth_methods = NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD | NC_SSH_AUTH_INTERACTIVE;
         endpt->opts.ssh->auth_attempts = 3;
-        endpt->opts.ssh->auth_timeout = 10;
+        endpt->opts.ssh->auth_timeout = 30;
         break;
 #endif
 #ifdef NC_ENABLED_TLS

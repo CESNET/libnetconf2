@@ -649,7 +649,7 @@ int nc_server_ssh_endpt_get_auth_methods(const char *endpt_name);
 int nc_server_ssh_endpt_set_auth_attempts(const char *endpt_name, uint16_t auth_attempts);
 
 /**
- * @brief Set endpoint SSH authentication timeout. 10 seconds by default.
+ * @brief Set endpoint SSH authentication timeout. 30 seconds by default.
  *
  * @param[in] endpt_name Existing endpoint name.
  * @param[in] auth_timeout Number of seconds before an unauthenticated client is dropped.

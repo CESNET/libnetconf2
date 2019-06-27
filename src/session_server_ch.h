@@ -265,7 +265,7 @@ int nc_server_ssh_ch_client_endpt_get_auth_methods(const char *client_name, cons
 int nc_server_ssh_ch_client_endpt_set_auth_attempts(const char *client_name, const char *endpt_name, uint16_t auth_attempts);
 
 /**
- * @brief Set Call Home SSH authentication timeout. 10 seconds by default.
+ * @brief Set Call Home SSH authentication timeout. 30 seconds by default.
  *
  * @param[in] client_name Existing Call Home client name.
  * @param[in] endpt_name Existing endpoint name of the client.

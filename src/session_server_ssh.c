@@ -477,7 +477,7 @@ nc_server_ssh_endpt_set_auth_attempts(const char *endpt_name, uint16_t auth_atte
 }
 
 API int
-nc_server_ssh_set_ch_client_auth_attempts(const char *client_name, const char *endpt_name, uint16_t auth_attempts)
+nc_server_ssh_ch_client_endpt_set_auth_attempts(const char *client_name, const char *endpt_name, uint16_t auth_attempts)
 {
     int ret;
     struct nc_ch_client *client;
@@ -526,7 +526,7 @@ nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_timeo
 }
 
 API int
-nc_server_ssh_ch_client_set_auth_timeout(const char *client_name, const char *endpt_name, uint16_t auth_timeout)
+nc_server_ssh_ch_client_endpt_set_auth_timeout(const char *client_name, const char *endpt_name, uint16_t auth_timeout)
 {
     int ret;
     struct nc_ch_client *client;
