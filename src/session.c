@@ -1375,26 +1375,6 @@ nc_handshake_io(struct nc_session *session)
     return type;
 }
 
-#ifdef NC_ENABLED_SSH
-
-static void
-nc_ssh_init(void)
-{
-    ssh_threads_set_callbacks(ssh_threads_get_pthread());
-    ssh_init();
-}
-
-static void
-nc_ssh_destroy(void)
-{
-    FIPS_mode_set(0);
-    CONF_modules_unload(1);
-    nc_thread_destroy();
-    ssh_finalize();
-}
-
-#endif /* NC_ENABLED_SSH */
-
 #ifdef NC_ENABLED_TLS
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
