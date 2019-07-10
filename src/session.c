@@ -1375,7 +1375,7 @@ nc_handshake_io(struct nc_session *session)
     return type;
 }
 
-#ifdef NC_ENABLED_SSH
+#if defined(NC_ENABLED_SSH) && !defined(NC_ENABLED_TLS)
 
 static void
 nc_ssh_init(void)
@@ -1393,7 +1393,7 @@ nc_ssh_destroy(void)
     ssh_finalize();
 }
 
-#endif /* NC_ENABLED_SSH */
+#endif /* NC_ENABLED_SSH && !NC_ENABLED_TLS */
 
 #ifdef NC_ENABLED_TLS
 

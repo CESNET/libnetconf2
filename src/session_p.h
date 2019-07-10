@@ -39,14 +39,6 @@
 #   define NC_SSH_AUTH_COUNT 3
 
 /* ACCESS unlocked */
-struct nc_keepalives {
-    int enabled;
-    uint16_t idle_time;
-    uint16_t max_probes;
-    uint16_t probe_interval;
-};
-
-/* ACCESS unlocked */
 struct nc_client_ssh_opts {
     /* SSH authentication method preferences */
     struct {
@@ -129,6 +121,14 @@ struct nc_server_tls_opts {
 };
 
 #endif /* NC_ENABLED_TLS */
+
+/* ACCESS unlocked */
+struct nc_keepalives {
+    int enabled;
+    uint16_t idle_time;
+    uint16_t max_probes;
+    uint16_t probe_interval;
+};
 
 /* ACCESS unlocked */
 struct nc_server_unix_opts {

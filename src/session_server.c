@@ -790,45 +790,6 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
     return msgtype;
 }
 
-static int
-nc_accept_unix(struct nc_session *session, int sock)
-{
-    const struct passwd *pw;
-    struct ucred ucred;
-    char *username;
-    socklen_t len;
-
-    session->ti_type = NC_TI_UNIX;
-
-    len = sizeof(ucred);
-    if (getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &ucred, &len) < 0) {
-        ERR("Failed to get credentials from unix socket (%s).",
-            strerror(errno));
-        close(sock);
-        return -1;
-    }
-
-    pw = getpwuid(ucred.uid);
-    if (pw == NULL) {
-        ERR("Failed to find username for uid=%u (%s).\n", ucred.uid,
-            strerror(errno));
-        close(sock);
-        return -1;
-    }
-
-    username = strdup(pw->pw_name);
-    if (username == NULL) {
-        ERRMEM;
-        close(sock);
-        return -1;
-    }
-    session->username = lydict_insert_zc(server_opts.ctx, username);
-
-    session->ti.unixsock.sock = sock;
-
-    return 1;
-}
-
 static void
 nc_ps_queue_add_id(struct nc_pollsession *ps, uint8_t *id)
 {
@@ -1749,6 +1710,45 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
 }
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+
+static int
+nc_accept_unix(struct nc_session *session, int sock)
+{
+    const struct passwd *pw;
+    struct ucred ucred;
+    char *username;
+    socklen_t len;
+
+    session->ti_type = NC_TI_UNIX;
+
+    len = sizeof(ucred);
+    if (getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &ucred, &len) < 0) {
+        ERR("Failed to get credentials from unix socket (%s).",
+            strerror(errno));
+        close(sock);
+        return -1;
+    }
+
+    pw = getpwuid(ucred.uid);
+    if (pw == NULL) {
+        ERR("Failed to find username for uid=%u (%s).\n", ucred.uid,
+            strerror(errno));
+        close(sock);
+        return -1;
+    }
+
+    username = strdup(pw->pw_name);
+    if (username == NULL) {
+        ERRMEM;
+        close(sock);
+        return -1;
+    }
+    session->username = lydict_insert_zc(server_opts.ctx, username);
+
+    session->ti.unixsock.sock = sock;
+
+    return 1;
+}
 
 API int
 nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti)
