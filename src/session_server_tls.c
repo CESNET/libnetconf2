@@ -28,6 +28,10 @@
 #include "session_server_ch.h"
 #include "libnetconf.h"
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#define X509_STORE_CTX_get_by_subject X509_STORE_get_by_subject
+#endif
+
 struct nc_server_tls_opts tls_ch_opts;
 pthread_mutex_t tls_ch_opts_lock = PTHREAD_MUTEX_INITIALIZER;
 extern struct nc_server_opts server_opts;
@@ -564,7 +568,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         store_ctx = X509_STORE_CTX_new();
         obj = X509_OBJECT_new();
         X509_STORE_CTX_init(store_ctx, opts->crl_store, NULL, NULL);
-        rc = X509_STORE_get_by_subject(store_ctx, X509_LU_CRL, subject, obj);
+        rc = X509_STORE_CTX_get_by_subject(store_ctx, X509_LU_CRL, subject, obj);
         X509_STORE_CTX_free(store_ctx);
         crl = X509_OBJECT_get0_X509_CRL(obj);
         if (rc > 0 && crl) {
@@ -617,7 +621,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         store_ctx = X509_STORE_CTX_new();
         obj = X509_OBJECT_new();
         X509_STORE_CTX_init(store_ctx, opts->crl_store, NULL, NULL);
-        rc = X509_STORE_get_by_subject(store_ctx, X509_LU_CRL, issuer, obj);
+        rc = X509_STORE_CTX_get_by_subject(store_ctx, X509_LU_CRL, issuer, obj);
         X509_STORE_CTX_free(store_ctx);
         crl = X509_OBJECT_get0_X509_CRL(obj);
         if (rc > 0 && crl) {
@@ -777,7 +781,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
          * the current certificate in order to verify it's integrity */
         memset((char *)&obj, 0, sizeof(obj));
         X509_STORE_CTX_init(&store_ctx, opts->crl_store, NULL, NULL);
-        rc = X509_STORE_get_by_subject(&store_ctx, X509_LU_CRL, subject, &obj);
+        rc = X509_STORE_CTX_get_by_subject(&store_ctx, X509_LU_CRL, subject, &obj);
         X509_STORE_CTX_cleanup(&store_ctx);
         crl = obj.data.crl;
         if (rc > 0 && crl) {
@@ -829,7 +833,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
          * the current certificate in order to check for revocation */
         memset((char *)&obj, 0, sizeof(obj));
         X509_STORE_CTX_init(&store_ctx, opts->crl_store, NULL, NULL);
-        rc = X509_STORE_get_by_subject(&store_ctx, X509_LU_CRL, issuer, &obj);
+        rc = X509_STORE_CTX_get_by_subject(&store_ctx, X509_LU_CRL, issuer, &obj);
         X509_STORE_CTX_cleanup(&store_ctx);
         crl = obj.data.crl;
         if (rc > 0 && crl) {
@@ -1595,7 +1599,7 @@ nc_server_tls_get_ctn(uint32_t *id, char **fingerprint, NC_TLS_CTN_MAPTYPE *map_
         if (map_type && !(*map_type) && ctn->map_type) {
             *map_type = ctn->map_type;
         }
-        if (name && !(*name) && ctn->name && ctn->name) {
+        if (name && !(*name) && ctn->name) {
             *name = strdup(ctn->name);
         }
 
