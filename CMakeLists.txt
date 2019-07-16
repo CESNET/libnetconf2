@@ -4,6 +4,7 @@ include(GNUInstallDirs)
 include(CheckFunctionExists)
 include(CheckCSourceCompiles)
 include(CheckIncludeFile)
+cmake_policy(SET CMP0075 NEW)
 
 # include custom Modules
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMakeModules/")
