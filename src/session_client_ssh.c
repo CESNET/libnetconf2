@@ -1846,7 +1846,7 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
 
     session = _nc_connect_libssh(sess, ctx, &client_opts.ka, &ssh_ch_opts, timeout);
     if (!session) {
-        ssh_free(sess);
+        /* sess is freed */
         return NULL;
     }
 
