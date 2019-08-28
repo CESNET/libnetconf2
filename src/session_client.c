@@ -97,15 +97,25 @@ nc_client_context_free(void *ptr)
 #endif
     {
         /* for the main thread the same is done in nc_client_destroy() */
-        nc_client_set_schema_searchpath(NULL);
+        free(c->opts.schema_searchpath);
+
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
-        nc_client_ch_del_bind(NULL, 0, 0);
+        int i;
+        for (i = 0; i < c->opts.ch_bind_count; ++i) {
+            close(c->opts.ch_binds[i].sock);
+            free((char *)c->opts.ch_binds[i].address);
+        }
+        free(c->opts.ch_binds);
+        c->opts.ch_binds = NULL;
+        c->opts.ch_bind_count = 0;
 #endif
 #ifdef NC_ENABLED_SSH
-        nc_client_ssh_destroy_opts();
+        _nc_client_ssh_destroy_opts(&c->ssh_opts);
+        _nc_client_ssh_destroy_opts(&c->ssh_ch_opts);
 #endif
 #ifdef NC_ENABLED_TLS
-        nc_client_tls_destroy_opts();
+        _nc_client_tls_destroy_opts(&c->tls_opts);
+        _nc_client_tls_destroy_opts(&c->tls_ch_opts);
 #endif
         free(c);
     }
