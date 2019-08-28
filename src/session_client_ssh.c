@@ -152,7 +152,7 @@ nc_close_inout(FILE *inout, int echo, struct termios *oldterm)
     }
 }
 
-static void
+void
 _nc_client_ssh_destroy_opts(struct nc_client_ssh_opts *opts)
 {
     int i;

@@ -234,7 +234,7 @@ tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
 
 #endif
 
-static void
+void
 _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts)
 {
     free(opts->cert_path);

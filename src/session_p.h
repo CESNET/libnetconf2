@@ -694,6 +694,7 @@ int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
 void nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts);
 
 void nc_client_ssh_destroy_opts(void);
+void _nc_client_ssh_destroy_opts(struct nc_client_ssh_opts *opts);
 
 #endif /* NC_ENABLED_SSH */
 
@@ -714,6 +715,7 @@ int nc_accept_tls_session(struct nc_session *session, int sock, int timeout);
 void nc_server_tls_clear_opts(struct nc_server_tls_opts *opts);
 
 void nc_client_tls_destroy_opts(void);
+void _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts);
 
 #endif /* NC_ENABLED_TLS */
 
