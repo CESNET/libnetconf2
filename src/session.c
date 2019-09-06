@@ -1375,7 +1375,9 @@ nc_handshake_io(struct nc_session *session)
     return type;
 }
 
-#if defined(NC_ENABLED_SSH) && !defined(NC_ENABLED_TLS)
+#ifdef NC_ENABLED_SSH
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
 
 static void
 nc_ssh_init(void)
@@ -1393,7 +1395,9 @@ nc_ssh_destroy(void)
     ssh_finalize();
 }
 
-#endif /* NC_ENABLED_SSH && !NC_ENABLED_TLS */
+#endif
+
+#endif /* NC_ENABLED_SSH */
 
 #ifdef NC_ENABLED_TLS
 
@@ -1584,7 +1588,7 @@ nc_init(void)
 {
 #if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
     nc_ssh_tls_init();
-#elif defined(NC_ENABLED_SSH)
+#elif defined(NC_ENABLED_SSH) && OPENSSL_VERSION_NUMBER < 0x10100000L
     nc_ssh_init();
 #elif defined(NC_ENABLED_TLS)
     nc_tls_init();
@@ -1596,7 +1600,7 @@ nc_destroy(void)
 {
 #if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
     nc_ssh_tls_destroy();
-#elif defined(NC_ENABLED_SSH)
+#elif defined(NC_ENABLED_SSH) && OPENSSL_VERSION_NUMBER < 0x10100000L
     nc_ssh_destroy();
 #elif defined(NC_ENABLED_TLS)
     nc_tls_destroy();
