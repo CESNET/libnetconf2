@@ -46,7 +46,7 @@ base64der_key_to_tmp_file(const char *in, const char *key_str)
         return NULL;
     }
 
-    umode = umask(0600);
+    umode = umask(0177);
     fd = mkstemp(path);
     umask(umode);
     if (fd == -1) {
