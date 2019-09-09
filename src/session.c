@@ -1360,17 +1360,24 @@ nc_handshake_io(struct nc_session *session)
 static void
 nc_ssh_init(void)
 {
+#if (LIBSSH_VERSION_INT < SSH_VERSION_INT(0, 8, 0))
     ssh_threads_set_callbacks(ssh_threads_get_pthread());
     ssh_init();
+#endif
 }
 
 static void
 nc_ssh_destroy(void)
 {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     FIPS_mode_set(0);
     CONF_modules_unload(1);
     nc_thread_destroy();
+#endif
+
+#if (LIBSSH_VERSION_INT < SSH_VERSION_INT(0, 8, 0))
     ssh_finalize();
+#endif
 }
 
 #endif /* NC_ENABLED_SSH */
@@ -1511,9 +1518,11 @@ nc_ssh_tls_init(void)
     SSL_load_error_strings();
     ERR_load_BIO_strings();
     SSL_library_init();
+#endif
 
     nc_ssh_init();
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     CRYPTO_set_dynlock_create_callback(tls_dyn_create_func);
     CRYPTO_set_dynlock_lock_callback(tls_dyn_lock_func);
     CRYPTO_set_dynlock_destroy_callback(tls_dyn_destroy_func);
@@ -1525,14 +1534,16 @@ nc_ssh_tls_destroy(void)
 {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     ERR_free_strings();
-#if OPENSSL_VERSION_NUMBER < 0x10002000L // < 1.0.2
+# if OPENSSL_VERSION_NUMBER < 0x10002000L // < 1.0.2
     sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
-#elif OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
+# elif OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     SSL_COMP_free_compression_methods();
+# endif
 #endif
 
     nc_ssh_destroy();
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     CRYPTO_set_dynlock_create_callback(NULL);
     CRYPTO_set_dynlock_lock_callback(NULL);
     CRYPTO_set_dynlock_destroy_callback(NULL);
