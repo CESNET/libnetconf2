@@ -1241,6 +1241,7 @@ _non_blocking_connect(int timeout, int *sock_pending, struct addrinfo *res, stru
     struct timeval ts;
     socklen_t len = sizeof(int);
     struct in_addr *addr;
+    uint16_t port;
     char str[INET6_ADDRSTRLEN];
 
     if (sock_pending && *sock_pending != -1) {
@@ -1250,13 +1251,15 @@ _non_blocking_connect(int timeout, int *sock_pending, struct addrinfo *res, stru
         assert(res);
         if (res->ai_family == AF_INET6) {
             addr = (struct in_addr *) &((struct sockaddr_in6 *)res->ai_addr)->sin6_addr;
+            port = ntohs(((struct sockaddr_in6 *)res->ai_addr)->sin6_port);
         } else {
             addr = &((struct sockaddr_in *)res->ai_addr)->sin_addr;
+            port = ntohs(((struct sockaddr_in *)res->ai_addr)->sin_port);
         }
         if (!inet_ntop(res->ai_family, addr, str, res->ai_addrlen)) {
             WRN("inet_ntop() failed (%s).", strerror(errno));
         } else {
-            VRB("Trying to connect via %s to %s.", (res->ai_family == AF_INET6) ? "IPv6" : "IPv4", str);
+            VRB("Trying to connect via %s to %s:%u.", (res->ai_family == AF_INET6) ? "IPv6" : "IPv4", str, port);
         }
 
         /* connect to a server */
