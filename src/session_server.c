@@ -2700,7 +2700,7 @@ nc_server_ch_client_endpt_enable_keepalives(const char *client_name, const char 
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
-    return -1;
+    return 0;
 }
 
 API int
@@ -2737,7 +2737,7 @@ nc_server_ch_client_endpt_set_keepalives(const char *client_name, const char *en
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
-    return -1;
+    return 0;
 }
 
 API int
