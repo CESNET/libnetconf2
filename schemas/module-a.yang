@@ -1,0 +1,23 @@
+module module-a {
+
+    namespace "urn:jmu:params:xml:ns:yang:module-a";
+    prefix a;
+    
+    description "This is a simple user module";
+    
+    container top {
+    
+        leaf name {
+            type string;
+        }    
+    
+        leaf type {
+            type string;
+        }    
+        
+        leaf hidden {
+            type boolean;
+        }
+        
+    }
+}
