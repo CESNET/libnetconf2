@@ -323,9 +323,8 @@ struct nc_server_opts {
 
 /**
  * Timeout in msec for a thread to wait for its turn to work with a pollsession structure.
- *
  */
-#define NC_PS_QUEUE_TIMEOUT 1000
+#define NC_PS_QUEUE_TIMEOUT 5000
 
 /**
  * Time slept in msec if no endpoint was created for a running Call Home client.
