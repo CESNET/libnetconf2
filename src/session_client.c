@@ -384,12 +384,12 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
 
     do {
         msg = nc_recv_reply(clb_data->session, rpc, msgid, NC_READ_ACT_TIMEOUT * 1000, 0, &reply);
-    } while (msg == NC_MSG_NOTIF);
+    } while (msg == NC_MSG_NOTIF || msg == NC_MSG_REPLY_ERR_MSGID);
     nc_rpc_free(rpc);
     if (msg == NC_MSG_WOULDBLOCK) {
         ERR("Session %u: timeout for receiving reply to a <get-schema> expired.", clb_data->session->id);
         return NULL;
-    } else if (msg == NC_MSG_ERROR) {
+    } else if (msg == NC_MSG_ERROR || reply == NULL) {
         ERR("Session %u: failed to receive a reply to <get-schema>.", clb_data->session->id);
         return NULL;
     }
@@ -715,11 +715,11 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
 
     do {
         msg = nc_recv_reply(session, rpc, msgid, NC_READ_ACT_TIMEOUT * 1000, 0, &reply);
-    } while (msg == NC_MSG_NOTIF);
+    } while (msg == NC_MSG_NOTIF || msg == NC_MSG_REPLY_ERR_MSGID);
     if (msg == NC_MSG_WOULDBLOCK) {
         WRN("Session %u: timeout for receiving reply to a <get> yang-library data expired.", session->id);
         goto cleanup;
-    } else if (msg == NC_MSG_ERROR) {
+    } else if (msg == NC_MSG_ERROR || reply == NULL) {
         WRN("Session %u: failed to receive a reply to <get> of yang-library data.", session->id);
         goto cleanup;
     }
