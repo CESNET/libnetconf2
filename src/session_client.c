@@ -1098,18 +1098,10 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     session->ti.fd.in = fdin;
     session->ti.fd.out = fdout;
 
-    /* assign context (dicionary needed for handshake) */
-    if (!ctx) {
-        ctx = ly_ctx_new(NC_SCHEMAS_DIR, LY_CTX_NOYANGLIBRARY);
-        /* definitely should not happen, but be ready */
-        if (!ctx && !(ctx = ly_ctx_new(NULL, 0))) {
-            /* that's just it */
-            goto fail;
-        }
-    } else {
-        session->flags |= NC_SESSION_SHAREDCTX;
+    if (nc_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
+        goto fail;
     }
-    session->ctx = ctx;
+    ctx = session->ctx;
 
     /* NETCONF handshake */
     if (nc_handshake_io(session) != NC_MSG_HELLO) {
@@ -1182,18 +1174,10 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
     session->ti.unixsock.sock = sock;
     sock = -1; /* do not close sock in fail label anymore */
 
-    /* assign context (dictionary needed for handshake) */
-    if (!ctx) {
-        ctx = ly_ctx_new(NC_SCHEMAS_DIR, LY_CTX_NOYANGLIBRARY);
-        /* definitely should not happen, but be ready */
-        if (!ctx && !(ctx = ly_ctx_new(NULL, 0))) {
-            /* that's just it */
-            goto fail;
-        }
-    } else {
-        session->flags |= NC_SESSION_SHAREDCTX;
+    if (nc_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
+        goto fail;
     }
-    session->ctx = ctx;
+    ctx = session->ctx;
 
     session->path = lydict_insert(ctx, address, 0);
 
