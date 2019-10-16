@@ -75,7 +75,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
 {
     size_t readd = 0;
     ssize_t r = -1;
-    int fd;
+    int fd, interrupted;
     struct timespec ts_cur, ts_inact_timeout;
 
     assert(session);
@@ -92,6 +92,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
     nc_gettimespec_mono(&ts_inact_timeout);
     nc_addtimespec(&ts_inact_timeout, inact_timeout);
     do {
+        interrupted = 0;
         switch (session->ti_type) {
         case NC_TI_NONE:
             return 0;
@@ -102,8 +103,12 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
             /* read via standard file descriptor */
             r = read(fd, buf + readd, count - readd);
             if (r < 0) {
-                if ((errno == EAGAIN) || (errno == EINTR)) {
+                if (errno == EAGAIN) {
                     r = 0;
+                    break;
+                } else if (errno == EINTR) {
+                    r = 0;
+                    interrupted = 1;
                     break;
                 } else {
                     ERR("Session %u: reading from file descriptor (%d) failed (%s).",
@@ -190,7 +195,9 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
 
         if (r == 0) {
             /* nothing read */
-            usleep(NC_TIMEOUT_STEP);
+            if (!interrupted) {
+                usleep(NC_TIMEOUT_STEP);
+            }
             nc_gettimespec_mono(&ts_cur);
             if ((nc_difftimespec(&ts_cur, &ts_inact_timeout) < 1) || (nc_difftimespec(&ts_cur, ts_act_timeout) < 1)) {
                 if (nc_difftimespec(&ts_cur, &ts_inact_timeout) < 1) {
@@ -700,7 +707,7 @@ struct wclb_arg {
 static int
 nc_write(struct nc_session *session, const void *buf, size_t count)
 {
-    int c, fd;
+    int c, fd, interrupted;
     size_t written = 0;
 #ifdef NC_ENABLED_TLS
     unsigned long e;
@@ -721,6 +728,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
     DBG("Session %u: sending message:\n%.*s\n", session->id, count, buf);
 
     do {
+        interrupted = 0;
         switch (session->ti_type) {
         case NC_TI_FD:
         case NC_TI_UNIX:
@@ -728,6 +736,9 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
             c = write(fd, (char *)(buf + written), count - written);
             if (c < 0 && errno == EAGAIN) {
                 c = 0;
+            } else if (c < 0 && errno == EINTR) {
+                c = 0;
+                interrupted = 1;
             } else if (c < 0) {
                 ERR("Session %u: socket error (%s).", session->id, strerror(errno));
                 return -1;
@@ -787,7 +798,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
             return -1;
         }
 
-        if (c == 0) {
+        if (c == 0 && !interrupted) {
             /* we must wait */
             usleep(NC_TIMEOUT_STEP);
         }
