@@ -186,6 +186,28 @@ struct nc_rpc_subscribe {
     char free;
 };
 
+struct nc_rpc_getdata {
+    NC_RPC_TYPE type;        /**< NC_RPC_GETDATA */
+    char *datastore;         /**< target datastore identity */
+    char *filter;            /**< either XML subtree (starts with '<') or an XPath (starts with '/' or an alpha) */
+    char *config_filter;     /**< config filter ("true"/"false") */
+    char **origin_filter;    /**< origin filters */
+    int origin_filter_count; /**< origin filter count */
+    int negated_origin_filter; /**< whether origin filter is negated or not */
+    int max_depth;           /**< max depth of returned subtrees, 0 for unlimited */
+    int with_origin;         /**< whether to return origin of data */
+    NC_WD_MODE wd_mode;
+    char free;
+};
+
+struct nc_rpc_editdata {
+    NC_RPC_TYPE type;        /**< NC_RPC_EDITDATA */
+    char *datastore;         /**< target datastore identity */
+    NC_RPC_EDIT_DFLTOP default_op;
+    char *edit_cont;         /**< either URL (starts with aplha) or config (starts with '<') */
+    char free;
+};
+
 void nc_server_rpc_free(struct nc_server_rpc *rpc, struct ly_ctx *ctx);
 
 void nc_client_err_clean(struct nc_err *err, struct ly_ctx *ctx);
