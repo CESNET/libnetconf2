@@ -442,7 +442,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, struct lyxml_elem **d
     DBG("Session %u: received message:\n%s\n", session->id, msg);
 
     /* build XML tree */
-    *data = lyxml_parse_mem(session->ctx, msg, 0);
+    *data = lyxml_parse_mem(session->ctx, msg, LYXML_PARSE_NOMIXEDCONTENT);
     if (!*data) {
         goto malformed_msg;
     } else if (!(*data)->ns) {
