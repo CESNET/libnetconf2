@@ -215,15 +215,9 @@ if(ENABLE_SSH)
     endif()
     include_directories(${LIBSSH_INCLUDE_DIRS})
 
-    set(LIBSSH_SESSION_OPTION_CHECK_CODE
-        "#include <libssh/libssh.h>
-        int main(void) {
-            ssh_session sess;
-            ssh_options_set(sess, SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES, NULL);
-            return 0;
-        }"
-    )
-    check_c_source_compiles("${LIBSSH_SESSION_OPTION_CHECK_CODE}" HAVE_LIBSSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES)
+    if(LibSSH_VERSION VERSION_GREATER 0.8.2)
+        set(HAVE_LIBSSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES 1)
+    endif()
 endif()
 
 # dependencies - libval
