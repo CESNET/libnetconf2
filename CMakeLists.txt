@@ -81,19 +81,25 @@ if ($ENV{TRAVIS_BRANCH} STREQUAL "master")
     set(BRANCH "master")
     set(BUILD_TYPE "Package")
     set(CONFLICT_PACKAGE_NAME "libnetconf2-experimental")
-    set(COMPAT_PACKAGES "")
+    set(PACKAGE_PART_NAME "")
 else ()
     set(PACKAGE_NAME "libnetconf2-experimental")
     set(BRANCH "devel")
     set(BUILD_TYPE "debug")
     set(CONFLICT_PACKAGE_NAME "libnetconf2")
-    set(COMPAT_PACKAGES "-experimental")
+    set(PACKAGE_PART_NAME "-experimental")
 endif()
 # change version in config files
 configure_file(${PROJECT_SOURCE_DIR}/packages/libnetconf2.spec.in ${PROJECT_BINARY_DIR}/build-packages/libnetconf2.spec)
 configure_file(${PROJECT_SOURCE_DIR}/packages/libnetconf2.dsc.in ${PROJECT_BINARY_DIR}/build-packages/libnetconf2.dsc)
 configure_file(${PROJECT_SOURCE_DIR}/packages/debian.control.in ${PROJECT_BINARY_DIR}/build-packages/debian.control @ONLY)
 configure_file(${PROJECT_SOURCE_DIR}/packages/debian.rules.in ${PROJECT_BINARY_DIR}/build-packages/debian.rules)
+configure_file(${PROJECT_SOURCE_DIR}/packages/debian.libnetconf2-dev.install
+               ${PROJECT_BINARY_DIR}/build-packages/debian.libnetconf2${PACKAGE_PART_NAME}-dev.install COPYONLY)
+configure_file(${PROJECT_SOURCE_DIR}/packages/debian.libnetconf2.install
+               ${PROJECT_BINARY_DIR}/build-packages/debian.libnetconf2${PACKAGE_PART_NAME}.install COPYONLY)
+configure_file(${PROJECT_SOURCE_DIR}/packages/debian.python3-netconf2.install
+               ${PROJECT_BINARY_DIR}/build-packages/debian.python3-netconf2${PACKAGE_PART_NAME}.install COPYONLY)
 
 if (NOT DEB_BUILDER)
     message(WARNING "Missing tools (devscripts, debhelper package) for building deb package.\nYou won't be able to generate deb package from source code.\nCompiling libnetconf2 should still works fine.")
