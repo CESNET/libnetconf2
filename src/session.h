@@ -92,7 +92,8 @@ typedef enum {
  */
 typedef enum {
     NC_CH_FIRST_LISTED = 0, //default
-    NC_CH_LAST_CONNECTED
+    NC_CH_LAST_CONNECTED,
+    NC_CH_RANDOM
 } NC_CH_START_WITH;
 
 /**

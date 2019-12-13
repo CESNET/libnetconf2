@@ -1532,7 +1532,8 @@ open_netconf_channel(struct nc_session *session, int timeout)
 }
 
 static struct nc_session *
-_nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client_ssh_opts *opts, int timeout)
+_nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepalives *ka,
+        struct nc_client_ssh_opts *opts, int timeout)
 {
     char *host = NULL, *username = NULL, *ip_host;
     unsigned short port = 0;
@@ -1573,7 +1574,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_client
         ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
 
         /* create and connect socket */
-        sock = nc_sock_connect(host, port, -1, NULL, &ip_host);
+        sock = nc_sock_connect(host, port, -1, ka, NULL, &ip_host);
         if (sock == -1) {
             ERR("Unable to connect to %s:%u (%s).", host, port, strerror(errno));
             goto fail;
@@ -1732,7 +1733,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
 #endif
 
     /* create and assign communication socket */
-    sock = nc_sock_connect(host, port, -1, NULL, &ip_host);
+    sock = nc_sock_connect(host, port, -1, &client_opts.ka, NULL, &ip_host);
     if (sock == -1) {
         ERR("Unable to connect to %s:%u (%s).", host, port, strerror(errno));
         goto fail;
@@ -1779,7 +1780,7 @@ fail:
 API struct nc_session *
 nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
 {
-    return _nc_connect_libssh(ssh_session, ctx, &ssh_opts, NC_TRANSPORT_TIMEOUT);
+    return _nc_connect_libssh(ssh_session, ctx, &client_opts.ka, &ssh_opts, NC_TRANSPORT_TIMEOUT);
 }
 
 API struct nc_session *
@@ -1891,7 +1892,7 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
             "ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-rsa,rsa-sha2-512,rsa-sha2-256,ssh-dss");
 #endif
 
-    session = _nc_connect_libssh(sess, ctx, &ssh_ch_opts, timeout);
+    session = _nc_connect_libssh(sess, ctx, &client_opts.ka, &ssh_ch_opts, timeout);
     if (!session) {
         /* sess is freed */
         return NULL;

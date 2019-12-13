@@ -622,7 +622,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     }
 
     /* create and assign socket */
-    sock = nc_sock_connect(host, port, -1, NULL, &ip_host);
+    sock = nc_sock_connect(host, port, -1, &client_opts.ka, NULL, &ip_host);
     if (sock == -1) {
         ERR("Unable to connect to %s:%u (%s).", host, port, strerror(errno));
         goto fail;

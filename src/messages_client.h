@@ -59,7 +59,11 @@ typedef enum {
     NC_RPC_GETSCHEMA,   /**< \<get-schema\> RPC. */
 
     /* notifications */
-    NC_RPC_SUBSCRIBE    /**< \<create-subscription\> RPC. */
+    NC_RPC_SUBSCRIBE,   /**< \<create-subscription\> RPC. */
+
+    /* ietf-netconf-nmda */
+    NC_RPC_GETDATA,     /**< \<get-data\> RPC. */
+    NC_RPC_EDITDATA,    /**< \<edit-data\> RPC. */
 } NC_RPC_TYPE;
 
 /**
@@ -441,6 +445,49 @@ struct nc_rpc *nc_rpc_getschema(const char *identifier, const char *version, con
  */
 struct nc_rpc *nc_rpc_subscribe(const char *stream_name, const char *filter, const char *start_time,
                                 const char *stop_time, NC_PARAMTYPE paramtype);
+
+/**
+ * @brief Create NETCONF RPC \<get-data\>
+ *
+ * Note that functions to create any RPC object do not check validity of the provided
+ * parameters. It is checked later while sending the RPC via a specific NETCONF session
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * check. Created object can be sent via any NETCONF session which supports all the
+ * needed NETCONF capabilities for the RPC.
+ *
+ * @param[in] datastore Source datastore, foreign identity so a module name prefix is required.
+ * @param[in] filter Optional filter data, an XML subtree or XPath expression (with JSON prefixes).
+ * @param[in] config_filter Optional config filter, "true" for config-only data, "false" for state-only data.
+ * @param[in] origin_filter Optional origin filter array, selects only nodes of this or derived origin.
+ * @param[in] origin_filter_count Count of filters is \p origin_filter.
+ * @param[in] neg_origin_filter Whether origin filters are negated or not.
+ * @param[in] max_depth Maximum depth of returned subtrees, 0 for unlimited.
+ * @param[in] with_origin Whether return data origin.
+ * @param[in] wd_mode Optional with-defaults capability mode.
+ * @param[in] paramtype How to further manage data parameters.
+ * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
+ */
+struct nc_rpc *nc_rpc_getdata(const char *datastore, const char *filter, const char *config_filter, char **origin_filter,
+                              int origin_filter_count, int neg_origin_filter, uint16_t max_depth, int with_origin,
+                              NC_WD_MODE wd_mode, NC_PARAMTYPE paramtype);
+
+/**
+ * @brief Create NETCONF RPC \<get-data\>
+ *
+ * Note that functions to create any RPC object do not check validity of the provided
+ * parameters. It is checked later while sending the RPC via a specific NETCONF session
+ * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
+ * check. Created object can be sent via any NETCONF session which supports all the
+ * needed NETCONF capabilities for the RPC.
+ *
+ * @param[in] datastore Source datastore, foreign identity so a module name prefix is required.
+ * @param[in] default_op Optional default operation.
+ * @param[in] edit_content Config or URL where the config to perform is to be found.
+ * @param[in] paramtype How to further manage data parameters.
+ * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
+ */
+struct nc_rpc *nc_rpc_editdata(const char *datastore, NC_RPC_EDIT_DFLTOP default_op, const char *edit_content,
+                               NC_PARAMTYPE paramtype);
 
 /**
  * @brief Free the NETCONF RPC object.

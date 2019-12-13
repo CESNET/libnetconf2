@@ -123,6 +123,14 @@ struct nc_server_tls_opts {
 #endif /* NC_ENABLED_TLS */
 
 /* ACCESS unlocked */
+struct nc_keepalives {
+    int enabled;
+    uint16_t idle_time;
+    uint16_t max_probes;
+    uint16_t probe_interval;
+};
+
+/* ACCESS unlocked */
 struct nc_server_unix_opts {
     mode_t mode;
     uid_t uid;
@@ -134,6 +142,7 @@ struct nc_client_opts {
     char *schema_searchpath;
     ly_module_imp_clb schema_clb;
     void *schema_clb_data;
+    struct nc_keepalives ka;
 
     struct nc_bind {
         const char *address;
@@ -189,17 +198,17 @@ struct nc_server_opts {
     int (*user_verify_clb)(const struct nc_session *session);
 
     int (*server_cert_clb)(const char *name, void *user_data, char **cert_path, char **cert_data,char **privkey_path,
-                           char **privkey_data, int *privkey_data_rsa);
+            char **privkey_data, NC_SSH_KEY_TYPE *privkey_type);
     void *server_cert_data;
     void (*server_cert_data_free)(void *data);
 
     int (*server_cert_chain_clb)(const char *name, void *user_data, char ***cert_paths, int *cert_path_count,
-                                 char ***cert_data, int *cert_data_count);
+            char ***cert_data, int *cert_data_count);
     void *server_cert_chain_data;
     void (*server_cert_chain_data_free)(void *data);
 
     int (*trusted_cert_list_clb)(const char *name, void *user_data, char ***cert_paths, int *cert_path_count,
-                                 char ***cert_data, int *cert_data_count);
+            char ***cert_data, int *cert_data_count);
     void *trusted_cert_list_data;
     void (*trusted_cert_list_data_free)(void *data);
 #endif
@@ -215,7 +224,7 @@ struct nc_server_opts {
     uint16_t authkey_count;
     pthread_mutex_t authkey_lock;
 
-    int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path, char **privkey_data, int *privkey_data_rsa);
+    int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path, char **privkey_data, NC_SSH_KEY_TYPE *privkey_type);
     void *hostkey_data;
     void (*hostkey_data_free)(void *data);
 #endif
@@ -229,6 +238,7 @@ struct nc_server_opts {
     struct nc_endpt {
         const char *name;
         NC_TRANSPORT_IMPL ti;
+        struct nc_keepalives ka;
         union {
 #ifdef NC_ENABLED_SSH
             struct nc_server_ssh_opts *ssh;
@@ -246,32 +256,29 @@ struct nc_server_opts {
      *                modify CH clients - READ lock ch_client_lock + ch_client_lock */
     struct nc_ch_client {
         const char *name;
-        NC_TRANSPORT_IMPL ti;
         struct nc_ch_endpt {
             const char *name;
+            NC_TRANSPORT_IMPL ti;
             const char *address;
             uint16_t port;
             int sock_pending;
-        } *ch_endpts;
-        uint16_t ch_endpt_count;
-        union {
+            struct nc_keepalives ka;
+            union {
 #ifdef NC_ENABLED_SSH
-            struct nc_server_ssh_opts *ssh;
+                struct nc_server_ssh_opts *ssh;
 #endif
 #ifdef NC_ENABLED_TLS
-            struct nc_server_tls_opts *tls;
+                struct nc_server_tls_opts *tls;
 #endif
-        } opts;
+            } opts;
+        } *ch_endpts;
+        uint16_t ch_endpt_count;
         NC_CH_CONN_TYPE conn_type;
         union {
             struct {
-                uint32_t idle_timeout;
-                uint16_t ka_max_wait;
-                uint8_t ka_max_attempts;
-            } persist;
-            struct {
+                uint16_t period;
+                time_t anchor_time;
                 uint16_t idle_timeout;
-                uint16_t reconnect_timeout;
             } period;
         } conn;
         NC_CH_START_WITH start_with;
@@ -316,9 +323,8 @@ struct nc_server_opts {
 
 /**
  * Timeout in msec for a thread to wait for its turn to work with a pollsession structure.
- *
  */
-#define NC_PS_QUEUE_TIMEOUT 1000
+#define NC_PS_QUEUE_TIMEOUT 5000
 
 /**
  * Time slept in msec if no endpoint was created for a running Call Home client.
@@ -409,7 +415,7 @@ struct nc_session {
     /* other */
     struct ly_ctx *ctx;            /**< libyang context of the session */
     void *data;                    /**< arbitrary user data */
-    uint8_t flags;                 /**< various flags of the session - TODO combine with status and/or side */
+    uint8_t flags;                 /**< various flags of the session */
 #define NC_SESSION_SHAREDCTX 0x01
 #define NC_SESSION_CALLHOME 0x02
 
@@ -505,7 +511,9 @@ int32_t nc_difftimespec(const struct timespec *ts1, const struct timespec *ts2);
 
 void nc_addtimespec(struct timespec *ts, uint32_t msec);
 
-int nc_sock_enable_keepalive(int sock);
+const char *nc_keytype2str(NC_SSH_KEY_TYPE type);
+
+int nc_sock_enable_keepalive(int sock, struct nc_keepalives *ka);
 
 struct nc_session *nc_new_session(NC_SIDE side, int shared_ti);
 
@@ -546,11 +554,12 @@ NC_MSG_TYPE nc_handshake_io(struct nc_session *session);
  * @param[in] host Hostname to connect to.
  * @param[in] port Port to connect on.
  * @param[in] timeout for blocking the connect+select call (-1 for infinite).
+ * @param[in] ka Keepalives parameters.
  * @param[in,out] sock_pending for exchanging the pending socket, if the blocking timeout was != -1
  * @param[out] ip_host Optional parameter with string IP address of the connected host.
  * @return Connected socket or -1 on error.
  */
-int nc_sock_connect(const char *host, uint16_t port, int timeout, int* sock_pending, char **ip_host);
+int nc_sock_connect(const char *host, uint16_t port, int timeout, struct nc_keepalives *ka, int *sock_pending, char **ip_host);
 
 /**
  * @brief Accept a new socket connection.
@@ -568,9 +577,10 @@ int nc_sock_accept(int sock, int timeout, char **peer_host, uint16_t *peer_port)
  *
  * @param[in] address IP address to listen on.
  * @param[in] port Port to listen on.
+ * @param[in] ka Keepalives parameters.
  * @return Listening socket, -1 on error.
  */
-int nc_sock_listen_inet(const char *address, uint16_t port);
+int nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives *ka);
 
 /**
  * @brief Create a listening socket (AF_UNIX).
@@ -605,14 +615,16 @@ int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout
 struct nc_endpt *nc_server_endpt_lock_get(const char *name, NC_TRANSPORT_IMPL ti, uint16_t *idx);
 
 /**
- * @brief Lock CH client structures for reading and the specific client.
+ * @brief Lock CH client structures for reading and lock the specific client.
  *
  * @param[in] name Name of the CH client.
+ * @param[in] endpt_name Endpoint of the CH client.
  * @param[in] ti Expected transport.
- * @param[out] idx Index of the client. Optional.
- * @return CH client structure.
+ * @param[out] client_p Pointer to the CH client.
+ * @return CH endpoint structure.
  */
-struct nc_ch_client *nc_server_ch_client_lock(const char *name, NC_TRANSPORT_IMPL ti, uint16_t *idx);
+struct nc_ch_endpt *nc_server_ch_client_lock(const char *name, const char *endpt_name, NC_TRANSPORT_IMPL ti,
+        struct nc_ch_client **client_p);
 
 /**
  * @brief Unlock CH client strcutures and the specific client.

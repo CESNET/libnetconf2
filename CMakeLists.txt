@@ -4,6 +4,9 @@ include(GNUInstallDirs)
 include(CheckFunctionExists)
 include(CheckCSourceCompiles)
 include(CheckIncludeFile)
+if(POLICY CMP0075)
+    cmake_policy(SET CMP0075 NEW)
+endif()
 
 # include custom Modules
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMakeModules/")
@@ -31,12 +34,23 @@ set(CMAKE_C_FLAGS_RELEASE "-O2 -DNDEBUG")
 set(CMAKE_C_FLAGS_PACKAGE "-g -O2 -DNDEBUG")
 set(CMAKE_C_FLAGS_DEBUG   "-g -O0")
 
-# set version
-set(LIBNETCONF2_MAJOR_VERSION 0)
-set(LIBNETCONF2_MINOR_VERSION 12)
-set(LIBNETCONF2_MICRO_VERSION 64)
+# Version of the project
+# Generic version of not only the library. Major version is reserved for really big changes of the project,
+# minor version changes with added functionality (new tool, functionality of the tool or library, ...) and
+# micro version is changed with a set of small changes or bugfixes anywhere in the project.
+set(LIBNETCONF2_MAJOR_VERSION 1)
+set(LIBNETCONF2_MINOR_VERSION 1)
+set(LIBNETCONF2_MICRO_VERSION 3)
 set(LIBNETCONF2_VERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION}.${LIBNETCONF2_MICRO_VERSION})
-set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION})
+
+# Version of the library
+# Major version is changed with every backward non-compatible API/ABI change in libyang, minor version changes
+# with backward compatible change and micro version is connected with any internal change of the library.
+set(LIBNETCONF2_MAJOR_SOVERSION 1)
+set(LIBNETCONF2_MINOR_SOVERSION 1)
+set(LIBNETCONF2_MICRO_SOVERSION 3)
+set(LIBNETCONF2_SOVERSION_FULL ${LIBNETCONF2_MAJOR_SOVERSION}.${LIBNETCONF2_MINOR_SOVERSION}.${LIBNETCONF2_MICRO_SOVERSION})
+set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_SOVERSION})
 
 # build options
 option(ENABLE_SSH "Enable NETCONF over SSH support (via libssh)" ON)
@@ -113,7 +127,7 @@ else ()
 endif()
 
 if (NOT RPM_BUILDER)
-    message(WARNING "Missing tools (rpm package) for building rpm package. \nYou won't be able to generate rpm package from source code.\nCompiling libnetconf2 should still works fine.")
+    message(WARNING "Missing tools (rpm package) for building rpm package. \nYou won't be able to generate rpm package from source code.\nCompiling libnetconf2 should still work fine.")
 else ()
     # target for local build rpm package
     string(REPLACE ${PROJECT_SOURCE_DIR} "." EXCLUDE_BUILD_DIR ${PROJECT_BINARY_DIR})
@@ -164,7 +178,7 @@ set(headers
 
 # libnetconf2 target
 add_library(netconf2 SHARED ${libsrc})
-set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_VERSION} SOVERSION ${LIBNETCONF2_SOVERSION})
+set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_VERSION} SOVERSION ${LIBNETCONF2_SOVERSION_FULL})
 
 if((CMAKE_BUILD_TYPE STREQUAL debug) OR (CMAKE_BUILD_TYPE STREQUAL Package))
     option(ENABLE_BUILD_TESTS "Build tests" ON)
@@ -207,16 +221,9 @@ if(ENABLE_SSH)
     endif()
     include_directories(${LIBSSH_INCLUDE_DIRS})
 
-    set(LIBSSH_SESSION_OPTION_CHECK_CODE
-        "#include <libssh/libssh.h>
-        int main(void) {
-            ssh_session sess;
-            ssh_options_set(sess, SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES, NULL);
-            return 0;
-        }"
-    )
-
-    check_c_source_compiles("${LIBSSH_SESSION_OPTION_CHECK_CODE}" HAVE_LIBSSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES)
+    if(LibSSH_VERSION VERSION_GREATER 0.8.2)
+        set(HAVE_LIBSSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES 1)
+    endif()
 endif()
 
 # dependencies - libval
