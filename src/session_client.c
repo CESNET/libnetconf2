@@ -1326,7 +1326,7 @@ nc_sock_connect(const char *host, uint16_t port, int timeout, int *sock_pending,
         i = getaddrinfo(host, port_s, &hints, &res_list);
         if (i != 0) {
             ERR("Unable to translate the host address (%s).", gai_strerror(i));
-            return -1;
+            goto error;
         }
 
         for (res = res_list; res != NULL; res = res->ai_next) {
@@ -1340,16 +1340,14 @@ nc_sock_connect(const char *host, uint16_t port, int timeout, int *sock_pending,
             opt = 1;
             if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof opt) == -1) {
                 ERR("Could not set TCP_NODELAY socket option (%s).", strerror(errno));
-                close(sock);
-                return -1;
+                goto error;
             }
 
             if (ip_host && ((res->ai_family == AF_INET6) || (res->ai_family == AF_INET))) {
                 buf = malloc(INET6_ADDRSTRLEN);
                 if (!buf) {
                     ERRMEM;
-                    close(sock);
-                    return -1;
+                    goto error;
                 }
                 if (res->ai_family == AF_INET) {
                     addr = &((struct sockaddr_in *)res->ai_addr)->sin_addr;
@@ -1359,8 +1357,7 @@ nc_sock_connect(const char *host, uint16_t port, int timeout, int *sock_pending,
                 if (!inet_ntop(res->ai_family, addr, buf, INET6_ADDRSTRLEN)) {
                     ERR("Converting host to IP address failed (%s).", strerror(errno));
                     free(buf);
-                    close(sock);
-                    return -1;
+                    goto error;
                 }
 
                 *ip_host = buf;
@@ -1376,6 +1373,15 @@ nc_sock_connect(const char *host, uint16_t port, int timeout, int *sock_pending,
     }
 
     return sock;
+
+error:
+    if (sock != -1) {
+        close(sock);
+    }
+    if (sock_pending) {
+        *sock_pending = -1;
+    }
+    return -1;
 }
 
 static NC_MSG_TYPE
