@@ -33,6 +33,16 @@ another basic building block for the [**Netopeer2** toolset](https://github.com/
 For a reference implementation of NETCONF client and server, check the
 **Netopeer2** project.
 
+## Branches
+
+The project uses 2 main branches `master` and `devel`. Other branches should not be cloned. In `master` there are files of the
+last official *release*. Any latest improvements and changes, which were tested at least briefly are found in `devel`. On every
+new *release*, `devel` is merged into `master`.
+
+This means that when only stable official releases are to be used, either `master` can be used or specific *releases* downloaded.
+If all the latest bugfixes should be applied, `devel` branch is the  one to be used. Note that whenever **a new issue is created**
+and it occurs on the `master` branch, the **first response will likely be** to use `devel` before any further provided support.
+
 ## libnetconf vs libnetconf2
 
 **libnetconf2** is being developed with experiences gained from the development
@@ -45,7 +55,7 @@ of them is more suitable for your needs.
 To represent the schema and data trees, **libnetconf** uses libxml2, which is
 intended for different purposes - schema and data trees connected with YANG
 have specific needs and restrictions in comparison to more generic XML.
-Therefore, in **libnetconf2**, we have completely replaced libxml2 by 
+Therefore, in **libnetconf2**, we have completely replaced libxml2 by
 [libyang](https://github.com/CESNET/libyang). It is much more efficient in work
 with YANG modeled data (which is the case of NETCONF messages) and this advantage
 then applies also to **libnetconf2**. The library connects data with the YANG
