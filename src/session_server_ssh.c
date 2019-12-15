@@ -19,10 +19,14 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <pwd.h>
+#ifndef __APPLE__
 #include <shadow.h>
 #include <crypt.h>
+#endif
 #include <errno.h>
 #include <time.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "config.h"
 #include "session_server.h"
@@ -660,6 +664,7 @@ nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts)
 static char *
 auth_password_get_pwd_hash(const char *username)
 {
+#ifndef __APPLE__
     struct passwd *pwd, pwd_buf;
     struct spwd *spwd, spwd_buf;
     char *pass_hash = NULL, buf[256];
@@ -698,6 +703,9 @@ auth_password_get_pwd_hash(const char *username)
     }
 
     return strdup(pass_hash);
+#else
+    return strdup("");
+#endif
 }
 
 static int

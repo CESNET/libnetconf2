@@ -1720,11 +1720,11 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
 static int
 nc_accept_unix(struct nc_session *session, int sock)
 {
+#ifdef SO_PEERCRED
     const struct passwd *pw;
     struct ucred ucred;
     char *username;
     socklen_t len;
-
     session->ti_type = NC_TI_UNIX;
 
     len = sizeof(ucred);
@@ -1754,6 +1754,9 @@ nc_accept_unix(struct nc_session *session, int sock)
     session->ti.unixsock.sock = sock;
 
     return 1;
+#else
+    return -1;
+#endif
 }
 
 API int

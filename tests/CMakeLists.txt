@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 3.13)
 
 # list of all the tests in each directory
 set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_time test_client_thread)
@@ -7,9 +7,9 @@ set(client_tests test_client test_client_messages)
 # add -Wl,--wrap flags
 set(test test_client_ssh)
 set(${test}_mock_funcs connect ssh_connect ssh_userauth_none ssh_userauth_kbdint ssh_is_connected
-                       ssh_channel_open_session ssh_channel_request_subsystem ssh_channel_is_close ssh_channel_write
-                       ssh_channel_poll_timeout ssh_userauth_password nc_handshake_io nc_ctx_check_and_fill
-                       ssh_userauth_try_publickey ssh_userauth_publickey)
+    ssh_channel_open_session ssh_channel_request_subsystem ssh_channel_is_close ssh_channel_write
+    ssh_channel_poll_timeout ssh_userauth_password nc_handshake_io nc_ctx_check_and_fill
+    ssh_userauth_try_publickey ssh_userauth_publickey)
 set(${test}_wrap_link_flags "-Wl")
 foreach(mock_func IN LISTS ${test}_mock_funcs)
     set(${test}_wrap_link_flags "${${test}_wrap_link_flags},--wrap=${mock_func}")
@@ -23,13 +23,13 @@ foreach(mock_func IN LISTS ${test}_mock_funcs)
 endforeach()
 
 #append tests depending on SSH/TLS
-if (ENABLE_SSH OR ENABLE_TLS)
+if(ENABLE_SSH OR ENABLE_TLS)
     list(APPEND tests test_server_thread)
-    if (ENABLE_SSH)
+    if(ENABLE_SSH)
         list(APPEND client_tests test_client_ssh)
     endif()
 
-    if (ENABLE_TLS)
+    if(ENABLE_TLS)
         list(APPEND client_tests test_client_tls)
     endif()
 endif()
@@ -53,19 +53,19 @@ foreach(test_name IN LISTS client_tests)
     add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
 endforeach()
 
-if (ENABLE_VALGRIND_TESTS)
+if(ENABLE_VALGRIND_TESTS)
     find_program(valgrind_FOUND valgrind)
-    if (valgrind_FOUND)
-        foreach (test_name IN LISTS tests)
+    if(valgrind_FOUND)
+        foreach(test_name IN LISTS tests)
             add_test(${test_name}_valgrind valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1
-                                           --suppressions=${PROJECT_SOURCE_DIR}/tests/ld.supp ${CMAKE_BINARY_DIR}/tests/${test_name})
+                --suppressions=${PROJECT_SOURCE_DIR}/tests/ld.supp ${CMAKE_BINARY_DIR}/tests/${test_name})
         endforeach()
 
-        foreach (test_name IN LISTS client_tests)
+        foreach(test_name IN LISTS client_tests)
             add_test(${test_name}_valgrind valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1
-                                            --suppressions=${PROJECT_SOURCE_DIR}/tests/ld.supp ${CMAKE_BINARY_DIR}/tests/${test_name})
+                --suppressions=${PROJECT_SOURCE_DIR}/tests/ld.supp ${CMAKE_BINARY_DIR}/tests/${test_name})
         endforeach()
-    else (valgrind_FOUND)
+    else()
         Message("-- valgrind executable not found! Disabling memory leaks tests")
     endif()
 endif()
