@@ -813,8 +813,9 @@ static int
 nc_write_starttag_and_msg(struct nc_session *session, const void *buf, size_t count)
 {
     int ret = 0, c;
-    char chunksize[20];
+    char chunksize[24];
 
+    // warning: ‘%zu’ directive writing between 4 and 20 bytes into a region of size 18 [-Wformat-overflow=]
     if (session->version == NC_VERSION_11) {
         sprintf(chunksize, "\n#%zu\n", count);
         ret = nc_write(session, chunksize, strlen(chunksize));

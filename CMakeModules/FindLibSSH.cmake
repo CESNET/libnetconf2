@@ -85,7 +85,7 @@ else()
     )
     message(STATUS "LIBSSH_LIBRARY_DIR: ${LIBSSH_LIBRARY_DIR}")
 
-    if(LibSSH_FIND_VERSION)
+    if(LIBSSH_FIND_VERSION)
       file(STRINGS ${LIBSSH_INCLUDE_DIR}/libssh/libssh.h LIBSSH_VERSION_MAJOR
         REGEX "#define[ ]+LIBSSH_VERSION_MAJOR[ ]+[0-9]+")
       # Older versions of libssh like libssh-0.2 have LIBSSH_VERSION but not LIBSSH_VERSION_MAJOR
@@ -98,10 +98,10 @@ else()
           REGEX "#define[ ]+LIBSSH_VERSION_MICRO[ ]+[0-9]+")
         string(REGEX MATCH "[0-9]+" LIBSSH_VERSION_PATCH ${LIBSSH_VERSION_PATCH})
 
-        set(LibSSH_VERSION ${LIBSSH_VERSION_MAJOR}.${LIBSSH_VERSION_MINOR}.${LIBSSH_VERSION_PATCH})
+        set(LIBSSH_VERSION ${LIBSSH_VERSION_MAJOR}.${LIBSSH_VERSION_MINOR}.${LIBSSH_VERSION_PATCH})
 
         include(FindPackageVersionCheck)
-        find_package_version_check(LibSSH DEFAULT_MSG)
+        find_package_version_check(LIBSSH DEFAULT_MSG)
       else()
         message(STATUS "LIBSSH_VERSION_MAJOR not found in ${LIBSSH_INCLUDE_DIR}/libssh/libssh.h, assuming libssh is too old")
         set(LIBSSH_FOUND FALSE)
