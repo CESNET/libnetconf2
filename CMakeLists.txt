@@ -11,6 +11,18 @@ include(CheckFunctionExists)
 include(CheckCSourceCompiles)
 include(CheckIncludeFile)
 
+include(FetchContent)
+if(CMAKE_VERSION VERSION_LESS "3.14")
+    function(fetchcontent_makeavailable name)
+        fetchcontent_getproperties(${name})
+        if(NOT ${name}_POPULATED)
+            fetchcontent_populate(${name})
+            add_subdirectory(${${name}_SOURCE_DIR} ${${name}_BINARY_DIR})
+            include_directories(${${name}_SOURCE_DIR}/include)
+        endif()
+    endfunction()
+endif()
+
 # include custom Modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMakeModules/")
 
@@ -195,7 +207,7 @@ endif()
 # dependencies - pthread
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)
-target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(netconf2 PUBLIC ${CMAKE_THREAD_LIBS_INIT})
 
 # check availability for some pthread functions
 #unused? set(CMAKE_REQUIRED_LIBRARIES pthread)
@@ -235,7 +247,15 @@ if(ENABLE_DNSSEC)
 endif()
 
 # dependencies - libyang
-find_package(LibYANG REQUIRED)
+find_package(LibYANG QUIET)
+if(NOT LIBYANG_FOUND)
+    fetchcontent_declare(
+        libyang
+        GIT_REPOSITORY https://github.com/CESNET/libyang.git
+        GIT_TAG        v1.0.109
+    )
+    fetchcontent_makeavailable(libyang)
+endif()
 target_link_libraries(netconf2 PUBLIC ${LIBYANG_LIBRARIES})
 target_include_directories(netconf2 PUBLIC ${LIBYANG_INCLUDE_DIR})
 
