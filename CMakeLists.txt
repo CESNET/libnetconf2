@@ -220,10 +220,10 @@ check_function_exists(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETK
 if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
     find_package(OpenSSL REQUIRED)
     if(ENABLE_TLS)
-        message(STATUS "OPENSSL found, requiered for TLS")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_TLS") # NOTE: for tests only! CK
+        message(STATUS "OPENSSL found, required for TLS")
         target_compile_definitions(netconf2 PUBLIC NC_ENABLED_TLS)
     endif()
+
     #TODO target_link_libraries(netconf2 PUBLIC OpenSSL::SSL OpenSSL::Crypto)
     set(OPENSSL_LIBRARIES ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
     target_link_libraries(netconf2 PUBLIC ${OPENSSL_LIBRARIES})
@@ -234,12 +234,15 @@ endif()
 if(ENABLE_SSH AND OPENSSL_FOUND)
     option(LIBSSH_FIND_VERSION "check version too" ON)
     find_package(LibSSH 0.8.2 REQUIRED)
-    target_compile_definitions(netconf2 PUBLIC NC_ENABLED_SSH)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH") # NOTE: for tests only! CK
-    target_link_libraries(netconf2 PUBLIC ${LIBSSH_LIBRARY})
-    list(APPEND CMAKE_REQUIRED_LIBRARIES "ssh;crypt")
-    target_include_directories(netconf2 PUBLIC ${LIBSSH_INCLUDE_DIR})
+    find_library(LIBCRYPT crypt)
+    if(LIBCRYPT-NOTFOUND)
+        message(WARNING "LIBCRYPT not found, required for SSH")
+    endif()
 
+    target_compile_definitions(netconf2 PUBLIC NC_ENABLED_SSH)
+    target_link_libraries(netconf2 PUBLIC ${LIBCRYPT} ${LIBSSH_LIBRARY})
+    list(APPEND CMAKE_REQUIRED_LIBRARIES "ssh;crypt")   #TODO why? CK
+    target_include_directories(netconf2 PUBLIC ${LIBSSH_INCLUDE_DIR})
     if(LIBSSH_VERSION VERSION_GREATER 0.8.2)
         set(HAVE_LIBSSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES 1)
     endif()
