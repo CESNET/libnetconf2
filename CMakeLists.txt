@@ -11,6 +11,18 @@ include(CheckFunctionExists)
 include(CheckCSourceCompiles)
 include(CheckIncludeFile)
 
+include(FetchContent)
+if(CMAKE_VERSION VERSION_LESS "3.14")
+    function(fetchcontent_makeavailable name)
+        fetchcontent_getproperties(${name})
+        if(NOT ${name}_POPULATED)
+            fetchcontent_populate(${name})
+            add_subdirectory(${${name}_SOURCE_DIR} ${${name}_BINARY_DIR})
+            include_directories(${${name}_SOURCE_DIR}/include)
+        endif()
+    endfunction()
+endif()
+
 # include custom Modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMakeModules/")
 
@@ -148,20 +160,21 @@ set(libsrc
     src/time.c)
 
 if(ENABLE_SSH)
-    set(libsrc ${libsrc}
+    list(APPEND libsrc
         src/session_client_ssh.c
         src/session_server_ssh.c)
     set(SSH_MACRO "#ifndef NC_ENABLED_SSH\n#define NC_ENABLED_SSH\n#endif")
 endif()
 
 if(ENABLE_TLS)
-    set(libsrc ${libsrc}
+    list(APPEND libsrc
         src/session_client_tls.c
         src/session_server_tls.c)
     set(TLS_MACRO "#ifndef NC_ENABLED_TLS\n#define NC_ENABLED_TLS\n#endif")
 endif()
 
 set(headers
+    ${PROJECT_BINARY_DIR}/src/config.h
     src/log.h
     src/netconf.h
     src/session.h
@@ -174,7 +187,7 @@ set(headers
 
 # netconf2 target
 add_library(netconf2 SHARED ${libsrc} ${headers})
-add_library(netconf2::netconf2 ALIAS netconf2)
+add_library(libnetconf2::netconf2 ALIAS netconf2)
 
 include_directories(${PROJECT_BINARY_DIR}/src)  # for config.h
 target_include_directories(netconf2 PUBLIC
@@ -195,10 +208,10 @@ endif()
 # dependencies - pthread
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)
-target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(netconf2 PUBLIC ${CMAKE_THREAD_LIBS_INIT})
 
 # check availability for some pthread functions
-#unused? set(CMAKE_REQUIRED_LIBRARIES pthread)
+set(CMAKE_REQUIRED_LIBRARIES pthread)
 check_include_file(stdatomic.h HAVE_STDATOMIC)
 check_function_exists(pthread_mutex_timedlock HAVE_PTHREAD_MUTEX_TIMEDLOCK)
 check_function_exists(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
@@ -207,23 +220,32 @@ check_function_exists(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETK
 if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
     find_package(OpenSSL REQUIRED)
     if(ENABLE_TLS)
+        message(STATUS "OPENSSL found, required for TLS")
         target_compile_definitions(netconf2 PUBLIC NC_ENABLED_TLS)
     endif()
-    target_link_libraries(netconf2 PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+
+    #TODO target_link_libraries(netconf2 PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+    set(OPENSSL_LIBRARIES ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
+    target_link_libraries(netconf2 PUBLIC ${OPENSSL_LIBRARIES})
     target_include_directories(netconf2 PUBLIC ${OPENSSL_INCLUDE_DIR})
 endif()
 
 # dependencies - libssh
-if(ENABLE_SSH)
+if(ENABLE_SSH AND OPENSSL_FOUND)
+    option(LIBSSH_FIND_VERSION "check version too" ON)
     find_package(LibSSH 0.8.2 REQUIRED)
-    target_compile_definitions(netconf2 PUBLIC NC_ENABLED_SSH)
-    target_link_libraries(netconf2 PUBLIC ${LIBSSH_LIBRARY})
-    #unused? list(APPEND CMAKE_REQUIRED_LIBRARIES "ssh;crypt")
-    target_include_directories(netconf2 PUBLIC ${LIBSSH_INCLUDE_DIR})
+    find_library(LIBCRYPT crypt)
+    if(LIBCRYPT-NOTFOUND)
+        message(WARNING "LIBCRYPT not found, required for SSH")
+    endif()
 
-    # if(LibSSH_VERSION VERSION_GREATER 0.8.2)
-    set(HAVE_LIBSSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES 1)
-    # endif()
+    target_compile_definitions(netconf2 PUBLIC NC_ENABLED_SSH)
+    target_link_libraries(netconf2 PUBLIC ${LIBCRYPT} ${LIBSSH_LIBRARY})
+    list(APPEND CMAKE_REQUIRED_LIBRARIES "ssh;crypt")   #TODO why? CK
+    target_include_directories(netconf2 PUBLIC ${LIBSSH_INCLUDE_DIR})
+    if(LIBSSH_VERSION VERSION_GREATER 0.8.2)
+        set(HAVE_LIBSSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES 1)
+    endif()
 endif()
 
 # dependencies - libval
@@ -235,7 +257,15 @@ if(ENABLE_DNSSEC)
 endif()
 
 # dependencies - libyang
-find_package(LibYANG REQUIRED)
+find_package(LibYANG QUIET)
+if(NOT LIBYANG_FOUND)
+    fetchcontent_declare(
+        libyang
+        GIT_REPOSITORY https://github.com/CESNET/libyang.git
+        GIT_TAG        v1.0.109
+    )
+    fetchcontent_makeavailable(libyang)
+endif()
 target_link_libraries(netconf2 PUBLIC ${LIBYANG_LIBRARIES})
 target_include_directories(netconf2 PUBLIC ${LIBYANG_INCLUDE_DIR})
 

@@ -1,5 +1,3 @@
-cmake_minimum_required(VERSION 3.13)
-
 # list of all the tests in each directory
 set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_time test_client_thread)
 set(client_tests test_client test_client_messages)
@@ -34,14 +32,19 @@ if(ENABLE_SSH OR ENABLE_TLS)
     endif()
 endif()
 
+########################################
+## TODO: what kind of hack is this? CK #
 foreach(src IN LISTS libsrc)
     list(APPEND test_srcs "../${src}")
 endforeach()
 add_library(testobj OBJECT ${test_srcs})
+########################################
+
+target_link_libraries(testobj libnetconf2::netconf2)
 
 foreach(test_name IN LISTS tests)
     add_executable(${test_name} $<TARGET_OBJECTS:testobj> ${test_name}.c)
-    target_link_libraries(${test_name} ${CMOCKA_LIBRARIES} ${LIBYANG_LIBRARIES} netconf2)
+    target_link_libraries(${test_name} ${CMOCKA_LIBRARIES} libnetconf2::netconf2)
     target_include_directories(${test_name} PRIVATE ${CMOCKA_INCLUDE_DIR})
     set_target_properties(${test_name} PROPERTIES LINK_FLAGS "${${test_name}_wrap_link_flags}")
     add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
@@ -49,7 +52,7 @@ endforeach()
 
 foreach(test_name IN LISTS client_tests)
     add_executable(${test_name} $<TARGET_OBJECTS:testobj> ./client/${test_name}.c)
-    target_link_libraries(${test_name} ${CMOCKA_LIBRARIES} ${LIBYANG_LIBRARIES} netconf2)
+    target_link_libraries(${test_name} ${CMOCKA_LIBRARIES} libnetconf2::netconf2)
     target_include_directories(${test_name} PRIVATE ${CMOCKA_INCLUDE_DIR})
     set_target_properties(${test_name} PROPERTIES LINK_FLAGS "${${test_name}_wrap_link_flags}")
     add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
@@ -68,7 +71,7 @@ if(ENABLE_VALGRIND_TESTS)
                 --suppressions=${PROJECT_SOURCE_DIR}/tests/ld.supp ${CMAKE_BINARY_DIR}/tests/${test_name})
         endforeach()
     else()
-        Message("-- valgrind executable not found! Disabling memory leaks tests")
+        message("-- valgrind executable not found! Disabling memory leaks tests")
     endif()
 endif()
 

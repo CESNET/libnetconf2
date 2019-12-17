@@ -73,6 +73,9 @@ else()
   set(LIBYANG_INCLUDE_DIRS ${LIBYANG_INCLUDE_DIR})
   set(LIBYANG_LIBRARIES ${LIBYANG_LIBRARY})
 
+  include(FindPackageHandleStandardArgs)
+  find_package_handle_standard_args(LIBYANG DEFAULT_MSG LIBYANG_LIBRARIES LIBYANG_INCLUDE_DIRS)
+
   # show the LIBYANG_INCLUDE_DIRS and LIBYANG_LIBRARIES variables only in the advanced view
   mark_as_advanced(LIBYANG_INCLUDE_DIRS LIBYANG_LIBRARIES)
 
