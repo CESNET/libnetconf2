@@ -19,19 +19,19 @@ Architecture: any
 Description: Headers for libnetconf2 library.
 
 Package: @PACKAGE_NAME@-dbg
-Depends: @PACKAGE_NAME@ (= @LIBNETCONF2_VERSION@)
+Depends: @PACKAGE_NAME@ (= @libnetconf2_VERSION@)
 Section: debug
 Architecture: any
 Description: Debug symbols for libnetconf2 library.
 
 Package: python3-netconf2@PACKAGE_PART_NAME@
-Depends: @PACKAGE_NAME@ (= @LIBNETCONF2_VERSION@)
+Depends: @PACKAGE_NAME@ (= @libnetconf2_VERSION@)
 Section: libs
 Architecture: any
 Description: Bindings of libyang library to python3 language.
 
 Package: python3-netconf2@PACKAGE_PART_NAME@-dbg
-Depends: python3-netconf2@PACKAGE_PART_NAME@ (= @LIBNETCONF2_VERSION@)
+Depends: python3-netconf2@PACKAGE_PART_NAME@ (= @libnetconf2_VERSION@)
 Section: debug
 Architecture: any
 Description: Debug symbols of python3 bidings of libnetconf2 library.

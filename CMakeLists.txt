@@ -176,8 +176,8 @@ set(headers
 add_library(netconf2 SHARED ${libsrc} ${headers})
 add_library(netconf2::netconf2 ALIAS netconf2)
 
-include_directories(${PROJECT_BINARY_DIR}/src)
-target_include_directories(netconf2 INTERFACE
+include_directories(${PROJECT_BINARY_DIR}/src)  # for config.h
+target_include_directories(netconf2 PUBLIC
   $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )

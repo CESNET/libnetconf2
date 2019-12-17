@@ -1,5 +1,5 @@
 Name: @PACKAGE_NAME@
-Version: @LIBNETCONF2_VERSION@
+Version: @libnetconf2_VERSION@
 Release: 0
 Summary: Libnetconf2 library
 Url: https://github.com/CESNET/libnetconf2

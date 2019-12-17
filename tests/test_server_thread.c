@@ -36,7 +36,9 @@
 
 #define nc_assert(cond) if (!(cond)) { fprintf(stderr, "assert failed (%s:%d)\n", __FILE__, __LINE__); exit(1); }
 
+#if _POSIX_BARRIERS >= 200112L
 pthread_barrier_t barrier;
+
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
@@ -645,10 +647,12 @@ client_fork(void)
     ++clients;
 #endif
 }
+#endif
 
 int
 main(void)
 {
+#if _POSIX_BARRIERS >= 200112L
     struct ly_ctx *ctx;
     int ret, i, clients = 0;
     pthread_t tids[thread_count];
@@ -751,6 +755,7 @@ main(void)
 
     nc_server_destroy();
     ly_ctx_destroy(ctx, NULL);
+#endif
 
     return 0;
 }
