@@ -218,10 +218,6 @@ if(ENABLE_SSH)
         set(CMAKE_REQUIRED_LIBRARIES "ssh;crypt")
     endif()
     include_directories(${LIBSSH_INCLUDE_DIRS})
-
-    if(LibSSH_VERSION VERSION_GREATER 0.8.2)
-        set(HAVE_LIBSSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES 1)
-    endif()
 endif()
 
 # dependencies - libval
