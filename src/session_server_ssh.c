@@ -19,10 +19,14 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <pwd.h>
+#ifndef __APPLE__
 #include <shadow.h>
 #include <crypt.h>
+#endif
 #include <errno.h>
 #include <time.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "config.h"
 #include "session_server.h"
@@ -660,6 +664,7 @@ nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts)
 static char *
 auth_password_get_pwd_hash(const char *username)
 {
+#ifndef __APPLE__
     struct passwd *pwd, pwd_buf;
     struct spwd *spwd, spwd_buf;
     char *pass_hash = NULL, buf[256];
@@ -698,6 +703,9 @@ auth_password_get_pwd_hash(const char *username)
     }
 
     return strdup(pass_hash);
+#else
+    return strdup("");
+#endif
 }
 
 static int
@@ -1319,6 +1327,13 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         close(sock);
         return -1;
     }
+    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_KEY_EXCHANGE, "curve25519-sha256,ecdh-sha2-nistp256,"
+            "diffie-hellman-group18-sha512,diffie-hellman-group16-sha512,diffie-hellman-group-exchange-sha256,"
+            "diffie-hellman-group14-sha1,diffie-hellman-group1-sha1,diffie-hellman-group-exchange-sha1");
+#ifdef HAVE_LIBSSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES
+    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES, "ssh-ed25519,ecdsa-sha2-nistp256,"
+            "ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-rsa,rsa-sha2-512,rsa-sha2-256,ssh-dss");
+#endif
 
     if (opts->auth_methods & NC_SSH_AUTH_PUBLICKEY) {
         libssh_auth_methods |= SSH_AUTH_METHOD_PUBLICKEY;

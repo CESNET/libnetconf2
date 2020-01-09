@@ -18,7 +18,7 @@
 #  define UNUSED(x) UNUSED_ ## x
 #endif
 
-#define TESTS_DIR "@CMAKE_SOURCE_DIR@/tests"
+#define TESTS_DIR "@CMAKE_SOURCE_DIR@/tests/"
 
 @SSH_MACRO@
 @TLS_MACRO@

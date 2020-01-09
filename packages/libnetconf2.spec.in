@@ -1,5 +1,5 @@
 Name: @PACKAGE_NAME@
-Version: @LIBNETCONF2_VERSION@
+Version: @libnetconf2_VERSION@
 Release: 0
 Summary: Libnetconf2 library
 Url: https://github.com/CESNET/libnetconf2
@@ -7,11 +7,10 @@ Source: %{url}/archive/@BRANCH@.tar.gz
 License: BSD-3-Clause
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}
 
-Requires:  libyang@COMPAT_PACKAGES@
-BuildRequires:  libyang@COMPAT_PACKAGES@-devel
+Requires:  libyang@PACKAGE_PART_NAME@
+BuildRequires:  libyang@PACKAGE_PART_NAME@-devel
 BuildRequires:  libssh-devel >= 0.7.1
 BuildRequires:  openssl-devel
-BuildRequires:  valgrind
 BuildRequires:  cmake
 BuildRequires:  libcmocka-devel
 BuildRequires:  gcc
@@ -22,7 +21,7 @@ BuildRequires:  timezone
 %if 0%{?suse_version} + 0%{?fedora} > 0
 BuildRequires:  python3-devel
 %else
-BuildRequires:  python34-devel
+BuildRequires:  python36-devel
 %endif
 Conflicts: @CONFLICT_PACKAGE_NAME@
 
@@ -31,14 +30,14 @@ Summary:    Headers of libnetconf2 library
 Requires:   %{name} = %{version}-%{release}
 Requires:   libssh-devel
 
-%package -n python3-netconf2@COMPAT_PACKAGES@
+%package -n python3-netconf2@PACKAGE_PART_NAME@
 Summary:    Bindings to python3
 Requires:   %{name} = %{version}-%{release}
 
 %description devel
 Headers of libnetconf2 library.
 
-%description -n python3-netconf2@COMPAT_PACKAGES@
+%description -n python3-netconf2@PACKAGE_PART_NAME@
 Bindings of libnetconf2 library to python3 language.
 
 %description
@@ -48,7 +47,7 @@ Libnetconf2 is a NETCONF library in C intended for building NETCONF clients and 
 %setup -n libnetconf2-@BRANCH@
 
 %build
-cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr -DCMAKE_BUILD_TYPE:String="@BUILD_TYPE@" -DENABLE_PYTHON=ON -DENABLE_VALGRIND_TESTS:BOOL=FALSE .
+cmake -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE="@BUILD_TYPE@" -DENABLE_PYTHON=ON -DENABLE_VALGRIND_TESTS=OFF .
 make
 
 %check
@@ -76,7 +75,7 @@ make DESTDIR=%{buildroot} install
 %{_includedir}/nc_server.h
 %dir %{_includedir}/libnetconf2/
 
-%files -n python3-netconf2@COMPAT_PACKAGES@
+%files -n python3-netconf2@PACKAGE_PART_NAME@
 %defattr(-,root,root)
 /usr/lib*/python*/*-packages/*
 

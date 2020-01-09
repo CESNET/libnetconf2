@@ -36,7 +36,9 @@
 
 #define nc_assert(cond) if (!(cond)) { fprintf(stderr, "assert failed (%s:%d)\n", __FILE__, __LINE__); exit(1); }
 
+#if _POSIX_BARRIERS >= 200112L
 pthread_barrier_t barrier;
+
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
@@ -202,7 +204,7 @@ ssh_endpt_del_authkey_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_del_authkey(TESTS_DIR"/data/key_dsa.pub", NULL, 0, "test2");
+    ret = nc_server_ssh_del_authkey(TESTS_DIR"/data/key_ecdsa.pub", NULL, 0, "test2");
     nc_assert(!ret);
 
     return NULL;
@@ -235,7 +237,7 @@ ssh_client_thread(void *arg)
     ret = nc_client_ssh_set_username("test");
     nc_assert(!ret);
 
-    ret = nc_client_ssh_add_keypair(TESTS_DIR"/data/key_ecdsa.pub", TESTS_DIR"/data/key_ecdsa");
+    ret = nc_client_ssh_add_keypair(TESTS_DIR"/data/key_dsa.pub", TESTS_DIR"/data/key_dsa");
     nc_assert(!ret);
 
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PUBLICKEY, 1);
@@ -645,10 +647,12 @@ client_fork(void)
     ++clients;
 #endif
 }
+#endif
 
 int
 main(void)
 {
+#if _POSIX_BARRIERS >= 200112L
     struct ly_ctx *ctx;
     int ret, i, clients = 0;
     pthread_t tids[thread_count];
@@ -681,7 +685,7 @@ main(void)
     nc_assert(!ret);
     ret = nc_server_endpt_set_port("main_ssh", 6001);
     nc_assert(!ret);
-    ret = nc_server_ssh_add_authkey_path(TESTS_DIR"/data/key_ecdsa.pub", "test");
+    ret = nc_server_ssh_add_authkey_path(TESTS_DIR"/data/key_dsa.pub", "test");
     nc_assert(!ret);
     ret = nc_server_ssh_endpt_add_hostkey("main_ssh", "key_rsa", -1);
     nc_assert(!ret);
@@ -692,7 +696,7 @@ main(void)
     ++clients;
 
     /* for ssh_endpt_del_authkey */
-    ret = nc_server_ssh_add_authkey_path(TESTS_DIR"/data/key_dsa.pub", "test2");
+    ret = nc_server_ssh_add_authkey_path(TESTS_DIR"/data/key_ecdsa.pub", "test2");
     nc_assert(!ret);
 
     ret = nc_server_add_endpt("secondary", NC_TI_LIBSSH);
@@ -751,6 +755,7 @@ main(void)
 
     nc_server_destroy();
     ly_ctx_destroy(ctx, NULL);
+#endif
 
     return 0;
 }

@@ -1,10 +1,10 @@
 Format: 3.0 (quilt)
 Source: @PACKAGE_NAME@
-Binary: @PACKAGE_NAME@, @PACKAGE_NAME@-dbg, @PACKAGE_NAME@-dev, python3-netconf2@COMPAT_PACKAGES@, python3-netconf2@COMPAT_PACKAGES@-dbg
+Binary: @PACKAGE_NAME@, @PACKAGE_NAME@-dbg, @PACKAGE_NAME@-dev, python3-netconf2@PACKAGE_PART_NAME@, python3-netconf2@PACKAGE_PART_NAME@-dbg
 Maintainer: CESNET <rkrejci@cesnet.cz>
-Version: @LIBNETCONF2_VERSION@
+Version: @libnetconf2_VERSION@
 Architecture: any
 Standards-Version: 3.8.2
 Homepage: https://github.com/CESNET/libnetconf2
 Vcs-Git: https://github.com/CESNET/libnetconf2
-Build-Depends: debhelper (>= 9), make, gcc, cmake, pkg-config, libcmocka-dev, libyang@COMPAT_PACKAGES@-dev, libssh-dev (>= 0.7.1), openssl, python3-dev (>= 3.4)
+Build-Depends: debhelper (>= 9), make, gcc, cmake, pkg-config, libcmocka-dev, libyang@PACKAGE_PART_NAME@-dev, libssh-dev (>= 0.7.1), openssl, python3-dev (>= 3.4)
