@@ -98,10 +98,11 @@ if(NOT DEFINED ENV{TRAVIS_BRANCH})
             set(ENV{TRAVIS_BRANCH} "master")
         endif()
     endif()
-    set(GIT_BRANCH $ENV{TRAVIS_BRANCH}) # NOTE: used for configure_file
+
+    set(GIT_BRANCH $ENV{TRAVIS_BRANCH}) # NOTE: used for configure_file too
 endif()
 
-if(${GIT_BRANCH} STREQUAL "master")
+if(GIT_BRANCH STREQUAL master)
     set(PACKAGE_NAME "libnetconf2")
     set(BRANCH "master")
     set(BUILD_TYPE "Package")
