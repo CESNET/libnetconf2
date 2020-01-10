@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.9.2)   # should be at least 3.11 .. 3.14! CK
 
 # Version of the project
 # Generic version of not only the library. Major version is reserved for really big changes of the project,
@@ -14,16 +14,18 @@ if(POLICY CMP0075)
     cmake_policy(SET CMP0075 NEW)
 endif()
 
-include(FetchContent)
-if(CMAKE_VERSION VERSION_LESS "3.14")
-    function(fetchcontent_makeavailable name)
-        fetchcontent_getproperties(${name})
-        if(NOT ${name}_POPULATED)
-            fetchcontent_populate(${name})
-            add_subdirectory(${${name}_SOURCE_DIR} ${${name}_BINARY_DIR})
-            include_directories(${${name}_SOURCE_DIR}/include)
-        endif()
-    endfunction()
+include(FetchContent OPTIONAL RESULT_VARIABLE HAS_FETCH_CONTENTS)
+if(HAS_FETCH_CONTENTS)
+    if(CMAKE_VERSION VERSION_LESS "3.14")
+        function(fetchcontent_makeavailable name)
+            fetchcontent_getproperties(${name})
+            if(NOT ${name}_POPULATED)
+                fetchcontent_populate(${name})
+                add_subdirectory(${${name}_SOURCE_DIR} ${${name}_BINARY_DIR})
+                include_directories(${${name}_SOURCE_DIR}/include)
+            endif()
+        endfunction()
+    endif()
 endif()
 
 # include custom Modules
@@ -96,10 +98,10 @@ if(NOT DEFINED ENV{TRAVIS_BRANCH})
             set(ENV{TRAVIS_BRANCH} "master")
         endif()
     endif()
-    set(GIT_BRANCH $ENV{TRAVIS_BRANCH})
+    set(GIT_BRANCH $ENV{TRAVIS_BRANCH}) # NOTE: used for configure_file
 endif()
 
-if($ENV{TRAVIS_BRANCH} STREQUAL "master")
+if(${GIT_BRANCH} STREQUAL "master")
     set(PACKAGE_NAME "libnetconf2")
     set(BRANCH "master")
     set(BUILD_TYPE "Package")
@@ -243,7 +245,8 @@ if(ENABLE_SSH AND OPENSSL_FOUND)
 
     find_library(LIBCRYPT crypt)
     if(NOT LIBCRYPT_FOUND)
-        message(FATAL_ERROR "LIBCRYPT not found, required for SSH")
+        message(WARNING "LIBCRYPT not found, required for SSH")
+        set(LIBCRYPT "-lcrypt" CACHE STRING "forced, we hope the best ..." FORCE)
     endif()
 
     target_compile_definitions(netconf2 PUBLIC NC_ENABLED_SSH)
@@ -264,15 +267,20 @@ if(ENABLE_DNSSEC)
 endif()
 
 # dependencies - libyang
-find_package(LibYANG QUIET)
-if(NOT LIBYANG_FOUND)
-    fetchcontent_declare(
-        libyang
-        GIT_REPOSITORY https://github.com/CESNET/libyang.git
-        GIT_TAG        v1.0.109
-    )
-    fetchcontent_makeavailable(libyang)
+if(HAS_FETCH_CONTENTS)
+    find_package(LibYANG QUIET)
+    if(NOT LIBYANG_FOUND)
+        fetchcontent_declare(
+            libyang
+            GIT_REPOSITORY https://github.com/CESNET/libyang.git
+            GIT_TAG        v1.0.109
+        )
+        fetchcontent_makeavailable(libyang)
+    endif()
+else()
+    find_package(LibYANG REQUIRED)
 endif()
+
 target_link_libraries(netconf2 PUBLIC ${LIBYANG_LIBRARIES})
 target_include_directories(netconf2 PUBLIC ${LIBYANG_INCLUDE_DIR})
 
