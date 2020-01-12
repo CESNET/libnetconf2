@@ -40,11 +40,11 @@ endforeach()
 add_library(testobj OBJECT ${test_srcs})
 ########################################
 
-#TBD target_link_libraries(testobj netconf2)
+target_link_libraries(testobj libnetconf2::netconf2)
 
 foreach(test_name IN LISTS tests)
     add_executable(${test_name} $<TARGET_OBJECTS:testobj> ${test_name}.c)
-    target_link_libraries(${test_name} ${CMOCKA_LIBRARIES} ${LIBYANG_LIBRARIES} netconf2)
+    target_link_libraries(${test_name} ${CMOCKA_LIBRARIES} libnetconf2::netconf2)
     target_include_directories(${test_name} PRIVATE ${CMOCKA_INCLUDE_DIR})
     set_target_properties(${test_name} PROPERTIES LINK_FLAGS "${${test_name}_wrap_link_flags}")
     add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
@@ -52,7 +52,7 @@ endforeach()
 
 foreach(test_name IN LISTS client_tests)
     add_executable(${test_name} $<TARGET_OBJECTS:testobj> ./client/${test_name}.c)
-    target_link_libraries(${test_name} ${CMOCKA_LIBRARIES} ${LIBYANG_LIBRARIES} netconf2)
+    target_link_libraries(${test_name} ${CMOCKA_LIBRARIES} libnetconf2::netconf2)
     target_include_directories(${test_name} PRIVATE ${CMOCKA_INCLUDE_DIR})
     set_target_properties(${test_name} PROPERTIES LINK_FLAGS "${${test_name}_wrap_link_flags}")
     add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)

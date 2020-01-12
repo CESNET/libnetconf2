@@ -18,7 +18,7 @@ netconf2Module = Extension("netconf2",
                         )
 
 setup(name='netconf2',
-      version='${LIBNETCONF2_VERSION}',
+      version='${libnetconf2_VERSION}',
       author='Radek Krejci',
       author_email='rkrejci@cesnet.cz',
       description='libnetconf2 Python bindings.',

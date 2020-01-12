@@ -1,6 +1,10 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 3.9.2)   # should be at least 3.11 .. 3.14! CK
 
-project(libnetconf2 LANGUAGES C)
+# Version of the project
+# Generic version of not only the library. Major version is reserved for really big changes of the project,
+# minor version changes with added functionality (new tool, functionality of the tool or library, ...) and
+# micro version is changed with a set of small changes or bugfixes anywhere in the project.
+project(libnetconf2 VERSION 1.1.4 LANGUAGES C)
 
 include(GNUInstallDirs)
 include(CheckFunctionExists)
@@ -9,6 +13,20 @@ include(CheckIncludeFile)
 
 if(POLICY CMP0075)
     cmake_policy(SET CMP0075 NEW)
+endif()
+
+include(FetchContent OPTIONAL RESULT_VARIABLE HAS_FETCH_CONTENTS)
+if(HAS_FETCH_CONTENTS)
+    if(CMAKE_VERSION VERSION_LESS "3.14")
+        function(fetchcontent_makeavailable name)
+            fetchcontent_getproperties(${name})
+            if(NOT ${name}_POPULATED)
+                fetchcontent_populate(${name})
+                add_subdirectory(${${name}_SOURCE_DIR} ${${name}_BINARY_DIR})
+                include_directories(${${name}_SOURCE_DIR}/include)
+            endif()
+        endfunction()
+    endif()
 endif()
 
 # include custom Modules
@@ -40,23 +58,11 @@ add_compile_options(-Wall -Wextra -fvisibility=hidden)
 
 set(CMAKE_C_FLAGS_PACKAGE "-g -O2 -DNDEBUG")
 
-# Version of the project
-# Generic version of not only the library. Major version is reserved for really big changes of the project,
-# minor version changes with added functionality (new tool, functionality of the tool or library, ...) and
-# micro version is changed with a set of small changes or bugfixes anywhere in the project.
-set(LIBNETCONF2_MAJOR_VERSION 1)
-set(LIBNETCONF2_MINOR_VERSION 1)
-set(LIBNETCONF2_MICRO_VERSION 4)
-set(LIBNETCONF2_VERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION}.${LIBNETCONF2_MICRO_VERSION})
-
 # Version of the library
 # Major version is changed with every backward non-compatible API/ABI change in libyang, minor version changes
 # with backward compatible change and micro version is connected with any internal change of the library.
-set(LIBNETCONF2_MAJOR_SOVERSION 1)
-set(LIBNETCONF2_MINOR_SOVERSION 1)
-set(LIBNETCONF2_MICRO_SOVERSION 4)
-set(LIBNETCONF2_SOVERSION_FULL ${LIBNETCONF2_MAJOR_SOVERSION}.${LIBNETCONF2_MINOR_SOVERSION}.${LIBNETCONF2_MICRO_SOVERSION})
-set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_SOVERSION})
+set(LIBNETCONF2_SOVERSION_FULL ${libnetconf2_VERSION})
+#unused? set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_SOVERSION})
 
 # build options
 option(ENABLE_SSH "Enable NETCONF over SSH support (via libssh)" ON)
@@ -148,8 +154,6 @@ else()
     configure_file(${PROJECT_SOURCE_DIR}/packages/local-rpm.sh.in ${PROJECT_BINARY_DIR}/build-packages/local-rpm.sh @ONLY)
 endif()
 
-include_directories(${PROJECT_BINARY_DIR}/src)
-
 # source files
 set(libsrc
     src/io.c
@@ -189,7 +193,15 @@ set(headers
 
 # netconf2 target
 add_library(netconf2 SHARED ${libsrc} ${headers})
-set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_VERSION} SOVERSION ${LIBNETCONF2_SOVERSION_FULL})
+add_library(libnetconf2::netconf2 ALIAS netconf2)
+
+include_directories(${PROJECT_BINARY_DIR}/src)  # for config.h
+target_include_directories(netconf2 PUBLIC
+  $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
+set_target_properties(netconf2 PROPERTIES VERSION ${libnetconf2_VERSION} SOVERSION ${LIBNETCONF2_SOVERSION_FULL})
 
 if((CMAKE_BUILD_TYPE STREQUAL Debug) OR (CMAKE_BUILD_TYPE STREQUAL Package))
     option(ENABLE_BUILD_TESTS "Build tests" ON)
@@ -202,7 +214,7 @@ endif()
 # dependencies - pthread
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)
-target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(netconf2 PUBLIC ${CMAKE_THREAD_LIBS_INIT})
 
 # check availability for some pthread functions
 set(CMAKE_REQUIRED_LIBRARIES pthread)
@@ -215,46 +227,56 @@ if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
     find_package(OpenSSL REQUIRED)
     if(ENABLE_TLS)
         message(STATUS "OPENSSL found, required for TLS")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_TLS")
+        target_compile_definitions(netconf2 PUBLIC NC_ENABLED_TLS)
     endif()
 
     #TODO target_link_libraries(netconf2 PUBLIC OpenSSL::SSL OpenSSL::Crypto)
-    target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
-    include_directories(${OPENSSL_INCLUDE_DIR})
+    set(OPENSSL_LIBRARIES ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
+    target_link_libraries(netconf2 PUBLIC ${OPENSSL_LIBRARIES})
+    target_include_directories(netconf2 PUBLIC ${OPENSSL_INCLUDE_DIR})
 endif()
 
 # dependencies - libssh
 if(ENABLE_SSH AND OPENSSL_FOUND)
     option(LIBSSH_FIND_VERSION "check version too" ON)
-    find_package(LibSSH 0.7.0 REQUIRED)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH")
+    find_package(LibSSH 0.8.2 REQUIRED)
     message(STATUS "LibSSH version ${LIBSSH_VERSION} found")
 
     if(LIBSSH_VERSION VERSION_EQUAL 0.9.3)
         message(FATAL_ERROR "LIBSSH 0.9.3 includes regression bugs and libnetconf2 will NOT work properly, try to use an older version")
     endif()
 
-    if(LIBSSH_VERSION VERSION_LESS 0.8.0)
-        target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lssh_threads -lcrypt)
-    else()
-        target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lcrypt)
-        set(CMAKE_REQUIRED_LIBRARIES "ssh;crypt")
-    endif()
-    include_directories(${LIBSSH_INCLUDE_DIRS})
+    target_compile_definitions(netconf2 PUBLIC NC_ENABLED_SSH)
+    target_link_libraries(netconf2 PUBLIC ${LIBCRYPT} ${LIBSSH_LIBRARY})
+    list(APPEND CMAKE_REQUIRED_LIBRARIES "ssh;crypt")   #TODO why? CK
+    target_include_directories(netconf2 PUBLIC ${LIBSSH_INCLUDE_DIR})
 endif()
 
 # dependencies - libval
 if(ENABLE_DNSSEC)
     find_package(LibVAL REQUIRED)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_DNSSEC")
-    target_link_libraries(netconf2 ${LIBVAL_LIBRARIES})
-    include_directories(${LIBVAL_INCLUDE_DIRS})
+    target_compile_definitions(netconf2 PUBLIC ENABLE_DNSSEC)
+    target_link_libraries(netconf2 PUBLIC ${LIBVAL_LIBRARIES})
+    target_include_directories(netconf2 PUBLIC ${LIBVAL_INCLUDE_DIR})
 endif()
 
 # dependencies - libyang
-find_package(LibYANG REQUIRED)
-target_link_libraries(netconf2 ${LIBYANG_LIBRARIES})
-include_directories(${LIBYANG_INCLUDE_DIRS})
+if(HAS_FETCH_CONTENTS)
+    find_package(LibYANG QUIET)
+    if(NOT LIBYANG_FOUND)
+        fetchcontent_declare(
+            libyang
+            GIT_REPOSITORY https://github.com/CESNET/libyang.git
+            GIT_TAG        v1.0.109
+        )
+        fetchcontent_makeavailable(libyang)
+    endif()
+else()
+    find_package(LibYANG REQUIRED)
+endif()
+
+target_link_libraries(netconf2 PUBLIC ${LIBYANG_LIBRARIES})
+target_include_directories(netconf2 PUBLIC ${LIBYANG_INCLUDE_DIR})
 
 # generate doxygen documentation for libnetconf2 API
 find_package(Doxygen)
@@ -272,7 +294,7 @@ if(ENABLE_PYTHON)
 endif()
 
 # install library
-install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS netconf2 EXPORT libnetconf2-targets DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # install headers
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_client.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
@@ -300,6 +322,16 @@ if(PKG_CONFIG_FOUND)
         endif()
     endif()
 endif()
+
+# Install cmake config files too
+set(ConfigPackageLocation ${CMAKE_INSTALL_LIBDIR}/cmake/libnetconf2)
+configure_file(libnetconf2-config-version.cmake.in libnetconf2-config-version.cmake @ONLY)
+install(FILES ${PROJECT_BINARY_DIR}/libnetconf2-config-version.cmake
+  DESTINATION ${ConfigPackageLocation})
+install(EXPORT libnetconf2-targets
+  DESTINATION ${ConfigPackageLocation}
+  NAMESPACE libnetconf2::)
+install(FILES libnetconf2-config.cmake DESTINATION ${ConfigPackageLocation})
 
 if(ENABLE_VALGRIND_TESTS)
     set(ENABLE_BUILD_TESTS ON)
