@@ -224,17 +224,17 @@ if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
 endif()
 
 # dependencies - libssh
-if(ENABLE_SSH)
+if(ENABLE_SSH AND OPENSSL_FOUND)
     option(LIBSSH_FIND_VERSION "check version too" ON)
     find_package(LibSSH 0.7.0 REQUIRED)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH")
-    message(STATUS "LibSSH version ${LIBSSH_VERSION} found")
+    message(STATUS "LibSSH version ${LibSSH_VERSION} found")
 
-    if(LIBSSH_VERSION VERSION_EQUAL 0.9.3)
-        message(FATAL_ERROR "LIBSSH 0.9.3 includes regression bugs and libnetconf2 will NOT work properly, try to use an older version")
+    if(LibSSH_VERSION VERSION_EQUAL 0.9.3)
+        message(FATAL_ERROR "LibSSH 0.9.3 includes regression bugs and libnetconf2 will NOT work properly, try to use an older version")
     endif()
 
-    if(LIBSSH_VERSION VERSION_LESS 0.8.0)
+    if(LibSSH_VERSION VERSION_LESS 0.8.0)
         target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lssh_threads -lcrypt)
     else()
         target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lcrypt)
