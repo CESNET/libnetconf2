@@ -1,15 +1,18 @@
 cmake_minimum_required(VERSION 2.6)
-project(libnetconf2 C)
+
+project(libnetconf2 LANGUAGES C)
+
 include(GNUInstallDirs)
 include(CheckFunctionExists)
 include(CheckCSourceCompiles)
 include(CheckIncludeFile)
+
 if(POLICY CMP0075)
     cmake_policy(SET CMP0075 NEW)
 endif()
 
 # include custom Modules
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMakeModules/")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMakeModules/")
 
 set(LIBNETCONF2_DESCRIPTION "NETCONF server and client library in C.")
 
@@ -26,13 +29,16 @@ set(DATA_INSTALL_DIR ${CMAKE_INSTALL_DATADIR}/libnetconf2)
 
 # set default build type if not specified by user
 if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE debug)
+    set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-set(CMAKE_C_FLAGS         "${CMAKE_C_FLAGS} -Wall -Wextra -fvisibility=hidden -std=gnu11")
-set(CMAKE_C_FLAGS_RELEASE "-O2 -DNDEBUG")
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_EXTENSIONS ON)
+add_compile_options(-Wall -Wextra -fvisibility=hidden)
+#TODO add_compile_options(-Wpedantic)
+
+
 set(CMAKE_C_FLAGS_PACKAGE "-g -O2 -DNDEBUG")
-set(CMAKE_C_FLAGS_DEBUG   "-g -O0")
 
 # Version of the project
 # Generic version of not only the library. Major version is reserved for really big changes of the project,
@@ -68,38 +74,48 @@ if(ENABLE_DNSSEC AND NOT ENABLE_SSH)
     set(ENABLE_DNSSEC OFF)
 endif()
 
-# package options
-find_program (DEB_BUILDER NAMES debuild)
-find_program (RPM_BUILDER NAMES rpmbuild)
+if(ENABLE_SSH)
+    find_library(LIBCRYPT crypt)
+    if(LIBCRYPT STREQUAL LIBCRYPT-NOTFOUND)
+        message(WARNING "LIBCRYPT not found! SSH, and TLS support disabled.")
+        set(ENABLE_SSH OFF)
+        set(ENABLE_TLS OFF)
+    endif()
+endif()
 
-if (NOT DEFINED ENV{TRAVIS_BRANCH})
+# package options
+find_program(DEB_BUILDER NAMES debuild)
+find_program(RPM_BUILDER NAMES rpmbuild)
+
+if(NOT DEFINED ENV{TRAVIS_BRANCH})
     execute_process(COMMAND "git" "rev-parse" "--abbrev-ref" "HEAD"
                     OUTPUT_VARIABLE GIT_BRANCH
                     OUTPUT_STRIP_TRAILING_WHITESPACE
                     ERROR_QUIET
-                   )
-    if (NOT GIT_BRANCH)
+    )
+    if(NOT GIT_BRANCH)
         set(ENV{TRAVIS_BRANCH} "master")
     else()
-        if (GIT_BRANCH MATCHES "master|devel")
+        if(GIT_BRANCH MATCHES "master|devel")
             set(ENV{TRAVIS_BRANCH} ${GIT_BRANCH})
         else()
             set(ENV{TRAVIS_BRANCH} "master")
         endif()
     endif()
-    set(GIT_BRANCH $ENV{TRAVIS_BRANCH})
+
+    set(GIT_BRANCH $ENV{TRAVIS_BRANCH}) # NOTE: used for configure_file too
 endif()
 
-if ($ENV{TRAVIS_BRANCH} STREQUAL "master")
+if(GIT_BRANCH STREQUAL master)
     set(PACKAGE_NAME "libnetconf2")
     set(BRANCH "master")
     set(BUILD_TYPE "Package")
     set(CONFLICT_PACKAGE_NAME "libnetconf2-experimental")
     set(COMPAT_PACKAGES "")
-else ()
+else()
     set(PACKAGE_NAME "libnetconf2-experimental")
     set(BRANCH "devel")
-    set(BUILD_TYPE "debug")
+    set(BUILD_TYPE "Debug")
     set(CONFLICT_PACKAGE_NAME "libnetconf2")
     set(COMPAT_PACKAGES "-experimental")
 endif()
@@ -109,9 +125,9 @@ configure_file(${PROJECT_SOURCE_DIR}/packages/libnetconf2.dsc.in ${PROJECT_BINAR
 configure_file(${PROJECT_SOURCE_DIR}/packages/debian.control.in ${PROJECT_BINARY_DIR}/build-packages/debian.control @ONLY)
 configure_file(${PROJECT_SOURCE_DIR}/packages/debian.rules.in ${PROJECT_BINARY_DIR}/build-packages/debian.rules)
 
-if (NOT DEB_BUILDER)
+if(NOT DEB_BUILDER)
     message(WARNING "Missing tools (devscripts, debhelper package) for building deb package.\nYou won't be able to generate deb package from source code.\nCompiling libnetconf2 should still works fine.")
-else ()
+else()
     # target for local build deb package
     add_custom_target(build-deb
                       WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
@@ -120,9 +136,9 @@ else ()
     configure_file(${PROJECT_SOURCE_DIR}/packages/local-deb.sh.in ${PROJECT_BINARY_DIR}/build-packages/local-deb.sh @ONLY)
 endif()
 
-if (NOT RPM_BUILDER)
+if(NOT RPM_BUILDER)
     message(WARNING "Missing tools (rpm package) for building rpm package. \nYou won't be able to generate rpm package from source code.\nCompiling libnetconf2 should still work fine.")
-else ()
+else()
     # target for local build rpm package
     string(REPLACE ${PROJECT_SOURCE_DIR} "." EXCLUDE_BUILD_DIR ${PROJECT_BINARY_DIR})
     add_custom_target(build-rpm
@@ -146,20 +162,21 @@ set(libsrc
     src/time.c)
 
 if(ENABLE_SSH)
-    set(libsrc ${libsrc}
+    list(APPEND libsrc
         src/session_client_ssh.c
         src/session_server_ssh.c)
     set(SSH_MACRO "#ifndef NC_ENABLED_SSH\n#define NC_ENABLED_SSH\n#endif")
 endif()
 
 if(ENABLE_TLS)
-    set(libsrc ${libsrc}
+    list(APPEND libsrc
         src/session_client_tls.c
         src/session_server_tls.c)
     set(TLS_MACRO "#ifndef NC_ENABLED_TLS\n#define NC_ENABLED_TLS\n#endif")
 endif()
 
 set(headers
+    ${PROJECT_BINARY_DIR}/src/config.h
     src/log.h
     src/netconf.h
     src/session.h
@@ -170,11 +187,11 @@ set(headers
     src/session_server.h
     src/session_server_ch.h)
 
-# libnetconf2 target
-add_library(netconf2 SHARED ${libsrc})
+# netconf2 target
+add_library(netconf2 SHARED ${libsrc} ${headers})
 set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_VERSION} SOVERSION ${LIBNETCONF2_SOVERSION_FULL})
 
-if((CMAKE_BUILD_TYPE STREQUAL debug) OR (CMAKE_BUILD_TYPE STREQUAL Package))
+if((CMAKE_BUILD_TYPE STREQUAL Debug) OR (CMAKE_BUILD_TYPE STREQUAL Package))
     option(ENABLE_BUILD_TESTS "Build tests" ON)
     option(ENABLE_VALGRIND_TESTS "Build tests with valgrind" ON)
 else()
@@ -196,21 +213,27 @@ check_function_exists(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETK
 # dependencies - openssl
 if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
     find_package(OpenSSL REQUIRED)
-    if (ENABLE_TLS)
+    if(ENABLE_TLS)
+        message(STATUS "OPENSSL found, required for TLS")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_TLS")
     endif()
+
+    #TODO target_link_libraries(netconf2 PUBLIC OpenSSL::SSL OpenSSL::Crypto)
     target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
     include_directories(${OPENSSL_INCLUDE_DIR})
 endif()
 
 # dependencies - libssh
-if(ENABLE_SSH)
+if(ENABLE_SSH AND OPENSSL_FOUND)
+    option(LIBSSH_FIND_VERSION "check version too" ON)
     find_package(LibSSH 0.7.0 REQUIRED)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH")
     message(STATUS "LibSSH version ${LibSSH_VERSION} found")
+
     if(LibSSH_VERSION VERSION_EQUAL 0.9.3)
         message(FATAL_ERROR "LibSSH 0.9.3 includes regression bugs and libnetconf2 will NOT work properly, try to use an older version")
     endif()
+
     if(LibSSH_VERSION VERSION_LESS 0.8.0)
         target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lssh_threads -lcrypt)
     else()
@@ -221,7 +244,7 @@ if(ENABLE_SSH)
 endif()
 
 # dependencies - libval
-if (ENABLE_DNSSEC)
+if(ENABLE_DNSSEC)
     find_package(LibVAL REQUIRED)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_DNSSEC")
     target_link_libraries(netconf2 ${LIBVAL_LIBRARIES})
@@ -246,7 +269,7 @@ endif()
 # Python bindings
 if(ENABLE_PYTHON)
     add_subdirectory(python)
-endif(ENABLE_PYTHON)
+endif()
 
 # install library
 install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -287,7 +310,7 @@ if(ENABLE_BUILD_TESTS)
     if(CMOCKA_FOUND)
         enable_testing()
         add_subdirectory(tests)
-    endif(CMOCKA_FOUND)
+    endif()
 endif()
 
 configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)
