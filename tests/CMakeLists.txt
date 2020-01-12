@@ -40,7 +40,7 @@ endforeach()
 add_library(testobj OBJECT ${test_srcs})
 ########################################
 
-target_link_libraries(testobj libnetconf2::netconf2)
+#XXX target_link_libraries(testobj libnetconf2::netconf2)
 
 foreach(test_name IN LISTS tests)
     add_executable(${test_name} $<TARGET_OBJECTS:testobj> ${test_name}.c)
