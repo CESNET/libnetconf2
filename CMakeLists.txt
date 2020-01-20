@@ -224,7 +224,7 @@ if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
 endif()
 
 # dependencies - libssh
-if(ENABLE_SSH AND OPENSSL_FOUND)
+if(ENABLE_SSH)
     option(LIBSSH_FIND_VERSION "check version too" ON)
     find_package(LibSSH 0.7.0 REQUIRED)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH")
