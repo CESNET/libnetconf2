@@ -10,7 +10,7 @@ netconf2Module = Extension("netconf2",
                                    ],
                            depends=["${CMAKE_CURRENT_SOURCE_DIR}/netconf.h",
                                     "${CMAKE_CURRENT_SOURCE_DIR}/session.h",
-                                    "${CMAKE_CURRENT_COURCE_DIR}/rpc.h"
+                                    "${CMAKE_CURRENT_SOURCE_DIR}/rpc.h"
                                    ],
                            libraries=["netconf2"],
                            extra_compile_args=["-Wall", "-I${CMAKE_CURRENT_BINARY_DIR}", "-I${LIBYANG_INCLUDE_DIR}", "-I${LIBSSH_INCLUDE_DIR}" @SSH_DEFINE@ @TLS_DEFINE@],
@@ -18,7 +18,7 @@ netconf2Module = Extension("netconf2",
                         )
 
 setup(name='netconf2',
-      version='${LIBNETCONF2_VERSION}',
+      version='${libnetconf2_VERSION}',
       author='Radek Krejci',
       author_email='rkrejci@cesnet.cz',
       description='libnetconf2 Python bindings.',
