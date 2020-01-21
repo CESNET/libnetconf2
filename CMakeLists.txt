@@ -267,7 +267,7 @@ if(DOXYGEN_FOUND)
 endif()
 
 # Python bindings
-if(ENABLE_PYTHON)
+if(ENABLE_PYTHON AND ENABLE_SSH)
     add_subdirectory(python)
 endif()
 
