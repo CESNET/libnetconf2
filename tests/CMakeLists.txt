@@ -36,6 +36,8 @@ foreach(src IN LISTS libsrc)
     list(APPEND test_srcs "../${src}")
 endforeach()
 add_library(testobj OBJECT ${test_srcs})
+# NOTE: this is needed to import definitions and include path from libnetconf2::netconf2
+target_link_libraries(testobj libnetconf2::netconf2)
 
 foreach(test_name IN LISTS tests)
     add_executable(${test_name} $<TARGET_OBJECTS:testobj> ${test_name}.c)
