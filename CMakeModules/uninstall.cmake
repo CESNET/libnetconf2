@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 2.8.12)
 
 set(MANIFEST "${CMAKE_CURRENT_BINARY_DIR}/install_manifest.txt")
 
@@ -24,4 +24,4 @@ foreach(file ${files})
     else()
         message(STATUS "Does-not-exist: ${file}")
     endif()
-endforeach(file)
+endforeach()

@@ -1,5 +1,5 @@
-#NOTE: should be: cmake_minimum_required(VERSION 3.13..3.14)
-cmake_minimum_required(VERSION 2.8.12)  # NOTE: the abolute minimum version, but not tested!
+# NOTE: should be: cmake_minimum_required(VERSION 3.13..3.14)
+cmake_minimum_required(VERSION 2.8.12)  # NOTE: the absolute minimum version, but not tested!
 
 if(POLICY CMP0048)
     cmake_policy(SET CMP0048 NEW)
