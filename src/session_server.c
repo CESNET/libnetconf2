@@ -1983,6 +1983,29 @@ nc_server_endpt_count(void)
     return server_opts.endpt_count;
 }
 
+API int
+nc_server_is_endpt(const char *name)
+{
+    uint16_t i;
+    int found = 0;
+
+    /* ENDPT READ LOCK */
+    pthread_rwlock_rdlock(&server_opts.endpt_lock);
+
+    /* check name uniqueness */
+    for (i = 0; i < server_opts.endpt_count; ++i) {
+        if (!strcmp(server_opts.endpts[i].name, name)) {
+            found = 1;
+            break;
+        }
+    }
+
+    /* ENDPT UNLOCK */
+    pthread_rwlock_unlock(&server_opts.endpt_lock);
+
+    return found;
+}
+
 int
 nc_server_endpt_set_address_port(const char *endpt_name, const char *address, uint16_t port)
 {

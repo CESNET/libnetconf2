@@ -382,6 +382,14 @@ int nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti);
 int nc_server_endpt_count(void);
 
 /**
+ * @brief Check if an endpoint exists.
+ *
+ * @param[in] name Endpoint name.
+ * @return 0 if does not exists, non-zero otherwise.
+ */
+int nc_server_is_endpt(const char *name);
+
+/**
  * @brief Change endpoint listening address.
  *
  * On error the previous listening socket (if any) is left untouched.
