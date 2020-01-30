@@ -566,7 +566,7 @@ int nc_session_ntf_thread_running(const struct nc_session *session);
  *            waiting and 0 for immediate return if data are not available on the wire.
  * @param[in] parseroptions libyang parseroptions flags, do not set the data type, it is set
  *            internally. \b LYD_OPT_DESTRUCT and \b LYD_OPT_NOSIBLINGS is ignored.
- * @param[out] reply Resulting object of NETCONF RPC reply.
+ * @param[out] reply Resulting object of NETCONF RPC reply. Set only on #NC_MSG_REPLY and #NC_MSG_REPLY_ERR_MSGID return.
  * @return #NC_MSG_REPLY for success,
  *         #NC_MSG_WOULDBLOCK if \p timeout has elapsed,
  *         #NC_MSG_ERROR if reading has failed,

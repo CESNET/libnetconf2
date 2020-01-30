@@ -2054,7 +2054,7 @@ nc_client_destroy(void)
 API NC_MSG_TYPE
 nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout, int parseroptions, struct nc_reply **reply)
 {
-    struct lyxml_elem *xml;
+    struct lyxml_elem *xml = NULL;
     NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
 
     if (!session) {
@@ -2062,6 +2062,9 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
         return NC_MSG_ERROR;
     } else if (!rpc) {
         ERRARG("rpc");
+        return NC_MSG_ERROR;
+    } else if (!msgid) {
+        ERRARG("msgid");
         return NC_MSG_ERROR;
     } else if (!reply) {
         ERRARG("reply");
@@ -2083,13 +2086,15 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
 
     msgtype = get_msg(session, timeout, msgid, &xml);
 
-    if (msgtype == NC_MSG_REPLY) {
+    if ((msgtype == NC_MSG_REPLY) || (msgtype == NC_MSG_REPLY_ERR_MSGID)) {
         *reply = parse_reply(session->ctx, xml, rpc, parseroptions);
-        lyxml_free(session->ctx, xml);
+        lyxml_free_withsiblings(session->ctx, xml);
+        xml = NULL;
         if (!(*reply)) {
             return NC_MSG_ERROR;
         }
     }
+    assert(!xml);
 
     return msgtype;
 }
