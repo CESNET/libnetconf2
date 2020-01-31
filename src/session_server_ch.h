@@ -52,6 +52,14 @@ int nc_server_ch_add_client(const char *name);
 int nc_server_ch_del_client(const char *name);
 
 /**
+ * @brief Check if a Call Home client exists.
+ *
+ * @param[in] name Client name.
+ * @return 0 if does not exists, non-zero otherwise.
+ */
+int nc_server_ch_is_client(const char *name);
+
+/**
  * @brief Add a new Call Home client endpoint.
  *
  * @param[in] client_name Existing client name.
@@ -72,6 +80,15 @@ int nc_server_ch_client_add_endpt(const char *client_name, const char *endpt_nam
  * @return 0 on success, -1 on error.
  */
 int nc_server_ch_client_del_endpt(const char *client_name, const char *endpt_name, NC_TRANSPORT_IMPL ti);
+
+/**
+ * @brief Check if an endpoint of a Call Home client exists.
+ *
+ * @param[in] client_name Client name.
+ * @param[in] endpt_name Endpoint name.
+ * @return 0 if does not exists, non-zero otherwise.
+ */
+int nc_server_ch_client_is_endpt(const char *client_name, const char *endpt_name);
 
 /**
  * @brief Change Call Home client endpoint listening address.

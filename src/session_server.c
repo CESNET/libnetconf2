@@ -1989,6 +1989,10 @@ nc_server_is_endpt(const char *name)
     uint16_t i;
     int found = 0;
 
+    if (!name) {
+        return found;
+    }
+
     /* ENDPT READ LOCK */
     pthread_rwlock_rdlock(&server_opts.endpt_lock);
 
@@ -2533,6 +2537,33 @@ nc_server_ch_del_client(const char *name)
 }
 
 API int
+nc_server_ch_is_client(const char *name)
+{
+    uint16_t i;
+    int found = 0;
+
+    if (!name) {
+        return found;
+    }
+
+    /* READ LOCK */
+    pthread_rwlock_rdlock(&server_opts.ch_client_lock);
+
+    /* check name uniqueness */
+    for (i = 0; i < server_opts.ch_client_count; ++i) {
+        if (!strcmp(server_opts.ch_clients[i].name, name)) {
+            found = 1;
+            break;
+        }
+    }
+
+    /* UNLOCK */
+    pthread_rwlock_unlock(&server_opts.ch_client_lock);
+
+    return found;
+}
+
+API int
 nc_server_ch_client_add_endpt(const char *client_name, const char *endpt_name, NC_TRANSPORT_IMPL ti)
 {
     uint16_t i;
@@ -2640,6 +2671,44 @@ nc_server_ch_client_del_endpt(const char *client_name, const char *endpt_name, N
     nc_server_ch_client_unlock(client);
 
     return ret;
+}
+
+API int
+nc_server_ch_client_is_endpt(const char *client_name, const char *endpt_name)
+{
+    uint16_t i;
+    struct nc_ch_client *client = NULL;
+    int found = 0;
+
+    if (!client_name || !endpt_name) {
+        return found;
+    }
+
+    /* READ LOCK */
+    pthread_rwlock_rdlock(&server_opts.ch_client_lock);
+
+    for (i = 0; i < server_opts.ch_client_count; ++i) {
+        if (!strcmp(server_opts.ch_clients[i].name, client_name)) {
+            client = &server_opts.ch_clients[i];
+            break;
+        }
+    }
+
+    if (!client) {
+        goto cleanup;
+    }
+
+    for (i = 0; i < client->ch_endpt_count; ++i) {
+        if (!strcmp(client->ch_endpts[i].name, endpt_name)) {
+            found = 1;
+            break;
+        }
+    }
+
+cleanup:
+    /* UNLOCK */
+    pthread_rwlock_unlock(&server_opts.ch_client_lock);
+    return found;
 }
 
 API int
