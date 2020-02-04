@@ -35,9 +35,6 @@ endif()
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_EXTENSIONS ON)
 add_compile_options(-Wall -Wextra -fvisibility=hidden)
-#TODO add_compile_options(-Wpedantic)
-
-
 set(CMAKE_C_FLAGS_PACKAGE "-g -O2 -DNDEBUG")
 
 # Version of the project
@@ -231,8 +228,8 @@ endif()
 
 # dependencies - libssh
 if(ENABLE_SSH)
-    option(LIBSSH_FIND_VERSION "check version too" ON)
-    find_package(LibSSH 0.7.0 REQUIRED)
+    set(LIBSSH_FIND_VERSION 0.7.0)
+    find_package(LibSSH REQUIRED)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH")
     message(STATUS "LibSSH version ${LIBSSH_VERSION} found")
 
