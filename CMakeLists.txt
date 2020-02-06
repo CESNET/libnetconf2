@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.6)
 
-project(libnetconf2 LANGUAGES C)
+project(libnetconf2 C)
 
 include(GNUInstallDirs)
 include(CheckFunctionExists)
