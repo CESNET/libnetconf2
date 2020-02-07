@@ -1186,7 +1186,7 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
             reply = nc_server_reply_err(nc_err_libyang(server_opts.ctx));
             ret = nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, xml, reply);
             nc_server_reply_free(reply);
-            if (ret == -1) {
+            if (ret != NC_MSG_REPLY) {
                 ERR("Session %u: failed to write reply.", session->id);
             }
             ret = NC_PSPOLL_REPLY_ERROR | NC_PSPOLL_BAD_RPC;
