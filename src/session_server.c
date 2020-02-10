@@ -1187,7 +1187,7 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
             ret = nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, xml, reply);
             nc_server_reply_free(reply);
             if (ret != NC_MSG_REPLY) {
-                ERR("Session %u: failed to write reply.", session->id);
+                ERR("Session %u: failed to write reply (%s).", session->id, nc_msgtype2str[ret]);
             }
             ret = NC_PSPOLL_REPLY_ERROR | NC_PSPOLL_BAD_RPC;
         } else {
@@ -1246,8 +1246,8 @@ nc_server_notif_send(struct nc_session *session, struct nc_server_notif *notif, 
 
     /* we do not need RPC lock for this, IO lock will be acquired properly */
     ret = nc_write_msg_io(session, timeout, NC_MSG_NOTIF, notif);
-    if (ret == NC_MSG_ERROR) {
-        ERR("Session %u: failed to write notification.", session->id);
+    if (ret != NC_MSG_NOTIF) {
+        ERR("Session %u: failed to write notification (%s).", session->id, nc_msgtype2str[ret]);
     }
 
     return ret;
@@ -1314,7 +1314,7 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, struct nc_se
     nc_server_reply_free(reply);
 
     if (r != NC_MSG_REPLY) {
-        ERR("Session %u: failed to write reply.", session->id);
+        ERR("Session %u: failed to write reply (%s).", session->id, nc_msgtype2str[r]);
         ret |= NC_PSPOLL_ERROR;
     }
 

@@ -79,6 +79,11 @@ typedef enum NC_MSG_TYPE {
 } NC_MSG_TYPE;
 
 /**
+ * @brief Messages of NETCONF message type enum.
+ */
+extern const char *nc_msgtype2str[];
+
+/**
  * @brief Enumeration of the supported types of datastores defined by NETCONF
  */
 typedef enum NC_DATASTORE_TYPE {

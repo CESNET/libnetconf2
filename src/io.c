@@ -32,6 +32,18 @@
 
 #include "libnetconf.h"
 
+const char *nc_msgtype2str[] = {
+    "error",
+    "would block",
+    "no message",
+    "hello message",
+    "bad hello message",
+    "RPC message",
+    "rpc-reply message",
+    "rpc-reply message with wrong ID",
+    "notification message",
+};
+
 #define BUFFERSIZE 512
 
 #ifdef NC_ENABLED_TLS
