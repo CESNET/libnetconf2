@@ -470,7 +470,7 @@ nc_err_libyang(struct ly_ctx *ctx)
             break;
         case LYVE_INELEM:
             str = ly_errpath(ctx);
-            if (!strcmp(str, "/")) {
+            if (!str || !strcmp(str, "/")) {
                 e = nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_APP);
                 /* keep default message */
                 return e;

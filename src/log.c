@@ -96,5 +96,5 @@ API void
 nc_set_print_clb(void (*clb)(NC_VERB_LEVEL, const char *))
 {
     print_clb = clb;
-    ly_set_log_clb(nc_ly_log_clb, 0);
+    ly_set_log_clb(nc_ly_log_clb, 1);
 }
