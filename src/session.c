@@ -965,6 +965,15 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
         if (lys_features_state(mod, "startup") == 1) {
             add_cpblt(ctx, "urn:ietf:params:netconf:capability:startup:1.0", &cpblts, &size, &count);
         }
+        /* 
+        The URL capability must be set manually using nc_server_set_capability()
+        because of the need for supported protocols to be included.
+        https://tools.ietf.org/html/rfc6241#section-8.8.3
+        */
+        // if (lys_features_state(mod, "url") == 1) {
+        //    add_cpblt(ctx, "urn:ietf:params:netconf:capability:url:1.0", &cpblts, &size, &count);
+        // }
+        
         if (lys_features_state(mod, "xpath") == 1) {
             add_cpblt(ctx, "urn:ietf:params:netconf:capability:xpath:1.0", &cpblts, &size, &count);
         }
