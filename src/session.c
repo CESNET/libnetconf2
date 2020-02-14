@@ -921,7 +921,7 @@ add_cpblt(struct ly_ctx *ctx, const char *capab, const char ***cpblts, int *size
 API const char **
 nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
 {
-    const char **cpblts;
+    const char **cpblts, *ver;
     const struct lys_module *mod, *devmod;
     int size = 10, count, features_count = 0, dev_count = 0, i, str_len, len;
     unsigned int u, v, module_set_id;
@@ -965,15 +965,15 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
         if (lys_features_state(mod, "startup") == 1) {
             add_cpblt(ctx, "urn:ietf:params:netconf:capability:startup:1.0", &cpblts, &size, &count);
         }
-        /* 
-        The URL capability must be set manually using nc_server_set_capability()
-        because of the need for supported protocols to be included.
-        https://tools.ietf.org/html/rfc6241#section-8.8.3
-        */
+
+        /* The URL capability must be set manually using nc_server_set_capability()
+         * because of the need for supported protocols to be included.
+         * https://tools.ietf.org/html/rfc6241#section-8.8.3
+         */
         // if (lys_features_state(mod, "url") == 1) {
         //    add_cpblt(ctx, "urn:ietf:params:netconf:capability:url:1.0", &cpblts, &size, &count);
         // }
-        
+
         if (lys_features_state(mod, "xpath") == 1) {
             add_cpblt(ctx, "urn:ietf:params:netconf:capability:xpath:1.0", &cpblts, &size, &count);
         }
@@ -1030,9 +1030,14 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
     u = module_set_id = 0;
     while ((mod = ly_ctx_get_module_iter(ctx, &u))) {
         if (!strcmp(mod->name, "ietf-yang-library")) {
+            if (mod->rev_size && (strcmp(mod->rev[0].date, "2019-01-04") >= 0)) {
+                ver = "1.1";
+            } else {
+                ver = "1.0";
+            }
             /* Add the yang-library NETCONF capability as defined in RFC 7950 5.6.4 */
-            sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.0?%s%s&module-set-id=%u",
-                    mod->rev_size ? "revision=" : "", mod->rev_size ? mod->rev[0].date : "",
+            sprintf(str, "urn:ietf:params:netconf:capability:yang-library:%s?%s%s&module-set-id=%u",
+                    ver, mod->rev_size ? "revision=" : "", mod->rev_size ? mod->rev[0].date : "",
                     ly_ctx_get_module_set_id(ctx));
             add_cpblt(ctx, str, &cpblts, &size, &count);
             continue;
