@@ -2810,27 +2810,22 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         }
 
         if (rpc_getd->wd_mode) {
-            ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL, 1);
-            if (!ietfncwd) {
-                ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
-                lyd_free(data);
-                return NC_MSG_ERROR;
-            }
             switch (rpc_getd->wd_mode) {
             case NC_WD_UNKNOWN:
                 /* cannot get here */
                 break;
             case NC_WD_ALL:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all");
+                /* "with-defaults" are used from a grouping so it belongs to the ietf-netconf-nmda module */
+                node = lyd_new_leaf(data, mod, "with-defaults", "report-all");
                 break;
             case NC_WD_ALL_TAG:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all-tagged");
+                node = lyd_new_leaf(data, mod, "with-defaults", "report-all-tagged");
                 break;
             case NC_WD_TRIM:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "trim");
+                node = lyd_new_leaf(data, mod, "with-defaults", "trim");
                 break;
             case NC_WD_EXPLICIT:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "explicit");
+                node = lyd_new_leaf(data, mod, "with-defaults", "explicit");
                 break;
             }
             if (!node) {
