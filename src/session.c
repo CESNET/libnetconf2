@@ -918,11 +918,65 @@ add_cpblt(struct ly_ctx *ctx, const char *capab, const char ***cpblts, int *size
     ++(*count);
 }
 
+static struct lys_feature *
+nc_lys_next_feature(struct lys_feature *last, const struct lys_module *ly_mod, int *idx)
+{
+    uint8_t i;
+
+    assert(ly_mod);
+
+    /* find the (sub)module of the last feature */
+    if (last) {
+        for (i = 0; i < ly_mod->inc_size; ++i) {
+            if (*idx >= ly_mod->inc[i].submodule->features_size) {
+                /* not a feature from this submodule, skip */
+                continue;
+            }
+            if (last != ly_mod->inc[i].submodule->features + *idx) {
+                /* feature is not from this submodule */
+                continue;
+            }
+
+            /* we have found the submodule */
+            break;
+        }
+
+        /* feature not found in submodules, it must be in the main module */
+        assert((i < ly_mod->inc_size) || ((*idx < ly_mod->features_size) && (last == ly_mod->features + *idx)));
+
+        /* we want the next feature */
+        ++(*idx);
+    } else {
+        i = 0;
+        *idx = 0;
+    }
+
+    /* find the (sub)module of the next feature */
+    while ((i < ly_mod->inc_size) && (*idx == ly_mod->inc[i].submodule->features_size)) {
+        /* next submodule */
+        ++i;
+        *idx = 0;
+    }
+
+    /* get the next feature */
+    if (i < ly_mod->inc_size) {
+        last = ly_mod->inc[i].submodule->features + *idx;
+    } else if (*idx < ly_mod->features_size) {
+        last = ly_mod->features + *idx;
+    } else {
+        last = NULL;
+    }
+
+    return last;
+}
+
+
 API const char **
 nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
 {
     const char **cpblts, *ver;
     const struct lys_module *mod, *devmod;
+    struct lys_feature *feat;
     int size = 10, count, features_count = 0, dev_count = 0, i, str_len, len;
     unsigned int u, v, module_set_id;
     char *s;
@@ -1055,29 +1109,29 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
         str_len = sprintf(str, "%s?module=%s%s%s", mod->ns, mod->name,
                           mod->rev_size ? "&revision=" : "", mod->rev_size ? mod->rev[0].date : "");
 
-        if (mod->features_size) {
-            features_count = 0;
-            for (i = 0; i < mod->features_size; ++i) {
-                if (!(mod->features[i].flags & LYS_FENABLED)) {
-                    continue;
-                }
-                if (!features_count) {
-                    strcat(str, "&features=");
-                    str_len += 10;
-                }
-                len = strlen(mod->features[i].name);
-                if (str_len + 1 + len >= NC_CPBLT_BUF_LEN) {
-                    ERRINT;
-                    break;
-                }
-                if (features_count) {
-                    strcat(str, ",");
-                    ++str_len;
-                }
-                strcat(str, mod->features[i].name);
-                str_len += len;
-                features_count++;
+        features_count = 0;
+        i = 0;
+        feat = NULL;
+        while ((feat = nc_lys_next_feature(feat, mod, &i))) {
+            if (!(feat->flags & LYS_FENABLED)) {
+                continue;
             }
+            if (!features_count) {
+                strcat(str, "&features=");
+                str_len += 10;
+            }
+            len = strlen(feat->name);
+            if (str_len + 1 + len >= NC_CPBLT_BUF_LEN) {
+                ERRINT;
+                break;
+            }
+            if (features_count) {
+                strcat(str, ",");
+                ++str_len;
+            }
+            strcat(str, feat->name);
+            str_len += len;
+            features_count++;
         }
 
         if (mod->deviated) {
