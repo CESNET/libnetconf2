@@ -974,7 +974,7 @@ nc_lys_next_feature(struct lys_feature *last, const struct lys_module *ly_mod, i
 API const char **
 nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
 {
-    const char **cpblts, *ver;
+    const char **cpblts;
     const struct lys_module *mod, *devmod;
     struct lys_feature *feat;
     int size = 10, count, features_count = 0, dev_count = 0, i, str_len, len;
@@ -1084,16 +1084,22 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
     u = module_set_id = 0;
     while ((mod = ly_ctx_get_module_iter(ctx, &u))) {
         if (!strcmp(mod->name, "ietf-yang-library")) {
-            if (mod->rev_size && (strcmp(mod->rev[0].date, "2019-01-04") >= 0)) {
-                ver = "1.1";
-            } else {
-                ver = "1.0";
+            if (!mod->rev_size || (strcmp(mod->rev[0].date, "2016-06-21") && strcmp(mod->rev[0].date, "2019-01-04"))) {
+                ERR("Unknown \"ietf-yang-library\" revision, only 2016-06-21 and 2019-01-04 are supported.");
+                goto error;
             }
-            /* Add the yang-library NETCONF capability as defined in RFC 7950 5.6.4 */
-            sprintf(str, "urn:ietf:params:netconf:capability:yang-library:%s?%s%s&module-set-id=%u",
-                    ver, mod->rev_size ? "revision=" : "", mod->rev_size ? mod->rev[0].date : "",
-                    ly_ctx_get_module_set_id(ctx));
+
+            /* the old one is certainly supported (capab defined in RFC 7950 section 5.6.4) */
+            sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.0?revision=%s&module-set-id=%u",
+                    mod->rev[0].date, ly_ctx_get_module_set_id(ctx));
             add_cpblt(ctx, str, &cpblts, &size, &count);
+
+            if (!strcmp(mod->rev[0].date, "2019-01-04")) {
+                /* new one is supported (capab defined in RFC 8526 section 2) */
+                sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.1?revision=%s&content-id=%u",
+                        mod->rev[0].date, ly_ctx_get_module_set_id(ctx));
+                add_cpblt(ctx, str, &cpblts, &size, &count);
+            }
             continue;
         } else if (mod->type) {
             /* skip submodules */
@@ -1176,7 +1182,6 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
     return cpblts;
 
 error:
-
     free(cpblts);
     return NULL;
 }
