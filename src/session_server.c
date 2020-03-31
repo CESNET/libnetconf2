@@ -2903,7 +2903,7 @@ nc_server_ch_client_periodic_set_period(const char *client_name, uint16_t period
     }
 
     if (client->conn_type != NC_CH_PERIOD) {
-        ERR("Call Home client \"%s\" is not of periodic connection type.");
+        ERR("Call Home client \"%s\" is not of periodic connection type.", client_name);
         /* UNLOCK */
         nc_server_ch_client_unlock(client);
         return -1;
@@ -2934,7 +2934,7 @@ nc_server_ch_client_periodic_set_anchor_time(const char *client_name, time_t anc
     }
 
     if (client->conn_type != NC_CH_PERIOD) {
-        ERR("Call Home client \"%s\" is not of periodic connection type.");
+        ERR("Call Home client \"%s\" is not of periodic connection type.", client_name);
         /* UNLOCK */
         nc_server_ch_client_unlock(client);
         return -1;
