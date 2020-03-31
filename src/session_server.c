@@ -2771,7 +2771,7 @@ nc_server_ch_client_endpt_set_port(const char *client_name, const char *endpt_na
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
-    return -1;
+    return 0;
 }
 
 API int
