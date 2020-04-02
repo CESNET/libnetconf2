@@ -1035,9 +1035,20 @@ nc_ctx_check_and_fill(struct nc_session *session)
             yanglib_support = 0;
         } else {
             revision = strndup(&revision[9], 10);
-            if (nc_ctx_load_module(session, "ietf-yang-library", revision, server_modules, old_clb, old_data, get_schema_support, &mod)) {
-                WRN("Session %u: loading NETCONF ietf-yang-library schema failed, unable to automatically use <get-schema>.", session->id);
+            if (nc_ctx_load_module(session, "ietf-yang-library", revision, server_modules, old_clb, old_data,
+                    get_schema_support, &mod)) {
+                WRN("Session %u: loading NETCONF ietf-yang-library schema failed, unable to use it to learn all the supported modules.",
+                    session->id);
                 yanglib_support = 0;
+            }
+            if (strcmp(revision, "2019-01-04") >= 0) {
+                /* we also need ietf-datastores to be implemented */
+                if (nc_ctx_load_module(session, "ietf-datastores", NULL, server_modules, old_clb, old_data,
+                        get_schema_support, &mod)) {
+                    WRN("Session %u: loading NETCONF ietf-datastores schema failed, unable to use yang-library"
+                        " to learn all the supported modules.", session->id);
+                    yanglib_support = 0;
+                }
             }
             free(revision);
         }
