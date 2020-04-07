@@ -31,6 +31,7 @@
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/select.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <poll.h>
