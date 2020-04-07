@@ -13,6 +13,11 @@
  */
 
 #define _GNU_SOURCE
+
+#ifdef __linux__
+# include <sys/syscall.h>
+#endif
+
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -25,7 +30,6 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
-#include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <arpa/inet.h>
