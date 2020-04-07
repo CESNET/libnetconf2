@@ -28,6 +28,7 @@
 #include <ctype.h>
 #include <libyang/libyang.h>
 
+#include "compat.h"
 #include "session.h"
 #include "libnetconf.h"
 #include "session_server.h"

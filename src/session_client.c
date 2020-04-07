@@ -34,6 +34,7 @@
 
 #include <libyang/libyang.h>
 
+#include "compat.h"
 #include "libnetconf.h"
 #include "session_client.h"
 #include "messages_client.h"

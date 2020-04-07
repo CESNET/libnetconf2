@@ -2,17 +2,18 @@ cmake_minimum_required(VERSION 2.6)
 
 project(libnetconf2 C)
 
+# include custom Modules
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMakeModules/")
+
 include(GNUInstallDirs)
 include(CheckFunctionExists)
 include(CheckCSourceCompiles)
 include(CheckIncludeFile)
+include(UseCompat)
 
 if(POLICY CMP0075)
     cmake_policy(SET CMP0075 NEW)
 endif()
-
-# include custom Modules
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMakeModules/")
 
 set(LIBNETCONF2_DESCRIPTION "NETCONF server and client library in C.")
 
@@ -190,8 +191,11 @@ set(headers
     src/session_server.h
     src/session_server_ch.h)
 
+# use compat
+use_compat()
+
 # netconf2 target
-add_library(netconf2 SHARED ${libsrc} ${headers})
+add_library(netconf2 SHARED ${libsrc} ${headers} compat)
 set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_VERSION} SOVERSION ${LIBNETCONF2_SOVERSION_FULL})
 
 if((CMAKE_BUILD_TYPE STREQUAL Debug) OR (CMAKE_BUILD_TYPE STREQUAL Package))

@@ -30,6 +30,7 @@
 
 #include <libyang/libyang.h>
 
+#include "compat.h"
 #include "libnetconf.h"
 
 const char *nc_msgtype2str[] = {
