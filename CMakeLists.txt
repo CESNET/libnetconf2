@@ -232,22 +232,27 @@ endif()
 
 # dependencies - libssh
 if(ENABLE_SSH)
-    set(LIBSSH_FIND_VERSION 0.7.0)
-    find_package(LibSSH REQUIRED)
+    find_package(LibSSH 0.7.0 REQUIRED)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH")
-    message(STATUS "LibSSH version ${LIBSSH_VERSION} found")
+    message(STATUS "LibSSH version ${LibSSH_VERSION} found")
 
-    if(LIBSSH_VERSION VERSION_EQUAL 0.9.3)
-        message(FATAL_ERROR "LIBSSH 0.9.3 includes regression bugs and libnetconf2 will NOT work properly, try to use an older version")
+    if(LibSSH_VERSION VERSION_EQUAL 0.9.3)
+        message(FATAL_ERROR "LibSSH 0.9.3 includes regression bugs and libnetconf2 will NOT work properly, try to use another version")
     endif()
 
-    if(LIBSSH_VERSION VERSION_LESS 0.8.0)
-        target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lssh_threads -lcrypt)
+    if(LibSSH_VERSION VERSION_LESS 0.8.0)
+        target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lssh_threads)
+        list(APPEND CMAKE_REQUIRED_FLAGS "-L${LIBSSH_LIBRARY_DIR}")
+        list(APPEND CMAKE_REQUIRED_LIBRARIES ssh ssh_threads)
     else()
-        target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lcrypt)
-        set(CMAKE_REQUIRED_LIBRARIES "ssh;crypt")
+        target_link_libraries(netconf2 ${LIBSSH_LIBRARIES})
+        list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBSSH_LIBRARIES})
     endif()
     include_directories(${LIBSSH_INCLUDE_DIRS})
+
+    # crypt
+    target_link_libraries(netconf2 -lcrypt)
+    list(APPEND CMAKE_REQUIRED_LIBRARIES crypt)
 endif()
 
 # dependencies - libval
