@@ -1090,14 +1090,14 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
                 goto error;
             }
 
-            /* the old one is certainly supported (capab defined in RFC 7950 section 5.6.4) */
-            sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.0?revision=%s&module-set-id=%u",
-                    mod->rev[0].date, ly_ctx_get_module_set_id(ctx));
-            add_cpblt(ctx, str, &cpblts, &size, &count);
-
             if (!strcmp(mod->rev[0].date, "2019-01-04")) {
-                /* new one is supported (capab defined in RFC 8526 section 2) */
+                /* new one (capab defined in RFC 8526 section 2) */
                 sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.1?revision=%s&content-id=%u",
+                        mod->rev[0].date, ly_ctx_get_module_set_id(ctx));
+                add_cpblt(ctx, str, &cpblts, &size, &count);
+            } else {
+                /* old one (capab defined in RFC 7950 section 5.6.4) */
+                sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.0?revision=%s&module-set-id=%u",
                         mod->rev[0].date, ly_ctx_get_module_set_id(ctx));
                 add_cpblt(ctx, str, &cpblts, &size, &count);
             }
