@@ -11,6 +11,7 @@
  *
  *     https://opensource.org/licenses/BSD-3-Clause
  */
+#define _QNX_SOURCE /* getpeereid */
 #define _GNU_SOURCE /* signals, threads, SO_PEERCRED */
 
 #include <stdint.h>
@@ -1720,24 +1721,35 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
 static int
 nc_accept_unix(struct nc_session *session, int sock)
 {
-#ifdef SO_PEERCRED
+#if defined(SO_PEERCRED) || defined(HAVE_GETPEEREID)
     const struct passwd *pw;
-    struct ucred ucred;
     char *username;
-    socklen_t len;
     session->ti_type = NC_TI_UNIX;
+    uid_t uid;
 
-    len = sizeof(ucred);
-    if (getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &ucred, &len) < 0) {
-        ERR("Failed to get credentials from unix socket (%s).",
-            strerror(errno));
-        close(sock);
-        return -1;
-    }
+    #ifdef SO_PEERCRED
+        struct ucred ucred;
+        socklen_t len;
+        len = sizeof(ucred);
+        if (getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &ucred, &len) < 0) {
+            ERR("Failed to get credentials from unix socket (%s).",
+                strerror(errno));
+            close(sock);
+            return -1;
+        }
+        uid = ucred.uid;
+    #else
+        if (getpeereid(sock, &uid, NULL) < 0) {
+            ERR("Failed to get credentials from unix socket (%s).",
+                strerror(errno));
+            close(sock);
+            return -1;
+        }
+    #endif
 
-    pw = getpwuid(ucred.uid);
+    pw = getpwuid(uid);
     if (pw == NULL) {
-        ERR("Failed to find username for uid=%u (%s).\n", ucred.uid,
+        ERR("Failed to find username for uid=%u (%s).\n", uid,
             strerror(errno));
         close(sock);
         return -1;

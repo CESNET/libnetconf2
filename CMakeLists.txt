@@ -251,8 +251,13 @@ if(ENABLE_SSH)
     include_directories(${LIBSSH_INCLUDE_DIRS})
 
     # crypt
-    target_link_libraries(netconf2 -lcrypt)
-    list(APPEND CMAKE_REQUIRED_LIBRARIES crypt)
+    if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "QNX")
+        target_link_libraries(netconf2 -lcrypt)
+        list(APPEND CMAKE_REQUIRED_LIBRARIES crypt)
+    else()
+        target_link_libraries(netconf2 -llogin)
+        list(APPEND CMAKE_REQUIRED_LIBRARIES login)
+    endif()
 endif()
 
 # dependencies - libval
@@ -267,6 +272,20 @@ endif()
 find_package(LibYANG REQUIRED)
 target_link_libraries(netconf2 ${LIBYANG_LIBRARIES})
 include_directories(${LIBYANG_INCLUDE_DIRS})
+
+# header file compatibility - shadow.h and crypt.h
+check_include_file("shadow.h" HAVE_SHADOW)
+check_include_file("crypt.h" HAVE_CRYPT)
+
+# function compatibility - getpeereid on QNX
+if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
+    target_link_libraries(netconf2 -lsocket)
+    list(APPEND CMAKE_REQUIRED_LIBRARIES socket)
+    list(REMOVE_ITEM CMAKE_REQUIRED_LIBRARIES pthread)
+    list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_QNX_SOURCE)
+    check_symbol_exists(getpeereid "sys/types.h;unistd.h" HAVE_GETPEEREID)
+    list(REMOVE_ITEM CMAKE_REQUIRED_DEFINITIONS -D_QNX_SOURCE)
+endif()
 
 # generate doxygen documentation for libnetconf2 API
 find_package(Doxygen)
