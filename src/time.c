@@ -19,6 +19,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "compat.h"
 #include "libnetconf.h"
 
 API time_t
