@@ -228,7 +228,7 @@ nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives *ka
         goto fail;
     }
 
-    bzero(&saddr, sizeof(struct sockaddr_storage));
+    memset(&saddr, 0, sizeof(struct sockaddr_storage));
     if (is_ipv4) {
         saddr4 = (struct sockaddr_in *)&saddr;
 
