@@ -31,7 +31,8 @@ typedef enum NC_VERB_LEVEL {
     NC_VERB_ERROR = 0,   /**< Print only error messages. */
     NC_VERB_WARNING = 1, /**< Print error and warning messages. */
     NC_VERB_VERBOSE = 2, /**< Besides errors and warnings, print some other verbose messages. */
-    NC_VERB_DEBUG = 3    /**< Print all messages including some development debug messages. */
+    NC_VERB_DEBUG = 3,   /**< Print almost all messages including some development debug messages. */
+    NC_VERB_DEBUG_LOWLVL = 4, /**< Print all messages including low level debug messages. */
 } NC_VERB_LEVEL;
 
 /**
@@ -77,7 +78,7 @@ void nc_libssh_thread_verbosity(int level);
  */
 void nc_set_print_clb(void (*clb)(NC_VERB_LEVEL, const char *));
 
-/**@} Miscellaneous */
+/** @} */
 
 #ifdef __cplusplus
 }

@@ -45,7 +45,8 @@ struct {
     {NC_VERB_ERROR, "[ERR]"},
     {NC_VERB_WARNING, "[WRN]"},
     {NC_VERB_VERBOSE, "[INF]"},
-    {NC_VERB_DEBUG, "[DBG]"}
+    {NC_VERB_DEBUG, "[DBG]"},
+    {NC_VERB_DEBUG_LOWLVL, "[DBL]"}
 };
 
 #ifdef NC_ENABLED_SSH
