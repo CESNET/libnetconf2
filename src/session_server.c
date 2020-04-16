@@ -3269,7 +3269,7 @@ nc_ch_client_thread(void *arg)
             if (nc_server_ch_client_thread_session_cond_wait(session, data)) {
                 goto cleanup;
             }
-            VRB("Call Home client \"%s\" session terminated, reconnecting...", client->name);
+            VRB("Call Home client \"%s\" session terminated, reconnecting...", data->client_name);
 
             /* LOCK */
             client = nc_server_ch_client_with_endpt_lock(data->client_name);
