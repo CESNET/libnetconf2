@@ -1011,6 +1011,16 @@ nc_ctx_check_and_fill(struct nc_session *session)
             }
         }
     }
+    if (get_schema_support) {
+        VRB("Session %u: capability for <get-schema> support found.", session->id);
+    } else {
+        VRB("Session %u: capability for <get-schema> support not found.", session->id);
+    }
+    if (yanglib_support) {
+        VRB("Session %u: capability for yang-library support found.", session->id);
+    } else {
+        VRB("Session %u: capability for yang-library support not found.", session->id);
+    }
 
     /* get information about server's schemas from capabilities list until we will have yang-library */
     if (build_schema_info_cpblts(session->opts.client.cpblts, &server_modules) || !server_modules) {
