@@ -1719,14 +1719,8 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 static int
-nc_accept_unix(struct nc_session *session, int sock)
+nc_get_uid(int sock, uid_t *uid)
 {
-#if defined(SO_PEERCRED) || defined(HAVE_GETPEEREID)
-    const struct passwd *pw;
-    char *username;
-    session->ti_type = NC_TI_UNIX;
-    uid_t uid;
-
     #ifdef SO_PEERCRED
         struct ucred ucred;
         socklen_t len;
@@ -1737,15 +1731,31 @@ nc_accept_unix(struct nc_session *session, int sock)
             close(sock);
             return -1;
         }
-        uid = ucred.uid;
+        *uid = ucred.uid;
     #else
-        if (getpeereid(sock, &uid, NULL) < 0) {
+        if (getpeereid(sock, uid, NULL) < 0) {
             ERR("Failed to get credentials from unix socket (%s).",
                 strerror(errno));
             close(sock);
             return -1;
         }
     #endif
+
+    return 0;
+}
+
+static int
+nc_accept_unix(struct nc_session *session, int sock)
+{
+#if defined(SO_PEERCRED) || defined(HAVE_GETPEEREID)
+    const struct passwd *pw;
+    char *username;
+    session->ti_type = NC_TI_UNIX;
+    uid_t uid;
+
+    if (nc_get_uid(sock, &uid) < 0) {
+        return -1;
+    }
 
     pw = getpwuid(uid);
     if (pw == NULL) {
