@@ -48,6 +48,21 @@
 #cmakedefine HAVE_PTHREAD_MUTEX_TIMEDLOCK
 
 /*
+ * Support for getpeereid
+ */
+#cmakedefine HAVE_GETPEEREID
+
+/*
+ * Support for shadow file manipulation
+ */
+#cmakedefine HAVE_SHADOW
+
+/*
+ * Support for crypt.h
+ */
+#cmakedefine HAVE_CRYPT
+
+/*
  * Location of installed basic YIN/YANG schemas
  */
 #define NC_SCHEMAS_DIR "@SCHEMAS_DIR@"
