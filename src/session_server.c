@@ -1721,26 +1721,24 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
 static int
 nc_get_uid(int sock, uid_t *uid)
 {
-    #ifdef SO_PEERCRED
-        struct ucred ucred;
-        socklen_t len;
-        len = sizeof(ucred);
-        if (getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &ucred, &len) < 0) {
-            ERR("Failed to get credentials from unix socket (%s).",
-                strerror(errno));
-            close(sock);
-            return -1;
-        }
-        *uid = ucred.uid;
-    #else
-        if (getpeereid(sock, uid, NULL) < 0) {
-            ERR("Failed to get credentials from unix socket (%s).",
-                strerror(errno));
-            close(sock);
-            return -1;
-        }
-    #endif
+    int ret;
 
+#ifdef SO_PEERCRED
+    struct ucred ucred;
+    socklen_t len;
+    len = sizeof(ucred);
+    ret = getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &ucred, &len);
+    if (!ret) {
+        *uid = ucred.uid;
+    }
+#else
+    ret = getpeereid(sock, uid, NULL);
+#endif
+
+    if (ret < 0) {
+        ERR("Failed to get credentials from unix socket (%s).", strerror(errno));
+        return -1;
+    }
     return 0;
 }
 
@@ -1753,7 +1751,8 @@ nc_accept_unix(struct nc_session *session, int sock)
     session->ti_type = NC_TI_UNIX;
     uid_t uid;
 
-    if (nc_get_uid(sock, &uid) < 0) {
+    if (nc_get_uid(sock, &uid)) {
+        close(sock);
         return -1;
     }
 
