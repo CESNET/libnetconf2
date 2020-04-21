@@ -72,15 +72,6 @@ if(ENABLE_DNSSEC AND NOT ENABLE_SSH)
     set(ENABLE_DNSSEC OFF)
 endif()
 
-if(ENABLE_SSH)
-    find_library(LIBCRYPT crypt)
-    if(LIBCRYPT STREQUAL LIBCRYPT-NOTFOUND)
-        message(WARNING "LIBCRYPT not found! SSH, and TLS support disabled.")
-        set(ENABLE_SSH OFF)
-        set(ENABLE_TLS OFF)
-    endif()
-endif()
-
 # package options
 find_program(DEB_BUILDER NAMES debuild)
 find_program(RPM_BUILDER NAMES rpmbuild)
