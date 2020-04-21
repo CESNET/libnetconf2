@@ -187,7 +187,7 @@ use_compat()
 
 # netconf2 target
 add_library(netconf2 SHARED ${libsrc} ${headers} $<TARGET_OBJECTS:compat>)
-set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_VERSION} SOVERSION ${LIBNETCONF2_SOVERSION_FULL})
+set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_SOVERSION_FULL} SOVERSION ${LIBNETCONF2_SOVERSION})
 
 if((CMAKE_BUILD_TYPE STREQUAL Debug) OR (CMAKE_BUILD_TYPE STREQUAL Package))
     option(ENABLE_BUILD_TESTS "Build tests" ON)
