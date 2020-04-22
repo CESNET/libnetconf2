@@ -216,7 +216,6 @@ if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_TLS")
     endif()
 
-    #TODO target_link_libraries(netconf2 PUBLIC OpenSSL::SSL OpenSSL::Crypto)
     target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
     include_directories(${OPENSSL_INCLUDE_DIR})
 endif()
@@ -227,8 +226,8 @@ if(ENABLE_SSH)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH")
     message(STATUS "LibSSH version ${LibSSH_VERSION} found")
 
-    if(LibSSH_VERSION VERSION_EQUAL 0.9.3)
-        message(FATAL_ERROR "LibSSH 0.9.3 includes regression bugs and libnetconf2 will NOT work properly, try to use another version")
+    if(LibSSH_VERSION VERSION_EQUAL 0.9.3 OR LibSSH_VERSION VERSION_EQUAL 0.9.4)
+        message(FATAL_ERROR "LibSSH ${LibSSH_VERSION} includes regression bugs and libnetconf2 will NOT work properly, try to use another version")
     endif()
 
     if(LibSSH_VERSION VERSION_LESS 0.8.0)
