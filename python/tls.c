@@ -66,7 +66,7 @@ ncTLSStr(ncTLSObject *self)
 static int
 ncTLSSetCert(ncTLSObject *self, PyObject *value, void *closure)
 {
-    char *path;
+    const char *path;
     struct stat st;
 
     if (!value) {
@@ -109,7 +109,7 @@ ncTLSGetCert(ncTLSObject *self, void *closure)
 static int
 ncTLSSetKey(ncTLSObject *self, PyObject *value, void *closure)
 {
-    char *path;
+    const char *path;
     struct stat st;
 
     if (!value) {
