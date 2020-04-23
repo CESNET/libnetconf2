@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 2.6)
 
 project(libnetconf2 C)
+set(LIBNETCONF2_DESC "NETCONF library in C providing API for both clients and servers.")
 
 # include custom Modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMakeModules/")
@@ -70,77 +71,6 @@ set(SCHEMAS_DIR "${CMAKE_INSTALL_PREFIX}/${DATA_INSTALL_DIR}" CACHE STRING "Dire
 if(ENABLE_DNSSEC AND NOT ENABLE_SSH)
     message(WARNING "DNSSEC SSHFP retrieval cannot be used without SSH support.")
     set(ENABLE_DNSSEC OFF)
-endif()
-
-# package options
-find_program(DEB_BUILDER NAMES debuild)
-find_program(RPM_BUILDER NAMES rpmbuild)
-
-if(NOT DEFINED ENV{TRAVIS_BRANCH})
-    execute_process(COMMAND "git" "rev-parse" "--abbrev-ref" "HEAD"
-                    OUTPUT_VARIABLE GIT_BRANCH
-                    OUTPUT_STRIP_TRAILING_WHITESPACE
-                    ERROR_QUIET
-    )
-    if(NOT GIT_BRANCH)
-        set(ENV{TRAVIS_BRANCH} "master")
-    else()
-        if(GIT_BRANCH MATCHES "master|devel")
-            set(ENV{TRAVIS_BRANCH} ${GIT_BRANCH})
-        else()
-            set(ENV{TRAVIS_BRANCH} "master")
-        endif()
-    endif()
-
-    set(GIT_BRANCH $ENV{TRAVIS_BRANCH}) # NOTE: used for configure_file too
-endif()
-
-if(GIT_BRANCH STREQUAL master)
-    set(PACKAGE_NAME "libnetconf2")
-    set(BRANCH "master")
-    set(BUILD_TYPE "Package")
-    set(CONFLICT_PACKAGE_NAME "libnetconf2-experimental")
-    set(PACKAGE_PART_NAME "")
-else()
-    set(PACKAGE_NAME "libnetconf2-experimental")
-    set(BRANCH "devel")
-    set(BUILD_TYPE "Debug")
-    set(CONFLICT_PACKAGE_NAME "libnetconf2")
-    set(PACKAGE_PART_NAME "-experimental")
-endif()
-# change version in config files
-configure_file(${PROJECT_SOURCE_DIR}/packages/libnetconf2.spec.in ${PROJECT_BINARY_DIR}/build-packages/libnetconf2.spec)
-configure_file(${PROJECT_SOURCE_DIR}/packages/libnetconf2.dsc.in ${PROJECT_BINARY_DIR}/build-packages/libnetconf2.dsc)
-configure_file(${PROJECT_SOURCE_DIR}/packages/debian.control.in ${PROJECT_BINARY_DIR}/build-packages/debian.control @ONLY)
-configure_file(${PROJECT_SOURCE_DIR}/packages/debian.rules.in ${PROJECT_BINARY_DIR}/build-packages/debian.rules)
-configure_file(${PROJECT_SOURCE_DIR}/packages/debian.libnetconf2-dev.install
-               ${PROJECT_BINARY_DIR}/build-packages/debian.libnetconf2${PACKAGE_PART_NAME}-dev.install COPYONLY)
-configure_file(${PROJECT_SOURCE_DIR}/packages/debian.libnetconf2.install
-               ${PROJECT_BINARY_DIR}/build-packages/debian.libnetconf2${PACKAGE_PART_NAME}.install COPYONLY)
-configure_file(${PROJECT_SOURCE_DIR}/packages/debian.python3-netconf2.install
-               ${PROJECT_BINARY_DIR}/build-packages/debian.python3-netconf2${PACKAGE_PART_NAME}.install COPYONLY)
-
-if(NOT DEB_BUILDER)
-    message(WARNING "Missing tools (devscripts, debhelper package) for building deb package.\nYou won't be able to generate deb package from source code.\nCompiling libnetconf2 should still works fine.")
-else()
-    # target for local build deb package
-    add_custom_target(build-deb
-                      WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
-                      COMMAND build-packages/local-deb.sh
-    )
-    configure_file(${PROJECT_SOURCE_DIR}/packages/local-deb.sh.in ${PROJECT_BINARY_DIR}/build-packages/local-deb.sh @ONLY)
-endif()
-
-if(NOT RPM_BUILDER)
-    message(WARNING "Missing tools (rpm package) for building rpm package. \nYou won't be able to generate rpm package from source code.\nCompiling libnetconf2 should still work fine.")
-else()
-    # target for local build rpm package
-    string(REPLACE ${PROJECT_SOURCE_DIR} "." EXCLUDE_BUILD_DIR ${PROJECT_BINARY_DIR})
-    add_custom_target(build-rpm
-                      WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
-                      COMMAND build-packages/local-rpm.sh
-    )
-    configure_file(${PROJECT_SOURCE_DIR}/packages/local-rpm.sh.in ${PROJECT_BINARY_DIR}/build-packages/local-rpm.sh @ONLY)
 endif()
 
 include_directories(${PROJECT_BINARY_DIR}/src)
@@ -291,6 +221,9 @@ endif()
 if(ENABLE_PYTHON)
     add_subdirectory(python)
 endif()
+
+# packages
+add_subdirectory(packages)
 
 # install library
 install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
