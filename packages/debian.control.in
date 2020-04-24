@@ -6,7 +6,7 @@ Build-Depends: debhelper (>= 9), gcc
 Homepage: @GITHUB_URL@
 
 Package: @PACKAGE@
-Depends: libyang, libssh-4 (>= 0.7.1), libssh-4 (<< 0.9.3) | libssh-4 (>> 0.9.4), ${shlibs:Depends}
+Depends: libyang (>= 0.16), libssh-4 (>= 0.7.1), libssh-4 (<< 0.9.3) | libssh-4 (>> 0.9.4), ${shlibs:Depends}
 Section: libs
 Architecture: any
 Description: @PACKAGE_DESC@
