@@ -581,7 +581,8 @@ void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const st
  *                        to be set. The one set will be freed.
  *                        - \p privkey_path expects a PEM file,
  *                        - \p privkey_data expects a base-64 encoded ANS.1 DER data,
- *                        - \p privkey_type type of the key in \p privkey_data.
+ *                        - \p privkey_type type of the key in \p privkey_data. Use ::NC_SSH_KEY_UNKNOWN for
+ *                          PKCS#8 key that includes the information about the key in its data.
  * @param[in] user_data Optional arbitrary user data that will be passed to \p hostkey_clb.
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
  */
