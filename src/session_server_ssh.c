@@ -78,7 +78,7 @@ base64der_key_to_tmp_file(const char *in, const char *key_str)
     written += fwrite(" PRIVATE KEY-----", 1, 17, file);
 
     fclose(file);
-    if ((unsigned)written != 62 + strlen(in)) {
+    if ((unsigned)written != 11 + strlen(key_str) + 18 + strlen(in) + 10 + strlen(key_str) + 17) {
         unlink(path);
         return NULL;
     }
