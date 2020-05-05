@@ -4,6 +4,7 @@
 #  LIBYANG_FOUND - system has LibYANG
 #  LIBYANG_INCLUDE_DIRS - the LibYANG include directory
 #  LIBYANG_LIBRARIES - Link these to use LibYANG
+#  LIBYANG_VERSION - SO version of the found libyang library
 #
 #  Author Radek Krejci <rkrejci@cesnet.cz>
 #  Copyright (c) 2015 CESNET, z.s.p.o.
@@ -31,53 +32,53 @@
 #  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
+include(FindPackageHandleStandardArgs)
 
 if(LIBYANG_LIBRARIES AND LIBYANG_INCLUDE_DIRS)
-  # in cache already
-  set(LIBYANG_FOUND TRUE)
-else()
-
-  find_path(LIBYANG_INCLUDE_DIR
-    NAMES
-      libyang/libyang.h
-    PATHS
-      /usr/include
-      /usr/local/include
-      /opt/local/include
-      /sw/include
-      ${CMAKE_INCLUDE_PATH}
-      ${CMAKE_INSTALL_PREFIX}/include
-  )
-
-  find_library(LIBYANG_LIBRARY
-    NAMES
-      yang
-      libyang
-    PATHS
-      /usr/lib
-      /usr/lib64
-      /usr/local/lib
-      /usr/local/lib64
-      /opt/local/lib
-      /sw/lib
-      ${CMAKE_LIBRARY_PATH}
-      ${CMAKE_INSTALL_PREFIX}/lib
-  )
-
-  if(LIBYANG_INCLUDE_DIR AND LIBYANG_LIBRARY)
+    # in cache already
     set(LIBYANG_FOUND TRUE)
-  else()
-    set(LIBYANG_FOUND FALSE)
-  endif()
+else()
+    find_path(LIBYANG_INCLUDE_DIR
+        NAMES
+        libyang/libyang.h
+        PATHS
+        /usr/include
+        /usr/local/include
+        /opt/local/include
+        /sw/include
+        ${CMAKE_INCLUDE_PATH}
+        ${CMAKE_INSTALL_PREFIX}/include
+    )
 
-  set(LIBYANG_INCLUDE_DIRS ${LIBYANG_INCLUDE_DIR})
-  set(LIBYANG_LIBRARIES ${LIBYANG_LIBRARY})
+    find_library(LIBYANG_LIBRARY
+        NAMES
+        yang
+        libyang
+        PATHS
+        /usr/lib
+        /usr/lib64
+        /usr/local/lib
+        /usr/local/lib64
+        /opt/local/lib
+        /sw/lib
+        ${CMAKE_LIBRARY_PATH}
+        ${CMAKE_INSTALL_PREFIX}/lib
+    )
 
-  include(FindPackageHandleStandardArgs)
-  find_package_handle_standard_args(LIBYANG DEFAULT_MSG LIBYANG_LIBRARIES LIBYANG_INCLUDE_DIRS)
+    if(LIBYANG_INCLUDE_DIR)
+        find_path(LY_HEADER_PATH "libyang/libyang.h" HINTS ${LIBYANG_INCLUDE_DIR})
+        file(READ "${LY_HEADER_PATH}/libyang/libyang.h" LY_HEADER)
+        string(REGEX MATCH "#define LY_VERSION \"[0-9]+\\.[0-9]+\\.[0-9]+\"" LY_VERSION_MACRO "${LY_HEADER}")
+        string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" LIBYANG_VERSION "${LY_VERSION_MACRO}")
+    endif()
 
-  # show the LIBYANG_INCLUDE_DIRS and LIBYANG_LIBRARIES variables only in the advanced view
-  mark_as_advanced(LIBYANG_INCLUDE_DIRS LIBYANG_LIBRARIES)
+    set(LIBYANG_INCLUDE_DIRS ${LIBYANG_INCLUDE_DIR})
+    set(LIBYANG_LIBRARIES ${LIBYANG_LIBRARY})
+    mark_as_advanced(LIBYANG_INCLUDE_DIRS LIBYANG_LIBRARIES)
 
+    # handle the QUIETLY, REQUIRED and VERSION arguments and set LIBYANG_FOUND to TRUE
+    # if all listed variables are TRUE
+    find_package_handle_standard_args(LibYANG FOUND_VAR LIBYANG_FOUND
+        REQUIRED_VARS LIBYANG_LIBRARY LIBYANG_INCLUDE_DIR
+        VERSION_VAR LIBYANG_VERSION)
 endif()
-
