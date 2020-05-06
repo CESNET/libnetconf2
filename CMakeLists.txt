@@ -26,9 +26,6 @@ endif()
 # osx specific
 set(CMAKE_MACOSX_RPATH TRUE)
 
-set(INCLUDE_INSTALL_SUBDIR ${CMAKE_INSTALL_INCLUDEDIR}/libnetconf2)
-set(DATA_INSTALL_DIR ${CMAKE_INSTALL_DATADIR}/libnetconf2)
-
 # set default build type if not specified by user
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
@@ -66,7 +63,7 @@ set(READ_INACTIVE_TIMEOUT 20 CACHE STRING "Maximum number of seconds waiting for
 set(READ_ACTIVE_TIMEOUT 300 CACHE STRING "Maximum number of seconds for receiving a full message")
 set(MAX_PSPOLL_THREAD_COUNT 6 CACHE STRING "Maximum number of threads that could simultaneously access a ps_poll structure")
 set(TIMEOUT_STEP 100 CACHE STRING "Number of microseconds tasks are repeated until timeout elapses")
-set(SCHEMAS_DIR "${CMAKE_INSTALL_PREFIX}/${DATA_INSTALL_DIR}" CACHE STRING "Directory with internal lnc2 schemas")
+set(YANG_MODULE_DIR "${CMAKE_INSTALL_PREFIX}/share/yang/modules" CACHE STRING "Directory with common YANG modules")
 
 if(ENABLE_DNSSEC AND NOT ENABLE_SSH)
     message(WARNING "DNSSEC SSHFP retrieval cannot be used without SSH support.")
@@ -231,13 +228,7 @@ install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
 # install headers
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_client.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_server.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-install(FILES ${headers} DESTINATION ${INCLUDE_INSTALL_SUBDIR})
-
-# install schemas
-install(
-    CODE "file(GLOB yin_schemas \"${CMAKE_SOURCE_DIR}/schemas/*.yin\")"
-    CODE "file(INSTALL \${yin_schemas} DESTINATION ${CMAKE_INSTALL_PREFIX}/${DATA_INSTALL_DIR})"
-)
+install(FILES ${headers} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libnetconf2)
 
 # install pkg-config file
 find_package(PkgConfig)

@@ -495,7 +495,7 @@ main(void)
     const struct lys_node *node;
 
     /* create ctx */
-    ctx = ly_ctx_new(TESTS_DIR"/../schemas", 0);
+    ctx = ly_ctx_new(TESTS_DIR"/data/modules", 0);
     assert_non_null(ctx);
 
     /* load modules */

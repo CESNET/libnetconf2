@@ -63,9 +63,9 @@
 #cmakedefine HAVE_CRYPT
 
 /*
- * Location of installed basic YIN/YANG schemas
+ * Location of installed basic YANG modules on the system
  */
-#define NC_SCHEMAS_DIR "@SCHEMAS_DIR@"
+#define NC_YANG_DIR "@YANG_MODULE_DIR@"
 
 /*
  * Inactive read timeout

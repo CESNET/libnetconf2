@@ -226,7 +226,7 @@ nc_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx)
         if (client_opts.schema_searchpath) {
             ly_ctx_set_searchdir(ctx, client_opts.schema_searchpath);
         }
-        ly_ctx_set_searchdir(ctx, NC_SCHEMAS_DIR);
+        ly_ctx_set_searchdir(ctx, NC_YANG_DIR);
 
         /* set callback for getting schemas, if provided */
         ly_ctx_set_module_imp_clb(ctx, client_opts.schema_clb, client_opts.schema_clb_data);
@@ -950,10 +950,6 @@ nc_ctx_fill_ietf_netconf(struct nc_session *session, struct schema_info *modules
     ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL, 1);
     if (!ietfnc) {
         nc_ctx_load_module(session, "ietf-netconf", NULL, modules, user_clb, user_data, has_get_schema, &ietfnc);
-        if (!ietfnc) {
-            WRN("Unable to find correct \"ietf-netconf\" schema, trying to use backup from \"%s\".", NC_SCHEMAS_DIR"/ietf-netconf.yin");
-            ietfnc = lys_parse_path(session->ctx, NC_SCHEMAS_DIR"/ietf-netconf.yin", LYS_IN_YIN);
-        }
     }
     if (!ietfnc) {
         ERR("Loading base NETCONF schema failed.");
