@@ -72,8 +72,6 @@ make DESTDIR=%{buildroot} install
 %files
 %defattr(-,root,root)
 %{_libdir}/libnetconf2.so.*
-%{_datadir}/libnetconf2/*
-%dir %{_datadir}/libnetconf2/
 
 %files devel
 %defattr(-,root,root)
