@@ -44,6 +44,9 @@
 #include "session_client.h"
 #include "messages_client.h"
 
+#include "../modules/ietf_netconf_monitoring@2010-10-04_yang.h"
+#include "../modules/ietf_netconf@2013-09-29_yang.h"
+
 static const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "candidate"};
 
 #ifdef NC_ENABLED_SSH
@@ -225,8 +228,9 @@ nc_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx)
         /* user path must be first, the first path is used to store schemas retreived via get-schema */
         if (client_opts.schema_searchpath) {
             ly_ctx_set_searchdir(ctx, client_opts.schema_searchpath);
+        } else if (!access(NC_YANG_DIR, F_OK)) {
+            ly_ctx_set_searchdir(ctx, NC_YANG_DIR);
         }
-        ly_ctx_set_searchdir(ctx, NC_YANG_DIR);
 
         /* set callback for getting schemas, if provided */
         ly_ctx_set_module_imp_clb(ctx, client_opts.schema_clb, client_opts.schema_clb_data);
@@ -950,6 +954,9 @@ nc_ctx_fill_ietf_netconf(struct nc_session *session, struct schema_info *modules
     ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL, 1);
     if (!ietfnc) {
         nc_ctx_load_module(session, "ietf-netconf", NULL, modules, user_clb, user_data, has_get_schema, &ietfnc);
+        if (!ietfnc) {
+            ietfnc = lys_parse_mem(session->ctx, ietf_netconf_2013_09_29_yang, LYS_YANG);
+        }
     }
     if (!ietfnc) {
         ERR("Loading base NETCONF schema failed.");
@@ -1025,11 +1032,9 @@ nc_ctx_check_and_fill(struct nc_session *session)
     }
 
     /* get-schema is supported, load local ietf-netconf-monitoring so we can create <get-schema> RPCs */
-    if (get_schema_support && !ly_ctx_get_module(session->ctx, "ietf-netconf-monitoring", NULL, 1)) {
-        if (nc_ctx_load_module(session, "ietf-netconf-monitoring", NULL, server_modules, old_clb, old_data, 0, &mod)) {
-            WRN("Session %u: loading NETCONF monitoring schema failed, cannot use <get-schema>.", session->id);
-            get_schema_support = 0;
-        }
+    if (get_schema_support && !lys_parse_mem(session->ctx, ietf_netconf_monitoring_2010_10_04_yang, LYS_YANG)) {
+        WRN("Session %u: loading NETCONF monitoring schema failed, cannot use <get-schema>.", session->id);
+        get_schema_support = 0;
     }
 
     /* load base model disregarding whether it's in capabilities (but NETCONF capabilities are used to enable features) */
