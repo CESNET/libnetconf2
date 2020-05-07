@@ -46,10 +46,10 @@ setup_write(void **state)
 
     w = malloc(sizeof *w);
     w->session = calloc(1, sizeof *w->session);
-    w->session->ctx = ly_ctx_new(TESTS_DIR"/../schemas", 0);
+    w->session->ctx = ly_ctx_new(TESTS_DIR"/data/modules", 0);
 
     /* ietf-netconf */
-    fd = open(TESTS_DIR"/../schemas/ietf-netconf.yin", O_RDONLY);
+    fd = open(TESTS_DIR"/data/modules/ietf-netconf.yin", O_RDONLY);
     if (fd == -1) {
         free(w);
         return -1;

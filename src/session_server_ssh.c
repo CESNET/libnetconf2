@@ -14,21 +14,25 @@
 
 #define _GNU_SOURCE
 
+#include "config.h" /* Expose HAVE_SHADOW and HAVE_CRYPT */
+
+#ifdef HAVE_SHADOW
+    #include <shadow.h>
+#endif
+#ifdef HAVE_CRYPT
+    #include <crypt.h>
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <pwd.h>
-#ifndef __APPLE__
-#include <shadow.h>
-#include <crypt.h>
-#endif
 #include <errno.h>
 #include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
 
-#include "config.h"
 #include "session_server.h"
 #include "session_server_ch.h"
 #include "libnetconf.h"
@@ -65,18 +69,30 @@ base64der_key_to_tmp_file(const char *in, const char *key_str)
     }
 
     /* write the key into the file */
-    written = fwrite("-----BEGIN ", 1, 11, file);
-    written += fwrite(key_str, 1, strlen(key_str), file);
-    written += fwrite(" PRIVATE KEY-----\n", 1, 18, file);
-    written += fwrite(in, 1, strlen(in), file);
-    written += fwrite("\n-----END ", 1, 10, file);
-    written += fwrite(key_str, 1, strlen(key_str), file);
-    written += fwrite(" PRIVATE KEY-----", 1, 17, file);
+    if (key_str) {
+        written = fwrite("-----BEGIN ", 1, 11, file);
+        written += fwrite(key_str, 1, strlen(key_str), file);
+        written += fwrite(" PRIVATE KEY-----\n", 1, 18, file);
+        written += fwrite(in, 1, strlen(in), file);
+        written += fwrite("\n-----END ", 1, 10, file);
+        written += fwrite(key_str, 1, strlen(key_str), file);
+        written += fwrite(" PRIVATE KEY-----", 1, 17, file);
 
-    fclose(file);
-    if ((unsigned)written != 62 + strlen(in)) {
-        unlink(path);
-        return NULL;
+        fclose(file);
+        if ((unsigned)written != 11 + strlen(key_str) + 18 + strlen(in) + 10 + strlen(key_str) + 17) {
+            unlink(path);
+            return NULL;
+        }
+    } else {
+        written = fwrite("-----BEGIN PRIVATE KEY-----\n", 1, 28, file);
+        written += fwrite(in, 1, strlen(in), file);
+        written += fwrite("\n-----END PRIVATE KEY-----", 1, 26, file);
+
+        fclose(file);
+        if ((unsigned)written != 28 + strlen(in) + 26) {
+            unlink(path);
+            return NULL;
+        }
     }
 
     return strdup(path);
@@ -664,7 +680,7 @@ nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts)
 static char *
 auth_password_get_pwd_hash(const char *username)
 {
-#ifndef __APPLE__
+#ifdef HAVE_SHADOW
     struct passwd *pwd, pwd_buf;
     struct spwd *spwd, spwd_buf;
     char *pass_hash = NULL, buf[256];
@@ -676,7 +692,11 @@ auth_password_get_pwd_hash(const char *username)
     }
 
     if (!strcmp(pwd->pw_passwd, "x")) {
-        getspnam_r(username, &spwd_buf, buf, 256, &spwd);
+        #ifndef __QNXNTO__
+            getspnam_r(username, &spwd_buf, buf, 256, &spwd);
+        #else
+            spwd = getspnam_r(username, &spwd_buf, buf, 256);
+        #endif
         if (!spwd) {
             VRB("Failed to retrieve the shadow entry for \"%s\".", username);
             return NULL;

@@ -45,7 +45,8 @@ struct {
     {NC_VERB_ERROR, "[ERR]"},
     {NC_VERB_WARNING, "[WRN]"},
     {NC_VERB_VERBOSE, "[INF]"},
-    {NC_VERB_DEBUG, "[DBG]"}
+    {NC_VERB_DEBUG, "[DBG]"},
+    {NC_VERB_DEBUG_LOWLVL, "[DBL]"}
 };
 
 #ifdef NC_ENABLED_SSH
@@ -96,5 +97,5 @@ API void
 nc_set_print_clb(void (*clb)(NC_VERB_LEVEL, const char *))
 {
     print_clb = clb;
-    ly_set_log_clb(nc_ly_log_clb, 0);
+    ly_set_log_clb(nc_ly_log_clb, 1);
 }

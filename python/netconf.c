@@ -53,6 +53,7 @@ clb_print(NC_VERB_LEVEL level, const char* msg)
         }
         break;
     case NC_VERB_DEBUG:
+    case NC_VERB_DEBUG_LOWLVL:
         if (syslogEnabled) {
             syslog(LOG_DEBUG, "%s", msg);
         }
@@ -127,9 +128,15 @@ setSearchpath(PyObject *self, PyObject *args, PyObject *keywds)
     Py_RETURN_NONE;
 }
 
-char *
+static void
+schemaCallbackModelFree(void *model_data, void *user_data)
+{
+    free(model_data);
+}
+
+const char *
 schemaCallbackWrapper(const char *mod_name, const char *mod_rev, const char *submod_name, const char *sub_rev,
-                      void *user_data, LYS_INFORMAT *format, void (**free_module_data)(void *model_data))
+                      void *user_data, LYS_INFORMAT *format, void (**free_module_data)(void *model_data, void *user_data))
 {
     PyObject *arglist, *result, *data = NULL;
     char *str = NULL;
@@ -148,7 +155,7 @@ schemaCallbackWrapper(const char *mod_name, const char *mod_rev, const char *sub
             return NULL;
         }
         Py_DECREF(result);
-        *free_module_data = free;
+        *free_module_data = schemaCallbackModelFree;
         str = strdup(PyUnicode_AsUTF8(data));
         Py_DECREF(data);
     }

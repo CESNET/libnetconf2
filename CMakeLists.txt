@@ -1,18 +1,20 @@
 cmake_minimum_required(VERSION 2.6)
 
 project(libnetconf2 C)
+set(LIBNETCONF2_DESC "NETCONF library in C providing API for both clients and servers.")
+
+# include custom Modules
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMakeModules/")
 
 include(GNUInstallDirs)
 include(CheckFunctionExists)
 include(CheckCSourceCompiles)
 include(CheckIncludeFile)
+include(UseCompat)
 
 if(POLICY CMP0075)
     cmake_policy(SET CMP0075 NEW)
 endif()
-
-# include custom Modules
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMakeModules/")
 
 set(LIBNETCONF2_DESCRIPTION "NETCONF server and client library in C.")
 
@@ -23,9 +25,6 @@ endif()
 
 # osx specific
 set(CMAKE_MACOSX_RPATH TRUE)
-
-set(INCLUDE_INSTALL_SUBDIR ${CMAKE_INSTALL_INCLUDEDIR}/libnetconf2)
-set(DATA_INSTALL_DIR ${CMAKE_INSTALL_DATADIR}/libnetconf2)
 
 # set default build type if not specified by user
 if(NOT CMAKE_BUILD_TYPE)
@@ -43,15 +42,15 @@ set(CMAKE_C_FLAGS_PACKAGE "-g -O2 -DNDEBUG")
 # micro version is changed with a set of small changes or bugfixes anywhere in the project.
 set(LIBNETCONF2_MAJOR_VERSION 1)
 set(LIBNETCONF2_MINOR_VERSION 1)
-set(LIBNETCONF2_MICRO_VERSION 7)
+set(LIBNETCONF2_MICRO_VERSION 24)
 set(LIBNETCONF2_VERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION}.${LIBNETCONF2_MICRO_VERSION})
 
 # Version of the library
 # Major version is changed with every backward non-compatible API/ABI change in libyang, minor version changes
 # with backward compatible change and micro version is connected with any internal change of the library.
 set(LIBNETCONF2_MAJOR_SOVERSION 1)
-set(LIBNETCONF2_MINOR_SOVERSION 2)
-set(LIBNETCONF2_MICRO_SOVERSION 1)
+set(LIBNETCONF2_MINOR_SOVERSION 3)
+set(LIBNETCONF2_MICRO_SOVERSION 5)
 set(LIBNETCONF2_SOVERSION_FULL ${LIBNETCONF2_MAJOR_SOVERSION}.${LIBNETCONF2_MINOR_SOVERSION}.${LIBNETCONF2_MICRO_SOVERSION})
 set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_SOVERSION})
 
@@ -64,91 +63,11 @@ set(READ_INACTIVE_TIMEOUT 20 CACHE STRING "Maximum number of seconds waiting for
 set(READ_ACTIVE_TIMEOUT 300 CACHE STRING "Maximum number of seconds for receiving a full message")
 set(MAX_PSPOLL_THREAD_COUNT 6 CACHE STRING "Maximum number of threads that could simultaneously access a ps_poll structure")
 set(TIMEOUT_STEP 100 CACHE STRING "Number of microseconds tasks are repeated until timeout elapses")
-set(SCHEMAS_DIR "${CMAKE_INSTALL_PREFIX}/${DATA_INSTALL_DIR}" CACHE STRING "Directory with internal lnc2 schemas")
+set(YANG_MODULE_DIR "${CMAKE_INSTALL_PREFIX}/share/yang/modules" CACHE STRING "Directory with common YANG modules")
 
 if(ENABLE_DNSSEC AND NOT ENABLE_SSH)
     message(WARNING "DNSSEC SSHFP retrieval cannot be used without SSH support.")
     set(ENABLE_DNSSEC OFF)
-endif()
-
-if(ENABLE_SSH)
-    find_library(LIBCRYPT crypt)
-    if(LIBCRYPT STREQUAL LIBCRYPT-NOTFOUND)
-        message(WARNING "LIBCRYPT not found! SSH, and TLS support disabled.")
-        set(ENABLE_SSH OFF)
-        set(ENABLE_TLS OFF)
-    endif()
-endif()
-
-# package options
-find_program(DEB_BUILDER NAMES debuild)
-find_program(RPM_BUILDER NAMES rpmbuild)
-
-if(NOT DEFINED ENV{TRAVIS_BRANCH})
-    execute_process(COMMAND "git" "rev-parse" "--abbrev-ref" "HEAD"
-                    OUTPUT_VARIABLE GIT_BRANCH
-                    OUTPUT_STRIP_TRAILING_WHITESPACE
-                    ERROR_QUIET
-    )
-    if(NOT GIT_BRANCH)
-        set(ENV{TRAVIS_BRANCH} "master")
-    else()
-        if(GIT_BRANCH MATCHES "master|devel")
-            set(ENV{TRAVIS_BRANCH} ${GIT_BRANCH})
-        else()
-            set(ENV{TRAVIS_BRANCH} "master")
-        endif()
-    endif()
-
-    set(GIT_BRANCH $ENV{TRAVIS_BRANCH}) # NOTE: used for configure_file too
-endif()
-
-if(GIT_BRANCH STREQUAL master)
-    set(PACKAGE_NAME "libnetconf2")
-    set(BRANCH "master")
-    set(BUILD_TYPE "Package")
-    set(CONFLICT_PACKAGE_NAME "libnetconf2-experimental")
-    set(PACKAGE_PART_NAME "")
-else()
-    set(PACKAGE_NAME "libnetconf2-experimental")
-    set(BRANCH "devel")
-    set(BUILD_TYPE "Debug")
-    set(CONFLICT_PACKAGE_NAME "libnetconf2")
-    set(PACKAGE_PART_NAME "-experimental")
-endif()
-# change version in config files
-configure_file(${PROJECT_SOURCE_DIR}/packages/libnetconf2.spec.in ${PROJECT_BINARY_DIR}/build-packages/libnetconf2.spec)
-configure_file(${PROJECT_SOURCE_DIR}/packages/libnetconf2.dsc.in ${PROJECT_BINARY_DIR}/build-packages/libnetconf2.dsc)
-configure_file(${PROJECT_SOURCE_DIR}/packages/debian.control.in ${PROJECT_BINARY_DIR}/build-packages/debian.control @ONLY)
-configure_file(${PROJECT_SOURCE_DIR}/packages/debian.rules.in ${PROJECT_BINARY_DIR}/build-packages/debian.rules)
-configure_file(${PROJECT_SOURCE_DIR}/packages/debian.libnetconf2-dev.install
-               ${PROJECT_BINARY_DIR}/build-packages/debian.libnetconf2${PACKAGE_PART_NAME}-dev.install COPYONLY)
-configure_file(${PROJECT_SOURCE_DIR}/packages/debian.libnetconf2.install
-               ${PROJECT_BINARY_DIR}/build-packages/debian.libnetconf2${PACKAGE_PART_NAME}.install COPYONLY)
-configure_file(${PROJECT_SOURCE_DIR}/packages/debian.python3-netconf2.install
-               ${PROJECT_BINARY_DIR}/build-packages/debian.python3-netconf2${PACKAGE_PART_NAME}.install COPYONLY)
-
-if(NOT DEB_BUILDER)
-    message(WARNING "Missing tools (devscripts, debhelper package) for building deb package.\nYou won't be able to generate deb package from source code.\nCompiling libnetconf2 should still works fine.")
-else()
-    # target for local build deb package
-    add_custom_target(build-deb
-                      WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
-                      COMMAND build-packages/local-deb.sh
-    )
-    configure_file(${PROJECT_SOURCE_DIR}/packages/local-deb.sh.in ${PROJECT_BINARY_DIR}/build-packages/local-deb.sh @ONLY)
-endif()
-
-if(NOT RPM_BUILDER)
-    message(WARNING "Missing tools (rpm package) for building rpm package. \nYou won't be able to generate rpm package from source code.\nCompiling libnetconf2 should still work fine.")
-else()
-    # target for local build rpm package
-    string(REPLACE ${PROJECT_SOURCE_DIR} "." EXCLUDE_BUILD_DIR ${PROJECT_BINARY_DIR})
-    add_custom_target(build-rpm
-                      WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
-                      COMMAND build-packages/local-rpm.sh
-    )
-    configure_file(${PROJECT_SOURCE_DIR}/packages/local-rpm.sh.in ${PROJECT_BINARY_DIR}/build-packages/local-rpm.sh @ONLY)
 endif()
 
 include_directories(${PROJECT_BINARY_DIR}/src)
@@ -190,9 +109,12 @@ set(headers
     src/session_server.h
     src/session_server_ch.h)
 
+# use compat
+use_compat()
+
 # netconf2 target
-add_library(netconf2 SHARED ${libsrc} ${headers})
-set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_VERSION} SOVERSION ${LIBNETCONF2_SOVERSION_FULL})
+add_library(netconf2 SHARED ${libsrc} ${headers} $<TARGET_OBJECTS:compat>)
+set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_SOVERSION_FULL} SOVERSION ${LIBNETCONF2_SOVERSION})
 
 if((CMAKE_BUILD_TYPE STREQUAL Debug) OR (CMAKE_BUILD_TYPE STREQUAL Package))
     option(ENABLE_BUILD_TESTS "Build tests" ON)
@@ -221,29 +143,38 @@ if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_TLS")
     endif()
 
-    #TODO target_link_libraries(netconf2 PUBLIC OpenSSL::SSL OpenSSL::Crypto)
     target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
     include_directories(${OPENSSL_INCLUDE_DIR})
 endif()
 
 # dependencies - libssh
 if(ENABLE_SSH)
-    set(LIBSSH_FIND_VERSION 0.7.0)
-    find_package(LibSSH REQUIRED)
+    find_package(LibSSH 0.7.0 REQUIRED)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH")
-    message(STATUS "LibSSH version ${LIBSSH_VERSION} found")
+    message(STATUS "LibSSH version ${LibSSH_VERSION} found")
 
-    if(LIBSSH_VERSION VERSION_EQUAL 0.9.3)
-        message(FATAL_ERROR "LIBSSH 0.9.3 includes regression bugs and libnetconf2 will NOT work properly, try to use an older version")
+    if(LibSSH_VERSION VERSION_EQUAL 0.9.3 OR LibSSH_VERSION VERSION_EQUAL 0.9.4)
+        message(FATAL_ERROR "LibSSH ${LibSSH_VERSION} includes regression bugs and libnetconf2 will NOT work properly, try to use another version")
     endif()
 
-    if(LIBSSH_VERSION VERSION_LESS 0.8.0)
-        target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lssh_threads -lcrypt)
+    if(LibSSH_VERSION VERSION_LESS 0.8.0)
+        target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lssh_threads)
+        list(APPEND CMAKE_REQUIRED_FLAGS "-L${LIBSSH_LIBRARY_DIR}")
+        list(APPEND CMAKE_REQUIRED_LIBRARIES ssh ssh_threads)
     else()
-        target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lcrypt)
-        set(CMAKE_REQUIRED_LIBRARIES "ssh;crypt")
+        target_link_libraries(netconf2 ${LIBSSH_LIBRARIES})
+        list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBSSH_LIBRARIES})
     endif()
     include_directories(${LIBSSH_INCLUDE_DIRS})
+
+    # crypt
+    if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "QNX")
+        target_link_libraries(netconf2 -lcrypt)
+        list(APPEND CMAKE_REQUIRED_LIBRARIES crypt)
+    else()
+        target_link_libraries(netconf2 -llogin)
+        list(APPEND CMAKE_REQUIRED_LIBRARIES login)
+    endif()
 endif()
 
 # dependencies - libval
@@ -258,6 +189,20 @@ endif()
 find_package(LibYANG REQUIRED)
 target_link_libraries(netconf2 ${LIBYANG_LIBRARIES})
 include_directories(${LIBYANG_INCLUDE_DIRS})
+
+# header file compatibility - shadow.h and crypt.h
+check_include_file("shadow.h" HAVE_SHADOW)
+check_include_file("crypt.h" HAVE_CRYPT)
+
+# function compatibility - getpeereid on QNX
+if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
+    target_link_libraries(netconf2 -lsocket)
+    list(APPEND CMAKE_REQUIRED_LIBRARIES socket)
+    list(REMOVE_ITEM CMAKE_REQUIRED_LIBRARIES pthread)
+    list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_QNX_SOURCE)
+    check_symbol_exists(getpeereid "sys/types.h;unistd.h" HAVE_GETPEEREID)
+    list(REMOVE_ITEM CMAKE_REQUIRED_DEFINITIONS -D_QNX_SOURCE)
+endif()
 
 # generate doxygen documentation for libnetconf2 API
 find_package(Doxygen)
@@ -274,19 +219,16 @@ if(ENABLE_PYTHON)
     add_subdirectory(python)
 endif()
 
+# packages
+add_subdirectory(packages)
+
 # install library
 install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # install headers
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_client.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_server.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-install(FILES ${headers} DESTINATION ${INCLUDE_INSTALL_SUBDIR})
-
-# install schemas
-install(
-    CODE "file(GLOB yin_schemas \"${CMAKE_SOURCE_DIR}/schemas/*.yin\")"
-    CODE "file(INSTALL \${yin_schemas} DESTINATION ${CMAKE_INSTALL_PREFIX}/${DATA_INSTALL_DIR})"
-)
+install(FILES ${headers} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libnetconf2)
 
 # install pkg-config file
 find_package(PkgConfig)

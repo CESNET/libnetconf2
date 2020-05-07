@@ -13,6 +13,11 @@
  */
 
 #define _GNU_SOURCE
+
+#ifdef __linux__
+# include <sys/syscall.h>
+#endif
+
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -25,8 +30,8 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
-#include <sys/syscall.h>
 #include <sys/types.h>
+#include <sys/select.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <poll.h>
@@ -34,9 +39,13 @@
 
 #include <libyang/libyang.h>
 
+#include "compat.h"
 #include "libnetconf.h"
 #include "session_client.h"
 #include "messages_client.h"
+
+#include "../modules/ietf_netconf_monitoring@2010-10-04_yang.h"
+#include "../modules/ietf_netconf@2013-09-29_yang.h"
 
 static const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "candidate"};
 
@@ -219,8 +228,9 @@ nc_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx)
         /* user path must be first, the first path is used to store schemas retreived via get-schema */
         if (client_opts.schema_searchpath) {
             ly_ctx_set_searchdir(ctx, client_opts.schema_searchpath);
+        } else if (!access(NC_YANG_DIR, F_OK)) {
+            ly_ctx_set_searchdir(ctx, NC_YANG_DIR);
         }
-        ly_ctx_set_searchdir(ctx, NC_SCHEMAS_DIR);
 
         /* set callback for getting schemas, if provided */
         ly_ctx_set_module_imp_clb(ctx, client_opts.schema_clb, client_opts.schema_clb_data);
@@ -945,8 +955,7 @@ nc_ctx_fill_ietf_netconf(struct nc_session *session, struct schema_info *modules
     if (!ietfnc) {
         nc_ctx_load_module(session, "ietf-netconf", NULL, modules, user_clb, user_data, has_get_schema, &ietfnc);
         if (!ietfnc) {
-            WRN("Unable to find correct \"ietf-netconf\" schema, trying to use backup from \"%s\".", NC_SCHEMAS_DIR"/ietf-netconf.yin");
-            ietfnc = lys_parse_path(session->ctx, NC_SCHEMAS_DIR"/ietf-netconf.yin", LYS_IN_YIN);
+            ietfnc = lys_parse_mem(session->ctx, ietf_netconf_2013_09_29_yang, LYS_YANG);
         }
     }
     if (!ietfnc) {
@@ -998,12 +1007,22 @@ nc_ctx_check_and_fill(struct nc_session *session)
             if (yanglib_support) {
                 break;
             }
-        } else if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:netconf:capability:yang-library:1.0", 51)) {
+        } else if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:netconf:capability:yang-library:", 48)) {
             yanglib_support = 1 + i;
             if (get_schema_support) {
                 break;
             }
         }
+    }
+    if (get_schema_support) {
+        VRB("Session %u: capability for <get-schema> support found.", session->id);
+    } else {
+        VRB("Session %u: capability for <get-schema> support not found.", session->id);
+    }
+    if (yanglib_support) {
+        VRB("Session %u: capability for yang-library support found.", session->id);
+    } else {
+        VRB("Session %u: capability for yang-library support not found.", session->id);
     }
 
     /* get information about server's schemas from capabilities list until we will have yang-library */
@@ -1013,11 +1032,9 @@ nc_ctx_check_and_fill(struct nc_session *session)
     }
 
     /* get-schema is supported, load local ietf-netconf-monitoring so we can create <get-schema> RPCs */
-    if (get_schema_support && !ly_ctx_get_module(session->ctx, "ietf-netconf-monitoring", NULL, 1)) {
-        if (nc_ctx_load_module(session, "ietf-netconf-monitoring", NULL, server_modules, old_clb, old_data, 0, &mod)) {
-            WRN("Session %u: loading NETCONF monitoring schema failed, cannot use <get-schema>.", session->id);
-            get_schema_support = 0;
-        }
+    if (get_schema_support && !lys_parse_mem(session->ctx, ietf_netconf_monitoring_2010_10_04_yang, LYS_YANG)) {
+        WRN("Session %u: loading NETCONF monitoring schema failed, cannot use <get-schema>.", session->id);
+        get_schema_support = 0;
     }
 
     /* load base model disregarding whether it's in capabilities (but NETCONF capabilities are used to enable features) */
@@ -1035,9 +1052,20 @@ nc_ctx_check_and_fill(struct nc_session *session)
             yanglib_support = 0;
         } else {
             revision = strndup(&revision[9], 10);
-            if (nc_ctx_load_module(session, "ietf-yang-library", revision, server_modules, old_clb, old_data, get_schema_support, &mod)) {
-                WRN("Session %u: loading NETCONF ietf-yang-library schema failed, unable to automatically use <get-schema>.", session->id);
+            if (nc_ctx_load_module(session, "ietf-yang-library", revision, server_modules, old_clb, old_data,
+                    get_schema_support, &mod)) {
+                WRN("Session %u: loading NETCONF ietf-yang-library schema failed, unable to use it to learn all the supported modules.",
+                    session->id);
                 yanglib_support = 0;
+            }
+            if (strcmp(revision, "2019-01-04") >= 0) {
+                /* we also need ietf-datastores to be implemented */
+                if (nc_ctx_load_module(session, "ietf-datastores", NULL, server_modules, old_clb, old_data,
+                        get_schema_support, &mod)) {
+                    WRN("Session %u: loading NETCONF ietf-datastores schema failed, unable to use yang-library"
+                        " to learn all the supported modules.", session->id);
+                    yanglib_support = 0;
+                }
             }
             free(revision);
         }
@@ -2810,27 +2838,22 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         }
 
         if (rpc_getd->wd_mode) {
-            ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL, 1);
-            if (!ietfncwd) {
-                ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
-                lyd_free(data);
-                return NC_MSG_ERROR;
-            }
             switch (rpc_getd->wd_mode) {
             case NC_WD_UNKNOWN:
                 /* cannot get here */
                 break;
             case NC_WD_ALL:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all");
+                /* "with-defaults" are used from a grouping so it belongs to the ietf-netconf-nmda module */
+                node = lyd_new_leaf(data, mod, "with-defaults", "report-all");
                 break;
             case NC_WD_ALL_TAG:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all-tagged");
+                node = lyd_new_leaf(data, mod, "with-defaults", "report-all-tagged");
                 break;
             case NC_WD_TRIM:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "trim");
+                node = lyd_new_leaf(data, mod, "with-defaults", "trim");
                 break;
             case NC_WD_EXPLICIT:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "explicit");
+                node = lyd_new_leaf(data, mod, "with-defaults", "explicit");
                 break;
             }
             if (!node) {

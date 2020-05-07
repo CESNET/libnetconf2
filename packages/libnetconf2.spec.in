@@ -1,59 +1,68 @@
-Name: @PACKAGE_NAME@
+Name: @PACKAGE@
 Version: @LIBNETCONF2_VERSION@
 Release: 0
-Summary: Libnetconf2 library
-Url: https://github.com/CESNET/libnetconf2
-Source: %{url}/archive/@BRANCH@.tar.gz
+Summary: @PACKAGE_BRIEF@
+Url: @GITHUB_URL@
+Source: @GITHUB_URL@/archive/master.tar.gz
+Source1: @PACKAGE@.rpmlintrc
 License: BSD-3-Clause
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}
 
-Requires:  libyang@PACKAGE_PART_NAME@
-BuildRequires:  libyang@PACKAGE_PART_NAME@-devel
+%if 0%{?centos_version} || 0%{?centos_ver} || 0%{?scientificlinux_version}
+Requires:  libssh >= 0.7.1
+%else
+%if 0%{?suse_version}
+Requires:  libssh4 >= 0.7.1
+Requires:  (libssh4 < 0.9.3 or libssh4 > 0.9.4)
+%else
+Requires:  libssh >= 0.7.1
+Requires:  (libssh < 0.9.3 or libssh > 0.9.4)
+%endif
+%endif
+
+Requires:  libyang >= 0.16
+Requires:  openssl
+
+BuildRequires:  cmake
+BuildRequires:  doxygen
+BuildRequires:  libyang-devel >= 0.16
+BuildRequires:  gcc
+BuildRequires:  libcmocka-devel
 BuildRequires:  libssh-devel >= 0.7.1
 BuildRequires:  openssl-devel
-BuildRequires:  cmake
-BuildRequires:  libcmocka-devel
-BuildRequires:  gcc
+
 %if 0%{?suse_version}
 BuildRequires:  timezone
 %endif
 
-%if 0%{?suse_version} + 0%{?fedora} > 0
-BuildRequires:  python3-devel
-%else
-BuildRequires:  python36-devel
-%endif
-Conflicts: @CONFLICT_PACKAGE_NAME@
-
 %package devel
-Summary:    Headers of libnetconf2 library
+Summary:    @PACKAGE_DEV_BRIEF@
 Requires:   %{name} = %{version}-%{release}
 Requires:   libssh-devel
 
-%package -n python3-netconf2@PACKAGE_PART_NAME@
-Summary:    Bindings to python3
-Requires:   %{name} = %{version}-%{release}
-
 %description devel
-Headers of libnetconf2 library.
-
-%description -n python3-netconf2@PACKAGE_PART_NAME@
-Bindings of libnetconf2 library to python3 language.
+@PACKAGE_DEV_DESC@
 
 %description
-Libnetconf2 is a NETCONF library in C intended for building NETCONF clients and servers.
+@PACKAGE_DESC@
 
 %prep
-%setup -n libnetconf2-@BRANCH@
+%setup -n @PACKAGE@-master
+mkdir build
 
 %build
-cmake -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE="@BUILD_TYPE@" -DENABLE_PYTHON=ON -DENABLE_VALGRIND_TESTS=OFF .
+cd build
+cmake -DCMAKE_INSTALL_PREFIX=/usr \
+   -DCMAKE_BUILD_TYPE="Package" \
+   -DENABLE_VALGRIND_TESTS=OFF ..
 make
 
 %check
+cd build
 ctest --output-on-failure
 
 %install
+cd build
 make DESTDIR=%{buildroot} install
 
 %post -p /sbin/ldconfig
@@ -63,8 +72,6 @@ make DESTDIR=%{buildroot} install
 %files
 %defattr(-,root,root)
 %{_libdir}/libnetconf2.so.*
-%{_datadir}/libnetconf2/*
-%dir %{_datadir}/libnetconf2/
 
 %files devel
 %defattr(-,root,root)
@@ -74,9 +81,5 @@ make DESTDIR=%{buildroot} install
 %{_includedir}/nc_client.h
 %{_includedir}/nc_server.h
 %dir %{_includedir}/libnetconf2/
-
-%files -n python3-netconf2@PACKAGE_PART_NAME@
-%defattr(-,root,root)
-/usr/lib*/python*/*-packages/*
 
 %changelog

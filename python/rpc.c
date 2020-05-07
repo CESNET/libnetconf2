@@ -201,7 +201,7 @@ ncRPCEditConfig(ncSessionObject *self, PyObject *args, PyObject *keywords)
 {
     static char *kwlist[] = {"datastore", "data", "defop", "testopt", "erropt", NULL};
     struct lyd_node *data = NULL, *node, *content_tree = NULL;
-    char *content_str = NULL;
+    const char *content_str = NULL;
     const struct lys_module *ietfnc;
     NC_DATASTORE datastore;
     NC_RPC_EDIT_DFLTOP defop = 0;
@@ -264,7 +264,7 @@ ncRPCEditConfig(ncSessionObject *self, PyObject *args, PyObject *keywords)
 
     if (content_str) {
         if (!content_str[0] || (content_str[0] == '<')) {
-            node = lyd_new_anydata(data, ietfnc, "config", content_str, LYD_ANYDATA_SXML);
+            node = lyd_new_anydata(data, ietfnc, "config", (void *)content_str, LYD_ANYDATA_SXML);
         } else {
             node = lyd_new_leaf(data, ietfnc, "url", content_str);
         }

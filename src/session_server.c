@@ -11,6 +11,7 @@
  *
  *     https://opensource.org/licenses/BSD-3-Clause
  */
+#define _QNX_SOURCE /* getpeereid */
 #define _GNU_SOURCE /* signals, threads, SO_PEERCRED */
 
 #include <stdint.h>
@@ -228,7 +229,7 @@ nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives *ka
         goto fail;
     }
 
-    bzero(&saddr, sizeof(struct sockaddr_storage));
+    memset(&saddr, 0, sizeof(struct sockaddr_storage));
     if (is_ipv4) {
         saddr4 = (struct sockaddr_in *)&saddr;
 
@@ -881,7 +882,7 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
 
     /* add ourselves into the queue */
     nc_ps_queue_add_id(ps, id);
-    DBG("PS 0x%p TID %lu queue: added %u, head %u, lenght %u", ps, (long unsigned int)pthread_self(), *id,
+    DBL("PS 0x%p TID %lu queue: added %u, head %u, lenght %u", ps, (long unsigned int)pthread_self(), *id,
             ps->queue[ps->queue_begin], ps->queue_len);
 
     /* is it our turn? */
@@ -942,7 +943,7 @@ nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func)
 
     /* remove ourselves from the queue */
     nc_ps_queue_remove_id(ps, id);
-    DBG("PS 0x%p TID %lu queue: removed %u, head %u, lenght %u", ps, (long unsigned int)pthread_self(), id,
+    DBL("PS 0x%p TID %lu queue: removed %u, head %u, lenght %u", ps, (long unsigned int)pthread_self(), id,
             ps->queue[ps->queue_begin], ps->queue_len);
 
     /* broadcast to all other threads that the queue moved */
@@ -1186,8 +1187,8 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
             reply = nc_server_reply_err(nc_err_libyang(server_opts.ctx));
             ret = nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, xml, reply);
             nc_server_reply_free(reply);
-            if (ret == -1) {
-                ERR("Session %u: failed to write reply.", session->id);
+            if (ret != NC_MSG_REPLY) {
+                ERR("Session %u: failed to write reply (%s).", session->id, nc_msgtype2str[ret]);
             }
             ret = NC_PSPOLL_REPLY_ERROR | NC_PSPOLL_BAD_RPC;
         } else {
@@ -1246,8 +1247,8 @@ nc_server_notif_send(struct nc_session *session, struct nc_server_notif *notif, 
 
     /* we do not need RPC lock for this, IO lock will be acquired properly */
     ret = nc_write_msg_io(session, timeout, NC_MSG_NOTIF, notif);
-    if (ret == NC_MSG_ERROR) {
-        ERR("Session %u: failed to write notification.", session->id);
+    if (ret != NC_MSG_NOTIF) {
+        ERR("Session %u: failed to write notification (%s).", session->id, nc_msgtype2str[ret]);
     }
 
     return ret;
@@ -1314,7 +1315,7 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, struct nc_se
     nc_server_reply_free(reply);
 
     if (r != NC_MSG_REPLY) {
-        ERR("Session %u: failed to write reply.", session->id);
+        ERR("Session %u: failed to write reply (%s).", session->id, nc_msgtype2str[r]);
         ret |= NC_PSPOLL_ERROR;
     }
 
@@ -1718,26 +1719,46 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 static int
+nc_get_uid(int sock, uid_t *uid)
+{
+    int ret;
+
+#ifdef SO_PEERCRED
+    struct ucred ucred;
+    socklen_t len;
+    len = sizeof(ucred);
+    ret = getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &ucred, &len);
+    if (!ret) {
+        *uid = ucred.uid;
+    }
+#else
+    ret = getpeereid(sock, uid, NULL);
+#endif
+
+    if (ret < 0) {
+        ERR("Failed to get credentials from unix socket (%s).", strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+static int
 nc_accept_unix(struct nc_session *session, int sock)
 {
-#ifdef SO_PEERCRED
+#if defined(SO_PEERCRED) || defined(HAVE_GETPEEREID)
     const struct passwd *pw;
-    struct ucred ucred;
     char *username;
-    socklen_t len;
     session->ti_type = NC_TI_UNIX;
+    uid_t uid;
 
-    len = sizeof(ucred);
-    if (getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &ucred, &len) < 0) {
-        ERR("Failed to get credentials from unix socket (%s).",
-            strerror(errno));
+    if (nc_get_uid(sock, &uid)) {
         close(sock);
         return -1;
     }
 
-    pw = getpwuid(ucred.uid);
+    pw = getpwuid(uid);
     if (pw == NULL) {
-        ERR("Failed to find username for uid=%u (%s).\n", ucred.uid,
+        ERR("Failed to find username for uid=%u (%s).\n", uid,
             strerror(errno));
         close(sock);
         return -1;
@@ -2771,7 +2792,7 @@ nc_server_ch_client_endpt_set_port(const char *client_name, const char *endpt_na
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
-    return -1;
+    return 0;
 }
 
 API int
@@ -2903,7 +2924,7 @@ nc_server_ch_client_periodic_set_period(const char *client_name, uint16_t period
     }
 
     if (client->conn_type != NC_CH_PERIOD) {
-        ERR("Call Home client \"%s\" is not of periodic connection type.");
+        ERR("Call Home client \"%s\" is not of periodic connection type.", client_name);
         /* UNLOCK */
         nc_server_ch_client_unlock(client);
         return -1;
@@ -2934,7 +2955,7 @@ nc_server_ch_client_periodic_set_anchor_time(const char *client_name, time_t anc
     }
 
     if (client->conn_type != NC_CH_PERIOD) {
-        ERR("Call Home client \"%s\" is not of periodic connection type.");
+        ERR("Call Home client \"%s\" is not of periodic connection type.", client_name);
         /* UNLOCK */
         nc_server_ch_client_unlock(client);
         return -1;
@@ -3269,7 +3290,7 @@ nc_ch_client_thread(void *arg)
             if (nc_server_ch_client_thread_session_cond_wait(session, data)) {
                 goto cleanup;
             }
-            VRB("Call Home client \"%s\" session terminated, reconnecting...", client->name);
+            VRB("Call Home client \"%s\" session terminated, reconnecting...", data->client_name);
 
             /* LOCK */
             client = nc_server_ch_client_with_endpt_lock(data->client_name);

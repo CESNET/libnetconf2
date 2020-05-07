@@ -1,37 +1,24 @@
-Source: @PACKAGE_NAME@
-Maintainer: CESNET <rkrejci@cesnet.cz>
+Source: @PACKAGE@
+Maintainer: CESNET <mvasko@cesnet.cz>
 Priority: extra
 Standards-Version: 3.8.2
 Build-Depends: debhelper (>= 9), gcc
-Homepage: https://github.com/CESNET/libnetconf2
+Homepage: @GITHUB_URL@
 
-Package: @PACKAGE_NAME@
-Depends: libyang@PACKAGE_PART_NAME@, libssh-4 (>= 0.7.1), ${shlibs:Depends}
-Conflicts: @CONFLICT_PACKAGE_NAME@
+Package: @PACKAGE@
+Depends: libyang (>= 0.16), libssh-4 (>= 0.7.1), libssh-4 (<< 0.9.3) | libssh-4 (>> 0.9.4), ${shlibs:Depends}
 Section: libs
 Architecture: any
-Description: Libnetconf2 is a NETCONF library in C intended for building NETCONF clients and servers.
+Description: @PACKAGE_DESC@
 
-Package: @PACKAGE_NAME@-dev
-Depends: libyang@PACKAGE_PART_NAME@-dev
+Package: @PACKAGE@-dev
+Depends: libyang-dev, @PACKAGE@ (=@LIBNETCONF2_VERSION@)
 Section: libdevel
 Architecture: any
-Description: Headers for libnetconf2 library.
+Description: @PACKAGE_DEV_DESC@
 
-Package: @PACKAGE_NAME@-dbg
-Depends: @PACKAGE_NAME@ (= @LIBNETCONF2_VERSION@)
+Package: @PACKAGE@-dbg
+Depends: @PACKAGE@ (=@LIBNETCONF2_VERSION@)
 Section: debug
 Architecture: any
-Description: Debug symbols for libnetconf2 library.
-
-Package: python3-netconf2@PACKAGE_PART_NAME@
-Depends: @PACKAGE_NAME@ (= @LIBNETCONF2_VERSION@)
-Section: libs
-Architecture: any
-Description: Bindings of libyang library to python3 language.
-
-Package: python3-netconf2@PACKAGE_PART_NAME@-dbg
-Depends: python3-netconf2@PACKAGE_PART_NAME@ (= @LIBNETCONF2_VERSION@)
-Section: debug
-Architecture: any
-Description: Debug symbols of python3 bidings of libnetconf2 library.
+Description: @PACKAGE_DBG_DESC@

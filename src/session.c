@@ -28,6 +28,7 @@
 #include <ctype.h>
 #include <libyang/libyang.h>
 
+#include "compat.h"
 #include "session.h"
 #include "libnetconf.h"
 #include "session_server.h"
@@ -918,11 +919,65 @@ add_cpblt(struct ly_ctx *ctx, const char *capab, const char ***cpblts, int *size
     ++(*count);
 }
 
+static struct lys_feature *
+nc_lys_next_feature(struct lys_feature *last, const struct lys_module *ly_mod, int *idx)
+{
+    uint8_t i;
+
+    assert(ly_mod);
+
+    /* find the (sub)module of the last feature */
+    if (last) {
+        for (i = 0; i < ly_mod->inc_size; ++i) {
+            if (*idx >= ly_mod->inc[i].submodule->features_size) {
+                /* not a feature from this submodule, skip */
+                continue;
+            }
+            if (last != ly_mod->inc[i].submodule->features + *idx) {
+                /* feature is not from this submodule */
+                continue;
+            }
+
+            /* we have found the submodule */
+            break;
+        }
+
+        /* feature not found in submodules, it must be in the main module */
+        assert((i < ly_mod->inc_size) || ((*idx < ly_mod->features_size) && (last == ly_mod->features + *idx)));
+
+        /* we want the next feature */
+        ++(*idx);
+    } else {
+        i = 0;
+        *idx = 0;
+    }
+
+    /* find the (sub)module of the next feature */
+    while ((i < ly_mod->inc_size) && (*idx == ly_mod->inc[i].submodule->features_size)) {
+        /* next submodule */
+        ++i;
+        *idx = 0;
+    }
+
+    /* get the next feature */
+    if (i < ly_mod->inc_size) {
+        last = ly_mod->inc[i].submodule->features + *idx;
+    } else if (*idx < ly_mod->features_size) {
+        last = ly_mod->features + *idx;
+    } else {
+        last = NULL;
+    }
+
+    return last;
+}
+
+
 API const char **
 nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
 {
     const char **cpblts;
     const struct lys_module *mod, *devmod;
+    struct lys_feature *feat;
     int size = 10, count, features_count = 0, dev_count = 0, i, str_len, len;
     unsigned int u, v, module_set_id;
     char *s;
@@ -965,9 +1020,15 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
         if (lys_features_state(mod, "startup") == 1) {
             add_cpblt(ctx, "urn:ietf:params:netconf:capability:startup:1.0", &cpblts, &size, &count);
         }
-        if (lys_features_state(mod, "url") == 1) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:capability:url:1.0", &cpblts, &size, &count);
-        }
+
+        /* The URL capability must be set manually using nc_server_set_capability()
+         * because of the need for supported protocols to be included.
+         * https://tools.ietf.org/html/rfc6241#section-8.8.3
+         */
+        // if (lys_features_state(mod, "url") == 1) {
+        //    add_cpblt(ctx, "urn:ietf:params:netconf:capability:url:1.0", &cpblts, &size, &count);
+        // }
+
         if (lys_features_state(mod, "xpath") == 1) {
             add_cpblt(ctx, "urn:ietf:params:netconf:capability:xpath:1.0", &cpblts, &size, &count);
         }
@@ -1024,11 +1085,22 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
     u = module_set_id = 0;
     while ((mod = ly_ctx_get_module_iter(ctx, &u))) {
         if (!strcmp(mod->name, "ietf-yang-library")) {
-            /* Add the yang-library NETCONF capability as defined in RFC 7950 5.6.4 */
-            sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.0?%s%s&module-set-id=%u",
-                    mod->rev_size ? "revision=" : "", mod->rev_size ? mod->rev[0].date : "",
-                    ly_ctx_get_module_set_id(ctx));
-            add_cpblt(ctx, str, &cpblts, &size, &count);
+            if (!mod->rev_size || (strcmp(mod->rev[0].date, "2016-06-21") && strcmp(mod->rev[0].date, "2019-01-04"))) {
+                ERR("Unknown \"ietf-yang-library\" revision, only 2016-06-21 and 2019-01-04 are supported.");
+                goto error;
+            }
+
+            if (!strcmp(mod->rev[0].date, "2019-01-04")) {
+                /* new one (capab defined in RFC 8526 section 2) */
+                sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.1?revision=%s&content-id=%u",
+                        mod->rev[0].date, ly_ctx_get_module_set_id(ctx));
+                add_cpblt(ctx, str, &cpblts, &size, &count);
+            } else {
+                /* old one (capab defined in RFC 7950 section 5.6.4) */
+                sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.0?revision=%s&module-set-id=%u",
+                        mod->rev[0].date, ly_ctx_get_module_set_id(ctx));
+                add_cpblt(ctx, str, &cpblts, &size, &count);
+            }
             continue;
         } else if (mod->type) {
             /* skip submodules */
@@ -1044,29 +1116,29 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
         str_len = sprintf(str, "%s?module=%s%s%s", mod->ns, mod->name,
                           mod->rev_size ? "&revision=" : "", mod->rev_size ? mod->rev[0].date : "");
 
-        if (mod->features_size) {
-            features_count = 0;
-            for (i = 0; i < mod->features_size; ++i) {
-                if (!(mod->features[i].flags & LYS_FENABLED)) {
-                    continue;
-                }
-                if (!features_count) {
-                    strcat(str, "&features=");
-                    str_len += 10;
-                }
-                len = strlen(mod->features[i].name);
-                if (str_len + 1 + len >= NC_CPBLT_BUF_LEN) {
-                    ERRINT;
-                    break;
-                }
-                if (features_count) {
-                    strcat(str, ",");
-                    ++str_len;
-                }
-                strcat(str, mod->features[i].name);
-                str_len += len;
-                features_count++;
+        features_count = 0;
+        i = 0;
+        feat = NULL;
+        while ((feat = nc_lys_next_feature(feat, mod, &i))) {
+            if (!(feat->flags & LYS_FENABLED)) {
+                continue;
             }
+            if (!features_count) {
+                strcat(str, "&features=");
+                str_len += 10;
+            }
+            len = strlen(feat->name);
+            if (str_len + 1 + len >= NC_CPBLT_BUF_LEN) {
+                ERRINT;
+                break;
+            }
+            if (features_count) {
+                strcat(str, ",");
+                ++str_len;
+            }
+            strcat(str, feat->name);
+            str_len += len;
+            features_count++;
         }
 
         if (mod->deviated) {
@@ -1111,7 +1183,6 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
     return cpblts;
 
 error:
-
     free(cpblts);
     return NULL;
 }
