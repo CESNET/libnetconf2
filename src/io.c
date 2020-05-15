@@ -605,16 +605,18 @@ nc_read_poll(struct nc_session *session, int io_timeout)
         return -1;
     } else { /* status > 0 */
         /* in case of standard (non-libssh) poll, there still can be an error */
-        if (fds.revents & POLLHUP) {
-            ERR("Session %u: communication channel unexpectedly closed.", session->id);
-            session->status = NC_STATUS_INVALID;
-            session->term_reason = NC_SESSION_TERM_DROPPED;
-            return -1;
-        }
         if (fds.revents & POLLERR) {
             ERR("Session %u: communication channel error.", session->id);
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_OTHER;
+            return -1;
+        }
+        /* Some poll() implementations may return POLLHUP|POLLIN when the other
+         * side has closed but there is data left to read in the buffer. */
+        if ((fds.revents & POLLHUP) && !(fds.revents & POLLIN)) {
+            ERR("Session %u: communication channel unexpectedly closed.", session->id);
+            session->status = NC_STATUS_INVALID;
+            session->term_reason = NC_SESSION_TERM_DROPPED;
             return -1;
         }
     }
