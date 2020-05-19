@@ -150,22 +150,14 @@ endif()
 # dependencies - libssh
 if(ENABLE_SSH)
     find_package(LibSSH 0.7.0 REQUIRED)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH")
-    message(STATUS "LibSSH version ${LibSSH_VERSION} found")
-
-    if(LibSSH_VERSION VERSION_EQUAL 0.9.3 OR LibSSH_VERSION VERSION_EQUAL 0.9.4)
-        message(FATAL_ERROR "LibSSH ${LibSSH_VERSION} includes regression bugs and libnetconf2 will NOT work properly, try to use another version")
+    if(LIBSSH_VERSION VERSION_EQUAL 0.9.3 OR LIBSSH_VERSION VERSION_EQUAL 0.9.4)
+        message(FATAL_ERROR "LibSSH ${LIBSSH_VERSION} includes regression bugs and libnetconf2 will NOT work properly, try to use another version")
     endif()
 
-    if(LibSSH_VERSION VERSION_LESS 0.8.0)
-        target_link_libraries(netconf2 "-L${LIBSSH_LIBRARY_DIR}" -lssh -lssh_threads)
-        list(APPEND CMAKE_REQUIRED_FLAGS "-L${LIBSSH_LIBRARY_DIR}")
-        list(APPEND CMAKE_REQUIRED_LIBRARIES ssh ssh_threads)
-    else()
-        target_link_libraries(netconf2 ${LIBSSH_LIBRARIES})
-        list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBSSH_LIBRARIES})
-    endif()
+    target_link_libraries(netconf2 ${LIBSSH_LIBRARIES})
+    list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBSSH_LIBRARIES})
     include_directories(${LIBSSH_INCLUDE_DIRS})
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH")
 
     # crypt
     if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "QNX")
