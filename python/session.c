@@ -141,7 +141,7 @@ auth_interactive_pyclb(const char *auth_name, const char *instruction, const cha
     ncSSHObject *ssh = (ncSSHObject*)priv;
     char *password = NULL;
 
-    arglist = Py_BuildValue("(sssO)", auth_name, instruction, prompt, ssh->clb_password_data ? ssh->clb_password_data : Py_None);
+    arglist = Py_BuildValue("(sssO)", auth_name, instruction, prompt, ssh->clb_interactive_data ? ssh->clb_interactive_data : Py_None);
     if (!arglist) {
         PyErr_Print();
         return NULL;
