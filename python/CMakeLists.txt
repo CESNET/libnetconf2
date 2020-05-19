@@ -24,5 +24,5 @@ if(PYTHON)
     add_custom_target(pyapidoc COMMAND make -f ${CMAKE_CURRENT_BINARY_DIR}/docs/Makefile html)
     execute_process(COMMAND ${PYTHON} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(plat_specific=True))"
         OUTPUT_VARIABLE PYTHON_MODULE_PATH OUTPUT_STRIP_TRAILING_WHITESPACE)
-    install(CODE "execute_process(COMMAND ${PYTHON} ${SETUP_PY} build -b ${PYAPI_BUILD_DIR} install --install-lib=\$ENV{DESTDIR}/${PYTHON_MODULE_PATH})")
+    install(CODE "execute_process(COMMAND ${PYTHON} \"${SETUP_PY}\" build -b \"${PYAPI_BUILD_DIR}\" install --install-lib=\$ENV{DESTDIR}/\"${PYTHON_MODULE_PATH}\")")
 endif()
