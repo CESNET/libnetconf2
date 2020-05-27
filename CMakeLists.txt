@@ -31,9 +31,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_EXTENSIONS ON)
-add_compile_options(-Wall -Wextra -fvisibility=hidden)
+add_compile_options(-Wall -Wextra -fvisibility=hidden -std=gnu99)
 set(CMAKE_C_FLAGS_PACKAGE "-g -O2 -DNDEBUG")
 
 # Version of the project
