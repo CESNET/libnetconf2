@@ -1661,6 +1661,10 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
     return session;
 
 fail:
+    {
+		char *alarm_content = ssh_get_error(session->ti.libssh.session);
+        VRB("alarm_content is: %s", alarm_content);
+    }
     free(host);
     session->host = NULL;
     free(username);
