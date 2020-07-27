@@ -1323,7 +1323,7 @@ _non_blocking_connect(int timeout, int *sock_pending, struct addrinfo *res, stru
         ERR("getsockopt() failed (%s).", strerror(errno));
         goto cleanup;
     }
-    if (error == ECONNREFUSED) {
+    if (error) {
         /* network connection failed, try another resource */
         VRB("getsockopt() error (%s).", strerror(error));
         errno = error;
