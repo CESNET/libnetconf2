@@ -1380,9 +1380,14 @@ nc_sock_connect(const char *host, uint16_t port, int timeout, struct nc_keepaliv
 
         for (res = res_list; res != NULL; res = res->ai_next) {
             sock = _non_blocking_connect(timeout, sock_pending, res, ka);
-            if (sock == -1 && (!sock_pending || *sock_pending == -1)) {
-                /* try the next resource */
-                continue;
+            if (sock == -1) {
+                if (!sock_pending || *sock_pending == -1) {
+                    /* try the next resource */
+                    continue;
+                } else {
+                    /* timeout, keep pending socket */
+                    return -1;
+                }
             }
             VRB("Successfully connected to %s:%s over %s.", host, port_s, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
 
