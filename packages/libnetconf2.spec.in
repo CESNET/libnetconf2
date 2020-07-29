@@ -20,12 +20,12 @@ Requires:  (libssh < 0.9.3 or libssh > 0.9.4)
 %endif
 %endif
 
-Requires:  libyang >= 0.16
+Requires:  libyang@LIBYANG_DEP_SOVERSION_MAJOR@
 Requires:  openssl
 
 BuildRequires:  cmake
 BuildRequires:  doxygen
-BuildRequires:  libyang-devel >= 0.16
+BuildRequires:  libyang-devel >= @LIBYANG_DEP_SOVERSION_MAJOR@.0
 BuildRequires:  gcc
 BuildRequires:  libcmocka-devel
 BuildRequires:  libssh-devel >= 0.7.1
