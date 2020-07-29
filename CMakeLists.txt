@@ -52,6 +52,9 @@ set(LIBNETCONF2_MICRO_SOVERSION 7)
 set(LIBNETCONF2_SOVERSION_FULL ${LIBNETCONF2_MAJOR_SOVERSION}.${LIBNETCONF2_MINOR_SOVERSION}.${LIBNETCONF2_MICRO_SOVERSION})
 set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_SOVERSION})
 
+# libyang SO version required
+set(LIBYANG_DEP_SOVERSION_MAJOR 1)
+
 # build options
 option(ENABLE_SSH "Enable NETCONF over SSH support (via libssh)" ON)
 option(ENABLE_TLS "Enable NETCONF over TLS support (via OpenSSL)" ON)
@@ -147,7 +150,7 @@ endif()
 
 # dependencies - libssh
 if(ENABLE_SSH)
-    find_package(LibSSH 0.7.0 REQUIRED)
+    find_package(LibSSH 0.7.1 REQUIRED)
     if(LIBSSH_VERSION VERSION_EQUAL 0.9.3 OR LIBSSH_VERSION VERSION_EQUAL 0.9.4)
         message(FATAL_ERROR "LibSSH ${LIBSSH_VERSION} includes regression bugs and libnetconf2 will NOT work properly, try to use another version")
     endif()
