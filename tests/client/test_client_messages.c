@@ -110,7 +110,7 @@ test_nc_rpc_getconfig(void **state)
     /* create getconfig rpc with NC_PARAMTYPE_CONST */
     rpc = nc_rpc_getconfig(NC_DATASTORE_CANDIDATE, "filter-string", NC_WD_UNKNOWN, NC_PARAMTYPE_CONST);
     assert_non_null(rpc);
-    check_getconfig(rpc, NC_DATASTORE_CANDIDATE, "filter-string", NC_PARAMTYPE_CONST);
+    check_getconfig(rpc, NC_DATASTORE_CANDIDATE, "filter-string", NC_WD_UNKNOWN);
     nc_rpc_free(rpc);
 
     /* create getconfig rpc with NC_PARAMTYPE_FREE */
