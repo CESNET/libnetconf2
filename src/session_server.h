@@ -340,8 +340,6 @@ int nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **sessi
  */
 void nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *));
 
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
-
 /**@} Server Session */
 
 /**
@@ -400,9 +398,12 @@ int nc_server_is_endpt(const char *name);
  */
 int nc_server_endpt_set_address(const char *endpt_name, const char *address);
 
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+
 /**
  * @brief Change endpoint listening port.
  *
+ * This is only valid on SSH/TLS transport endpoint.
  * On error the previous listening socket (if any) is left untouched.
  *
  * @param[in] endpt_name Existing endpoint name.
@@ -411,10 +412,12 @@ int nc_server_endpt_set_address(const char *endpt_name, const char *address);
  */
 int nc_server_endpt_set_port(const char *endpt_name, uint16_t port);
 
+#endif
+
 /**
  * @brief Change endpoint permissions.
  *
- * This is only valid on unix transport endpoint.
+ * This is only valid on UNIX transport endpoint.
  * On error the previous listening socket (if any) is left untouched.
  *
  * @param[in] endpt_name Existing endpoint name.
@@ -465,8 +468,6 @@ int nc_server_endpt_set_keepalives(const char *endpt_name, int idle_time, int ma
  *         parsing fail, NC_MSG_WOULDBLOCK on timeout, NC_MSG_ERROR on other errors.
  */
 NC_MSG_TYPE nc_accept(int timeout, struct nc_session **session);
-
-#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
 #ifdef NC_ENABLED_SSH
 

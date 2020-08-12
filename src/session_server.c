@@ -1716,8 +1716,6 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
     nc_ps_unlock(ps, q_id, __func__);
 }
 
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
-
 static int
 nc_get_uid(int sock, uid_t *uid)
 {
@@ -2103,13 +2101,24 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
     }
 
     if (sock > -1) {
-#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
-        VRB("Listening on %s:%u for %s connections.", address, port, (endpt->ti == NC_TI_LIBSSH ? "SSH" : "TLS"));
-#elif defined(NC_ENABLED_SSH)
-        VRB("Listening on %s:%u for SSH connections.", address, port);
-#else
-        VRB("Listening on %s:%u for TLS connections.", address, port);
+        switch (endpt->ti) {
+        case NC_TI_UNIX:
+            VRB("Listening on %s for UNIX connections.", address);
+            break;
+#ifdef NC_ENABLED_SSH
+        case NC_TI_LIBSSH:
+            VRB("Listening on %s:%u for SSH connections.", address, port);
+            break;
 #endif
+#ifdef NC_ENABLED_TLS
+        case NC_TI_OPENSSL:
+            VRB("Listening on %s:%u for TLS connections.", address, port);
+            break;
+#endif
+        default:
+            ERRINT;
+            break;
+        }
     }
 
 cleanup:
@@ -2128,11 +2137,15 @@ nc_server_endpt_set_address(const char *endpt_name, const char *address)
     return nc_server_endpt_set_address_port(endpt_name, address, 0);
 }
 
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+
 API int
 nc_server_endpt_set_port(const char *endpt_name, uint16_t port)
 {
     return nc_server_endpt_set_address_port(endpt_name, NULL, port);
 }
+
+#endif
 
 API int
 nc_server_endpt_set_perms(const char *endpt_name, mode_t mode, uid_t uid, gid_t gid)
@@ -2362,6 +2375,8 @@ cleanup:
     *session = NULL;
     return msgtype;
 }
+
+#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 /* client is expected to be locked */
 static int
