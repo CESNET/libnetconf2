@@ -517,7 +517,7 @@ cleanup:
         nc_session_io_unlock(session, __func__);
     }
     free(msg);
-    free(*data);
+    lyxml_free(session->ctx, *data);
     *data = NULL;
 
     return ret;
