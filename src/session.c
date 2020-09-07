@@ -628,7 +628,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         } /* else failed to lock it, too bad */
     }
 
-    if ((session->side == NC_CLIENT) && (session->status == NC_STATUS_RUNNING)) {
+    if (session->side == NC_CLIENT) {
         /* cleanup message queues */
         /* notifications */
         for (contiter = session->opts.client.notifs; contiter; ) {
@@ -648,35 +648,37 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
             free(p);
         }
 
-        /* send closing info to the other side */
-        ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL, 1);
-        if (!ietfnc) {
-            WRN("Session %u: missing ietf-netconf schema in context, unable to send <close-session>.", session->id);
-        } else {
-            close_rpc = lyd_new(NULL, ietfnc, "close-session");
-            nc_send_msg_io(session, NC_SESSION_FREE_LOCK_TIMEOUT, close_rpc);
-            lyd_free(close_rpc);
-            switch (nc_read_msg_poll_io(session, NC_CLOSE_REPLY_TIMEOUT, &rpl)) {
-            case NC_MSG_REPLY:
-                LY_TREE_FOR(rpl->child, child) {
-                    if (!strcmp(child->name, "ok") && child->ns && !strcmp(child->ns->value, NC_NS_BASE)) {
-                        break;
+        if (session->status == NC_STATUS_RUNNING) {
+            /* send closing info to the other side */
+            ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL, 1);
+            if (!ietfnc) {
+                WRN("Session %u: missing ietf-netconf schema in context, unable to send <close-session>.", session->id);
+            } else {
+                close_rpc = lyd_new(NULL, ietfnc, "close-session");
+                nc_send_msg_io(session, NC_SESSION_FREE_LOCK_TIMEOUT, close_rpc);
+                lyd_free(close_rpc);
+                switch (nc_read_msg_poll_io(session, NC_CLOSE_REPLY_TIMEOUT, &rpl)) {
+                case NC_MSG_REPLY:
+                    LY_TREE_FOR(rpl->child, child) {
+                        if (!strcmp(child->name, "ok") && child->ns && !strcmp(child->ns->value, NC_NS_BASE)) {
+                            break;
+                        }
                     }
+                    if (!child) {
+                        WRN("Session %u: the reply to <close-session> was not <ok> as expected.", session->id);
+                    }
+                    lyxml_free(session->ctx, rpl);
+                    break;
+                case NC_MSG_WOULDBLOCK:
+                    WRN("Session %u: timeout for receiving a reply to <close-session> elapsed.", session->id);
+                    break;
+                case NC_MSG_ERROR:
+                    ERR("Session %u: failed to receive a reply to <close-session>.", session->id);
+                    break;
+                default:
+                    /* cannot happen */
+                    break;
                 }
-                if (!child) {
-                    WRN("Session %u: the reply to <close-session> was not <ok> as expected.", session->id);
-                }
-                lyxml_free(session->ctx, rpl);
-                break;
-            case NC_MSG_WOULDBLOCK:
-                WRN("Session %u: timeout for receiving a reply to <close-session> elapsed.", session->id);
-                break;
-            case NC_MSG_ERROR:
-                ERR("Session %u: failed to receive a reply to <close-session>.", session->id);
-                break;
-            default:
-                /* cannot happen */
-                break;
             }
         }
 
