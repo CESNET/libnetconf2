@@ -426,7 +426,7 @@ struct nc_session {
             char **cpblts;                 /**< list of server's capabilities on client side */
             struct nc_msg_cont *replies;   /**< queue for RPC replies received instead of notifications */
             struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
-            volatile pthread_t *ntf_tid;   /**< running notifications receiving thread */
+            ATOMIC_PTR ntf_tid;            /**< running notifications receiving thread */
 
             /* client flags */
             /* some server modules failed to load so the data from them will be ignored - not use strict flag for parsing */

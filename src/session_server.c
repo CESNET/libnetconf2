@@ -773,7 +773,7 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
     (*session)->ctx = server_opts.ctx;
 
     /* assign new SID atomically */
-    (*session)->id = ATOMIC_INC(&server_opts.new_session_id);
+    (*session)->id = ATOMIC_INC(server_opts.new_session_id);
 
     /* NETCONF handshake */
     msgtype = nc_handshake_io(*session);
@@ -2349,7 +2349,7 @@ nc_accept(int timeout, struct nc_session **session)
     pthread_rwlock_unlock(&server_opts.endpt_lock);
 
     /* assign new SID atomically */
-    (*session)->id = ATOMIC_INC(&server_opts.new_session_id);
+    (*session)->id = ATOMIC_INC(server_opts.new_session_id);
 
     /* NETCONF handshake */
     msgtype = nc_handshake_io(*session);
@@ -2497,7 +2497,7 @@ nc_server_ch_add_client(const char *name)
     client = &server_opts.ch_clients[server_opts.ch_client_count - 1];
 
     client->name = lydict_insert(server_opts.ctx, name, 0);
-    client->id = ATOMIC_INC(&server_opts.new_client_id);
+    client->id = ATOMIC_INC(server_opts.new_client_id);
     client->ch_endpts = NULL;
     client->ch_endpt_count = 0;
     client->conn_type = 0;
@@ -3134,7 +3134,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, struct nc_session **session)
     }
 
     /* assign new SID atomically */
-    (*session)->id = ATOMIC_INC(&server_opts.new_session_id);
+    (*session)->id = ATOMIC_INC(server_opts.new_session_id);
 
     /* NETCONF handshake */
     msgtype = nc_handshake_io(*session);

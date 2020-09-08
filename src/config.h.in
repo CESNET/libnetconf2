@@ -36,10 +36,16 @@
 # include <stdatomic.h>
 
 # define ATOMIC_UINT32_T atomic_uint_fast32_t
-# define ATOMIC_INC(x) atomic_fetch_add(x, 1)
+# define ATOMIC_PTR atomic_uintptr_t
+# define ATOMIC_STORE(x, val) atomic_store(&(x), (atomic_uintptr_t)(val))
+# define ATOMIC_LOAD(x) ((void *)atomic_load(&(x)))
+# define ATOMIC_INC(x) atomic_fetch_add(&(x), 1)
 #else
 # define ATOMIC_UINT32_T uint32_t
-# define ATOMIC_INC(x) __sync_add_and_fetch(x, 1)
+# define ATOMIC_PTR void *
+# define ATOMIC_STORE(x, val) (x) = (void *)(val)
+# define ATOMIC_LOAD(x) ((void *)(x))
+# define ATOMIC_INC(x) __sync_add_and_fetch(&(x), 1)
 #endif
 
 /*
