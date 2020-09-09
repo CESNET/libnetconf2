@@ -615,7 +615,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     /* stop notifications loop if any */
     if ((session->side == NC_CLIENT) && ATOMIC_LOAD(session->opts.client.ntf_tid)) {
-        ATOMIC_STORE(session->opts.client.ntf_tid, NULL);
+        ATOMIC_STORE(session->opts.client.ntf_tid, (uintptr_t)NULL);
         /* the thread now knows it should quit */
     }
 

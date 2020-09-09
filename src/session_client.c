@@ -2214,7 +2214,7 @@ nc_recv_notif_thread(void *arg)
     free(ntarg);
 
     /* remember our allocated tid, we will be freeing it */
-    ntf_tid = ATOMIC_LOAD(session->opts.client.ntf_tid);
+    ntf_tid = (pthread_t *)ATOMIC_LOAD(session->opts.client.ntf_tid);
 
     while (ATOMIC_LOAD(session->opts.client.ntf_tid)) {
         msgtype = nc_recv_notif(session, NC_CLIENT_NOTIF_THREAD_SLEEP / 1000, &notif);
@@ -2235,7 +2235,7 @@ nc_recv_notif_thread(void *arg)
     }
 
     VRB("Session %u: notification thread exit.", session->id);
-    ATOMIC_STORE(session->opts.client.ntf_tid, NULL);
+    ATOMIC_STORE(session->opts.client.ntf_tid, (uintptr_t)NULL);
     free(ntf_tid);
     return NULL;
 }
@@ -2276,14 +2276,14 @@ nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_s
         return -1;
     }
     /* just so that nc_recv_notif_thread() does not immediately exit, the value does not matter */
-    ATOMIC_STORE(session->opts.client.ntf_tid, tid);
+    ATOMIC_STORE(session->opts.client.ntf_tid, (uintptr_t)tid);
 
     ret = pthread_create(tid, NULL, nc_recv_notif_thread, ntarg);
     if (ret) {
         ERR("Session %u: failed to create a new thread (%s).", strerror(errno));
         free(ntarg);
         free(tid);
-        ATOMIC_STORE(session->opts.client.ntf_tid, NULL);
+        ATOMIC_STORE(session->opts.client.ntf_tid, (uintptr_t)NULL);
         return -1;
     }
 
