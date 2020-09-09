@@ -34,10 +34,11 @@
 #cmakedefine HAVE_STDATOMIC
 #ifdef HAVE_STDATOMIC
 # include <stdatomic.h>
+# include <stdint.h>
 
 # define ATOMIC_UINT32_T atomic_uint_fast32_t
 # define ATOMIC_PTR atomic_uintptr_t
-# define ATOMIC_STORE(x, val) atomic_store(&(x), (atomic_uintptr_t)(val))
+# define ATOMIC_STORE(x, val) atomic_store(&(x), (uintptr_t)(val))
 # define ATOMIC_LOAD(x) ((void *)atomic_load(&(x)))
 # define ATOMIC_INC(x) atomic_fetch_add(&(x), 1)
 #else
