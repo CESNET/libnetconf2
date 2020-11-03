@@ -692,11 +692,11 @@ auth_password_get_pwd_hash(const char *username)
     }
 
     if (!strcmp(pwd->pw_passwd, "x")) {
-        #ifndef __QNXNTO__
-            getspnam_r(username, &spwd_buf, buf, 256, &spwd);
-        #else
-            spwd = getspnam_r(username, &spwd_buf, buf, 256);
-        #endif
+# ifndef __QNXNTO__
+        getspnam_r(username, &spwd_buf, buf, 256, &spwd);
+# else
+        spwd = getspnam_r(username, &spwd_buf, buf, 256);
+# endif
         if (!spwd) {
             VRB("Failed to retrieve the shadow entry for \"%s\".", username);
             return NULL;
