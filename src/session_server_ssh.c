@@ -700,6 +700,9 @@ auth_password_get_pwd_hash(const char *username)
         if (!spwd) {
             VRB("Failed to retrieve the shadow entry for \"%s\".", username);
             return NULL;
+        } else if ((spwd->sp_expire > -1) && (spwd->sp_expire <= (time(NULL) / (60 * 60 * 24)))) {
+            WRN("User \"%s\" account has expired.", username);
+            return NULL;
         }
 
         pass_hash = spwd->sp_pwdp;
