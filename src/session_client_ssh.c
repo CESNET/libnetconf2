@@ -437,6 +437,7 @@ hostkey_not_known:
                     ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
                     goto error;
                 }
+                fflush(out);
             }
         } while (strcmp(answer, "yes") && strcmp(answer, "no"));
 
