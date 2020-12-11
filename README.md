@@ -272,6 +272,23 @@ too small.
 $ cmake -D MAX_PSPOLL_THREAD_COUNT:String="6" ..
 ```
 
+### Code Coverage
+
+To generate statistical information about code coverage by tests, set
+`ENABLE_COVERAGE` option to `ON`:
+```
+$ cmake -D ENABLE_COVERAGE="ON" ..
+```
+and then the make's `coverage` target should be available to generate statistics:
+```
+$ make coverage
+```
+
+Note that `gcc` compiler is required for this option and additional tools are required:
+* gcov
+* lcov
+* genhtml
+
 ### CMake Notes
 
 Note that, with CMake, if you want to change the compiler or its options after

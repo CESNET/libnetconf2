@@ -70,5 +70,50 @@ if(ENABLE_VALGRIND_TESTS)
     endif()
 endif()
 
+if(ENABLE_COVERAGE)
+    # Destination
+    set(COVERAGE_DIR        "${CMAKE_BINARY_DIR}/tests/code_coverage/")
+    set(COVERAGE_FILE_RAW   "${CMAKE_BINARY_DIR}/tests/coverage_raw.info")
+    set(COVERAGE_FILE_CLEAN "${CMAKE_BINARY_DIR}/tests/coverage_clean.info")
+
+    # Add coverage target
+    add_custom_target(coverage
+        COMMENT "Generating code coverage..."
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        # Cleanup code counters
+        COMMAND "${PATH_LCOV}" --directory . --zerocounters --quiet
+
+        # Run tests
+        COMMAND "${CMAKE_CTEST_COMMAND}" --quiet
+
+        # Capture the counters
+        COMMAND "${PATH_LCOV}"
+            --directory .
+            --rc lcov_branch_coverage=1
+            --rc 'lcov_excl_line=assert'
+            --capture --quiet
+            --output-file "${COVERAGE_FILE_RAW}"
+        # Remove coverage of tests, system headers, etc.
+        COMMAND "${PATH_LCOV}"
+            --remove "${COVERAGE_FILE_RAW}" '${CMAKE_SOURCE_DIR}/tests/*'
+            --rc lcov_branch_coverage=1
+            --quiet --output-file "${COVERAGE_FILE_CLEAN}"
+        # Generate HTML report
+        COMMAND "${PATH_GENHTML}"
+            --branch-coverage --function-coverage --quiet --title "libnetconf2"
+            --legend --show-details --output-directory "${COVERAGE_DIR}"
+            "${COVERAGE_FILE_CLEAN}"
+        # Delete the counters
+        COMMAND "${CMAKE_COMMAND}" -E remove
+            ${COVERAGE_FILE_RAW} ${COVERAGE_FILE_CLEAN}
+        )
+
+    add_custom_command(TARGET coverage POST_BUILD
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
+        COMMENT "To see the code coverage report, open ${COVERAGE_DIR}index.html"
+        COMMAND ;
+        )
+endif()
+
 include_directories(${CMAKE_SOURCE_DIR}/src ${PROJECT_BINARY_DIR})
 configure_file("${PROJECT_SOURCE_DIR}/tests/config.h.in" "${PROJECT_BINARY_DIR}/tests/config.h" ESCAPE_QUOTES @ONLY)
