@@ -1279,10 +1279,7 @@ nc_send_hello_io(struct nc_session *session)
         sid = NULL;
     } else {
         cpblts = nc_server_get_cpblts_version(session->ctx, LYS_VERSION_1);
-        if (!cpblts) {
-            ERRMEM;
-            return NC_MSG_ERROR;
-        }
+      
         io_timeout = NC_SERVER_HELLO_TIMEOUT * 1000;
         sid = &session->id;
     }
