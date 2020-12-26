@@ -175,13 +175,751 @@ test_write_rpc_11_bad(void **state)
     return test_write_rpc_bad(state);
 }
 
+static void
+test_nc_send_rpc_bad(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+
+    // session is NULL
+    ret_a = nc_send_rpc(NULL, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+
+    // rpc is NULL
+    ret_a = nc_send_rpc(w->session,NULL, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+
+    // msgid is NULL
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, NULL);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_act_generic(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+
+    w->session->side = NC_CLIENT;
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_act_generic_xml("xml", NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_ACT_GENERIC);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_validate(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+
+    w->session->side = NC_CLIENT;
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_validate(NC_DATASTORE_RUNNING, "url", NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_VALIDATE);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_cancel(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+
+    w->session->side = NC_CLIENT;
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_cancel("persist-id", NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_CANCEL);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_discard(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+
+    w->session->side = NC_CLIENT;
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_discard();
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_DISCARD);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_commit(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+
+    w->session->side = NC_CLIENT;
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_commit(1, 100, "persist", "persist-id", NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_COMMIT);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_get(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+    const struct lys_module *module;
+
+    w->session->side = NC_CLIENT;
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_get("filter", NC_WD_ALL, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GET);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_get("<filter>", NC_WD_ALL, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GET);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+
+    /* load ietf-netconf-with-defaults */
+    module = ly_ctx_load_module(w->session->ctx, "ietf-netconf-with-defaults", NULL);
+    assert_non_null(module);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_get("filter", NC_WD_ALL, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GET);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_not_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_get("filter", NC_WD_ALL_TAG, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GET);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_not_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_get("filter", NC_WD_TRIM, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GET);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_not_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_get("filter", NC_WD_EXPLICIT, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GET);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_not_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_get("filter", 7, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GET);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_unlock(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+
+    w->session->side = NC_CLIENT;
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_unlock(NC_DATASTORE_RUNNING);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_UNLOCK);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_not_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_delete(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+
+    w->session->side = NC_CLIENT;
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_delete(NC_DATASTORE_RUNNING, "target-url", NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_DELETE);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_copy(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+
+    w->session->side = NC_CLIENT;
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_copy(NC_DATASTORE_CANDIDATE, "target-url", NC_DATASTORE_CANDIDATE, "src-url",
+                         NC_WD_ALL, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_COPY);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_copy(NC_DATASTORE_CANDIDATE, NULL, NC_DATASTORE_CANDIDATE, "src-url",
+                         NC_WD_ALL, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_COPY);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_copy_bad(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+    const struct lys_module *module;
+    int ret;
+
+    module = ly_ctx_load_module(w->session->ctx, "ietf-netconf", NULL);
+    assert_non_null(module);
+    ret = lys_features_enable(module, "candidate");
+    assert_int_equal(ret, 0);
+
+    w->session->side = NC_CLIENT;
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_copy(NC_DATASTORE_CANDIDATE, NULL, NC_DATASTORE_CANDIDATE, "candidate",
+                         NC_WD_ALL, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_COPY);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_copy(NC_DATASTORE_CANDIDATE, NULL, NC_DATASTORE_CANDIDATE, NULL,
+                         NC_WD_ALL, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_COPY);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+
+    module = ly_ctx_load_module(w->session->ctx, "ietf-netconf-with-defaults", NULL);
+    assert_non_null(module);
+
+    /* free the previous w->rpc, wd_mode is NC_WD_ALL */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_copy(NC_DATASTORE_CANDIDATE, NULL, NC_DATASTORE_CANDIDATE, NULL,
+                         NC_WD_ALL, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_COPY);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_not_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc, wd_mode is NC_WD_ALL_TAG */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_copy(NC_DATASTORE_CANDIDATE, NULL, NC_DATASTORE_CANDIDATE, NULL,
+                         NC_WD_ALL_TAG, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_COPY);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_not_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc, wd_mode is NC_WD_ALL_TRIM */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_copy(NC_DATASTORE_CANDIDATE, NULL, NC_DATASTORE_CANDIDATE, NULL,
+                         NC_WD_TRIM, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_COPY);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_not_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc, wd_mode is NC_WD_EXPLICIT */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_copy(NC_DATASTORE_CANDIDATE, NULL, NC_DATASTORE_CANDIDATE, NULL,
+                         NC_WD_EXPLICIT, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_COPY);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_not_equal(ret_a, NC_MSG_ERROR);
+
+}
+
+static void
+test_nc_send_rpc_edit(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+    const struct lys_module *module;
+    int ret;
+
+    w->session->side = NC_CLIENT;
+
+    /* load the ietf-netconf module*/
+    module = ly_ctx_load_module(w->session->ctx, "ietf-netconf", NULL);
+    assert_non_null(module);
+    ret = lys_features_enable(module, "candidate");
+    assert_int_equal(ret, 0);
+    ret = lys_features_enable(module, "validate");
+    assert_int_equal(ret, 0);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_edit(NC_DATASTORE_CANDIDATE, NC_RPC_EDIT_DFLTOP_REPLACE, NC_RPC_EDIT_TESTOPT_TESTSET,
+                         NC_RPC_EDIT_ERROPT_STOP, "candidate", NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_EDIT);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_edit(NC_DATASTORE_CANDIDATE, NC_RPC_EDIT_DFLTOP_REPLACE, NC_RPC_EDIT_TESTOPT_TESTSET,
+                         NC_RPC_EDIT_ERROPT_STOP, "<candidate>", NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_EDIT);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_not_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_edit_bad(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+    const struct lys_module *module;
+    int ret;
+
+    w->session->side = NC_CLIENT;
+
+    /* load the ietf-netconf module*/
+    module = ly_ctx_load_module(w->session->ctx, "ietf-netconf", NULL);
+    assert_non_null(module);
+    ret = lys_features_enable(module, "candidate");
+    assert_int_equal(ret, 0);
+
+    /* free the previous w->rpc, target is bad */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_edit(NC_DATASTORE_RUNNING, NC_RPC_EDIT_DFLTOP_REPLACE, NC_RPC_EDIT_TESTOPT_TESTSET,
+                         NC_RPC_EDIT_ERROPT_STOP, "running", NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_EDIT);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc, test-opt is bad */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_edit(NC_DATASTORE_CANDIDATE, NC_RPC_EDIT_DFLTOP_REPLACE, NC_RPC_EDIT_TESTOPT_TESTSET,
+                         NC_RPC_EDIT_ERROPT_STOP, "candidate", NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_EDIT);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_getconfig(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+    const struct lys_module *module;
+
+    w->session->side = NC_CLIENT;
+
+    /* load the ietf-netconf-with-defaults module */
+    module = ly_ctx_load_module(w->session->ctx, "ietf-netconf-with-defaults", NULL);
+    assert_non_null(module);
+
+    /* free the previous w->rpc, wd_mode is NC_WD_ALL */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_getconfig(NC_DATASTORE_RUNNING, "filter-string", NC_WD_ALL, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GETCONFIG);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_not_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc, wd_mode is NC_WD_ALL_TAG */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_getconfig(NC_DATASTORE_RUNNING, "<filter-string>", NC_WD_ALL_TAG, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GETCONFIG);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_not_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc, wd_mode is NC_WD_TRIM */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_getconfig(NC_DATASTORE_RUNNING, "filter-string", NC_WD_TRIM, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GETCONFIG);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_not_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc, wd_mode is NC_WD_EXPLICIT */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_getconfig(NC_DATASTORE_RUNNING, "filter-string", NC_WD_EXPLICIT, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GETCONFIG);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_not_equal(ret_a, NC_MSG_ERROR);
+
+}
+
+static void
+test_nc_send_rpc_getconfig_bad(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+
+    w->session->side = NC_CLIENT;
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_getconfig(NC_DATASTORE_RUNNING, "filter-string", NC_WD_ALL, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GETCONFIG);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    ly_ctx_destroy(w->session->ctx, NULL);
+    w->session->ctx = NULL;
+    w->rpc = nc_rpc_getconfig(NC_DATASTORE_CANDIDATE, "filter-string", NC_WD_UNKNOWN, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GETCONFIG);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_getschema(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+    const struct lys_module *module;
+
+    w->session->side = NC_CLIENT;
+
+    /* load the ietf-netconf-monitoring module */
+    module = ly_ctx_load_module(w->session->ctx, "ietf-netconf-monitoring", NULL);
+    assert_non_null(module);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_getschema("id", "version", "format", NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GETSCHEMA);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    ly_ctx_destroy(w->session->ctx, NULL);
+    w->session->ctx = NULL;
+    w->rpc = nc_rpc_getschema("id", "version", "format", NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GETSCHEMA);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_subscribe(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+    const struct lys_module *module;
+
+    w->session->side = NC_CLIENT;
+
+    /* load the notification module */
+    module = ly_ctx_load_module(w->session->ctx, "notifications", NULL);
+    assert_non_null(module);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_subscribe("stream-name", "filter", "start-time",
+                              "stop-time", NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_SUBSCRIBE);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    ly_ctx_destroy(w->session->ctx, NULL);
+    w->session->ctx = NULL;
+    w->rpc = nc_rpc_subscribe("stream-name", "filter", "start-time",
+                              "stop-time", NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_SUBSCRIBE);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_editdata(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+    const struct lys_module *module;
+
+    w->session->side = NC_CLIENT;
+
+    /* load the ietf-netconf-nmda module */
+    module = ly_ctx_load_module(w->session->ctx, "ietf-netconf-nmda", NULL);
+    assert_non_null(module);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_editdata("datastore", NC_RPC_EDIT_DFLTOP_REPLACE, "edit-content",
+                              NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_EDITDATA);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+
+}
+
+static void
+test_nc_send_rpc_getdata(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+    char *origin_filter = "origin_filter";
+
+    w->session->side = NC_CLIENT;
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    ly_ctx_destroy(w->session->ctx, NULL);
+    w->session->ctx = NULL;
+    w->rpc = nc_rpc_getdata("datastore", "filter", "config_filter", &origin_filter,
+                            1, 1, 2, 1, NC_WD_ALL, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GETDATA);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_getdata_bad(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+    const struct lys_module *module;
+    char *origin_filter = "origin_filter";
+
+    w->session->side = NC_CLIENT;
+
+    /* load the ietf-netconf-nmda module */
+    module = ly_ctx_load_module(w->session->ctx, "ietf-netconf-nmda", NULL);
+    assert_non_null(module);
+
+    /* free the previous w->rpc */
+    nc_rpc_free(w->rpc);
+    w->rpc = nc_rpc_getdata("datastore", "filter", "config_filter", &origin_filter,
+                            1, 1, 2, 1, NC_WD_ALL, NC_PARAMTYPE_CONST);
+    assert_non_null(w->rpc);
+    assert_int_equal(nc_rpc_get_type(w->rpc), NC_RPC_GETDATA);
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_send_rpc_unknown(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+    NC_MSG_TYPE ret_a;
+    uint64_t msgid;
+
+    w->session->side = NC_CLIENT;
+    w->rpc->type = NC_RPC_UNKNOWN;
+
+    /* send rpc command */
+    ret_a = nc_send_rpc(w->session, w->rpc, 0, &msgid);
+    assert_int_equal(ret_a, NC_MSG_ERROR);
+}
+
+static void
+test_nc_client_session_set_not_strict(void **state)
+{
+    struct wr *w = (struct wr *)*state;
+
+    w->session->side = NC_SERVER;
+    nc_client_session_set_not_strict(w->session);
+
+    w->session->side = NC_CLIENT;
+    nc_client_session_set_not_strict(w->session);
+    assert_true(w->session->flags & NC_SESSION_CLIENT_NOT_STRICT);
+}
+
 int main(void)
 {
     const struct CMUnitTest io[] = {
         cmocka_unit_test_setup_teardown(test_write_rpc_10, setup_write, teardown_write),
         cmocka_unit_test_setup_teardown(test_write_rpc_10_bad, setup_write, teardown_write),
         cmocka_unit_test_setup_teardown(test_write_rpc_11, setup_write, teardown_write),
-        cmocka_unit_test_setup_teardown(test_write_rpc_11_bad, setup_write, teardown_write)};
+        cmocka_unit_test_setup_teardown(test_write_rpc_11_bad, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_bad, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_act_generic, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_validate, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_cancel, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_discard, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_commit, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_get, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_unlock, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_delete, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_copy, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_copy_bad, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_edit, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_edit_bad, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_getconfig, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_getconfig_bad, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_getschema, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_subscribe, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_editdata, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_getdata, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_getdata_bad, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_send_rpc_unknown, setup_write, teardown_write),
+        cmocka_unit_test_setup_teardown(test_nc_client_session_set_not_strict, setup_write, teardown_write)};
 
     return cmocka_run_group_tests(io, NULL, NULL);
 }

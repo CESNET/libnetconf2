@@ -1,0 +1,387 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module name="ietf-netconf-nmda"
+        xmlns="urn:ietf:params:xml:ns:yang:yin:1"
+        xmlns:ncds="urn:ietf:params:xml:ns:yang:ietf-netconf-nmda"
+        xmlns:yang="urn:ietf:params:xml:ns:yang:ietf-yang-types"
+        xmlns:inet="urn:ietf:params:xml:ns:yang:ietf-inet-types"
+        xmlns:ds="urn:ietf:params:xml:ns:yang:ietf-datastores"
+        xmlns:or="urn:ietf:params:xml:ns:yang:ietf-origin"
+        xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0"
+        xmlns:ncwd="urn:ietf:params:xml:ns:yang:ietf-netconf-with-defaults">
+  <yang-version value="1.1"/>
+  <namespace uri="urn:ietf:params:xml:ns:yang:ietf-netconf-nmda"/>
+  <prefix value="ncds"/>
+  <import module="ietf-yang-types">
+    <prefix value="yang"/>
+    <reference>
+      <text>RFC 6991: Common YANG Data Types</text>
+    </reference>
+  </import>
+  <import module="ietf-inet-types">
+    <prefix value="inet"/>
+    <reference>
+      <text>RFC 6991: Common YANG Data Types</text>
+    </reference>
+  </import>
+  <import module="ietf-datastores">
+    <prefix value="ds"/>
+    <reference>
+      <text>RFC 8342: Network Management Datastore Architecture
+          (NMDA)</text>
+    </reference>
+  </import>
+  <import module="ietf-origin">
+    <prefix value="or"/>
+    <reference>
+      <text>RFC 8342: Network Management Datastore Architecture
+          (NMDA)</text>
+    </reference>
+  </import>
+  <import module="ietf-netconf">
+    <prefix value="nc"/>
+    <reference>
+      <text>RFC 6241: Network Configuration Protocol (NETCONF)</text>
+    </reference>
+  </import>
+  <import module="ietf-netconf-with-defaults">
+    <prefix value="ncwd"/>
+    <reference>
+      <text>RFC 6243: With-defaults Capability for NETCONF</text>
+    </reference>
+  </import>
+  <organization>
+    <text>IETF NETCONF Working Group</text>
+  </organization>
+  <contact>
+    <text>WG Web:   &lt;https://datatracker.ietf.org/wg/netconf/&gt;
+WG List:  &lt;mailto:netconf@ietf.org&gt;
+Author:   Martin Bjorklund
+          &lt;mailto:mbj@tail-f.com&gt;
+Author:   Juergen Schoenwaelder
+          &lt;mailto:j.schoenwaelder@jacobs-university.de&gt;
+Author:   Phil Shafer
+          &lt;mailto:phil@juniper.net&gt;
+Author:   Kent Watsen
+          &lt;mailto:kent+ietf@watsen.net&gt;
+Author:   Robert Wilton
+          &lt;mailto:rwilton@cisco.com&gt;</text>
+  </contact>
+  <description>
+    <text>This YANG module defines a set of NETCONF operations to support
+the Network Management Datastore Architecture (NMDA).
+The key words 'MUST', 'MUST NOT', 'REQUIRED', 'SHALL', 'SHALL
+NOT', 'SHOULD', 'SHOULD NOT', 'RECOMMENDED', 'NOT RECOMMENDED',
+'MAY', and 'OPTIONAL' in this document are to be interpreted as
+described in BCP 14 (RFC 2119) (RFC 8174) when, and only when,
+they appear in all capitals, as shown here.
+Copyright (c) 2019 IETF Trust and the persons identified as
+authors of the code.  All rights reserved.
+Redistribution and use in source and binary forms, with or
+without modification, is permitted pursuant to, and subject to
+the license terms contained in, the Simplified BSD License set
+forth in Section 4.c of the IETF Trust's Legal Provisions
+Relating to IETF Documents
+(https://trustee.ietf.org/license-info).
+This version of this YANG module is part of RFC 8526; see
+the RFC itself for full legal notices.</text>
+  </description>
+  <revision date="2019-01-07">
+    <description>
+      <text>Initial revision.</text>
+    </description>
+    <reference>
+      <text>RFC 8526: NETCONF Extensions to Support the Network Management
+          Datastore Architecture</text>
+    </reference>
+  </revision>
+  <feature name="origin">
+    <description>
+      <text>Indicates that the server supports the 'origin' annotation.</text>
+    </description>
+    <reference>
+      <text>RFC 8342: Network Management Datastore Architecture (NMDA)</text>
+    </reference>
+  </feature>
+  <feature name="with-defaults">
+    <description>
+      <text>NETCONF :with-defaults capability.  If the server advertises
+the :with-defaults capability for a session, then this
+feature must also be enabled for that session.  Otherwise,
+this feature must not be enabled.</text>
+    </description>
+    <reference>
+      <text>RFC 6243: With-defaults Capability for NETCONF, Section 4; and
+RFC 8526: NETCONF Extensions to Support the Network Management
+          Datastore Architecture, Section 3.1.1.2</text>
+    </reference>
+  </feature>
+  <augment target-node="/nc:lock/nc:input/nc:target/nc:config-target">
+    <description>
+      <text>Add NMDA datastore as target.</text>
+    </description>
+    <leaf name="datastore">
+      <type name="ds:datastore-ref"/>
+      <description>
+        <text>Datastore to lock.
+The &lt;lock&gt; operation is only supported on writable
+datastores.
+If the &lt;lock&gt; operation is not supported by the server on
+the specified target datastore, then the server MUST return
+an &lt;rpc-error&gt; element with an &lt;error-tag&gt; value of
+'invalid-value'.</text>
+      </description>
+    </leaf>
+  </augment>
+  <augment target-node="/nc:unlock/nc:input/nc:target/nc:config-target">
+    <description>
+      <text>Add NMDA datastore as target.</text>
+    </description>
+    <leaf name="datastore">
+      <type name="ds:datastore-ref"/>
+      <description>
+        <text>Datastore to unlock.
+The &lt;unlock&gt; operation is only supported on writable
+datastores.
+If the &lt;unlock&gt; operation is not supported by the server on
+the specified target datastore, then the server MUST return
+an &lt;rpc-error&gt; element with an &lt;error-tag&gt; value of
+'invalid-value'.</text>
+      </description>
+    </leaf>
+  </augment>
+  <augment target-node="/nc:validate/nc:input/nc:source/nc:config-source">
+    <description>
+      <text>Add NMDA datastore as source.</text>
+    </description>
+    <leaf name="datastore">
+      <type name="ds:datastore-ref"/>
+      <description>
+        <text>Datastore to validate.
+The &lt;validate&gt; operation is supported only on configuration
+datastores.
+If the &lt;validate&gt; operation is not supported by the server
+on the specified target datastore, then the server MUST
+return an &lt;rpc-error&gt; element with an &lt;error-tag&gt; value of
+'invalid-value'.</text>
+      </description>
+    </leaf>
+  </augment>
+  <rpc name="get-data">
+    <description>
+      <text>Retrieve data from an NMDA datastore.  The content returned
+by get-data must satisfy all filters, i.e., the filter
+criteria are logically ANDed.
+Any ancestor nodes (including list keys) of nodes selected by
+the filters are included in the response.
+The 'with-origin' parameter is only valid for an operational
+datastore.  If 'with-origin' is used with an invalid
+datastore, then the server MUST return an &lt;rpc-error&gt; element
+with an &lt;error-tag&gt; value of 'invalid-value'.
+The 'with-defaults' parameter only applies to the operational
+datastore if the NETCONF :with-defaults and
+:with-operational-defaults capabilities are both advertised.
+If the 'with-defaults' parameter is present in a request for
+which it is not supported, then the server MUST return an
+&lt;rpc-error&gt; element with an &lt;error-tag&gt; value of
+'invalid-value'.</text>
+    </description>
+    <input>
+      <leaf name="datastore">
+        <type name="ds:datastore-ref"/>
+        <mandatory value="true"/>
+        <description>
+          <text>Datastore from which to retrieve data.
+If the datastore is not supported by the server, then the
+server MUST return an &lt;rpc-error&gt; element with an
+&lt;error-tag&gt; value of 'invalid-value'.</text>
+        </description>
+      </leaf>
+      <choice name="filter-spec">
+        <description>
+          <text>The content filter specification for this request.</text>
+        </description>
+        <anydata name="subtree-filter">
+          <description>
+            <text>This parameter identifies the portions of the
+target datastore to retrieve.</text>
+          </description>
+          <reference>
+            <text>RFC 6241: Network Configuration Protocol (NETCONF),
+          Section 6</text>
+          </reference>
+        </anydata>
+        <leaf name="xpath-filter">
+          <if-feature name="nc:xpath"/>
+          <type name="yang:xpath1.0"/>
+          <description>
+            <text>This parameter contains an XPath expression identifying
+the portions of the target datastore to retrieve.
+If the expression returns a node-set, all nodes in the
+node-set are selected by the filter.  Otherwise, if the
+expression does not return a node-set, then the
+&lt;get-data&gt; operation fails.
+The expression is evaluated in the following XPath
+context:
+  o  The set of namespace declarations are those in
+     scope on the 'xpath-filter' leaf element.
+  o  The set of variable bindings is empty.
+  o  The function library is the core function library,
+     and the XPath functions are defined in Section 10
+     of RFC 7950.
+  o  The context node is the root node of the target
+     datastore.</text>
+          </description>
+        </leaf>
+      </choice>
+      <leaf name="config-filter">
+        <type name="boolean"/>
+        <description>
+          <text>Filter for nodes with the given value for their 'config'
+property.  When this leaf is set to 'true', only 'config
+true' nodes are selected, and when set to 'false', only
+'config false' nodes are selected.  If this leaf is not
+present, no nodes are filtered.</text>
+        </description>
+      </leaf>
+      <choice name="origin-filters">
+        <when condition="derived-from-or-self(datastore, &quot;ds:operational&quot;)"/>
+        <if-feature name="origin"/>
+        <description>
+          <text>Filters configuration nodes based on the 'origin'
+annotation.  Configuration nodes that do not have an
+'origin' annotation are treated as if they have the
+'origin' annotation 'or:unknown'.
+System state nodes are not affected by origin-filters and
+thus not filtered.  Note that system state nodes can be
+filtered with the 'config-filter' leaf.</text>
+        </description>
+        <leaf-list name="origin-filter">
+          <type name="or:origin-ref"/>
+          <description>
+            <text>Filter based on the 'origin' annotation.  A
+configuration node matches the filter if its 'origin'
+annotation is derived from or equal to any of the given
+filter values.</text>
+          </description>
+        </leaf-list>
+        <leaf-list name="negated-origin-filter">
+          <type name="or:origin-ref"/>
+          <description>
+            <text>Filter based on the 'origin' annotation.  A
+configuration node matches the filter if its 'origin'
+annotation is neither derived from nor equal to any of
+the given filter values.</text>
+          </description>
+        </leaf-list>
+      </choice>
+      <leaf name="max-depth">
+        <type name="union">
+          <type name="uint16">
+            <range value="1..65535"/>
+          </type>
+          <type name="enumeration">
+            <enum name="unbounded">
+              <description>
+                <text>All descendant nodes are included.</text>
+              </description>
+            </enum>
+          </type>
+        </type>
+        <default value="unbounded"/>
+        <description>
+          <text>For each node selected by the filters, this parameter
+selects how many conceptual subtree levels should be
+returned in the reply.  If the depth is 1, the reply
+includes just the selected nodes but no children.  If the
+depth is 'unbounded', all descendant nodes are included.</text>
+        </description>
+      </leaf>
+      <leaf name="with-origin">
+        <when condition="derived-from-or-self(../datastore, &quot;ds:operational&quot;)"/>
+        <if-feature name="origin"/>
+        <type name="empty"/>
+        <description>
+          <text>If this parameter is present, the server will return
+the 'origin' annotation for the nodes that have one.</text>
+        </description>
+      </leaf>
+      <uses name="ncwd:with-defaults-parameters">
+        <if-feature name="with-defaults"/>
+      </uses>
+    </input>
+    <output>
+      <anydata name="data">
+        <description>
+          <text>Copy of the source datastore subset that matched
+the filter criteria (if any).  An empty data
+container indicates that the request did not
+produce any results.</text>
+        </description>
+      </anydata>
+    </output>
+  </rpc>
+  <rpc name="edit-data">
+    <description>
+      <text>Edit data in an NMDA datastore.
+If an error condition occurs such that an error severity
+&lt;rpc-error&gt; element is generated, the server will stop
+processing the &lt;edit-data&gt; operation and restore the
+specified configuration to its complete state at
+the start of this &lt;edit-data&gt; operation.</text>
+    </description>
+    <input>
+      <leaf name="datastore">
+        <type name="ds:datastore-ref"/>
+        <mandatory value="true"/>
+        <description>
+          <text>Datastore that is the target of the &lt;edit-data&gt; operation.
+If the target datastore is not writable, or is not
+supported by the server, then the server MUST return an
+&lt;rpc-error&gt; element with an &lt;error-tag&gt; value of
+'invalid-value'.</text>
+        </description>
+      </leaf>
+      <leaf name="default-operation">
+        <type name="enumeration">
+          <enum name="merge">
+            <description>
+              <text>The default operation is merge.</text>
+            </description>
+          </enum>
+          <enum name="replace">
+            <description>
+              <text>The default operation is replace.</text>
+            </description>
+          </enum>
+          <enum name="none">
+            <description>
+              <text>There is no default operation.</text>
+            </description>
+          </enum>
+        </type>
+        <default value="merge"/>
+        <description>
+          <text>The default operation to use.</text>
+        </description>
+      </leaf>
+      <choice name="edit-content">
+        <mandatory value="true"/>
+        <description>
+          <text>The content for the edit operation.</text>
+        </description>
+        <anydata name="config">
+          <description>
+            <text>Inline config content.</text>
+          </description>
+        </anydata>
+        <leaf name="url">
+          <if-feature name="nc:url"/>
+          <type name="inet:uri"/>
+          <description>
+            <text>URL-based config content.</text>
+          </description>
+        </leaf>
+      </choice>
+    </input>
+  </rpc>
+</module>
