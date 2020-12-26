@@ -273,6 +273,60 @@ test_send_recv_error(void)
 }
 
 static void
+test_send_recv_error2(void)
+{
+    int ret;
+    uint64_t msgid;
+    NC_MSG_TYPE msgtype;
+    struct nc_rpc *rpc;
+    struct nc_reply *reply;
+    struct nc_pollsession *ps;
+
+    /* client RPC */
+    rpc = nc_rpc_kill(1);
+    assert_non_null(rpc);
+
+    msgtype = nc_send_rpc(client_session, rpc, 0, &msgid);
+    assert_int_equal(msgtype, NC_MSG_RPC);
+
+    /* server RPC, send reply */
+    ps = nc_ps_new();
+    assert_non_null(ps);
+    nc_ps_add_session(ps, server_session);
+
+    ret = nc_ps_poll(ps, 0, NULL);
+    assert_int_equal(ret, NC_PSPOLL_RPC | NC_PSPOLL_REPLY_ERROR);
+
+    /* server finished */
+    nc_ps_free(ps);
+
+    /* client reply, session is NULL */
+    msgtype = nc_recv_reply(NULL, rpc, msgid, 0, 0, &reply);
+    assert_int_equal(msgtype, NC_MSG_ERROR);
+
+    /* rpc is NULL */
+    msgtype = nc_recv_reply(client_session, NULL, msgid, 0, 0, &reply);
+    assert_int_equal(msgtype, NC_MSG_ERROR);
+
+    /* msgis is NULL */
+    msgtype = nc_recv_reply(client_session, rpc, 0, 0, 0, &reply);
+    assert_int_equal(msgtype, NC_MSG_ERROR);
+
+    /* reply is NULL*/
+    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, 1, NULL);
+    assert_int_equal(msgtype, NC_MSG_ERROR);
+
+    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, 1, &reply);
+    assert_int_equal(msgtype, NC_MSG_ERROR);
+
+    client_session->status = NC_STATUS_INVALID;
+    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, 0, &reply);
+    assert_int_equal(msgtype, NC_MSG_ERROR);
+
+    nc_rpc_free(rpc);
+}
+
+static void
 test_send_recv_error_10(void **state)
 {
     (void)state;
@@ -281,6 +335,7 @@ test_send_recv_error_10(void **state)
     client_session->version = NC_VERSION_10;
 
     test_send_recv_error();
+    test_send_recv_error2();
 }
 
 static void
@@ -292,6 +347,7 @@ test_send_recv_error_11(void **state)
     client_session->version = NC_VERSION_11;
 
     test_send_recv_error();
+    test_send_recv_error2();
 }
 
 static void
@@ -466,6 +522,25 @@ test_send_recv_notif(void)
 }
 
 static void
+test_send_recv_notif_error()
+{
+    struct nc_notif *notif;
+    NC_MSG_TYPE ret;
+
+    /* session is NULL */
+    ret = nc_recv_notif(NULL, 0, &notif);
+    assert_int_equal(ret, NC_MSG_ERROR);
+
+    /* notif is NULL */
+    ret = nc_recv_notif(server_session, 0, NULL);
+    assert_int_equal(ret, NC_MSG_ERROR);
+
+    /* session->side is NC_SERVER */
+    ret = nc_recv_notif(server_session, 0, &notif);
+    assert_int_equal(ret, NC_MSG_ERROR);
+}
+
+static void
 test_send_recv_notif_10(void **state)
 {
     (void)state;
@@ -477,6 +552,17 @@ test_send_recv_notif_10(void **state)
 }
 
 static void
+test_send_recv_notif_error_10(void **state)
+{
+    (void)state;
+
+    server_session->version = NC_VERSION_10;
+    client_session->version = NC_VERSION_10;
+
+    test_send_recv_notif_error();
+}
+
+static void
 test_send_recv_notif_11(void **state)
 {
     (void)state;
@@ -485,6 +571,17 @@ test_send_recv_notif_11(void **state)
     client_session->version = NC_VERSION_11;
 
     test_send_recv_notif();
+}
+
+static void
+test_send_recv_notif_error_11(void **state)
+{
+    (void)state;
+
+    server_session->version = NC_VERSION_11;
+    client_session->version = NC_VERSION_11;
+
+    test_send_recv_notif_error();
 }
 
 int
@@ -530,10 +627,12 @@ main(void)
         cmocka_unit_test_setup_teardown(test_send_recv_error_10, setup_sessions, teardown_sessions),
         cmocka_unit_test_setup_teardown(test_send_recv_data_10, setup_sessions, teardown_sessions),
         cmocka_unit_test_setup_teardown(test_send_recv_notif_10, setup_sessions, teardown_sessions),
+        cmocka_unit_test_setup_teardown(test_send_recv_notif_error_10, setup_sessions, teardown_sessions),
         cmocka_unit_test_setup_teardown(test_send_recv_ok_11, setup_sessions, teardown_sessions),
         cmocka_unit_test_setup_teardown(test_send_recv_error_11, setup_sessions, teardown_sessions),
         cmocka_unit_test_setup_teardown(test_send_recv_data_11, setup_sessions, teardown_sessions),
         cmocka_unit_test_setup_teardown(test_send_recv_notif_11, setup_sessions, teardown_sessions),
+        cmocka_unit_test_setup_teardown(test_send_recv_notif_error_11, setup_sessions, teardown_sessions),
     };
 
     ret = cmocka_run_group_tests(comm, NULL, NULL);
