@@ -8,6 +8,8 @@
 #include <cmocka.h>
 #include <libyang/libyang.h>
 #include <session_client.h>
+#include <session_client_ch.h>
+#include <session_p.h>
 #include <log.h>
 #include <config.h>
 #include "tests/config.h"
@@ -35,6 +37,8 @@ setup_f(void **state)
     nc_verbosity(NC_VERB_VERBOSE);
 
     ret = nc_client_ssh_set_username("username");
+    assert_int_equal(ret, 0);
+    ret = nc_client_ssh_ch_set_username("ch_username");
     assert_int_equal(ret, 0);
     nc_client_ssh_set_auth_hostkey_check_clb(ssh_hostkey_check_clb, NULL);
 
@@ -184,6 +188,41 @@ __wrap_ssh_userauth_publickey(ssh_session session, const char *username, const s
     (void)privkey;
 
     return (int)mock();
+}
+
+MOCK int
+__wrap_nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives *ka)
+{
+    (void)address;
+    (void)port;
+    (void)ka;
+
+    return (int)mock();
+}
+
+MOCK int
+__wrap_nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host, uint16_t *port, uint16_t *idx)
+{
+    (void)binds;
+    (void)bind_count;
+    (void)timeout;
+    (void)host;
+    (void)port;
+
+    *idx = 0;
+    return (int)mock();
+}
+
+MOCK struct nc_session *
+__wrap_nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout)
+{
+    (void)sock;
+    (void)host;
+    (void)port;
+    (void)ctx;
+    (void)timeout;
+
+    return mock_ptr_type(struct nc_session *);
 }
 
 static int
@@ -621,6 +660,128 @@ test_nc_connect_ssh_bad_hello(void **state)
     nc_client_destroy();
 }
 
+static void
+test_nc_client_ssh_ch_setting_username(void **state)
+{
+    (void)state;
+    const char *username_ret;
+    int ret;
+
+    /* username is set to "ch_username" in setup_f */
+    username_ret = nc_client_ssh_ch_get_username();
+    assert_string_equal(username_ret, "ch_username");
+    /* set new username and check if it changes */
+    ret = nc_client_ssh_ch_set_username("new_ch_username");
+    assert_int_equal(ret, 0);
+    username_ret = nc_client_ssh_ch_get_username();
+    assert_string_equal(username_ret, "new_ch_username");
+}
+
+static void
+test_nc_client_ssh_ch_add_bind_listen(void **state)
+{
+    (void)state;
+    int ret;
+
+    /* invalid parameters, address NULL or port 0 */
+    ret = nc_client_ssh_ch_add_bind_listen(NULL, 4334);
+    assert_int_equal(ret, -1);
+    ret = nc_client_ssh_ch_add_bind_listen("127.0.0.1", 0);
+    assert_int_equal(ret, -1);
+
+    /* failed to create an ssh listening socket */
+    will_return(__wrap_nc_sock_listen_inet, -1);
+    ret = nc_client_ssh_ch_add_bind_listen("127.0.0.1", 4334);
+    assert_int_equal(ret, -1);
+
+    /* fake a successful CH ssh listening socket */
+    will_return(__wrap_nc_sock_listen_inet, 1);
+    ret = nc_client_ssh_ch_add_bind_listen("127.0.0.1", 4334);
+    assert_int_equal(ret, 0);
+
+    /* remove ssh listening client binds */
+    ret = nc_client_ssh_ch_del_bind("127.0.0.1", 4334);
+    assert_int_equal(ret, 0);
+}
+
+static void
+test_nc_accept_callhome(void **state)
+{
+    (void)state;
+    struct nc_session *session = NULL;
+    int timeout = 10;
+    int ret;
+
+    /* invalid parameter session */
+    ret = nc_accept_callhome(timeout, NULL, NULL);
+    assert_int_equal(ret, -1);
+
+    /* no client bind */
+    ret = nc_accept_callhome(timeout, NULL, &session);
+    assert_int_equal(ret, -1);
+
+    /* successfully add a client Call Home bind */
+    will_return(__wrap_nc_sock_listen_inet, 1);
+    ret = nc_client_ssh_ch_add_bind_listen("127.0.0.1", 4334);
+    assert_int_equal(ret, 0);
+
+    /* failed to accept a client bind */
+    will_return(__wrap_nc_sock_accept_binds, -1);
+    ret = nc_accept_callhome(timeout, NULL, &session);
+    assert_int_equal(ret, -1);
+
+    /* failed to accept a server Call Home connection */
+    will_return(__wrap_nc_accept_callhome_ssh_sock, NULL);
+    will_return(__wrap_nc_sock_accept_binds, 2);
+    ret = nc_accept_callhome(timeout, NULL, &session);
+    assert_int_equal(ret, -1);
+
+    /* create session structure to fake a successful server call home connection */
+    session = nc_new_session(NC_CLIENT, 0);
+    assert_non_null(session);
+    will_return(__wrap_nc_sock_accept_binds, 2);
+    will_return(__wrap_nc_accept_callhome_ssh_sock, session);
+    ret = nc_accept_callhome(timeout, NULL, &session);
+    assert_int_equal(ret, 1);
+
+    /* remove ssh listening client binds */
+    ret = nc_client_ssh_ch_del_bind("127.0.0.1", 4334);
+    assert_int_equal(ret, 0);
+
+    /* free session */
+    nc_session_free(session, NULL);
+}
+
+static void
+test_nc_client_ssh_callhome_successful(void **state)
+{
+    (void)state;
+    struct nc_session *session = NULL;
+    int timeout = 10;
+    int ret;
+
+    /* create session structure */
+    session = nc_new_session(NC_CLIENT, 0);
+    assert_non_null(session);
+
+    /* prepare to fake return values for functions used by nc_accept_callhome */
+    will_return(__wrap_nc_sock_listen_inet, 1);
+    will_return(__wrap_nc_sock_accept_binds, 2);
+    will_return(__wrap_nc_accept_callhome_ssh_sock, session);
+
+    ret = nc_client_ssh_ch_add_bind_listen("127.0.0.1", 4334);
+    assert_int_equal(ret, 0);
+    ret = nc_accept_callhome(timeout, NULL, &session);
+    assert_int_equal(ret, 1);
+
+    /* remove ssh listening client binds */
+    ret = nc_client_ssh_ch_del_bind("127.0.0.1", 4334);
+    assert_int_equal(ret, 0);
+
+    /* free session */
+    nc_session_free(session, NULL);
+}
+
 int
 main(void)
 {
@@ -637,6 +798,10 @@ main(void)
         cmocka_unit_test_setup_teardown(test_nc_connect_ssh_pubkey_succesfull, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_connect_connection_failed, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_connect_ssh_bad_hello, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_client_ssh_ch_setting_username, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_client_ssh_ch_add_bind_listen, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_accept_callhome, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_client_ssh_callhome_successful, setup_f, teardown_f),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
