@@ -7,7 +7,7 @@ set(test test_client_ssh)
 set(${test}_mock_funcs connect ssh_connect ssh_userauth_none ssh_userauth_kbdint ssh_is_connected
     ssh_channel_open_session ssh_channel_request_subsystem ssh_channel_is_close ssh_channel_write
     ssh_channel_poll_timeout ssh_userauth_password nc_handshake_io nc_ctx_check_and_fill
-    ssh_userauth_try_publickey ssh_userauth_publickey)
+    ssh_userauth_try_publickey ssh_userauth_publickey nc_sock_listen_inet nc_sock_accept_binds nc_accept_callhome_ssh_sock)
 set(${test}_wrap_link_flags "-Wl")
 foreach(mock_func IN LISTS ${test}_mock_funcs)
     set(${test}_wrap_link_flags "${${test}_wrap_link_flags},--wrap=${mock_func}")
