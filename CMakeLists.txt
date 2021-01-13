@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8.12)
 
 project(libnetconf2 C)
 set(LIBNETCONF2_DESC "NETCONF library in C providing API for both clients and servers.")
