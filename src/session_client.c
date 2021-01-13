@@ -2661,13 +2661,15 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         rpc_com = (struct nc_rpc_commit *)rpc;
 
         data = lyd_new(NULL, mod, "commit");
-        if (rpc_com->confirmed) {
-            lyd_new_leaf(data, mod, "confirmed", NULL);
-        }
+        if (lys_features_state(mod, "confirmed-commit")) {
+            if (rpc_com->confirmed) {
+                lyd_new_leaf(data, mod, "confirmed", NULL);
+            }
 
-        if (rpc_com->confirm_timeout) {
-            sprintf(str, "%u", rpc_com->confirm_timeout);
-            lyd_new_leaf(data, mod, "confirm-timeout", str);
+            if (rpc_com->confirm_timeout) {
+                sprintf(str, "%u", rpc_com->confirm_timeout);
+                lyd_new_leaf(data, mod, "confirm-timeout", str);
+            }
         }
 
         if (rpc_com->persist) {
