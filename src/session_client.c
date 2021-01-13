@@ -2654,7 +2654,11 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         data = lyd_new(NULL, mod, "kill-session");
         sprintf(str, "%u", rpc_k->sid);
-        lyd_new_leaf(data, mod, "session-id", str);
+        node = lyd_new_leaf(data, mod, "session-id", str);
+        if (!node) {
+            lyd_free(data);
+            return NC_MSG_ERROR;
+        }
         break;
 
     case NC_RPC_COMMIT:
@@ -2662,12 +2666,20 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         data = lyd_new(NULL, mod, "commit");
         if (rpc_com->confirmed) {
-            lyd_new_leaf(data, mod, "confirmed", NULL);
+            node = lyd_new_leaf(data, mod, "confirmed", NULL);
+            if (!node) {
+                lyd_free(data);
+                return NC_MSG_ERROR;
+            }
         }
 
         if (rpc_com->confirm_timeout) {
             sprintf(str, "%u", rpc_com->confirm_timeout);
-            lyd_new_leaf(data, mod, "confirm-timeout", str);
+            node = lyd_new_leaf(data, mod, "confirm-timeout", str);
+            if (!node) {
+                lyd_free(data);
+                return NC_MSG_ERROR;
+            }
         }
 
         if (rpc_com->persist) {
