@@ -565,6 +565,109 @@ test_nc_rpc_subscribe(void **state)
     nc_rpc_free(rpc);
 }
 
+/* function to check if values of getdata rpc are set correctly */
+void
+check_getdata(struct nc_rpc *rpc, char *datastore, const char *filter, const char *config_filter,
+              char **origin_filter, int origin_filter_count, int negated_origin_filter, uint16_t max_depth,
+              int with_origin, NC_WD_MODE wd_mode)
+{
+   assert_int_equal(nc_rpc_get_type(rpc), NC_RPC_GETDATA);
+   struct nc_rpc_getdata *rpc_getdata = (struct nc_rpc_getdata*)rpc;
+
+   assert_int_equal(rpc_getdata->type, NC_RPC_GETDATA);
+   assert_string_equal(rpc_getdata->datastore, datastore);
+   assert_string_equal(rpc_getdata->filter, filter);
+   assert_string_equal(rpc_getdata->config_filter, config_filter);
+   assert_string_equal(*rpc_getdata->origin_filter, *origin_filter);
+   assert_int_equal(rpc_getdata->origin_filter_count, origin_filter_count);
+   assert_int_equal(rpc_getdata->negated_origin_filter, negated_origin_filter);
+   assert_int_equal(rpc_getdata->max_depth, max_depth);
+   assert_int_equal(rpc_getdata->with_origin, with_origin);
+   assert_int_equal(rpc_getdata->wd_mode, wd_mode);
+}
+
+static void
+test_nc_rpc_getdata(void **state)
+{
+    (void)state;
+    struct nc_rpc *rpc = NULL;
+
+    /* create getdata rpc with NC_PARAMTYPE_CONST */
+    char *origin_filters = "origin_filter";
+    rpc = nc_rpc_getdata("candidate", "filter", "true", &origin_filters, 1, 1, 3, 1, NC_WD_UNKNOWN, NC_PARAMTYPE_CONST);
+    assert_non_null(rpc);
+    check_getdata(rpc, "candidate", "filter", "true", &origin_filters, 1, 1, 3, 1, NC_WD_UNKNOWN);
+    nc_rpc_free(rpc);
+
+    /* create getdata rpc with NC_PARAMTYPE_FREE */
+    char *datastore = strdup("running");
+    char *filter = strdup("filter");
+    char *config_filter = strdup("true");
+    char buf[20] = {0};
+    char **origin_filter;
+    int origin_filter_count = 2;
+
+    origin_filter = calloc(origin_filter_count, sizeof *origin_filter);
+    assert_non_null(origin_filter);
+    for (int i = 0; i < origin_filter_count; i++) {
+       snprintf(buf, sizeof(buf) - 1, "origin_filter%d", i + 1);
+       origin_filter[i] = strdup(buf);
+    }
+
+    rpc = nc_rpc_getdata(datastore, filter, config_filter, origin_filter, origin_filter_count, 2, 3, 1, NC_WD_EXPLICIT, NC_PARAMTYPE_FREE);
+    assert_non_null(rpc);
+    check_getdata(rpc, datastore, filter, config_filter, origin_filter, origin_filter_count, 2, 3, 1, NC_WD_EXPLICIT);
+    nc_rpc_free(rpc);
+
+    /* create getdata rpc with NC_PARAMTYPE_DUP_AND_FREE */
+    char *origin_filter1 = "origin_filter1";
+    rpc = nc_rpc_getdata("startup", "filter1", "false", &origin_filter1, 1, 0, 3, 1, NC_WD_ALL, NC_PARAMTYPE_DUP_AND_FREE);
+    assert_non_null(rpc);
+    check_getdata(rpc, "startup", "filter1", "false", &origin_filter1, 1, 0, 3, 1, NC_WD_ALL);
+    nc_rpc_free(rpc);
+}
+
+/* function to check if values of editdata rpc are set correctly */
+void
+check_editdata(struct nc_rpc *rpc, char *datastore, NC_RPC_EDIT_DFLTOP default_op, const char *edit_content)
+{
+   assert_int_equal(nc_rpc_get_type(rpc), NC_RPC_EDITDATA);
+   struct nc_rpc_editdata *rpc_editdata = (struct nc_rpc_editdata*)rpc;
+
+   assert_int_equal(rpc_editdata->type, NC_RPC_EDITDATA);
+   assert_string_equal(rpc_editdata->datastore, datastore);
+   assert_int_equal(rpc_editdata->default_op, default_op);
+   assert_string_equal(rpc_editdata->edit_cont, edit_content);
+}
+
+static void
+test_nc_rpc_editdata(void **state)
+{
+    (void)state;
+    struct nc_rpc *rpc = NULL;
+
+    /* create editdata rpc with NC_PARAMTYPE_CONST */
+    rpc = nc_rpc_editdata("candidate", NC_RPC_EDIT_DFLTOP_UNKNOWN, "edit", NC_PARAMTYPE_CONST);
+    assert_non_null(rpc);
+    check_editdata(rpc, "candidate", NC_RPC_EDIT_DFLTOP_UNKNOWN, "edit");
+    nc_rpc_free(rpc);
+
+    /* create editdata rpc with NC_PARAMTYPE_FREE */
+    char *datastore = strdup("running");
+    char *edit_cont = strdup("edit_data");
+
+    rpc = nc_rpc_editdata(datastore, NC_RPC_EDIT_DFLTOP_MERGE, edit_cont, NC_PARAMTYPE_FREE);
+    assert_non_null(rpc);
+    check_editdata(rpc, datastore, NC_RPC_EDIT_DFLTOP_MERGE, edit_cont);
+    nc_rpc_free(rpc);
+
+    /* create editdata rpc with NC_PARAMTYPE_DUP_AND_FREE */
+    rpc = nc_rpc_editdata("startup", NC_RPC_EDIT_DFLTOP_REPLACE, "edit_cont", NC_PARAMTYPE_DUP_AND_FREE);
+    assert_non_null(rpc);
+    check_editdata(rpc, "startup", NC_RPC_EDIT_DFLTOP_REPLACE, "edit_cont");
+    nc_rpc_free(rpc);
+}
+
 int
 main(void)
 {
@@ -585,6 +688,8 @@ main(void)
         cmocka_unit_test_setup_teardown(test_nc_rpc_validate, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_rpc_getschema, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_rpc_subscribe, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_rpc_getdata, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_rpc_editdata, setup_f, teardown_f),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
