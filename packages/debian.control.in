@@ -12,13 +12,13 @@ Architecture: any
 Description: @PACKAGE_DESC@
 
 Package: @PACKAGE@-dev
-Depends: libyang-dev, @PACKAGE@ (=@LIBNETCONF2_VERSION@)
+Depends: libyang-dev, @PACKAGE@ (=@LIBNETCONF2_VERSION@-1)
 Section: libdevel
 Architecture: any
 Description: @PACKAGE_DEV_DESC@
 
 Package: @PACKAGE@-dbg
-Depends: @PACKAGE@ (=@LIBNETCONF2_VERSION@)
+Depends: @PACKAGE@ (=@LIBNETCONF2_VERSION@-1)
 Section: debug
 Architecture: any
 Description: @PACKAGE_DBG_DESC@
