@@ -220,15 +220,12 @@ nc_new_session(NC_SIDE side, int shared_ti)
     sess->side = side;
 
     if (side == NC_SERVER) {
-        sess->opts.server.rpc_lock = malloc(sizeof *sess->opts.server.rpc_lock);
-        sess->opts.server.rpc_cond = malloc(sizeof *sess->opts.server.rpc_cond);
-        sess->opts.server.rpc_inuse = malloc(sizeof *sess->opts.server.rpc_inuse);
-        if (!sess->opts.server.rpc_lock || !sess->opts.server.rpc_cond || !sess->opts.server.rpc_inuse) {
-            goto error;
-        }
-        pthread_mutex_init(sess->opts.server.rpc_lock, NULL);
-        pthread_cond_init(sess->opts.server.rpc_cond, NULL);
-        *sess->opts.server.rpc_inuse = 0;
+        pthread_mutex_init(&sess->opts.server.rpc_lock, NULL);
+        pthread_cond_init(&sess->opts.server.rpc_cond, NULL);
+        sess->opts.server.rpc_inuse = 0;
+
+        pthread_mutex_init(&sess->opts.server.ch_lock, NULL);
+        pthread_cond_init(&sess->opts.server.ch_cond, NULL);
     }
 
     if (!shared_ti) {
@@ -242,11 +239,6 @@ nc_new_session(NC_SIDE side, int shared_ti)
     return sess;
 
 error:
-    if (side == NC_SERVER) {
-        free(sess->opts.server.rpc_lock);
-        free(sess->opts.server.rpc_cond);
-        free((int *)sess->opts.server.rpc_inuse);
-    }
     free(sess);
     return NULL;
 }
@@ -272,34 +264,33 @@ nc_session_rpc_lock(struct nc_session *session, int timeout, const char *func)
         nc_addtimespec(&ts_timeout, timeout);
 
         /* LOCK */
-        ret = pthread_mutex_timedlock(session->opts.server.rpc_lock, &ts_timeout);
+        ret = pthread_mutex_timedlock(&session->opts.server.rpc_lock, &ts_timeout);
         if (!ret) {
-            while (*session->opts.server.rpc_inuse) {
-                ret = pthread_cond_timedwait(session->opts.server.rpc_cond, session->opts.server.rpc_lock, &ts_timeout);
+            while (session->opts.server.rpc_inuse) {
+                ret = pthread_cond_timedwait(&session->opts.server.rpc_cond, &session->opts.server.rpc_lock, &ts_timeout);
                 if (ret) {
-                    pthread_mutex_unlock(session->opts.server.rpc_lock);
+                    pthread_mutex_unlock(&session->opts.server.rpc_lock);
                     break;
                 }
             }
         }
     } else if (!timeout) {
         /* LOCK */
-        ret = pthread_mutex_trylock(session->opts.server.rpc_lock);
+        ret = pthread_mutex_trylock(&session->opts.server.rpc_lock);
         if (!ret) {
-            /* be extra careful, someone could have been faster */
-            if (*session->opts.server.rpc_inuse) {
-                pthread_mutex_unlock(session->opts.server.rpc_lock);
+            if (session->opts.server.rpc_inuse) {
+                pthread_mutex_unlock(&session->opts.server.rpc_lock);
                 return 0;
             }
         }
     } else { /* timeout == -1 */
         /* LOCK */
-        ret = pthread_mutex_lock(session->opts.server.rpc_lock);
+        ret = pthread_mutex_lock(&session->opts.server.rpc_lock);
         if (!ret) {
-            while (*session->opts.server.rpc_inuse) {
-                ret = pthread_cond_wait(session->opts.server.rpc_cond, session->opts.server.rpc_lock);
+            while (session->opts.server.rpc_inuse) {
+                ret = pthread_cond_wait(&session->opts.server.rpc_cond, &session->opts.server.rpc_lock);
                 if (ret) {
-                    pthread_mutex_unlock(session->opts.server.rpc_lock);
+                    pthread_mutex_unlock(&session->opts.server.rpc_lock);
                     break;
                 }
             }
@@ -318,11 +309,11 @@ nc_session_rpc_lock(struct nc_session *session, int timeout, const char *func)
     }
 
     /* ok */
-    assert(*session->opts.server.rpc_inuse == 0);
-    *session->opts.server.rpc_inuse = 1;
+    assert(session->opts.server.rpc_inuse == 0);
+    session->opts.server.rpc_inuse = 1;
 
     /* UNLOCK */
-    ret = pthread_mutex_unlock(session->opts.server.rpc_lock);
+    ret = pthread_mutex_unlock(&session->opts.server.rpc_lock);
     if (ret) {
         /* error */
         ERR("%s: faile to RPC unlock a session (%s).", func, strerror(ret));
@@ -343,20 +334,20 @@ nc_session_rpc_unlock(struct nc_session *session, int timeout, const char *func)
         return -1;
     }
 
-    assert(*session->opts.server.rpc_inuse);
+    assert(session->opts.server.rpc_inuse);
 
     if (timeout > 0) {
         nc_gettimespec_real(&ts_timeout);
         nc_addtimespec(&ts_timeout, timeout);
 
         /* LOCK */
-        ret = pthread_mutex_timedlock(session->opts.server.rpc_lock, &ts_timeout);
+        ret = pthread_mutex_timedlock(&session->opts.server.rpc_lock, &ts_timeout);
     } else if (!timeout) {
         /* LOCK */
-        ret = pthread_mutex_trylock(session->opts.server.rpc_lock);
+        ret = pthread_mutex_trylock(&session->opts.server.rpc_lock);
     } else { /* timeout == -1 */
         /* LOCK */
-        ret = pthread_mutex_lock(session->opts.server.rpc_lock);
+        ret = pthread_mutex_lock(&session->opts.server.rpc_lock);
     }
 
     if (ret && (ret != EBUSY) && (ret != ETIMEDOUT)) {
@@ -367,12 +358,12 @@ nc_session_rpc_unlock(struct nc_session *session, int timeout, const char *func)
         WRN("%s: session RPC lock timeout, should not happen.");
     }
 
-    *session->opts.server.rpc_inuse = 0;
-    pthread_cond_signal(session->opts.server.rpc_cond);
+    session->opts.server.rpc_inuse = 0;
+    pthread_cond_signal(&session->opts.server.rpc_cond);
 
     if (!ret) {
         /* UNLOCK */
-        ret = pthread_mutex_unlock(session->opts.server.rpc_lock);
+        ret = pthread_mutex_unlock(&session->opts.server.rpc_lock);
         if (ret) {
             /* error */
             ERR("%s: failed to RPC unlock a session (%s).", func, strerror(ret));
@@ -614,7 +605,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         /* the thread now knows it should quit */
     }
 
-    if ((session->side == NC_SERVER) && session->opts.server.rpc_lock) {
+    if (session->side == NC_SERVER) {
         r = nc_session_rpc_lock(session, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
         if (r == -1) {
             return;
@@ -692,17 +683,17 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
         /* CH LOCK */
-        pthread_mutex_lock(session->opts.server.ch_lock);
+        pthread_mutex_lock(&session->opts.server.ch_lock);
     }
 
     /* mark session for closing */
     session->status = NC_STATUS_CLOSING;
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
-        pthread_cond_signal(session->opts.server.ch_cond);
+        pthread_cond_signal(&session->opts.server.ch_cond);
 
         /* CH UNLOCK */
-        pthread_mutex_unlock(session->opts.server.ch_lock);
+        pthread_mutex_unlock(&session->opts.server.ch_lock);
 
         /* wait for CH thread to actually wake up */
         i = (NC_SESSION_FREE_LOCK_TIMEOUT * 1000) / NC_TIMEOUT_STEP;
@@ -846,15 +837,12 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     lydict_remove(session->ctx, session->path);
 
     /* final cleanup */
-    if ((session->side == NC_SERVER) && session->opts.server.rpc_lock) {
+    if (session->side == NC_SERVER) {
         if (rpc_locked) {
             nc_session_rpc_unlock(session, NC_SESSION_LOCK_TIMEOUT, __func__);
         }
-        pthread_mutex_destroy(session->opts.server.rpc_lock);
-        pthread_cond_destroy(session->opts.server.rpc_cond);
-        free(session->opts.server.rpc_lock);
-        free(session->opts.server.rpc_cond);
-        free((int *)session->opts.server.rpc_inuse);
+        pthread_mutex_destroy(&session->opts.server.rpc_lock);
+        pthread_cond_destroy(&session->opts.server.rpc_cond);
     }
 
     if (session->io_lock && !multisession) {
@@ -867,15 +855,9 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     if (session->side == NC_SERVER) {
-        /* free CH synchronization structures if used */
-        if (session->opts.server.ch_cond) {
-            pthread_cond_destroy(session->opts.server.ch_cond);
-            free(session->opts.server.ch_cond);
-        }
-        if (session->opts.server.ch_lock) {
-            pthread_mutex_destroy(session->opts.server.ch_lock);
-            free(session->opts.server.ch_lock);
-        }
+        /* free CH synchronization structures */
+        pthread_cond_destroy(&session->opts.server.ch_cond);
+        pthread_mutex_destroy(&session->opts.server.ch_lock);
     }
 
     free(session);

@@ -438,13 +438,13 @@ struct nc_session {
             time_t last_rpc;               /**< monotonic time (seconds) the last RPC was received on this session */
             int ntf_status;                /**< flag whether the session is subscribed to any stream */
 
-            pthread_mutex_t *rpc_lock;   /**< lock indicating RPC processing, this lock is always locked before io_lock!! */
-            pthread_cond_t *rpc_cond;    /**< RPC condition (tied with rpc_lock and rpc_inuse) */
-            volatile int *rpc_inuse;     /**< variable indicating whether there is RPC being processed or not (tied with
+            pthread_mutex_t rpc_lock;    /**< lock indicating RPC processing, this lock is always locked before io_lock!! */
+            pthread_cond_t rpc_cond;     /**< RPC condition (tied with rpc_lock and rpc_inuse) */
+            int rpc_inuse;               /**< variable indicating whether there is RPC being processed or not (tied with
                                               rpc_cond and rpc_lock) */
 
-            pthread_mutex_t *ch_lock;      /**< Call Home thread lock */
-            pthread_cond_t *ch_cond;       /**< Call Home thread condition */
+            pthread_mutex_t ch_lock;       /**< Call Home thread lock */
+            pthread_cond_t ch_cond;        /**< Call Home thread condition */
 
             /* server flags */
 #ifdef NC_ENABLED_SSH

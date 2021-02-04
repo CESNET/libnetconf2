@@ -99,15 +99,9 @@ test_new_session(NC_SIDE side)
     sess->side = side;
 
     if (side == NC_SERVER) {
-        sess->opts.server.rpc_lock = malloc(sizeof *sess->opts.server.rpc_lock);
-        sess->opts.server.rpc_cond = malloc(sizeof *sess->opts.server.rpc_cond);
-        sess->opts.server.rpc_inuse = malloc(sizeof *sess->opts.server.rpc_inuse);
-        if (!sess->opts.server.rpc_lock || !sess->opts.server.rpc_cond || !sess->opts.server.rpc_inuse) {
-            goto error;
-        }
-        pthread_mutex_init(sess->opts.server.rpc_lock, NULL);
-        pthread_cond_init(sess->opts.server.rpc_cond, NULL);
-        *sess->opts.server.rpc_inuse = 0;
+        pthread_mutex_init(&sess->opts.server.rpc_lock, NULL);
+        pthread_cond_init(&sess->opts.server.rpc_cond, NULL);
+        sess->opts.server.rpc_inuse = 0;
     }
 
     sess->io_lock = malloc(sizeof *sess->io_lock);
@@ -119,11 +113,6 @@ test_new_session(NC_SIDE side)
     return sess;
 
 error:
-    if (side == NC_SERVER) {
-        free(sess->opts.server.rpc_lock);
-        free(sess->opts.server.rpc_cond);
-        free((int *)sess->opts.server.rpc_inuse);
-    }
     free(sess);
     return NULL;
 }

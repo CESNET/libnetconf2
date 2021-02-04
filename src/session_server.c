@@ -3194,21 +3194,10 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
     struct timespec ts;
     struct nc_ch_client *client;
 
-    /* session created, initialize condition */
-    session->opts.server.ch_lock = calloc(1, sizeof *session->opts.server.ch_lock);
-    session->opts.server.ch_cond = calloc(1, sizeof *session->opts.server.ch_cond);
-    if (!session->opts.server.ch_lock || !session->opts.server.ch_cond) {
-        ERRMEM;
-        nc_session_free(session, NULL);
-        return -1;
-    }
-    pthread_mutex_init(session->opts.server.ch_lock, NULL);
-    pthread_cond_init(session->opts.server.ch_cond, NULL);
-
     session->flags |= NC_SESSION_CALLHOME;
 
     /* CH LOCK */
-    pthread_mutex_lock(session->opts.server.ch_lock);
+    pthread_mutex_lock(&session->opts.server.ch_lock);
 
     /* give the session to the user */
     data->session_clb(data->client_name, session);
@@ -3217,7 +3206,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
         nc_gettimespec_real(&ts);
         nc_addtimespec(&ts, NC_CH_NO_ENDPT_WAIT);
 
-        r = pthread_cond_timedwait(session->opts.server.ch_cond, session->opts.server.ch_lock, &ts);
+        r = pthread_cond_timedwait(&session->opts.server.ch_cond, &session->opts.server.ch_lock, &ts);
         if (!r) {
             /* we were woken up, something probably happened */
             if (session->status != NC_STATUS_RUNNING) {
@@ -3259,7 +3248,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
     } while (session->status == NC_STATUS_RUNNING);
 
     /* CH UNLOCK */
-    pthread_mutex_unlock(session->opts.server.ch_lock);
+    pthread_mutex_unlock(&session->opts.server.ch_lock);
 
     if (session->status == NC_STATUS_CLOSING) {
         /* signal to nc_session_free() that we registered session being freed, otherwise it matters not */
