@@ -283,11 +283,6 @@ nc_session_rpc_lock(struct nc_session *session, int timeout, const char *func)
             }
         }
     } else if (!timeout) {
-        if (*session->opts.server.rpc_inuse) {
-            /* immediate timeout */
-            return 0;
-        }
-
         /* LOCK */
         ret = pthread_mutex_trylock(session->opts.server.rpc_lock);
         if (!ret) {
