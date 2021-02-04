@@ -611,7 +611,10 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
             return;
         } else if (r) {
             rpc_locked = 1;
-        } /* else failed to lock it, too bad */
+        } else {
+            /* else failed to lock it, too bad */
+            ERR("Session %u: freeing a session while an RPC is being processed.", session->id);
+        }
     }
 
     if (session->side == NC_CLIENT) {
