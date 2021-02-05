@@ -1257,7 +1257,7 @@ _non_blocking_connect(int timeout, int *sock_pending, struct addrinfo *res, stru
     char str[INET6_ADDRSTRLEN];
 
     if (sock_pending && *sock_pending != -1) {
-        VRB("Trying to connect the pending socket=%d.", *sock_pending );
+        VRB("Trying to connect the pending socket %d.", *sock_pending );
         sock = *sock_pending;
     } else {
         assert(res);

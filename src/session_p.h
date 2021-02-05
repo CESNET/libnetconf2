@@ -262,6 +262,7 @@ struct nc_server_opts {
             const char *address;
             uint16_t port;
             int sock_pending;
+            int sock_retries;
             struct nc_keepalives ka;
             union {
 #ifdef NC_ENABLED_SSH
@@ -340,6 +341,16 @@ struct nc_server_opts {
  * Number of sockets kept waiting to be accepted.
  */
 #define NC_REVERSE_QUEUE 5
+
+/**
+ * Timeout for connecting Call Home socket to a client (s).
+ */
+#define NC_SOCKET_CH_TIMEOUT 5
+
+/**
+ * Number of retires of connection Call Home socket to a client.
+ */
+#define NC_SOCKET_CH_RETRIES 5
 
 /**
  * @brief Type of the session
