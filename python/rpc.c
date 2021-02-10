@@ -269,7 +269,8 @@ ncRPCEditConfig(ncSessionObject *self, PyObject *args, PyObject *keywords)
             node = lyd_new_leaf(data, ietfnc, "url", content_str);
         }
     } else if (content_tree) {
-        node = lyd_new_anydata(data, ietfnc, "config", content_tree, LYD_ANYDATA_DATATREE);
+        /* the content_tree is managed by libyang, make copy to insert it into RPC and manage it on our own */
+        node = lyd_new_anydata(data, ietfnc, "config", lyd_dup_withsiblings(content_tree, LYD_DUP_OPT_RECURSIVE), LYD_ANYDATA_DATATREE);
     }
     if (!node) {
         goto error;
