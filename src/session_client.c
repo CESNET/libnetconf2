@@ -517,7 +517,9 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *subm
             match = u + 1;
         }
         if (!match) {
-            WRN("Session %u: unable to identify revision of the schema \"%s\" from the available server side information.",
+            /* valid situation if we are retrieving YANG 1.1 schema and have only capabilities for now
+             * (when loading ietf-datastore for ietf-yang-library) */
+            VRB("Session %u: unable to identify revision of the schema \"%s\" from the available server side information.",
                 clb_data->session->id, mod_name);
         }
     }
@@ -527,7 +529,7 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *subm
             rev = sub_rev;
         } else if (match) {
             if (!clb_data->schemas[match - 1].submodules) {
-                WRN("Session %u: Unable to identify revision of the requested submodule \"%s\", in schema \"%s\", from the available server side information.",
+                VRB("Session %u: Unable to identify revision of the requested submodule \"%s\", in schema \"%s\", from the available server side information.",
                     clb_data->session->id, submod_name, mod_name);
             } else {
                 for (v = 0; clb_data->schemas[match - 1].submodules[v].name; ++v) {
@@ -547,7 +549,7 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *subm
         rev = mod_rev;
     }
 
-    VRB("Session %u: retreiving data for schema \"%s\", revision \"%s\".", clb_data->session->id, name, rev);
+    VRB("Session %u: retreiving data for schema \"%s\", revision \"%s\".", clb_data->session->id, name, rev ? rev : "<latest>");
 
     if (match) {
         /* we have enough information to avoid communication with server and try to get
