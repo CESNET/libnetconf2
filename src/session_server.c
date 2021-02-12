@@ -458,14 +458,20 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
                 ERRMEM;
             }
         } else if (saddr.ss_family == AF_UNIX) {
-            *host = strdup(((struct sockaddr_un *)&saddr)->sun_path);
-            if (*host) {
-                if (port) {
-                    *port = 0;
+            saddr_len = sizeof(saddr);
+            if (getsockname(ret, (struct sockaddr *)&saddr, &saddr_len) == 0) {
+                *host = strdup(((struct sockaddr_un *)&saddr)->sun_path);
+                if (*host) {
+                    if (port) {
+                        *port = 0;
+                    }
+                } else {
+                    ERRMEM;
                 }
             } else {
-                ERRMEM;
+                ERR("getsockname failed (%s).", strerror(errno));
             }
+
         } else {
             ERR("Source host of an unknown protocol family.");
         }
