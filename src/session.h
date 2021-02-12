@@ -162,10 +162,29 @@ NC_TRANSPORT_IMPL nc_session_get_ti(const struct nc_session *session);
 /**
  * @brief Get session username.
  *
+ * Note that if another thread can release the username string
+ * in the meantime due to the end of the session, then an alternative
+ * nc_session_get_username_dup function should be used.
+ *
  * @param[in] session Session to get the information from.
  * @return Session username.
  */
 const char *nc_session_get_username(const struct nc_session *session);
+
+/**
+ * @brief Get duplicate of session username.
+ *
+ * This function is useful for server when there is a risk that another
+ * thread may release the username string, eg due to the termination
+ * of a NETCONF session. In this function, locks are applied
+ * during string duplication and the newly allocated string is returned,
+ * thus avoiding the race-condition issue.
+ *
+ * @param[in] session Session to get the information from.
+ * @return Allocated session username. Call free function to avoid a memory leak.
+ * @return NULL if the original username set to NULL or some error occurs.
+ */
+char *nc_session_get_username_dup(struct nc_session *session);
 
 /**
  * @brief Get session host.

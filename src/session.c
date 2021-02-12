@@ -502,6 +502,43 @@ nc_session_get_username(const struct nc_session *session)
     return session->username;
 }
 
+API char *
+nc_session_get_username_dup(struct nc_session *session)
+{
+    int r, rpc_locked = 0;
+    char *username = NULL;
+
+    if (!session) {
+        ERRARG("session");
+        return NULL;
+    }
+
+    /* lock */
+    if (session->side == NC_SERVER) {
+        r = nc_session_rpc_lock(session, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
+        if (r == -1) {
+            return NULL;
+        } else if (r) {
+            rpc_locked = 1;
+        } else {
+            /* else failed to lock it, too bad */
+            ERR("Session %u: freeing a session while an RPC is being processed.", session->id);
+        }
+    }
+
+    /* duplicate */
+    if (session->username) {
+        username = strdup(session->username);
+    }
+
+    /* unlock */
+    if (rpc_locked) {
+        nc_session_rpc_unlock(session, NC_SESSION_LOCK_TIMEOUT, __func__);
+    }
+
+    return username;
+}
+
 API const char *
 nc_session_get_host(const struct nc_session *session)
 {
