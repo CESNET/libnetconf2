@@ -329,6 +329,106 @@ fail:
     return -1;
 }
 
+/**
+ * @brief Evaluate socket name for AF_UNIX socket.
+ * @param[in] acc_sock_fd is file descriptor for the accepted socket (a nonnegative).
+ * @param[out] host is pointer to char* to which the socket name will be set. It must not be NULL.
+ * @return 0 in case of success. Call free function for parameter host to avoid a memory leak.
+ * @return 0 if the stream socket is unnamed. Parameter host is set to NULL.
+ * @return -1 in case of error. Parameter host is set to NULL.
+ */
+static int
+sock_host_unix(int acc_sock_fd, char **host)
+{
+    char *sun_path;
+    struct sockaddr_storage saddr;
+    socklen_t addr_len;
+
+    *host = NULL;
+    saddr.ss_family = AF_UNIX;
+    addr_len = sizeof(saddr);
+
+    if (getsockname(acc_sock_fd, (struct sockaddr *)&saddr, &addr_len)) {
+        ERR("getsockname failed (%s).", strerror(errno));
+        return -1;
+    }
+
+    sun_path = ((struct sockaddr_un *)&saddr)->sun_path;
+    if (!sun_path) {
+        /* stream socket is unnamed */
+        return 0;
+    }
+
+    if (!(*host = strdup(sun_path))) {
+        ERRMEM;
+        return -1;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief Evaluate socket name and port number for AF_INET socket.
+ * @param[in] addr is pointing to structure filled by accept function which was successful.
+ * @param[out] host is pointer to char* to which the socket name will be set. It must not be NULL.
+ * @param[out] port is pointer to uint16_t to which the port number will be set. It must not be NULL.
+ * @return 0 in case of success. Call free function for parameter host to avoid a memory leak.
+ * @return -1 in case of error. Parameter host is set to NULL and port is unchanged.
+ */
+static int
+sock_host_inet(const struct sockaddr_in *addr, char **host, uint16_t *port)
+{
+    *host = malloc(INET_ADDRSTRLEN);
+    if (!(*host)) {
+        ERRMEM;
+        return -1;
+    }
+
+    if (!inet_ntop(AF_INET, &addr->sin_addr.s_addr, *host, INET_ADDRSTRLEN)) {
+        ERR("inet_ntop failed(%s).");
+        free(*host);
+        *host = NULL;
+        return -1;
+    }
+
+    if (port) {
+        *port = ntohs(addr->sin_port);
+    }
+
+    return 0;
+}
+
+/**
+ * @brief Evaluate socket name and port number for AF_INET6 socket.
+ * @param[in] addr is pointing to structure filled by accept function which was successful.
+ * @param[out] host is pointer to char* to which the socket name will be set. It must not be NULL.
+ * @param[out] port is pointer to uint16_t to which the port number will be set. It must not be NULL.
+ * @return 0 in case of success. Call free function for parameter host to avoid a memory leak.
+ * @return -1 in case of error. Parameter host is set to the NULL and port is unchanged.
+ */
+static int
+sock_host_inet6(const struct sockaddr_in6 *addr, char **host, uint16_t *port)
+{
+    *host =  malloc(INET6_ADDRSTRLEN);
+    if (!(*host)) {
+        ERRMEM;
+        return -1;
+    }
+
+    if (!inet_ntop(AF_INET6, &addr->sin6_addr.s6_addr, *host, INET6_ADDRSTRLEN)) {
+        ERR("inet_ntop failed(%s).");
+        free(*host);
+        *host = NULL;
+        return -1;
+    }
+
+    if (port) {
+        *port = ntohs(addr->sin6_port);
+    }
+
+    return 0;
+}
+
 int
 nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host, uint16_t *port, uint16_t *idx)
 {
@@ -425,56 +525,22 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
         *idx = i;
     }
 
-    /* host was requested */
-    if (host) {
-        if (saddr.ss_family == AF_INET) {
-            *host = malloc(INET_ADDRSTRLEN);
-            if (*host) {
-                if (!inet_ntop(AF_INET, &((struct sockaddr_in *)&saddr)->sin_addr.s_addr, *host, INET_ADDRSTRLEN)) {
-                    ERR("inet_ntop failed (%s).", strerror(errno));
-                    free(*host);
-                    *host = NULL;
-                }
+    if (!host) {
+        return ret;
+    }
 
-                if (port) {
-                    *port = ntohs(((struct sockaddr_in *)&saddr)->sin_port);
-                }
-            } else {
-                ERRMEM;
-            }
-        } else if (saddr.ss_family == AF_INET6) {
-            *host = malloc(INET6_ADDRSTRLEN);
-            if (*host) {
-                if (!inet_ntop(AF_INET6, ((struct sockaddr_in6 *)&saddr)->sin6_addr.s6_addr, *host, INET6_ADDRSTRLEN)) {
-                    ERR("inet_ntop failed (%s).", strerror(errno));
-                    free(*host);
-                    *host = NULL;
-                }
+    if (port) {
+        *port = 0;
+    }
 
-                if (port) {
-                    *port = ntohs(((struct sockaddr_in6 *)&saddr)->sin6_port);
-                }
-            } else {
-                ERRMEM;
-            }
-        } else if (saddr.ss_family == AF_UNIX) {
-            saddr_len = sizeof(saddr);
-            if (getsockname(ret, (struct sockaddr *)&saddr, &saddr_len) == 0) {
-                *host = strdup(((struct sockaddr_un *)&saddr)->sun_path);
-                if (*host) {
-                    if (port) {
-                        *port = 0;
-                    }
-                } else {
-                    ERRMEM;
-                }
-            } else {
-                ERR("getsockname failed (%s).", strerror(errno));
-            }
-
-        } else {
-            ERR("Source host of an unknown protocol family.");
-        }
+    if (saddr.ss_family == AF_UNIX) {
+        sock_host_unix(ret, host);
+    } else if (saddr.ss_family == AF_INET) {
+        sock_host_inet((struct sockaddr_in *)&saddr, host, port);
+    } else if (saddr.ss_family == AF_INET6) {
+        sock_host_inet6((struct sockaddr_in6 *)&saddr, host, port);
+    } else {
+        ERR("Source host of an unknown protocol family.");
     }
 
     return ret;
