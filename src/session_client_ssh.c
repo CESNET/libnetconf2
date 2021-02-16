@@ -1650,13 +1650,13 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
 
     /* store information into the dictionary */
     if (host) {
-        session->host = lydict_insert_zc(ctx, host);
+        lydict_insert_zc(ctx, host, &session->host);
     }
     if (port) {
         session->port = port;
     }
     if (username) {
-        session->username = lydict_insert_zc(ctx, username);
+        lydict_insert_zc(ctx, username, &session->username);
     }
 
     return session;
@@ -1757,9 +1757,9 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     }
 
     /* store information into the dictionary */
-    session->host = lydict_insert_zc(ctx, ip_host);
+    lydict_insert_zc(ctx, ip_host, &session->host);
     session->port = port;
-    session->username = lydict_insert(ctx, username, 0);
+    lydict_insert(ctx, username, 0, &session->username);
 
     return session;
 
@@ -1833,9 +1833,9 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     }
 
     /* store information into session and the dictionary */
-    new_session->host = lydict_insert(ctx, session->host, 0);
+    lydict_insert(ctx, session->host, 0, &new_session->host);
     new_session->port = session->port;
-    new_session->username = lydict_insert(ctx, session->username, 0);
+    lydict_insert(ctx, session->username, 0, &new_session->username);
 
     return new_session;
 

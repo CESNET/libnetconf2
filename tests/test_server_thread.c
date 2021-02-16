@@ -232,33 +232,21 @@ ssh_client_thread(void *arg)
     nc_assert(ret == 9);
     nc_assert(!strncmp(buf, "ssh_ready", 9));
 
-    fprintf(stdout, "SSH #1\n");
-
     /* skip the knownhost check */
     nc_client_ssh_set_auth_hostkey_check_clb(ssh_hostkey_check_clb, NULL);
-
-    fprintf(stdout, "SSH #2\n");
 
     ret = nc_client_ssh_set_username("test");
     nc_assert(!ret);
 
-    fprintf(stdout, "SSH #3\n");
-
     ret = nc_client_ssh_add_keypair(TESTS_DIR"/data/key_ecdsa.pub", TESTS_DIR"/data/key_ecdsa");
     nc_assert(!ret);
-
-    fprintf(stdout, "SSH #4\n");
 
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PUBLICKEY, 1);
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PASSWORD, -1);
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_INTERACTIVE, -1);
 
-    fprintf(stdout, "SSH #5\n");
-
     session = nc_connect_ssh("127.0.0.1", 6001, NULL);
     nc_assert(session);
-
-    fprintf(stdout, "SSH #6\n");
 
     nc_session_free(session, NULL);
 
@@ -676,14 +664,14 @@ main(void)
 
     client_fork();
 
-    ctx = ly_ctx_new(TESTS_DIR"/data/modules", 0);
+    ly_ctx_new(TESTS_DIR"/data/modules", 0, &ctx);
     nc_assert(ctx);
-    ly_ctx_load_module(ctx, "ietf-netconf", NULL);
+    ly_ctx_load_module(ctx, "ietf-netconf", NULL, NULL);
 
     /* load some application models with deviations */
-    nc_assert( ly_ctx_load_module(ctx, "module-a", NULL) );
-    nc_assert( ly_ctx_load_module(ctx, "module-a-dv", NULL) );
-    nc_assert( ly_ctx_load_module(ctx, "module-a-dv2", NULL) );
+    nc_assert(ly_ctx_load_module(ctx, "module-a", NULL, NULL));
+    nc_assert(ly_ctx_load_module(ctx, "module-a-dv", NULL, NULL));
+    nc_assert(ly_ctx_load_module(ctx, "module-a-dv2", NULL, NULL));
 
     nc_server_init(ctx);
 

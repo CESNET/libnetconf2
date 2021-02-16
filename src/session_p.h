@@ -375,7 +375,7 @@ typedef enum {
  * @brief Container to serialize PRC messages
  */
 struct nc_msg_cont {
-    struct lyxml_elem *msg;
+    struct ly_in *msg;
     struct nc_msg_cont *next;
 };
 
@@ -503,7 +503,7 @@ struct nc_pollsession {
 
 struct nc_ntf_thread_arg {
     struct nc_session *session;
-    void (*notif_clb)(struct nc_session *session, const struct nc_notif *notif);
+    void (*notif_clb)(struct nc_session *session, const struct lyd_node *envp, const struct lyd_node *op);
 };
 
 void *nc_realloc(void *ptr, size_t size);
@@ -756,30 +756,29 @@ void _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts);
  * @param[in] session NETCONF session from which the message is being read.
  * @param[in] io_timeout Timeout in milliseconds. Negative value means infinite timeout,
  *            zero value causes to return immediately.
- * @param[out] data XML tree built from the read data.
- * @return Type of the read message. #NC_MSG_WOULDBLOCK is returned if timeout is positive
- * (or zero) value and it passed out without any data on the wire. #NC_MSG_ERROR is
- * returned on error and #NC_MSG_NONE is never returned by this function.
+ * @param[out] msg Input handled with the NETCONF message (application layer data).
+ * @return 1 on success.
+ * @return 0 on timeout.
+ * @return -1 on error.
+ * @return -2 on malformed message error.
  */
-NC_MSG_TYPE nc_read_msg_poll_io(struct nc_session* session, int io_timeout, struct lyxml_elem **data);
+int nc_read_msg_poll_io(struct nc_session* session, int io_timeout, struct ly_in **msg);
 
 /**
- * @brief Read message from the wire.
- *
- * Accepts hello, rpc, rpc-reply and notification. Received string is transformed into
- * libyang XML tree and the message type is detected from the top level element.
+ * @brief Read a message from the wire.
  *
  * @param[in] session NETCONF session from which the message is being read.
  * @param[in] io_timeout Timeout in milliseconds. Negative value means infinite timeout,
  *            zero value causes to return immediately.
- * @param[out] data XML tree built from the read data.
+ * @param[out] msg Input handled with the NETCONF message (application layer data).
  * @param[in] passing_io_lock True if \p session IO lock is already held. This function always unlocks
  *            it before returning!
- * @return Type of the read message. #NC_MSG_WOULDBLOCK is returned if timeout is positive
- * (or zero) value and it passed out without any data on the wire. #NC_MSG_ERROR is
- * returned on error and #NC_MSG_NONE is never returned by this function.
+ * @return 1 on success.
+ * @return 0 on timeout.
+ * @return -1 on error.
+ * @return -2 on malformed message error.
  */
-NC_MSG_TYPE nc_read_msg_io(struct nc_session* session, int io_timeout, struct lyxml_elem **data, int passing_io_lock);
+int nc_read_msg_io(struct nc_session* session, int io_timeout, struct ly_in **msg, int passing_io_lock);
 
 /**
  * @brief Write message into wire.
@@ -791,12 +790,9 @@ NC_MSG_TYPE nc_read_msg_io(struct nc_session* session, int io_timeout, struct ly
  * specific additional parameters are required or accepted:
  * - #NC_MSG_RPC
  *   - `struct lyd_node *op;` - operation (content of the \<rpc/\> to be sent. Required parameter.
- *   - `const char *attrs;` - additional attributes to be added into the \<rpc/\> element.
- *     Required parameter.
- *     `message-id` attribute is added automatically and default namespace is set to #NC_NS_BASE.
- *     Optional parameter.
+ *   - `const char *attrs;` - additional attributes to be added into the \<rpc/\> element. Required parameter.
  * - #NC_MSG_REPLY
- *   - `struct lyxml_node *rpc_elem;` - root of the RPC object to reply to. Required parameter.
+ *   - `struct lyd_node_opaq *rpc_envp;` - parsed envelopes of the RPC to reply to. Required parameter.
  *   - `struct nc_server_reply *reply;` - RPC reply. Required parameter.
  * - #NC_MSG_NOTIF
  *   - `struct nc_server_notif *notif;` - notification object. Required parameter.

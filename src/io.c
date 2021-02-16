@@ -344,24 +344,22 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint
     return count;
 }
 
-/* return NC_MSG_ERROR can change session status, acquires IO lock as needed */
-NC_MSG_TYPE
-nc_read_msg_io(struct nc_session *session, int io_timeout, struct lyxml_elem **data, int passing_io_lock)
+int
+nc_read_msg_io(struct nc_session *session, int io_timeout, struct ly_in **msg, int passing_io_lock)
 {
-    int ret, io_locked = passing_io_lock;
-    char *msg = NULL, *chunk;
+    int ret = 1, r, io_locked = passing_io_lock;
+    char *data = NULL, *chunk;
     uint64_t chunk_len, len = 0;
     /* use timeout in milliseconds instead seconds */
     uint32_t inact_timeout = NC_READ_INACT_TIMEOUT * 1000;
     struct timespec ts_act_timeout;
-    struct nc_server_reply *reply;
 
-    assert(session && data);
-    *data = NULL;
+    assert(session && msg);
+    *msg = NULL;
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
         ERR("Session %u: invalid session to read from.", session->id);
-        ret = NC_MSG_ERROR;
+        ret = -1;
         goto cleanup;
     }
 
@@ -371,11 +369,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, struct lyxml_elem **d
     if (!io_locked) {
         /* SESSION IO LOCK */
         ret = nc_session_io_lock(session, io_timeout, __func__);
-        if (ret < 0) {
-            ret = NC_MSG_ERROR;
-            goto cleanup;
-        } else if (!ret) {
-            ret = NC_MSG_WOULDBLOCK;
+        if (ret < 1) {
             goto cleanup;
         }
         io_locked = 1;
@@ -384,34 +378,35 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, struct lyxml_elem **d
     /* read the message */
     switch (session->version) {
     case NC_VERSION_10:
-        ret = nc_read_until(session, NC_VERSION_10_ENDTAG, 0, inact_timeout, &ts_act_timeout, &msg);
-        if (ret == -1) {
-            ret = NC_MSG_ERROR;
+        r = nc_read_until(session, NC_VERSION_10_ENDTAG, 0, inact_timeout, &ts_act_timeout, &data);
+        if (r == -1) {
+            ret = r;
             goto cleanup;
         }
 
         /* cut off the end tag */
-        msg[ret - NC_VERSION_10_ENDTAG_LEN] = '\0';
+        data[r - NC_VERSION_10_ENDTAG_LEN] = '\0';
         break;
     case NC_VERSION_11:
         while (1) {
-            ret = nc_read_until(session, "\n#", 0, inact_timeout, &ts_act_timeout, NULL);
-            if (ret == -1) {
-                ret = NC_MSG_ERROR;
+            r = nc_read_until(session, "\n#", 0, inact_timeout, &ts_act_timeout, NULL);
+            if (r == -1) {
+                ret = r;
                 goto cleanup;
             }
-            ret = nc_read_until(session, "\n", 0, inact_timeout, &ts_act_timeout, &chunk);
-            if (ret == -1) {
-                ret = NC_MSG_ERROR;
+            r = nc_read_until(session, "\n", 0, inact_timeout, &ts_act_timeout, &chunk);
+            if (r == -1) {
+                ret = r;
                 goto cleanup;
             }
 
             if (!strcmp(chunk, "#\n")) {
                 /* end of chunked framing message */
                 free(chunk);
-                if (!msg) {
+                if (!data) {
                     ERR("Session %u: invalid frame chunk delimiters.", session->id);
-                    goto malformed_msg;
+                    ret = -2;
+                    goto cleanup;
                 }
                 break;
             }
@@ -421,26 +416,27 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, struct lyxml_elem **d
             free(chunk);
             if (!chunk_len) {
                 ERR("Session %u: invalid frame chunk size detected, fatal error.", session->id);
-                goto malformed_msg;
+                ret = -2;
+                goto cleanup;
             }
 
             /* now we have size of next chunk, so read the chunk */
-            ret = nc_read_chunk(session, chunk_len, inact_timeout, &ts_act_timeout, &chunk);
-            if (ret == -1) {
-                ret = NC_MSG_ERROR;
+            r = nc_read_chunk(session, chunk_len, inact_timeout, &ts_act_timeout, &chunk);
+            if (r == -1) {
+                ret = r;
                 goto cleanup;
             }
 
             /* realloc message buffer, remember to count terminating null byte */
-            msg = nc_realloc(msg, len + chunk_len + 1);
-            if (!msg) {
+            data = nc_realloc(data, len + chunk_len + 1);
+            if (!data) {
                 ERRMEM;
-                ret = NC_MSG_ERROR;
+                ret = -1;
                 goto cleanup;
             }
-            memcpy(msg + len, chunk, chunk_len);
+            memcpy(data + len, chunk, chunk_len);
             len += chunk_len;
-            msg[len] = '\0';
+            data[len] = '\0';
             free(chunk);
         }
 
@@ -452,74 +448,21 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, struct lyxml_elem **d
     nc_session_io_unlock(session, __func__);
     io_locked = 0;
 
-    DBG("Session %u: received message:\n%s\n", session->id, msg);
+    DBG("Session %u: received message:\n%s\n", session->id, data);
 
-    /* build XML tree */
-    *data = lyxml_parse_mem(session->ctx, msg, LYXML_PARSE_NOMIXEDCONTENT);
-    if (!*data) {
-        goto malformed_msg;
-    } else if (!(*data)->ns) {
-        ERR("Session %u: invalid message root element (invalid namespace).", session->id);
-        goto malformed_msg;
+    /* build an input structure, eats data */
+    if (ly_in_new_memory(data, msg)) {
+        ret = -1;
+        goto cleanup;
     }
-    free(msg);
-    msg = NULL;
-
-    /* get and return message type */
-    if (!strcmp((*data)->ns->value, NC_NS_BASE)) {
-        if (!strcmp((*data)->name, "rpc")) {
-            return NC_MSG_RPC;
-        } else if (!strcmp((*data)->name, "rpc-reply")) {
-            return NC_MSG_REPLY;
-        } else if (!strcmp((*data)->name, "hello")) {
-            return NC_MSG_HELLO;
-        } else {
-            ERR("Session %u: invalid message root element (invalid name \"%s\").", session->id, (*data)->name);
-            goto malformed_msg;
-        }
-    } else if (!strcmp((*data)->ns->value, NC_NS_NOTIF)) {
-        if (!strcmp((*data)->name, "notification")) {
-            return NC_MSG_NOTIF;
-        } else {
-            ERR("Session %u: invalid message root element (invalid name \"%s\").", session->id, (*data)->name);
-            goto malformed_msg;
-        }
-    } else {
-        ERR("Session %u: invalid message root element (invalid namespace \"%s\").", session->id, (*data)->ns->value);
-        goto malformed_msg;
-    }
-
-malformed_msg:
-    ERR("Session %u: malformed message received.", session->id);
-    if ((session->side == NC_SERVER) && (session->version == NC_VERSION_11)) {
-        /* NETCONF version 1.1 defines sending error reply from the server (RFC 6241 sec. 3) */
-        reply = nc_server_reply_err(nc_err(NC_ERR_MALFORMED_MSG));
-
-        if (io_locked) {
-            /* nc_write_msg_io locks and unlocks the lock by itself */
-            nc_session_io_unlock(session, __func__);
-            io_locked = 0;
-        }
-
-        if (nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, NULL, reply) != NC_MSG_REPLY) {
-            ERR("Session %u: unable to send a \"Malformed message\" error reply, terminating session.", session->id);
-            if (session->status != NC_STATUS_INVALID) {
-                session->status = NC_STATUS_INVALID;
-                session->term_reason = NC_SESSION_TERM_OTHER;
-            }
-        }
-        nc_server_reply_free(reply);
-    }
-    ret = NC_MSG_ERROR;
+    data = NULL;
 
 cleanup:
     if (io_locked) {
+        /* SESSION IO UNLOCK */
         nc_session_io_unlock(session, __func__);
     }
-    free(msg);
-    lyxml_free(session->ctx, *data);
-    *data = NULL;
-
+    free(data);
     return ret;
 }
 
@@ -624,45 +567,36 @@ nc_read_poll(struct nc_session *session, int io_timeout)
     return ret;
 }
 
-/* return NC_MSG_ERROR can change session status, acquires IO lock as needed */
-NC_MSG_TYPE
-nc_read_msg_poll_io(struct nc_session *session, int io_timeout, struct lyxml_elem **data)
+int
+nc_read_msg_poll_io(struct nc_session *session, int io_timeout, struct ly_in **msg)
 {
     int ret;
 
-    assert(data);
-    *data = NULL;
+    assert(msg);
+    *msg = NULL;
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
         ERR("Session %u: invalid session to read from.", session->id);
-        return NC_MSG_ERROR;
+        return -1;
     }
 
     /* SESSION IO LOCK */
     ret = nc_session_io_lock(session, io_timeout, __func__);
-    if (ret < 0) {
-        return NC_MSG_ERROR;
-    } else if (!ret) {
-        return NC_MSG_WOULDBLOCK;
+    if (ret < 1) {
+        return ret;
     }
 
     ret = nc_read_poll(session, io_timeout);
-    if (ret == 0) {
-        /* timed out */
+    if (ret < 1) {
+        /* timed out or error */
 
         /* SESSION IO UNLOCK */
         nc_session_io_unlock(session, __func__);
-        return NC_MSG_WOULDBLOCK;
-    } else if (ret < 0) {
-        /* poll error, error written */
-
-        /* SESSION IO UNLOCK */
-        nc_session_io_unlock(session, __func__);
-        return NC_MSG_ERROR;
+        return ret;
     }
 
     /* SESSION IO LOCK passed down */
-    return nc_read_msg_io(session, io_timeout, data, 1);
+    return nc_read_msg_io(session, io_timeout, msg, 1);
 }
 
 /* does not really log, only fatal errors */
@@ -964,192 +898,15 @@ nc_write_clb(void *arg, const void *buf, size_t count, int xmlcontent)
 static ssize_t
 nc_write_xmlclb(void *arg, const void *buf, size_t count)
 {
-    return nc_write_clb(arg, buf, count, 0);
-}
+    ssize_t r;
 
-static void
-nc_write_error_elem(struct wclb_arg *arg, const char *name, uint16_t nam_len, const char *prefix, uint16_t pref_len,
-                    int open, int no_attr)
-{
-    if (open) {
-        nc_write_clb((void *)arg, "<", 1, 0);
-    } else {
-        nc_write_clb((void *)arg, "</", 2, 0);
+    r = nc_write_clb(arg, buf, count, 0);
+    if (r == -1) {
+        return -1;
     }
 
-    if (prefix) {
-        nc_write_clb((void *)arg, prefix, pref_len, 0);
-        nc_write_clb((void *)arg, ":", 1, 0);
-    }
-
-    nc_write_clb((void *)arg, name, nam_len, 0);
-    if (!open || !no_attr) {
-        nc_write_clb((void *)arg, ">", 1, 0);
-    }
-}
-
-static void
-nc_write_error(struct wclb_arg *arg, struct nc_server_error *err, const char *prefix)
-{
-    uint16_t i, pref_len = 0;
-    char str_sid[11];
-
-    if (prefix) {
-        pref_len = strlen(prefix);
-    }
-
-    nc_write_error_elem(arg, "rpc-error", 9, prefix, pref_len, 1, 0);
-
-    nc_write_error_elem(arg, "error-type", 10, prefix, pref_len, 1, 0);
-    switch (err->type) {
-    case NC_ERR_TYPE_TRAN:
-        nc_write_clb((void *)arg, "transport", 9, 0);
-        break;
-    case NC_ERR_TYPE_RPC:
-        nc_write_clb((void *)arg, "rpc", 3, 0);
-        break;
-    case NC_ERR_TYPE_PROT:
-        nc_write_clb((void *)arg, "protocol", 8, 0);
-        break;
-    case NC_ERR_TYPE_APP:
-        nc_write_clb((void *)arg, "application", 11, 0);
-        break;
-    default:
-        ERRINT;
-        return;
-    }
-
-    nc_write_error_elem(arg, "error-type", 10, prefix, pref_len, 0, 0);
-
-    nc_write_error_elem(arg, "error-tag", 9, prefix, pref_len, 1, 0);
-    switch (err->tag) {
-    case NC_ERR_IN_USE:
-        nc_write_clb((void *)arg, "in-use", 6, 0);
-        break;
-    case NC_ERR_INVALID_VALUE:
-        nc_write_clb((void *)arg, "invalid-value", 13, 0);
-        break;
-    case NC_ERR_TOO_BIG:
-        nc_write_clb((void *)arg, "too-big", 7, 0);
-        break;
-    case NC_ERR_MISSING_ATTR:
-        nc_write_clb((void *)arg, "missing-attribute", 17, 0);
-        break;
-    case NC_ERR_BAD_ATTR:
-        nc_write_clb((void *)arg, "bad-attribute", 13, 0);
-        break;
-    case NC_ERR_UNKNOWN_ATTR:
-        nc_write_clb((void *)arg, "unknown-attribute", 17, 0);
-        break;
-    case NC_ERR_MISSING_ELEM:
-        nc_write_clb((void *)arg, "missing-element", 15, 0);
-        break;
-    case NC_ERR_BAD_ELEM:
-        nc_write_clb((void *)arg, "bad-element", 11, 0);
-        break;
-    case NC_ERR_UNKNOWN_ELEM:
-        nc_write_clb((void *)arg, "unknown-element", 15, 0);
-        break;
-    case NC_ERR_UNKNOWN_NS:
-        nc_write_clb((void *)arg, "unknown-namespace", 17, 0);
-        break;
-    case NC_ERR_ACCESS_DENIED:
-        nc_write_clb((void *)arg, "access-denied", 13, 0);
-        break;
-    case NC_ERR_LOCK_DENIED:
-        nc_write_clb((void *)arg, "lock-denied", 11, 0);
-        break;
-    case NC_ERR_RES_DENIED:
-        nc_write_clb((void *)arg, "resource-denied", 15, 0);
-        break;
-    case NC_ERR_ROLLBACK_FAILED:
-        nc_write_clb((void *)arg, "rollback-failed", 15, 0);
-        break;
-    case NC_ERR_DATA_EXISTS:
-        nc_write_clb((void *)arg, "data-exists", 11, 0);
-        break;
-    case NC_ERR_DATA_MISSING:
-        nc_write_clb((void *)arg, "data-missing", 12, 0);
-        break;
-    case NC_ERR_OP_NOT_SUPPORTED:
-        nc_write_clb((void *)arg, "operation-not-supported", 23, 0);
-        break;
-    case NC_ERR_OP_FAILED:
-        nc_write_clb((void *)arg, "operation-failed", 16, 0);
-        break;
-    case NC_ERR_MALFORMED_MSG:
-        nc_write_clb((void *)arg, "malformed-message", 17, 0);
-        break;
-    default:
-        ERRINT;
-        return;
-    }
-    nc_write_error_elem(arg, "error-tag", 9, prefix, pref_len, 0, 0);
-
-    nc_write_error_elem(arg, "error-severity", 14, prefix, pref_len, 1, 0);
-    nc_write_clb((void *)arg, "error", 5, 0);
-    nc_write_error_elem(arg, "error-severity", 14, prefix, pref_len, 0, 0);
-
-    if (err->apptag) {
-        nc_write_error_elem(arg, "error-app-tag", 13, prefix, pref_len, 1, 0);
-        nc_write_clb((void *)arg, err->apptag, strlen(err->apptag), 1);
-        nc_write_error_elem(arg, "error-app-tag", 13, prefix, pref_len, 0, 0);
-    }
-
-    if (err->path) {
-        nc_write_error_elem(arg, "error-path", 10, prefix, pref_len, 1, 0);
-        nc_write_clb((void *)arg, err->path, strlen(err->path), 1);
-        nc_write_error_elem(arg, "error-path", 10, prefix, pref_len, 0, 0);
-    }
-
-    if (err->message) {
-        nc_write_error_elem(arg, "error-message", 13, prefix, pref_len, 1, 1);
-        if (err->message_lang) {
-            nc_write_clb((void *)arg, " xml:lang=\"", 11, 0);
-            nc_write_clb((void *)arg, err->message_lang, strlen(err->message_lang), 1);
-            nc_write_clb((void *)arg, "\"", 1, 0);
-        }
-        nc_write_clb((void *)arg, ">", 1, 0);
-        nc_write_clb((void *)arg, err->message, strlen(err->message), 1);
-        nc_write_error_elem(arg, "error-message", 13, prefix, pref_len, 0, 0);
-    }
-
-    if ((err->sid > -1) || err->attr_count || err->elem_count || err->ns_count || err->other_count) {
-        nc_write_error_elem(arg, "error-info", 10, prefix, pref_len, 1, 0);
-
-        if (err->sid > -1) {
-            nc_write_error_elem(arg, "session-id", 10, prefix, pref_len, 1, 0);
-            sprintf(str_sid, "%u", (uint32_t)err->sid);
-            nc_write_clb((void *)arg, str_sid, strlen(str_sid), 0);
-            nc_write_error_elem(arg, "session-id", 10, prefix, pref_len, 0, 0);
-        }
-
-        for (i = 0; i < err->attr_count; ++i) {
-            nc_write_error_elem(arg, "bad-attribute", 13, prefix, pref_len, 1, 0);
-            nc_write_clb((void *)arg, err->attr[i], strlen(err->attr[i]), 1);
-            nc_write_error_elem(arg, "bad-attribute", 13, prefix, pref_len, 0, 0);
-        }
-
-        for (i = 0; i < err->elem_count; ++i) {
-            nc_write_error_elem(arg, "bad-element", 11, prefix, pref_len, 1, 0);
-            nc_write_clb((void *)arg, err->elem[i], strlen(err->elem[i]), 1);
-            nc_write_error_elem(arg, "bad-element", 11, prefix, pref_len, 0, 0);
-        }
-
-        for (i = 0; i < err->ns_count; ++i) {
-            nc_write_error_elem(arg, "bad-namespace", 13, prefix, pref_len, 1, 0);
-            nc_write_clb((void *)arg, err->ns[i], strlen(err->ns[i]), 1);
-            nc_write_error_elem(arg, "bad-namespace", 13, prefix, pref_len, 0, 0);
-        }
-
-        for (i = 0; i < err->other_count; ++i) {
-            lyxml_print_clb(nc_write_xmlclb, (void *)arg, err->other[i], 0);
-        }
-
-        nc_write_error_elem(arg, "error-info", 10, prefix, pref_len, 0, 0);
-    }
-
-    nc_write_error_elem(arg, "rpc-error", 9, prefix, pref_len, 0, 0);
+    /* always return what libyang expects, simply that all the characters were printed */
+    return count;
 }
 
 /* return NC_MSG_ERROR can change session status, acquires IO lock as needed */
@@ -1158,17 +915,16 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
 {
     va_list ap;
     int count, ret;
-    const char *attrs, *base_prefix;
-    struct lyd_node *content;
-    struct lyxml_elem *rpc_elem;
+    const char *attrs;
+    struct lyd_node *op, *reply_envp, *node;
+    struct lyd_node_opaq *rpc_envp;
     struct nc_server_notif *notif;
     struct nc_server_reply *reply;
-    struct nc_server_reply_error *error_rpl;
-    char *buf = NULL;
+    char *buf;
     struct wclb_arg arg;
     const char **capabilities;
-    uint32_t *sid = NULL, i;
-    int wd = 0;
+    uint32_t *sid = NULL, i, wd = 0;
+    LY_ERR lyrc;
 
     assert(session);
 
@@ -1192,11 +948,11 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
 
     switch (type) {
     case NC_MSG_RPC:
-        content = va_arg(ap, struct lyd_node *);
+        op = va_arg(ap, struct lyd_node *);
         attrs = va_arg(ap, const char *);
 
         count = asprintf(&buf, "<rpc xmlns=\"%s\" message-id=\"%"PRIu64"\"%s>",
-                         NC_NS_BASE, session->opts.client.msgid + 1, attrs ? attrs : "");
+                NC_NS_BASE, session->opts.client.msgid + 1, attrs ? attrs : "");
         if (count == -1) {
             ERRMEM;
             ret = NC_MSG_ERROR;
@@ -1205,7 +961,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         nc_write_clb((void *)&arg, buf, count, 0);
         free(buf);
 
-        if (lyd_print_clb(nc_write_xmlclb, (void *)&arg, content, LYD_XML, LYP_WITHSIBLINGS | LYP_NETCONF)) {
+        if (lyd_print_clb(nc_write_xmlclb, (void *)&arg, op, LYD_XML, LYD_PRINT_SHRINK)) {
             ret = NC_MSG_ERROR;
             goto cleanup;
         }
@@ -1215,64 +971,70 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         break;
 
     case NC_MSG_REPLY:
-        rpc_elem = va_arg(ap, struct lyxml_elem *);
+        rpc_envp = va_arg(ap, struct lyd_node_opaq *);
         reply = va_arg(ap, struct nc_server_reply *);
 
-        if (rpc_elem && rpc_elem->ns && rpc_elem->ns->prefix) {
-            nc_write_clb((void *)&arg, "<", 1, 0);
-            nc_write_clb((void *)&arg, rpc_elem->ns->prefix, strlen(rpc_elem->ns->prefix), 0);
-            nc_write_clb((void *)&arg, ":rpc-reply", 10, 0);
-            base_prefix = rpc_elem->ns->prefix;
-        }
-        else {
-            nc_write_clb((void *)&arg, "<rpc-reply", 10, 0);
-            base_prefix = NULL;
+        if (!rpc_envp) {
+            /* can be NULL if replying with a malformed-message error */
+            nc_write_clb((void *)&arg, "<rpc-reply xmlns=\"" NC_NS_BASE "\">", 18 + strlen(NC_NS_BASE) + 2, 0);
+
+            assert(reply->type == NC_RPL_ERROR);
+            if (lyd_print_clb(nc_write_xmlclb, (void *)&arg, ((struct nc_server_reply_error *)reply)->err, LYD_XML,
+                    LYD_PRINT_SHRINK | LYD_PRINT_WITHSIBLINGS)) {
+                ret = NC_MSG_ERROR;
+                goto cleanup;
+            }
+
+            nc_write_clb((void *)&arg, "</rpc-reply>", 12, 0);
+            break;
         }
 
-        /* can be NULL if replying with a malformed-message error */
-        if (rpc_elem) {
-            lyxml_print_clb(nc_write_xmlclb, (void *)&arg, rpc_elem, LYXML_PRINT_ATTRS);
-            nc_write_clb((void *)&arg, ">", 1, 0);
-        } else {
-            /* but put there at least the correct namespace */
-            nc_write_clb((void *)&arg, " xmlns=\""NC_NS_BASE"\">", 49, 0);
+        /* build a rpc-reply opaque node that can be simply printed */
+        if (lyd_new_opaq2(NULL, session->ctx, "rpc-reply", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns, &reply_envp)) {
+            ERRINT;
+            ret = NC_MSG_ERROR;
+            goto cleanup;
         }
+
         switch (reply->type) {
         case NC_RPL_OK:
-            nc_write_clb((void *)&arg, "<", 1, 0);
-            if (base_prefix) {
-                nc_write_clb((void *)&arg, base_prefix, strlen(base_prefix), 0);
-                nc_write_clb((void *)&arg, ":", 1, 0);
+            if (lyd_new_opaq2(reply_envp, NULL, "ok", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns, NULL)) {
+                lyd_free_tree(reply_envp);
+
+                ERRINT;
+                ret = NC_MSG_ERROR;
+                goto cleanup;
             }
-            nc_write_clb((void *)&arg, "ok/>", 4, 0);
             break;
         case NC_RPL_DATA:
             switch(((struct nc_server_reply_data *)reply)->wd) {
             case NC_WD_UNKNOWN:
             case NC_WD_EXPLICIT:
-                wd = LYP_WD_EXPLICIT;
+                wd = LYD_PRINT_WD_EXPLICIT;
                 break;
             case NC_WD_TRIM:
-                wd = LYP_WD_TRIM;
+                wd = LYD_PRINT_WD_TRIM;
                 break;
             case NC_WD_ALL:
-                wd = LYP_WD_ALL;
+                wd = LYD_PRINT_WD_ALL;
                 break;
             case NC_WD_ALL_TAG:
-                wd = LYP_WD_ALL_TAG;
+                wd = LYD_PRINT_WD_ALL_TAG;
                 break;
             }
-            if (lyd_print_clb(nc_write_xmlclb, (void *)&arg, ((struct nc_reply_data *)reply)->data, LYD_XML,
-                              LYP_WITHSIBLINGS | LYP_NETCONF | wd)) {
-                ret = NC_MSG_ERROR;
-                goto cleanup;
+
+            node = ((struct nc_server_reply_data *)reply)->data;
+            assert(node->schema->nodetype & (LYS_RPC | LYS_ACTION));
+            if (lyd_child(node)) {
+                /* temporary */
+                lyd_child(node)->parent = NULL;
+                lyd_insert_child(reply_envp, lyd_child(node));
+                ((struct lyd_node_inner *)node)->child = NULL;
             }
             break;
         case NC_RPL_ERROR:
-            error_rpl = (struct nc_server_reply_error *)reply;
-            for (i = 0; i < error_rpl->count; ++i) {
-                nc_write_error(&arg, error_rpl->err[i], base_prefix);
-            }
+            /* temporary */
+            lyd_insert_child(reply_envp, ((struct nc_server_reply_error *)reply)->err);
             break;
         default:
             ERRINT;
@@ -1280,13 +1042,41 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
             ret = NC_MSG_ERROR;
             goto cleanup;
         }
-        if (rpc_elem && rpc_elem->ns && rpc_elem->ns->prefix) {
-            nc_write_clb((void *)&arg, "</", 2, 0);
-            nc_write_clb((void *)&arg, rpc_elem->ns->prefix, strlen(rpc_elem->ns->prefix), 0);
-            nc_write_clb((void *)&arg, ":rpc-reply>", 11, 0);
+
+        /* temporary */
+        ((struct lyd_node_opaq *)reply_envp)->attr = rpc_envp->attr;
+
+        /* print */
+        lyrc = lyd_print_clb(nc_write_xmlclb, (void *)&arg, reply_envp, LYD_XML, LYD_PRINT_SHRINK | wd);
+        ((struct lyd_node_opaq *)reply_envp)->attr = NULL;
+
+        /* cleanup */
+        switch (reply->type) {
+        case NC_RPL_OK:
+            /* just free everything */
+            lyd_free_tree(reply_envp);
+            break;
+        case NC_RPL_DATA:
+            if (lyd_child(reply_envp)) {
+                /* connect back to the reply structure */
+                lyd_child(reply_envp)->parent = NULL;
+                lyd_insert_child(((struct nc_server_reply_data *)reply)->data, lyd_child(reply_envp));
+                ((struct lyd_node_opaq *)reply_envp)->child = NULL;
+            }
+            lyd_free_tree(reply_envp);
+            break;
+        case NC_RPL_ERROR:
+            /* unlink from the data reply */
+            lyd_unlink_tree(lyd_child(reply_envp));
+            lyd_free_tree(reply_envp);
+            break;
+        default:
+            break;
         }
-        else {
-            nc_write_clb((void *)&arg, "</rpc-reply>", 12, 0);
+
+        if (lyrc) {
+            ret = NC_MSG_ERROR;
+            goto cleanup;
         }
         break;
 
@@ -1297,7 +1087,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         nc_write_clb((void *)&arg, "<eventTime>", 11, 0);
         nc_write_clb((void *)&arg, notif->eventtime, strlen(notif->eventtime), 0);
         nc_write_clb((void *)&arg, "</eventTime>", 12, 0);
-        if (lyd_print_clb(nc_write_xmlclb, (void *)&arg, notif->tree, LYD_XML, 0)) {
+        if (lyd_print_clb(nc_write_xmlclb, (void *)&arg, notif->ntf, LYD_XML, LYD_PRINT_SHRINK)) {
             ret = NC_MSG_ERROR;
             goto cleanup;
         }
@@ -1373,4 +1163,3 @@ nc_realloc(void *ptr, size_t size)
 
     return ret;
 }
-

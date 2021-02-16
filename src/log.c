@@ -35,7 +35,7 @@ API void
 nc_verbosity(NC_VERB_LEVEL level)
 {
     verbose_level = level;
-    ly_verb((LY_LOG_LEVEL)level);
+    ly_log_level((LY_LOG_LEVEL)level);
 }
 
 struct {

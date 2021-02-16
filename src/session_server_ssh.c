@@ -131,7 +131,7 @@ nc_server_ssh_add_hostkey(const char *name, int16_t idx, struct nc_server_ssh_op
     if (idx != opts->hostkey_count - 1) {
         memmove(opts->hostkeys + idx + 1, opts->hostkeys + idx, opts->hostkey_count - idx);
     }
-    opts->hostkeys[idx] = lydict_insert(server_opts.ctx, name, 0);
+    lydict_insert(server_opts.ctx, name, 0, &opts->hostkeys[idx]);
 
     return 0;
 }
@@ -566,8 +566,7 @@ nc_server_ssh_ch_client_endpt_set_auth_timeout(const char *client_name, const ch
 }
 
 static int
-_nc_server_ssh_add_authkey(const char *pubkey_path, const char *pubkey_base64, NC_SSH_KEY_TYPE type,
-                          const char *username)
+_nc_server_ssh_add_authkey(const char *pubkey_path, const char *pubkey_base64, NC_SSH_KEY_TYPE type, const char *username)
 {
     /* LOCK */
     pthread_mutex_lock(&server_opts.authkey_lock);
@@ -578,10 +577,10 @@ _nc_server_ssh_add_authkey(const char *pubkey_path, const char *pubkey_base64, N
         ERRMEM;
         return -1;
     }
-    server_opts.authkeys[server_opts.authkey_count - 1].path = lydict_insert(server_opts.ctx, pubkey_path, 0);
-    server_opts.authkeys[server_opts.authkey_count - 1].base64 = lydict_insert(server_opts.ctx, pubkey_base64, 0);
+    lydict_insert(server_opts.ctx, pubkey_path, 0, &server_opts.authkeys[server_opts.authkey_count - 1].path);
+    lydict_insert(server_opts.ctx, pubkey_base64, 0, &server_opts.authkeys[server_opts.authkey_count - 1].base64);
     server_opts.authkeys[server_opts.authkey_count - 1].type = type;
-    server_opts.authkeys[server_opts.authkey_count - 1].username = lydict_insert(server_opts.ctx, username, 0);
+    lydict_insert(server_opts.ctx, username, 0, &server_opts.authkeys[server_opts.authkey_count - 1].username);
 
     /* UNLOCK */
     pthread_mutex_unlock(&server_opts.authkey_lock);
@@ -1004,8 +1003,8 @@ nc_sshcb_channel_subsystem(struct nc_session *session, ssh_channel channel, cons
         new_session->io_lock = session->io_lock;
         new_session->ti.libssh.channel = channel;
         new_session->ti.libssh.session = session->ti.libssh.session;
-        new_session->username = lydict_insert(server_opts.ctx, session->username, 0);
-        new_session->host = lydict_insert(server_opts.ctx, session->host, 0);
+        lydict_insert(server_opts.ctx, session->username, 0, &new_session->username);
+        lydict_insert(server_opts.ctx, session->host, 0, &new_session->host);
         new_session->port = session->port;
         new_session->ctx = server_opts.ctx;
         new_session->flags = NC_SESSION_SSH_AUTHENTICATED | NC_SESSION_SSH_SUBSYS_NETCONF | NC_SESSION_SHAREDCTX;
@@ -1161,7 +1160,7 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
                 return 1;
             }
 
-            session->username = lydict_insert(server_opts.ctx, username, 0);
+            lydict_insert(server_opts.ctx, username, 0, &session->username);
         } else if (username) {
             if (strcmp(username, session->username)) {
                 ERR("User \"%s\" changed its username to \"%s\".", session->username, username);

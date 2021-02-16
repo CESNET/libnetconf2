@@ -559,14 +559,14 @@ int nc_session_ntf_thread_running(const struct nc_session *session);
  * but \b LYD_OPT_GET and \b LYD_OPT_GETCONFIG, respectively.
  *
  * @param[in] session NETCONF session from which the function gets data. It must be the
- *            client side session object.
+ * client side session object.
  * @param[in] rpc Original RPC this should be the reply to.
  * @param[in] msgid Expected message ID of the reply.
  * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite
- *            waiting and 0 for immediate return if data are not available on the wire.
- * @param[in] parseroptions libyang parseroptions flags, do not set the data type, it is set
- *            internally. \b LYD_OPT_DESTRUCT and \b LYD_OPT_NOSIBLINGS is ignored.
- * @param[out] reply Resulting object of NETCONF RPC reply. Set only on #NC_MSG_REPLY and #NC_MSG_REPLY_ERR_MSGID return.
+ * waiting and 0 for immediate return if data are not available on the wire.
+ * @param[out] envp NETCONF rpc-reply XML envelopes.
+ * @param[out] op Parsed NETCONF reply data, if any (none for \<ok\> or error replies). Set only on #NC_MSG_REPLY
+ * and #NC_MSG_REPLY_ERR_MSGID return.
  * @return #NC_MSG_REPLY for success,
  *         #NC_MSG_WOULDBLOCK if \p timeout has elapsed,
  *         #NC_MSG_ERROR if reading has failed,
@@ -574,7 +574,7 @@ int nc_session_ntf_thread_running(const struct nc_session *session);
  *         #NC_MSG_REPLY_ERR_MSGID if a reply with missing or wrong message-id was received.
  */
 NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout,
-                          int parseroptions, struct nc_reply **reply);
+        struct lyd_node **envp, struct lyd_node **op);
 
 /**
  * @brief Receive NETCONF Notification.
@@ -583,13 +583,14 @@ NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64
  *            client side session object.
  * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite
  *            waiting and 0 for immediate return if data are not available on the wire.
- * @param[out] notif Resulting object of NETCONF Notification.
+ * @param[out] envp NETCONF notification XML envelopes.
+ * @param[out] op Parsed NETCONF notification data.
  * @return #NC_MSG_NOTIF for success,
  *         #NC_MSG_WOULDBLOCK if \p timeout has elapsed,
  *         #NC_MSG_ERROR if reading has failed, and
  *         #NC_MSG_REPLY if a reply was read instead (call this function again to get a notification).
  */
-NC_MSG_TYPE nc_recv_notif(struct nc_session* session, int timeout, struct nc_notif **notif);
+NC_MSG_TYPE nc_recv_notif(struct nc_session *session, int timeout, struct lyd_node **envp, struct lyd_node **op);
 
 /**
  * @brief Receive NETCONF Notifications in a separate thread until the session is terminated
@@ -598,11 +599,11 @@ NC_MSG_TYPE nc_recv_notif(struct nc_session* session, int timeout, struct nc_not
  * @param[in] session Netconf session to read notifications from.
  * @param[in] notif_clb Function that is called for every received notification (including
  *            \<notificationComplete\>). Parameters are the session the notification was received on
- *            and the notification itself.
+ *            and the notification data.
  * @return 0 if the thread was successfully created, -1 on error.
  */
 int nc_recv_notif_dispatch(struct nc_session *session,
-                           void (*notif_clb)(struct nc_session *session, const struct nc_notif *notif));
+        void (*notif_clb)(struct nc_session *session, const struct lyd_node *envp, const struct lyd_node *op));
 
 /**
  * @brief Send NETCONF RPC message via the session.
@@ -630,7 +631,7 @@ NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int time
  */
 void nc_client_session_set_not_strict(struct nc_session *session);
 
-/**@} Client Session */
+/** @} Client Session */
 
 #ifdef __cplusplus
 }

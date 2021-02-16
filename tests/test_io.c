@@ -46,7 +46,7 @@ setup_write(void **state)
 
     w = malloc(sizeof *w);
     w->session = calloc(1, sizeof *w->session);
-    w->session->ctx = ly_ctx_new(TESTS_DIR"/data/modules", 0);
+    ly_ctx_new(TESTS_DIR"/data/modules", 0, &w->session->ctx);
 
     /* ietf-netconf */
     fd = open(TESTS_DIR"/data/modules/ietf-netconf.yin", O_RDONLY);
@@ -55,7 +55,7 @@ setup_write(void **state)
         return -1;
     }
 
-    lys_parse_fd(w->session->ctx, fd, LYS_IN_YIN);
+    lys_parse_fd(w->session->ctx, fd, LYS_IN_YIN, NULL);
     close(fd);
 
     pipe(pipes);

@@ -125,8 +125,8 @@ struct nc_err {
     const char **elem;
     /** @brief \<bad-namespace\>, array of the unexpected XML namespaces that caused the error. Part of \<error-info\>. */
     const char **ns;
-    /** @brief Array of the remaining non-standard elements. */
-    struct lyxml_elem **other;
+    /** @brief List of the remaining non-standard opaque nodes. */
+    struct lyd_node *other;
 
     /** @brief Number of items in the attr array */
     uint16_t attr_count;
@@ -142,43 +142,6 @@ struct nc_err {
  * @brief NETCONF client RPC object
  */
 struct nc_rpc;
-
-/**
- * @brief NETCONF client rpc-reply object
- */
-struct nc_reply {
-    NC_RPL type; /**< reply type */
-};
-
-/**
- * @brief NETCONF client data rpc-reply object
- */
-struct nc_reply_data {
-    NC_RPL type;            /**< NC_RPL_DATA */
-    struct lyd_node *data;  /**< libyang RPC reply data tree (output of an RPC),
-                                 \<get\> and \<get-config\> replies are special,
-                                 in those cases there is the configuration itself,
-                                 it should be validated as such (using \b LYD_OPT_GET or \b LYD_OPT_GETCONFIG),
-                                 and it can be NULL in a valid reply. */
-};
-
-/**
- * @brief NETCONF client error rpc-reply object
- */
-struct nc_reply_error {
-    NC_RPL type;              /**< NC_RPL_ERROR */
-    const struct nc_err *err; /**< errors, any of the values inside can be NULL */
-    uint32_t count;           /**< number of error structures */
-};
-
-/**
- * @brief NETCONF client notification object
- */
-struct nc_notif {
-    NC_RPL type;           /**< NC_RPL_NOTIF */
-    const char *datetime;  /**< eventTime of the notification */
-    struct lyd_node *tree; /**< libyang data tree of the message */
-};
 
 /**
  * @brief Get the type of the RPC
@@ -496,21 +459,7 @@ struct nc_rpc *nc_rpc_editdata(const char *datastore, NC_RPC_EDIT_DFLTOP default
  */
 void nc_rpc_free(struct nc_rpc *rpc);
 
-/**
- * @brief Free the NETCONF RPC reply object.
- *
- * @param[in] reply Object to free.
- */
-void nc_reply_free(struct nc_reply *reply);
-
-/**
- * @brief Free the NETCONF Notification object.
- *
- * @param[in] notif Object to free.
- */
-void nc_notif_free(struct nc_notif *notif);
-
-/**@} Client Messages */
+/** @} Client Messages */
 
 #ifdef __cplusplus
 }

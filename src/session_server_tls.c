@@ -663,7 +663,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
 
     /* cert-to-name match, now to extract the specific field from the peer cert */
     if (map_type == NC_TLS_CTN_SPECIFIED) {
-        session->username = lydict_insert(server_opts.ctx, username, 0);
+        lydict_insert(server_opts.ctx, username, 0, &session->username);
     } else {
         rc = nc_tls_ctn_get_username_from_cert(session->opts.server.client_cert, map_type, &cp);
         if (rc) {
@@ -672,7 +672,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
             }
             goto fail;
         }
-        session->username = lydict_insert_zc(server_opts.ctx, cp);
+        lydict_insert_zc(server_opts.ctx, cp, &session->username);
     }
 
     VRB("Cert verify CTN: new client username recognized as \"%s\".", session->username);
@@ -924,7 +924,7 @@ nc_server_tls_set_server_cert(const char *name, struct nc_server_tls_opts *opts)
     if (opts->server_cert) {
         lydict_remove(server_opts.ctx, opts->server_cert);
     }
-    opts->server_cert = lydict_insert(server_opts.ctx, name, 0);
+    lydict_insert(server_opts.ctx, name, 0, &opts->server_cert);
 
     return 0;
 }
@@ -1011,12 +1011,13 @@ nc_server_tls_add_trusted_cert_list(const char *name, struct nc_server_tls_opts 
     }
 
     ++opts->trusted_cert_list_count;
-    opts->trusted_cert_lists = nc_realloc(opts->trusted_cert_lists, opts->trusted_cert_list_count * sizeof *opts->trusted_cert_lists);
+    opts->trusted_cert_lists = nc_realloc(opts->trusted_cert_lists,
+            opts->trusted_cert_list_count * sizeof *opts->trusted_cert_lists);
     if (!opts->trusted_cert_lists) {
         ERRMEM;
         return -1;
     }
-    opts->trusted_cert_lists[opts->trusted_cert_list_count - 1] = lydict_insert(server_opts.ctx, name, 0);
+    lydict_insert(server_opts.ctx, name, 0, &opts->trusted_cert_lists[opts->trusted_cert_list_count - 1]);
 
     return 0;
 }
@@ -1165,17 +1166,13 @@ nc_server_tls_set_trusted_ca_paths(const char *ca_file, const char *ca_dir, stru
     }
 
     if (ca_file) {
-        if (opts->trusted_ca_file) {
-            lydict_remove(server_opts.ctx, opts->trusted_ca_file);
-        }
-        opts->trusted_ca_file = lydict_insert(server_opts.ctx, ca_file, 0);
+        lydict_remove(server_opts.ctx, opts->trusted_ca_file);
+        lydict_insert(server_opts.ctx, ca_file, 0, &opts->trusted_ca_file);
     }
 
     if (ca_dir) {
-        if (opts->trusted_ca_dir) {
-            lydict_remove(server_opts.ctx, opts->trusted_ca_dir);
-        }
-        opts->trusted_ca_dir = lydict_insert(server_opts.ctx, ca_dir, 0);
+        lydict_remove(server_opts.ctx, opts->trusted_ca_dir);
+        lydict_insert(server_opts.ctx, ca_dir, 0, &opts->trusted_ca_dir);
     }
 
     return 0;
@@ -1407,19 +1404,15 @@ nc_server_tls_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE m
 
     new->id = id;
     if (fingerprint) {
-        if (new->fingerprint) {
-            lydict_remove(server_opts.ctx, new->fingerprint);
-        }
-        new->fingerprint = lydict_insert(server_opts.ctx, fingerprint, 0);
+        lydict_remove(server_opts.ctx, new->fingerprint);
+        lydict_insert(server_opts.ctx, fingerprint, 0, &new->fingerprint);
     }
     if (map_type) {
         new->map_type = map_type;
     }
     if (name) {
-        if (new->name) {
-            lydict_remove(server_opts.ctx, new->name);
-        }
-        new->name = lydict_insert(server_opts.ctx, name, 0);
+        lydict_remove(server_opts.ctx, new->name);
+        lydict_insert(server_opts.ctx, name, 0, &new->name);
     }
 
     return 0;

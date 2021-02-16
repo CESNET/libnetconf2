@@ -24,27 +24,6 @@ extern const char *rpcedit_dfltop2str[];
 extern const char *rpcedit_testopt2str[];
 extern const char *rpcedit_erropt2str[];
 
-struct nc_server_error {
-    NC_ERR_TYPE type;
-    NC_ERR tag;
-    //NC_ERR_SEV severity;
-    const char *apptag;
-    const char *path;
-    const char *message;
-    const char *message_lang;
-
-    /* <error-info> */
-    int64_t sid;    /* -1 for not set */
-    const char **attr;
-    uint16_t attr_count;
-    const char **elem;
-    uint16_t elem_count;
-    const char **ns;
-    uint16_t ns_count;
-    struct lyxml_elem **other;
-    uint16_t other_count;
-};
-
 struct nc_server_reply {
     NC_RPL type;
 };
@@ -52,25 +31,23 @@ struct nc_server_reply {
 struct nc_server_reply_data {
     NC_RPL type;
     struct lyd_node *data;
-    char free;
+    int free;
     NC_WD_MODE wd;
 };
 
 struct nc_server_reply_error {
     NC_RPL type;
-    struct ly_ctx *ctx;
-    struct nc_server_error **err;
-    uint32_t count;
+    struct lyd_node *err;
 };
 
 struct nc_server_rpc {
-    struct lyxml_elem *root; /**< RPC element of the received XML message */
-    struct lyd_node *tree;   /**< libyang data tree of the message (NETCONF operation) */
+    struct lyd_node *envp;   /**< NETCONF-specific RPC envelopes */
+    struct lyd_node *rpc;    /**< RPC data tree */
 };
 
 struct nc_server_notif {
     char *eventtime;        /**< eventTime of the notification */
-    struct lyd_node *tree;  /**< libyang data tree of the message */
+    struct lyd_node *ntf;   /**< notification data tree of the message */
     int free;
 };
 
@@ -208,7 +185,7 @@ struct nc_rpc_editdata {
     char free;
 };
 
-void nc_server_rpc_free(struct nc_server_rpc *rpc, struct ly_ctx *ctx);
+void nc_server_rpc_free(struct nc_server_rpc *rpc);
 
 void nc_client_err_clean(struct nc_err *err, struct ly_ctx *ctx);
 

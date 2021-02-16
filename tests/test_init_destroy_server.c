@@ -39,7 +39,7 @@ setup_server(void **state)
 {
     (void)state;
 
-    ctx = ly_ctx_new(NULL, 0);
+    ly_ctx_new(NULL, 0, &ctx);
     assert_non_null(ctx);
 
     nc_server_init(ctx);

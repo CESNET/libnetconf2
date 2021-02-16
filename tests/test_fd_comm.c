@@ -58,8 +58,7 @@ my_getconfig_rpc_clb(struct lyd_node *rpc, struct nc_session *session)
     assert_string_equal(rpc->schema->name, "get-config");
     assert_ptr_equal(session, server_session);
 
-    data = lyd_new_path(NULL, session->ctx, "/ietf-netconf:get-config/data", NULL, LYD_ANYDATA_CONSTSTRING,
-                        LYD_PATH_OPT_OUTPUT);
+    lyd_new_path(NULL, session->ctx, "/ietf-netconf:get-config/data", NULL, LYD_NEW_PATH_OUTPUT, &data);
     assert_non_null(data);
 
     return nc_server_reply_data(data, NC_WD_EXPLICIT, NC_PARAMTYPE_FREE);
@@ -156,9 +155,11 @@ teardown_sessions(void **state)
     (void)state;
 
     close(server_session->ti.fd.in);
+    server_session->ti.fd.in = -1;
     nc_session_free(server_session, NULL);
 
     close(client_session->ti.fd.in);
+    client_session->ti.fd.in = -1;
     nc_session_free(client_session, NULL);
 
     return 0;
@@ -171,7 +172,7 @@ test_send_recv_ok(void)
     uint64_t msgid;
     NC_MSG_TYPE msgtype;
     struct nc_rpc *rpc;
-    struct nc_reply *reply;
+    struct lyd_node *envp, *op;
     struct nc_pollsession *ps;
 
     /* client RPC */
@@ -193,12 +194,13 @@ test_send_recv_ok(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, 0, &reply);
+    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, &envp, &op);
     assert_int_equal(msgtype, NC_MSG_REPLY);
 
     nc_rpc_free(rpc);
-    assert_int_equal(reply->type, NC_RPL_OK);
-    nc_reply_free(reply);
+    assert_null(op);
+    assert_string_equal(LYD_NAME(lyd_child(envp)), "ok");
+    lyd_free_tree(envp);
 }
 
 static void
@@ -230,7 +232,7 @@ test_send_recv_error(void)
     uint64_t msgid;
     NC_MSG_TYPE msgtype;
     struct nc_rpc *rpc;
-    struct nc_reply *reply;
+    struct lyd_node *envp, *op, *node;
     struct nc_pollsession *ps;
 
     /* client RPC */
@@ -252,13 +254,16 @@ test_send_recv_error(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, 0, &reply);
+    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, &envp, &op);
     assert_int_equal(msgtype, NC_MSG_REPLY);
 
     nc_rpc_free(rpc);
-    assert_int_equal(reply->type, NC_RPL_ERROR);
-    assert_string_equal(((struct nc_reply_error *)reply)->err->tag, "operation-not-supported");
-    nc_reply_free(reply);
+    assert_string_equal(LYD_NAME(lyd_child(envp)), "rpc-error");
+    lyd_find_sibling_opaq_next(lyd_child(lyd_child(envp)), "error-tag", &node);
+    assert_non_null(node);
+    assert_string_equal(((struct lyd_node_opaq *)node)->value, "operation-not-supported");
+    lyd_free_tree(envp);
+    assert_null(op);
 }
 
 static void
@@ -290,7 +295,7 @@ test_send_recv_data(void)
     uint64_t msgid;
     NC_MSG_TYPE msgtype;
     struct nc_rpc *rpc;
-    struct nc_reply *reply;
+    struct lyd_node *envp, *op;
     struct nc_pollsession *ps;
 
     /* client RPC */
@@ -312,12 +317,14 @@ test_send_recv_data(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, 0, &reply);
+    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, &envp, &op);
     assert_int_equal(msgtype, NC_MSG_REPLY);
 
     nc_rpc_free(rpc);
-    assert_int_equal(reply->type, NC_RPL_DATA);
-    nc_reply_free(reply);
+    assert_non_null(envp);
+    lyd_free_tree(envp);
+    assert_non_null(op);
+    lyd_free_tree(op);
 }
 
 static void
@@ -343,10 +350,10 @@ test_send_recv_data_11(void **state)
 }
 
 static void
-test_notif_clb(struct nc_session *session, const struct nc_notif *notif)
+test_notif_clb(struct nc_session *session, const struct lyd_node *UNUSED(envp), const struct lyd_node *op)
 {
     assert_ptr_equal(session, client_session);
-    assert_string_equal(notif->tree->schema->name, "notificationComplete");
+    assert_string_equal(op->schema->name, "notificationComplete");
 
     /* client notification received, update state */
     pthread_mutex_lock(&state_lock);
@@ -377,7 +384,7 @@ server_send_notif_thread(void *arg)
     }
 
     /* create notif */
-    notif_tree = lyd_new_path(NULL, ctx, "/nc-notifications:notificationComplete", NULL, 0, 0);
+    lyd_new_path(NULL, ctx, "/nc-notifications:notificationComplete", NULL, 0, &notif_tree);
     assert_non_null(notif_tree);
     buf = malloc(64);
     assert_non_null(buf);
@@ -405,7 +412,7 @@ test_send_recv_notif(void)
     uint64_t msgid;
     NC_MSG_TYPE msgtype;
     struct nc_rpc *rpc;
-    struct nc_reply *reply;
+    struct lyd_node *envp, *op;
     struct nc_pollsession *ps;
 
     /* client RPC */
@@ -446,12 +453,13 @@ test_send_recv_notif(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, 0, &reply);
+    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, &envp, &op);
     assert_int_equal(msgtype, NC_MSG_REPLY);
-
     nc_rpc_free(rpc);
-    assert_int_equal(reply->type, NC_RPL_OK);
-    nc_reply_free(reply);
+
+    assert_string_equal(LYD_NAME(lyd_child(envp)), "ok");
+    lyd_free_tree(envp);
+    assert_null(op);
 }
 
 static void
@@ -481,36 +489,35 @@ main(void)
 {
     int ret;
     const struct lys_module *module;
-    const struct lys_node *node;
+    struct lysc_node *node;
+    const char *nc_features[] = {"candidate", NULL};
 
     /* create ctx */
-    ctx = ly_ctx_new(TESTS_DIR"/data/modules", 0);
+    ly_ctx_new(TESTS_DIR"/data/modules", 0, &ctx);
     assert_non_null(ctx);
 
     /* load modules */
-    module = ly_ctx_load_module(ctx, "ietf-netconf-acm", NULL);
+    module = ly_ctx_load_module(ctx, "ietf-netconf-acm", NULL, NULL);
     assert_non_null(module);
 
-    module = ly_ctx_load_module(ctx, "ietf-netconf", NULL);
+    module = ly_ctx_load_module(ctx, "ietf-netconf", NULL, nc_features);
     assert_non_null(module);
-    ret = lys_features_enable(module, "candidate");
-    assert_int_equal(ret, 0);
 
-    module = ly_ctx_load_module(ctx, "nc-notifications", NULL);
+    module = ly_ctx_load_module(ctx, "nc-notifications", NULL, NULL);
     assert_non_null(module);
 
     /* set RPC callbacks */
-    node = ly_ctx_get_node(module->ctx, NULL, "/ietf-netconf:get", 0);
+    node = (struct lysc_node *)lys_find_path(module->ctx, NULL, "/ietf-netconf:get", 0);
     assert_non_null(node);
-    lys_set_private(node, my_get_rpc_clb);
+    node->priv = my_get_rpc_clb;
 
-    node = ly_ctx_get_node(module->ctx, NULL, "/ietf-netconf:get-config", 0);
+    node = (struct lysc_node *)lys_find_path(module->ctx, NULL, "/ietf-netconf:get-config", 0);
     assert_non_null(node);
-    lys_set_private(node, my_getconfig_rpc_clb);
+    node->priv = my_getconfig_rpc_clb;
 
-    node = ly_ctx_get_node(module->ctx, NULL, "/ietf-netconf:commit", 0);
+    node = (struct lysc_node *)lys_find_path(module->ctx, NULL, "/ietf-netconf:commit", 0);
     assert_non_null(node);
-    lys_set_private(node, my_commit_rpc_clb);
+    node->priv = my_commit_rpc_clb;
 
     nc_server_init(ctx);
 

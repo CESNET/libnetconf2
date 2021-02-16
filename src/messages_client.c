@@ -56,7 +56,10 @@ nc_rpc_act_generic(const struct lyd_node *data, NC_PARAMTYPE paramtype)
     rpc->type = NC_RPC_ACT_GENERIC;
     rpc->has_data = 1;
     if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
-        rpc->content.data = lyd_dup(data, 1);
+        if (lyd_dup_single(data, NULL, LYD_DUP_RECURSIVE, &rpc->content.data)) {
+            free(rpc);
+            return NULL;
+        }
     } else {
         rpc->content.data = (struct lyd_node *)data;
     }
@@ -651,7 +654,7 @@ nc_rpc_free(struct nc_rpc *rpc)
         rpc_generic = (struct nc_rpc_act_generic *)rpc;
         if (rpc_generic->free) {
             if (rpc_generic->has_data) {
-                lyd_free(rpc_generic->content.data);
+                lyd_free_tree(rpc_generic->content.data);
             } else {
                 free(rpc_generic->content.xml_str);
             }
@@ -782,57 +785,6 @@ nc_client_err_clean(struct nc_err *err, struct ly_ctx *ctx)
         lydict_remove(ctx, err->ns[i]);
     }
     free(err->ns);
-    for (i = 0; i < err->other_count; ++i) {
-        lyxml_free(ctx, err->other[i]);
-    }
+    lyd_free_siblings(err->other);
     free(err->other);
-}
-
-API void
-nc_reply_free(struct nc_reply *reply)
-{
-    struct nc_client_reply_error *error;
-    struct nc_reply_data *data;
-    uint32_t i;
-
-    if (!reply) {
-        return;
-    }
-
-    switch (reply->type) {
-    case NC_RPL_DATA:
-        data = (struct nc_reply_data *)reply;
-        lyd_free_withsiblings(data->data);
-        break;
-
-    case NC_RPL_OK:
-        /* nothing to free */
-        break;
-
-    case NC_RPL_ERROR:
-        error = (struct nc_client_reply_error *)reply;
-        for (i = 0; i < error->count; ++i) {
-            nc_client_err_clean(&error->err[i], error->ctx);
-        }
-        free(error->err);
-        break;
-
-    case NC_RPL_NOTIF:
-        nc_notif_free((struct nc_notif *)reply);
-        return;
-    }
-
-    free(reply);
-}
-
-API void
-nc_notif_free(struct nc_notif *notif)
-{
-    if (!notif) {
-        return;
-    }
-
-    lydict_remove(notif->tree->schema->module->ctx, notif->datetime);
-    lyd_free(notif->tree);
-    free(notif);
 }

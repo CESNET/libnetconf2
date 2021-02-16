@@ -16,7 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#include <stdbool.h>
+#include <inttypes.h>
 
 #include <libyang/libyang.h>
 
@@ -60,7 +60,10 @@ nc_server_reply_data(struct lyd_node *data, NC_WD_MODE wd, NC_PARAMTYPE paramtyp
     ret->type = NC_RPL_DATA;
     ret->wd = wd;
     if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
-        ret->data = lyd_dup(data, 1);
+        if (lyd_dup_single(data, NULL, LYD_DUP_RECURSIVE, &ret->data)) {
+            free(ret);
+            return NULL;
+        }
     } else {
         ret->data = data;
     }
@@ -73,7 +76,7 @@ nc_server_reply_data(struct lyd_node *data, NC_WD_MODE wd, NC_PARAMTYPE paramtyp
 }
 
 API struct nc_server_reply *
-nc_server_reply_err(struct nc_server_error *err)
+nc_server_reply_err(struct lyd_node *err)
 {
     struct nc_server_reply_error *ret;
 
@@ -89,19 +92,12 @@ nc_server_reply_err(struct nc_server_error *err)
     }
 
     ret->type = NC_RPL_ERROR;
-    ret->err = malloc(sizeof *ret->err);
-    if (!ret->err) {
-        ERRMEM;
-        free(ret);
-        return NULL;
-    }
-    ret->err[0] = err;
-    ret->count = 1;
+    ret->err = err;
     return (struct nc_server_reply *)ret;
 }
 
 API int
-nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_error *err)
+nc_server_reply_add_err(struct nc_server_reply *reply, struct lyd_node *err)
 {
     struct nc_server_reply_error *err_rpl;
 
@@ -114,17 +110,11 @@ nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_error *e
     }
 
     err_rpl = (struct nc_server_reply_error *)reply;
-    ++err_rpl->count;
-    err_rpl->err = nc_realloc(err_rpl->err, err_rpl->count * sizeof *err_rpl->err);
-    if (!err_rpl->err) {
-        ERRMEM;
-        return -1;
-    }
-    err_rpl->err[err_rpl->count - 1] = err;
+    lyd_insert_sibling(err_rpl->err, err, &err_rpl->err);
     return 0;
 }
 
-API const struct nc_server_error *
+API const struct lyd_node *
 nc_server_reply_get_last_err(const struct nc_server_reply *reply)
 {
     struct nc_server_reply_error *err_rpl;
@@ -135,17 +125,147 @@ nc_server_reply_get_last_err(const struct nc_server_reply *reply)
     }
 
     err_rpl = (struct nc_server_reply_error *)reply;
-    if (!err_rpl->count) {
+    if (!err_rpl->err) {
         return NULL;
     }
-    return err_rpl->err[err_rpl->count - 1];
+    return err_rpl->err->prev;
 }
 
-API struct nc_server_error *
-nc_err(int tag, ...)
+static const char *
+nc_err_tag2str(NC_ERR tag)
+{
+    switch (tag) {
+    case NC_ERR_IN_USE:
+        return "in-use";
+    case NC_ERR_INVALID_VALUE:
+        return "invalid-value";
+    case NC_ERR_ACCESS_DENIED:
+        return "access-denied";
+    case NC_ERR_ROLLBACK_FAILED:
+        return "rollback-failed";
+    case NC_ERR_OP_NOT_SUPPORTED:
+        return "operation-not-supported";
+    case NC_ERR_TOO_BIG:
+        return "too-big";
+    case NC_ERR_RES_DENIED:
+        return "resource-denied";
+    case NC_ERR_MISSING_ATTR:
+        return "missing-attribute";
+    case NC_ERR_BAD_ATTR:
+        return "bad-attribute";
+    case NC_ERR_UNKNOWN_ATTR:
+        return "unknown-attribute";
+    case NC_ERR_MISSING_ELEM:
+        return "missing-element";
+    case NC_ERR_BAD_ELEM:
+        return "bad-element";
+    case NC_ERR_UNKNOWN_ELEM:
+        return "unknown-element";
+    case NC_ERR_UNKNOWN_NS:
+        return "unknown-namespace";
+    case NC_ERR_LOCK_DENIED:
+        return "lock-denied";
+    case NC_ERR_DATA_EXISTS:
+        return "data-exists";
+    case NC_ERR_DATA_MISSING:
+        return "data-missing";
+    case NC_ERR_OP_FAILED:
+        return "operation-failed";
+    case NC_ERR_MALFORMED_MSG:
+        return "malformed-message";
+    default:
+        break;
+    }
+
+    return NULL;
+}
+
+static NC_ERR
+nc_err_str2tag(const char *str)
+{
+    if (!strcmp(str, "in-use")) {
+        return NC_ERR_IN_USE;
+    } else if (!strcmp(str, "invalid-value")) {
+        return NC_ERR_INVALID_VALUE;
+    } else if (!strcmp(str, "access-denied")) {
+        return NC_ERR_ACCESS_DENIED;
+    } else if (!strcmp(str, "rollback-failed")) {
+        return NC_ERR_ROLLBACK_FAILED;
+    } else if (!strcmp(str, "operation-not-supported")) {
+        return NC_ERR_OP_NOT_SUPPORTED;
+    } else if (!strcmp(str, "too-big")) {
+        return NC_ERR_TOO_BIG;
+    } else if (!strcmp(str, "resource-denied")) {
+        return NC_ERR_RES_DENIED;
+    } else if (!strcmp(str, "missing-attribute")) {
+        return NC_ERR_MISSING_ATTR;
+    } else if (!strcmp(str, "bad-attribute")) {
+        return NC_ERR_BAD_ATTR;
+    } else if (!strcmp(str, "unknown-attribute")) {
+        return NC_ERR_UNKNOWN_ATTR;
+    } else if (!strcmp(str, "missing-element")) {
+        return NC_ERR_MISSING_ELEM;
+    } else if (!strcmp(str, "bad-element")) {
+        return NC_ERR_BAD_ELEM;
+    } else if (!strcmp(str, "unknown-element")) {
+        return NC_ERR_UNKNOWN_ELEM;
+    } else if (!strcmp(str, "unknown-namespace")) {
+        return NC_ERR_UNKNOWN_NS;
+    } else if (!strcmp(str, "lock-denied")) {
+        return NC_ERR_LOCK_DENIED;
+    } else if (!strcmp(str, "data-exists")) {
+        return NC_ERR_DATA_EXISTS;
+    } else if (!strcmp(str, "data-missing")) {
+        return NC_ERR_DATA_MISSING;
+    } else if (!strcmp(str, "operation-failed")) {
+        return NC_ERR_OP_FAILED;
+    } else if (!strcmp(str, "malformed-message")) {
+        return NC_ERR_MALFORMED_MSG;
+    }
+
+    return 0;
+}
+
+static const char *
+nc_err_type2str(NC_ERR_TYPE type)
+{
+    switch (type) {
+    case NC_ERR_TYPE_TRAN:
+        return "transport";
+    case NC_ERR_TYPE_RPC:
+        return "rpc";
+    case NC_ERR_TYPE_PROT:
+        return "protocol";
+    case NC_ERR_TYPE_APP:
+        return "application";
+    default:
+        break;
+    }
+
+    return NULL;
+}
+
+static NC_ERR_TYPE
+nc_err_str2type(const char *str)
+{
+    if (!strcmp(str, "transport")) {
+        return NC_ERR_TYPE_TRAN;
+    } else if (!strcmp(str, "rpc")) {
+        return NC_ERR_TYPE_RPC;
+    } else if (!strcmp(str, "protocol")) {
+        return NC_ERR_TYPE_PROT;
+    } else if (!strcmp(str, "application")) {
+        return NC_ERR_TYPE_APP;
+    }
+
+    return 0;
+}
+
+API struct lyd_node *
+nc_err(const struct ly_ctx *ctx, NC_ERR tag, ...)
 {
     va_list ap;
-    struct nc_server_error *ret;
+    struct lyd_node *err = NULL;
     NC_ERR_TYPE type;
     const char *arg1, *arg2;
     uint32_t sid;
@@ -155,15 +275,14 @@ nc_err(int tag, ...)
         return NULL;
     }
 
-    ret = calloc(1, sizeof *ret);
-    if (!ret) {
-        ERRMEM;
+    /* rpc-error */
+    if (lyd_new_opaq2(NULL, ctx, "rpc-error", NULL, NULL, NC_NS_BASE, &err)) {
         return NULL;
     }
-    ret->sid = -1;
 
     va_start(ap, tag);
 
+    /* error-type */
     switch (tag) {
     case NC_ERR_IN_USE:
     case NC_ERR_INVALID_VALUE:
@@ -176,141 +295,175 @@ nc_err(int tag, ...)
             goto fail;
         }
         break;
-
     case NC_ERR_TOO_BIG:
     case NC_ERR_RES_DENIED:
-        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
-        /* nothing to check */
+        type = (NC_ERR_TYPE)va_arg(ap, int);
         break;
-
     case NC_ERR_MISSING_ATTR:
     case NC_ERR_BAD_ATTR:
     case NC_ERR_UNKNOWN_ATTR:
-        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
-        arg1 = va_arg(ap, const char *);
-        arg2 = va_arg(ap, const char *);
-
+        type = (NC_ERR_TYPE)va_arg(ap, int);
         if (type == NC_ERR_TYPE_TRAN) {
             ERRARG("type");
             goto fail;
         }
-        nc_err_add_bad_attr(ret, arg1);
-        nc_err_add_bad_elem(ret, arg2);
         break;
-
     case NC_ERR_MISSING_ELEM:
     case NC_ERR_BAD_ELEM:
     case NC_ERR_UNKNOWN_ELEM:
-        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
-        arg1 = va_arg(ap, const char *);
-
+        type = (NC_ERR_TYPE)va_arg(ap, int);
         if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
             ERRARG("type");
             goto fail;
         }
-        nc_err_add_bad_elem(ret, arg1);
         break;
-
     case NC_ERR_UNKNOWN_NS:
-        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
-        arg1 = va_arg(ap, const char *);
-        arg2 = va_arg(ap, const char *);
-
+        type = (NC_ERR_TYPE)va_arg(ap, int);
         if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
             ERRARG("type");
             goto fail;
         }
-        nc_err_add_bad_elem(ret, arg1);
-        nc_err_add_bad_ns(ret, arg2);
         break;
-
     case NC_ERR_LOCK_DENIED:
-        sid = va_arg(ap, uint32_t);
-
         type = NC_ERR_TYPE_PROT;
-        nc_err_set_sid(ret, sid);
         break;
-
     case NC_ERR_DATA_EXISTS:
     case NC_ERR_DATA_MISSING:
         type = NC_ERR_TYPE_APP;
         break;
-
     case NC_ERR_OP_FAILED:
-        type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
-
+        type = (NC_ERR_TYPE)va_arg(ap, int);
         if (type == NC_ERR_TYPE_TRAN) {
             ERRARG("type");
             goto fail;
         }
         break;
-
     case NC_ERR_MALFORMED_MSG:
         type = NC_ERR_TYPE_RPC;
         break;
+    default:
+        ERRARG("tag");
+        goto fail;
+    }
+    if (lyd_new_opaq2(err, NULL, "error-type", nc_err_type2str(type), NULL, NC_NS_BASE, NULL)) {
+        goto fail;
+    }
 
+    /* error-tag */
+    if (lyd_new_opaq2(err, NULL, "error-tag", nc_err_tag2str(tag), NULL, NC_NS_BASE, NULL)) {
+        goto fail;
+    }
+
+    /* error-severity */
+    if (lyd_new_opaq2(err, NULL, "error-severity", "error", NULL, NC_NS_BASE, NULL)) {
+        goto fail;
+    }
+
+    /* error-message */
+    switch (tag) {
+    case NC_ERR_IN_USE:
+        nc_err_set_msg(err, "The request requires a resource that already is in use.", "en");
+        break;
+    case NC_ERR_INVALID_VALUE:
+        nc_err_set_msg(err, "The request specifies an unacceptable value for one or more parameters.", "en");
+        break;
+    case NC_ERR_TOO_BIG:
+        nc_err_set_msg(err, "The request or response (that would be generated) is too large for the implementation to handle.", "en");
+        break;
+    case NC_ERR_MISSING_ATTR:
+        nc_err_set_msg(err, "An expected attribute is missing.", "en");
+        break;
+    case NC_ERR_BAD_ATTR:
+        nc_err_set_msg(err, "An attribute value is not correct.", "en");
+        break;
+    case NC_ERR_UNKNOWN_ATTR:
+        nc_err_set_msg(err, "An unexpected attribute is present.", "en");
+        break;
+    case NC_ERR_MISSING_ELEM:
+        nc_err_set_msg(err, "An expected element is missing.", "en");
+        break;
+    case NC_ERR_BAD_ELEM:
+        nc_err_set_msg(err, "An element value is not correct.", "en");
+        break;
+    case NC_ERR_UNKNOWN_ELEM:
+        nc_err_set_msg(err, "An unexpected element is present.", "en");
+        break;
+    case NC_ERR_UNKNOWN_NS:
+        nc_err_set_msg(err, "An unexpected namespace is present.", "en");
+        break;
+    case NC_ERR_ACCESS_DENIED:
+        nc_err_set_msg(err, "Access to the requested protocol operation or data model is denied because authorization failed.", "en");
+        break;
+    case NC_ERR_LOCK_DENIED:
+        nc_err_set_msg(err, "Access to the requested lock is denied because the lock is currently held by another entity.", "en");
+        break;
+    case NC_ERR_RES_DENIED:
+        nc_err_set_msg(err, "Request could not be completed because of insufficient resources.", "en");
+        break;
+    case NC_ERR_ROLLBACK_FAILED:
+        nc_err_set_msg(err, "Request to roll back some configuration change was not completed for some reason.", "en");
+        break;
+    case NC_ERR_DATA_EXISTS:
+        nc_err_set_msg(err, "Request could not be completed because the relevant data model content already exists.", "en");
+        break;
+    case NC_ERR_DATA_MISSING:
+        nc_err_set_msg(err, "Request could not be completed because the relevant data model content does not exist.", "en");
+        break;
+    case NC_ERR_OP_NOT_SUPPORTED:
+        nc_err_set_msg(err, "Request could not be completed because the requested operation is not supported by this implementation.", "en");
+        break;
+    case NC_ERR_OP_FAILED:
+        nc_err_set_msg(err, "Request could not be completed because the requested operation failed for a non-specific reason.", "en");
+        break;
+    case NC_ERR_MALFORMED_MSG:
+        nc_err_set_msg(err, "A message could not be handled because it failed to be parsed correctly.", "en");
+        break;
     default:
         ERRARG("tag");
         goto fail;
     }
 
+    /* error-info */
     switch (tag) {
     case NC_ERR_IN_USE:
-        nc_err_set_msg(ret, "The request requires a resource that already is in use.", "en");
-        break;
     case NC_ERR_INVALID_VALUE:
-        nc_err_set_msg(ret, "The request specifies an unacceptable value for one or more parameters.", "en");
-        break;
+    case NC_ERR_ACCESS_DENIED:
+    case NC_ERR_ROLLBACK_FAILED:
+    case NC_ERR_OP_NOT_SUPPORTED:
     case NC_ERR_TOO_BIG:
-        nc_err_set_msg(ret, "The request or response (that would be generated) is too large for the implementation to handle.", "en");
+    case NC_ERR_RES_DENIED:
+    case NC_ERR_DATA_EXISTS:
+    case NC_ERR_DATA_MISSING:
+    case NC_ERR_OP_FAILED:
+    case NC_ERR_MALFORMED_MSG:
         break;
     case NC_ERR_MISSING_ATTR:
-        nc_err_set_msg(ret, "An expected attribute is missing.", "en");
-        break;
     case NC_ERR_BAD_ATTR:
-        nc_err_set_msg(ret, "An attribute value is not correct.", "en");
-        break;
     case NC_ERR_UNKNOWN_ATTR:
-        nc_err_set_msg(ret, "An unexpected attribute is present.", "en");
+        arg1 = va_arg(ap, const char *);
+        arg2 = va_arg(ap, const char *);
+
+        nc_err_add_bad_attr(err, arg1);
+        nc_err_add_bad_elem(err, arg2);
         break;
     case NC_ERR_MISSING_ELEM:
-        nc_err_set_msg(ret, "An expected element is missing.", "en");
-        break;
     case NC_ERR_BAD_ELEM:
-        nc_err_set_msg(ret, "An element value is not correct.", "en");
-        break;
     case NC_ERR_UNKNOWN_ELEM:
-        nc_err_set_msg(ret, "An unexpected element is present.", "en");
+        arg1 = va_arg(ap, const char *);
+
+        nc_err_add_bad_elem(err, arg1);
         break;
     case NC_ERR_UNKNOWN_NS:
-        nc_err_set_msg(ret, "An unexpected namespace is present.", "en");
-        break;
-    case NC_ERR_ACCESS_DENIED:
-        nc_err_set_msg(ret, "Access to the requested protocol operation or data model is denied because authorization failed.", "en");
+        arg1 = va_arg(ap, const char *);
+        arg2 = va_arg(ap, const char *);
+
+        nc_err_add_bad_elem(err, arg1);
+        nc_err_add_bad_ns(err, arg2);
         break;
     case NC_ERR_LOCK_DENIED:
-        nc_err_set_msg(ret, "Access to the requested lock is denied because the lock is currently held by another entity.", "en");
-        break;
-    case NC_ERR_RES_DENIED:
-        nc_err_set_msg(ret, "Request could not be completed because of insufficient resources.", "en");
-        break;
-    case NC_ERR_ROLLBACK_FAILED:
-        nc_err_set_msg(ret, "Request to roll back some configuration change was not completed for some reason.", "en");
-        break;
-    case NC_ERR_DATA_EXISTS:
-        nc_err_set_msg(ret, "Request could not be completed because the relevant data model content already exists.", "en");
-        break;
-    case NC_ERR_DATA_MISSING:
-        nc_err_set_msg(ret, "Request could not be completed because the relevant data model content does not exist.", "en");
-        break;
-    case NC_ERR_OP_NOT_SUPPORTED:
-        nc_err_set_msg(ret, "Request could not be completed because the requested operation is not supported by this implementation.", "en");
-        break;
-    case NC_ERR_OP_FAILED:
-        nc_err_set_msg(ret, "Request could not be completed because the requested operation failed for a non-specific reason.", "en");
-        break;
-    case NC_ERR_MALFORMED_MSG:
-        nc_err_set_msg(ret, "A message could not be handled because it failed to be parsed correctly.", "en");
+        sid = va_arg(ap, uint32_t);
+
+        nc_err_set_sid(err, sid);
         break;
     default:
         ERRARG("tag");
@@ -318,67 +471,29 @@ nc_err(int tag, ...)
     }
 
     va_end(ap);
-
-    ret->type = type;
-    ret->tag = tag;
-    return ret;
+    return err;
 
 fail:
     va_end(ap);
-    free(ret);
+    lyd_free_siblings(err);
     return NULL;
 }
 
-static struct lyxml_elem *
-nc_err_libyang_other_elem(const char *name, const char *content, int cont_len)
-{
-    struct lyxml_elem *root = NULL;
-    struct lyxml_ns *ns;
-
-    root = calloc(1, sizeof *root);
-    if (!root) {
-        ERRMEM;
-        goto error;
-    }
-    root->prev = root;
-    root->name = lydict_insert(server_opts.ctx, name, 0);
-    root->content = lydict_insert(server_opts.ctx, content, cont_len);
-
-    ns = calloc(1, sizeof *root->ns);
-    if (!ns) {
-        ERRMEM;
-        goto error;
-    }
-    root->attr = (struct lyxml_attr *)ns;
-    ns->type = LYXML_ATTR_NS;
-    ns->parent = root;
-    ns->value = lydict_insert(server_opts.ctx, "urn:ietf:params:xml:ns:yang:1", 0);
-    root->ns = ns;
-
-    return root;
-
-error:
-    lyxml_free(server_opts.ctx, root);
-    return NULL;
-}
-
-API struct nc_server_error *
+API struct lyd_node *
 nc_err_libyang(struct ly_ctx *ctx)
 {
-    struct nc_server_error *e;
-    struct lyxml_elem *elem;
+    struct lyd_node *e, *other;
     const char *str, *stri, *strj, *strk, *strl, *uniqi, *uniqj;
     char *attr, *path;
     int len;
 
-    if (!ly_errno) {
+    if (!ly_errcode(ctx)) {
         /* LY_SUCCESS */
         return NULL;
-    } else if (ly_errno == LY_EVALID) {
-        switch (ly_vecode(ctx)) {
-        /* RFC 6020 section 13 errors */
-        case LYVE_NOUNIQ:
-            e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+    } else if ((ly_errcode(ctx) == LY_EVALID) && (ly_vecode(ctx) == LYVE_DATA)) {
+        /* RFC 7950 section 15 errors */
+        if (!strncmp(ly_errmsg(ctx), "Unique data", 11)) {
+            e = nc_err(ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
             nc_err_set_app_tag(e, "data-not-unique");
             nc_err_set_path(e, ly_errpath(ctx));
 
@@ -408,20 +523,19 @@ nc_err_libyang(struct ly_ctx *ctx)
             while (1) {
                 uniqj = strpbrk(uniqi, " \"");
 
-                len = sprintf(path, "%.*s/%.*s", (int)(strj - stri), stri, (int)(uniqj - uniqi), uniqi);
-                elem = nc_err_libyang_other_elem("non-unique", path, len);
-                if (!elem) {
+                sprintf(path, "%.*s/%.*s", (int)(strj - stri), stri, (int)(uniqj - uniqi), uniqi);
+                if (lyd_new_opaq2(NULL, ctx, "non-unique", path, NULL, "urn:ietf:params:xml:ns:yang:1", &other)) {
                     free(path);
                     return e;
                 }
-                nc_err_add_info_other(e, elem);
+                nc_err_add_info_other(e, other);
 
-                len = sprintf(path, "%.*s/%.*s", (int)(strl - strk), strk, (int)(uniqj - uniqi), uniqi);
-                elem = nc_err_libyang_other_elem("non-unique", path, len);
-                if (!elem) {
+                sprintf(path, "%.*s/%.*s", (int)(strl - strk), strk, (int)(uniqj - uniqi), uniqi);
+                if (lyd_new_opaq2(NULL, ctx, "non-unique", path, NULL, "urn:ietf:params:xml:ns:yang:1", &other)) {
+                    free(path);
                     return e;
                 }
-                nc_err_add_info_other(e, elem);
+                nc_err_add_info_other(e, other);
 
                 if (uniqj[0] == '"') {
                     break;
@@ -429,34 +543,29 @@ nc_err_libyang(struct ly_ctx *ctx)
                 uniqi = uniqj + 1;
             }
             free(path);
-            break;
-        case LYVE_NOMAX:
-            e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+        } else if (!strncmp(ly_errmsg(ctx), "Too many", 8)) {
+            e = nc_err(ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
             nc_err_set_app_tag(e, "too-many-elements");
             nc_err_set_path(e, ly_errpath(ctx));
-            break;
-        case LYVE_NOMIN:
-            e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+        } else if (!strncmp(ly_errmsg(ctx), "Too few", 7)) {
+            e = nc_err(ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
             nc_err_set_app_tag(e, "too-few-elements");
             nc_err_set_path(e, ly_errpath(ctx));
-            break;
-        case LYVE_NOMUST:
-            e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+        } else if (!strncmp(ly_errmsg(ctx), "Must condition", 14)) {
+            e = nc_err(ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
             if (ly_errapptag(ctx)) {
                 nc_err_set_app_tag(e, ly_errapptag(ctx));
             } else {
                 nc_err_set_app_tag(e, "must-violation");
             }
             nc_err_set_path(e, ly_errpath(ctx));
-            break;
-        case LYVE_NOREQINS:
-        case LYVE_NOLEAFREF:
-            e = nc_err(NC_ERR_DATA_MISSING);
+        } else if (!strncmp(ly_errmsg(ctx), "Invalid leafref", 15) ||
+                !strncmp(ly_errmsg(ctx), "Invalid instance-identifier", 27)) {
+            e = nc_err(ctx, NC_ERR_DATA_MISSING);
             nc_err_set_app_tag(e, "instance-required");
             nc_err_set_path(e, ly_errpath(ctx));
-            break;
-        case LYVE_NOMANDCHOICE:
-            e = nc_err(NC_ERR_DATA_MISSING);
+        } else if (!strncmp(ly_errmsg(ctx), "Mandatory choice", 16)) {
+            e = nc_err(ctx, NC_ERR_DATA_MISSING);
             nc_err_set_app_tag(e, "missing-choice");
             nc_err_set_path(e, ly_errpath(ctx));
 
@@ -464,29 +573,28 @@ nc_err_libyang(struct ly_ctx *ctx)
             stri = strchr(str, '"');
             stri++;
             strj = strchr(stri, '"');
-            elem = nc_err_libyang_other_elem("missing-choice", stri, strj - stri);
-            if (elem) {
-                nc_err_add_info_other(e, elem);
+            path = strndup(stri, strj - stri);
+
+            if (lyd_new_opaq2(NULL, ctx, "missing-choice", path, NULL, "urn:ietf:params:xml:ns:yang:1", &other)) {
+                free(path);
+                return e;
             }
-            break;
-        case LYVE_INELEM:
+            nc_err_add_info_other(e, other);
+            free(path);
+        } else if (!strncmp(ly_errmsg(ctx), "Unexpected data", 15)) {
             str = ly_errpath(ctx);
             if (!str || !strcmp(str, "/")) {
-                e = nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_APP);
+                e = nc_err(ctx, NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_APP);
                 /* keep default message */
                 return e;
             } else {
-                e = nc_err(NC_ERR_UNKNOWN_ELEM, NC_ERR_TYPE_PROT, ly_errpath(ctx));
+                e = nc_err(ctx, NC_ERR_UNKNOWN_ELEM, NC_ERR_TYPE_PROT, ly_errpath(ctx));
             }
-            break;
-        case LYVE_MISSELEM:
-        case LYVE_INORDER:
-            e = nc_err(NC_ERR_MISSING_ELEM, NC_ERR_TYPE_PROT, ly_errpath(ctx));
-            break;
-        case LYVE_INVAL:
-            e = nc_err(NC_ERR_BAD_ELEM, NC_ERR_TYPE_PROT, ly_errpath(ctx));
-            break;
-        case LYVE_INATTR:
+        } else if (!strncmp(ly_errmsg(ctx), "Mandatory node", 14)) {
+            e = nc_err(ctx, NC_ERR_MISSING_ELEM, NC_ERR_TYPE_PROT, ly_errpath(ctx));
+        } else if (!strncmp(ly_errmsg(ctx), "Duplicate instance", 18) || !strncmp(ly_errmsg(ctx), "Data for both cases", 19)) {
+            e = nc_err(ctx, NC_ERR_BAD_ELEM, NC_ERR_TYPE_PROT, ly_errpath(ctx));
+        /*case LYVE_INATTR:
         case LYVE_MISSATTR:
         case LYVE_INMETA:
             str = ly_errmsg(ctx);
@@ -499,60 +607,74 @@ nc_err_libyang(struct ly_ctx *ctx)
             strj--;
             attr = strndup(stri, (strj - stri) + 1);
             if (ly_vecode(ctx) == LYVE_INATTR) {
-                e = nc_err(NC_ERR_UNKNOWN_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath(ctx));
+                e = nc_err(ctx, NC_ERR_UNKNOWN_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath(ctx));
             } else if (ly_vecode(ctx) == LYVE_MISSATTR) {
-                e = nc_err(NC_ERR_MISSING_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath(ctx));
-            } else { /* LYVE_INMETA */
-                e = nc_err(NC_ERR_BAD_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath(ctx));
+                e = nc_err(ctx, NC_ERR_MISSING_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath(ctx));
+            } else { * LYVE_INMETA *
+                e = nc_err(ctx, NC_ERR_BAD_ATTR, NC_ERR_TYPE_PROT, attr, ly_errpath(ctx));
             }
             free(attr);
-            break;
-        case LYVE_NOCONSTR:
-        case LYVE_NOWHEN:
-            e = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_PROT);
-            /* LYVE_NOCONSTR (length, range, pattern) can have a specific error-app-tag */
+            break;*/
+        } else if (!strncmp(ly_errmsg(ctx), "When condition", 14) || !strncmp(ly_errmsg(ctx), "Unsatisfied pattern", 19) ||
+                !strncmp(ly_errmsg(ctx), "Unsatisfied length", 18) || !strncmp(ly_errmsg(ctx), "Unsatisfied range", 17)) {
+            e = nc_err(ctx, NC_ERR_INVALID_VALUE, NC_ERR_TYPE_PROT);
+            /* length, range, pattern can have a specific error-app-tag */
             if (ly_errapptag(ctx)) {
                 nc_err_set_app_tag(e, ly_errapptag(ctx));
             }
             nc_err_set_path(e, ly_errpath(ctx));
-            break;
-        default:
-            e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
-            break;
+        } else {
+            e = nc_err(ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
         }
     } else {
         /* non-validation (internal) error */
-        e = nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+        e = nc_err(ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
     }
     nc_err_set_msg(e, ly_errmsg(ctx), "en");
     return e;
 }
 
 API NC_ERR_TYPE
-nc_err_get_type(const struct nc_server_error *err)
+nc_err_get_type(const struct lyd_node *err)
 {
+    struct lyd_node *match;
+
     if (!err) {
         ERRARG("err");
         return 0;
     }
 
-    return err->type;
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-type", &match);
+    if (match) {
+        return nc_err_str2type(((struct lyd_node_opaq *)match)->value);
+    }
+
+    return 0;
 }
 
 API NC_ERR
-nc_err_get_tag(const struct nc_server_error *err)
+nc_err_get_tag(const struct lyd_node *err)
 {
+    struct lyd_node *match;
+
     if (!err) {
         ERRARG("err");
         return 0;
     }
 
-    return err->tag;
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-tag", &match);
+    if (match) {
+        return nc_err_str2tag(((struct lyd_node_opaq *)match)->value);
+    }
+
+    return 0;
 }
 
 API int
-nc_err_set_app_tag(struct nc_server_error *err, const char *error_app_tag)
+nc_err_set_app_tag(struct lyd_node *err, const char *error_app_tag)
 {
+    struct lyd_node *match;
+
     if (!err) {
         ERRARG("err");
         return -1;
@@ -561,28 +683,42 @@ nc_err_set_app_tag(struct nc_server_error *err, const char *error_app_tag)
         return -1;
     }
 
-    if (err->apptag) {
-        lydict_remove(server_opts.ctx, err->apptag);
+    /* remove previous node */
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-app-tag", &match);
+    if (match) {
+        lyd_free_tree(match);
     }
-    err->apptag = lydict_insert(server_opts.ctx, error_app_tag, 0);
+
+    if (lyd_new_opaq2(err, NULL, "error-app-tag", error_app_tag, NULL, NC_NS_BASE, NULL)) {
+        return -1;
+    }
 
     return 0;
 }
 
 API const char *
-nc_err_get_app_tag(const struct nc_server_error *err)
+nc_err_get_app_tag(const struct lyd_node *err)
 {
+    struct lyd_node *match;
+
     if (!err) {
         ERRARG("err");
         return NULL;
     }
 
-    return err->apptag;
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-app-tag", &match);
+    if (match) {
+        return ((struct lyd_node_opaq *)match)->value;
+    }
+
+    return NULL;
 }
 
 API int
-nc_err_set_path(struct nc_server_error *err, const char *error_path)
+nc_err_set_path(struct lyd_node *err, const char *error_path)
 {
+    struct lyd_node *match;
+
     if (!err) {
         ERRARG("err");
         return -1;
@@ -591,28 +727,43 @@ nc_err_set_path(struct nc_server_error *err, const char *error_path)
         return -1;
     }
 
-    if (err->path) {
-        lydict_remove(server_opts.ctx, err->path);
+    /* remove previous node */
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-path", &match);
+    if (match) {
+        lyd_free_tree(match);
     }
-    err->path = lydict_insert(server_opts.ctx, error_path, 0);
+
+    if (lyd_new_opaq2(err, NULL, "error-path", error_path, NULL, NC_NS_BASE, NULL)) {
+        return -1;
+    }
 
     return 0;
 }
 
 API const char *
-nc_err_get_path(const struct nc_server_error *err)
+nc_err_get_path(const struct lyd_node *err)
 {
+    struct lyd_node *match;
+
     if (!err) {
         ERRARG("err");
         return 0;
     }
 
-    return err->path;
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-path", &match);
+    if (match) {
+        return ((struct lyd_node_opaq *)match)->value;
+    }
+
+    return NULL;
 }
 
 API int
-nc_err_set_msg(struct nc_server_error *err, const char *error_message, const char *lang)
+nc_err_set_msg(struct lyd_node *err, const char *error_message, const char *lang)
 {
+    struct lyd_node *match;
+    struct lyd_attr *attr;
+
     if (!err) {
         ERRARG("err");
         return -1;
@@ -621,47 +772,77 @@ nc_err_set_msg(struct nc_server_error *err, const char *error_message, const cha
         return -1;
     }
 
-    if (err->message) {
-        lydict_remove(server_opts.ctx, err->message);
+    /* remove previous message */
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-message", &match);
+    if (match) {
+        lyd_free_tree(match);
     }
-    err->message = lydict_insert(server_opts.ctx, error_message, 0);
 
-    if (err->message_lang) {
-        lydict_remove(server_opts.ctx, err->message_lang);
+    if (lyd_new_opaq2(err, NULL, "error-message", error_message, NULL, NC_NS_BASE, &match)) {
+        return -1;
     }
-    if (lang) {
-        err->message_lang = lydict_insert(server_opts.ctx, lang, 0);
+    if (lang && lyd_new_attr(match, NULL, "xml:lang", lang, &attr)) {
+        lyd_free_tree(match);
+        return -1;
     }
 
     return 0;
 }
 
 API const char *
-nc_err_get_msg(const struct nc_server_error *err)
+nc_err_get_msg(const struct lyd_node *err)
 {
+    struct lyd_node *match;
+
     if (!err) {
         ERRARG("err");
-        return 0;
+        return NULL;
     }
 
-    return err->message;
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-message", &match);
+    if (match) {
+        return ((struct lyd_node_opaq *)match)->value;
+    }
+
+    return NULL;
 }
 
 API int
-nc_err_set_sid(struct nc_server_error *err, uint32_t session_id)
+nc_err_set_sid(struct lyd_node *err, uint32_t session_id)
 {
+    struct lyd_node *match, *info;
+    char buf[22];
+
     if (!err) {
         ERRARG("err");
         return -1;
     }
 
-    err->sid = session_id;
+    /* find error-info */
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-info", &info);
+    if (!info && lyd_new_opaq2(err, NULL, "error-info", NULL, NULL, NC_NS_BASE, &info)) {
+        return -1;
+    }
+
+    /* remove previous node */
+    lyd_find_sibling_opaq_next(lyd_child(info), "session-id", &match);
+    if (match) {
+        lyd_free_tree(match);
+    }
+
+    sprintf(buf, "%" PRIu32, session_id);
+    if (lyd_new_opaq2(info, NULL, "session-id", buf, NULL, NC_NS_BASE, NULL)) {
+        return -1;
+    }
+
     return 0;
 }
 
 API int
-nc_err_add_bad_attr(struct nc_server_error *err, const char *attr_name)
+nc_err_add_bad_attr(struct lyd_node *err, const char *attr_name)
 {
+    struct lyd_node *info;
+
     if (!err) {
         ERRARG("err");
         return -1;
@@ -670,20 +851,24 @@ nc_err_add_bad_attr(struct nc_server_error *err, const char *attr_name)
         return -1;
     }
 
-    ++err->attr_count;
-    err->attr = nc_realloc(err->attr, err->attr_count * sizeof *err->attr);
-    if (!err->attr) {
-        ERRMEM;
+    /* find error-info */
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-info", &info);
+    if (!info && lyd_new_opaq2(err, NULL, "error-info", NULL, NULL, NC_NS_BASE, &info)) {
         return -1;
     }
-    err->attr[err->attr_count - 1] = lydict_insert(server_opts.ctx, attr_name, 0);
+
+    if (lyd_new_opaq2(info, NULL, "bad-attribute", attr_name, NULL, NC_NS_BASE, NULL)) {
+        return -1;
+    }
 
     return 0;
 }
 
 API int
-nc_err_add_bad_elem(struct nc_server_error *err, const char *elem_name)
+nc_err_add_bad_elem(struct lyd_node *err, const char *elem_name)
 {
+    struct lyd_node *info;
+
     if (!err) {
         ERRARG("err");
         return -1;
@@ -692,20 +877,24 @@ nc_err_add_bad_elem(struct nc_server_error *err, const char *elem_name)
         return -1;
     }
 
-    ++err->elem_count;
-    err->elem = nc_realloc(err->elem, err->elem_count * sizeof *err->elem);
-    if (!err->elem) {
-        ERRMEM;
+    /* find error-info */
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-info", &info);
+    if (!info && lyd_new_opaq2(err, NULL, "error-info", NULL, NULL, NC_NS_BASE, &info)) {
         return -1;
     }
-    err->elem[err->elem_count - 1] = lydict_insert(server_opts.ctx, elem_name, 0);
+
+    if (lyd_new_opaq2(info, NULL, "bad-element", elem_name, NULL, NC_NS_BASE, NULL)) {
+        return -1;
+    }
 
     return 0;
 }
 
 API int
-nc_err_add_bad_ns(struct nc_server_error *err, const char *ns_name)
+nc_err_add_bad_ns(struct lyd_node *err, const char *ns_name)
 {
+    struct lyd_node *info;
+
     if (!err) {
         ERRARG("err");
         return -1;
@@ -714,20 +903,24 @@ nc_err_add_bad_ns(struct nc_server_error *err, const char *ns_name)
         return -1;
     }
 
-    ++err->ns_count;
-    err->ns = nc_realloc(err->ns, err->ns_count * sizeof *err->ns);
-    if (!err->ns) {
-        ERRMEM;
+    /* find error-info */
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-info", &info);
+    if (!info && lyd_new_opaq2(err, NULL, "error-info", NULL, NULL, NC_NS_BASE, &info)) {
         return -1;
     }
-    err->ns[err->ns_count - 1] = lydict_insert(server_opts.ctx, ns_name, 0);
+
+    if (lyd_new_opaq2(info, NULL, "bad-namespace", ns_name, NULL, NC_NS_BASE, NULL)) {
+        return -1;
+    }
 
     return 0;
 }
 
 API int
-nc_err_add_info_other(struct nc_server_error *err, struct lyxml_elem *other)
+nc_err_add_info_other(struct lyd_node *err, struct lyd_node *other)
 {
+    struct lyd_node *info;
+
     if (!err) {
         ERRARG("err");
         return -1;
@@ -736,25 +929,26 @@ nc_err_add_info_other(struct nc_server_error *err, struct lyxml_elem *other)
         return -1;
     }
 
-    ++err->other_count;
-    err->other = nc_realloc(err->other, err->other_count * sizeof *err->other);
-    if (!err->other) {
-        ERRMEM;
+    /* find error-info */
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-info", &info);
+    if (!info && lyd_new_opaq2(err, NULL, "error-info", NULL, NULL, NC_NS_BASE, &info)) {
         return -1;
     }
-    err->other[err->other_count - 1] = other;
+
+    lyd_insert_child(info, other);
+
     return 0;
 }
 
 void
-nc_server_rpc_free(struct nc_server_rpc *rpc, struct ly_ctx *ctx)
+nc_server_rpc_free(struct nc_server_rpc *rpc)
 {
     if (!rpc) {
         return;
     }
 
-    lyxml_free(ctx, rpc->root);
-    lyd_free(rpc->tree);
+    lyd_free_tree(rpc->envp);
+    lyd_free_tree(rpc->rpc);
 
     free(rpc);
 }
@@ -762,7 +956,6 @@ nc_server_rpc_free(struct nc_server_rpc *rpc, struct ly_ctx *ctx)
 API void
 nc_server_reply_free(struct nc_server_reply *reply)
 {
-    uint32_t i;
     struct nc_server_reply_data *data_rpl;
     struct nc_server_reply_error *error_rpl;
 
@@ -774,7 +967,7 @@ nc_server_reply_free(struct nc_server_reply *reply)
     case NC_RPL_DATA:
         data_rpl = (struct nc_server_reply_data *)reply;
         if (data_rpl->free) {
-            lyd_free_withsiblings(data_rpl->data);
+            lyd_free_siblings(data_rpl->data);
         }
         break;
     case NC_RPL_OK:
@@ -782,10 +975,7 @@ nc_server_reply_free(struct nc_server_reply *reply)
         break;
     case NC_RPL_ERROR:
         error_rpl = (struct nc_server_reply_error *)reply;
-        for (i = 0; i < error_rpl->count; ++i) {
-            nc_err_free(error_rpl->err[i]);
-        }
-        free(error_rpl->err);
+        lyd_free_siblings(error_rpl->err);
         break;
     default:
         break;
@@ -793,44 +983,12 @@ nc_server_reply_free(struct nc_server_reply *reply)
     free(reply);
 }
 
-API void
-nc_err_free(struct nc_server_error *err)
-{
-    uint32_t i;
-
-    if (!err) {
-        return;
-    }
-
-    lydict_remove(server_opts.ctx, err->apptag);
-    lydict_remove(server_opts.ctx, err->path);
-    lydict_remove(server_opts.ctx, err->message);
-    lydict_remove(server_opts.ctx, err->message_lang);
-    for (i = 0; i < err->attr_count; ++i) {
-        lydict_remove(server_opts.ctx, err->attr[i]);
-    }
-    free(err->attr);
-    for (i = 0; i < err->elem_count; ++i) {
-        lydict_remove(server_opts.ctx, err->elem[i]);
-    }
-    free(err->elem);
-    for (i = 0; i < err->ns_count; ++i) {
-        lydict_remove(server_opts.ctx, err->ns[i]);
-    }
-    free(err->ns);
-    for (i = 0; i < err->other_count; ++i) {
-        lyxml_free(server_opts.ctx, err->other[i]);
-    }
-    free(err->other);
-    free(err);
-}
-
 API struct nc_server_notif *
-nc_server_notif_new(struct lyd_node* event, char *eventtime, NC_PARAMTYPE paramtype)
+nc_server_notif_new(struct lyd_node *event, char *eventtime, NC_PARAMTYPE paramtype)
 {
     struct nc_server_notif *ntf;
     struct lyd_node *elem;
-    bool found_notif = false;
+    int found;
 
     if (!event) {
         ERRARG("event");
@@ -841,32 +999,15 @@ nc_server_notif_new(struct lyd_node* event, char *eventtime, NC_PARAMTYPE paramt
     }
 
     /* check that there is a notification */
-    for (elem = event; elem && !found_notif; elem = elem->child) {
-next_node:
-        switch (elem->schema->nodetype) {
-        case LYS_LEAF:
-            /* key, skip it */
-            elem = elem->next;
-            if (!elem) {
-                /* error */
-                ERRARG("event");
-                return NULL;
-            }
-            goto next_node;
-        case LYS_CONTAINER:
-        case LYS_LIST:
-            /* ok */
+    found = 0;
+    LYD_TREE_DFS_BEGIN(event, elem) {
+        if (elem->schema->nodetype == LYS_NOTIF) {
+            found = 1;
             break;
-        case LYS_NOTIF:
-            found_notif = true;
-            break;
-        default:
-            /* error */
-            ERRARG("event");
-            return NULL;
         }
+        LYD_TREE_DFS_END(event, elem);
     }
-    if (!found_notif) {
+    if (!found) {
         ERRARG("event");
         return NULL;
     }
@@ -874,10 +1015,13 @@ next_node:
     ntf = malloc(sizeof *ntf);
     if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
         ntf->eventtime = strdup(eventtime);
-        ntf->tree = lyd_dup(event, 1);
+        if (lyd_dup_single(event, NULL, LYD_DUP_RECURSIVE, &ntf->ntf)) {
+            free(ntf);
+            return NULL;
+        }
     } else {
         ntf->eventtime = eventtime;
-        ntf->tree = event;
+        ntf->ntf = event;
     }
     ntf->free = (paramtype == NC_PARAMTYPE_CONST ? 0 : 1);
 
@@ -892,7 +1036,7 @@ nc_server_notif_free(struct nc_server_notif *notif)
     }
 
     if (notif->free) {
-        lyd_free(notif->tree);
+        lyd_free_tree(notif->ntf);
         free(notif->eventtime);
     }
     free(notif);

@@ -220,8 +220,7 @@ nc_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx)
 {
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        ctx = ly_ctx_new(NULL, LY_CTX_NOYANGLIBRARY);
-        if (!ctx) {
+        if (ly_ctx_new(NULL, LY_CTX_NO_YANGLIBRARY, &ctx)) {
             return EXIT_FAILURE;
         }
 
@@ -291,7 +290,6 @@ nc_client_get_schema_callback(void **user_data)
     return client_opts.schema_clb;
 }
 
-
 struct schema_info {
     char *name;
     char *revision;
@@ -299,7 +297,7 @@ struct schema_info {
         char *name;
         char *revision;
     } *submodules;
-    struct ly_set features;
+    char **features;
     int implemented;
 };
 
@@ -370,10 +368,8 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
                                LYS_INFORMAT *format)
 {
     struct nc_rpc *rpc;
-    struct nc_reply *reply;
-    struct nc_reply_data *data_rpl;
-    struct nc_reply_error *error_rpl;
-    struct lyd_node_anydata *get_schema_data;
+    struct lyd_node *envp = NULL, *op = NULL;
+    struct lyd_node_any *get_schema_data;
     NC_MSG_TYPE msg;
     uint64_t msgid;
     char *localfile = NULL;
@@ -393,70 +389,35 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
     }
 
     do {
-        msg = nc_recv_reply(clb_data->session, rpc, msgid, NC_READ_ACT_TIMEOUT * 1000, 0, &reply);
+        msg = nc_recv_reply(clb_data->session, rpc, msgid, NC_READ_ACT_TIMEOUT * 1000, &envp, &op);
     } while (msg == NC_MSG_NOTIF || msg == NC_MSG_REPLY_ERR_MSGID);
     nc_rpc_free(rpc);
     if (msg == NC_MSG_WOULDBLOCK) {
         ERR("Session %u: timeout for receiving reply to a <get-schema> expired.", clb_data->session->id);
-        return NULL;
-    } else if (msg == NC_MSG_ERROR || reply == NULL) {
+        goto cleanup;
+    } else if (msg == NC_MSG_ERROR || !op) {
         ERR("Session %u: failed to receive a reply to <get-schema>.", clb_data->session->id);
-        return NULL;
+        goto cleanup;
     }
 
-    switch (reply->type) {
-    case NC_RPL_OK:
-        ERR("Session %u: unexpected reply OK to a <get-schema> RPC.", clb_data->session->id);
-        nc_reply_free(reply);
-        return NULL;
-    case NC_RPL_DATA:
-        /* fine */
-        break;
-    case NC_RPL_ERROR:
-        error_rpl = (struct nc_reply_error *)reply;
-        if (error_rpl->count) {
-            ERR("Session %u: error reply to a <get-schema> RPC (tag \"%s\", message \"%s\").",
-                clb_data->session->id, error_rpl->err[0].tag, error_rpl->err[0].message);
-        } else {
-            ERR("Session %u: unexpected reply error to a <get-schema> RPC.", clb_data->session->id);
-        }
-        nc_reply_free(reply);
-        return NULL;
-    case NC_RPL_NOTIF:
-        ERR("Session %u: unexpected reply notification to a <get-schema> RPC.", clb_data->session->id);
-        nc_reply_free(reply);
-        return NULL;
-    }
-
-    data_rpl = (struct nc_reply_data *)reply;
-    if (!data_rpl->data || (data_rpl->data->schema->nodetype != LYS_RPC) || strcmp(data_rpl->data->schema->name, "get-schema")
-            || !data_rpl->data->child || (data_rpl->data->child->schema->nodetype != LYS_ANYXML)) {
+    if (!lyd_child(op) || (lyd_child(op)->schema->nodetype != LYS_ANYXML)) {
         ERR("Session %u: unexpected data in reply to a <get-schema> RPC.", clb_data->session->id);
-        nc_reply_free(reply);
-        return NULL;
+        goto cleanup;
     }
-    get_schema_data = (struct lyd_node_anydata *)data_rpl->data->child;
+    get_schema_data = (struct lyd_node_any *)lyd_child(op);
     switch (get_schema_data->value_type) {
-    case LYD_ANYDATA_CONSTSTRING:
     case LYD_ANYDATA_STRING:
+    case LYD_ANYDATA_XML:
         model_data = strdup(get_schema_data->value.str);
         break;
     case LYD_ANYDATA_DATATREE:
-        lyd_print_mem(&model_data, get_schema_data->value.tree, LYD_XML, LYP_WITHSIBLINGS);
-        break;
-    case LYD_ANYDATA_XML:
-        lyxml_print_mem(&model_data, get_schema_data->value.xml, LYXML_PRINT_SIBLINGS);
+        lyd_print_mem(&model_data, get_schema_data->value.tree, LYD_XML, LYD_PRINT_WITHSIBLINGS);
         break;
     case LYD_ANYDATA_JSON:
-    case LYD_ANYDATA_JSOND:
-    case LYD_ANYDATA_SXML:
-    case LYD_ANYDATA_SXMLD:
     case LYD_ANYDATA_LYB:
-    case LYD_ANYDATA_LYBD:
         ERRINT;
-        nc_reply_free(reply);
+        break;
     }
-    nc_reply_free(reply);
 
     if (model_data && !model_data[0]) {
         /* empty data */
@@ -468,8 +429,8 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
     if (model_data) {
         *format = LYS_IN_YANG;
         if (client_opts.schema_searchpath) {
-            if (asprintf(&localfile, "%s/%s%s%s.yang", client_opts.schema_searchpath, name,
-                         rev ? "@" : "", rev ? rev : "") == -1) {
+            if (asprintf(&localfile, "%s/%s%s%s.yang", client_opts.schema_searchpath, name, rev ? "@" : "",
+                    rev ? rev : "") == -1) {
                 ERRMEM;
             } else {
                 f = fopen(localfile, "w");
@@ -485,6 +446,9 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
         }
     }
 
+cleanup:
+    lyd_free_tree(envp);
+    lyd_free_tree(op);
     return model_data;
 }
 
@@ -494,9 +458,10 @@ static void free_with_user_data(void *data, void *user_data)
     (void)user_data;
 }
 
-static const char *
+static LY_ERR
 retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *submod_name, const char *sub_rev,
-                     void *user_data, LYS_INFORMAT *format, void (**free_module_data)(void *model_data, void *user_data))
+        void *user_data, LYS_INFORMAT *format, const char **module_data,
+        void (**free_module_data)(void *model_data, void *user_data))
 {
     struct clb_data_s *clb_data = (struct clb_data_s *)user_data;
     unsigned int u, v, match = 1;
@@ -540,7 +505,7 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *subm
                 if (!rev) {
                     ERR("Session %u: requested submodule \"%s\" is not known for schema \"%s\" on server side.",
                         clb_data->session->id, submod_name, mod_name);
-                    return NULL;
+                    return LY_ENOTFOUND;
                 }
             }
         }
@@ -549,7 +514,7 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *subm
         rev = mod_rev;
     }
 
-    VRB("Session %u: retreiving data for schema \"%s\", revision \"%s\".", clb_data->session->id, name, rev ? rev : "<latest>");
+    VRB("Session %u: retrieving data for schema \"%s\", revision \"%s\".", clb_data->session->id, name, rev ? rev : "<latest>");
 
     if (match) {
         /* we have enough information to avoid communication with server and try to get
@@ -583,16 +548,18 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *subm
     /* 3. try to use user callback */
     if (!model_data && clb_data->user_clb) {
         VRB("Session %u: reading schema via user callback.", clb_data->session->id);
-        return clb_data->user_clb(mod_name, mod_rev, submod_name, sub_rev, clb_data->user_data, format, free_module_data);
+        clb_data->user_clb(mod_name, mod_rev, submod_name, sub_rev, clb_data->user_data, format,
+                (const char **)&model_data, free_module_data);
     }
 
     *free_module_data = free_with_user_data;
-    return model_data;
+    *module_data = model_data;
+    return (*module_data ? LY_SUCCESS : LY_ENOTFOUND);
 }
 
 static int
 nc_ctx_load_module(struct nc_session *session, const char *name, const char *revision, struct schema_info *schemas,
-                   ly_module_imp_clb user_clb, void *user_data, int has_get_schema, const struct lys_module **mod)
+        ly_module_imp_clb user_clb, void *user_data, int has_get_schema, struct lys_module **mod)
 {
     int ret = 0;
     struct ly_err_item *eitem;
@@ -603,12 +570,12 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
 
     *mod = NULL;
     if (revision) {
-        *mod = ly_ctx_get_module(session->ctx, name, revision, 0);
+        *mod = ly_ctx_get_module(session->ctx, name, revision);
     }
     if (*mod) {
         if (!(*mod)->implemented) {
             /* make the present module implemented */
-            if (lys_set_implemented(*mod)) {
+            if (lys_set_implemented(*mod, NULL)) {
                 ERR("Failed to implement model \"%s\".", (*mod)->name);
                 ret = -1;
             }
@@ -626,15 +593,15 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
         ly_log_options(LY_LOSTORE);
 
         /* get module data */
-        module_data = retrieve_schema_data(name, revision, NULL, NULL, &clb_data, &format, &free_module_data);
+        retrieve_schema_data(name, revision, NULL, NULL, &clb_data, &format, &module_data, &free_module_data);
 
         if (module_data) {
             /* parse the schema */
             ly_ctx_set_module_imp_clb(session->ctx, retrieve_schema_data, &clb_data);
 
-            *mod = lys_parse_mem(session->ctx, module_data, format);
+            lys_parse_mem(session->ctx, module_data, format, (const struct lys_module **)mod);
             if (*free_module_data) {
-                (*free_module_data)((char*)module_data, user_data);
+                (*free_module_data)((char *)module_data, user_data);
             }
 
             ly_ctx_set_module_imp_clb(session->ctx, NULL, NULL);
@@ -644,14 +611,14 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
         ly_log_options(LY_LOLOG | LY_LOSTORE_LAST);
         if (!(*mod)) {
             for (eitem = ly_err_first(session->ctx); eitem && eitem->next; eitem = eitem->next) {
-                ly_err_print(eitem);
+                ly_err_print(session->ctx, eitem);
             }
             ret = -1;
         } else {
             /* print only warnings */
             for (eitem = ly_err_first(session->ctx); eitem && eitem->next; eitem = eitem->next) {
                 if (eitem->level == LY_LLWRN) {
-                    ly_err_print(eitem);
+                    ly_err_print(session->ctx, eitem);
                 }
             }
         }
@@ -666,7 +633,7 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
 static void
 free_schema_info(struct schema_info *list)
 {
-    unsigned int u, v;
+    uint32_t u, v;
 
     if (!list) {
         return;
@@ -675,10 +642,12 @@ free_schema_info(struct schema_info *list)
     for (u = 0; list[u].name; ++u) {
         free(list[u].name);
         free(list[u].revision);
-        for (v = 0; v < list[u].features.number; ++v) {
-            free(list[u].features.set.g[v]);
+        if (list[u].features) {
+            for (v = 0; list[u].features[v]; ++v) {
+                free(list[u].features[v]);
+            }
+            free(list[u].features);
         }
-        free(list[u].features.set.g);
         if (list[u].submodules) {
             for (v = 0; list[u].submodules[v].name; ++v) {
                 free(list[u].submodules[v].name);
@@ -695,22 +664,24 @@ static int
 build_schema_info_yl(struct nc_session *session, struct schema_info **result)
 {
     struct nc_rpc *rpc = NULL;
-    struct nc_reply *reply = NULL;
-    struct nc_reply_error *error_rpl;
-    struct lyd_node *yldata = NULL;
+    struct lyd_node *op = NULL, *envp = NULL;
+    struct lyd_node_any *data;
     NC_MSG_TYPE msg;
     uint64_t msgid;
     struct ly_set *modules = NULL;
-    unsigned int u, v, submodules_count;
+    uint32_t u, v, submodules_count, feature_count;
     struct lyd_node *iter, *child;
     struct lys_module *mod;
     int ret = EXIT_SUCCESS;
 
     /* get yang-library data from the server */
     if (nc_session_cpblt(session, "urn:ietf:params:netconf:capability:xpath:1.0")) {
-        rpc = nc_rpc_get("/ietf-yang-library:*", 0, NC_PARAMTYPE_CONST);
+        rpc = nc_rpc_getdata("ietf-datastores:operational", "/ietf-yang-library:*", "false", NULL, 0, 0, 0, 0, 0,
+                NC_PARAMTYPE_CONST);
     } else {
-        rpc = nc_rpc_get("<modules-state xmlns=\"urn:ietf:params:xml:ns:yang:ietf-yang-library\"/>", 0, NC_PARAMTYPE_CONST);
+        rpc = nc_rpc_getdata("ietf-datastores:operational",
+                "<modules-state xmlns=\"urn:ietf:params:xml:ns:yang:ietf-yang-library\"/>", "false", NULL, 0, 0, 0, 0,
+                0, NC_PARAMTYPE_CONST);
     }
     if (!rpc) {
         goto cleanup;
@@ -726,76 +697,71 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
     }
 
     do {
-        msg = nc_recv_reply(session, rpc, msgid, NC_READ_ACT_TIMEOUT * 1000, 0, &reply);
+        lyd_free_tree(envp);
+        lyd_free_tree(op);
+
+        msg = nc_recv_reply(session, rpc, msgid, NC_READ_ACT_TIMEOUT * 1000, &envp, &op);
     } while (msg == NC_MSG_NOTIF || msg == NC_MSG_REPLY_ERR_MSGID);
     if (msg == NC_MSG_WOULDBLOCK) {
         WRN("Session %u: timeout for receiving reply to a <get> yang-library data expired.", session->id);
         goto cleanup;
-    } else if (msg == NC_MSG_ERROR || reply == NULL) {
+    } else if (msg == NC_MSG_ERROR) {
         WRN("Session %u: failed to receive a reply to <get> of yang-library data.", session->id);
         goto cleanup;
-    }
-
-    switch (reply->type) {
-    case NC_RPL_OK:
-        WRN("Session %u: unexpected reply OK to a yang-library <get> RPC.", session->id);
-        goto cleanup;
-    case NC_RPL_DATA:
-        /* fine */
-        break;
-    case NC_RPL_ERROR:
-        error_rpl = (struct nc_reply_error *)reply;
-        if (error_rpl->count) {
-            WRN("Session %u: error reply to a yang-library <get> RPC (tag \"%s\", message \"%s\").",
-                session->id, error_rpl->err[0].tag, error_rpl->err[0].message);
-        } else {
-            WRN("Session %u: unexpected reply error to a yang-library <get> RPC.", session->id);
-        }
-        goto cleanup;
-    case NC_RPL_NOTIF:
-        WRN("Session %u: unexpected reply notification to a yang-library <get> RPC.", session->id);
+    } else if (!op || !lyd_child(op) || strcmp(lyd_child(op)->schema->name, "data")) {
+        WRN("Session %u: unexpected reply without data to a yang-library <get> RPC.", session->id);
         goto cleanup;
     }
 
-    yldata = ((struct nc_reply_data *)reply)->data;
-    if (!yldata || strcmp(yldata->schema->module->name, "ietf-yang-library")) {
+    data = (struct lyd_node_any *)lyd_child(op);
+    if (data->value_type != LYD_ANYDATA_DATATREE) {
         WRN("Session %u: unexpected data in reply to a yang-library <get> RPC.", session->id);
         goto cleanup;
     }
 
-    modules = lyd_find_path(yldata, "/ietf-yang-library:modules-state/module");
-    if (!modules) {
+    if (lyd_find_xpath(data->value.tree, "/ietf-yang-library:modules-state/module", &modules)) {
         WRN("Session %u: no module information in reply to a yang-library <get> RPC.", session->id);
         goto cleanup;
     }
 
-    (*result) = calloc(modules->number + 1, sizeof **result);
+    (*result) = calloc(modules->count + 1, sizeof **result);
     if (!(*result)) {
         ERRMEM;
         ret = EXIT_FAILURE;
         goto cleanup;
     }
 
-    for (u = 0; u < modules->number; ++u) {
+    for (u = 0; u < modules->count; ++u) {
         submodules_count = 0;
-        mod = ((struct lyd_node *)modules->set.d[u])->schema->module;
-        LY_TREE_FOR(modules->set.d[u]->child, iter) {
+        feature_count = 0;
+        mod = ((struct lyd_node *)modules->dnodes[u])->schema->module;
+        LY_LIST_FOR(lyd_child(modules->dnodes[u]), iter) {
             if (iter->schema->module != mod) {
                 /* ignore node from other schemas (augments) */
                 continue;
             }
-            if (!((struct lyd_node_leaf_list *)iter)->value_str || !((struct lyd_node_leaf_list *)iter)->value_str[0]) {
+            if (!LYD_CANON_VALUE(iter) || !LYD_CANON_VALUE(iter)[0]) {
                 /* ignore empty nodes */
                 continue;
             }
             if (!strcmp(iter->schema->name, "name")) {
-                (*result)[u].name = strdup(((struct lyd_node_leaf_list *)iter)->value_str);
+                (*result)[u].name = strdup(LYD_CANON_VALUE(iter));
             } else if (!strcmp(iter->schema->name, "revision")) {
-                (*result)[u].revision = strdup(((struct lyd_node_leaf_list *)iter)->value_str);
+                (*result)[u].revision = strdup(LYD_CANON_VALUE(iter));
             } else if (!strcmp(iter->schema->name, "conformance-type")) {
-                (*result)[u].implemented = !strcmp(((struct lyd_node_leaf_list *)iter)->value_str, "implement");
+                (*result)[u].implemented = !strcmp(LYD_CANON_VALUE(iter), "implement");
             } else if (!strcmp(iter->schema->name, "feature")) {
-                ly_set_add(&(*result)[u].features, (void *)strdup(((struct lyd_node_leaf_list *)iter)->value_str), LY_SET_OPT_USEASLIST);
+                (*result)[u].features = nc_realloc((*result)[u].features, (feature_count + 2) * sizeof *(*result)[u].features);
+                if (!(*result)[u].features) {
+                    ERRMEM;
+                    free_schema_info(*result);
+                    *result = NULL;
+                    ret = EXIT_FAILURE;
+                    goto cleanup;
+                }
+                (*result)[u].features[feature_count] = strdup(LYD_CANON_VALUE(iter));
+                (*result)[u].features[feature_count + 1] = NULL;
+                ++feature_count;
             } else if (!strcmp(iter->schema->name, "submodule")) {
                 submodules_count++;
             }
@@ -811,16 +777,16 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
                 goto cleanup;
             } else {
                 v = 0;
-                LY_TREE_FOR(modules->set.d[u]->child, iter) {
-                    mod = ((struct lyd_node *)modules->set.d[u])->schema->module;
+                LY_LIST_FOR(lyd_child(modules->dnodes[u]), iter) {
+                    mod = modules->dnodes[u]->schema->module;
                     if (mod == iter->schema->module && !strcmp(iter->schema->name, "submodule")) {
-                        LY_TREE_FOR(iter->child, child) {
+                        LY_LIST_FOR(lyd_child(iter), child) {
                             if (mod != child->schema->module) {
                                 continue;
                             } else if (!strcmp(child->schema->name, "name")) {
-                                (*result)[u].submodules[v].name = strdup(((struct lyd_node_leaf_list *)child)->value_str);
+                                (*result)[u].submodules[v].name = strdup(LYD_CANON_VALUE(child));
                             } else if (!strcmp(child->schema->name, "revision")) {
-                                (*result)[u].submodules[v].name = strdup(((struct lyd_node_leaf_list *)child)->value_str);
+                                (*result)[u].submodules[v].revision = strdup(LYD_CANON_VALUE(child));
                             }
                         }
                     }
@@ -831,8 +797,9 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
 
 cleanup:
     nc_rpc_free(rpc);
-    nc_reply_free(reply);
-    ly_set_free(modules);
+    lyd_free_tree(envp);
+    lyd_free_tree(op);
+    ly_set_free(modules, NULL);
 
     if (session->status != NC_STATUS_RUNNING) {
         /* something bad heppened, discard the session */
@@ -846,7 +813,7 @@ cleanup:
 static int
 build_schema_info_cpblts(char **cpblts, struct schema_info **result)
 {
-    unsigned int u, v;
+    uint32_t u, v, feature_count;
     char *module_cpblt, *ptr, *ptr2;
 
     for (u = 0; cpblts[u]; ++u);
@@ -889,14 +856,22 @@ build_schema_info_cpblts(char **cpblts, struct schema_info **result)
         ptr = strstr(module_cpblt, "features=");
         if (ptr) {
             ptr += 9;
+            feature_count = 0;
             for (ptr2 = ptr; *ptr && *ptr != '&'; ++ptr) {
                 if (*ptr == ',') {
-                    ly_set_add(&(*result)[v].features, (void *)strndup(ptr2, ptr - ptr2), LY_SET_OPT_USEASLIST);
+                    (*result)[v].features = nc_realloc((*result)[v].features, (feature_count + 2) * sizeof *(*result)[v].features);
+                    (*result)[v].features[feature_count] = strndup(ptr2, ptr - ptr2);
+                    (*result)[v].features[feature_count + 1] = NULL;
+                    ++feature_count;
+
                     ptr2 = ptr + 1;
                 }
             }
             /* the last one */
-            ly_set_add(&(*result)[v].features, (void *)strndup(ptr2, ptr - ptr2), LY_SET_OPT_USEASLIST);
+            (*result)[v].features = nc_realloc((*result)[v].features, (feature_count + 2) * sizeof *(*result)[v].features);
+            (*result)[v].features[feature_count] = strndup(ptr2, ptr - ptr2);
+            (*result)[v].features[feature_count + 1] = NULL;
+            ++feature_count;
         }
         ++v;
     }
@@ -905,11 +880,12 @@ build_schema_info_cpblts(char **cpblts, struct schema_info **result)
 }
 
 static int
-nc_ctx_fill(struct nc_session *session, struct schema_info *modules, ly_module_imp_clb user_clb, void *user_data, int has_get_schema)
+nc_ctx_fill(struct nc_session *session, struct schema_info *modules, ly_module_imp_clb user_clb, void *user_data,
+        int has_get_schema)
 {
     int ret = EXIT_FAILURE;
-    const struct lys_module *mod;
-    unsigned int u, v;
+    struct lys_module *mod;
+    uint32_t u;
 
     for (u = 0; modules[u].name; ++u) {
         /* skip import-only modules */
@@ -931,33 +907,30 @@ nc_ctx_fill(struct nc_session *session, struct schema_info *modules, ly_module_i
             WRN("Failed to load schema \"%s@%s\".", modules[u].name, modules[u].revision ? modules[u].revision : "<latest>");
             session->flags |= NC_SESSION_CLIENT_NOT_STRICT;
         } else {
-            /* set features - first disable all to enable specified then */
-            lys_features_disable(mod, "*");
-            for (v = 0; v < modules[u].features.number; v++) {
-                lys_features_enable(mod, (const char*)modules[u].features.set.g[v]);
-            }
+            /* set the features */
+            lys_set_implemented(mod, (const char **)modules[u].features);
         }
     }
 
-    /* done */
+    /* success */
     ret = EXIT_SUCCESS;
 
 cleanup:
-
     return ret;
 }
 
 static int
-nc_ctx_fill_ietf_netconf(struct nc_session *session, struct schema_info *modules, ly_module_imp_clb user_clb, void *user_data, int has_get_schema)
+nc_ctx_fill_ietf_netconf(struct nc_session *session, struct schema_info *modules, ly_module_imp_clb user_clb,
+        void *user_data, int has_get_schema)
 {
-    unsigned int u, v;
-    const struct lys_module *ietfnc;
+    uint32_t u;
+    struct lys_module *ietfnc;
 
-    ietfnc = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL, 1);
+    ietfnc = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf");
     if (!ietfnc) {
         nc_ctx_load_module(session, "ietf-netconf", NULL, modules, user_clb, user_data, has_get_schema, &ietfnc);
         if (!ietfnc) {
-            ietfnc = lys_parse_mem(session->ctx, ietf_netconf_2013_09_29_yang, LYS_YANG);
+            lys_parse_mem(session->ctx, ietf_netconf_2013_09_29_yang, LYS_IN_YANG, (const struct lys_module **)&ietfnc);
         }
     }
     if (!ietfnc) {
@@ -971,10 +944,7 @@ nc_ctx_fill_ietf_netconf(struct nc_session *session, struct schema_info *modules
             continue;
         }
 
-        lys_features_disable(ietfnc, "*");
-        for (v = 0; v < modules[u].features.number; v++) {
-            lys_features_enable(ietfnc, (const char*)modules[u].features.set.g[v]);
-        }
+        lys_set_implemented(ietfnc, (const char **)modules[u].features);
     }
 
     return 0;
@@ -986,7 +956,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     int i, get_schema_support = 0, yanglib_support = 0, ret = -1;
     ly_module_imp_clb old_clb = NULL;
     void *old_data = NULL;
-    const struct lys_module *mod = NULL;
+    struct lys_module *mod = NULL;
     char *revision;
     struct schema_info *server_modules = NULL, *sm = NULL;
 
@@ -997,7 +967,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
 
     /* switch off default searchpath to use only our callback integrating modifying searchpath algorithm to limit
      * schemas only to those present on the server side */
-    ly_ctx_set_disable_searchdirs(session->ctx);
+    ly_ctx_set_options(session->ctx, LY_CTX_DISABLE_SEARCHDIRS);
 
     /* our callback is set later with appropriate data */
     ly_ctx_set_module_imp_clb(session->ctx, NULL, NULL);
@@ -1034,7 +1004,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     }
 
     /* get-schema is supported, load local ietf-netconf-monitoring so we can create <get-schema> RPCs */
-    if (get_schema_support && !lys_parse_mem(session->ctx, ietf_netconf_monitoring_2010_10_04_yang, LYS_YANG)) {
+    if (get_schema_support && lys_parse_mem(session->ctx, ietf_netconf_monitoring_2010_10_04_yang, LYS_IN_YANG, NULL)) {
         WRN("Session %u: loading NETCONF monitoring schema failed, cannot use <get-schema>.", session->id);
         get_schema_support = 0;
     }
@@ -1049,27 +1019,36 @@ nc_ctx_check_and_fill(struct nc_session *session)
         /* use get schema to get server's ietf-yang-library */
         revision = strstr(session->opts.client.cpblts[yanglib_support - 1], "revision=");
         if (!revision) {
-            WRN("Session %u: loading NETCONF ietf-yang-library schema failed, missing revision in NETCONF <hello> message.", session->id);
+            WRN("Session %u: loading NETCONF ietf-yang-library schema failed, missing revision in NETCONF <hello> message.",
+                    session->id);
             WRN("Session %u: unable to automatically use <get-schema>.", session->id);
             yanglib_support = 0;
         } else {
             revision = strndup(&revision[9], 10);
             if (nc_ctx_load_module(session, "ietf-yang-library", revision, server_modules, old_clb, old_data,
                     get_schema_support, &mod)) {
-                WRN("Session %u: loading NETCONF ietf-yang-library schema failed, unable to use it to learn all the supported modules.",
-                    session->id);
+                WRN("Session %u: loading NETCONF ietf-yang-library schema failed, unable to use it to learn all "
+                        "the supported modules.", session->id);
                 yanglib_support = 0;
             }
             if (strcmp(revision, "2019-01-04") >= 0) {
                 /* we also need ietf-datastores to be implemented */
                 if (nc_ctx_load_module(session, "ietf-datastores", NULL, server_modules, old_clb, old_data,
                         get_schema_support, &mod)) {
-                    WRN("Session %u: loading NETCONF ietf-datastores schema failed, unable to use yang-library"
-                        " to learn all the supported modules.", session->id);
+                    WRN("Session %u: loading NETCONF ietf-datastores schema failed, unable to use yang-library "
+                            "to learn all the supported modules.", session->id);
                     yanglib_support = 0;
                 }
             }
             free(revision);
+
+            /* ietf-netconf-nmda is needed to issue get-data */
+            if (nc_ctx_load_module(session, "ietf-netconf-nmda", NULL, server_modules, old_clb, old_data,
+                    get_schema_support, &mod)) {
+                WRN("Session %u: loading NETCONF ietf-netconf-nmda schema failed, unable to use get-data to retrieve "
+                        "yang-library data.", session->id);
+                yanglib_support = 0;
+            }
         }
     }
 
@@ -1080,7 +1059,8 @@ nc_ctx_check_and_fill(struct nc_session *session)
         } else if (!sm) {
             VRB("Session %u: trying to use capabilities instead of ietf-yang-library data.", session->id);
         } else {
-            /* prefer yang-library information, currently we have it from capabilities used for getting correct yang-library schema */
+            /* prefer yang-library information, currently we have it from capabilities used for getting correct
+             * yang-library schema */
             free_schema_info(server_modules);
             server_modules = sm;
         }
@@ -1094,7 +1074,8 @@ nc_ctx_check_and_fill(struct nc_session *session)
     ret = 0;
 
     if (session->flags & NC_SESSION_CLIENT_NOT_STRICT) {
-        WRN("Session %u: some models failed to be loaded, any data from these models (and any other unknown) will be ignored.", session->id);
+        WRN("Session %u: some models failed to be loaded, any data from these models (and any other unknown) will "
+                "be ignored.", session->id);
     }
 
 cleanup:
@@ -1102,7 +1083,7 @@ cleanup:
 
     /* set user callback back */
     ly_ctx_set_module_imp_clb(session->ctx, old_clb, old_data);
-    ly_ctx_unset_disable_searchdirs(session->ctx);
+    ly_ctx_unset_options(session->ctx, LY_CTX_DISABLE_SEARCHDIRS);
 
     return ret;
 }
@@ -1214,14 +1195,14 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
     }
     ctx = session->ctx;
 
-    session->path = lydict_insert(ctx, address, 0);
+    lydict_insert(ctx, address, 0, &session->path);
 
     username = strdup(pw->pw_name);
     if (username == NULL) {
         ERRMEM;
         goto fail;
     }
-    session->username = lydict_insert_zc(ctx, username);
+    lydict_insert_zc(ctx, username, &session->username);
 
     /* NETCONF handshake */
     if (nc_handshake_io(session) != NC_MSG_HELLO) {
@@ -1443,441 +1424,6 @@ error:
     return -1;
 }
 
-static NC_MSG_TYPE
-get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_elem **msg)
-{
-    char *ptr;
-    const char *str_msgid;
-    uint64_t cur_msgid;
-    struct lyxml_elem *xml;
-    struct nc_msg_cont *cont, **cont_ptr;
-    NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
-
-    /* try to get notification from the session's queue */
-    if (!msgid && session->opts.client.notifs) {
-        cont = session->opts.client.notifs;
-        session->opts.client.notifs = cont->next;
-
-        xml = cont->msg;
-        free(cont);
-
-        msgtype = NC_MSG_NOTIF;
-    }
-
-    /* try to get rpc-reply from the session's queue */
-    if (msgid && session->opts.client.replies) {
-        cont = session->opts.client.replies;
-        session->opts.client.replies = cont->next;
-
-        xml = cont->msg;
-        free(cont);
-
-        msgtype = NC_MSG_REPLY;
-    }
-
-    if (!msgtype) {
-        /* read message from wire */
-        msgtype = nc_read_msg_poll_io(session, timeout, &xml);
-    }
-
-    /* we read rpc-reply, want a notif */
-    if (!msgid && (msgtype == NC_MSG_REPLY)) {
-        cont_ptr = &session->opts.client.replies;
-        while (*cont_ptr) {
-            cont_ptr = &((*cont_ptr)->next);
-        }
-        *cont_ptr = malloc(sizeof **cont_ptr);
-        if (!*cont_ptr) {
-            ERRMEM;
-            lyxml_free(session->ctx, xml);
-            return NC_MSG_ERROR;
-        }
-        (*cont_ptr)->msg = xml;
-        (*cont_ptr)->next = NULL;
-    }
-
-    /* we read notif, want a rpc-reply */
-    if (msgid && (msgtype == NC_MSG_NOTIF)) {
-        cont_ptr = &session->opts.client.notifs;
-        while (*cont_ptr) {
-            cont_ptr = &((*cont_ptr)->next);
-        }
-        *cont_ptr = malloc(sizeof **cont_ptr);
-        if (!*cont_ptr) {
-            ERRMEM;
-            lyxml_free(session->ctx, xml);
-            return NC_MSG_ERROR;
-        }
-        (*cont_ptr)->msg = xml;
-        (*cont_ptr)->next = NULL;
-    }
-
-    switch (msgtype) {
-    case NC_MSG_NOTIF:
-        if (!msgid) {
-            *msg = xml;
-        }
-        break;
-
-    case NC_MSG_REPLY:
-        if (msgid) {
-            /* check message-id */
-            str_msgid = lyxml_get_attr(xml, "message-id", NULL);
-            if (!str_msgid) {
-                WRN("Session %u: received a <rpc-reply> without a message-id.", session->id);
-            } else {
-                cur_msgid = strtoul(str_msgid, &ptr, 10);
-                if (cur_msgid != msgid) {
-                    ERR("Session %u: received a <rpc-reply> with an unexpected message-id \"%s\".",
-                        session->id, str_msgid);
-                    msgtype = NC_MSG_REPLY_ERR_MSGID;
-                }
-            }
-            *msg = xml;
-        }
-        break;
-
-    case NC_MSG_HELLO:
-        ERR("Session %u: received another <hello> message.", session->id);
-        lyxml_free(session->ctx, xml);
-        msgtype = NC_MSG_ERROR;
-        break;
-
-    case NC_MSG_RPC:
-        ERR("Session %u: received <rpc> from a NETCONF server.", session->id);
-        lyxml_free(session->ctx, xml);
-        msgtype = NC_MSG_ERROR;
-        break;
-
-    default:
-        /* NC_MSG_WOULDBLOCK and NC_MSG_ERROR - pass it out;
-         * NC_MSG_NONE is not returned by nc_read_msg()
-         */
-        break;
-    }
-
-    return msgtype;
-}
-
-/* cannot strictly fail, but does not need to fill any error parameter at all */
-static void
-parse_rpc_error(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_err *err)
-{
-    struct lyxml_elem *iter, *next, *info;
-
-    LY_TREE_FOR(xml->child, iter) {
-        if (!iter->ns) {
-            if (iter->content) {
-                WRN("<rpc-error> child \"%s\" with value \"%s\" without namespace.", iter->name, iter->content);
-            } else {
-                WRN("<rpc-error> child \"%s\" without namespace.", iter->name);
-            }
-            continue;
-        } else if (strcmp(iter->ns->value, NC_NS_BASE)) {
-            if (iter->content) {
-                WRN("<rpc-error> child \"%s\" with value \"%s\" in an unknown namespace \"%s\".",
-                    iter->name, iter->content, iter->ns->value);
-            } else {
-                WRN("<rpc-error> child \"%s\" in an unknown namespace \"%s\".", iter->name, iter->ns->value);
-            }
-            continue;
-        }
-
-        if (!strcmp(iter->name, "error-type")) {
-            if (!iter->content || (strcmp(iter->content, "transport") && strcmp(iter->content, "rpc")
-                    && strcmp(iter->content, "protocol") && strcmp(iter->content, "application"))) {
-                WRN("<rpc-error> <error-type> unknown value \"%s\".", (iter->content ? iter->content : ""));
-            } else if (err->type) {
-                WRN("<rpc-error> <error-type> duplicated.");
-            } else {
-                err->type = lydict_insert(ctx, iter->content, 0);
-            }
-        } else if (!strcmp(iter->name, "error-tag")) {
-            if (!iter->content || (strcmp(iter->content, "in-use") && strcmp(iter->content, "invalid-value")
-                    && strcmp(iter->content, "too-big") && strcmp(iter->content, "missing-attribute")
-                    && strcmp(iter->content, "bad-attribute") && strcmp(iter->content, "unknown-attribute")
-                    && strcmp(iter->content, "missing-element") && strcmp(iter->content, "bad-element")
-                    && strcmp(iter->content, "unknown-element") && strcmp(iter->content, "unknown-namespace")
-                    && strcmp(iter->content, "access-denied") && strcmp(iter->content, "lock-denied")
-                    && strcmp(iter->content, "resource-denied") && strcmp(iter->content, "rollback-failed")
-                    && strcmp(iter->content, "data-exists") && strcmp(iter->content, "data-missing")
-                    && strcmp(iter->content, "operation-not-supported") && strcmp(iter->content, "operation-failed")
-                    && strcmp(iter->content, "malformed-message"))) {
-                WRN("<rpc-error> <error-tag> unknown value \"%s\".", (iter->content ? iter->content : ""));
-            } else if (err->tag) {
-                WRN("<rpc-error> <error-tag> duplicated.");
-            } else {
-                err->tag = lydict_insert(ctx, iter->content, 0);
-            }
-        } else if (!strcmp(iter->name, "error-severity")) {
-            if (!iter->content || (strcmp(iter->content, "error") && strcmp(iter->content, "warning"))) {
-                WRN("<rpc-error> <error-severity> unknown value \"%s\".", (iter->content ? iter->content : ""));
-            } else if (err->severity) {
-                WRN("<rpc-error> <error-severity> duplicated.");
-            } else {
-                err->severity = lydict_insert(ctx, iter->content, 0);
-            }
-        } else if (!strcmp(iter->name, "error-app-tag")) {
-            if (err->apptag) {
-                WRN("<rpc-error> <error-app-tag> duplicated.");
-            } else {
-                err->apptag = lydict_insert(ctx, (iter->content ? iter->content : ""), 0);
-            }
-        } else if (!strcmp(iter->name, "error-path")) {
-            if (err->path) {
-                WRN("<rpc-error> <error-path> duplicated.");
-            } else {
-                err->path = lydict_insert(ctx, (iter->content ? iter->content : ""), 0);
-            }
-        } else if (!strcmp(iter->name, "error-message")) {
-            if (err->message) {
-                WRN("<rpc-error> <error-message> duplicated.");
-            } else {
-                err->message_lang = lyxml_get_attr(iter, "xml:lang", NULL);
-                if (err->message_lang) {
-                    err->message_lang = lydict_insert(ctx, err->message_lang, 0);
-                } else {
-                    VRB("<rpc-error> <error-message> without the recommended \"xml:lang\" attribute.");
-                }
-                err->message = lydict_insert(ctx, (iter->content ? iter->content : ""), 0);
-            }
-        } else if (!strcmp(iter->name, "error-info")) {
-            LY_TREE_FOR_SAFE(iter->child, next, info) {
-                if (info->ns && !strcmp(info->ns->value, NC_NS_BASE)) {
-                    if (!strcmp(info->name, "session-id")) {
-                        if (err->sid) {
-                            WRN("<rpc-error> <error-info> <session-id> duplicated.");
-                        } else {
-                            err->sid = lydict_insert(ctx, (info->content ? info->content : ""), 0);
-                        }
-                    } else if (!strcmp(info->name, "bad-attribute")) {
-                        ++err->attr_count;
-                        err->attr = nc_realloc(err->attr, err->attr_count * sizeof *err->attr);
-                        if (!err->attr) {
-                            ERRMEM;
-                            return;
-                        }
-                        err->attr[err->attr_count - 1] = lydict_insert(ctx, (info->content ? info->content : ""), 0);
-                    } else if (!strcmp(info->name, "bad-element")) {
-                        ++err->elem_count;
-                        err->elem = nc_realloc(err->elem, err->elem_count * sizeof *err->elem);
-                        if (!err->elem) {
-                            ERRMEM;
-                            return;
-                        }
-                        err->elem[err->elem_count - 1] = lydict_insert(ctx, (info->content ? info->content : ""), 0);
-                    } else if (!strcmp(info->name, "bad-namespace")) {
-                        ++err->ns_count;
-                        err->ns = nc_realloc(err->ns, err->ns_count * sizeof *err->ns);
-                        if (!err->ns) {
-                            ERRMEM;
-                            return;
-                        }
-                        err->ns[err->ns_count - 1] = lydict_insert(ctx, (info->content ? info->content : ""), 0);
-                    } else {
-                        if (info->content) {
-                            WRN("<rpc-error> <error-info> unknown child \"%s\" with value \"%s\".",
-                                info->name, info->content);
-                        } else {
-                            WRN("<rpc-error> <error-info> unknown child \"%s\".", info->name);
-                        }
-                    }
-                } else {
-                    lyxml_unlink(ctx, info);
-                    ++err->other_count;
-                    err->other = nc_realloc(err->other, err->other_count * sizeof *err->other);
-                    if (!err->other) {
-                        ERRMEM;
-                        return;
-                    }
-                    err->other[err->other_count - 1] = info;
-                }
-            }
-        } else {
-            if (iter->content) {
-                WRN("<rpc-error> unknown child \"%s\" with value \"%s\".", iter->name, iter->content);
-            } else {
-                WRN("<rpc-error> unknown child \"%s\".", iter->name);
-            }
-        }
-    }
-}
-
-static struct nc_reply *
-parse_reply(struct ly_ctx *ctx, struct lyxml_elem *xml, struct nc_rpc *rpc, int parseroptions)
-{
-    struct lyxml_elem *iter;
-    struct lyd_node *data = NULL, *rpc_act = NULL;
-    struct nc_client_reply_error *error_rpl;
-    struct nc_reply_data *data_rpl;
-    struct nc_reply *reply = NULL;
-    struct nc_rpc_act_generic *rpc_gen;
-    int i, data_parsed = 0;
-
-    /* rpc-error */
-    if (xml->child && !strcmp(xml->child->name, "rpc-error") && xml->child->ns && !strcmp(xml->child->ns->value, NC_NS_BASE)) {
-        /* count and check elements */
-        i = 0;
-        LY_TREE_FOR(xml->child, iter) {
-            if (strcmp(iter->name, "rpc-error")) {
-                ERR("<rpc-reply> content mismatch (<rpc-error> and <%s>).", iter->name);
-                return NULL;
-            } else if (!iter->ns) {
-                ERR("<rpc-reply> content mismatch (<rpc-error> without namespace).");
-                return NULL;
-            } else if (strcmp(iter->ns->value, NC_NS_BASE)) {
-                ERR("<rpc-reply> content mismatch (<rpc-error> with NS \"%s\").", iter->ns->value);
-                return NULL;
-            }
-            ++i;
-        }
-
-        error_rpl = malloc(sizeof *error_rpl);
-        if (!error_rpl) {
-            ERRMEM;
-            return NULL;
-        }
-        error_rpl->type = NC_RPL_ERROR;
-        error_rpl->err = calloc(i, sizeof *error_rpl->err);
-        if (!error_rpl->err) {
-            ERRMEM;
-            free(error_rpl);
-            return NULL;
-        }
-        error_rpl->count = i;
-        error_rpl->ctx = ctx;
-        reply = (struct nc_reply *)error_rpl;
-
-        i = 0;
-        LY_TREE_FOR(xml->child, iter) {
-            parse_rpc_error(ctx, iter, error_rpl->err + i);
-            ++i;
-        }
-
-    /* ok */
-    } else if (xml->child && !strcmp(xml->child->name, "ok") && xml->child->ns && !strcmp(xml->child->ns->value, NC_NS_BASE)) {
-        if (xml->child->next) {
-            ERR("<rpc-reply> content mismatch (<ok> and <%s>).", xml->child->next->name);
-            return NULL;
-        }
-        reply = malloc(sizeof *reply);
-        if (!reply) {
-            ERRMEM;
-            return NULL;
-        }
-        reply->type = NC_RPL_OK;
-
-    /* some RPC output */
-    } else {
-        switch (rpc->type) {
-        case NC_RPC_ACT_GENERIC:
-            rpc_gen = (struct nc_rpc_act_generic *)rpc;
-
-            if (rpc_gen->has_data) {
-                rpc_act = lyd_dup(rpc_gen->content.data, 1);
-                if (!rpc_act) {
-                    ERR("Failed to duplicate a generic RPC/action.");
-                    return NULL;
-                }
-            } else {
-                rpc_act = lyd_parse_mem(ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | parseroptions, NULL);
-                if (!rpc_act) {
-                    ERR("Failed to parse a generic RPC/action XML.");
-                    return NULL;
-                }
-            }
-            break;
-
-        case NC_RPC_GETCONFIG:
-        case NC_RPC_GET:
-        case NC_RPC_GETDATA:
-            /* we should definitely have received at least an empty "data" element even on empty reply, but fine */
-            if (!xml->child || !xml->child->child) {
-                /* we did not receive any data */
-                data_rpl = malloc(sizeof *data_rpl);
-                if (!data_rpl) {
-                    ERRMEM;
-                    return NULL;
-                }
-                data_rpl->type = NC_RPL_DATA;
-                data_rpl->data = NULL;
-                return (struct nc_reply *)data_rpl;
-            }
-
-            /* special treatment */
-            ly_errno = 0;
-            data = lyd_parse_xml(ctx, &xml->child->child,
-                                 LYD_OPT_DESTRUCT | (rpc->type == NC_RPC_GETCONFIG ? LYD_OPT_GETCONFIG : LYD_OPT_GET)
-                                 | parseroptions);
-            if (ly_errno) {
-                ERR("Failed to parse <%s> reply.", (rpc->type == NC_RPC_GETCONFIG ? "get-config" : "get"));
-                return NULL;
-            }
-            data_parsed = 1;
-            break;
-
-        case NC_RPC_GETSCHEMA:
-            rpc_act = lyd_new(NULL, ly_ctx_get_module(ctx, "ietf-netconf-monitoring", NULL, 1), "get-schema");
-            if (!rpc_act) {
-                ERRINT;
-                return NULL;
-            }
-            break;
-
-        case NC_RPC_EDIT:
-        case NC_RPC_COPY:
-        case NC_RPC_DELETE:
-        case NC_RPC_LOCK:
-        case NC_RPC_UNLOCK:
-        case NC_RPC_KILL:
-        case NC_RPC_COMMIT:
-        case NC_RPC_DISCARD:
-        case NC_RPC_CANCEL:
-        case NC_RPC_VALIDATE:
-        case NC_RPC_SUBSCRIBE:
-        case NC_RPC_EDITDATA:
-            /* there is no output defined */
-            ERR("Unexpected data reply (root elem \"%s\").", xml->child ? xml->child->name : NULL);
-            return NULL;
-        default:
-            ERRINT;
-            return NULL;
-        }
-
-        data_rpl = malloc(sizeof *data_rpl);
-        if (!data_rpl) {
-            ERRMEM;
-            return NULL;
-        }
-        data_rpl->type = NC_RPL_DATA;
-
-        ly_errno = 0;
-        if (!data_parsed) {
-            data_rpl->data = lyd_parse_xml(ctx, &xml->child, LYD_OPT_RPCREPLY | LYD_OPT_DESTRUCT | parseroptions,
-                                           rpc_act, NULL);
-            if (!ly_errno && !data_rpl->data->child) {
-                ERR("An empty data <rpc-reply>.");
-                lyd_free_withsiblings(rpc_act);
-                lyd_free(data_rpl->data);
-                free(data_rpl);
-                return NULL;
-            }
-        } else {
-            /* <get>, <get-config>, <get-data> */
-            data_rpl->data = data;
-        }
-        lyd_free_withsiblings(rpc_act);
-        if (ly_errno) {
-            ERR("Failed to parse <rpc-reply>.");
-            free(data_rpl);
-            return NULL;
-        }
-        reply = (struct nc_reply *)data_rpl;
-    }
-
-    return reply;
-}
-
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
 
 int
@@ -2083,11 +1629,250 @@ nc_client_destroy(void)
     nc_destroy();
 }
 
-API NC_MSG_TYPE
-nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout, int parseroptions, struct nc_reply **reply)
+static NC_MSG_TYPE
+recv_reply_check_msgid(struct nc_session *session, const struct lyd_node *envp, uint64_t msgid)
 {
-    struct lyxml_elem *xml = NULL;
-    NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
+    char *ptr;
+    struct lyd_attr *attr;
+    uint64_t cur_msgid;
+
+    assert(envp && !envp->schema);
+
+    /* find the message-id attribute */
+    LY_LIST_FOR(((struct lyd_node_opaq *)envp)->attr, attr) {
+        if (!strcmp(attr->name.name, "message-id")) {
+            break;
+        }
+    }
+
+    if (!attr) {
+        ERR("Session %u: received a <rpc-reply> without a message-id.", session->id);
+        return NC_MSG_REPLY_ERR_MSGID;
+    }
+
+    cur_msgid = strtoul(attr->value, &ptr, 10);
+    if (cur_msgid != msgid) {
+        ERR("Session %u: received a <rpc-reply> with an unexpected message-id %" PRIu64 " (expected %" PRIu64 ").",
+                session->id, cur_msgid, msgid);
+        return NC_MSG_REPLY_ERR_MSGID;
+    }
+
+    return NC_MSG_REPLY;
+}
+
+static NC_MSG_TYPE
+recv_reply(struct nc_session *session, int timeout, struct lyd_node *op, uint64_t msgid, struct lyd_node **envp)
+{
+    int r;
+    LY_ERR lyrc;
+    struct ly_in *msg = NULL;
+    struct nc_msg_cont *cont, **cont_ptr;
+    NC_MSG_TYPE ret = NC_MSG_ERROR;
+
+    assert(op && (op->schema->nodetype & (LYS_RPC | LYS_ACTION)));
+
+    *envp = NULL;
+
+    /* try to get rpc-reply from the session's queue */
+    while (session->opts.client.replies) {
+        cont = session->opts.client.replies;
+        session->opts.client.replies = cont->next;
+
+        msg = cont->msg;
+        free(cont);
+
+        /* parse */
+        lyrc = lyd_parse_op(NULL, op, msg, LYD_XML, LYD_TYPE_REPLY_NETCONF, envp, NULL);
+        if (!lyrc) {
+            ret = recv_reply_check_msgid(session, *envp, msgid);
+            goto cleanup;
+        } else if (lyrc != LY_ENOT) {
+            lyd_free_tree(*envp);
+            *envp = NULL;
+            ERR("Session %u: received an invalid message (%s).", session->id, ly_errmsg(LYD_CTX(op)));
+            goto cleanup;
+        } else {
+            /* it was not a notification so it is nothing known */
+            ERR("Session %u: received an unexpected message.", session->id);
+        }
+
+        /* try the next message */
+        ly_in_free(msg, 1);
+        msg = NULL;
+    }
+
+    /* read message from wire */
+    r = nc_read_msg_poll_io(session, timeout, &msg);
+    if (!r) {
+        ret = NC_MSG_WOULDBLOCK;
+        goto cleanup;
+    } else if (r == -1) {
+        goto cleanup;
+    }
+
+    /* parse */
+    lyrc = lyd_parse_op(NULL, op, msg, LYD_XML, LYD_TYPE_REPLY_NETCONF, envp, NULL);
+    if (!lyrc) {
+        ret = recv_reply_check_msgid(session, *envp, msgid);
+        goto cleanup;
+    } else if (lyrc != LY_ENOT) {
+        lyd_free_tree(*envp);
+        *envp = NULL;
+        ERR("Session %u: received an invalid message (%s).", session->id, ly_errmsg(LYD_CTX(op)));
+        goto cleanup;
+    }
+
+    /* assume a notification, store it */
+    cont_ptr = &session->opts.client.notifs;
+    while (*cont_ptr) {
+        cont_ptr = &((*cont_ptr)->next);
+    }
+    *cont_ptr = malloc(sizeof **cont_ptr);
+    if (!*cont_ptr) {
+        ERRMEM;
+        goto cleanup;
+    }
+    (*cont_ptr)->msg = msg;
+    (*cont_ptr)->next = NULL;
+
+    ret = NC_MSG_NOTIF;
+
+cleanup:
+    ly_in_free(msg, 1);
+    return ret;
+}
+
+static int
+recv_reply_dup_rpc(struct nc_session *session, struct nc_rpc *rpc, struct lyd_node **op)
+{
+    LY_ERR lyrc;
+    struct nc_rpc_act_generic *rpc_gen;
+    struct ly_in *in;
+    struct lyd_node *tree, *op2;
+    const struct lys_module *mod;
+    const char *module_name = NULL;
+    const char *rpc_name = NULL;
+
+    switch (rpc->type) {
+    case NC_RPC_ACT_GENERIC:
+        rpc_gen = (struct nc_rpc_act_generic *)rpc;
+        if (rpc_gen->has_data) {
+            tree = rpc_gen->content.data;
+
+            /* find the operation node */
+            lyrc = LY_EINVAL;
+            LYD_TREE_DFS_BEGIN(tree, op2) {
+                if (op2->schema->nodetype & (LYS_RPC | LYS_ACTION)) {
+                    lyrc = lyd_dup_single(op2, NULL, 0, op);
+                    break;
+                }
+                LYD_TREE_DFS_END(tree, op2);
+            }
+        } else {
+            ly_in_new_memory(rpc_gen->content.xml_str, &in);
+            lyrc = lyd_parse_op(session->ctx, NULL, in, LYD_XML, LYD_TYPE_RPC_YANG, &tree, &op2);
+            ly_in_free(in, 0);
+            if (lyrc) {
+                return -1;
+            }
+
+            /* we want just the operation node */
+            lyrc = lyd_dup_single(op2, NULL, 0, op);
+
+            lyd_free_tree(tree);
+        }
+        break;
+    case NC_RPC_GETCONFIG:
+        module_name = "ietf-netconf";
+        rpc_name = "get-config";
+        break;
+    case NC_RPC_EDIT:
+        module_name = "ietf-netconf";
+        rpc_name = "edit-config";
+        break;
+    case NC_RPC_COPY:
+        module_name = "ietf-netconf";
+        rpc_name = "copy-config";
+        break;
+    case NC_RPC_DELETE:
+        module_name = "ietf-netconf";
+        rpc_name = "delete-config";
+        break;
+    case NC_RPC_LOCK:
+        module_name = "ietf-netconf";
+        rpc_name = "lock";
+        break;
+    case NC_RPC_UNLOCK:
+        module_name = "ietf-netconf";
+        rpc_name = "unlock";
+        break;
+    case NC_RPC_GET:
+        module_name = "ietf-netconf";
+        rpc_name = "get";
+        break;
+    case NC_RPC_KILL:
+        module_name = "ietf-netconf";
+        rpc_name = "kill-session";
+        break;
+    case NC_RPC_COMMIT:
+        module_name = "ietf-netconf";
+        rpc_name = "commit";
+        break;
+    case NC_RPC_DISCARD:
+        module_name = "ietf-netconf";
+        rpc_name = "discard-changes";
+        break;
+    case NC_RPC_CANCEL:
+        module_name = "ietf-netconf";
+        rpc_name = "cancel-commit";
+        break;
+    case NC_RPC_VALIDATE:
+        module_name = "ietf-netconf";
+        rpc_name = "validate";
+        break;
+    case NC_RPC_GETSCHEMA:
+        module_name = "ietf-netconf-monitoring";
+        rpc_name = "get-schema";
+        break;
+    case NC_RPC_SUBSCRIBE:
+        module_name = "notifications";
+        rpc_name = "subscribe";
+        break;
+    case NC_RPC_GETDATA:
+        module_name = "ietf-netconf-nmda";
+        rpc_name = "get-data";
+        break;
+    case NC_RPC_EDITDATA:
+        module_name = "ietf-netconf-nmda";
+        rpc_name = "edit-data";
+        break;
+    default:
+        lyrc = LY_EINT;
+        break;
+    }
+
+    if (module_name && rpc_name) {
+        mod = ly_ctx_get_module_implemented(session->ctx, module_name);
+        if (!mod) {
+            ERR("Session %u: missing \"%s\" schema in the context.", session->id, module_name);
+            return -1;
+        }
+
+        /* create the operation node */
+        lyrc = lyd_new_inner(NULL, mod, rpc_name, 0, op);
+    }
+
+    if (lyrc) {
+        return -1;
+    }
+    return 0;
+}
+
+API NC_MSG_TYPE
+nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, int timeout, struct lyd_node **envp,
+        struct lyd_node **op)
+{
+    NC_MSG_TYPE ret;
 
     if (!session) {
         ERRARG("session");
@@ -2098,101 +1883,133 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
     } else if (!msgid) {
         ERRARG("msgid");
         return NC_MSG_ERROR;
-    } else if (!reply) {
-        ERRARG("reply");
+    } else if (!envp) {
+        ERRARG("envp");
         return NC_MSG_ERROR;
-    } else if (parseroptions & LYD_OPT_TYPEMASK) {
-        ERRARG("parseroptions");
+    } else if (!op) {
+        ERRARG("op");
         return NC_MSG_ERROR;
     } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR("Session %u: invalid session to receive RPC replies.", session->id);
         return NC_MSG_ERROR;
     }
-    parseroptions &= ~(LYD_OPT_DESTRUCT | LYD_OPT_NOSIBLINGS);
-    if (!(session->flags & NC_SESSION_CLIENT_NOT_STRICT)) {
-        parseroptions &= LYD_OPT_STRICT;
+
+    /* get a duplicate of the RPC node to append reply to */
+    if (recv_reply_dup_rpc(session, rpc, op)) {
+        return NC_MSG_ERROR;
     }
-    /* no mechanism to check external dependencies is provided */
-    parseroptions|= LYD_OPT_NOEXTDEPS;
-    *reply = NULL;
 
-    msgtype = get_msg(session, timeout, msgid, &xml);
+    /* receive a reply */
+    ret = recv_reply(session, timeout, *op, msgid, envp);
 
-    if ((msgtype == NC_MSG_REPLY) || (msgtype == NC_MSG_REPLY_ERR_MSGID)) {
-        *reply = parse_reply(session->ctx, xml, rpc, parseroptions);
-        lyxml_free_withsiblings(session->ctx, xml);
-        xml = NULL;
-        if (!(*reply)) {
-            return NC_MSG_ERROR;
+    /* do not return the RPC copy on error or if the reply includes no data */
+    if (((ret != NC_MSG_REPLY) && (ret != NC_MSG_REPLY_ERR_MSGID)) || !lyd_child(*op)) {
+        lyd_free_tree(*op);
+        *op = NULL;
+    }
+    return ret;
+}
+
+static NC_MSG_TYPE
+recv_notif(struct nc_session *session, int timeout, struct lyd_node **envp, struct lyd_node **op)
+{
+    int r;
+    LY_ERR lyrc;
+    struct ly_in *msg = NULL;
+    struct nc_msg_cont *cont, **cont_ptr;
+    NC_MSG_TYPE ret = NC_MSG_ERROR;
+
+    *op = NULL;
+    *envp = NULL;
+
+    /* try to get notification from the session's queue */
+    while (session->opts.client.notifs) {
+        cont = session->opts.client.notifs;
+        session->opts.client.notifs = cont->next;
+
+        msg = cont->msg;
+        free(cont);
+
+        /* parse */
+        lyrc = lyd_parse_op(session->ctx, NULL, msg, LYD_XML, LYD_TYPE_NOTIF_NETCONF, envp, op);
+        if (!lyrc) {
+            ret = NC_MSG_NOTIF;
+            goto cleanup;
+        } else if (lyrc != LY_ENOT) {
+            lyd_free_tree(*envp);
+            *envp = NULL;
+            ERR("Session %u: received an invalid message (%s).", session->id, ly_errmsg(session->ctx));
+            goto cleanup;
+        } else {
+            /* it was not a rpc-reply so it is nothing known */
+            ERR("Session %u: received an unexpected message.", session->id);
         }
-    }
-    assert(!xml);
 
-    return msgtype;
+        /* try the next message */
+        ly_in_free(msg, 1);
+        msg = NULL;
+    }
+
+    /* read message from wire */
+    r = nc_read_msg_poll_io(session, timeout, &msg);
+    if (!r) {
+        ret = NC_MSG_WOULDBLOCK;
+        goto cleanup;
+    } else if (r == -1) {
+        goto cleanup;
+    }
+
+    /* parse */
+    lyrc = lyd_parse_op(session->ctx, NULL, msg, LYD_XML, LYD_TYPE_NOTIF_NETCONF, envp, op);
+    if (!lyrc) {
+        ret = NC_MSG_NOTIF;
+        goto cleanup;
+    } else if (lyrc != LY_ENOT) {
+        lyd_free_tree(*envp);
+        *envp = NULL;
+        ERR("Session %u: received an invalid message (%s).", session->id, ly_errmsg(session->ctx));
+        goto cleanup;
+    }
+
+    /* assume a rpc-reply, store it */
+    cont_ptr = &session->opts.client.replies;
+    while (*cont_ptr) {
+        cont_ptr = &((*cont_ptr)->next);
+    }
+    *cont_ptr = malloc(sizeof **cont_ptr);
+    if (!*cont_ptr) {
+        ERRMEM;
+        goto cleanup;
+    }
+    (*cont_ptr)->msg = msg;
+    (*cont_ptr)->next = NULL;
+
+    ret = NC_MSG_REPLY;
+
+cleanup:
+    ly_in_free(msg, 1);
+    return ret;
 }
 
 API NC_MSG_TYPE
-nc_recv_notif(struct nc_session *session, int timeout, struct nc_notif **notif)
+nc_recv_notif(struct nc_session *session, int timeout, struct lyd_node **envp, struct lyd_node **op)
 {
-    struct lyxml_elem *xml, *ev_time;
-    NC_MSG_TYPE msgtype = 0; /* NC_MSG_ERROR */
-
     if (!session) {
         ERRARG("session");
         return NC_MSG_ERROR;
-    } else if (!notif) {
-        ERRARG("notif");
+    } else if (!envp) {
+        ERRARG("envp");
+        return NC_MSG_ERROR;
+    } else if (!op) {
+        ERRARG("op");
         return NC_MSG_ERROR;
     } else if (session->status != NC_STATUS_RUNNING || session->side != NC_CLIENT) {
         ERR("Session %u: invalid session to receive Notifications.", session->id);
         return NC_MSG_ERROR;
     }
 
-    msgtype = get_msg(session, timeout, 0, &xml);
-
-    if (msgtype == NC_MSG_NOTIF) {
-        *notif = calloc(1, sizeof **notif);
-        if (!*notif) {
-            ERRMEM;
-            lyxml_free(session->ctx, xml);
-            return NC_MSG_ERROR;
-        }
-
-        /* eventTime */
-        LY_TREE_FOR(xml->child, ev_time) {
-            if (!strcmp(ev_time->name, "eventTime")) {
-                (*notif)->datetime = lydict_insert(session->ctx, ev_time->content, 0);
-                /* lyd_parse does not know this element */
-                lyxml_free(session->ctx, ev_time);
-                break;
-            }
-        }
-        if (!(*notif)->datetime) {
-            ERR("Session %u: notification is missing the \"eventTime\" element.", session->id);
-            goto fail;
-        }
-
-        /* notification body */
-        (*notif)->tree = lyd_parse_xml(session->ctx, &xml->child, LYD_OPT_NOTIF | LYD_OPT_DESTRUCT | LYD_OPT_TRUSTED
-                                       | (session->flags & NC_SESSION_CLIENT_NOT_STRICT ? 0 : LYD_OPT_STRICT), NULL);
-        lyxml_free(session->ctx, xml);
-        xml = NULL;
-        if (!(*notif)->tree) {
-            ERR("Session %u: failed to parse a new notification.", session->id);
-            goto fail;
-        }
-    }
-
-    return msgtype;
-
-fail:
-    lydict_remove(session->ctx, (*notif)->datetime);
-    lyd_free((*notif)->tree);
-    free(*notif);
-    *notif = NULL;
-    lyxml_free(session->ctx, xml);
-
-    return NC_MSG_ERROR;
+    /* receive a notification */
+    return recv_notif(session, timeout, envp, op);
 }
 
 static void *
@@ -2200,8 +2017,8 @@ nc_recv_notif_thread(void *arg)
 {
     struct nc_ntf_thread_arg *ntarg;
     struct nc_session *session;
-    void (*notif_clb)(struct nc_session *session, const struct nc_notif *notif);
-    struct nc_notif *notif;
+    void (*notif_clb)(struct nc_session *session, const struct lyd_node *envp, const struct lyd_node *op);
+    struct lyd_node *envp, *op;
     NC_MSG_TYPE msgtype;
     pthread_t *ntf_tid;
 
@@ -2216,15 +2033,16 @@ nc_recv_notif_thread(void *arg)
     ntf_tid = (pthread_t *)ATOMIC_LOAD(session->opts.client.ntf_tid);
 
     while (ATOMIC_LOAD(session->opts.client.ntf_tid)) {
-        msgtype = nc_recv_notif(session, NC_CLIENT_NOTIF_THREAD_SLEEP / 1000, &notif);
+        msgtype = nc_recv_notif(session, NC_CLIENT_NOTIF_THREAD_SLEEP / 1000, &envp, &op);
         if (msgtype == NC_MSG_NOTIF) {
-            notif_clb(session, notif);
-            if (!strcmp(notif->tree->schema->name, "notificationComplete")
-                    && !strcmp(notif->tree->schema->module->name, "nc-notifications")) {
-                nc_notif_free(notif);
+            notif_clb(session, envp, op);
+            if (!strcmp(op->schema->name, "notificationComplete") && !strcmp(op->schema->module->name, "nc-notifications")) {
+                lyd_free_tree(envp);
+                lyd_free_tree(op);
                 break;
             }
-            nc_notif_free(notif);
+            lyd_free_tree(envp);
+            lyd_free_tree(op);
         } else if ((msgtype == NC_MSG_ERROR) && (session->status != NC_STATUS_RUNNING)) {
             /* quit this thread once the session is broken */
             break;
@@ -2240,7 +2058,8 @@ nc_recv_notif_thread(void *arg)
 }
 
 API int
-nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_session *session, const struct nc_notif *notif))
+nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_session *session,
+        const struct lyd_node *envp, const struct lyd_node *op))
 {
     struct nc_ntf_thread_arg *ntarg;
     pthread_t *tid;
@@ -2289,11 +2108,31 @@ nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_s
     return 0;
 }
 
+static const char *
+nc_wd2str(NC_WD_MODE wd)
+{
+    switch (wd) {
+    case NC_WD_ALL:
+        return "report-all";
+    case NC_WD_ALL_TAG:
+        return "report-all-tagged";
+    case NC_WD_TRIM:
+        return "trim";
+    case NC_WD_EXPLICIT:
+        return "explicit";
+    default:
+        break;
+    }
+
+    return NULL;
+}
+
 API NC_MSG_TYPE
 nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_t *msgid)
 {
     NC_MSG_TYPE r;
     int dofree = 1;
+    struct ly_in *in;
     struct nc_rpc_act_generic *rpc_gen;
     struct nc_rpc_getconfig *rpc_gc;
     struct nc_rpc_edit *rpc_e;
@@ -2311,6 +2150,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     struct nc_rpc_editdata *rpc_editd;
     struct lyd_node *data, *node;
     const struct lys_module *mod = NULL, *ietfncwd;
+    LY_ERR lyrc;
     int i;
     char str[11];
     uint64_t cur_msgid;
@@ -2345,21 +2185,21 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_DISCARD:
     case NC_RPC_CANCEL:
     case NC_RPC_VALIDATE:
-        mod = ly_ctx_get_module(session->ctx, "ietf-netconf", NULL, 1);
+        mod = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf");
         if (!mod) {
             ERR("Session %u: missing \"ietf-netconf\" schema in the context.", session->id);
             return NC_MSG_ERROR;
         }
         break;
     case NC_RPC_GETSCHEMA:
-        mod = ly_ctx_get_module(session->ctx, "ietf-netconf-monitoring", NULL, 1);
+        mod = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-monitoring");
         if (!mod) {
             ERR("Session %u: missing \"ietf-netconf-monitoring\" schema in the context.", session->id);
             return NC_MSG_ERROR;
         }
         break;
     case NC_RPC_SUBSCRIBE:
-        mod = ly_ctx_get_module(session->ctx, "notifications", NULL, 1);
+        mod = ly_ctx_get_module_implemented(session->ctx, "notifications");
         if (!mod) {
             ERR("Session %u: missing \"notifications\" schema in the context.", session->id);
             return NC_MSG_ERROR;
@@ -2367,7 +2207,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         break;
     case NC_RPC_GETDATA:
     case NC_RPC_EDITDATA:
-        mod = ly_ctx_get_module(session->ctx, "ietf-netconf-nmda", NULL, 1);
+        mod = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-nmda");
         if (!mod) {
             ERR("Session %u: missing \"ietf-netconf-nmda\" schema in the context.", session->id);
             return NC_MSG_ERROR;
@@ -2386,9 +2226,10 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
             data = rpc_gen->content.data;
             dofree = 0;
         } else {
-            data = lyd_parse_mem(session->ctx, rpc_gen->content.xml_str, LYD_XML, LYD_OPT_RPC | LYD_OPT_NOEXTDEPS
-                                 | (session->flags & NC_SESSION_CLIENT_NOT_STRICT ? 0 : LYD_OPT_STRICT), NULL);
-            if (!data) {
+            ly_in_new_memory(rpc_gen->content.xml_str, &in);
+            lyrc = lyd_parse_op(session->ctx, NULL, in, LYD_XML, LYD_TYPE_RPC_YANG, &data, NULL);
+            ly_in_free(in, 0);
+            if (lyrc) {
                 return NC_MSG_ERROR;
             }
         }
@@ -2397,54 +2238,36 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_GETCONFIG:
         rpc_gc = (struct nc_rpc_getconfig *)rpc;
 
-        data = lyd_new(NULL, mod, "get-config");
-        node = lyd_new(data, mod, "source");
-        node = lyd_new_leaf(node, mod, ncds2str[rpc_gc->source], NULL);
-        if (!node) {
-            lyd_free(data);
+        lyd_new_inner(NULL, mod, "get-config", 0, &data);
+        lyd_new_inner(data, mod, "source", 0, &node);
+        if (lyd_new_term(node, mod, ncds2str[rpc_gc->source], NULL, 0, NULL)) {
+            lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
         if (rpc_gc->filter) {
             if (!rpc_gc->filter[0] || (rpc_gc->filter[0] == '<')) {
-                node = lyd_new_anydata(data, mod, "filter", rpc_gc->filter, LYD_ANYDATA_SXML);
-                lyd_insert_attr(node, NULL, "type", "subtree");
+                lyd_new_any(data, mod, "filter", rpc_gc->filter, 0, LYD_ANYDATA_XML, 0, &node);
+                lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "subtree", 0, NULL);
             } else {
-                node = lyd_new_anydata(data, mod, "filter", NULL, LYD_ANYDATA_CONSTSTRING);
-                lyd_insert_attr(node, NULL, "type", "xpath");
-                lyd_insert_attr(node, NULL, "select", rpc_gc->filter);
+                lyd_new_any(data, mod, "filter", NULL, 0, LYD_ANYDATA_STRING, 0, &node);
+                lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "xpath", 0, NULL);
+                lyd_new_meta(NULL, node, NULL, "ietf-netconf:select", rpc_gc->filter, 0, NULL);
             }
             if (!node) {
-                lyd_free(data);
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
 
         if (rpc_gc->wd_mode) {
-            ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL, 1);
+            ietfncwd = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-with-defaults");
             if (!ietfncwd) {
                 ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
-                lyd_free(data);
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
-            switch (rpc_gc->wd_mode) {
-            case NC_WD_UNKNOWN:
-                /* cannot get here */
-                break;
-            case NC_WD_ALL:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all");
-                break;
-            case NC_WD_ALL_TAG:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all-tagged");
-                break;
-            case NC_WD_TRIM:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "trim");
-                break;
-            case NC_WD_EXPLICIT:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "explicit");
-                break;
-            }
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, ietfncwd, "with-defaults", nc_wd2str(rpc_gc->wd_mode), 0, &node)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
@@ -2453,45 +2276,41 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_EDIT:
         rpc_e = (struct nc_rpc_edit *)rpc;
 
-        data = lyd_new(NULL, mod, "edit-config");
-        node = lyd_new(data, mod, "target");
-        node = lyd_new_leaf(node, mod, ncds2str[rpc_e->target], NULL);
-        if (!node) {
-            lyd_free(data);
+        lyd_new_inner(NULL, mod, "edit-config", 0, &data);
+        lyd_new_inner(data, mod, "target", 0, &node);
+        if (lyd_new_term(node, mod, ncds2str[rpc_e->target], NULL, 0, NULL)) {
+            lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
 
         if (rpc_e->default_op) {
-            node = lyd_new_leaf(data, mod, "default-operation", rpcedit_dfltop2str[rpc_e->default_op]);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "default-operation", rpcedit_dfltop2str[rpc_e->default_op], 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
 
         if (rpc_e->test_opt) {
-            node = lyd_new_leaf(data, mod, "test-option", rpcedit_testopt2str[rpc_e->test_opt]);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "test-option", rpcedit_testopt2str[rpc_e->test_opt], 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
 
         if (rpc_e->error_opt) {
-            node = lyd_new_leaf(data, mod, "error-option", rpcedit_erropt2str[rpc_e->error_opt]);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "error-option", rpcedit_erropt2str[rpc_e->error_opt], 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
 
         if (!rpc_e->edit_cont[0] || (rpc_e->edit_cont[0] == '<')) {
-            node = lyd_new_anydata(data, mod, "config", rpc_e->edit_cont, LYD_ANYDATA_SXML);
+            lyd_new_any(data, mod, "config", rpc_e->edit_cont, 0, LYD_ANYDATA_XML, 0, &node);
         } else {
-            node = lyd_new_leaf(data, mod, "url", rpc_e->edit_cont);
+            lyd_new_term(data, mod, "url", rpc_e->edit_cont, 0, &node);
         }
         if (!node) {
-            lyd_free(data);
+            lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
         break;
@@ -2499,59 +2318,42 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_COPY:
         rpc_cp = (struct nc_rpc_copy *)rpc;
 
-        data = lyd_new(NULL, mod, "copy-config");
-        node = lyd_new(data, mod, "target");
+        lyd_new_inner(NULL, mod, "copy-config", 0, &data);
+        lyd_new_inner(data, mod, "target", 0, &node);
         if (rpc_cp->url_trg) {
-            node = lyd_new_leaf(node, mod, "url", rpc_cp->url_trg);
+            lyd_new_term(node, mod, "url", rpc_cp->url_trg, 0, &node);
         } else {
-            node = lyd_new_leaf(node, mod, ncds2str[rpc_cp->target], NULL);
+            lyd_new_term(node, mod, ncds2str[rpc_cp->target], NULL, 0, &node);
         }
         if (!node) {
-            lyd_free(data);
+            lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
 
-        node = lyd_new(data, mod, "source");
+        lyd_new_inner(data, mod, "source", 0, &node);
         if (rpc_cp->url_config_src) {
             if (!rpc_cp->url_config_src[0] || (rpc_cp->url_config_src[0] == '<')) {
-                node = lyd_new_anydata(node, mod, "config", rpc_cp->url_config_src, LYD_ANYDATA_SXML);
+                lyd_new_any(node, mod, "config", rpc_cp->url_config_src, 0, LYD_ANYDATA_XML, 0, &node);
             } else {
-                node = lyd_new_leaf(node, mod, "url", rpc_cp->url_config_src);
+                lyd_new_term(node, mod, "url", rpc_cp->url_config_src, 0, &node);
             }
         } else {
-            node = lyd_new_leaf(node, mod, ncds2str[rpc_cp->source], NULL);
+            lyd_new_term(node, mod, ncds2str[rpc_cp->source], NULL, 0, &node);
         }
         if (!node) {
-            lyd_free(data);
+            lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
 
         if (rpc_cp->wd_mode) {
-            ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL, 1);
+            ietfncwd = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-with-defaults");
             if (!ietfncwd) {
                 ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
-                lyd_free(data);
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
-            switch (rpc_cp->wd_mode) {
-            case NC_WD_UNKNOWN:
-                /* cannot get here */
-                break;
-            case NC_WD_ALL:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all");
-                break;
-            case NC_WD_ALL_TAG:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all-tagged");
-                break;
-            case NC_WD_TRIM:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "trim");
-                break;
-            case NC_WD_EXPLICIT:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "explicit");
-                break;
-            }
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, ietfncwd, "with-defaults", nc_wd2str(rpc_cp->wd_mode), 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
@@ -2560,15 +2362,15 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_DELETE:
         rpc_del = (struct nc_rpc_delete *)rpc;
 
-        data = lyd_new(NULL, mod, "delete-config");
-        node = lyd_new(data, mod, "target");
+        lyd_new_inner(NULL, mod, "delete-config", 0, &data);
+        lyd_new_inner(data, mod, "target", 0, &node);
         if (rpc_del->url) {
-            node = lyd_new_leaf(node, mod, "url", rpc_del->url);
+            lyd_new_term(node, mod, "url", rpc_del->url, 0, &node);
         } else {
-            node = lyd_new_leaf(node, mod, ncds2str[rpc_del->target], NULL);
+            lyd_new_term(node, mod, ncds2str[rpc_del->target], NULL, 0, &node);
         }
         if (!node) {
-            lyd_free(data);
+            lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
         break;
@@ -2576,11 +2378,10 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_LOCK:
         rpc_lock = (struct nc_rpc_lock *)rpc;
 
-        data = lyd_new(NULL, mod, "lock");
-        node = lyd_new(data, mod, "target");
-        node = lyd_new_leaf(node, mod, ncds2str[rpc_lock->target], NULL);
-        if (!node) {
-            lyd_free(data);
+        lyd_new_inner(NULL, mod, "lock", 0, &data);
+        lyd_new_inner(data, mod, "target", 0, &node);
+        if (lyd_new_term(node, mod, ncds2str[rpc_lock->target], NULL, 0, NULL)) {
+            lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
         break;
@@ -2588,11 +2389,10 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_UNLOCK:
         rpc_lock = (struct nc_rpc_lock *)rpc;
 
-        data = lyd_new(NULL, mod, "unlock");
-        node = lyd_new(data, mod, "target");
-        node = lyd_new_leaf(node, mod, ncds2str[rpc_lock->target], NULL);
-        if (!node) {
-            lyd_free(data);
+        lyd_new_inner(NULL, mod, "unlock", 0, &data);
+        lyd_new_inner(data, mod, "target", 0, &data);
+        if (lyd_new_term(node, mod, ncds2str[rpc_lock->target], NULL, 0, NULL)) {
+            lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
         break;
@@ -2600,49 +2400,31 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_GET:
         rpc_g = (struct nc_rpc_get *)rpc;
 
-        data = lyd_new(NULL, mod, "get");
+        lyd_new_inner(NULL, mod, "get", 0, &data);
         if (rpc_g->filter) {
             if (!rpc_g->filter[0] || (rpc_g->filter[0] == '<')) {
-                node = lyd_new_anydata(data, mod, "filter", rpc_g->filter, LYD_ANYDATA_SXML);
-                lyd_insert_attr(node, NULL, "type", "subtree");
+                lyd_new_any(data, mod, "filter", rpc_g->filter, 0, LYD_ANYDATA_XML, 0, &node);
+                lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "subtree", 0, NULL);
             } else {
-                node = lyd_new_anydata(data, mod, "filter", NULL, LYD_ANYDATA_CONSTSTRING);
-                lyd_insert_attr(node, NULL, "type", "xpath");
-                lyd_insert_attr(node, NULL, "select", rpc_g->filter);
+                lyd_new_any(data, mod, "filter", NULL, 0, LYD_ANYDATA_STRING, 0, &node);
+                lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "xpath", 0, NULL);
+                lyd_new_meta(NULL, node, NULL, "ietf-netconf:select", rpc_g->filter, 0, NULL);
             }
             if (!node) {
-                lyd_free(data);
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
 
         if (rpc_g->wd_mode) {
-            ietfncwd = ly_ctx_get_module(session->ctx, "ietf-netconf-with-defaults", NULL, 1);
+            ietfncwd = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-with-defaults");
             if (!ietfncwd) {
                 ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
-                lyd_free(data);
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
-            switch (rpc_g->wd_mode) {
-            case NC_WD_ALL:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all");
-                break;
-            case NC_WD_ALL_TAG:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "report-all-tagged");
-                break;
-            case NC_WD_TRIM:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "trim");
-                break;
-            case NC_WD_EXPLICIT:
-                node = lyd_new_leaf(data, ietfncwd, "with-defaults", "explicit");
-                break;
-            default:
-                /* cannot get here */
-                node = NULL;
-                break;
-            }
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, ietfncwd, "with-defaults", nc_wd2str(rpc_g->wd_mode), 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
@@ -2651,11 +2433,10 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_KILL:
         rpc_k = (struct nc_rpc_kill *)rpc;
 
-        data = lyd_new(NULL, mod, "kill-session");
+        lyd_new_inner(NULL, mod, "kill-session", 0, &data);
         sprintf(str, "%u", rpc_k->sid);
-        node = lyd_new_leaf(data, mod, "session-id", str);
-        if (!node) {
-            lyd_free(data);
+        if (lyd_new_term(data, mod, "session-id", str, 0, NULL)) {
+            lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
         break;
@@ -2663,53 +2444,48 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_COMMIT:
         rpc_com = (struct nc_rpc_commit *)rpc;
 
-        data = lyd_new(NULL, mod, "commit");
+        lyd_new_inner(NULL, mod, "commit", 0, &data);
         if (rpc_com->confirmed) {
-            node = lyd_new_leaf(data, mod, "confirmed", NULL);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "confirmed", NULL, 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
 
         if (rpc_com->confirm_timeout) {
             sprintf(str, "%u", rpc_com->confirm_timeout);
-            node = lyd_new_leaf(data, mod, "confirm-timeout", str);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "confirm-timeout", str, 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
 
         if (rpc_com->persist) {
-            node = lyd_new_leaf(data, mod, "persist", rpc_com->persist);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "persist", rpc_com->persist, 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
 
         if (rpc_com->persist_id) {
-            node = lyd_new_leaf(data, mod, "persist-id", rpc_com->persist_id);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "persist-id", rpc_com->persist_id, 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
         break;
 
     case NC_RPC_DISCARD:
-        data = lyd_new(NULL, mod, "discard-changes");
+        lyd_new_inner(NULL, mod, "discard-changes", 0, &data);
         break;
 
     case NC_RPC_CANCEL:
         rpc_can = (struct nc_rpc_cancel *)rpc;
 
-        data = lyd_new(NULL, mod, "cancel-commit");
+        lyd_new_inner(NULL, mod, "cancel-commit", 0, &data);
         if (rpc_can->persist_id) {
-            node = lyd_new_leaf(data, mod, "persist-id", rpc_can->persist_id);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "persist-id", rpc_can->persist_id, 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
@@ -2718,19 +2494,19 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_VALIDATE:
         rpc_val = (struct nc_rpc_validate *)rpc;
 
-        data = lyd_new(NULL, mod, "validate");
-        node = lyd_new(data, mod, "source");
+        lyd_new_inner(NULL, mod, "validate", 0, &data);
+        lyd_new_inner(data, mod, "source", 0, &node);
         if (rpc_val->url_config_src) {
             if (!rpc_val->url_config_src[0] || (rpc_val->url_config_src[0] == '<')) {
-                node = lyd_new_anydata(node, mod, "config", rpc_val->url_config_src, LYD_ANYDATA_SXML);
+                lyd_new_any(node, mod, "config", rpc_val->url_config_src, 0, LYD_ANYDATA_XML, 0, &node);
             } else {
-                node = lyd_new_leaf(node, mod, "url", rpc_val->url_config_src);
+                lyd_new_term(node, mod, "url", rpc_val->url_config_src, 0, &node);
             }
         } else {
-            node = lyd_new_leaf(node, mod, ncds2str[rpc_val->source], NULL);
+            lyd_new_term(node, mod, ncds2str[rpc_val->source], NULL, 0, &node);
         }
         if (!node) {
-            lyd_free(data);
+            lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
         break;
@@ -2738,23 +2514,20 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_GETSCHEMA:
         rpc_gs = (struct nc_rpc_getschema *)rpc;
 
-        data = lyd_new(NULL, mod, "get-schema");
-        node = lyd_new_leaf(data, mod, "identifier", rpc_gs->identifier);
-        if (!node) {
-            lyd_free(data);
+        lyd_new_inner(NULL, mod, "get-schema", 0, &data);
+        if (lyd_new_term(data, mod, "identifier", rpc_gs->identifier, 0, NULL)) {
+            lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
         if (rpc_gs->version) {
-            node = lyd_new_leaf(data, mod, "version", rpc_gs->version);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "version", rpc_gs->version, 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
         if (rpc_gs->format) {
-            node = lyd_new_leaf(data, mod, "format", rpc_gs->format);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "format", rpc_gs->format, 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
@@ -2763,42 +2536,39 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_SUBSCRIBE:
         rpc_sub = (struct nc_rpc_subscribe *)rpc;
 
-        data = lyd_new(NULL, mod, "create-subscription");
+        lyd_new_inner(NULL, mod, "create-subscription", 0, &data);
         if (rpc_sub->stream) {
-            node = lyd_new_leaf(data, mod, "stream", rpc_sub->stream);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "stream", rpc_sub->stream, 0, &data)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
 
         if (rpc_sub->filter) {
             if (!rpc_sub->filter[0] || (rpc_sub->filter[0] == '<')) {
-                node = lyd_new_anydata(data, mod, "filter", rpc_sub->filter, LYD_ANYDATA_SXML);
-                lyd_insert_attr(node, NULL, "type", "subtree");
+                lyd_new_any(data, mod, "filter", rpc_sub->filter, 0, LYD_ANYDATA_XML, 0, &node);
+                lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "subtree", 0, NULL);
             } else {
-                node = lyd_new_anydata(data, mod, "filter", NULL, LYD_ANYDATA_CONSTSTRING);
-                lyd_insert_attr(node, NULL, "type", "xpath");
-                lyd_insert_attr(node, NULL, "select", rpc_sub->filter);
+                lyd_new_any(data, mod, "filter", NULL, 0, LYD_ANYDATA_STRING, 0, &node);
+                lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "xpath", 0, NULL);
+                lyd_new_meta(NULL, node, NULL, "ietf-netconf:select", rpc_sub->filter, 0, NULL);
             }
             if (!node) {
-                lyd_free(data);
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
 
         if (rpc_sub->start) {
-            node = lyd_new_leaf(data, mod, "startTime", rpc_sub->start);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "startTime", rpc_sub->start, 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
 
         if (rpc_sub->stop) {
-            node = lyd_new_leaf(data, mod, "stopTime", rpc_sub->stop);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "stopTime", rpc_sub->stop, 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
@@ -2807,75 +2577,53 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_GETDATA:
         rpc_getd = (struct nc_rpc_getdata *)rpc;
 
-        data = lyd_new(NULL, mod, "get-data");
-        node = lyd_new_leaf(data, mod, "datastore", rpc_getd->datastore);
-        if (!node) {
-            lyd_free(data);
+        lyd_new_inner(NULL, mod, "get-data", 0, &data);
+        if (lyd_new_term(data, mod, "datastore", rpc_getd->datastore, 0, NULL)) {
+            lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
         if (rpc_getd->filter) {
             if (!rpc_getd->filter[0] || (rpc_getd->filter[0] == '<')) {
-                node = lyd_new_anydata(data, mod, "subtree-filter", rpc_getd->filter, LYD_ANYDATA_SXML);
+                lyd_new_any(data, mod, "subtree-filter", rpc_getd->filter, 0, LYD_ANYDATA_XML, 0, &node);
             } else {
-                node = lyd_new_leaf(data, mod, "xpath-filter", rpc_getd->filter);
+                lyd_new_term(data, mod, "xpath-filter", rpc_getd->filter, 0, &node);
             }
             if (!node) {
-                lyd_free(data);
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
         if (rpc_getd->config_filter) {
-            node = lyd_new_leaf(data, mod, "config-filter", rpc_getd->config_filter);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "config-filter", rpc_getd->config_filter, 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
         for (i = 0; i < rpc_getd->origin_filter_count; ++i) {
-            node = lyd_new_leaf(data, mod, rpc_getd->negated_origin_filter ? "negated-origin-filter" : "origin-filter",
-                                rpc_getd->origin_filter[i]);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, rpc_getd->negated_origin_filter ? "negated-origin-filter" : "origin-filter",
+                    rpc_getd->origin_filter[i], 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
         if (rpc_getd->max_depth) {
             sprintf(str, "%u", rpc_getd->max_depth);
-            node = lyd_new_leaf(data, mod, "max-depth", str);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "max-depth", str, 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
         if (rpc_getd->with_origin) {
-            node = lyd_new_leaf(data, mod, "with-origin", NULL);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "with-origin", NULL, 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
 
         if (rpc_getd->wd_mode) {
-            switch (rpc_getd->wd_mode) {
-            case NC_WD_UNKNOWN:
-                /* cannot get here */
-                break;
-            case NC_WD_ALL:
-                /* "with-defaults" are used from a grouping so it belongs to the ietf-netconf-nmda module */
-                node = lyd_new_leaf(data, mod, "with-defaults", "report-all");
-                break;
-            case NC_WD_ALL_TAG:
-                node = lyd_new_leaf(data, mod, "with-defaults", "report-all-tagged");
-                break;
-            case NC_WD_TRIM:
-                node = lyd_new_leaf(data, mod, "with-defaults", "trim");
-                break;
-            case NC_WD_EXPLICIT:
-                node = lyd_new_leaf(data, mod, "with-defaults", "explicit");
-                break;
-            }
-            if (!node) {
-                lyd_free(data);
+            /* "with-defaults" are used from a grouping so it belongs to the ietf-netconf-nmda module */
+            if (lyd_new_term(data, mod, "with-defaults", nc_wd2str(rpc_getd->wd_mode), 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
@@ -2884,28 +2632,26 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_EDITDATA:
         rpc_editd = (struct nc_rpc_editdata *)rpc;
 
-        data = lyd_new(NULL, mod, "edit-data");
-        node = lyd_new_leaf(data, mod, "datastore", rpc_editd->datastore);
-        if (!node) {
-            lyd_free(data);
+        lyd_new_inner(NULL, mod, "edit-data", 0, &data);
+        if (lyd_new_term(data, mod, "datastore", rpc_editd->datastore, 0, NULL)) {
+            lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
 
         if (rpc_editd->default_op) {
-            node = lyd_new_leaf(data, mod, "default-operation", rpcedit_dfltop2str[rpc_editd->default_op]);
-            if (!node) {
-                lyd_free(data);
+            if (lyd_new_term(data, mod, "default-operation", rpcedit_dfltop2str[rpc_editd->default_op], 0, NULL)) {
+                lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
         }
 
         if (!rpc_editd->edit_cont[0] || (rpc_editd->edit_cont[0] == '<')) {
-            node = lyd_new_anydata(data, mod, "config", rpc_editd->edit_cont, LYD_ANYDATA_SXML);
+            lyd_new_any(data, mod, "config", rpc_editd->edit_cont, 0, LYD_ANYDATA_XML, 0, &node);
         } else {
-            node = lyd_new_leaf(data, mod, "url", rpc_editd->edit_cont);
+            lyd_new_term(data, mod, "url", rpc_editd->edit_cont, 0, &node);
         }
         if (!node) {
-            lyd_free(data);
+            lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
         break;
@@ -2920,10 +2666,9 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         return NC_MSG_ERROR;
     }
 
-    if (lyd_validate(&data, LYD_OPT_RPC | LYD_OPT_NOEXTDEPS
-                     | (session->flags & NC_SESSION_CLIENT_NOT_STRICT ? 0 : LYD_OPT_STRICT), NULL)) {
+    if (lyd_validate_op(data, NULL, LYD_TYPE_RPC_YANG, NULL)) {
         if (dofree) {
-            lyd_free(data);
+            lyd_free_tree(data);
         }
         return NC_MSG_ERROR;
     }
@@ -2933,7 +2678,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     cur_msgid = session->opts.client.msgid;
 
     if (dofree) {
-        lyd_free(data);
+        lyd_free_tree(data);
     }
 
     if (r == NC_MSG_RPC) {

@@ -53,8 +53,9 @@ test_nc_client_setting_schema_searchpath(void **state)
     assert_string_equal(path, "path1");
 }
 
-const char *test_clb(const char *mod_name, const char *mod_rev, const char *submod_name, const char *sub_rev,
-                      void *user_data, LYS_INFORMAT *format, void (**free_module_data)(void *model_data, void *user_data))
+LY_ERR
+test_clb(const char *mod_name, const char *mod_rev, const char *submod_name, const char *sub_rev, void *user_data,
+        LYS_INFORMAT *format, const char **model_data, void (**free_module_data)(void *model_data, void *user_data))
 {
     (void)mod_name;
     (void)mod_rev;
@@ -62,13 +63,15 @@ const char *test_clb(const char *mod_name, const char *mod_rev, const char *subm
     (void)sub_rev;
     (void)user_data;
     (void)format;
+    (void)model_data;
     (void)free_module_data;
 
-    return 0;
+    return LY_SUCCESS;
 }
 
-const char *test_clb1(const char *mod_name, const char *mod_rev, const char *submod_name, const char *sub_rev,
-                      void *user_data, LYS_INFORMAT *format, void (**free_module_data)(void *model_data, void *user_data))
+LY_ERR
+test_clb1(const char *mod_name, const char *mod_rev, const char *submod_name, const char *sub_rev, void *user_data,
+        LYS_INFORMAT *format, const char **model_data, void (**free_module_data)(void *model_data, void *user_data))
 {
     (void)mod_name;
     (void)mod_rev;
@@ -76,9 +79,10 @@ const char *test_clb1(const char *mod_name, const char *mod_rev, const char *sub
     (void)sub_rev;
     (void)user_data;
     (void)format;
+    (void)model_data;
     (void)free_module_data;
 
-    return 0;
+    return LY_SUCCESS;
 }
 
 static void

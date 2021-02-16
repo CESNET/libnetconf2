@@ -549,70 +549,84 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
 static struct nc_server_reply *
 nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(session))
 {
-    const char *identifier = NULL, *version = NULL, *format = NULL;
+    const char *identifier = NULL, *revision = NULL, *format = NULL;
     char *model_data = NULL;
-    const struct lys_module *module;
-    struct nc_server_error *err;
-    struct lyd_node *child, *data = NULL;
-    const struct lys_node *sdata = NULL;
+    struct ly_out *out;
+    const struct lys_module *module = NULL;
+    const struct lysp_submodule *submodule = NULL;
+    struct lyd_node *child, *err, *data = NULL;
+    LYS_OUTFORMAT outformat = 0;
 
-    LY_TREE_FOR(rpc->child, child) {
+    LY_LIST_FOR(lyd_child(rpc), child) {
         if (!strcmp(child->schema->name, "identifier")) {
-            identifier = ((struct lyd_node_leaf_list *)child)->value_str;
+            identifier = LYD_CANON_VALUE(child);
         } else if (!strcmp(child->schema->name, "version")) {
-            version = ((struct lyd_node_leaf_list *)child)->value_str;
-            if (version && version[0] == '\0') {
-                version = NULL;
+            revision = LYD_CANON_VALUE(child);
+            if (revision && revision[0] == '\0') {
+                revision = NULL;
             }
         } else if (!strcmp(child->schema->name, "format")) {
-            format = ((struct lyd_node_leaf_list *)child)->value_str;
+            format = LYD_CANON_VALUE(child);
         }
     }
-    VRB("Schema \"%s\" was requested.", identifier);
+    VRB("Schema \"%s@%s\" was requested.", identifier, revision ? revision : "<any>");
 
-    /* check version */
-    if (version && (strlen(version) != 10) && strcmp(version, "1.0")) {
-        err = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
+    /* check revision */
+    if (revision && (strlen(revision) != 10) && strcmp(revision, "1.0")) {
+        err = nc_err(server_opts.ctx, NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
         nc_err_set_msg(err, "The requested version is not supported.", "en");
         return nc_server_reply_err(err);
     }
 
-    /* check and get module with the name identifier */
-    module = ly_ctx_get_module(server_opts.ctx, identifier, version, 0);
-    if (!module) {
-        module = (const struct lys_module *)ly_ctx_get_submodule(server_opts.ctx, NULL, NULL, identifier, version);
+    if (revision) {
+        /* get specific module */
+        module = ly_ctx_get_module(server_opts.ctx, identifier, revision);
+        if (!module) {
+            submodule = ly_ctx_get_submodule(server_opts.ctx, identifier, revision);
+        }
+    } else {
+        /* try to get implemented, then latest module */
+        module = ly_ctx_get_module_implemented(server_opts.ctx, identifier);
+        if (!module) {
+            module = ly_ctx_get_module_latest(server_opts.ctx, identifier);
+        }
+        if (!module) {
+            submodule = ly_ctx_get_submodule_latest(server_opts.ctx, identifier);
+        }
     }
-    if (!module) {
-        err = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
+    if (!module && !submodule) {
+        err = nc_err(server_opts.ctx, NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
         nc_err_set_msg(err, "The requested schema was not found.", "en");
         return nc_server_reply_err(err);
     }
 
     /* check format */
     if (!format || !strcmp(format, "ietf-netconf-monitoring:yang")) {
-        lys_print_mem(&model_data, module, LYS_OUT_YANG, NULL, 0, 0);
+        outformat = LYS_OUT_YANG;
     } else if (!strcmp(format, "ietf-netconf-monitoring:yin")) {
-        lys_print_mem(&model_data, module, LYS_OUT_YIN, NULL, 0, 0);
+        outformat = LYS_OUT_YIN;
     } else {
-        err = nc_err(NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
+        err = nc_err(server_opts.ctx, NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
         nc_err_set_msg(err, "The requested format is not supported.", "en");
         return nc_server_reply_err(err);
     }
+
+    /* print */
+    ly_out_new_memory(&model_data, 0, &out);
+    if (module) {
+        lys_print_module(out, module, outformat, 0, 0);
+    } else {
+        lys_print_submodule(out, submodule, outformat, 0, 0);
+    }
+    ly_out_free(out, NULL, 0);
     if (!model_data) {
         ERRINT;
         return NULL;
     }
 
-    sdata = ly_ctx_get_node(server_opts.ctx, NULL, "/ietf-netconf-monitoring:get-schema/data", 1);
-    if (!sdata) {
-        ERRINT;
-        free(model_data);
-        return NULL;
-    }
-
-    data = lyd_new_path(NULL, server_opts.ctx, "/ietf-netconf-monitoring:get-schema/data", model_data,
-                        LYD_ANYDATA_STRING, LYD_PATH_OPT_OUTPUT);
-    if (!data || lyd_validate(&data, LYD_OPT_RPCREPLY, NULL)) {
+    lyd_new_path2(NULL, server_opts.ctx, "/ietf-netconf-monitoring:get-schema/data", model_data, LYD_ANYDATA_STRING,
+            LYD_NEW_PATH_OUTPUT, &data, NULL);
+    if (!data || lyd_validate_op(data, NULL, LYD_TYPE_REPLY_YANG, NULL)) {
         ERRINT;
         free(model_data);
         return NULL;
@@ -631,7 +645,7 @@ nc_clb_default_close_session(struct lyd_node *UNUSED(rpc), struct nc_session *se
 API int
 nc_server_init(struct ly_ctx *ctx)
 {
-    const struct lys_node *rpc;
+    struct lysc_node *rpc;
     pthread_rwlockattr_t  attr;
 
     if (!ctx) {
@@ -642,15 +656,18 @@ nc_server_init(struct ly_ctx *ctx)
     nc_init();
 
     /* set default <get-schema> callback if not specified */
-    rpc = ly_ctx_get_node(ctx, NULL, "/ietf-netconf-monitoring:get-schema", 0);
+    rpc = NULL;
+    if (ly_ctx_get_module_implemented(ctx, "ietf-netconf-monitoring")) {
+        rpc = (struct lysc_node *)lys_find_path(ctx, NULL, "/ietf-netconf-monitoring:get-schema", 0);
+    }
     if (rpc && !rpc->priv) {
-        lys_set_private(rpc, nc_clb_default_get_schema);
+        rpc->priv = nc_clb_default_get_schema;
     }
 
     /* set default <close-session> callback if not specififed */
-    rpc = ly_ctx_get_node(ctx, NULL, "/ietf-netconf:close-session", 0);
+    rpc = (struct lysc_node *)lys_find_path(ctx, NULL, "/ietf-netconf:close-session", 0);
     if (rpc && !rpc->priv) {
-        lys_set_private(rpc, nc_clb_default_close_session);
+        rpc->priv = nc_clb_default_close_session;
     }
 
     server_opts.ctx = ctx;
@@ -658,7 +675,7 @@ nc_server_init(struct ly_ctx *ctx)
     server_opts.new_session_id = 1;
     server_opts.new_client_id = 1;
 
-    errno=0;
+    errno = 0;
 
     if (pthread_rwlockattr_init(&attr) == 0) {
 #if defined(HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
@@ -775,7 +792,7 @@ nc_server_set_capability(const char *value)
         return EXIT_FAILURE;
     }
     server_opts.capabilities = new;
-    server_opts.capabilities[server_opts.capabilities_count - 1] = lydict_insert(server_opts.ctx, value, 0);
+    lydict_insert(server_opts.ctx, value, 0, &server_opts.capabilities[server_opts.capabilities_count - 1]);
 
     return EXIT_SUCCESS;
 }
@@ -1218,17 +1235,16 @@ nc_ps_session_count(struct nc_pollsession *ps)
 
 /* should be called holding the session RPC lock! IO lock will be acquired as needed
  * returns: NC_PSPOLL_ERROR,
- *          NC_PSPOLL_BAD_RPC,
+ *          NC_PSPOLL_TIMEOUT,
  *          NC_PSPOLL_BAD_RPC | NC_PSPOLL_REPLY_ERROR,
  *          NC_PSPOLL_RPC
  */
 static int
 nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_server_rpc **rpc)
 {
-    struct lyxml_elem *xml = NULL;
-    NC_MSG_TYPE msgtype;
+    struct ly_in *msg;
     struct nc_server_reply *reply = NULL;
-    int ret;
+    int r, ret;
 
     if (!session) {
         ERRARG("session");
@@ -1241,60 +1257,62 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
         return NC_PSPOLL_ERROR;
     }
 
-    msgtype = nc_read_msg_io(session, io_timeout, &xml, 0);
-
-    switch (msgtype) {
-    case NC_MSG_RPC:
-        *rpc = calloc(1, sizeof **rpc);
-        if (!*rpc) {
-            ERRMEM;
-            goto error;
-        }
-
-        ly_errno = LY_SUCCESS;
-        (*rpc)->tree = lyd_parse_xml(server_opts.ctx, &xml->child,
-                                     LYD_OPT_RPC | LYD_OPT_DESTRUCT | LYD_OPT_NOEXTDEPS | LYD_OPT_STRICT, NULL);
-        if (!(*rpc)->tree) {
-            /* parsing RPC failed */
-            reply = nc_server_reply_err(nc_err_libyang(server_opts.ctx));
-            ret = nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, xml, reply);
-            nc_server_reply_free(reply);
-            if (ret != NC_MSG_REPLY) {
-                ERR("Session %u: failed to write reply (%s).", session->id, nc_msgtype2str[ret]);
-            }
-            ret = NC_PSPOLL_REPLY_ERROR | NC_PSPOLL_BAD_RPC;
-        } else {
-            ret = NC_PSPOLL_RPC;
-        }
-        (*rpc)->root = xml;
-        break;
-    case NC_MSG_HELLO:
-        ERR("Session %u: received another <hello> message.", session->id);
-        ret = NC_PSPOLL_BAD_RPC;
-        goto error;
-    case NC_MSG_REPLY:
-        ERR("Session %u: received <rpc-reply> from a NETCONF client.", session->id);
-        ret = NC_PSPOLL_BAD_RPC;
-        goto error;
-    case NC_MSG_NOTIF:
-        ERR("Session %u: received <notification> from a NETCONF client.", session->id);
-        ret = NC_PSPOLL_BAD_RPC;
-        goto error;
-    default:
-        /* NC_MSG_ERROR,
-         * NC_MSG_WOULDBLOCK and NC_MSG_NONE is not returned by nc_read_msg_io()
-         */
-        ret = NC_PSPOLL_ERROR;
-        break;
+    /* get a message */
+    r = nc_read_msg_io(session, io_timeout, &msg, 0);
+    if (r == -2) {
+        /* malformed message */
+        ret = NC_PSPOLL_REPLY_ERROR;
+        reply = nc_server_reply_err(nc_err(server_opts.ctx, NC_ERR_MALFORMED_MSG));
+        goto send_reply;
+    } if (r == -1) {
+        return NC_PSPOLL_ERROR;
+    } else if (!r) {
+        return NC_PSPOLL_TIMEOUT;
     }
 
+    *rpc = calloc(1, sizeof **rpc);
+    if (!*rpc) {
+        ERRMEM;
+        ret = NC_PSPOLL_REPLY_ERROR;
+        goto cleanup;
+    }
+
+    /* parse the RPC */
+    if (lyd_parse_op(server_opts.ctx, NULL, msg, LYD_XML, LYD_TYPE_RPC_NETCONF, &(*rpc)->envp, &(*rpc)->rpc)) {
+        /* bad RPC received */
+        ret = NC_PSPOLL_REPLY_ERROR | NC_PSPOLL_BAD_RPC;
+
+        if ((*rpc)->envp) {
+            /* at least the envelopes were parsed */
+            reply = nc_server_reply_err(nc_err_libyang(server_opts.ctx));
+        } else if (session->version == NC_VERSION_11) {
+            /* completely malformed message, NETCONF version 1.1 defines sending error reply from the server (RFC 6241 sec. 3) */
+            reply = nc_server_reply_err(nc_err(server_opts.ctx, NC_ERR_MALFORMED_MSG));
+        }
+
+send_reply:
+        if (reply) {
+            r = nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, (*rpc)->envp, reply);
+            nc_server_reply_free(reply);
+            if (r != NC_MSG_REPLY) {
+                ERR("Session %u: failed to write reply (%s), terminating session.", session->id, nc_msgtype2str[r]);
+                if (session->status != NC_STATUS_INVALID) {
+                    session->status = NC_STATUS_INVALID;
+                    session->term_reason = NC_SESSION_TERM_OTHER;
+                }
+            }
+        }
+    } else {
+        ret = NC_PSPOLL_RPC;
+    }
+
+cleanup:
+    ly_in_free(msg, 1);
+    if (ret != NC_PSPOLL_RPC) {
+        nc_server_rpc_free(*rpc);
+        *rpc = NULL;
+    }
     return ret;
-
-error:
-    /* cleanup */
-    lyxml_free(server_opts.ctx, xml);
-
-    return NC_PSPOLL_ERROR;
 }
 
 API void
@@ -1312,7 +1330,7 @@ nc_server_notif_send(struct nc_session *session, struct nc_server_notif *notif, 
     if (!session || (session->side != NC_SERVER) || !session->opts.server.ntf_status) {
         ERRARG("session");
         return NC_MSG_ERROR;
-    } else if (!notif || !notif->tree || !notif->eventtime) {
+    } else if (!notif || !notif->ntf || !notif->eventtime) {
         ERRARG("notif");
         return NC_MSG_ERROR;
     }
@@ -1337,8 +1355,8 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, struct nc_se
 {
     nc_rpc_clb clb;
     struct nc_server_reply *reply;
-    struct lys_node *rpc_act = NULL;
-    struct lyd_node *next, *elem;
+    const struct lysc_node *rpc_act = NULL;
+    struct lyd_node *elem;
     int ret = 0;
     NC_MSG_TYPE r;
 
@@ -1347,17 +1365,17 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, struct nc_se
         return NC_PSPOLL_ERROR;
     }
 
-    if (rpc->tree->schema->nodetype == LYS_RPC) {
+    if (rpc->rpc->schema->nodetype == LYS_RPC) {
         /* RPC */
-        rpc_act = rpc->tree->schema;
+        rpc_act = rpc->rpc->schema;
     } else {
         /* action */
-        LY_TREE_DFS_BEGIN(rpc->tree, next, elem) {
+        LYD_TREE_DFS_BEGIN(rpc->rpc, elem) {
             if (elem->schema->nodetype == LYS_ACTION) {
                 rpc_act = elem->schema;
                 break;
             }
-            LY_TREE_DFS_END(rpc->tree, next, elem);
+            LYD_TREE_DFS_END(rpc->rpc, elem);
         }
         if (!rpc_act) {
             ERRINT;
@@ -1368,19 +1386,19 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, struct nc_se
     if (!rpc_act->priv) {
         if (!global_rpc_clb) {
             /* no callback, reply with a not-implemented error */
-            reply = nc_server_reply_err(nc_err(NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_PROT));
+            reply = nc_server_reply_err(nc_err(server_opts.ctx, NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_PROT));
         } else {
-          reply = global_rpc_clb(rpc->tree, session);
+          reply = global_rpc_clb(rpc->rpc, session);
         }
     } else {
         clb = (nc_rpc_clb)rpc_act->priv;
-        reply = clb(rpc->tree, session);
+        reply = clb(rpc->rpc, session);
     }
 
     if (!reply) {
-        reply = nc_server_reply_err(nc_err(NC_ERR_OP_FAILED, NC_ERR_TYPE_APP));
+        reply = nc_server_reply_err(nc_err(server_opts.ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP));
     }
-    r = nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, rpc->root, reply);
+    r = nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, rpc->envp, reply);
     if (reply->type == NC_RPL_ERROR) {
         ret |= NC_PSPOLL_REPLY_ERROR;
     }
@@ -1736,7 +1754,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                 cur_ps_session->state = NC_PS_STATE_NONE;
             }
         }
-        nc_server_rpc_free(rpc, server_opts.ctx);
+        nc_server_rpc_free(rpc);
 
         /* SESSION RPC UNLOCK */
         nc_session_rpc_unlock(cur_session, NC_SESSION_LOCK_TIMEOUT, __func__);
@@ -1828,8 +1846,7 @@ nc_accept_unix(struct nc_session *session, int sock)
 
     pw = getpwuid(uid);
     if (pw == NULL) {
-        ERR("Failed to find username for uid=%u (%s).\n", uid,
-            strerror(errno));
+        ERR("Failed to find username for uid=%u (%s).\n", uid, strerror(errno));
         close(sock);
         return -1;
     }
@@ -1840,7 +1857,7 @@ nc_accept_unix(struct nc_session *session, int sock)
         close(sock);
         return -1;
     }
-    session->username = lydict_insert_zc(server_opts.ctx, username);
+    lydict_insert_zc(server_opts.ctx, username, &session->username);
 
     session->ti.unixsock.sock = sock;
 
@@ -1884,7 +1901,7 @@ nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti)
         goto cleanup;
     }
     memset(&server_opts.endpts[server_opts.endpt_count - 1], 0, sizeof *server_opts.endpts);
-    server_opts.endpts[server_opts.endpt_count - 1].name = lydict_insert(server_opts.ctx, name, 0);
+    lydict_insert(server_opts.ctx, name, 0, &server_opts.endpts[server_opts.endpt_count - 1].name);
     server_opts.endpts[server_opts.endpt_count - 1].ti = ti;
     server_opts.endpts[server_opts.endpt_count - 1].ka.idle_time = 1;
     server_opts.endpts[server_opts.endpt_count - 1].ka.max_probes = 10;
@@ -1910,7 +1927,7 @@ nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti)
             goto cleanup;
         }
         server_opts.endpts[server_opts.endpt_count - 1].opts.ssh->auth_methods =
-            NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD | NC_SSH_AUTH_INTERACTIVE;
+                NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD | NC_SSH_AUTH_INTERACTIVE;
         server_opts.endpts[server_opts.endpt_count - 1].opts.ssh->auth_attempts = 3;
         server_opts.endpts[server_opts.endpt_count - 1].opts.ssh->auth_timeout = 30;
         break;
@@ -2167,7 +2184,7 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
 
     if (set_addr) {
         lydict_remove(server_opts.ctx, bind->address);
-        bind->address = lydict_insert(server_opts.ctx, address, 0);
+        lydict_insert(server_opts.ctx, address, 0, &bind->address);
     } else {
         bind->port = port;
     }
@@ -2371,7 +2388,7 @@ nc_accept(int timeout, struct nc_session **session)
     (*session)->status = NC_STATUS_STARTING;
     (*session)->ctx = server_opts.ctx;
     (*session)->flags = NC_SESSION_SHAREDCTX;
-    (*session)->host = lydict_insert_zc(server_opts.ctx, host);
+    lydict_insert_zc(server_opts.ctx, host, &(*session)->host);
     (*session)->port = port;
 
     /* sock gets assigned to session or closed */
@@ -2568,7 +2585,7 @@ nc_server_ch_add_client(const char *name)
     }
     client = &server_opts.ch_clients[server_opts.ch_client_count - 1];
 
-    client->name = lydict_insert(server_opts.ctx, name, 0);
+    lydict_insert(server_opts.ctx, name, 0, &client->name);
     client->id = ATOMIC_INC(server_opts.new_client_id);
     client->ch_endpts = NULL;
     client->ch_endpt_count = 0;
@@ -2712,7 +2729,7 @@ nc_server_ch_client_add_endpt(const char *client_name, const char *endpt_name, N
     endpt = &client->ch_endpts[client->ch_endpt_count - 1];
 
     memset(endpt, 0, sizeof *client->ch_endpts);
-    endpt->name = lydict_insert(server_opts.ctx, endpt_name, 0);
+    lydict_insert(server_opts.ctx, endpt_name, 0, &endpt->name);
     endpt->ti = ti;
     endpt->sock_pending = -1;
     endpt->ka.idle_time = 1;
@@ -2843,7 +2860,7 @@ nc_server_ch_client_endpt_set_address(const char *client_name, const char *endpt
     }
 
     lydict_remove(server_opts.ctx, endpt->address);
-    endpt->address = lydict_insert(server_opts.ctx, address, 0);
+    lydict_insert(server_opts.ctx, address, 0, &endpt->address);
 
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
@@ -3173,7 +3190,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, struct nc_session **session)
     (*session)->status = NC_STATUS_STARTING;
     (*session)->ctx = server_opts.ctx;
     (*session)->flags = NC_SESSION_SHAREDCTX;
-    (*session)->host = lydict_insert_zc(server_opts.ctx, ip_host);
+    lydict_insert_zc(server_opts.ctx, ip_host, &(*session)->host);
     (*session)->port = endpt->port;
 
     /* sock gets assigned to session or closed */

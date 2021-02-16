@@ -106,32 +106,33 @@ struct nc_server_reply *nc_server_reply_data(struct lyd_node *data, NC_WD_MODE w
 /**
  * @brief Create an ERROR rpc-reply object.
  *
- * @param[in] err Structure holding the error information. It will be freed with the returned object.
+ * @param[in] err Errors as opaque data node tree. It will be freed with the returned object.
  * @return rpc-reply object, NULL on error.
  */
-struct nc_server_reply *nc_server_reply_err(struct nc_server_error *err);
+struct nc_server_reply *nc_server_reply_err(struct lyd_node *err);
 
 /**
- * @brief Add another error to an ERROR rpc-reply object. It will be freed with the returned object.
+ * @brief Add another error opaque data node tree to an ERROR rpc-reply object.
  *
  * @param[in] reply ERROR reply to add to.
- * @param[in] err Structure holding the additional error information.
+ * @param[in] err Error as opaque data node tree. It will be freed with the returned object.
  * @return 0 on success, -1 on errror.
  */
-int nc_server_reply_add_err(struct nc_server_reply *reply, struct nc_server_error *err);
+int nc_server_reply_add_err(struct nc_server_reply *reply, struct lyd_node *err);
 
 /**
  * @brief Get last error from an ERROR rpy-reply object.
  *
  * @param[in] reply ERROR reply to read from.
- * @return Last error, NULL on failure.
+ * @return Last error opaque data tree, NULL on failure.
  */
-const struct nc_server_error *nc_server_reply_get_last_err(const struct nc_server_reply *reply);
+const struct lyd_node *nc_server_reply_get_last_err(const struct nc_server_reply *reply);
 
 /**
  * @brief Create a server error structure. Its \<error-message\> is filled with
  * a general description of the specific error.
  *
+ * @param[in] ctx libyang context to use.
  * @param[in] tag \<error-tag\> of the server error specified as #NC_ERR value. According to the tag, the
  * specific additional parameters are required:
  * - #NC_ERR_IN_USE
@@ -164,9 +165,9 @@ const struct nc_server_error *nc_server_reply_get_last_err(const struct nc_serve
  * - #NC_ERR_DATA_MISSING
  * - #NC_ERR_MALFORMED_MSG
  *   - no additional arguments
- * @return Server error structure, NULL on error.
+ * @return Opaque data node tree representing the error.
  */
-struct nc_server_error *nc_err(int tag, ...);
+struct lyd_node *nc_err(const struct ly_ctx *ctx, NC_ERR tag, ...);
 
 /**
  * @brief Create a server error structure based on libyang error.
@@ -175,122 +176,122 @@ struct nc_server_error *nc_err(int tag, ...);
  * NETCONF error structure based on internal libyang error information (ly_errno, ly_errmsg, ...)
  *
  * @param[in] ctx Libyang context to read the error from.
- * @return Server error structure, NULL on error.
+ * @return Error opaque data node tree.
  */
-struct nc_server_error *nc_err_libyang(struct ly_ctx *ctx);
+struct lyd_node *nc_err_libyang(struct ly_ctx *ctx);
 
 /**
  * @brief Get the \<error-type\> of a server error.
  *
- * @param[in] err Server error to read from.
+ * @param[in] err Error opaque data node tree to read from.
  * @return Server error type, 0 on error.
  */
-NC_ERR_TYPE nc_err_get_type(const struct nc_server_error *err);
+NC_ERR_TYPE nc_err_get_type(const struct lyd_node *err);
 
 /**
  * @brief Get the \<error-tag\> of a server error.
  *
- * @param[in] err Server error to read from.
+ * @param[in] err Error opaque data node tree to read from.
  * @return Server error tag, 0 on error.
  */
-NC_ERR nc_err_get_tag(const struct nc_server_error *err);
+NC_ERR nc_err_get_tag(const struct lyd_node *err);
 
 /**
  * @brief Set the \<error-app-tag\> element of an error. Any previous value will be overwritten.
  *
- * @param[in] err Error to modify.
+ * @param[in] err Error opaque data node tree to modify.
  * @param[in] error_app_tag New value of \<error-app-tag\>.
  * @return 0 on success, -1 on error.
  */
-int nc_err_set_app_tag(struct nc_server_error *err, const char *error_app_tag);
+int nc_err_set_app_tag(struct lyd_node *err, const char *error_app_tag);
 
 /**
  * @brief Get the \<error-app-tag\> of a server error.
  *
- * @param[in] err Server error to read from.
+ * @param[in] err Error opaque data node tree to read from.
  * @return Server error app tag, NULL on error.
  */
-const char *nc_err_get_app_tag(const struct nc_server_error *err);
+const char *nc_err_get_app_tag(const struct lyd_node *err);
 
 /**
  * @brief Set the \<error-path\> element of an error. Any previous value will be overwritten.
  *
- * @param[in] err Error to modify.
+ * @param[in] err Error opaque data node tree to modify.
  * @param[in] error_path New value of \<error-path\>.
  * @return 0 on success, -1 on error.
  */
-int nc_err_set_path(struct nc_server_error *err, const char *error_path);
+int nc_err_set_path(struct lyd_node *err, const char *error_path);
 
 /**
  * @brief Get the \<error-path\> of a server error.
  *
- * @param[in] err Server error to read from.
+ * @param[in] err Error opaque data node tree to read from.
  * @return Server error path, NULL on error.
  */
-const char *nc_err_get_path(const struct nc_server_error *err);
+const char *nc_err_get_path(const struct lyd_node *err);
 
 /**
  * @brief Set the \<error-message\> element of an error. Any previous value will be overwritten.
  *
- * @param[in] err Error to modify.
+ * @param[in] err Error opaque data node tree to modify.
  * @param[in] error_message New value of \<error-message\>.
  * @param[in] lang Optional language of \p error_message.
  * @return 0 on success, -1 on error.
  */
-int nc_err_set_msg(struct nc_server_error *err, const char *error_message, const char *lang);
+int nc_err_set_msg(struct lyd_node *err, const char *error_message, const char *lang);
 
 /**
  * @brief Get the \<error-message\> of a server error.
  *
- * @param[in] err Server error to read from.
+ * @param[in] err Error opaque data node tree to read from.
  * @return Server error message, NULL on error.
  */
-const char *nc_err_get_msg(const struct nc_server_error *err);
+const char *nc_err_get_msg(const struct lyd_node *err);
 
 /**
  * @brief Set the \<session-id\> element of an error. Any previous value will be overwritten.
  *
- * @param[in] err Error to modify.
+ * @param[in] err Error opaque data node tree to modify.
  * @param[in] session_id New value of \<session-id\>.
  * @return 0 on success, -1 on error.
  */
-int nc_err_set_sid(struct nc_server_error *err, uint32_t session_id);
+int nc_err_set_sid(struct lyd_node *err, uint32_t session_id);
 
 /**
  * @brief Add a \<bad-attribute\> element to an error.
  *
- * @param[in] err Error to modify.
+ * @param[in] err Error opaque data node tree to modify.
  * @param[in] attr_name Value of the new \<bad-attribute\> element.
  * @return 0 on success, -1 on error.
  */
-int nc_err_add_bad_attr(struct nc_server_error *err, const char *attr_name);
+int nc_err_add_bad_attr(struct lyd_node *err, const char *attr_name);
 
 /**
  * @brief Add a \<bad-element\> element to an error.
  *
- * @param[in] err Error to modify.
+ * @param[in] err Error opaque data node tree to modify.
  * @param[in] elem_name Value of the new \<bad-element\> element.
  * @return 0 on success, -1 on error.
  */
-int nc_err_add_bad_elem(struct nc_server_error *err, const char *elem_name);
+int nc_err_add_bad_elem(struct lyd_node *err, const char *elem_name);
 
 /**
  * @brief Add a \<bad-namespace\> element to an error.
  *
- * @param[in] err Error to modify.
+ * @param[in] err Error opaque data node tree to modify.
  * @param[in] ns_name Value of the new \<bad-namespace\> element.
  * @return 0 on success, -1 on error.
  */
-int nc_err_add_bad_ns(struct nc_server_error *err, const char *ns_name);
+int nc_err_add_bad_ns(struct lyd_node *err, const char *ns_name);
 
 /**
  * @brief Add an additional custom element to an error.
  *
- * @param[in] err Error to modify.
- * @param[in] other New custom XML element.
+ * @param[in] err Error opaque data node tree to modify.
+ * @param[in] other Other error opaque data node tree.
  * @return 0 on success, -1 on error.
  */
-int nc_err_add_info_other(struct nc_server_error *err, struct lyxml_elem *other);
+int nc_err_add_info_other(struct lyd_node *err, struct lyd_node *other);
 
 /**
  * @brief Free a server rpc-reply object.
@@ -298,13 +299,6 @@ int nc_err_add_info_other(struct nc_server_error *err, struct lyxml_elem *other)
  * @param[in] reply Server rpc-reply object to free.
  */
 void nc_server_reply_free(struct nc_server_reply *reply);
-
-/**
- * @brief Free a server error structure.
- *
- * @param[in] err Error structure to free.
- */
-void nc_err_free(struct nc_server_error *err);
 
 /**
  * @brief Create Event Notification object to be sent to the subscribed client(s).
