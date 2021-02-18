@@ -384,7 +384,7 @@ sock_host_inet(const struct sockaddr_in *addr, char **host, uint16_t *port)
         return -1;
     }
 
-    if (!inet_ntop(AF_INET, &addr->sin_addr.s_addr, *host, INET_ADDRSTRLEN)) {
+    if (!inet_ntop(AF_INET, &addr->sin_addr, *host, INET_ADDRSTRLEN)) {
         ERR("inet_ntop failed(%s).");
         free(*host);
         *host = NULL;
@@ -415,7 +415,7 @@ sock_host_inet6(const struct sockaddr_in6 *addr, char **host, uint16_t *port)
         return -1;
     }
 
-    if (!inet_ntop(AF_INET6, &addr->sin6_addr.s6_addr, *host, INET6_ADDRSTRLEN)) {
+    if (!inet_ntop(AF_INET6, &addr->sin6_addr, *host, INET6_ADDRSTRLEN)) {
         ERR("inet_ntop failed(%s).");
         free(*host);
         *host = NULL;
