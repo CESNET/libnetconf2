@@ -1495,12 +1495,6 @@ get_msg(struct nc_session *session, int timeout, uint64_t msgid, struct lyxml_el
 
     /* we read notif, want a rpc-reply */
     if (msgid && (msgtype == NC_MSG_NOTIF)) {
-        if (!ATOMIC_LOAD(session->opts.client.ntf_tid)) {
-            ERR("Session %u: received a <notification> but session is not subscribed.", session->id);
-            lyxml_free(session->ctx, xml);
-            return NC_MSG_ERROR;
-        }
-
         cont_ptr = &session->opts.client.notifs;
         while (*cont_ptr) {
             cont_ptr = &((*cont_ptr)->next);
