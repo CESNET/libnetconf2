@@ -1537,7 +1537,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
         struct nc_client_ssh_opts *opts, int timeout)
 {
     char *host = NULL, *username = NULL, *ip_host;
-    unsigned short port = 0;
+    unsigned int port = 0;
     int sock;
     struct passwd *pw;
     struct nc_session *session = NULL;
