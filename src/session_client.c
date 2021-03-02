@@ -1360,7 +1360,7 @@ nc_sock_connect(const char *host, uint16_t port, int timeout, struct nc_keepaliv
 {
     int i, opt;
     int sock = sock_pending ? *sock_pending : -1;
-    struct addrinfo hints, *res_list, *res;
+    struct addrinfo hints, *res_list = NULL, *res;
     char *buf, port_s[6]; /* length of string representation of short int */
     void *addr;
 
@@ -1388,7 +1388,7 @@ nc_sock_connect(const char *host, uint16_t port, int timeout, struct nc_keepaliv
                     continue;
                 } else {
                     /* timeout, keep pending socket */
-                    return -1;
+                    break;
                 }
             }
             VRB("Successfully connected to %s:%s over %s.", host, port_s, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
@@ -1431,6 +1431,9 @@ nc_sock_connect(const char *host, uint16_t port, int timeout, struct nc_keepaliv
     return sock;
 
 error:
+    if (res_list) {
+        freeaddrinfo(res_list);
+    }
     if (sock != -1) {
         close(sock);
     }
