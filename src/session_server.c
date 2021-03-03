@@ -3149,12 +3149,14 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, struct nc_session **session)
 
     sock = nc_sock_connect(endpt->address, endpt->port, NC_SOCKET_CH_TIMEOUT, &endpt->ka, &endpt->sock_pending, &ip_host);
     if (sock < 0) {
-        ++endpt->sock_retries;
-        if (endpt->sock_retries == NC_SOCKET_CH_RETRIES) {
-            ERR("Failed to connect socket %d after %d retries, closing.", endpt->sock_pending, NC_SOCKET_CH_RETRIES);
-            close(endpt->sock_pending);
-            endpt->sock_pending = -1;
-            endpt->sock_retries = 0;
+        if (endpt->sock_pending > -1) {
+            ++endpt->sock_retries;
+            if (endpt->sock_retries == NC_SOCKET_CH_RETRIES) {
+                ERR("Failed to connect socket %d after %d retries, closing.", endpt->sock_pending, NC_SOCKET_CH_RETRIES);
+                close(endpt->sock_pending);
+                endpt->sock_pending = -1;
+                endpt->sock_retries = 0;
+            }
         }
         return NC_MSG_ERROR;
     }
