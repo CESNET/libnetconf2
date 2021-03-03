@@ -3375,7 +3375,7 @@ nc_ch_client_thread(void *arg)
             if (nc_server_ch_client_thread_session_cond_wait(session, data)) {
                 goto cleanup;
             }
-            VRB("Call Home client \"%s\" session terminated, reconnecting...", data->client_name);
+            VRB("Call Home client \"%s\" session terminated.", data->client_name);
 
             /* LOCK */
             client = nc_server_ch_client_with_endpt_lock(data->client_name);
@@ -3395,6 +3395,7 @@ nc_ch_client_thread(void *arg)
 
                 /* sleep until we should reconnect TODO wake up sometimes to check for new notifications */
                 reconnect_in = (time(NULL) - client->conn.period.anchor_time) % (client->conn.period.period * 60);
+                VRB("Call Home client \"%s\" reconnecting in %d seconds.", data->client_name, reconnect_in);
                 sleep(reconnect_in);
 
                 /* LOCK */
