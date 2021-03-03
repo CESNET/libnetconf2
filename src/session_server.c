@@ -3275,10 +3275,10 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
     struct timespec ts;
     struct nc_ch_client *client;
 
-    session->flags |= NC_SESSION_CALLHOME;
-
     /* CH LOCK */
     pthread_mutex_lock(&session->opts.server.ch_lock);
+
+    session->flags |= NC_SESSION_CALLHOME;
 
     /* give the session to the user */
     data->session_clb(data->client_name, session);
@@ -3287,6 +3287,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
         nc_gettimespec_real(&ts);
         nc_addtimespec(&ts, NC_CH_NO_ENDPT_WAIT);
 
+        /* CH COND WAIT */
         r = pthread_cond_timedwait(&session->opts.server.ch_cond, &session->opts.server.ch_lock, &ts);
         if (!r) {
             /* we were woken up, something probably happened */
@@ -3328,13 +3329,11 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
 
     } while (session->status == NC_STATUS_RUNNING);
 
+    /* signal to nc_session_free() that CH registered this session not being valid anymore */
+    session->flags &= ~NC_SESSION_CALLHOME;
+
     /* CH UNLOCK */
     pthread_mutex_unlock(&session->opts.server.ch_lock);
-
-    if (session->status == NC_STATUS_CLOSING) {
-        /* signal to nc_session_free() that we registered session being freed, otherwise it matters not */
-        session->flags &= ~NC_SESSION_CALLHOME;
-    }
 
     return ret;
 }

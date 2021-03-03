@@ -593,6 +593,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     struct lyxml_elem *rpl, *child;
     struct lyd_node *close_rpc;
     const struct lys_module *ietfnc;
+    struct timespec ts;
     void *p;
 
     if (!session || (session->status == NC_STATUS_CLOSING)) {
@@ -695,17 +696,20 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
         pthread_cond_signal(&session->opts.server.ch_cond);
 
+        nc_gettimespec_real(&ts);
+        nc_addtimespec(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
+
+        /* wait for CH thread to actually wake up and terminate */
+        r = 0;
+        while (!r && (session->flags & NC_SESSION_CALLHOME)) {
+            r = pthread_cond_timedwait(&session->opts.server.ch_cond, &session->opts.server.ch_lock, &ts);
+        }
+
         /* CH UNLOCK */
         pthread_mutex_unlock(&session->opts.server.ch_lock);
 
-        /* wait for CH thread to actually wake up */
-        i = (NC_SESSION_FREE_LOCK_TIMEOUT * 1000) / NC_TIMEOUT_STEP;
-        while (i && (session->flags & NC_SESSION_CALLHOME)) {
-            usleep(NC_TIMEOUT_STEP);
-            --i;
-        }
-        if (session->flags & NC_SESSION_CALLHOME) {
-            ERR("Session %u: Call Home thread failed to wake up in a timely manner, fatal synchronization problem.", session->id);
+        if (r) {
+            ERR("Session %u: waiting for Call Home thread failed (%s).", session->id, strerror(r));
         }
     }
 
