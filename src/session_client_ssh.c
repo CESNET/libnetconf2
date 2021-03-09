@@ -1558,7 +1558,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
     session->ti.libssh.session = ssh_session;
 
     /* was port set? */
-    ssh_options_get_port(ssh_session, (unsigned int *)&port);
+    ssh_options_get_port(ssh_session, &port);
 
     if (ssh_options_get(ssh_session, SSH_OPTIONS_HOST, &host) != SSH_OK) {
         /*
