@@ -875,7 +875,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
 
     /* cert-to-name match, now to extract the specific field from the peer cert */
     if (map_type == NC_TLS_CTN_SPECIFIED) {
-        session->username = lydict_insert(server_opts.ctx, username, 0);
+        lydict_insert(server_opts.ctx, username, 0, &session->username);
     } else {
         rc = nc_tls_ctn_get_username_from_cert(session->opts.server.client_cert, map_type, &cp);
         if (rc) {
@@ -884,7 +884,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
             }
             goto fail;
         }
-        session->username = lydict_insert_zc(server_opts.ctx, cp);
+        lydict_insert_zc(server_opts.ctx, cp, &session->username);
     }
 
     VRB("Cert verify CTN: new client username recognized as \"%s\".", session->username);
