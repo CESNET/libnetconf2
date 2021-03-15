@@ -552,7 +552,7 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
     const char *identifier = NULL, *revision = NULL, *format = NULL;
     char *model_data = NULL;
     struct ly_out *out;
-    const struct lys_module *module = NULL;
+    const struct lys_module *module = NULL, *mod;
     const struct lysp_submodule *submodule = NULL;
     struct lyd_node *child, *err, *data = NULL;
     LYS_OUTFORMAT outformat = 0;
@@ -624,11 +624,18 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
         return NULL;
     }
 
-    lyd_new_path2(NULL, server_opts.ctx, "/ietf-netconf-monitoring:get-schema/data", model_data, LYD_ANYDATA_STRING,
-            LYD_NEW_PATH_OUTPUT, &data, NULL);
-    if (!data || lyd_validate_op(data, NULL, LYD_TYPE_REPLY_YANG, NULL)) {
+    /* create reply */
+    mod = ly_ctx_get_module_implemented(server_opts.ctx, "ietf-netconf-monitoring");
+    if (!mod || lyd_new_inner(NULL, mod, "get-schema", 0, &data)) {
         ERRINT;
         free(model_data);
+        return NULL;
+    }
+    lydict_insert_zc(server_opts.ctx, model_data, (const char **)&model_data);
+    if (lyd_new_any(data, NULL, "data", model_data, 1, LYD_ANYDATA_STRING, 1, NULL)) {
+        ERRINT;
+        lydict_remove(server_opts.ctx, model_data);
+        lyd_free_tree(data);
         return NULL;
     }
 
