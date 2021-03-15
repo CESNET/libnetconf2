@@ -1846,7 +1846,23 @@ recv_reply_dup_rpc(struct nc_session *session, struct nc_rpc *rpc, struct lyd_no
         module_name = "ietf-netconf-nmda";
         rpc_name = "edit-data";
         break;
-    default:
+    case NC_RPC_ESTABLISHSUB:
+        module_name = "ietf-subscribed-notifications";
+        rpc_name = "establish-subscription";
+        break;
+    case NC_RPC_MODIFYSUB:
+        module_name = "ietf-subscribed-notifications";
+        rpc_name = "modify-subscription";
+        break;
+    case NC_RPC_DELETESUB:
+        module_name = "ietf-subscribed-notifications";
+        rpc_name = "delete-subscription";
+        break;
+    case NC_RPC_KILLSUB:
+        module_name = "ietf-subscribed-notifications";
+        rpc_name = "kill-subscription";
+        break;
+    case NC_RPC_UNKNOWN:
         lyrc = LY_EINT;
         break;
     }
@@ -2148,6 +2164,10 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     struct nc_rpc_subscribe *rpc_sub;
     struct nc_rpc_getdata *rpc_getd;
     struct nc_rpc_editdata *rpc_editd;
+    struct nc_rpc_establishsub *rpc_estsub;
+    struct nc_rpc_modifysub *rpc_modsub;
+    struct nc_rpc_deletesub *rpc_delsub;
+    struct nc_rpc_killsub *rpc_killsub;
     struct lyd_node *data, *node;
     const struct lys_module *mod = NULL, *ietfncwd;
     LY_ERR lyrc;
@@ -2210,6 +2230,16 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         mod = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-nmda");
         if (!mod) {
             ERR("Session %u: missing \"ietf-netconf-nmda\" schema in the context.", session->id);
+            return NC_MSG_ERROR;
+        }
+        break;
+    case NC_RPC_ESTABLISHSUB:
+    case NC_RPC_MODIFYSUB:
+    case NC_RPC_DELETESUB:
+    case NC_RPC_KILLSUB:
+        mod = ly_ctx_get_module_implemented(session->ctx, "ietf-subscribed-notifications");
+        if (!mod) {
+            ERR("Session %u: missing \"ietf-subscribed-notifications\" schema in the context.", session->id);
             return NC_MSG_ERROR;
         }
         break;
@@ -2538,7 +2568,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         lyd_new_inner(NULL, mod, "create-subscription", 0, &data);
         if (rpc_sub->stream) {
-            if (lyd_new_term(data, mod, "stream", rpc_sub->stream, 0, &data)) {
+            if (lyd_new_term(data, mod, "stream", rpc_sub->stream, 0, NULL)) {
                 lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
@@ -2656,7 +2686,110 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         }
         break;
 
-    default:
+    case NC_RPC_ESTABLISHSUB:
+        rpc_estsub = (struct nc_rpc_establishsub *)rpc;
+
+        lyd_new_inner(NULL, mod, "establish-subscription", 0, &data);
+
+        if (rpc_estsub->filter) {
+            if (!rpc_estsub->filter[0] || (rpc_estsub->filter[0] == '<')) {
+                lyd_new_any(data, mod, "stream-subtree-filter", rpc_estsub->filter, 0, LYD_ANYDATA_XML, 0, &node);
+            } else if (rpc_estsub->filter[0] == '/') {
+                lyd_new_term(data, mod, "stream-xpath-filter", rpc_estsub->filter, 0, &node);
+            } else {
+                lyd_new_term(data, mod, "stream-filter-name", rpc_estsub->filter, 0, &node);
+            }
+            if (!node) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+        }
+
+        if (lyd_new_term(data, mod, "stream", rpc_estsub->stream, 0, NULL)) {
+            lyd_free_tree(data);
+            return NC_MSG_ERROR;
+        }
+
+        if (rpc_estsub->start) {
+            if (lyd_new_term(data, mod, "replay-start-time", rpc_estsub->start, 0, NULL)) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+        }
+
+        if (rpc_estsub->stop) {
+            if (lyd_new_term(data, mod, "stop-time", rpc_estsub->stop, 0, NULL)) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+        }
+
+        if (rpc_estsub->encoding) {
+            if (lyd_new_term(data, mod, "encoding", rpc_estsub->encoding, 0, NULL)) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+        }
+        break;
+
+    case NC_RPC_MODIFYSUB:
+        rpc_modsub = (struct nc_rpc_modifysub *)rpc;
+
+        lyd_new_inner(NULL, mod, "modify-subscription", 0, &data);
+
+        sprintf(str, "%u", rpc_modsub->id);
+        if (lyd_new_term(data, mod, "id", str, 0, NULL)) {
+            lyd_free_tree(data);
+            return NC_MSG_ERROR;
+        }
+
+        if (rpc_modsub->filter) {
+            if (!rpc_modsub->filter[0] || (rpc_modsub->filter[0] == '<')) {
+                lyd_new_any(data, mod, "stream-subtree-filter", rpc_modsub->filter, 0, LYD_ANYDATA_XML, 0, &node);
+            } else if (rpc_modsub->filter[0] == '/') {
+                lyd_new_term(data, mod, "stream-xpath-filter", rpc_modsub->filter, 0, &node);
+            } else {
+                lyd_new_term(data, mod, "stream-filter-name", rpc_modsub->filter, 0, &node);
+            }
+            if (!node) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+        }
+
+        if (rpc_modsub->stop) {
+            if (lyd_new_term(data, mod, "stop-time", rpc_modsub->stop, 0, NULL)) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+        }
+        break;
+
+    case NC_RPC_DELETESUB:
+        rpc_delsub = (struct nc_rpc_deletesub *)rpc;
+
+        lyd_new_inner(NULL, mod, "delete-subscription", 0, &data);
+
+        sprintf(str, "%u", rpc_delsub->id);
+        if (lyd_new_term(data, mod, "id", str, 0, NULL)) {
+            lyd_free_tree(data);
+            return NC_MSG_ERROR;
+        }
+        break;
+
+    case NC_RPC_KILLSUB:
+        rpc_killsub = (struct nc_rpc_killsub *)rpc;
+
+        lyd_new_inner(NULL, mod, "kill-subscription", 0, &data);
+
+        sprintf(str, "%u", rpc_killsub->id);
+        if (lyd_new_term(data, mod, "id", str, 0, NULL)) {
+            lyd_free_tree(data);
+            return NC_MSG_ERROR;
+        }
+        break;
+
+    case NC_RPC_UNKNOWN:
         ERRINT;
         return NC_MSG_ERROR;
     }

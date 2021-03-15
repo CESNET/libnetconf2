@@ -64,6 +64,12 @@ typedef enum {
     /* ietf-netconf-nmda */
     NC_RPC_GETDATA,     /**< \<get-data\> RPC. */
     NC_RPC_EDITDATA,    /**< \<edit-data\> RPC. */
+
+    /* ietf-subscribed-notifications */
+    NC_RPC_ESTABLISHSUB,    /**< \<establish-subscription\> RPC. */
+    NC_RPC_MODIFYSUB,       /**< \<modify-subscription\> RPC. */
+    NC_RPC_DELETESUB,       /**< \<delete-subscription\> RPC. */
+    NC_RPC_KILLSUB,         /**< \<kill-subscription\> RPC. */
 } NC_RPC_TYPE;
 
 /**
@@ -139,7 +145,13 @@ struct nc_err {
 };
 
 /**
+ * @struct nc_rpc
  * @brief NETCONF client RPC object
+ *
+ * Note that any stored parameters are not checked for validity because it is performed later,
+ * while sending the RPC via a specific NETCONF session (::nc_send_rpc()) since the NETCONF
+ * capabilities of the session are needed for such a check. An RPC object can be sent via any
+ * NETCONF session which supports all the needed NETCONF capabilities for the RPC.
  */
 struct nc_rpc;
 
@@ -166,11 +178,7 @@ struct nc_rpc *nc_rpc_act_generic(const struct lyd_node *data, NC_PARAMTYPE para
 /**
  * @brief Create a generic NETCONF RPC or action from an XML string
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] xml_str NETCONF RPC data as an XML string.
  * @param[in] paramtype How to further manage data parameters.
@@ -181,11 +189,7 @@ struct nc_rpc *nc_rpc_act_generic_xml(const char *xml_str, NC_PARAMTYPE paramtyp
 /**
  * @brief Create NETCONF RPC \<get-config\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] source Source datastore being queried.
  * @param[in] filter Optional filter data, an XML subtree or XPath expression (with JSON prefixes).
@@ -194,16 +198,12 @@ struct nc_rpc *nc_rpc_act_generic_xml(const char *xml_str, NC_PARAMTYPE paramtyp
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_WD_MODE wd_mode,
-                                NC_PARAMTYPE paramtype);
+        NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<edit-config\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] target Target datastore being edited.
  * @param[in] default_op Optional default operation.
@@ -214,16 +214,12 @@ struct nc_rpc *nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_WD_M
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, NC_RPC_EDIT_TESTOPT test_opt,
-                           NC_RPC_EDIT_ERROPT error_opt, const char *edit_content, NC_PARAMTYPE paramtype);
+        NC_RPC_EDIT_ERROPT error_opt, const char *edit_content, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<copy-config\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] target Target datastore.
  * @param[in] url_trg Used instead \p target if the target is an URL.
@@ -234,16 +230,12 @@ struct nc_rpc *nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, N
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTORE source,
-                           const char *url_or_config_src, NC_WD_MODE wd_mode, NC_PARAMTYPE paramtype);
+        const char *url_or_config_src, NC_WD_MODE wd_mode, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<delete-config\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] target Target datastore to delete.
  * @param[in] url Used instead \p target if the target is an URL.
@@ -255,11 +247,7 @@ struct nc_rpc *nc_rpc_delete(NC_DATASTORE target, const char *url, NC_PARAMTYPE 
 /**
  * @brief Create NETCONF RPC \<lock\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] target Target datastore of the operation.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
@@ -269,11 +257,7 @@ struct nc_rpc *nc_rpc_lock(NC_DATASTORE target);
 /**
  * @brief Create NETCONF RPC \<unlock\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] target Target datastore of the operation.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
@@ -283,11 +267,7 @@ struct nc_rpc *nc_rpc_unlock(NC_DATASTORE target);
 /**
  * @brief Create NETCONF RPC \<get\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] filter Optional filter data, an XML subtree or XPath expression (with JSON prefixes).
  * @param[in] wd_mode Optional with-defaults capability mode.
@@ -299,11 +279,7 @@ struct nc_rpc *nc_rpc_get(const char *filter, NC_WD_MODE wd_mode, NC_PARAMTYPE p
 /**
  * @brief Create NETCONF RPC \<kill-session\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] session_id Session ID of the session to kill.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
@@ -313,11 +289,7 @@ struct nc_rpc *nc_rpc_kill(uint32_t session_id);
 /**
  * @brief Create NETCONF RPC \<commit\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] confirmed Whether the commit is to be confirmed.
  * @param[in] confirm_timeout Optional confirm timeout.
@@ -327,16 +299,12 @@ struct nc_rpc *nc_rpc_kill(uint32_t session_id);
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_commit(int confirmed, uint32_t confirm_timeout, const char *persist, const char *persist_id,
-                             NC_PARAMTYPE paramtype);
+        NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<discard-changes\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
@@ -345,11 +313,7 @@ struct nc_rpc *nc_rpc_discard(void);
 /**
  * @brief Create NETCONF RPC \<cancel-commit\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] persist_id Optional identification string of a persistent confirmed commit.
  * @param[in] paramtype How to further manage data parameters.
@@ -360,11 +324,7 @@ struct nc_rpc *nc_rpc_cancel(const char *persist_id, NC_PARAMTYPE paramtype);
 /**
  * @brief Create NETCONF RPC \<validate\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] source Source datastore being validated.
  * @param[in] url_or_config Used instead \p source if the source is an URL or a config.
@@ -376,11 +336,7 @@ struct nc_rpc *nc_rpc_validate(NC_DATASTORE source, const char *url_or_config, N
 /**
  * @brief Create NETCONF RPC \<get-schema\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] identifier Requested model identifier.
  * @param[in] version Optional model version, either YANG version (1.0/1.1) or revision date.
@@ -393,11 +349,7 @@ struct nc_rpc *nc_rpc_getschema(const char *identifier, const char *version, con
 /**
  * @brief Create NETCONF RPC \<create-subscription\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] stream_name Optional name of a NETCONF stream to subscribe to.
  * @param[in] filter Optional filter data, an XML subtree or XPath expression (with JSON prefixes).
@@ -407,16 +359,12 @@ struct nc_rpc *nc_rpc_getschema(const char *identifier, const char *version, con
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_subscribe(const char *stream_name, const char *filter, const char *start_time,
-                                const char *stop_time, NC_PARAMTYPE paramtype);
+        const char *stop_time, NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<get-data\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] datastore Source datastore, foreign identity so a module name prefix is required.
  * @param[in] filter Optional filter data, an XML subtree or XPath expression (with JSON prefixes).
@@ -431,17 +379,13 @@ struct nc_rpc *nc_rpc_subscribe(const char *stream_name, const char *filter, con
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_getdata(const char *datastore, const char *filter, const char *config_filter, char **origin_filter,
-                              int origin_filter_count, int neg_origin_filter, uint16_t max_depth, int with_origin,
-                              NC_WD_MODE wd_mode, NC_PARAMTYPE paramtype);
+        int origin_filter_count, int neg_origin_filter, uint16_t max_depth, int with_origin, NC_WD_MODE wd_mode,
+        NC_PARAMTYPE paramtype);
 
 /**
  * @brief Create NETCONF RPC \<get-data\>
  *
- * Note that functions to create any RPC object do not check validity of the provided
- * parameters. It is checked later while sending the RPC via a specific NETCONF session
- * (#nc_send_rpc()) since the NETCONF capabilities of the session are needed for such a
- * check. Created object can be sent via any NETCONF session which supports all the
- * needed NETCONF capabilities for the RPC.
+ * For details, see ::nc_rpc.
  *
  * @param[in] datastore Source datastore, foreign identity so a module name prefix is required.
  * @param[in] default_op Optional default operation.
@@ -450,7 +394,58 @@ struct nc_rpc *nc_rpc_getdata(const char *datastore, const char *filter, const c
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_editdata(const char *datastore, NC_RPC_EDIT_DFLTOP default_op, const char *edit_content,
-                               NC_PARAMTYPE paramtype);
+        NC_PARAMTYPE paramtype);
+
+/**
+ * @brief Create NETCONF RPC \<establish-subscription\>
+ *
+ * For details, see ::nc_rpc.
+ *
+ * @param[in] filter Optional filter data, an XML subtree, XPath expression (with JSON prefixes),
+ * or filter reference, selected based on the first character.
+ * @param[in] stream_name Name of a NETCONF stream to subscribe to.
+ * @param[in] start_time Optional YANG datetime identifying the start of the subscription.
+ * @param[in] stop_time Optional YANG datetime identifying the end of the subscription.
+ * @param[in] encoding Optional specific encoding to use.
+ * @param[in] paramtype How to further manage data parameters.
+ * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
+ */
+struct nc_rpc *nc_rpc_establishsub(const char *filter, const char *stream_name, const char *start_time,
+        const char *stop_time, const char *encoding, NC_PARAMTYPE paramtype);
+
+/**
+ * @brief Create NETCONF RPC \<modify-subscription\>
+ *
+ * For details, see ::nc_rpc.
+ *
+ * @param[in] id Subscription ID to modify.
+ * @param[in] filter Optional new filter data, an XML subtree, XPath expression (with JSON prefixes),
+ * or filter reference, selected based on the first character.
+ * @param[in] stop_time Optional new YANG datetime identifying the end of the subscription.
+ * @param[in] paramtype How to further manage data parameters.
+ * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
+ */
+struct nc_rpc *nc_rpc_modifysub(uint32_t id, const char *filter, const char *stop_time, NC_PARAMTYPE paramtype);
+
+/**
+ * @brief Create NETCONF RPC \<delete-subscription\>
+ *
+ * For details, see ::nc_rpc.
+ *
+ * @param[in] id Subscription ID to delete.
+ * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
+ */
+struct nc_rpc *nc_rpc_deletesub(uint32_t id);
+
+/**
+ * @brief Create NETCONF RPC \<kill-subscription\>
+ *
+ * For details, see ::nc_rpc.
+ *
+ * @param[in] id Subscription ID to kill.
+ * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
+ */
+struct nc_rpc *nc_rpc_killsub(uint32_t id);
 
 /**
  * @brief Free the NETCONF RPC object.

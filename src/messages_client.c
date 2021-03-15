@@ -3,7 +3,7 @@
  * \author Radek Krejci <rkrejci@cesnet.cz>
  * \brief libnetconf2 - NETCONF messages functions
  *
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -132,7 +132,7 @@ nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_WD_MODE wd_mode, NC
 
 API struct nc_rpc *
 nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, NC_RPC_EDIT_TESTOPT test_opt,
-            NC_RPC_EDIT_ERROPT error_opt, const char *edit_content, NC_PARAMTYPE paramtype)
+        NC_RPC_EDIT_ERROPT error_opt, const char *edit_content, NC_PARAMTYPE paramtype)
 {
     struct nc_rpc_edit *rpc;
 
@@ -172,7 +172,7 @@ nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, NC_RPC_EDIT_TEST
 
 API struct nc_rpc *
 nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTORE source, const char *url_or_config_src,
-            NC_WD_MODE wd_mode, NC_PARAMTYPE paramtype)
+        NC_WD_MODE wd_mode, NC_PARAMTYPE paramtype)
 {
     struct nc_rpc_copy *rpc;
 
@@ -338,7 +338,7 @@ nc_rpc_kill(uint32_t session_id)
 
 API struct nc_rpc *
 nc_rpc_commit(int confirmed, uint32_t confirm_timeout, const char *persist, const char *persist_id,
-              NC_PARAMTYPE paramtype)
+        NC_PARAMTYPE paramtype)
 {
     struct nc_rpc_commit *rpc;
 
@@ -476,7 +476,7 @@ nc_rpc_getschema(const char *identifier, const char *version, const char *format
 
 API struct nc_rpc *
 nc_rpc_subscribe(const char *stream_name, const char *filter, const char *start_time, const char *stop_time,
-                 NC_PARAMTYPE paramtype)
+        NC_PARAMTYPE paramtype)
 {
     struct nc_rpc_subscribe *rpc;
 
@@ -519,8 +519,8 @@ nc_rpc_subscribe(const char *stream_name, const char *filter, const char *start_
 
 API struct nc_rpc *
 nc_rpc_getdata(const char *datastore, const char *filter, const char *config_filter, char **origin_filter,
-               int origin_filter_count, int negated_origin_filter, uint16_t max_depth, int with_origin,
-               NC_WD_MODE wd_mode, NC_PARAMTYPE paramtype)
+        int origin_filter_count, int negated_origin_filter, uint16_t max_depth, int with_origin, NC_WD_MODE wd_mode,
+        NC_PARAMTYPE paramtype)
 {
     struct nc_rpc_getdata *rpc = NULL;
     int i;
@@ -627,6 +627,141 @@ nc_rpc_editdata(const char *datastore, NC_RPC_EDIT_DFLTOP default_op, const char
     return (struct nc_rpc *)rpc;
 }
 
+API struct nc_rpc *
+nc_rpc_establishsub(const char *filter, const char *stream_name, const char *start_time,
+        const char *stop_time, const char *encoding, NC_PARAMTYPE paramtype)
+{
+    struct nc_rpc_establishsub *rpc;
+
+    if (!stream_name) {
+        ERRARG("stream_name");
+        return NULL;
+    }
+
+    if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
+        ERR("Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').", filter[0]);
+        return NULL;
+    }
+
+    rpc = malloc(sizeof *rpc);
+    if (!rpc) {
+        ERRMEM;
+        return NULL;
+    }
+
+    rpc->type = NC_RPC_ESTABLISHSUB;
+    if (filter && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->filter = strdup(filter);
+    } else {
+        rpc->filter = (char *)filter;
+    }
+    if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
+        rpc->stream = strdup(stream_name);
+    } else {
+        rpc->stream = (char *)stream_name;
+    }
+    if (start_time && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->start = strdup(start_time);
+    } else {
+        rpc->start = (char *)start_time;
+    }
+    if (stop_time && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->stop = strdup(stop_time);
+    } else {
+        rpc->stop = (char *)stop_time;
+    }
+    if (encoding && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->encoding = strdup(encoding);
+    } else {
+        rpc->encoding = (char *)encoding;
+    }
+    rpc->free = (paramtype == NC_PARAMTYPE_CONST ? 0 : 1);
+
+    return (struct nc_rpc *)rpc;
+}
+
+API struct nc_rpc *
+nc_rpc_modifysub(uint32_t id, const char *filter, const char *stop_time, NC_PARAMTYPE paramtype)
+{
+    struct nc_rpc_modifysub *rpc;
+
+    if (!id) {
+        ERRARG("id");
+        return NULL;
+    }
+
+    if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
+        ERR("Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').", filter[0]);
+        return NULL;
+    }
+
+    rpc = malloc(sizeof *rpc);
+    if (!rpc) {
+        ERRMEM;
+        return NULL;
+    }
+
+    rpc->type = NC_RPC_MODIFYSUB;
+    rpc->id = id;
+    if (filter && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->filter = strdup(filter);
+    } else {
+        rpc->filter = (char *)filter;
+    }
+    if (stop_time && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->stop = strdup(stop_time);
+    } else {
+        rpc->stop = (char *)stop_time;
+    }
+    rpc->free = (paramtype == NC_PARAMTYPE_CONST ? 0 : 1);
+
+    return (struct nc_rpc *)rpc;
+}
+
+API struct nc_rpc *
+nc_rpc_deletesub(uint32_t id)
+{
+    struct nc_rpc_deletesub *rpc;
+
+    if (!id) {
+        ERRARG("id");
+        return NULL;
+    }
+
+    rpc = malloc(sizeof *rpc);
+    if (!rpc) {
+        ERRMEM;
+        return NULL;
+    }
+
+    rpc->type = NC_RPC_DELETESUB;
+    rpc->id = id;
+
+    return (struct nc_rpc *)rpc;
+}
+
+API struct nc_rpc *
+nc_rpc_killsub(uint32_t id)
+{
+    struct nc_rpc_killsub *rpc;
+
+    if (!id) {
+        ERRARG("id");
+        return NULL;
+    }
+
+    rpc = malloc(sizeof *rpc);
+    if (!rpc) {
+        ERRMEM;
+        return NULL;
+    }
+
+    rpc->type = NC_RPC_KILLSUB;
+    rpc->id = id;
+
+    return (struct nc_rpc *)rpc;
+}
+
 API void
 nc_rpc_free(struct nc_rpc *rpc)
 {
@@ -643,6 +778,8 @@ nc_rpc_free(struct nc_rpc *rpc)
     struct nc_rpc_subscribe *rpc_subscribe;
     struct nc_rpc_getdata *rpc_getdata;
     struct nc_rpc_editdata *rpc_editdata;
+    struct nc_rpc_establishsub *rpc_establishsub;
+    struct nc_rpc_modifysub *rpc_modifysub;
     int i;
 
     if (!rpc) {
@@ -746,7 +883,30 @@ nc_rpc_free(struct nc_rpc *rpc)
             free(rpc_editdata->edit_cont);
         }
         break;
-    default:
+    case NC_RPC_ESTABLISHSUB:
+        rpc_establishsub = (struct nc_rpc_establishsub *)rpc;
+        if (rpc_establishsub->free) {
+            free(rpc_establishsub->filter);
+            free(rpc_establishsub->stream);
+            free(rpc_establishsub->start);
+            free(rpc_establishsub->stop);
+            free(rpc_establishsub->encoding);
+        }
+        break;
+    case NC_RPC_MODIFYSUB:
+        rpc_modifysub = (struct nc_rpc_modifysub *)rpc;
+        if (rpc_modifysub->free) {
+            free(rpc_modifysub->filter);
+            free(rpc_modifysub->stop);
+        }
+        break;
+    case NC_RPC_UNKNOWN:
+    case NC_RPC_LOCK:
+    case NC_RPC_UNLOCK:
+    case NC_RPC_KILL:
+    case NC_RPC_DISCARD:
+    case NC_RPC_DELETESUB:
+    case NC_RPC_KILLSUB:
         /* nothing special needed */
         break;
     }

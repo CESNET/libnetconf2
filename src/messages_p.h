@@ -185,6 +185,34 @@ struct nc_rpc_editdata {
     char free;
 };
 
+struct nc_rpc_establishsub {
+    NC_RPC_TYPE type;        /**< NC_RPC_ESTABLISHSUB */
+    char *filter;            /**< XML subtree (starts with '<'), an XPath (starts with '/'), or reference (start with alpha) */
+    char *stream;            /**< stream name */
+    char *start;
+    char *stop;
+    char *encoding;
+    char free;
+};
+
+struct nc_rpc_modifysub {
+    NC_RPC_TYPE type;        /**< NC_RPC_MODIFYSUB */
+    uint32_t id;
+    char *filter;            /**< XML subtree (starts with '<'), an XPath (starts with '/'), or reference (start with alpha) */
+    char *stop;
+    char free;
+};
+
+struct nc_rpc_deletesub {
+    NC_RPC_TYPE type;        /**< NC_RPC_DELETESUB */
+    uint32_t id;
+};
+
+struct nc_rpc_killsub {
+    NC_RPC_TYPE type;        /**< NC_RPC_KILLSUB */
+    uint32_t id;
+};
+
 void nc_server_rpc_free(struct nc_server_rpc *rpc);
 
 void nc_client_err_clean(struct nc_err *err, struct ly_ctx *ctx);
