@@ -1722,7 +1722,8 @@ recv_reply(struct nc_session *session, int timeout, struct lyd_node *op, uint64_
         goto cleanup;
     }
 
-    /* assume a notification, store it */
+    /* assume a notification, reset and store it */
+    ly_in_reset(msg);
     cont_ptr = &session->opts.client.notifs;
     while (*cont_ptr) {
         cont_ptr = &((*cont_ptr)->next);
@@ -1733,6 +1734,7 @@ recv_reply(struct nc_session *session, int timeout, struct lyd_node *op, uint64_
         goto cleanup;
     }
     (*cont_ptr)->msg = msg;
+    msg = NULL;
     (*cont_ptr)->next = NULL;
 
     ret = NC_MSG_NOTIF;
@@ -1987,7 +1989,8 @@ recv_notif(struct nc_session *session, int timeout, struct lyd_node **envp, stru
         goto cleanup;
     }
 
-    /* assume a rpc-reply, store it */
+    /* assume a rpc-reply, reset and store it */
+    ly_in_reset(msg);
     cont_ptr = &session->opts.client.replies;
     while (*cont_ptr) {
         cont_ptr = &((*cont_ptr)->next);
@@ -1998,6 +2001,7 @@ recv_notif(struct nc_session *session, int timeout, struct lyd_node **envp, stru
         goto cleanup;
     }
     (*cont_ptr)->msg = msg;
+    msg = NULL;
     (*cont_ptr)->next = NULL;
 
     ret = NC_MSG_REPLY;
