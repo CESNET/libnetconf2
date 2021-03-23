@@ -392,7 +392,7 @@ server_send_notif_thread(void *arg)
     assert_non_null(notif);
 
     /* send notif */
-    nc_session_set_notif_status(server_session, 1);
+    nc_session_inc_notif_status(server_session);
     msg_type = nc_server_notif_send(server_session, notif, 100);
     nc_server_notif_free(notif);
     assert_int_equal(msg_type, NC_MSG_NOTIF);

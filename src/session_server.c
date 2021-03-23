@@ -3565,14 +3565,27 @@ nc_session_get_start_time(const struct nc_session *session)
 }
 
 API void
-nc_session_set_notif_status(struct nc_session *session, int notif_status)
+nc_session_inc_notif_status(struct nc_session *session)
 {
     if (!session || (session->side != NC_SERVER)) {
         ERRARG("session");
         return;
     }
 
-    session->opts.server.ntf_status = (notif_status ? 1 : 0);
+    ++session->opts.server.ntf_status;
+}
+
+API void
+nc_session_dec_notif_status(struct nc_session *session)
+{
+    if (!session || (session->side != NC_SERVER)) {
+        ERRARG("session");
+        return;
+    }
+
+    if (session->opts.server.ntf_status) {
+        --session->opts.server.ntf_status;
+    }
 }
 
 API int

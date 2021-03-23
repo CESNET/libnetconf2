@@ -447,7 +447,7 @@ struct nc_session {
             /* server side only data */
             time_t session_start;          /**< real time the session was created */
             time_t last_rpc;               /**< monotonic time (seconds) the last RPC was received on this session */
-            int ntf_status;                /**< flag whether the session is subscribed to any stream */
+            int ntf_status;                /**< flag (count) whether the session is subscribed to notifications */
 
             pthread_mutex_t rpc_lock;    /**< lock indicating RPC processing, this lock is always locked before io_lock!! */
             pthread_cond_t rpc_cond;     /**< RPC condition (tied with rpc_lock and rpc_inuse) */

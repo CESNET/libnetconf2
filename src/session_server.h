@@ -877,15 +877,23 @@ void nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *ses
 time_t nc_session_get_start_time(const struct nc_session *session);
 
 /**
- * @brief Set session notification subscription flag.
+ * @brief Increase session notification subscription flag count.
+ * Supports multiple subscriptions on one session.
  *
  * It is used only to ignore timeouts, because they are
  * ignored for sessions with active subscriptions.
  *
  * @param[in] session Session to modify.
- * @param[in] notif_status 0 for no active subscriptions, non-zero for an active subscription.
  */
-void nc_session_set_notif_status(struct nc_session *session, int notif_status);
+void nc_session_inc_notif_status(struct nc_session *session);
+
+/**
+ * @brief Decrease session notification subscription flag count.
+ * Supports multiple subscriptions on one session.
+ *
+ * @param[in] session Session to modify.
+ */
+void nc_session_dec_notif_status(struct nc_session *session);
 
 /**
  * @brief Get session notification subscription flag.
