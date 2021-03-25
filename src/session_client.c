@@ -1752,8 +1752,7 @@ recv_reply_dup_rpc(struct nc_session *session, struct nc_rpc *rpc, struct lyd_no
     struct ly_in *in;
     struct lyd_node *tree, *op2;
     const struct lys_module *mod;
-    const char *module_name = NULL;
-    const char *rpc_name = NULL;
+    const char *module_name = NULL, *rpc_name = NULL, *module_check = NULL;
 
     switch (rpc->type) {
     case NC_RPC_ACT_GENERIC:
@@ -1864,6 +1863,20 @@ recv_reply_dup_rpc(struct nc_session *session, struct nc_rpc *rpc, struct lyd_no
         module_name = "ietf-subscribed-notifications";
         rpc_name = "kill-subscription";
         break;
+    case NC_RPC_ESTABLISHPUSH:
+        module_name = "ietf-subscribed-notifications";
+        rpc_name = "establish-subscription";
+        module_check = "ietf-yang-push";
+        break;
+    case NC_RPC_MODIFYPUSH:
+        module_name = "ietf-subscribed-notifications";
+        rpc_name = "modify-subscription";
+        module_check = "ietf-yang-push";
+        break;
+    case NC_RPC_RESYNCSUB:
+        module_name = "ietf-yang-push";
+        rpc_name = "resync-subscription";
+        break;
     case NC_RPC_UNKNOWN:
         lyrc = LY_EINT;
         break;
@@ -1878,6 +1891,12 @@ recv_reply_dup_rpc(struct nc_session *session, struct nc_rpc *rpc, struct lyd_no
 
         /* create the operation node */
         lyrc = lyd_new_inner(NULL, mod, rpc_name, 0, op);
+    }
+    if (module_check) {
+        if (!ly_ctx_get_module_implemented(session->ctx, module_check)) {
+            ERR("Session %u: missing \"%s\" schema in the context.", session->id, module_check);
+            return -1;
+        }
     }
 
     if (lyrc) {
@@ -2172,8 +2191,11 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     struct nc_rpc_modifysub *rpc_modsub;
     struct nc_rpc_deletesub *rpc_delsub;
     struct nc_rpc_killsub *rpc_killsub;
-    struct lyd_node *data, *node;
-    const struct lys_module *mod = NULL, *ietfncwd;
+    struct nc_rpc_establishpush *rpc_estpush;
+    struct nc_rpc_modifypush *rpc_modpush;
+    struct nc_rpc_resyncsub *rpc_resyncsub;
+    struct lyd_node *data, *node, *cont;
+    const struct lys_module *mod = NULL, *mod2 = NULL, *ietfncwd;
     LY_ERR lyrc;
     int i;
     char str[11];
@@ -2244,6 +2266,26 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         mod = ly_ctx_get_module_implemented(session->ctx, "ietf-subscribed-notifications");
         if (!mod) {
             ERR("Session %u: missing \"ietf-subscribed-notifications\" schema in the context.", session->id);
+            return NC_MSG_ERROR;
+        }
+        break;
+    case NC_RPC_ESTABLISHPUSH:
+    case NC_RPC_MODIFYPUSH:
+        mod = ly_ctx_get_module_implemented(session->ctx, "ietf-subscribed-notifications");
+        if (!mod) {
+            ERR("Session %u: missing \"ietf-subscribed-notifications\" schema in the context.", session->id);
+            return NC_MSG_ERROR;
+        }
+        mod2 = ly_ctx_get_module_implemented(session->ctx, "ietf-yang-push");
+        if (!mod2) {
+            ERR("Session %u: missing \"ietf-yang-push\" schema in the context.", session->id);
+            return NC_MSG_ERROR;
+        }
+        break;
+    case NC_RPC_RESYNCSUB:
+        mod = ly_ctx_get_module_implemented(session->ctx, "ietf-yang-push");
+        if (!mod) {
+            ERR("Session %u: missing \"ietf-yang-push\" schema in the context.", session->id);
             return NC_MSG_ERROR;
         }
         break;
@@ -2787,6 +2829,175 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         lyd_new_inner(NULL, mod, "kill-subscription", 0, &data);
 
         sprintf(str, "%u", rpc_killsub->id);
+        if (lyd_new_term(data, mod, "id", str, 0, NULL)) {
+            lyd_free_tree(data);
+            return NC_MSG_ERROR;
+        }
+        break;
+
+    case NC_RPC_ESTABLISHPUSH:
+        rpc_estpush = (struct nc_rpc_establishpush *)rpc;
+
+        lyd_new_inner(NULL, mod, "establish-subscription", 0, &data);
+
+        if (lyd_new_term(data, mod2, "datastore", rpc_estpush->datastore, 0, NULL)) {
+            lyd_free_tree(data);
+            return NC_MSG_ERROR;
+        }
+
+        if (rpc_estpush->filter) {
+            if (!rpc_estpush->filter[0] || (rpc_estpush->filter[0] == '<')) {
+                lyd_new_any(data, mod2, "datastore-subtree-filter", rpc_estpush->filter, 0, LYD_ANYDATA_XML, 0, &node);
+            } else if (rpc_estpush->filter[0] == '/') {
+                lyd_new_term(data, mod2, "datastore-xpath-filter", rpc_estpush->filter, 0, &node);
+            } else {
+                lyd_new_term(data, mod2, "selection-filter-ref", rpc_estpush->filter, 0, &node);
+            }
+            if (!node) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+        }
+
+        if (rpc_estpush->stop) {
+            if (lyd_new_term(data, mod, "stop-time", rpc_estpush->stop, 0, NULL)) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+        }
+
+        if (rpc_estpush->encoding) {
+            if (lyd_new_term(data, mod, "encoding", rpc_estpush->encoding, 0, NULL)) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+        }
+
+        if (rpc_estpush->periodic) {
+            if (lyd_new_inner(data, mod2, "periodic", 0, &cont)) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+
+            sprintf(str, "%" PRIu32, rpc_estpush->period);
+            if (lyd_new_term(cont, mod2, "period", str, 0, NULL)) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+
+            if (rpc_estpush->anchor_time) {
+                if (lyd_new_term(cont, mod2, "anchor-time", rpc_estpush->anchor_time, 0, NULL)) {
+                    lyd_free_tree(data);
+                    return NC_MSG_ERROR;
+                }
+            }
+        } else {
+            if (lyd_new_inner(data, mod2, "on-change", 0, &cont)) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+
+            if (rpc_estpush->dampening_period) {
+                sprintf(str, "%" PRIu32, rpc_estpush->dampening_period);
+                if (lyd_new_term(cont, mod2, "dampening-period", str, 0, NULL)) {
+                    lyd_free_tree(data);
+                    return NC_MSG_ERROR;
+                }
+            }
+
+            if (lyd_new_term(cont, mod2, "sync-on-start", rpc_estpush->sync_on_start ? "true" : "false", 0, NULL)) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+
+            if (rpc_estpush->excluded_change) {
+                for (i = 0; rpc_estpush->excluded_change[i]; ++i) {
+                    if (lyd_new_term(cont, mod2, "excluded-change", rpc_estpush->excluded_change[i], 0, NULL)) {
+                        lyd_free_tree(data);
+                        return NC_MSG_ERROR;
+                    }
+                }
+            }
+        }
+        break;
+
+    case NC_RPC_MODIFYPUSH:
+        rpc_modpush = (struct nc_rpc_modifypush *)rpc;
+
+        lyd_new_inner(NULL, mod, "modify-subscription", 0, &data);
+
+        sprintf(str, "%u", rpc_modpush->id);
+        if (lyd_new_term(data, mod, "id", str, 0, NULL)) {
+            lyd_free_tree(data);
+            return NC_MSG_ERROR;
+        }
+
+        if (lyd_new_term(data, mod2, "datastore", rpc_modpush->datastore, 0, NULL)) {
+            lyd_free_tree(data);
+            return NC_MSG_ERROR;
+        }
+
+        if (rpc_modpush->filter) {
+            if (!rpc_modpush->filter[0] || (rpc_modpush->filter[0] == '<')) {
+                lyd_new_any(data, mod2, "datastore-subtree-filter", rpc_modpush->filter, 0, LYD_ANYDATA_XML, 0, &node);
+            } else if (rpc_modpush->filter[0] == '/') {
+                lyd_new_term(data, mod2, "datastore-xpath-filter", rpc_modpush->filter, 0, &node);
+            } else {
+                lyd_new_term(data, mod2, "selection-filter-ref", rpc_modpush->filter, 0, &node);
+            }
+            if (!node) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+        }
+
+        if (rpc_modpush->stop) {
+            if (lyd_new_term(data, mod, "stop-time", rpc_modpush->stop, 0, NULL)) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+        }
+
+        if (rpc_modpush->periodic) {
+            if (lyd_new_inner(data, mod2, "periodic", 0, &cont)) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+
+            sprintf(str, "%" PRIu32, rpc_modpush->period);
+            if (lyd_new_term(cont, mod2, "period", str, 0, NULL)) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+
+            if (rpc_modpush->anchor_time) {
+                if (lyd_new_term(cont, mod2, "anchor-time", rpc_modpush->anchor_time, 0, NULL)) {
+                    lyd_free_tree(data);
+                    return NC_MSG_ERROR;
+                }
+            }
+        } else {
+            if (lyd_new_inner(data, mod2, "on-change", 0, &cont)) {
+                lyd_free_tree(data);
+                return NC_MSG_ERROR;
+            }
+
+            if (rpc_modpush->dampening_period) {
+                sprintf(str, "%" PRIu32, rpc_modpush->dampening_period);
+                if (lyd_new_term(cont, mod2, "dampening-period", str, 0, NULL)) {
+                    lyd_free_tree(data);
+                    return NC_MSG_ERROR;
+                }
+            }
+        }
+        break;
+
+    case NC_RPC_RESYNCSUB:
+        rpc_resyncsub = (struct nc_rpc_resyncsub *)rpc;
+
+        lyd_new_inner(NULL, mod, "resync-subscription", 0, &data);
+
+        sprintf(str, "%u", rpc_resyncsub->id);
         if (lyd_new_term(data, mod, "id", str, 0, NULL)) {
             lyd_free_tree(data);
             return NC_MSG_ERROR;

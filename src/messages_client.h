@@ -70,6 +70,11 @@ typedef enum {
     NC_RPC_MODIFYSUB,       /**< \<modify-subscription\> RPC. */
     NC_RPC_DELETESUB,       /**< \<delete-subscription\> RPC. */
     NC_RPC_KILLSUB,         /**< \<kill-subscription\> RPC. */
+
+    /* ietf-yang-push */
+    NC_RPC_ESTABLISHPUSH,   /**< \<establish-subscription\> RPC with augments. */
+    NC_RPC_MODIFYPUSH,      /**< \<modify-subscription\> RPC with augments. */
+    NC_RPC_RESYNCSUB,       /**< \<resync-subscription\> RPC. */
 } NC_RPC_TYPE;
 
 /**
@@ -446,6 +451,89 @@ struct nc_rpc *nc_rpc_deletesub(uint32_t id);
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
 struct nc_rpc *nc_rpc_killsub(uint32_t id);
+
+/**
+ * @brief Create NETCONF RPC \<establish-subscription\> with augments from ietf-yang-push for a periodic subscription
+ *
+ * For details, see ::nc_rpc.
+ *
+ * @param[in] datastore Source datastore, foreign identity so a module name prefix is required.
+ * @param[in] filter Optional filter data, an XML subtree, XPath expression (with JSON prefixes),
+ * or filter reference, selected based on the first character.
+ * @param[in] stop_time Optional YANG datetime identifying the end of the subscription.
+ * @param[in] encoding Optional specific encoding to use.
+ * @param[in] period Subscription period in centiseconds (0.01s).
+ * @param[in] anchor_time Optional anchor datetime for the period.
+ * @param[in] paramtype How to further manage data parameters.
+ * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
+ */
+struct nc_rpc *nc_rpc_establishpush_periodic(const char *datastore, const char *filter, const char *stop_time,
+        const char *encoding, uint32_t period, const char *anchor_time, NC_PARAMTYPE paramtype);
+
+/**
+ * @brief Create NETCONF RPC \<establish-subscription\> with augments from ietf-yang-push for an on-change subscription
+ *
+ * For details, see ::nc_rpc.
+ *
+ * @param[in] datastore Source datastore, foreign identity so a module name prefix is required.
+ * @param[in] filter Optional filter data, an XML subtree, XPath expression (with JSON prefixes),
+ * or filter reference, selected based on the first character.
+ * @param[in] stop_time Optional YANG datetime identifying the end of the subscription.
+ * @param[in] encoding Optional specific encoding to use.
+ * @param[in] dampening_period Optional dampening period of the notifications.
+ * @param[in] sync_on_start Whether to send a full push-update notification on subscription start.
+ * @param[in] excluded_change Optional NULL-terminated array of excluded changes.
+ * @param[in] paramtype How to further manage data parameters.
+ * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
+ */
+struct nc_rpc *nc_rpc_establishpush_onchange(const char *datastore, const char *filter, const char *stop_time,
+        const char *encoding, uint32_t dampening_period, int sync_on_start, const char **excluded_change,
+        NC_PARAMTYPE paramtype);
+
+/**
+ * @brief Create NETCONF RPC \<modify-subscription\> with augments from ietf-yang-push for a periodic subscription
+ *
+ * For details, see ::nc_rpc.
+ *
+ * @param[in] id Subscription ID to modify.
+ * @param[in] datastore Source datastore, foreign identity so a module name prefix is required.
+ * @param[in] filter Optional filter data, an XML subtree, XPath expression (with JSON prefixes),
+ * or filter reference, selected based on the first character.
+ * @param[in] stop_time Optional YANG datetime identifying the end of the subscription.
+ * @param[in] period Subscription period in centiseconds (0.01s).
+ * @param[in] anchor_time Optional anchor datetime for the period.
+ * @param[in] paramtype How to further manage data parameters.
+ * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
+ */
+struct nc_rpc *nc_rpc_modifypush_periodic(uint32_t id, const char *datastore, const char *filter, const char *stop_time,
+        uint32_t period, const char *anchor_time, NC_PARAMTYPE paramtype);
+
+/**
+ * @brief Create NETCONF RPC \<modify-subscription\> with augments from ietf-yang-push for an on-change subscription
+ *
+ * For details, see ::nc_rpc.
+ *
+ * @param[in] id Subscription ID to modify.
+ * @param[in] datastore Source datastore, foreign identity so a module name prefix is required.
+ * @param[in] filter Optional filter data, an XML subtree, XPath expression (with JSON prefixes),
+ * or filter reference, selected based on the first character.
+ * @param[in] stop_time Optional YANG datetime identifying the end of the subscription.
+ * @param[in] dampening_period Optional dampening period of the notifications.
+ * @param[in] paramtype How to further manage data parameters.
+ * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
+ */
+struct nc_rpc *nc_rpc_modifypush_onchange(uint32_t id, const char *datastore, const char *filter, const char *stop_time,
+        uint32_t dampening_period, NC_PARAMTYPE paramtype);
+
+/**
+ * @brief Create NETCONF RPC \<resync-subscription\>
+ *
+ * For details, see ::nc_rpc.
+ *
+ * @param[in] id Subscription ID to resync.
+ * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
+ */
+struct nc_rpc *nc_rpc_resyncsub(uint32_t id);
 
 /**
  * @brief Free the NETCONF RPC object.

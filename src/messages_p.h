@@ -213,6 +213,49 @@ struct nc_rpc_killsub {
     uint32_t id;
 };
 
+struct nc_rpc_establishpush {
+    NC_RPC_TYPE type;        /**< NC_RPC_ESTABLISHPUSH */
+    char *datastore;
+    char *filter;            /**< XML subtree (starts with '<'), an XPath (starts with '/'), or reference (start with alpha) */
+    char *stop;
+    char *encoding;
+    int periodic;
+    union {
+        struct {
+            uint32_t period;
+            char *anchor_time;
+        };
+        struct {
+            uint32_t dampening_period;
+            int sync_on_start;
+            char **excluded_change;
+        };
+    };
+    char free;
+};
+
+struct nc_rpc_modifypush {
+    NC_RPC_TYPE type;        /**< NC_RPC_MODIFYPUSH */
+    uint32_t id;
+    char *datastore;
+    char *filter;            /**< XML subtree (starts with '<'), an XPath (starts with '/'), or reference (start with alpha) */
+    char *stop;
+    int periodic;
+    union {
+        struct {
+            uint32_t period;
+            char *anchor_time;
+        };
+        uint32_t dampening_period;
+    };
+    char free;
+};
+
+struct nc_rpc_resyncsub {
+    NC_RPC_TYPE type;        /**< NC_RPC_RESYNCSUB */
+    uint32_t id;
+};
+
 void nc_server_rpc_free(struct nc_server_rpc *rpc);
 
 void nc_client_err_clean(struct nc_err *err, struct ly_ctx *ctx);

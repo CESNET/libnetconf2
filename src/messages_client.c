@@ -762,6 +762,251 @@ nc_rpc_killsub(uint32_t id)
     return (struct nc_rpc *)rpc;
 }
 
+API struct nc_rpc *
+nc_rpc_establishpush_periodic(const char *datastore, const char *filter, const char *stop_time, const char *encoding,
+        uint32_t period, const char *anchor_time, NC_PARAMTYPE paramtype)
+{
+    struct nc_rpc_establishpush *rpc;
+
+    if (!datastore) {
+        ERRARG("datastore");
+        return NULL;
+    } else if (!period) {
+        ERRARG("period");
+        return NULL;
+    }
+
+    if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
+        ERR("Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').", filter[0]);
+        return NULL;
+    }
+
+    rpc = malloc(sizeof *rpc);
+    if (!rpc) {
+        ERRMEM;
+        return NULL;
+    }
+
+    rpc->type = NC_RPC_ESTABLISHPUSH;
+    if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
+        rpc->datastore = strdup(datastore);
+    } else {
+        rpc->datastore = (char *)datastore;
+    }
+    if (filter && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->filter = strdup(filter);
+    } else {
+        rpc->filter = (char *)filter;
+    }
+    if (stop_time && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->stop = strdup(stop_time);
+    } else {
+        rpc->stop = (char *)stop_time;
+    }
+    if (encoding && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->encoding = strdup(encoding);
+    } else {
+        rpc->encoding = (char *)encoding;
+    }
+    rpc->periodic = 1;
+    rpc->period = period;
+    if (anchor_time && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->anchor_time = strdup(anchor_time);
+    } else {
+        rpc->anchor_time = (char *)anchor_time;
+    }
+    rpc->free = (paramtype == NC_PARAMTYPE_CONST ? 0 : 1);
+
+    return (struct nc_rpc *)rpc;
+}
+
+API struct nc_rpc *
+nc_rpc_establishpush_onchange(const char *datastore, const char *filter, const char *stop_time, const char *encoding,
+        uint32_t dampening_period, int sync_on_start, const char **excluded_change, NC_PARAMTYPE paramtype)
+{
+    struct nc_rpc_establishpush *rpc;
+    uint32_t i;
+
+    if (!datastore) {
+        ERRARG("datastore");
+        return NULL;
+    }
+
+    if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
+        ERR("Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').", filter[0]);
+        return NULL;
+    }
+
+    rpc = malloc(sizeof *rpc);
+    if (!rpc) {
+        ERRMEM;
+        return NULL;
+    }
+
+    rpc->type = NC_RPC_ESTABLISHPUSH;
+    if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
+        rpc->datastore = strdup(datastore);
+    } else {
+        rpc->datastore = (char *)datastore;
+    }
+    if (filter && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->filter = strdup(filter);
+    } else {
+        rpc->filter = (char *)filter;
+    }
+    if (stop_time && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->stop = strdup(stop_time);
+    } else {
+        rpc->stop = (char *)stop_time;
+    }
+    if (encoding && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->encoding = strdup(encoding);
+    } else {
+        rpc->encoding = (char *)encoding;
+    }
+    rpc->periodic = 0;
+    rpc->dampening_period = dampening_period;
+    rpc->sync_on_start = sync_on_start;
+    if (excluded_change && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->excluded_change = NULL;
+        for (i = 0; excluded_change[i]; ++i) {
+            rpc->excluded_change = realloc(rpc->excluded_change, (i + 2) * sizeof *rpc->excluded_change);
+            rpc->excluded_change[i] = strdup(excluded_change[i]);
+            rpc->excluded_change[i + 1] = NULL;
+        }
+    } else {
+        rpc->excluded_change = (char **)excluded_change;
+    }
+    rpc->free = (paramtype == NC_PARAMTYPE_CONST ? 0 : 1);
+
+    return (struct nc_rpc *)rpc;
+}
+
+API struct nc_rpc *
+nc_rpc_modifypush_periodic(uint32_t id, const char *datastore, const char *filter, const char *stop_time, uint32_t period,
+        const char *anchor_time, NC_PARAMTYPE paramtype)
+{
+    struct nc_rpc_modifypush *rpc;
+
+    if (!id) {
+        ERRARG("id");
+        return NULL;
+    } else if (!datastore) {
+        ERRARG("datastore");
+        return NULL;
+    }
+
+    if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
+        ERR("Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').", filter[0]);
+        return NULL;
+    }
+
+    rpc = malloc(sizeof *rpc);
+    if (!rpc) {
+        ERRMEM;
+        return NULL;
+    }
+
+    rpc->type = NC_RPC_MODIFYPUSH;
+    rpc->id = id;
+    if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
+        rpc->datastore = strdup(datastore);
+    } else {
+        rpc->datastore = (char *)datastore;
+    }
+    if (filter && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->filter = strdup(filter);
+    } else {
+        rpc->filter = (char *)filter;
+    }
+    if (stop_time && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->stop = strdup(stop_time);
+    } else {
+        rpc->stop = (char *)stop_time;
+    }
+    rpc->periodic = 1;
+    rpc->period = period;
+    if (anchor_time && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->anchor_time = strdup(anchor_time);
+    } else {
+        rpc->anchor_time = (char *)anchor_time;
+    }
+    rpc->free = (paramtype == NC_PARAMTYPE_CONST ? 0 : 1);
+
+    return (struct nc_rpc *)rpc;
+}
+
+API struct nc_rpc *
+nc_rpc_modifypush_onchange(uint32_t id, const char *datastore, const char *filter, const char *stop_time,
+        uint32_t dampening_period, NC_PARAMTYPE paramtype)
+{
+    struct nc_rpc_modifypush *rpc;
+
+    if (!id) {
+        ERRARG("id");
+        return NULL;
+    } else if (!datastore) {
+        ERRARG("datastore");
+        return NULL;
+    }
+
+    if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
+        ERR("Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').", filter[0]);
+        return NULL;
+    }
+
+    rpc = malloc(sizeof *rpc);
+    if (!rpc) {
+        ERRMEM;
+        return NULL;
+    }
+
+    rpc->type = NC_RPC_MODIFYPUSH;
+    rpc->id = id;
+    if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
+        rpc->datastore = strdup(datastore);
+    } else {
+        rpc->datastore = (char *)datastore;
+    }
+    if (filter && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->filter = strdup(filter);
+    } else {
+        rpc->filter = (char *)filter;
+    }
+    if (stop_time && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
+        rpc->stop = strdup(stop_time);
+    } else {
+        rpc->stop = (char *)stop_time;
+    }
+    rpc->periodic = 0;
+    rpc->dampening_period = dampening_period;
+    rpc->free = (paramtype == NC_PARAMTYPE_CONST ? 0 : 1);
+
+    return (struct nc_rpc *)rpc;
+}
+
+API struct nc_rpc *
+nc_rpc_resyncsub(uint32_t id)
+{
+    struct nc_rpc_resyncsub *rpc;
+
+    if (!id) {
+        ERRARG("id");
+        return NULL;
+    }
+
+    rpc = malloc(sizeof *rpc);
+    if (!rpc) {
+        ERRMEM;
+        return NULL;
+    }
+
+    rpc->type = NC_RPC_RESYNCSUB;
+    rpc->id = id;
+
+    return (struct nc_rpc *)rpc;
+}
+
 API void
 nc_rpc_free(struct nc_rpc *rpc)
 {
@@ -780,6 +1025,8 @@ nc_rpc_free(struct nc_rpc *rpc)
     struct nc_rpc_editdata *rpc_editdata;
     struct nc_rpc_establishsub *rpc_establishsub;
     struct nc_rpc_modifysub *rpc_modifysub;
+    struct nc_rpc_establishpush *rpc_establishpush;
+    struct nc_rpc_modifypush *rpc_modifypush;
     int i;
 
     if (!rpc) {
@@ -900,6 +1147,36 @@ nc_rpc_free(struct nc_rpc *rpc)
             free(rpc_modifysub->stop);
         }
         break;
+    case NC_RPC_ESTABLISHPUSH:
+        rpc_establishpush = (struct nc_rpc_establishpush *)rpc;
+        if (rpc_establishpush->free) {
+            free(rpc_establishpush->datastore);
+            free(rpc_establishpush->filter);
+            free(rpc_establishpush->stop);
+            free(rpc_establishpush->encoding);
+            if (rpc_establishpush->periodic) {
+                free(rpc_establishpush->anchor_time);
+            } else {
+                if (rpc_establishpush->excluded_change) {
+                    for (i = 0; rpc_establishpush->excluded_change[i]; ++i) {
+                        free(rpc_establishpush->excluded_change[i]);
+                    }
+                    free(rpc_establishpush->excluded_change);
+                }
+            }
+        }
+        break;
+    case NC_RPC_MODIFYPUSH:
+        rpc_modifypush = (struct nc_rpc_modifypush *)rpc;
+        if (rpc_modifypush->free) {
+            free(rpc_modifypush->datastore);
+            free(rpc_modifypush->filter);
+            free(rpc_modifypush->stop);
+            if (rpc_modifypush->periodic) {
+                free(rpc_modifypush->anchor_time);
+            }
+        }
+        break;
     case NC_RPC_UNKNOWN:
     case NC_RPC_LOCK:
     case NC_RPC_UNLOCK:
@@ -907,6 +1184,7 @@ nc_rpc_free(struct nc_rpc *rpc)
     case NC_RPC_DISCARD:
     case NC_RPC_DELETESUB:
     case NC_RPC_KILLSUB:
+    case NC_RPC_RESYNCSUB:
         /* nothing special needed */
         break;
     }
