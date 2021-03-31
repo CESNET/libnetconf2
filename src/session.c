@@ -916,8 +916,9 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
     const struct lys_module *mod;
     struct lysp_feature *feat;
     int size = 10, count, features_count = 0, dev_count = 0, str_len, len;
-    uint32_t i, u, module_set_id;
+    uint32_t i, u;
     LY_ARRAY_COUNT_TYPE v;
+    char *yl_content_id;
 #define NC_CPBLT_BUF_LEN 4096
     char str[NC_CPBLT_BUF_LEN];
 
@@ -1019,7 +1020,7 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
     }
 
     /* models */
-    u = module_set_id = 0;
+    u = 0;
     while ((mod = ly_ctx_get_module_iter(ctx, &u))) {
         if (!strcmp(mod->name, "ietf-yang-library")) {
             if (!mod->revision || (strcmp(mod->revision, "2016-06-21") && strcmp(mod->revision, "2019-01-04"))) {
@@ -1027,17 +1028,34 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
                 goto error;
             }
 
+            /* get content-id */
+            if (server_opts.content_id_clb) {
+                yl_content_id = server_opts.content_id_clb(server_opts.content_id_data);
+                if (!yl_content_id) {
+                    ERRMEM;
+                    goto error;
+                }
+            } else {
+                yl_content_id = malloc(11);
+                if (!yl_content_id) {
+                    ERRMEM;
+                    goto error;
+                }
+                sprintf(yl_content_id, "%u", ly_ctx_get_change_count(ctx));
+            }
+
             if (!strcmp(mod->revision, "2019-01-04")) {
                 /* new one (capab defined in RFC 8526 section 2) */
-                sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.1?revision=%s&content-id=%u",
-                        mod->revision, ly_ctx_get_module_set_id(ctx));
+                sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.1?revision=%s&content-id=%s",
+                        mod->revision, yl_content_id);
                 add_cpblt(ctx, str, &cpblts, &size, &count);
             } else {
                 /* old one (capab defined in RFC 7950 section 5.6.4) */
-                sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.0?revision=%s&module-set-id=%u",
-                        mod->revision, ly_ctx_get_module_set_id(ctx));
+                sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.0?revision=%s&module-set-id=%s",
+                        mod->revision, yl_content_id);
                 add_cpblt(ctx, str, &cpblts, &size, &count);
             }
+            free(yl_content_id);
             continue;
         } else if ((version == LYS_VERSION_1_0) && (mod->parsed->version > version)) {
             /* skip YANG 1.1 schemas */

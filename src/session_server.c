@@ -707,7 +707,7 @@ nc_server_init(struct ly_ctx *ctx)
 API void
 nc_server_destroy(void)
 {
-    unsigned int i;
+    uint32_t i;
 
     for (i = 0; i < server_opts.capabilities_count; i++) {
         lydict_remove(server_opts.ctx, server_opts.capabilities[i]);
@@ -715,6 +715,11 @@ nc_server_destroy(void)
     free(server_opts.capabilities);
     server_opts.capabilities = NULL;
     server_opts.capabilities_count = 0;
+    if (server_opts.content_id_data && server_opts.content_id_data_free) {
+        server_opts.content_id_data_free(server_opts.content_id_data);
+    }
+    server_opts.passwd_auth_data = NULL;
+    server_opts.passwd_auth_data_free = NULL;
 
 #if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
     nc_server_del_endpt(NULL, 0);
@@ -802,6 +807,15 @@ nc_server_set_capability(const char *value)
     lydict_insert(server_opts.ctx, value, 0, &server_opts.capabilities[server_opts.capabilities_count - 1]);
 
     return EXIT_SUCCESS;
+}
+
+API void
+nc_server_set_content_id_clb(char *(*content_id_clb)(void *user_data), void *user_data,
+        void (*free_user_data)(void *user_data))
+{
+    server_opts.content_id_clb = content_id_clb;
+    server_opts.content_id_data = user_data;
+    server_opts.content_id_data_free = free_user_data;
 }
 
 API void

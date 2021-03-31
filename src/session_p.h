@@ -175,8 +175,11 @@ struct nc_server_opts {
     /* ACCESS unlocked */
     NC_WD_MODE wd_basic_mode;
     int wd_also_supported;
-    unsigned int capabilities_count;
+    uint32_t capabilities_count;
     const char **capabilities;
+    char *(*content_id_clb)(void *user_data);
+    void *content_id_data;
+    void (*content_id_data_free)(void *data);
 
     /* ACCESS unlocked */
     uint16_t hello_timeout;

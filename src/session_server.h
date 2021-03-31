@@ -3,7 +3,7 @@
  * \author Michal Vasko <mvasko@cesnet.cz>
  * \brief libnetconf2 session server manipulation
  *
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -172,6 +172,16 @@ void nc_server_get_capab_withdefaults(NC_WD_MODE *basic_mode, int *also_supporte
 int nc_server_set_capability(const char *value);
 
 /**
+ * @brief Set the callback for getting yang-library capability identifier. If none is set, libyang context change count is used.
+ *
+ * @param[in] content_id_clb Callback that should return the yang-library content identifier.
+ * @param[in] user_data Optional arbitrary user data that will be passed to \p content_id_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
+ */
+void nc_server_set_content_id_clb(char *(*content_id_clb)(void *user_data), void *user_data,
+        void (*free_user_data)(void *user_data));
+
+/**
  * @brief Set server timeout for receiving a hello message.
  *
  * @param[in] hello_timeout Hello message timeout. 0 for infinite waiting.
@@ -225,7 +235,7 @@ const char **nc_server_get_cpblts(struct ly_ctx *ctx);
  */
 const char **nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version);
 
-/**@} Server */
+/** @} Server */
 
 /**
  * @addtogroup server_session
@@ -340,7 +350,7 @@ int nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **sessi
  */
 void nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *));
 
-/**@} Server Session */
+/** @} Server Session */
 
 /**
  * @addtogroup server
@@ -448,7 +458,7 @@ int nc_server_endpt_enable_keepalives(const char *endpt_name, int enable);
  */
 int nc_server_endpt_set_keepalives(const char *endpt_name, int idle_time, int max_probes, int probe_interval);
 
-/**@} Server */
+/** @} Server */
 
 /**
  * @addtogroup server_session
@@ -494,7 +504,7 @@ NC_MSG_TYPE nc_session_accept_ssh_channel(struct nc_session *orig_session, struc
  */
 NC_MSG_TYPE nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session);
 
-/**@} Server Session */
+/** @} Server Session */
 
 /**
  * @defgroup server_ssh Server SSH
@@ -541,36 +551,34 @@ int nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64
  * @brief Set the callback for SSH password authentication. If none is set, local system users are used.
  *
  * @param[in] passwd_auth_clb Callback that should authenticate the user. Username can be directly obtained from \p session.
- *                            Zero return indicates success, non-zero an error.
+ * Zero return indicates success, non-zero an error.
  * @param[in] user_data Optional arbitrary user data that will be passed to \p passwd_auth_clb.
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
  */
 void nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_session *session, const char *password,
-                                                              void *user_data),
-                                       void *user_data, void (*free_user_data)(void *user_data));
+        void *user_data), void *user_data, void (*free_user_data)(void *user_data));
 
 /**
  * @brief Set the callback for SSH interactive authentication. If none is set, local system users are used.
  *
  * @param[in] interactive_auth_clb Callback that should authenticate the user.
- *                            Zero return indicates success, non-zero an error.
+ * Zero return indicates success, non-zero an error.
  * @param[in] user_data Optional arbitrary user data that will be passed to \p passwd_auth_clb.
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
  */
-void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session, const ssh_message msg,
-                                                              void *user_data),
-                                           void *user_data, void (*free_user_data)(void *user_data));
+void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session,
+        const ssh_message msg, void *user_data), void *user_data, void (*free_user_data)(void *user_data));
 
 /**
  * @brief Set the callback for SSH public key authentication. If none is set, local system users are used.
  *
  * @param[in] pubkey_auth_clb Callback that should authenticate the user.
- *                            Zero return indicates success, non-zero an error.
+ * Zero return indicates success, non-zero an error.
  * @param[in] user_data Optional arbitrary user data that will be passed to \p passwd_auth_clb.
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
  */
- void nc_server_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session *session, ssh_key key, void *user_data),
-                                       void *user_data, void (*free_user_data)(void *user_data));
+ void nc_server_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session *session, ssh_key key,
+        void *user_data), void *user_data, void (*free_user_data)(void *user_data));
 
 /**
  * @brief Set the callback for retrieving host keys. Any RSA, DSA, and ECDSA keys can be added. However,
