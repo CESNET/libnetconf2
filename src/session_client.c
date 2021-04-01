@@ -2315,8 +2315,8 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         rpc_gc = (struct nc_rpc_getconfig *)rpc;
 
         lyd_new_inner(NULL, mod, "get-config", 0, &data);
-        lyd_new_inner(data, mod, "source", 0, &node);
-        if (lyd_new_term(node, mod, ncds2str[rpc_gc->source], NULL, 0, NULL)) {
+        lyd_new_inner(data, mod, "source", 0, &cont);
+        if (lyd_new_term(cont, mod, ncds2str[rpc_gc->source], NULL, 0, NULL)) {
             lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
@@ -2342,7 +2342,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
                 lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
-            if (lyd_new_term(data, ietfncwd, "with-defaults", nc_wd2str(rpc_gc->wd_mode), 0, &node)) {
+            if (lyd_new_term(data, ietfncwd, "with-defaults", nc_wd2str(rpc_gc->wd_mode), 0, NULL)) {
                 lyd_free_tree(data);
                 return NC_MSG_ERROR;
             }
@@ -2353,8 +2353,8 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         rpc_e = (struct nc_rpc_edit *)rpc;
 
         lyd_new_inner(NULL, mod, "edit-config", 0, &data);
-        lyd_new_inner(data, mod, "target", 0, &node);
-        if (lyd_new_term(node, mod, ncds2str[rpc_e->target], NULL, 0, NULL)) {
+        lyd_new_inner(data, mod, "target", 0, &cont);
+        if (lyd_new_term(cont, mod, ncds2str[rpc_e->target], NULL, 0, NULL)) {
             lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
@@ -2395,26 +2395,26 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         rpc_cp = (struct nc_rpc_copy *)rpc;
 
         lyd_new_inner(NULL, mod, "copy-config", 0, &data);
-        lyd_new_inner(data, mod, "target", 0, &node);
+        lyd_new_inner(data, mod, "target", 0, &cont);
         if (rpc_cp->url_trg) {
-            lyd_new_term(node, mod, "url", rpc_cp->url_trg, 0, &node);
+            lyd_new_term(cont, mod, "url", rpc_cp->url_trg, 0, &node);
         } else {
-            lyd_new_term(node, mod, ncds2str[rpc_cp->target], NULL, 0, &node);
+            lyd_new_term(cont, mod, ncds2str[rpc_cp->target], NULL, 0, &node);
         }
         if (!node) {
             lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
 
-        lyd_new_inner(data, mod, "source", 0, &node);
+        lyd_new_inner(data, mod, "source", 0, &cont);
         if (rpc_cp->url_config_src) {
             if (!rpc_cp->url_config_src[0] || (rpc_cp->url_config_src[0] == '<')) {
-                lyd_new_any(node, mod, "config", rpc_cp->url_config_src, 0, LYD_ANYDATA_XML, 0, &node);
+                lyd_new_any(cont, mod, "config", rpc_cp->url_config_src, 0, LYD_ANYDATA_XML, 0, &node);
             } else {
-                lyd_new_term(node, mod, "url", rpc_cp->url_config_src, 0, &node);
+                lyd_new_term(cont, mod, "url", rpc_cp->url_config_src, 0, &node);
             }
         } else {
-            lyd_new_term(node, mod, ncds2str[rpc_cp->source], NULL, 0, &node);
+            lyd_new_term(cont, mod, ncds2str[rpc_cp->source], NULL, 0, &node);
         }
         if (!node) {
             lyd_free_tree(data);
@@ -2439,11 +2439,11 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         rpc_del = (struct nc_rpc_delete *)rpc;
 
         lyd_new_inner(NULL, mod, "delete-config", 0, &data);
-        lyd_new_inner(data, mod, "target", 0, &node);
+        lyd_new_inner(data, mod, "target", 0, &cont);
         if (rpc_del->url) {
-            lyd_new_term(node, mod, "url", rpc_del->url, 0, &node);
+            lyd_new_term(cont, mod, "url", rpc_del->url, 0, &node);
         } else {
-            lyd_new_term(node, mod, ncds2str[rpc_del->target], NULL, 0, &node);
+            lyd_new_term(cont, mod, ncds2str[rpc_del->target], NULL, 0, &node);
         }
         if (!node) {
             lyd_free_tree(data);
@@ -2455,8 +2455,8 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         rpc_lock = (struct nc_rpc_lock *)rpc;
 
         lyd_new_inner(NULL, mod, "lock", 0, &data);
-        lyd_new_inner(data, mod, "target", 0, &node);
-        if (lyd_new_term(node, mod, ncds2str[rpc_lock->target], NULL, 0, NULL)) {
+        lyd_new_inner(data, mod, "target", 0, &cont);
+        if (lyd_new_term(cont, mod, ncds2str[rpc_lock->target], NULL, 0, NULL)) {
             lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
@@ -2466,8 +2466,8 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         rpc_lock = (struct nc_rpc_lock *)rpc;
 
         lyd_new_inner(NULL, mod, "unlock", 0, &data);
-        lyd_new_inner(data, mod, "target", 0, &data);
-        if (lyd_new_term(node, mod, ncds2str[rpc_lock->target], NULL, 0, NULL)) {
+        lyd_new_inner(data, mod, "target", 0, &cont);
+        if (lyd_new_term(cont, mod, ncds2str[rpc_lock->target], NULL, 0, NULL)) {
             lyd_free_tree(data);
             return NC_MSG_ERROR;
         }
@@ -2571,15 +2571,15 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         rpc_val = (struct nc_rpc_validate *)rpc;
 
         lyd_new_inner(NULL, mod, "validate", 0, &data);
-        lyd_new_inner(data, mod, "source", 0, &node);
+        lyd_new_inner(data, mod, "source", 0, &cont);
         if (rpc_val->url_config_src) {
             if (!rpc_val->url_config_src[0] || (rpc_val->url_config_src[0] == '<')) {
-                lyd_new_any(node, mod, "config", rpc_val->url_config_src, 0, LYD_ANYDATA_XML, 0, &node);
+                lyd_new_any(cont, mod, "config", rpc_val->url_config_src, 0, LYD_ANYDATA_XML, 0, &node);
             } else {
-                lyd_new_term(node, mod, "url", rpc_val->url_config_src, 0, &node);
+                lyd_new_term(cont, mod, "url", rpc_val->url_config_src, 0, &node);
             }
         } else {
-            lyd_new_term(node, mod, ncds2str[rpc_val->source], NULL, 0, &node);
+            lyd_new_term(cont, mod, ncds2str[rpc_val->source], NULL, 0, &node);
         }
         if (!node) {
             lyd_free_tree(data);
