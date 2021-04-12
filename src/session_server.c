@@ -3280,7 +3280,7 @@ fail:
 
 struct nc_ch_client_thread_arg {
     char *client_name;
-    void (*session_clb)(const char *client_name, struct nc_session *new_session);
+    int (*session_clb)(const char *client_name, struct nc_session *new_session);
 };
 
 static struct nc_ch_client *
@@ -3322,7 +3322,16 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
     session->flags |= NC_SESSION_CALLHOME;
 
     /* give the session to the user */
-    data->session_clb(data->client_name, session);
+    if (data->session_clb(data->client_name, session)) {
+        /* something is wrong, free the session */
+        session->flags &= ~NC_SESSION_CALLHOME;
+
+        /* CH UNLOCK */
+        pthread_mutex_unlock(&session->opts.server.ch_lock);
+
+        nc_session_free(session, NULL);
+        return 0;
+    }
 
     do {
         nc_gettimespec_real(&ts);
@@ -3526,7 +3535,7 @@ cleanup:
 }
 
 API int
-nc_connect_ch_client_dispatch(const char *client_name, void (*session_clb)(const char *client_name,
+nc_connect_ch_client_dispatch(const char *client_name, int (*session_clb)(const char *client_name,
         struct nc_session *new_session))
 {
     int ret;

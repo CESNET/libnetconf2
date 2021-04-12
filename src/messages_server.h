@@ -121,7 +121,7 @@ struct nc_server_reply *nc_server_reply_err(struct lyd_node *err);
 int nc_server_reply_add_err(struct nc_server_reply *reply, struct lyd_node *err);
 
 /**
- * @brief Get last error from an ERROR rpy-reply object.
+ * @brief Get last error from an ERROR rpc-reply object.
  *
  * @param[in] reply ERROR reply to read from.
  * @return Last error opaque data tree, NULL on failure.

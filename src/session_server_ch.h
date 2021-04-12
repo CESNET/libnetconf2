@@ -195,12 +195,12 @@ int nc_server_ch_client_set_max_attempts(const char *client_name, uint8_t max_at
  * @brief Establish a Call Home connection with a listening NETCONF client.
  *
  * @param[in] client_name Existing client name.
- * @param[out] session_clb Function that is called for every established session on the client. \p new_session
- *             pointer is internally discarded afterwards.
+ * @param[out] session_clb Function that is called for every established session on the client. @p new_session
+ * pointer is internally discarded afterwards. If the callback returns non-zero, the @p new_session is freed.
  * @return 0 if the thread was successfully created, -1 on error.
  */
 int nc_connect_ch_client_dispatch(const char *client_name,
-        void (*session_clb)(const char *client_name, struct nc_session *new_session));
+        int (*session_clb)(const char *client_name, struct nc_session *new_session));
 
 /** @} Server-side Call Home */
 
