@@ -170,17 +170,6 @@ const struct lyd_node *nc_server_reply_get_last_err(const struct nc_server_reply
 struct lyd_node *nc_err(const struct ly_ctx *ctx, NC_ERR tag, ...);
 
 /**
- * @brief Create a server error structure based on libyang error.
- *
- * The function should be used immediately when a libyang function fails to generate
- * NETCONF error structure based on internal libyang error information (ly_errno, ly_errmsg, ...)
- *
- * @param[in] ctx Libyang context to read the error from.
- * @return Error opaque data node tree.
- */
-struct lyd_node *nc_err_libyang(struct ly_ctx *ctx);
-
-/**
  * @brief Get the \<error-type\> of a server error.
  *
  * @param[in] err Error opaque data node tree to read from.

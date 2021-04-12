@@ -1265,6 +1265,7 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
 {
     struct ly_in *msg;
     struct nc_server_reply *reply = NULL;
+    struct lyd_node *e;
     int r, ret;
 
     if (!session) {
@@ -1305,7 +1306,9 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
 
         if ((*rpc)->envp) {
             /* at least the envelopes were parsed */
-            reply = nc_server_reply_err(nc_err_libyang(server_opts.ctx));
+            e = nc_err(server_opts.ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+            nc_err_set_msg(e, ly_errmsg(server_opts.ctx), "en");
+            reply = nc_server_reply_err(e);
         } else if (session->version == NC_VERSION_11) {
             /* completely malformed message, NETCONF version 1.1 defines sending error reply from the server (RFC 6241 sec. 3) */
             reply = nc_server_reply_err(nc_err(server_opts.ctx, NC_ERR_MALFORMED_MSG));
