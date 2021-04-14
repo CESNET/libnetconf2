@@ -757,7 +757,7 @@ main(void)
     pthread_barrier_destroy(&barrier);
 
     nc_server_destroy();
-    ly_ctx_destroy(ctx, NULL);
+    ly_ctx_destroy(ctx);
 #endif
 
     return 0;

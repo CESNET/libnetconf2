@@ -53,7 +53,7 @@ teardown_server(void **state)
     (void)state;
 
     nc_server_destroy();
-    ly_ctx_destroy(ctx, NULL);
+    ly_ctx_destroy(ctx);
 
     return 0;
 }

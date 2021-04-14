@@ -764,7 +764,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
                     lydict_remove(session->ctx, session->username);
                     lydict_remove(session->ctx, session->host);
                     if (!(session->flags & NC_SESSION_SHAREDCTX)) {
-                        ly_ctx_destroy(session->ctx, NULL);
+                        ly_ctx_destroy(session->ctx);
                     }
 
                     free(siter);
@@ -856,7 +856,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     if (!(session->flags & NC_SESSION_SHAREDCTX)) {
-        ly_ctx_destroy(session->ctx, NULL);
+        ly_ctx_destroy(session->ctx);
     }
 
     if (session->side == NC_SERVER) {
