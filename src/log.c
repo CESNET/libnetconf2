@@ -62,11 +62,37 @@ nc_libssh_thread_verbosity(int level)
 static void
 prv_vprintf(NC_VERB_LEVEL level, const char *format, va_list args)
 {
-#define PRV_MSG_SIZE 4096
-    char prv_msg[PRV_MSG_SIZE];
+#define PRV_MSG_INIT_SIZE 256
+    va_list args2;
+    char *prv_msg;
+    void *mem;
+    int req_len;
 
-    vsnprintf(prv_msg, PRV_MSG_SIZE - 1, format, args);
-    prv_msg[PRV_MSG_SIZE - 1] = '\0';
+    prv_msg = malloc(PRV_MSG_INIT_SIZE);
+    if (!prv_msg) {
+        return;
+    }
+
+    va_copy(args2, args);
+
+    req_len = vsnprintf(prv_msg, PRV_MSG_INIT_SIZE - 1, format, args);
+    if (req_len == -1) {
+        goto cleanup;
+    } else if (req_len >= PRV_MSG_INIT_SIZE - 1) {
+        /* the length is not enough */
+        ++req_len;
+        mem = realloc(prv_msg, req_len);
+        if (!mem) {
+            goto cleanup;
+        }
+        prv_msg = mem;
+
+        /* now print the full message */
+        req_len = vsnprintf(prv_msg, req_len, format, args2);
+        if (req_len == -1) {
+            goto cleanup;
+        }
+    }
 
     if (print_clb) {
         print_clb(level, prv_msg);
@@ -74,7 +100,9 @@ prv_vprintf(NC_VERB_LEVEL level, const char *format, va_list args)
         fprintf(stderr, "%s: %s\n", verb[level].label, prv_msg);
     }
 
-#undef PRV_MSG_SIZE
+cleanup:
+    free(prv_msg);
+#undef PRV_MSG_INIT_SIZE
 }
 
 void
