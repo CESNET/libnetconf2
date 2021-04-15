@@ -235,9 +235,6 @@ if(DOXYGEN_FOUND)
     configure_file(Doxyfile.in Doxyfile)
 endif()
 
-# packages
-add_subdirectory(packages)
-
 # install library
 install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
 

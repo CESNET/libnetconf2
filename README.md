@@ -43,14 +43,6 @@ This means that when only stable official releases are to be used, either `maste
 If all the latest bugfixes should be applied, `devel` branch is the  one to be used. Note that whenever **a new issue is created**
 and it occurs on the `master` branch, the **first response will likely be** to use `devel` before any further provided support.
 
-## Packages
-
-We are using openSUSE Build Service to automaticaly prepare binary packages for number of GNU/Linux distros.
-The [libnetconf2](https://software.opensuse.org//download.html?project=home%3Aliberouter&package=libnetconf2)
-packages are always build from current `master` branch (latest release). If you are interested in any other packages
-(such as *devel*), you can browse
-[all packages](https://download.opensuse.org/repositories/home:/liberouter/) from our repository.
-
 ## libnetconf vs libnetconf2
 
 **libnetconf2** is being developed with experiences gained from the development
