@@ -53,7 +53,7 @@ set(LIBNETCONF2_SOVERSION_FULL ${LIBNETCONF2_MAJOR_SOVERSION}.${LIBNETCONF2_MINO
 set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_SOVERSION})
 
 # libyang SO version required
-set(LIBYANG_DEP_SOVERSION_MAJOR 1)
+set(LIBYANG_DEP_SOVERSION_MAJOR 2)
 
 # build options
 option(ENABLE_SSH "Enable NETCONF over SSH support (via libssh)" ON)
@@ -207,7 +207,7 @@ if(ENABLE_DNSSEC)
 endif()
 
 # dependencies - libyang
-find_package(LibYANG REQUIRED)
+find_package(LibYANG ${LIBYANG_DEP_SOVERSION_MAJOR} REQUIRED)
 target_link_libraries(netconf2 ${LIBYANG_LIBRARIES})
 include_directories(${LIBYANG_INCLUDE_DIRS})
 
