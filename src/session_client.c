@@ -740,16 +740,16 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
                 /* ignore node from other schemas (augments) */
                 continue;
             }
-            if (!LYD_CANON_VALUE(iter) || !LYD_CANON_VALUE(iter)[0]) {
+            if (!lyd_get_value(iter) || !lyd_get_value(iter)[0]) {
                 /* ignore empty nodes */
                 continue;
             }
             if (!strcmp(iter->schema->name, "name")) {
-                (*result)[u].name = strdup(LYD_CANON_VALUE(iter));
+                (*result)[u].name = strdup(lyd_get_value(iter));
             } else if (!strcmp(iter->schema->name, "revision")) {
-                (*result)[u].revision = strdup(LYD_CANON_VALUE(iter));
+                (*result)[u].revision = strdup(lyd_get_value(iter));
             } else if (!strcmp(iter->schema->name, "conformance-type")) {
-                (*result)[u].implemented = !strcmp(LYD_CANON_VALUE(iter), "implement");
+                (*result)[u].implemented = !strcmp(lyd_get_value(iter), "implement");
             } else if (!strcmp(iter->schema->name, "feature")) {
                 (*result)[u].features = nc_realloc((*result)[u].features, (feature_count + 2) * sizeof *(*result)[u].features);
                 if (!(*result)[u].features) {
@@ -759,7 +759,7 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
                     ret = EXIT_FAILURE;
                     goto cleanup;
                 }
-                (*result)[u].features[feature_count] = strdup(LYD_CANON_VALUE(iter));
+                (*result)[u].features[feature_count] = strdup(lyd_get_value(iter));
                 (*result)[u].features[feature_count + 1] = NULL;
                 ++feature_count;
             } else if (!strcmp(iter->schema->name, "submodule")) {
@@ -784,9 +784,9 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
                             if (mod != child->schema->module) {
                                 continue;
                             } else if (!strcmp(child->schema->name, "name")) {
-                                (*result)[u].submodules[v].name = strdup(LYD_CANON_VALUE(child));
+                                (*result)[u].submodules[v].name = strdup(lyd_get_value(child));
                             } else if (!strcmp(child->schema->name, "revision")) {
-                                (*result)[u].submodules[v].revision = strdup(LYD_CANON_VALUE(child));
+                                (*result)[u].submodules[v].revision = strdup(lyd_get_value(child));
                             }
                         }
                     }

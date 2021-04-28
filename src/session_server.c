@@ -559,14 +559,14 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
 
     LY_LIST_FOR(lyd_child(rpc), child) {
         if (!strcmp(child->schema->name, "identifier")) {
-            identifier = LYD_CANON_VALUE(child);
+            identifier = lyd_get_value(child);
         } else if (!strcmp(child->schema->name, "version")) {
-            revision = LYD_CANON_VALUE(child);
+            revision = lyd_get_value(child);
             if (revision && revision[0] == '\0') {
                 revision = NULL;
             }
         } else if (!strcmp(child->schema->name, "format")) {
-            format = LYD_CANON_VALUE(child);
+            format = lyd_get_value(child);
         }
     }
     VRB("Schema \"%s@%s\" was requested.", identifier, revision ? revision : "<any>");
