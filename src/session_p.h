@@ -456,6 +456,7 @@ struct nc_session {
 
             pthread_mutex_t ch_lock;       /**< Call Home thread lock */
             pthread_cond_t ch_cond;        /**< Call Home thread condition */
+            size_t ref_count;              /**< Reference count: when referenced by SR's event session ncid */
 
             /* server flags */
 #ifdef NC_ENABLED_SSH
