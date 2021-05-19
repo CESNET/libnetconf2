@@ -372,6 +372,7 @@ server_send_notif_thread(void *arg)
     NC_MSG_TYPE msg_type;
     struct lyd_node *notif_tree;
     struct nc_server_notif *notif;
+    struct timespec ts;
     char *buf;
     (void)arg;
 
@@ -388,7 +389,8 @@ server_send_notif_thread(void *arg)
     assert_non_null(notif_tree);
     buf = malloc(64);
     assert_non_null(buf);
-    notif = nc_server_notif_new(notif_tree, nc_time2datetime(time(NULL), NULL, buf), NC_PARAMTYPE_FREE);
+    clock_gettime(CLOCK_REALTIME, &ts);
+    notif = nc_server_notif_new(notif_tree, nc_timespec2datetime(ts, NULL, buf), NC_PARAMTYPE_FREE);
     assert_non_null(notif);
 
     /* send notif */

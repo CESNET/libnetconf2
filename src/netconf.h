@@ -44,10 +44,10 @@ extern "C" {
 /**
  * @brief Set RPC callback to a schema node.
  *
- * @param[in] node const struct lys_node *node
+ * @param[in] node const struct lysc_node *node
  * @param[in] cb nc_rpc_clb cb
  */
-#define nc_set_rpc_callback(node, cb) lys_set_private(node, cb)
+#define nc_set_rpc_callback(node, cb) (node->priv = cb)
 
 /**
  * @brief Enumeration of reasons of the NETCONF session termination as defined in RFC 6470.
@@ -126,32 +126,31 @@ typedef enum NC_PARAMTYPE {
 } NC_PARAMTYPE;
 
 /**
- * @brief Transform given time_t (seconds since the epoch) into the RFC 3339 format
+ * @brief Transform given timespec (seconds since the epoch) into the RFC 3339 format
  * accepted by NETCONF functions.
  *
- * This is a reverse function to nc_datetime2time().
+ * This is a reverse function to nc_datetime2timespec().
  *
- * @param[in] time Time to convert.
+ * @param[in] ts Timespec to convert.
  * @param[in] tz Timezone name for the result. See tzselect(1) for list of
  * correct values. If not specified (NULL) or unknown/invalid, the result is provided in UTC (Zulu).
  * @param[in] buf Optional buffer to print the datetime into, should be at least 26 characters long!
  * @return Printed string in a format compliant to RFC 3339 stored in \p buf if provided,
  * otherwise it is up to the caller to free the returned string. NULL on error.
  */
-char* nc_time2datetime(time_t time, const char* tz, char *buf);
+char *nc_timespec2datetime(struct timespec ts, const char* tz, char *buf);
 
 /**
- * @brief Transform given string in RFC 3339 compliant format to the time_t
- * (seconds since the epoch) accepted by most Linux functions.
+ * @brief Transform given string in RFC 3339 compliant format to timespec accepted by most Linux functions.
  *
- * This is a reverse function to nc_time2datetime().
+ * This is a reverse function to nc_timespec2datetime().
  *
  * @param[in] datetime Time structure returned e.g. by localtime().
- * @return time_t value of the given string, -1 on error.
+ * @return timespec value of the given string, -1 on error.
  */
-time_t nc_datetime2time(const char* datetime);
+struct timespec nc_datetime2timespec(const char* datetime);
 
-/**@} Miscellaneous */
+/** @} Miscellaneous */
 
 #ifdef __cplusplus
 }

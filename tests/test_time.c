@@ -24,7 +24,7 @@
 #include "tests/config.h"
 
 static void
-test_2time(void **state)
+test_2timespec(void **state)
 {
     (void) state; /* unused */
     const char *date1 = "2010-02-28T12:34:56Z";      /* 1267360496 */
@@ -33,63 +33,64 @@ test_2time(void **state)
     const char *date4 = "2010-02-28T12:34:56+00:00"; /* 1267360496 */
     const char *date5 = "2010-02-28T12:34:56-00:00"; /* 1267360496 */
     const char *date6 = "2010-02-28T12:34:56.789Z";  /* 1267360496 */
-    time_t t;
+    struct timespec ts;
 
-    t = nc_datetime2time(date1);
-    assert_int_equal(t, 1267360496);
+    ts = nc_datetime2timespec(date1);
+    assert_int_equal(ts.tv_sec, 1267360496);
 
-    t = nc_datetime2time(date2);
-    assert_int_equal(t, 1267360496);
+    ts = nc_datetime2timespec(date2);
+    assert_int_equal(ts.tv_sec, 1267360496);
 
-    t = nc_datetime2time(date3);
-    assert_int_equal(t, 1267360496);
+    ts = nc_datetime2timespec(date3);
+    assert_int_equal(ts.tv_sec, 1267360496);
 
-    t = nc_datetime2time(date4);
-    assert_int_equal(t, 1267360496);
+    ts = nc_datetime2timespec(date4);
+    assert_int_equal(ts.tv_sec, 1267360496);
 
-    t = nc_datetime2time(date5);
-    assert_int_equal(t, 1267360496);
+    ts = nc_datetime2timespec(date5);
+    assert_int_equal(ts.tv_sec, 1267360496);
 
-    t = nc_datetime2time(date6);
-    assert_int_equal(t, 1267360496);
+    ts = nc_datetime2timespec(date6);
+    assert_int_equal(ts.tv_sec, 1267360496);
 
-    t = nc_datetime2time(NULL);
-    assert_int_equal(t, -1);
+    ts = nc_datetime2timespec(NULL);
+    assert_int_equal(ts.tv_sec, 0);
 }
 
 static void
 test_2datetime(void **state)
 {
     (void) state; /* unused */
-    time_t t = 1267360496;
+    struct timespec ts = {.tv_sec = 1267360496, .tv_nsec = 0};
     char buf[30];
 
-    assert_ptr_not_equal(NULL, nc_time2datetime(t, NULL, buf));
+    assert_ptr_not_equal(NULL, nc_timespec2datetime(ts, NULL, buf));
     assert_string_equal(buf, "2010-02-28T12:34:56Z");
 
-    assert_ptr_not_equal(NULL, nc_time2datetime(t, "Pacific/Honolulu", buf));
+    assert_ptr_not_equal(NULL, nc_timespec2datetime(ts, "Pacific/Honolulu", buf));
     assert_string_equal(buf, "2010-02-28T02:34:56-10:00");
 
-    assert_ptr_not_equal(NULL, nc_time2datetime(t, "Asia/Vladivostok", buf));
+    assert_ptr_not_equal(NULL, nc_timespec2datetime(ts, "Asia/Vladivostok", buf));
     assert_string_equal(buf, "2010-02-28T22:34:56+10:00");
 
-    assert_ptr_not_equal(NULL, nc_time2datetime(t, "CET", buf));
+    assert_ptr_not_equal(NULL, nc_timespec2datetime(ts, "CET", buf));
     assert_string_equal(buf, "2010-02-28T13:34:56+01:00");
+
+    /* unknown timezone -> UTC */
+    assert_ptr_not_equal(NULL, nc_timespec2datetime(ts, "xxx", buf));
+    assert_string_equal(buf, "2010-02-28T12:34:56Z");
 
 #if __WORDSIZE == 64
     /* negative years are prohibited */
-    assert_ptr_equal(NULL, nc_time2datetime(-69999999999, NULL, buf));
+    ts.tv_sec = -69999999999;
+    assert_ptr_equal(NULL, nc_timespec2datetime(ts, NULL, buf));
 #endif
-
-    /* unknown timezone -> UTC */
-    assert_ptr_not_equal(NULL, nc_time2datetime(t, "xxx", buf));
-    assert_string_equal(buf, "2010-02-28T12:34:56Z");
 }
 
 int main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test(test_2time),
+        cmocka_unit_test(test_2timespec),
         cmocka_unit_test(test_2datetime),
     };
 
