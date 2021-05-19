@@ -80,8 +80,7 @@ set(libsrc
     src/messages_server.c
     src/session.c
     src/session_client.c
-    src/session_server.c
-    src/time.c)
+    src/session_server.c)
 
 if(ENABLE_SSH)
     list(APPEND libsrc

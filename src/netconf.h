@@ -125,31 +125,6 @@ typedef enum NC_PARAMTYPE {
     NC_PARAMTYPE_DUP_AND_FREE /**< make a copy of the argument, free afterwards */
 } NC_PARAMTYPE;
 
-/**
- * @brief Transform given timespec (seconds since the epoch) into the RFC 3339 format
- * accepted by NETCONF functions.
- *
- * This is a reverse function to nc_datetime2timespec().
- *
- * @param[in] ts Timespec to convert.
- * @param[in] tz Timezone name for the result. See tzselect(1) for list of
- * correct values. If not specified (NULL) or unknown/invalid, the result is provided in UTC (Zulu).
- * @param[in] buf Optional buffer to print the datetime into, should be at least 26 characters long!
- * @return Printed string in a format compliant to RFC 3339 stored in \p buf if provided,
- * otherwise it is up to the caller to free the returned string. NULL on error.
- */
-char *nc_timespec2datetime(struct timespec ts, const char* tz, char *buf);
-
-/**
- * @brief Transform given string in RFC 3339 compliant format to timespec accepted by most Linux functions.
- *
- * This is a reverse function to nc_timespec2datetime().
- *
- * @param[in] datetime Time structure returned e.g. by localtime().
- * @return timespec value of the given string, -1 on error.
- */
-struct timespec nc_datetime2timespec(const char* datetime);
-
 /** @} Miscellaneous */
 
 #ifdef __cplusplus

@@ -1,5 +1,5 @@
 # list of all the tests in each directory
-set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_time test_client_thread)
+set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_client_thread)
 set(client_tests test_client test_client_messages)
 
 # add -Wl,--wrap flags

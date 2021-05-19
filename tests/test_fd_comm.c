@@ -387,10 +387,9 @@ server_send_notif_thread(void *arg)
     /* create notif */
     lyd_new_path(NULL, ctx, "/nc-notifications:notificationComplete", NULL, 0, &notif_tree);
     assert_non_null(notif_tree);
-    buf = malloc(64);
-    assert_non_null(buf);
     clock_gettime(CLOCK_REALTIME, &ts);
-    notif = nc_server_notif_new(notif_tree, nc_timespec2datetime(ts, NULL, buf), NC_PARAMTYPE_FREE);
+    ly_time_ts2str(&ts, &buf);
+    notif = nc_server_notif_new(notif_tree, buf, NC_PARAMTYPE_FREE);
     assert_non_null(notif);
 
     /* send notif */
