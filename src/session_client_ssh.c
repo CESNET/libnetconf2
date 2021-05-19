@@ -16,6 +16,7 @@
  */
 
 #define _GNU_SOURCE
+
 #include <assert.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -40,6 +41,7 @@
 #include <libssh/libssh.h>
 #include <libyang/libyang.h>
 
+#include "compat.h"
 #include "session_client.h"
 #include "session_client_ch.h"
 #include "libnetconf.h"

@@ -33,9 +33,10 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include "compat.h"
+#include "libnetconf.h"
 #include "session_server.h"
 #include "session_server_ch.h"
-#include "libnetconf.h"
 
 #if !defined(HAVE_CRYPT_R)
 pthread_mutex_t crypt_lock = PTHREAD_MUTEX_INITIALIZER;

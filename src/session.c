@@ -175,38 +175,6 @@ nc_sock_enable_keepalive(int sock, struct nc_keepalives *ka)
     return 0;
 }
 
-#ifndef HAVE_PTHREAD_MUTEX_TIMEDLOCK
-int
-pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *abstime)
-{
-    int32_t diff;
-    int rc;
-    struct timespec cur, dur;
-
-    /* Try to acquire the lock and, if we fail, sleep for 5ms. */
-    while ((rc = pthread_mutex_trylock(mutex)) == EBUSY) {
-        nc_gettimespec_real(&cur);
-
-        if ((diff = nc_difftimespec(&cur, abstime)) < 1) {
-            /* timeout */
-            break;
-        } else if (diff < 5) {
-            /* sleep until timeout */
-            dur.tv_sec = 0;
-            dur.tv_nsec = (long)diff * 1000000;
-        } else {
-            /* sleep 5 ms */
-            dur.tv_sec = 0;
-            dur.tv_nsec = 5000000;
-        }
-
-        nanosleep(&dur, NULL);
-    }
-
-    return rc;
-}
-#endif
-
 struct nc_session *
 nc_new_session(NC_SIDE side, int shared_ti)
 {

@@ -32,6 +32,7 @@
 #include <signal.h>
 #include <pwd.h>
 
+#include "compat.h"
 #include "libnetconf.h"
 #include "session_server.h"
 #include "session_server_ch.h"

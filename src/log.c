@@ -21,6 +21,7 @@
     #include <libssh/libssh.h>
 #endif
 
+#include "compat.h"
 #include "libnetconf.h"
 #include "log.h"
 
