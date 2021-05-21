@@ -477,7 +477,7 @@ nc_session_get_refcnt(const struct nc_session *session)
         return -1;
     }
 
-    return session->opts.server.ref_count;
+    return ATOMIC_LOAD(session->opts.server.ref_count);
 }
 
 API void
@@ -487,7 +487,7 @@ nc_session_reference(struct nc_session *session)
         ERRARG("session");
     }
 
-    session->opts.server.ref_count++;
+    ATOMIC_INC(session->opts.server.ref_count);
 }
 
 API void
@@ -497,8 +497,8 @@ nc_session_dereference(struct nc_session *session)
         ERRARG("session");
     }
 
-    if (session->opts.server.ref_count) {
-        session->opts.server.ref_count--;
+    if (ATOMIC_LOAD(session->opts.server.ref_count)) {
+        ATOMIC_DEC(session->opts.server.ref_count);
     }
 }
 
