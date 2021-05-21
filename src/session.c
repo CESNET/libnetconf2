@@ -469,6 +469,39 @@ nc_session_get_id(const struct nc_session *session)
     return session->id;
 }
 
+API uint32_t
+nc_session_get_refcnt(const struct nc_session *session)
+{
+    if (!session) {
+        ERRARG("session");
+        return -1;
+    }
+
+    return ATOMIC_LOAD(session->opts.server.ref_count);
+}
+
+API void
+nc_session_reference(struct nc_session *session)
+{
+    if (!session) {
+        ERRARG("session");
+    }
+
+    ATOMIC_INC(session->opts.server.ref_count);
+}
+
+API void
+nc_session_dereference(struct nc_session *session)
+{
+    if (!session) {
+        ERRARG("session");
+    }
+
+    if (ATOMIC_LOAD(session->opts.server.ref_count)) {
+        ATOMIC_DEC(session->opts.server.ref_count);
+    }
+}
+
 API int
 nc_session_get_version(const struct nc_session *session)
 {

@@ -144,6 +144,29 @@ uint32_t nc_session_get_killed_by(const struct nc_session *session);
 uint32_t nc_session_get_id(const struct nc_session *session);
 
 /**
+ * @brief Get reference count.
+ *
+ * @param[in] session Session to get the information from.
+ * @return Session ID.
+ */
+uint32_t nc_session_get_refcnt(const struct nc_session *session);
+/**
+ * @brief Put a reference to the session in order to avoid
+ *        unwanted release of session.
+ *
+ * @param[in] session Session to get the information from.
+ * @return Session ID.
+ */
+void nc_session_reference(struct nc_session *session);
+/**
+ * @brief Take reference from the session
+ *
+ * @param[in] session Session to get the information from.
+ * @return Session ID.
+ */
+void nc_session_dereference(struct nc_session *session);
+
+/**
  * @brief Get session NETCONF version.
  *
  * @param[in] session Session to get the information from.
