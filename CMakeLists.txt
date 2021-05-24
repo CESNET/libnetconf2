@@ -11,6 +11,7 @@ include(CheckFunctionExists)
 include(CheckCSourceCompiles)
 include(CheckIncludeFile)
 include(UseCompat)
+include(Doc)
 
 if(POLICY CMP0075)
     cmake_policy(SET CMP0075 NEW)
@@ -40,6 +41,8 @@ elseif ("${BUILD_TYPE_UPPER}" STREQUAL "RELWITHDEBINFO")
   set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Build Type" FORCE)
 elseif ("${BUILD_TYPE_UPPER}" STREQUAL "RELWITHDEBUG")
   set(CMAKE_BUILD_TYPE "RelWithDebug" CACHE STRING "Build Type" FORCE)
+elseif ("${BUILD_TYPE_UPPER}" STREQUAL "DOCONLY")
+  set(CMAKE_BUILD_TYPE "DocOnly" CACHE STRING "Build Type" FORCE)
 endif()
 
 add_compile_options(-Wall -Wextra -fvisibility=hidden -std=gnu99)
@@ -120,6 +123,11 @@ set(headers
     src/session_client_ch.h
     src/session_server.h
     src/session_server_ch.h)
+
+if("${BUILD_TYPE_UPPER}" STREQUAL "DOCONLY")
+    libnetconf_doc()
+    return()
+endif()
 
 # use compat
 use_compat()
@@ -238,14 +246,7 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
 endif()
 
 # generate doxygen documentation for libnetconf2 API
-find_package(Doxygen)
-if(DOXYGEN_FOUND)
-    set(DOXYGEN_SKIP_DOT TRUE)
-    add_custom_target(doc
-            COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_BINARY_DIR}/Doxyfile
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-    configure_file(Doxyfile.in Doxyfile)
-endif()
+libnetconf_doc()
 
 # Python bindings
 if(ENABLE_PYTHON)
