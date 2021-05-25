@@ -1837,7 +1837,7 @@ recv_reply_dup_rpc(struct nc_session *session, struct nc_rpc *rpc, struct lyd_no
         break;
     case NC_RPC_SUBSCRIBE:
         module_name = "notifications";
-        rpc_name = "subscribe";
+        rpc_name = "create-subscription";
         break;
     case NC_RPC_GETDATA:
         module_name = "ietf-netconf-nmda";
