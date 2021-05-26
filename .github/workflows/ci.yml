@@ -1,0 +1,184 @@
+name: libnetconf2 CI
+on:
+  push:
+    branches:
+      - libyang2
+  pull_request:
+    branches:
+      - libyang2
+
+env:
+  DEFAULT_OPTIONS: -DENABLE_BUILD_TESTS=ON -DENABLE_DNSSEC=ON
+  DEFAULT_PACKAGES: libcmocka-dev zlib1g-dev libssh-dev libssl-dev libval-dev
+
+jobs:
+  build:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }} # mac-OS does not implement robust mutexes so it is not supported
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+            name: "Release, Ubuntu 18.04, gcc",
+            os: "ubuntu-18.04",
+            build-type: "Release",
+            cc: "gcc",
+            options: "",
+            packager: "sudo apt-get",
+            packages: ""
+          }
+          - {
+            name: "Release, Ubuntu 18.04, clang",
+            os: "ubuntu-18.04",
+            build-type: "Release",
+            cc: "clang",
+            options: "",
+            packager: "sudo apt-get",
+            packages: ""
+          }
+          - {
+            name: "Debug, Ubuntu 18.04, gcc",
+            os: "ubuntu-18.04",
+            build-type: "Debug",
+            cc: "gcc",
+            options: "",
+            packager: "sudo apt-get",
+            packages: "valgrind"
+          }
+          - {
+            name: "Debug, Ubuntu 18.04, clang",
+            os: "ubuntu-18.04",
+            build-type: "Debug",
+            cc: "clang",
+            options: "",
+            packager: "sudo apt-get",
+            packages: "valgrind"
+          }
+          - {
+            name: "SSH Only",
+            os: "ubuntu-18.04",
+            build-type: "Debug",
+            cc: "gcc",
+            options: "DENABLE_TLS=OFF -DENABLE_SSH=ON",
+            packager: "sudo apt-get",
+            packages: "valgrind"
+          }
+          - {
+            name: "TLS Only",
+            os: "ubuntu-18.04",
+            build-type: "Debug",
+            cc: "gcc",
+            options: "DENABLE_TLS=ON -DENABLE_SSH=OFF",
+            packager: "sudo apt-get",
+            packages: "valgrind"
+          }
+          - {
+            name: "No SSH nor TLS",
+            os: "ubuntu-18.04",
+            build-type: "Debug",
+            cc: "gcc",
+            options: "DENABLE_TLS=OFF -DENABLE_SSH=OFF",
+            packager: "sudo apt-get",
+            packages: "valgrind"
+          }
+          - {
+            name: "ASAN and UBSAN",
+            os: "ubuntu-18.04",
+            build-type: "Debug",
+            cc: "clang",
+            options: "-DCMAKE_C_FLAGS=-fsanitize=address,undefined -DENABLE_VALGRIND_TESTS=OFF",
+            packager: "sudo apt-get",
+            packages: ""
+          }
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Uncrustify
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          git clone --branch uncrustify-0.71.0 https://github.com/uncrustify/uncrustify
+          cd uncrustify
+          mkdir build
+          cd build
+          CC=${{ matrix.config.cc }} cmake ..
+          make
+          sudo make install
+        if: ${{ matrix.config.name == 'Debug, Ubuntu 18.04, gcc' }}
+
+      - name: Dependencies
+        shell: bash
+        run: |
+          ${{ matrix.config.packager }} update
+          ${{ matrix.config.packager }} install $DEFAULT_PACKAGES ${{ matrix.config.packages }}
+
+          GIT_BRANCH=`echo ${{ github.ref }} | cut -d'/' -f 3`
+          git clone -b $GIT_BRANCH https://github.com/CESNET/libyang.git
+          cd libyang
+          mkdir build
+          cd build
+          CC=${{ matrix.config.cc }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.config.build-type }} -DENABLE_BUILD_TESTS=OFF ..
+          make -j2
+          sudo make install
+
+      - name: Configure
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir build
+          cd build
+          CC=${{ matrix.config.cc }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.config.build-type }} $DEFAULT_OPTIONS ${{ matrix.config.options }} ..
+
+      - name: Build
+        shell: bash
+        working-directory: ${{ github.workspace }}/build
+        run: make
+
+      - name: Test
+        shell: bash
+        working-directory: ${{ github.workspace }}/build
+        run: ctest --output-on-failure
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Dependencies
+        shell: bash
+        run: |
+          sudo apt-get install $DEFAULT_PACKAGES lcov
+
+          GIT_BRANCH=`echo ${{ github.ref }} | cut -d'/' -f 3`
+          git clone -b $GIT_BRANCH https://github.com/CESNET/libyang.git
+          cd libyang
+          mkdir build
+          cd build
+          CC=${{ matrix.config.cc }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.config.build-type }} -DENABLE_BUILD_TESTS=OFF ..
+          make -j2
+          sudo make install
+
+      - name: Configure
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir build
+          cd build
+          CC=gcc cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_COVERAGE=ON ..
+
+      - name: Build
+        shell: bash
+        working-directory: ${{ github.workspace }}/build
+        run: make
+
+      - name: Test
+        shell: bash
+        working-directory: ${{ github.workspace }}/build
+        run: ctest --output-on-failure
+
+      - name: Upload to Codecov.io
+        shell: bash
+        working-directory: ${{ github.workspace }}/build
+        run: bash <(curl -s https://codecov.io/bash)
