@@ -104,7 +104,7 @@ if(ENABLE_COVERAGE)
 endif()
 
 # compilation flags
-set(CMAKE_C_FLAGS           "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_COVERAGE} -Wall -Wextra -Wpedantic -fvisibility=hidden -std=gnu99")
+set(CMAKE_C_FLAGS           "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_COVERAGE} -Wall -Wextra -fvisibility=hidden -std=gnu99")
 set(CMAKE_C_FLAGS_RELEASE   "-DNDEBUG -O2")
 set(CMAKE_C_FLAGS_DEBUG     "-g -O0")
 
