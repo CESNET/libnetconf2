@@ -513,10 +513,6 @@ void *nc_realloc(void *ptr, size_t size);
 
 NC_MSG_TYPE nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op);
 
-#ifndef HAVE_PTHREAD_MUTEX_TIMEDLOCK
-int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *abstime);
-#endif
-
 int nc_gettimespec_mono(struct timespec *ts);
 
 int nc_gettimespec_real(struct timespec *ts);
