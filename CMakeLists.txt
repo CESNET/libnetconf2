@@ -325,7 +325,7 @@ gen_doc("${doxy_files}" ${LIBNETCONF2_VERSION} ${LIBNETCONF2_DESCRIPTION} "")
 
 # generate API/ABI report
 if ("${BUILD_TYPE_UPPER}" STREQUAL "ABICHECK")
-    lib_abi_check(netconf2 "${headers}" ${LIBNETCONF2_SOVERSION_FULL} a11ddd9f032e0b7bdaa8583c49f4eca168c9c642)
+    lib_abi_check(netconf2 "${headers}" ${LIBNETCONF2_SOVERSION_FULL} e7402149e5b36de7acab2e38970a3a9d6a8165d5)
 endif()
 
 # clean cmake cache
