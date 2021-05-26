@@ -113,7 +113,7 @@ $ make
 ```
 
 ### libssh
-Required version is at least 0.6.4. This dependency can be removed by disabling
+Required version is at least 0.7.1. This dependency can be removed by disabling
 SSH support (see the [Build Options](#build-options) section). Below si the basic
 sequence of commands for compiling and installing it from source. However, there
 are packages for certain Linux distributions available [here](https://www.libssh.org/get-it/).
