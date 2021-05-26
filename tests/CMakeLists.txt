@@ -1,3 +1,12 @@
+# headers test for including compat.h
+add_test(NAME headers
+    COMMAND ${CMAKE_SOURCE_DIR}/compat/check_includes.sh ${CMAKE_SOURCE_DIR}/src/)
+
+# format
+if (${SOURCE_FORMAT_ENABLED})
+    add_test(NAME format WORKING_DIRECTORY ${CMAKE_BINARY_DIR} COMMAND make format-check)
+endif()
+
 # list of all the tests in each directory
 set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_client_thread)
 set(client_tests test_client test_client_messages)

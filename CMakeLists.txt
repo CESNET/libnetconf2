@@ -10,6 +10,7 @@ include(CheckFunctionExists)
 include(CheckCSourceCompiles)
 include(CheckIncludeFile)
 include(UseCompat)
+include(SourceFormat)
 include(GenDoc)
 
 if(POLICY CMP0075)
@@ -172,6 +173,15 @@ set(doxy_files
     src/session_server.h
     src/session_server_ch.h)
 
+# source files to be covered by the 'format' target
+set(format_sources
+    compat/*.c
+    compat/*.h*
+    src/*.c
+    src/*.h
+    tests/*.c
+    tests/client/*.c)
+
 if("${BUILD_TYPE_UPPER}" STREQUAL "DOCONLY")
     gen_doc("${doxy_files}" ${LIBNETCONF2_VERSION} ${LIBNETCONF2_DESCRIPTION} "")
     return()
@@ -263,9 +273,6 @@ configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/sr
 configure_file(nc_client.h.in nc_client.h)
 configure_file(nc_server.h.in nc_server.h)
 
-# generate doxygen documentation for libnetconf2 API
-gen_doc("${doxy_files}" ${LIBNETCONF2_VERSION} ${LIBNETCONF2_DESCRIPTION} "")
-
 # install library
 install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
@@ -290,6 +297,14 @@ if(PKG_CONFIG_FOUND)
     endif()
 endif()
 
+if ("${BUILD_TYPE_UPPER}" STREQUAL "DEBUG")
+    # enable before adding tests to let them detect that format checking is available - one of the tests is format checking
+    source_format_enable()
+endif()
+
+# source files to be covered by the 'format' target and a test with 'format-check' target
+source_format(${format_sources})
+
 if(ENABLE_VALGRIND_TESTS)
     set(ENABLE_BUILD_TESTS ON)
 endif()
@@ -301,6 +316,9 @@ if(ENABLE_BUILD_TESTS)
         add_subdirectory(tests)
     endif()
 endif()
+
+# generate doxygen documentation for libnetconf2 API
+gen_doc("${doxy_files}" ${LIBNETCONF2_VERSION} ${LIBNETCONF2_DESCRIPTION} "")
 
 # clean cmake cache
 add_custom_target(cleancache
