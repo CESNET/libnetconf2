@@ -141,19 +141,14 @@ It is required only if DNSSEC SSHFP retrieval is enabled (it is disabled by
 default, see the [Build Options](#build-options) section).
 
 The easier way of installing it is as the libval-dev package (or a part of
-the dnssec-tools package), if you can find it for your distribution. Packages
-for some distributions or the source can be downloaded from [here](https://www.dnssec-tools.org/download/).
+the dnssec-tools package), if you can find it for your distribution. Otherwise,
+compile and install it from [source](https://github.com/DNSSEC-Tools/DNSSEC-Tools/).
+Only the validator component (`DNSSEC-Tools/dnssec-tools/validator`) is needed.
 
 ### cmocka
 For running the tests (see the [Tests](#tests) section for more information).
 ```
-$ git clone git://git.cryptomilk.org/projects/cmocka.git
-$ cd cmocka
-$ git checkout tags/cmocka-1.0.1
-$ mkdir build; cd build
-$ cmake ..
-$ make
-# make install
+$ sudo apt-get install libcmocka-dev
 ```
 
 ### Doxygen
