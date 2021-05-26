@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 2.8.12)
 
 project(libnetconf2 C)
-set(LIBNETCONF2_DESC "NETCONF library in C providing API for both clients and servers.")
 
 # include custom Modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMakeModules/")
@@ -45,9 +44,6 @@ elseif ("${BUILD_TYPE_UPPER}" STREQUAL "DOCONLY")
   set(CMAKE_BUILD_TYPE "DocOnly" CACHE STRING "Build Type" FORCE)
 endif()
 
-add_compile_options(-Wall -Wextra -fvisibility=hidden -std=gnu99)
-set(CMAKE_C_FLAGS_PACKAGE "-g -O2 -DNDEBUG")
-
 # Version of the project
 # Generic version of not only the library. Major version is reserved for really big changes of the project,
 # minor version changes with added functionality (new tool, functionality of the tool or library, ...) and
@@ -70,6 +66,49 @@ set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_SOVERSION})
 set(LIBYANG_DEP_SOVERSION_MAJOR 2)
 
 # build options
+if(("${BUILD_TYPE_UPPER}" STREQUAL "DEBUG") OR ("${BUILD_TYPE_UPPER}" STREQUAL "RELWITHDEBINFO"))
+    option(ENABLE_BUILD_TESTS "Build tests" ON)
+    option(ENABLE_VALGRIND_TESTS "Build tests with valgrind" ON)
+else()
+    option(ENABLE_BUILD_TESTS "Build tests" OFF)
+    option(ENABLE_VALGRIND_TESTS "Build tests with valgrind" OFF)
+endif()
+option(ENABLE_COVERAGE "Build code coverage report from tests" OFF)
+
+if(ENABLE_COVERAGE)
+    find_program(PATH_GCOV NAMES gcov)
+    if(NOT PATH_GCOV)
+        message(WARNING "'gcov' executable not found! Disabling building code coverage report.")
+        set(ENABLE_COVERAGE OFF)
+    endif()
+
+    find_program(PATH_LCOV NAMES lcov)
+    if(NOT PATH_LCOV)
+        message(WARNING "'lcov' executable not found! Disabling building code coverage report.")
+        set(ENABLE_COVERAGE OFF)
+    endif()
+
+    find_program(PATH_GENHTML NAMES genhtml)
+    if(NOT PATH_GENHTML)
+        message(WARNING "'genhtml' executable not found! Disabling building code coverage report.")
+        set(ENABLE_COVERAGE OFF)
+    endif()
+
+    if(NOT CMAKE_COMPILER_IS_GNUCC)
+        message(WARNING "Compiler is not gcc! Coverage may break the tests!")
+    endif()
+
+    if(ENABLE_COVERAGE)
+        set(CMAKE_C_FLAGS_COVERAGE "--coverage -fprofile-arcs -ftest-coverage")
+    endif()
+endif()
+
+# compilation flags
+set(CMAKE_C_FLAGS           "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_COVERAGE} -Wall -Wextra -Wpedantic -fvisibility=hidden -std=gnu99")
+set(CMAKE_C_FLAGS_RELEASE   "-DNDEBUG -O2")
+set(CMAKE_C_FLAGS_DEBUG     "-g -O0")
+
+# options
 option(ENABLE_SSH "Enable NETCONF over SSH support (via libssh)" ON)
 option(ENABLE_TLS "Enable NETCONF over TLS support (via OpenSSL)" ON)
 option(ENABLE_DNSSEC "Enable support for SSHFP retrieval using DNSSEC for SSH (requires OpenSSL and libval)" OFF)
@@ -83,8 +122,6 @@ if(ENABLE_DNSSEC AND NOT ENABLE_SSH)
     message(WARNING "DNSSEC SSHFP retrieval cannot be used without SSH support.")
     set(ENABLE_DNSSEC OFF)
 endif()
-
-include_directories(${PROJECT_BINARY_DIR}/src)
 
 # source files
 set(libsrc
@@ -122,6 +159,19 @@ set(headers
     src/session_server.h
     src/session_server_ch.h)
 
+# files to generate doxygen from
+set(doxy_files
+    src/libnetconf.h
+    src/log.h
+    src/netconf.h
+    src/session.h
+    src/messages_client.h
+    src/messages_server.h
+    src/session_client.h
+    src/session_client_ch.h
+    src/session_server.h
+    src/session_server_ch.h)
+
 if("${BUILD_TYPE_UPPER}" STREQUAL "DOCONLY")
     libnetconf_doc()
     return()
@@ -134,42 +184,8 @@ use_compat()
 add_library(netconf2 SHARED ${libsrc} ${compatsrc})
 set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_SOVERSION_FULL} SOVERSION ${LIBNETCONF2_SOVERSION})
 
-if((CMAKE_BUILD_TYPE STREQUAL Debug) OR (CMAKE_BUILD_TYPE STREQUAL Package))
-    option(ENABLE_BUILD_TESTS "Build tests" ON)
-    option(ENABLE_VALGRIND_TESTS "Build tests with valgrind" ON)
-else()
-    option(ENABLE_BUILD_TESTS "Build tests" OFF)
-    option(ENABLE_VALGRIND_TESTS "Build tests with valgrind" OFF)
-endif()
-option(ENABLE_COVERAGE "Build code coverage report from tests" OFF)
-
-if(ENABLE_COVERAGE)
-    find_program(PATH_GCOV NAMES gcov)
-    if(NOT PATH_GCOV)
-        message(WARNING "'gcov' executable not found! Disabling building code coverage report.")
-        set(ENABLE_COVERAGE OFF)
-    endif()
-
-    find_program(PATH_LCOV NAMES lcov)
-    if(NOT PATH_LCOV)
-        message(WARNING "'lcov' executable not found! Disabling building code coverage report.")
-        set(ENABLE_COVERAGE OFF)
-    endif()
-
-    find_program(PATH_GENHTML NAMES genhtml)
-    if(NOT PATH_GENHTML)
-        message(WARNING "'genhtml' executable not found! Disabling building code coverage report.")
-        set(ENABLE_COVERAGE OFF)
-    endif()
-
-    if(NOT CMAKE_COMPILER_IS_GNUCC)
-        message(WARNING "Compiler is not gcc! Coverage may break the tests!")
-    endif()
-
-    if(ENABLE_COVERAGE)
-        set(CMAKE_C_FLAGS_COVERAGE "${CMAKE_C_FLAGS} --coverage -fprofile-arcs -ftest-coverage")
-    endif()
-endif()
+# include repository files with highest priority
+include_directories(${PROJECT_BINARY_DIR}/src)
 
 # dependencies - pthread
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
@@ -186,7 +202,7 @@ if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
     find_package(OpenSSL REQUIRED)
     if(ENABLE_TLS)
         message(STATUS "OPENSSL found, required for TLS")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_COVERAGE} -DNC_ENABLED_TLS")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_TLS")
     endif()
 
     target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
@@ -203,7 +219,7 @@ if(ENABLE_SSH)
     target_link_libraries(netconf2 ${LIBSSH_LIBRARIES})
     list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBSSH_LIBRARIES})
     include_directories(${LIBSSH_INCLUDE_DIRS})
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_COVERAGE} -DNC_ENABLED_SSH")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH")
 
     # crypt
     if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "QNX")
@@ -218,7 +234,7 @@ endif()
 # dependencies - libval
 if(ENABLE_DNSSEC)
     find_package(LibVAL REQUIRED)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_COVERAGE} -DENABLE_DNSSEC")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_DNSSEC")
     target_link_libraries(netconf2 ${LIBVAL_LIBRARIES})
     include_directories(${LIBVAL_INCLUDE_DIRS})
 endif()
@@ -241,6 +257,11 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
     check_symbol_exists(getpeereid "sys/types.h;unistd.h" HAVE_GETPEEREID)
     list(REMOVE_ITEM CMAKE_REQUIRED_DEFINITIONS -D_QNX_SOURCE)
 endif()
+
+# generate files
+configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)
+configure_file(nc_client.h.in nc_client.h)
+configure_file(nc_server.h.in nc_server.h)
 
 # generate doxygen documentation for libnetconf2 API
 libnetconf_doc()
@@ -280,10 +301,6 @@ if(ENABLE_BUILD_TESTS)
         add_subdirectory(tests)
     endif()
 endif()
-
-configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)
-configure_file(nc_client.h.in nc_client.h)
-configure_file(nc_server.h.in nc_server.h)
 
 # clean cmake cache
 add_custom_target(cleancache
