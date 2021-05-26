@@ -6,7 +6,7 @@
  *
  * This source is compiled only with libssh.
  *
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -35,6 +35,8 @@
 #ifdef ENABLE_DNSSEC
 #   include <validator/resolver.h>
 #   include <validator/validator.h>
+#   include <validator/validator-config.h>
+
 #   include <validator/validator-compat.h>
 #endif
 
