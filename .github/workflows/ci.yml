@@ -111,6 +111,7 @@ jobs:
       - name: Dependencies
         shell: bash
         run: |
+          sudo add-apt-repository ppa:kedazo/libssh-0.7.x -y
           ${{ matrix.config.packager }} update
           ${{ matrix.config.packager }} install $DEFAULT_PACKAGES ${{ matrix.config.packages }}
 
@@ -156,6 +157,8 @@ jobs:
       - name: Dependencies
         shell: bash
         run: |
+          sudo add-apt-repository ppa:kedazo/libssh-0.7.x -y
+          sudo apt-get update
           sudo apt-get install $DEFAULT_PACKAGES lcov
 
           GIT_BRANCH=`echo ${{ github.ref }} | cut -d'/' -f 3`
