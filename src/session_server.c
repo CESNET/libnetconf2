@@ -718,8 +718,6 @@ nc_server_destroy(void)
     if (server_opts.content_id_data && server_opts.content_id_data_free) {
         server_opts.content_id_data_free(server_opts.content_id_data);
     }
-    server_opts.passwd_auth_data = NULL;
-    server_opts.passwd_auth_data_free = NULL;
 
 #if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
     nc_server_del_endpt(NULL, 0);
