@@ -89,7 +89,7 @@ void nc_session_set_status(struct nc_session *session, NC_STATUS status);
  */
 void nc_set_global_rpc_clb(nc_rpc_clb clb);
 
-/**@} Server Session */
+/** @} Server Session */
 
 /**
  * @addtogroup server
@@ -462,6 +462,7 @@ int nc_server_endpt_set_keepalives(const char *endpt_name, int idle_time, int ma
 
 /**
  * @addtogroup server_session
+ * @{
  */
 
 /**

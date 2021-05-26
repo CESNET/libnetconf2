@@ -119,7 +119,7 @@ void nc_client_init(void);
  */
 void nc_client_destroy(void);
 
-/**@} Client */
+/** @} Client */
 
 /**
  * @defgroup client_session Client Session
@@ -168,7 +168,7 @@ struct nc_session *nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx);
  */
 struct nc_session *nc_connect_unix(const char *address, struct ly_ctx *ctx);
 
-/**@} Client Session */
+/** @} Client Session */
 
 #ifdef NC_ENABLED_SSH
 
@@ -408,7 +408,7 @@ struct nc_session *nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx
  */
 struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx);
 
-/**@} Client SSH */
+/** @} Client SSH */
 
 #endif /* NC_ENABLED_SSH */
 
@@ -515,7 +515,7 @@ struct nc_session *nc_connect_tls(const char *host, uint16_t port, struct ly_ctx
  */
 struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
 
-/**@} Client TLS */
+/** @} Client TLS */
 
 #endif /* NC_ENABLED_TLS */
 

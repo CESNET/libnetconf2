@@ -10,7 +10,7 @@ include(CheckFunctionExists)
 include(CheckCSourceCompiles)
 include(CheckIncludeFile)
 include(UseCompat)
-include(Doc)
+include(GenDoc)
 
 if(POLICY CMP0075)
     cmake_policy(SET CMP0075 NEW)
@@ -173,7 +173,7 @@ set(doxy_files
     src/session_server_ch.h)
 
 if("${BUILD_TYPE_UPPER}" STREQUAL "DOCONLY")
-    libnetconf_doc()
+    gen_doc("${doxy_files}" ${LIBNETCONF2_VERSION} ${LIBNETCONF2_DESCRIPTION} "")
     return()
 endif()
 
@@ -264,7 +264,7 @@ configure_file(nc_client.h.in nc_client.h)
 configure_file(nc_server.h.in nc_server.h)
 
 # generate doxygen documentation for libnetconf2 API
-libnetconf_doc()
+gen_doc("${doxy_files}" ${LIBNETCONF2_VERSION} ${LIBNETCONF2_DESCRIPTION} "")
 
 # install library
 install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
