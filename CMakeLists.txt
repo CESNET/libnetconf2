@@ -10,6 +10,7 @@ include(CheckFunctionExists)
 include(CheckCSourceCompiles)
 include(CheckIncludeFile)
 include(UseCompat)
+include(ABICheck)
 include(SourceFormat)
 include(GenDoc)
 
@@ -34,15 +35,17 @@ endif()
 # normalize build type string
 string(TOUPPER "${CMAKE_BUILD_TYPE}" BUILD_TYPE_UPPER)
 if ("${BUILD_TYPE_UPPER}" STREQUAL "RELEASE")
-  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build Type" FORCE)
-elseif ("${BUILD_TYPE_UPPER}" STREQUAL "DEBUG")
-  set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build Type" FORCE)
-elseif ("${BUILD_TYPE_UPPER}" STREQUAL "RELWITHDEBINFO")
-  set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Build Type" FORCE)
-elseif ("${BUILD_TYPE_UPPER}" STREQUAL "RELWITHDEBUG")
-  set(CMAKE_BUILD_TYPE "RelWithDebug" CACHE STRING "Build Type" FORCE)
-elseif ("${BUILD_TYPE_UPPER}" STREQUAL "DOCONLY")
-  set(CMAKE_BUILD_TYPE "DocOnly" CACHE STRING "Build Type" FORCE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build Type" FORCE)
+elseif("${BUILD_TYPE_UPPER}" STREQUAL "DEBUG")
+    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build Type" FORCE)
+elseif("${BUILD_TYPE_UPPER}" STREQUAL "RELWITHDEBINFO")
+    set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Build Type" FORCE)
+elseif("${BUILD_TYPE_UPPER}" STREQUAL "RELWITHDEBUG")
+    set(CMAKE_BUILD_TYPE "RelWithDebug" CACHE STRING "Build Type" FORCE)
+elseif("${BUILD_TYPE_UPPER}" STREQUAL "ABICHECK")
+    set(CMAKE_BUILD_TYPE "ABICheck" CACHE STRING "Build Type" FORCE)
+elseif("${BUILD_TYPE_UPPER}" STREQUAL "DOCONLY")
+    set(CMAKE_BUILD_TYPE "DocOnly" CACHE STRING "Build Type" FORCE)
 endif()
 
 # Version of the project
@@ -108,6 +111,7 @@ endif()
 set(CMAKE_C_FLAGS           "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_COVERAGE} -Wall -Wextra -fvisibility=hidden -std=gnu99")
 set(CMAKE_C_FLAGS_RELEASE   "-DNDEBUG -O2")
 set(CMAKE_C_FLAGS_DEBUG     "-g -O0")
+set(CMAKE_C_FLAGS_ABICHECK  "-g -Og")
 
 # options
 option(ENABLE_SSH "Enable NETCONF over SSH support (via libssh)" ON)
@@ -149,7 +153,6 @@ if(ENABLE_TLS)
 endif()
 
 set(headers
-    ${PROJECT_BINARY_DIR}/src/config.h
     src/log.h
     src/netconf.h
     src/session.h
@@ -279,7 +282,7 @@ install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
 # install headers
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_client.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_server.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-install(FILES ${headers} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libnetconf2)
+install(FILES ${headers} ${PROJECT_BINARY_DIR}/src/config.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libnetconf2)
 
 # install pkg-config file
 find_package(PkgConfig)
@@ -319,6 +322,11 @@ endif()
 
 # generate doxygen documentation for libnetconf2 API
 gen_doc("${doxy_files}" ${LIBNETCONF2_VERSION} ${LIBNETCONF2_DESCRIPTION} "")
+
+# generate API/ABI report
+if ("${BUILD_TYPE_UPPER}" STREQUAL "ABICHECK")
+    lib_abi_check(netconf2 "${headers}" ${LIBNETCONF2_SOVERSION_FULL} a11ddd9f032e0b7bdaa8583c49f4eca168c9c642)
+endif()
 
 # clean cmake cache
 add_custom_target(cleancache
