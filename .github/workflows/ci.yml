@@ -9,7 +9,7 @@ on:
 
 env:
   DEFAULT_OPTIONS: -DENABLE_BUILD_TESTS=ON -DENABLE_DNSSEC=ON
-  DEFAULT_PACKAGES: libcmocka-dev zlib1g-dev libssh-dev libssl-dev libval-dev
+  DEFAULT_PACKAGES: libcmocka-dev zlib1g-dev libssh-dev libssl-dev
 
 jobs:
   build:
@@ -122,6 +122,13 @@ jobs:
           CC=${{ matrix.config.cc }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.config.build-type }} -DENABLE_BUILD_TESTS=OFF ..
           make -j2
           sudo make install
+
+          git clone https://github.com/DNSSEC-Tools/DNSSEC-Tools.git dnssec-tools
+          cd dnssec-tools/dnssec-tools/validator
+          ./configure
+          make -j2
+          sudo make install
+
 
       - name: Configure
         shell: bash
