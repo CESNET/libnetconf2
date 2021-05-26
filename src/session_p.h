@@ -16,21 +16,21 @@
 #ifndef NC_SESSION_PRIVATE_H_
 #define NC_SESSION_PRIVATE_H_
 
-#include <stdint.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <sys/stat.h>
 
 #include <libyang/libyang.h>
 
 #include "libnetconf.h"
+#include "messages_client.h"
 #include "netconf.h"
 #include "session.h"
-#include "messages_client.h"
 
 #ifdef NC_ENABLED_SSH
 
-#   include <libssh/libssh.h>
 #   include <libssh/callbacks.h>
+#   include <libssh/libssh.h>
 #   include <libssh/server.h>
 
 /* seconds */
@@ -200,7 +200,7 @@ struct nc_server_opts {
 #ifdef NC_ENABLED_TLS
     int (*user_verify_clb)(const struct nc_session *session);
 
-    int (*server_cert_clb)(const char *name, void *user_data, char **cert_path, char **cert_data,char **privkey_path,
+    int (*server_cert_clb)(const char *name, void *user_data, char **cert_path, char **cert_data, char **privkey_path,
             char **privkey_data, NC_SSH_KEY_TYPE *privkey_type);
     void *server_cert_data;
     void (*server_cert_data_free)(void *data);
@@ -761,7 +761,7 @@ void _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts);
  * @return -1 on error.
  * @return -2 on malformed message error.
  */
-int nc_read_msg_poll_io(struct nc_session* session, int io_timeout, struct ly_in **msg);
+int nc_read_msg_poll_io(struct nc_session *session, int io_timeout, struct ly_in **msg);
 
 /**
  * @brief Read a message from the wire.
@@ -777,7 +777,7 @@ int nc_read_msg_poll_io(struct nc_session* session, int io_timeout, struct ly_in
  * @return -1 on error.
  * @return -2 on malformed message error.
  */
-int nc_read_msg_io(struct nc_session* session, int io_timeout, struct ly_in **msg, int passing_io_lock);
+int nc_read_msg_io(struct nc_session *session, int io_timeout, struct ly_in **msg, int passing_io_lock);
 
 /**
  * @brief Write message into wire.

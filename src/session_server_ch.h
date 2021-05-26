@@ -19,13 +19,13 @@
 extern "C" {
 #endif
 
-#include <stdint.h>
 #include <libyang/libyang.h>
+#include <stdint.h>
 
-#include "session.h"
 #include "netconf.h"
+#include "session.h"
 
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
 
 /**
  * @defgroup server_ch Server-side Call Home

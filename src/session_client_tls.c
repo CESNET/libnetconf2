@@ -21,20 +21,20 @@
 #include <unistd.h>
 
 #include <libyang/libyang.h>
-#include <openssl/ossl_typ.h>
 #include <openssl/err.h>
+#include <openssl/ossl_typ.h>
 #include <openssl/x509.h>
 
+#include "libnetconf.h"
 #include "session_client.h"
 #include "session_client_ch.h"
-#include "libnetconf.h"
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 #define X509_STORE_CTX_get_by_subject X509_STORE_get_by_subject
 #endif
 
 struct nc_client_context *nc_client_context_location(void);
-int nc_session_new_ctx( struct nc_session *session, struct ly_ctx *ctx);
+int nc_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx);
 
 #define client_opts nc_client_context_location()->opts
 #define tls_opts nc_client_context_location()->tls_opts
@@ -81,7 +81,7 @@ tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
     rc = X509_STORE_CTX_get_by_subject(store_ctx, X509_LU_CRL, subject, obj);
     X509_STORE_CTX_free(store_ctx);
     crl = X509_OBJECT_get0_X509_CRL(obj);
-    if (rc > 0 && crl) {
+    if ((rc > 0) && crl) {
         next_update = X509_CRL_get0_nextUpdate(crl);
 
         /* verify the signature on this CRL */
@@ -120,7 +120,7 @@ tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
     rc = X509_STORE_CTX_get_by_subject(store_ctx, X509_LU_CRL, issuer, obj);
     X509_STORE_CTX_free(store_ctx);
     crl = X509_OBJECT_get0_X509_CRL(obj);
-    if (rc > 0 && crl) {
+    if ((rc > 0) && crl) {
         /* check if the current certificate is revoked by this CRL */
         n = sk_X509_REVOKED_num(X509_CRL_get_REVOKED(crl));
         for (i = 0; i < n; i++) {
@@ -176,7 +176,7 @@ tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
     rc = X509_STORE_CTX_get_by_subject(&store_ctx, X509_LU_CRL, subject, &obj);
     X509_STORE_CTX_cleanup(&store_ctx);
     crl = obj.data.crl;
-    if (rc > 0 && crl) {
+    if ((rc > 0) && crl) {
         next_update = X509_CRL_get_nextUpdate(crl);
 
         /* verify the signature on this CRL */
@@ -214,7 +214,7 @@ tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
     rc = X509_STORE_CTX_get_by_subject(&store_ctx, X509_LU_CRL, issuer, &obj);
     X509_STORE_CTX_cleanup(&store_ctx);
     crl = obj.data.crl;
-    if (rc > 0 && crl) {
+    if ((rc > 0) && crl) {
         /* check if the current certificate is revoked by this CRL */
         n = sk_X509_REVOKED_num(X509_CRL_get_REVOKED(crl));
         for (i = 0; i < n; i++) {

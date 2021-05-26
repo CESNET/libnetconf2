@@ -20,19 +20,19 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/socket.h>
+#include <unistd.h>
 
 #include <cmocka.h>
 #include <libyang/libyang.h>
 
-#include <session_client.h>
-#include <session_server.h>
-#include <session_p.h>
 #include <messages_p.h>
+#include <session_client.h>
+#include <session_p.h>
+#include <session_server.h>
 #include "tests/config.h"
 
 struct nc_session *server_session;
@@ -374,6 +374,7 @@ server_send_notif_thread(void *arg)
     struct nc_server_notif *notif;
     struct timespec ts;
     char *buf;
+
     (void)arg;
 
     /* wait for the RPC callback to be called */
@@ -494,7 +495,7 @@ main(void)
     const char *nc_features[] = {"candidate", NULL};
 
     /* create ctx */
-    ly_ctx_new(TESTS_DIR"/data/modules", 0, &ctx);
+    ly_ctx_new(TESTS_DIR "/data/modules", 0, &ctx);
     assert_non_null(ctx);
 
     /* load modules */

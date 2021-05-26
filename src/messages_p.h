@@ -17,8 +17,8 @@
 
 #include <libyang/libyang.h>
 
-#include "messages_server.h"
 #include "messages_client.h"
+#include "messages_server.h"
 
 extern const char *rpcedit_dfltop2str[];
 extern const char *rpcedit_testopt2str[];

@@ -91,7 +91,7 @@ typedef enum {
  * @brief Enumeration of Call Home client priority policy.
  */
 typedef enum {
-    NC_CH_FIRST_LISTED = 0, //default
+    NC_CH_FIRST_LISTED = 0, // default
     NC_CH_LAST_CONNECTED,
     NC_CH_RANDOM
 } NC_CH_START_WITH;
@@ -223,7 +223,7 @@ void *nc_session_get_data(const struct nc_session *session);
  */
 void nc_session_free(struct nc_session *session, void (*data_free)(void *));
 
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
 
 /**
  * @brief Free all the dynamically allocated thread-specific libssl/libcrypto

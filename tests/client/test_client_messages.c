@@ -1,17 +1,17 @@
+#include <errno.h>
+#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <setjmp.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <errno.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 #include <cmocka.h>
-#include <libyang/libyang.h>
-#include <session_client.h>
-#include <log.h>
 #include <config.h>
+#include <libyang/libyang.h>
+#include <log.h>
 #include <messages_p.h>
+#include <session_client.h>
 #include "tests/config.h"
 
 static int
@@ -50,6 +50,7 @@ test_nc_rpc_act_generic_xml(void **state)
 
     /* create generic rpc with NC_PARAMTYPE_FREE */
     char *str = strdup("str");
+
     rpc = nc_rpc_act_generic_xml(str, NC_PARAMTYPE_FREE);
     assert_int_equal(nc_rpc_get_type(rpc), NC_RPC_ACT_GENERIC);
     generic_rpc = (struct nc_rpc_act_generic *)rpc;
@@ -75,6 +76,7 @@ test_nc_rpc_act_generic(void **state)
     struct nc_rpc *rpc = NULL;
     struct nc_rpc_act_generic *generic_rpc = NULL;
     struct lyd_node node;
+
     node.next = NULL;
     node.prev = &node;
 
@@ -115,6 +117,7 @@ test_nc_rpc_getconfig(void **state)
 
     /* create getconfig rpc with NC_PARAMTYPE_FREE */
     char *filter = strdup("string");
+
     rpc = nc_rpc_getconfig(NC_DATASTORE_CONFIG, filter, NC_WD_EXPLICIT, NC_PARAMTYPE_FREE);
     assert_non_null(rpc);
     check_getconfig(rpc, NC_DATASTORE_CONFIG, filter, NC_WD_EXPLICIT);
@@ -130,7 +133,7 @@ test_nc_rpc_getconfig(void **state)
 /* function to check if values of edit rpc are set correctly */
 void
 check_edit(struct nc_rpc *rpc, NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, NC_RPC_EDIT_TESTOPT test_opt,
-            NC_RPC_EDIT_ERROPT error_opt, const char *edit_content)
+        NC_RPC_EDIT_ERROPT error_opt, const char *edit_content)
 {
     assert_int_equal(nc_rpc_get_type(rpc), NC_RPC_EDIT);
     struct nc_rpc_edit *edit_rpc = (struct nc_rpc_edit *)rpc;
@@ -143,7 +146,6 @@ check_edit(struct nc_rpc *rpc, NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_o
     assert_string_equal(edit_rpc->edit_cont, edit_content);
 }
 
-
 static void
 test_nc_rpc_edit(void **state)
 {
@@ -152,34 +154,35 @@ test_nc_rpc_edit(void **state)
 
     /* create edit rpc with NC_PARAMTYPE_CONST */
     rpc = nc_rpc_edit(NC_DATASTORE_RUNNING, NC_RPC_EDIT_DFLTOP_REPLACE, NC_RPC_EDIT_TESTOPT_TESTSET,
-                      NC_RPC_EDIT_ERROPT_STOP, "url", NC_PARAMTYPE_CONST);
+            NC_RPC_EDIT_ERROPT_STOP, "url", NC_PARAMTYPE_CONST);
     assert_non_null(rpc);
     check_edit(rpc, NC_DATASTORE_RUNNING, NC_RPC_EDIT_DFLTOP_REPLACE,
-               NC_RPC_EDIT_TESTOPT_TESTSET, NC_RPC_EDIT_ERROPT_STOP, "url");
+            NC_RPC_EDIT_TESTOPT_TESTSET, NC_RPC_EDIT_ERROPT_STOP, "url");
     nc_rpc_free(rpc);
 
     /* create edit rpc with NC_PARAMTYPE_FREE */
     char *str = strdup("string");
+
     rpc = nc_rpc_edit(NC_DATASTORE_CANDIDATE, NC_RPC_EDIT_DFLTOP_MERGE, NC_RPC_EDIT_TESTOPT_SET,
-                      NC_RPC_EDIT_ERROPT_ROLLBACK, str, NC_PARAMTYPE_FREE);
+            NC_RPC_EDIT_ERROPT_ROLLBACK, str, NC_PARAMTYPE_FREE);
     assert_non_null(rpc);
     check_edit(rpc, NC_DATASTORE_CANDIDATE, NC_RPC_EDIT_DFLTOP_MERGE,
-               NC_RPC_EDIT_TESTOPT_SET, NC_RPC_EDIT_ERROPT_ROLLBACK, str);
+            NC_RPC_EDIT_TESTOPT_SET, NC_RPC_EDIT_ERROPT_ROLLBACK, str);
     nc_rpc_free(rpc);
 
     /* create edit rpc with NC_PARAMTYPE_DUP_AND_FREE */
     rpc = nc_rpc_edit(NC_DATASTORE_CONFIG, NC_RPC_EDIT_DFLTOP_NONE, NC_RPC_EDIT_TESTOPT_TEST,
-                      NC_RPC_EDIT_ERROPT_CONTINUE, "url1", NC_PARAMTYPE_DUP_AND_FREE);
+            NC_RPC_EDIT_ERROPT_CONTINUE, "url1", NC_PARAMTYPE_DUP_AND_FREE);
     assert_non_null(rpc);
     check_edit(rpc, NC_DATASTORE_CONFIG, NC_RPC_EDIT_DFLTOP_NONE,
-               NC_RPC_EDIT_TESTOPT_TEST, NC_RPC_EDIT_ERROPT_CONTINUE, "url1");
+            NC_RPC_EDIT_TESTOPT_TEST, NC_RPC_EDIT_ERROPT_CONTINUE, "url1");
     nc_rpc_free(rpc);
 }
 
 /* function to check if values of copy rpc are set correctly */
 void
 check_copy(struct nc_rpc *rpc, NC_DATASTORE target, const char *url_trg, NC_DATASTORE source,
-           const char *url_or_config_src, NC_WD_MODE wd_mode)
+        const char *url_or_config_src, NC_WD_MODE wd_mode)
 {
     assert_int_equal(nc_rpc_get_type(rpc), NC_RPC_COPY);
     struct nc_rpc_copy *copy_rpc = (struct nc_rpc_copy *)rpc;
@@ -200,7 +203,7 @@ test_nc_rpc_copy(void **state)
 
     /* create copy rpc with NC_PARAMTYPE_CONST */
     rpc = nc_rpc_copy(NC_DATASTORE_RUNNING, "target-url", NC_DATASTORE_RUNNING, "src-url",
-                      NC_WD_ALL, NC_PARAMTYPE_CONST);
+            NC_WD_ALL, NC_PARAMTYPE_CONST);
     assert_non_null(rpc);
     check_copy(rpc, NC_DATASTORE_RUNNING, "target-url", NC_DATASTORE_RUNNING, "src-url", NC_WD_ALL);
     nc_rpc_free(rpc);
@@ -208,15 +211,16 @@ test_nc_rpc_copy(void **state)
     /* create copy rpc with NC_PARAMTYPE_FREE */
     char *target = strdup("target");
     char *src = strdup("src");
+
     rpc = nc_rpc_copy(NC_DATASTORE_STARTUP, target, NC_DATASTORE_RUNNING, src,
-                      NC_WD_ALL_TAG, NC_PARAMTYPE_FREE);
+            NC_WD_ALL_TAG, NC_PARAMTYPE_FREE);
     assert_non_null(rpc);
     check_copy(rpc, NC_DATASTORE_STARTUP, target, NC_DATASTORE_RUNNING, src, NC_WD_ALL_TAG);
     nc_rpc_free(rpc);
 
     /* create copy rpc with NC_PARAMTYPE_DUP_AND_FREE */
     rpc = nc_rpc_copy(NC_DATASTORE_STARTUP, "url", NC_DATASTORE_CANDIDATE, "url",
-                      NC_WD_TRIM, NC_PARAMTYPE_DUP_AND_FREE);
+            NC_WD_TRIM, NC_PARAMTYPE_DUP_AND_FREE);
     assert_non_null(rpc);
     check_copy(rpc, NC_DATASTORE_STARTUP, "url", NC_DATASTORE_CANDIDATE, "url", NC_WD_TRIM);
     nc_rpc_free(rpc);
@@ -248,6 +252,7 @@ test_nc_rpc_delete(void **state)
 
     /* create delete rpc with NC_PARAMTYPE_FREE */
     char *url = strdup("url");
+
     rpc = nc_rpc_delete(NC_DATASTORE_CANDIDATE, url, NC_PARAMTYPE_FREE);
     assert_non_null(rpc);
     check_delete(rpc, NC_DATASTORE_CANDIDATE, url);
@@ -321,6 +326,7 @@ test_nc_rpc_get(void **state)
 
     /* create get rpc with NC_PARAMTYPE_FREE */
     char *str = strdup("string");
+
     rpc = nc_rpc_get(str, NC_WD_EXPLICIT, NC_PARAMTYPE_FREE);
     assert_non_null(rpc);
     check_get_rpc(rpc, str, NC_WD_EXPLICIT);
@@ -380,6 +386,7 @@ test_nc_rpc_commit(void **state)
     /* create commit rpc with NC_PARAMTYPE_FREE*/
     char *str1 = strdup("str1");
     char *str2 = strdup("str2");
+
     rpc = nc_rpc_commit(2, 5, str1, str2, NC_PARAMTYPE_FREE);
     assert_non_null(rpc);
     check_commit_rpc(rpc, 2, 5, str1, str2);
@@ -430,6 +437,7 @@ test_nc_rpc_cancel(void **state)
 
     /* create cancel rpc with NC_PARAMTYPE_FREE*/
     char *str = strdup("string");
+
     rpc = nc_rpc_cancel(str, NC_PARAMTYPE_FREE);
     assert_non_null(rpc);
     check_cancel_rpc(rpc, str);
@@ -468,6 +476,7 @@ test_nc_rpc_validate(void **state)
 
     /* create validate rpc with NC_PARAMTYPE_FREE */
     char *str = strdup("string");
+
     rpc = nc_rpc_validate(NC_DATASTORE_CANDIDATE, str, NC_PARAMTYPE_FREE);
     assert_non_null(rpc);
     check_validate_rpc(rpc, NC_DATASTORE_CANDIDATE, str);
@@ -509,6 +518,7 @@ test_nc_rpc_getschema(void **state)
     char *str1 = strdup("str1");
     char *str2 = strdup("str2");
     char *str3 = strdup("str3");
+
     rpc = nc_rpc_getschema(str1, str2, str3, NC_PARAMTYPE_FREE);
     assert_non_null(rpc);
     check_getschema_rpc(rpc, str1, str2, str3);
@@ -524,7 +534,7 @@ test_nc_rpc_getschema(void **state)
 /* function to check if values of subscribe rpc are set correctly */
 void
 check_subscribe_rpc(struct nc_rpc *rpc, const char *stream_name, const char *filter,
-                    const char *start_time, const char *stop_time)
+        const char *start_time, const char *stop_time)
 {
     assert_int_equal(nc_rpc_get_type(rpc), NC_RPC_SUBSCRIBE);
     struct nc_rpc_subscribe *subscribe_rpc = (struct nc_rpc_subscribe *)rpc;
@@ -553,6 +563,7 @@ test_nc_rpc_subscribe(void **state)
     char *str2 = strdup("str2");
     char *str3 = strdup("str3");
     char *str4 = strdup("str4");
+
     rpc = nc_rpc_subscribe(str1, str2, str3, str4, NC_PARAMTYPE_FREE);
     assert_non_null(rpc);
     check_subscribe_rpc(rpc, str1, str2, str3, str4);
@@ -568,22 +579,22 @@ test_nc_rpc_subscribe(void **state)
 /* function to check if values of getdata rpc are set correctly */
 void
 check_getdata(struct nc_rpc *rpc, char *datastore, const char *filter, const char *config_filter,
-              char **origin_filter, int origin_filter_count, int negated_origin_filter, uint16_t max_depth,
-              int with_origin, NC_WD_MODE wd_mode)
+        char **origin_filter, int origin_filter_count, int negated_origin_filter, uint16_t max_depth,
+        int with_origin, NC_WD_MODE wd_mode)
 {
-   assert_int_equal(nc_rpc_get_type(rpc), NC_RPC_GETDATA);
-   struct nc_rpc_getdata *rpc_getdata = (struct nc_rpc_getdata*)rpc;
+    assert_int_equal(nc_rpc_get_type(rpc), NC_RPC_GETDATA);
+    struct nc_rpc_getdata *rpc_getdata = (struct nc_rpc_getdata *)rpc;
 
-   assert_int_equal(rpc_getdata->type, NC_RPC_GETDATA);
-   assert_string_equal(rpc_getdata->datastore, datastore);
-   assert_string_equal(rpc_getdata->filter, filter);
-   assert_string_equal(rpc_getdata->config_filter, config_filter);
-   assert_string_equal(*rpc_getdata->origin_filter, *origin_filter);
-   assert_int_equal(rpc_getdata->origin_filter_count, origin_filter_count);
-   assert_int_equal(rpc_getdata->negated_origin_filter, negated_origin_filter);
-   assert_int_equal(rpc_getdata->max_depth, max_depth);
-   assert_int_equal(rpc_getdata->with_origin, with_origin);
-   assert_int_equal(rpc_getdata->wd_mode, wd_mode);
+    assert_int_equal(rpc_getdata->type, NC_RPC_GETDATA);
+    assert_string_equal(rpc_getdata->datastore, datastore);
+    assert_string_equal(rpc_getdata->filter, filter);
+    assert_string_equal(rpc_getdata->config_filter, config_filter);
+    assert_string_equal(*rpc_getdata->origin_filter, *origin_filter);
+    assert_int_equal(rpc_getdata->origin_filter_count, origin_filter_count);
+    assert_int_equal(rpc_getdata->negated_origin_filter, negated_origin_filter);
+    assert_int_equal(rpc_getdata->max_depth, max_depth);
+    assert_int_equal(rpc_getdata->with_origin, with_origin);
+    assert_int_equal(rpc_getdata->wd_mode, wd_mode);
 }
 
 static void
@@ -594,6 +605,7 @@ test_nc_rpc_getdata(void **state)
 
     /* create getdata rpc with NC_PARAMTYPE_CONST */
     char *origin_filters = "origin_filter";
+
     rpc = nc_rpc_getdata("candidate", "filter", "true", &origin_filters, 1, 1, 3, 1, NC_WD_UNKNOWN, NC_PARAMTYPE_CONST);
     assert_non_null(rpc);
     check_getdata(rpc, "candidate", "filter", "true", &origin_filters, 1, 1, 3, 1, NC_WD_UNKNOWN);
@@ -610,8 +622,8 @@ test_nc_rpc_getdata(void **state)
     origin_filter = calloc(origin_filter_count, sizeof *origin_filter);
     assert_non_null(origin_filter);
     for (int i = 0; i < origin_filter_count; i++) {
-       snprintf(buf, sizeof(buf) - 1, "origin_filter%d", i + 1);
-       origin_filter[i] = strdup(buf);
+        snprintf(buf, sizeof(buf) - 1, "origin_filter%d", i + 1);
+        origin_filter[i] = strdup(buf);
     }
 
     rpc = nc_rpc_getdata(datastore, filter, config_filter, origin_filter, origin_filter_count, 2, 3, 1, NC_WD_EXPLICIT, NC_PARAMTYPE_FREE);
@@ -621,6 +633,7 @@ test_nc_rpc_getdata(void **state)
 
     /* create getdata rpc with NC_PARAMTYPE_DUP_AND_FREE */
     char *origin_filter1 = "origin_filter1";
+
     rpc = nc_rpc_getdata("startup", "filter1", "false", &origin_filter1, 1, 0, 3, 1, NC_WD_ALL, NC_PARAMTYPE_DUP_AND_FREE);
     assert_non_null(rpc);
     check_getdata(rpc, "startup", "filter1", "false", &origin_filter1, 1, 0, 3, 1, NC_WD_ALL);
@@ -631,13 +644,13 @@ test_nc_rpc_getdata(void **state)
 void
 check_editdata(struct nc_rpc *rpc, char *datastore, NC_RPC_EDIT_DFLTOP default_op, const char *edit_content)
 {
-   assert_int_equal(nc_rpc_get_type(rpc), NC_RPC_EDITDATA);
-   struct nc_rpc_editdata *rpc_editdata = (struct nc_rpc_editdata*)rpc;
+    assert_int_equal(nc_rpc_get_type(rpc), NC_RPC_EDITDATA);
+    struct nc_rpc_editdata *rpc_editdata = (struct nc_rpc_editdata *)rpc;
 
-   assert_int_equal(rpc_editdata->type, NC_RPC_EDITDATA);
-   assert_string_equal(rpc_editdata->datastore, datastore);
-   assert_int_equal(rpc_editdata->default_op, default_op);
-   assert_string_equal(rpc_editdata->edit_cont, edit_content);
+    assert_int_equal(rpc_editdata->type, NC_RPC_EDITDATA);
+    assert_string_equal(rpc_editdata->datastore, datastore);
+    assert_int_equal(rpc_editdata->default_op, default_op);
+    assert_string_equal(rpc_editdata->edit_cont, edit_content);
 }
 
 static void

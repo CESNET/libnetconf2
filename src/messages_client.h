@@ -74,7 +74,7 @@ typedef enum {
     /* ietf-yang-push */
     NC_RPC_ESTABLISHPUSH,   /**< \<establish-subscription\> RPC with augments. */
     NC_RPC_MODIFYPUSH,      /**< \<modify-subscription\> RPC with augments. */
-    NC_RPC_RESYNCSUB,       /**< \<resync-subscription\> RPC. */
+    NC_RPC_RESYNCSUB        /**< \<resync-subscription\> RPC. */
 } NC_RPC_TYPE;
 
 /**

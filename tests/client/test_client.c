@@ -1,14 +1,14 @@
+#include <errno.h>
+#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <setjmp.h>
-#include <sys/types.h>
 #include <sys/socket.h>
-#include <errno.h>
+#include <sys/types.h>
 
 #include <cmocka.h>
 #include <libyang/libyang.h>
-#include <session_client.h>
 #include <log.h>
+#include <session_client.h>
 #include "tests/config.h"
 
 static int

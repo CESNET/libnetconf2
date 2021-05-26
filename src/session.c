@@ -14,23 +14,23 @@
 #define _DEFAULT_SOURCE
 
 #include <assert.h>
+#include <ctype.h>
 #include <errno.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <pthread.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/socket.h>
+#include <libyang/libyang.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/types.h>
 #include <time.h>
-#include <ctype.h>
-#include <libyang/libyang.h>
+#include <unistd.h>
 
 #include "compat.h"
-#include "session.h"
 #include "libnetconf.h"
+#include "session.h"
 #include "session_server.h"
 
 #ifdef NC_ENABLED_SSH
@@ -39,7 +39,7 @@
 
 #endif /* NC_ENABLED_SSH */
 
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
 
 #   include <openssl/conf.h>
 #   include <openssl/err.h>
@@ -60,7 +60,7 @@ nc_gettimespec_mono(struct timespec *ts)
 {
 #ifdef CLOCK_MONOTONIC_RAW
     return clock_gettime(CLOCK_MONOTONIC_RAW, ts);
-#elif defined(CLOCK_MONOTONIC)
+#elif defined (CLOCK_MONOTONIC)
     return clock_gettime(CLOCK_MONOTONIC, ts);
 #else
     /* no monotonic clock available, return realtime */
@@ -95,7 +95,7 @@ nc_difftimespec(const struct timespec *ts1, const struct timespec *ts2)
     nsec_diff += (((int64_t)ts2->tv_sec) - ((int64_t)ts1->tv_sec)) * 1000000000L;
     nsec_diff += ((int64_t)ts2->tv_nsec) - ((int64_t)ts1->tv_nsec);
 
-    return (nsec_diff ? nsec_diff / 1000000L : 0);
+    return nsec_diff ? nsec_diff / 1000000L : 0;
 }
 
 void
@@ -445,7 +445,7 @@ nc_session_get_version(const struct nc_session *session)
         return -1;
     }
 
-    return (session->version == NC_VERSION_10 ? 0 : 1);
+    return session->version == NC_VERSION_10 ? 0 : 1;
 }
 
 API NC_TRANSPORT_IMPL
@@ -488,8 +488,9 @@ nc_session_get_path(const struct nc_session *session)
         ERRARG("session");
         return NULL;
     }
-    if (session->ti_type != NC_TI_UNIX)
+    if (session->ti_type != NC_TI_UNIX) {
         return NULL;
+    }
 
     return session->path;
 }
@@ -543,7 +544,7 @@ nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op)
 {
     if (session->ctx != op->schema->module->ctx) {
         ERR("Session %u: RPC \"%s\" was created in different context than that of the session.",
-            session->id, op->schema->name);
+                session->id, op->schema->name);
         return NC_MSG_ERROR;
     }
 
@@ -747,7 +748,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
             ssh_free(session->ti.libssh.session);
         } else {
             /* remove the session from the list */
-            for (siter = session->ti.libssh.next; siter->ti.libssh.next != session; siter = siter->ti.libssh.next);
+            for (siter = session->ti.libssh.next; siter->ti.libssh.next != session; siter = siter->ti.libssh.next) {}
             if (session->ti.libssh.next == siter) {
                 /* there will be only one session */
                 siter->ti.libssh.next = NULL;
@@ -852,7 +853,7 @@ add_cpblt(struct ly_ctx *ctx, const char *capab, const char ***cpblts, int *size
             len = strlen(capab);
         }
         for (i = 0; i < *count; i++) {
-            if (!strncmp((*cpblts)[i], capab, len) && ((*cpblts)[i][len] == '\0' || (*cpblts)[i][len] == '?')) {
+            if (!strncmp((*cpblts)[i], capab, len) && (((*cpblts)[i][len] == '\0') || ((*cpblts)[i][len] == '?'))) {
                 /* already present, do not duplicate it */
                 return;
             }
@@ -887,6 +888,7 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
     uint32_t i, u;
     LY_ARRAY_COUNT_TYPE v;
     char *yl_content_id;
+
 #define NC_CPBLT_BUF_LEN 4096
     char str[NC_CPBLT_BUF_LEN];
 
@@ -932,7 +934,7 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
          * https://tools.ietf.org/html/rfc6241#section-8.8.3
          */
         // if (lys_feature_value(mod, "url") == LY_SUCCESS) {
-        //    add_cpblt(ctx, "urn:ietf:params:netconf:capability:url:1.0", &cpblts, &size, &count);
+        // add_cpblt(ctx, "urn:ietf:params:netconf:capability:url:1.0", &cpblts, &size, &count);
         // }
 
         if (lys_feature_value(mod, "xpath") == LY_SUCCESS) {
@@ -1139,9 +1141,9 @@ parse_cpblts(struct lyd_node *capabilities, char ***list)
         }
 
         /* detect NETCONF version */
-        if (ver < 0 && !strncmp(cpb_start, "urn:ietf:params:netconf:base:1.0", cpb_end - cpb_start)) {
+        if ((ver < 0) && !strncmp(cpb_start, "urn:ietf:params:netconf:base:1.0", cpb_end - cpb_start)) {
             ver = 0;
-        } else if (ver < 1 && !strncmp(cpb_start, "urn:ietf:params:netconf:base:1.1", cpb_end - cpb_start)) {
+        } else if ((ver < 1) && !strncmp(cpb_start, "urn:ietf:params:netconf:base:1.1", cpb_end - cpb_start)) {
             ver = 1;
         }
 
@@ -1238,7 +1240,7 @@ nc_recv_client_hello_io(struct nc_session *session)
                 }
                 str = NULL;
                 id = strtoll(node->value, &str, 10);
-                if (*str || id < 1 || id > UINT32_MAX) {
+                if (*str || (id < 1) || (id > UINT32_MAX)) {
                     ERR("Invalid value of <session-id> element in server <hello>.");
                     rc = NC_MSG_ERROR;
                     goto cleanup;
@@ -1436,11 +1438,12 @@ tls_dyn_destroy_func(struct CRYPTO_dynlock_value *l, const char *UNUSED(file), i
     pthread_mutex_destroy(&l->lock);
     free(l);
 }
+
 #endif
 
 #endif /* NC_ENABLED_TLS */
 
-#if defined(NC_ENABLED_TLS) && !defined(NC_ENABLED_SSH)
+#if defined (NC_ENABLED_TLS) && !defined (NC_ENABLED_SSH)
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
 static pthread_mutex_t *tls_locks;
@@ -1460,6 +1463,7 @@ tls_thread_id_func(CRYPTO_THREADID *tid)
 {
     CRYPTO_THREADID_set_numeric(tid, (unsigned long)pthread_self());
 }
+
 #endif
 
 static void
@@ -1522,7 +1526,7 @@ nc_tls_destroy(void)
 
 #endif /* NC_ENABLED_TLS && !NC_ENABLED_SSH */
 
-#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
+#if defined (NC_ENABLED_SSH) && defined (NC_ENABLED_TLS)
 
 static void
 nc_ssh_tls_init(void)
@@ -1565,13 +1569,13 @@ nc_ssh_tls_destroy(void)
 
 #endif /* NC_ENABLED_SSH && NC_ENABLED_TLS */
 
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
 
 API void
 nc_thread_destroy(void)
 {
     /* caused data-races and seems not neccessary for avoiding valgrind reachable memory */
-    //CRYPTO_cleanup_all_ex_data();
+    // CRYPTO_cleanup_all_ex_data();
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
     CRYPTO_THREADID crypto_tid;
@@ -1586,11 +1590,11 @@ nc_thread_destroy(void)
 void
 nc_init(void)
 {
-#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
+#if defined (NC_ENABLED_SSH) && defined (NC_ENABLED_TLS)
     nc_ssh_tls_init();
-#elif defined(NC_ENABLED_SSH)
+#elif defined (NC_ENABLED_SSH)
     nc_ssh_init();
-#elif defined(NC_ENABLED_TLS)
+#elif defined (NC_ENABLED_TLS)
     nc_tls_init();
 #endif
 }
@@ -1598,11 +1602,11 @@ nc_init(void)
 void
 nc_destroy(void)
 {
-#if defined(NC_ENABLED_SSH) && defined(NC_ENABLED_TLS)
+#if defined (NC_ENABLED_SSH) && defined (NC_ENABLED_TLS)
     nc_ssh_tls_destroy();
-#elif defined(NC_ENABLED_SSH)
+#elif defined (NC_ENABLED_SSH)
     nc_ssh_destroy();
-#elif defined(NC_ENABLED_TLS)
+#elif defined (NC_ENABLED_TLS)
     nc_tls_destroy();
 #endif
 }

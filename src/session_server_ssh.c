@@ -23,14 +23,14 @@
     #include <crypt.h>
 #endif
 
+#include <errno.h>
+#include <fcntl.h>
+#include <pwd.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <pwd.h>
-#include <errno.h>
+#include <sys/types.h>
 #include <time.h>
-#include <fcntl.h>
 #include <unistd.h>
 
 #include "compat.h"
@@ -38,7 +38,7 @@
 #include "session_server.h"
 #include "session_server_ch.h"
 
-#if !defined(HAVE_CRYPT_R)
+#if !defined (HAVE_CRYPT_R)
 pthread_mutex_t crypt_lock = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
@@ -157,7 +157,7 @@ nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name, int16_
 
 API void
 nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_session *session, const char *password, void *user_data),
-                                  void *user_data, void (*free_user_data)(void *user_data))
+        void *user_data, void (*free_user_data)(void *user_data))
 {
     server_opts.passwd_auth_clb = passwd_auth_clb;
     server_opts.passwd_auth_data = user_data;
@@ -166,7 +166,7 @@ nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_session
 
 API void
 nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session, ssh_message msg, void *user_data),
-                                  void *user_data, void (*free_user_data)(void *user_data))
+        void *user_data, void (*free_user_data)(void *user_data))
 {
     server_opts.interactive_auth_clb = interactive_auth_clb;
     server_opts.interactive_auth_data = user_data;
@@ -175,7 +175,7 @@ nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct 
 
 API void
 nc_server_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session *session, ssh_key key, void *user_data),
-                                  void *user_data, void (*free_user_data)(void *user_data))
+        void *user_data, void (*free_user_data)(void *user_data))
 {
     server_opts.pubkey_auth_clb = pubkey_auth_clb;
     server_opts.pubkey_auth_data = user_data;
@@ -622,7 +622,7 @@ nc_server_ssh_add_authkey(const char *pubkey_base64, NC_SSH_KEY_TYPE type, const
 
 API int
 nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64, NC_SSH_KEY_TYPE type,
-                          const char *username)
+        const char *username)
 {
     uint32_t i;
     int ret = -1;
@@ -643,10 +643,10 @@ nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64, NC
         server_opts.authkey_count = 0;
     } else {
         for (i = 0; i < server_opts.authkey_count; ++i) {
-            if ((!pubkey_path || !strcmp(server_opts.authkeys[i].path, pubkey_path))
-                    && (!pubkey_base64 || !strcmp(server_opts.authkeys[i].base64, pubkey_base64))
-                    && (!type || (server_opts.authkeys[i].type == type))
-                    && (!username || !strcmp(server_opts.authkeys[i].username, username))) {
+            if ((!pubkey_path || !strcmp(server_opts.authkeys[i].path, pubkey_path)) &&
+                    (!pubkey_base64 || !strcmp(server_opts.authkeys[i].base64, pubkey_base64)) &&
+                    (!type || (server_opts.authkeys[i].type == type)) &&
+                    (!username || !strcmp(server_opts.authkeys[i].username, username))) {
                 lydict_remove(server_opts.ctx, server_opts.authkeys[i].path);
                 lydict_remove(server_opts.ctx, server_opts.authkeys[i].base64);
                 lydict_remove(server_opts.ctx, server_opts.authkeys[i].username);
@@ -654,7 +654,7 @@ nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64, NC
                 --server_opts.authkey_count;
                 if (i < server_opts.authkey_count) {
                     memcpy(&server_opts.authkeys[i], &server_opts.authkeys[server_opts.authkey_count],
-                           sizeof *server_opts.authkeys);
+                            sizeof *server_opts.authkeys);
                 } else if (!server_opts.authkey_count) {
                     free(server_opts.authkeys);
                     server_opts.authkeys = NULL;
@@ -735,7 +735,8 @@ static int
 auth_password_compare_pwd(const char *pass_hash, const char *pass_clear)
 {
     char *new_pass_hash;
-#if defined(HAVE_CRYPT_R)
+
+#if defined (HAVE_CRYPT_R)
     struct crypt_data cdata;
 #endif
 
@@ -750,7 +751,7 @@ auth_password_compare_pwd(const char *pass_hash, const char *pass_clear)
         }
     }
 
-#if defined(HAVE_CRYPT_R)
+#if defined (HAVE_CRYPT_R)
     cdata.initialized = 0;
     new_pass_hash = crypt_r(pass_clear, pass_hash, &cdata);
 #else
@@ -948,7 +949,7 @@ nc_sshcb_channel_open(struct nc_session *session, ssh_message msg)
         }
         session->ti.libssh.channel = chan;
 
-    /* additional channel request */
+        /* additional channel request */
     } else {
         chan = ssh_message_channel_request_open_reply_accept(msg);
         if (!chan) {
@@ -1065,7 +1066,7 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
             str_subtype = "channel-x11";
             break;
         case SSH_CHANNEL_UNKNOWN:
-            /* fallthrough */
+        /* fallthrough */
         default:
             str_subtype = "unknown";
             break;
@@ -1097,7 +1098,7 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
             str_subtype = "x11";
             break;
         case SSH_CHANNEL_REQUEST_UNKNOWN:
-            /* fallthrough */
+        /* fallthrough */
         default:
             str_subtype = "unknown";
             break;
@@ -1119,7 +1120,7 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
             str_subtype = "cancel-tcpip-forward";
             break;
         case SSH_GLOBAL_REQUEST_UNKNOWN:
-            /* fallthrough */
+        /* fallthrough */
         default:
             str_subtype = "unknown";
             break;
@@ -1137,7 +1138,7 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
         /* "valid" situation if, for example, receiving some auth or channel request timeouted,
          * but we got it now, during session free */
         VRB("SSH message arrived on a %s session, the request will be denied.",
-            (session && session->status == NC_STATUS_CLOSING ? "closing" : "invalid"));
+                (session && session->status == NC_STATUS_CLOSING ? "closing" : "invalid"));
         ssh_message_reply_default(msg);
         return 0;
     }
@@ -1224,7 +1225,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
         ret = ssh_execute_message_callbacks(session->ti.libssh.session);
         if (ret != SSH_OK) {
             ERR("Failed to receive SSH messages on a session (%s).",
-                ssh_get_error(session->ti.libssh.session));
+                    ssh_get_error(session->ti.libssh.session));
             return -1;
         }
 
@@ -1235,7 +1236,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
         ret = ssh_execute_message_callbacks(session->ti.libssh.session);
         if (ret != SSH_OK) {
             ERR("Failed to receive SSH messages on a session (%s).",
-                ssh_get_error(session->ti.libssh.session));
+                    ssh_get_error(session->ti.libssh.session));
             return -1;
         }
 
@@ -1260,7 +1261,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
         ret = ssh_execute_message_callbacks(session->ti.libssh.session);
         if (ret != SSH_OK) {
             ERR("Failed to receive SSH messages on a session (%s).",
-                ssh_get_error(session->ti.libssh.session));
+                    ssh_get_error(session->ti.libssh.session));
             return -1;
         }
 
@@ -1424,7 +1425,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 
         if (ssh_execute_message_callbacks(session->ti.libssh.session) != SSH_OK) {
             ERR("Failed to receive SSH messages on a session (%s).",
-                ssh_get_error(session->ti.libssh.session));
+                    ssh_get_error(session->ti.libssh.session));
             return -1;
         }
 
@@ -1482,13 +1483,13 @@ nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session
         return NC_MSG_ERROR;
     }
 
-    if ((orig_session->status == NC_STATUS_RUNNING) && (orig_session->ti_type == NC_TI_LIBSSH)
-            && orig_session->ti.libssh.next) {
+    if ((orig_session->status == NC_STATUS_RUNNING) && (orig_session->ti_type == NC_TI_LIBSSH) &&
+            orig_session->ti.libssh.next) {
         for (new_session = orig_session->ti.libssh.next;
                 new_session != orig_session;
                 new_session = new_session->ti.libssh.next) {
-            if ((new_session->status == NC_STATUS_STARTING) && new_session->ti.libssh.channel
-                    && (new_session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
+            if ((new_session->status == NC_STATUS_STARTING) && new_session->ti.libssh.channel &&
+                    (new_session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
                 /* we found our session */
                 break;
             }
@@ -1546,14 +1547,14 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
 
     for (i = 0; i < ps->session_count; ++i) {
         cur_session = ps->sessions[i]->session;
-        if ((cur_session->status == NC_STATUS_RUNNING) && (cur_session->ti_type == NC_TI_LIBSSH)
-                && cur_session->ti.libssh.next) {
+        if ((cur_session->status == NC_STATUS_RUNNING) && (cur_session->ti_type == NC_TI_LIBSSH) &&
+                cur_session->ti.libssh.next) {
             /* an SSH session with more channels */
             for (new_session = cur_session->ti.libssh.next;
                     new_session != cur_session;
                     new_session = new_session->ti.libssh.next) {
-                if ((new_session->status == NC_STATUS_STARTING) && new_session->ti.libssh.channel
-                        && (new_session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
+                if ((new_session->status == NC_STATUS_STARTING) && new_session->ti.libssh.channel &&
+                        (new_session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
                     /* we found our session */
                     break;
                 }

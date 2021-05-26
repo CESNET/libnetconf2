@@ -20,17 +20,17 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/socket.h>
+#include <unistd.h>
 
 #include <cmocka.h>
 #include <libyang/libyang.h>
 
-#include "tests/config.h"
 #include <session_server.h>
+#include "tests/config.h"
 
 struct ly_ctx *ctx;
 
@@ -73,4 +73,3 @@ main(void)
 
     return cmocka_run_group_tests(init_destroy, NULL, NULL);
 }
-

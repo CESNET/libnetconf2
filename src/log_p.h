@@ -38,11 +38,11 @@ extern volatile uint8_t verbose_level;
 /*
  * Verbose printing macros
  */
-#define ERR(format,args...) prv_printf(NC_VERB_ERROR,format,##args)
-#define WRN(format,args...) if(verbose_level>=NC_VERB_WARNING){prv_printf(NC_VERB_WARNING,format,##args);}
-#define VRB(format,args...) if(verbose_level>=NC_VERB_VERBOSE){prv_printf(NC_VERB_VERBOSE,format,##args);}
-#define DBG(format,args...) if(verbose_level>=NC_VERB_DEBUG){prv_printf(NC_VERB_DEBUG,format,##args);}
-#define DBL(format,args...) if(verbose_level>=NC_VERB_DEBUG_LOWLVL){prv_printf(NC_VERB_DEBUG_LOWLVL,format,##args);}
+#define ERR(format, args ...) prv_printf(NC_VERB_ERROR,format,##args)
+#define WRN(format, args ...) if(verbose_level>=NC_VERB_WARNING){prv_printf(NC_VERB_WARNING,format,##args);}
+#define VRB(format, args ...) if(verbose_level>=NC_VERB_VERBOSE){prv_printf(NC_VERB_VERBOSE,format,##args);}
+#define DBG(format, args ...) if(verbose_level>=NC_VERB_DEBUG){prv_printf(NC_VERB_DEBUG,format,##args);}
+#define DBL(format, args ...) if(verbose_level>=NC_VERB_DEBUG_LOWLVL){prv_printf(NC_VERB_DEBUG_LOWLVL,format,##args);}
 
 #define ERRMEM ERR("%s: memory reallocation failed (%s:%d).", __func__, __FILE__, __LINE__)
 #define ERRARG(arg) ERR("%s: invalid argument (%s).", __func__, arg)

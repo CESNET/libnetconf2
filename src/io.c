@@ -15,14 +15,14 @@
 #define _GNU_SOURCE /* asprintf, signals */
 #include <assert.h>
 #include <errno.h>
-#include <poll.h>
 #include <inttypes.h>
+#include <poll.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <signal.h>
 #include <time.h>
+#include <unistd.h>
 
 #ifdef NC_ENABLED_TLS
 #   include <openssl/err.h>
@@ -125,14 +125,14 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
                     break;
                 } else {
                     ERR("Session %u: reading from file descriptor (%d) failed (%s).",
-                        session->id, fd, strerror(errno));
+                            session->id, fd, strerror(errno));
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_OTHER;
                     return -1;
                 }
             } else if (r == 0) {
                 ERR("Session %u: communication file descriptor (%d) unexpectedly closed.",
-                    session->id, fd);
+                        session->id, fd);
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_DROPPED;
                 return -1;
@@ -148,7 +148,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
                 break;
             } else if (r == SSH_ERROR) {
                 ERR("Session %u: reading from the SSH channel failed (%s).", session->id,
-                    ssh_get_error(session->ti.libssh.session));
+                        ssh_get_error(session->ti.libssh.session));
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_OTHER;
                 return -1;
@@ -269,7 +269,7 @@ nc_read_chunk(struct nc_session *session, size_t len, uint32_t inact_timeout, st
 
 static ssize_t
 nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint32_t inact_timeout,
-              struct timespec *ts_act_timeout, char **result)
+        struct timespec *ts_act_timeout, char **result)
 {
     char *chunk = NULL;
     size_t size, count = 0, r, len, i, matched = 0;
@@ -277,7 +277,7 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint
     assert(session);
     assert(endtag);
 
-    if (limit && limit < BUFFERSIZE) {
+    if (limit && (limit < BUFFERSIZE)) {
         size = limit;
     } else {
         size = BUFFERSIZE;
@@ -290,7 +290,7 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint
 
     len = strlen(endtag);
     while (1) {
-        if (limit && count == limit) {
+        if (limit && (count == limit)) {
             free(chunk);
             WRN("Session %u: reading limit (%d) reached.", session->id, limit);
             ERR("Session %u: invalid input data (missing \"%s\" sequence).", session->id, endtag);
@@ -486,7 +486,7 @@ nc_read_poll(struct nc_session *session, int io_timeout)
         ret = ssh_channel_poll_timeout(session->ti.libssh.channel, io_timeout, 0);
         if (ret == SSH_ERROR) {
             ERR("Session %u: SSH channel poll error (%s).", session->id,
-                ssh_get_error(session->ti.libssh.session));
+                    ssh_get_error(session->ti.libssh.session));
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_OTHER;
             return -1;
@@ -516,13 +516,14 @@ nc_read_poll(struct nc_session *session, int io_timeout)
 
         fds.fd = SSL_get_fd(session->ti.tls);
 #endif
-        /* fallthrough */
+    /* fallthrough */
     case NC_TI_FD:
     case NC_TI_UNIX:
-        if (session->ti_type == NC_TI_FD)
+        if (session->ti_type == NC_TI_FD) {
             fds.fd = session->ti.fd.in;
-        else if (session->ti_type == NC_TI_UNIX)
+        } else if (session->ti_type == NC_TI_UNIX) {
             fds.fd = session->ti.unixsock.sock;
+        }
 
         fds.events = POLLIN;
         fds.revents = 0;
@@ -634,7 +635,7 @@ nc_session_is_connected(struct nc_session *session)
     fds.revents = 0;
 
     errno = 0;
-    while (((ret = poll(&fds, 1, 0)) == -1) && (errno == EINTR));
+    while (((ret = poll(&fds, 1, 0)) == -1) && (errno == EINTR)) {}
 
     if (ret == -1) {
         ERR("Session %u: poll failed (%s).", session->id, strerror(errno));
@@ -658,6 +659,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
 {
     int c, fd, interrupted;
     size_t written = 0;
+
 #ifdef NC_ENABLED_TLS
     unsigned long e;
 #endif
@@ -683,9 +685,9 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
         case NC_TI_UNIX:
             fd = session->ti_type == NC_TI_FD ? session->ti.fd.out : session->ti.unixsock.sock;
             c = write(fd, (char *)(buf + written), count - written);
-            if (c < 0 && errno == EAGAIN) {
+            if ((c < 0) && (errno == EAGAIN)) {
                 c = 0;
-            } else if (c < 0 && errno == EINTR) {
+            } else if ((c < 0) && (errno == EINTR)) {
                 c = 0;
                 interrupted = 1;
             } else if (c < 0) {
@@ -747,7 +749,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
             return -1;
         }
 
-        if (c == 0 && !interrupted) {
+        if ((c == 0) && !interrupted) {
             /* we must wait */
             usleep(NC_TIMEOUT_STEP);
         }
@@ -843,7 +845,7 @@ nc_write_clb(void *arg, const void *buf, size_t count, int xmlcontent)
         ret += c;
     }
 
-    if (!xmlcontent && count > WRITE_BUFSIZE) {
+    if (!xmlcontent && (count > WRITE_BUFSIZE)) {
         /* write directly */
         c = nc_write_starttag_and_msg(warg->session, buf, count);
         if (c == -1) {
@@ -951,7 +953,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         op = va_arg(ap, struct lyd_node *);
         attrs = va_arg(ap, const char *);
 
-        count = asprintf(&buf, "<rpc xmlns=\"%s\" message-id=\"%"PRIu64"\"%s>",
+        count = asprintf(&buf, "<rpc xmlns=\"%s\" message-id=\"%" PRIu64 "\"%s>",
                 NC_NS_BASE, session->opts.client.msgid + 1, attrs ? attrs : "");
         if (count == -1) {
             ERRMEM;
@@ -1007,7 +1009,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
             }
             break;
         case NC_RPL_DATA:
-            switch(((struct nc_server_reply_data *)reply)->wd) {
+            switch (((struct nc_server_reply_data *)reply)->wd) {
             case NC_WD_UNKNOWN:
             case NC_WD_EXPLICIT:
                 wd = LYD_PRINT_WD_EXPLICIT;
@@ -1083,7 +1085,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
     case NC_MSG_NOTIF:
         notif = va_arg(ap, struct nc_server_notif *);
 
-        nc_write_clb((void *)&arg, "<notification xmlns=\""NC_NS_NOTIF"\">", 21 + 47 + 2, 0);
+        nc_write_clb((void *)&arg, "<notification xmlns=\""NC_NS_NOTIF "\">", 21 + 47 + 2, 0);
         nc_write_clb((void *)&arg, "<eventTime>", 11, 0);
         nc_write_clb((void *)&arg, notif->eventtime, strlen(notif->eventtime), 0);
         nc_write_clb((void *)&arg, "</eventTime>", 12, 0);
@@ -1100,7 +1102,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
             goto cleanup;
         }
         capabilities = va_arg(ap, const char **);
-        sid = va_arg(ap, uint32_t*);
+        sid = va_arg(ap, uint32_t *);
 
         count = asprintf(&buf, "<hello xmlns=\"%s\"><capabilities>", NC_NS_BASE);
         if (count == -1) {

@@ -18,34 +18,34 @@
 # include <sys/syscall.h>
 #endif
 
+#include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <poll.h>
 #include <pthread.h>
+#include <pwd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/socket.h>
-#include <sys/un.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/select.h>
+#include <sys/un.h>
 #include <unistd.h>
-#include <arpa/inet.h>
-#include <poll.h>
-#include <pwd.h>
 
 #include <libyang/libyang.h>
 
 #include "compat.h"
 #include "libnetconf.h"
-#include "session_client.h"
 #include "messages_client.h"
+#include "session_client.h"
 
-#include "../modules/ietf_netconf_monitoring@2010-10-04_yang.h"
 #include "../modules/ietf_netconf@2013-09-29_yang.h"
+#include "../modules/ietf_netconf_monitoring@2010-10-04_yang.h"
 
 static const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "candidate"};
 
@@ -53,7 +53,7 @@ static const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "c
 int sshauth_hostkey_check(const char *hostname, ssh_session session, void *priv);
 char *sshauth_password(const char *username, const char *hostname, void *priv);
 char *sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo, void *priv);
-char *sshauth_privkey_passphrase(const char* privkey_path, void *priv);
+char *sshauth_privkey_passphrase(const char *privkey_path, void *priv);
 #endif /* NC_ENABLED_SSH */
 
 static pthread_once_t nc_client_context_once = PTHREAD_ONCE_INIT;
@@ -108,7 +108,7 @@ nc_client_context_free(void *ptr)
         /* for the main thread the same is done in nc_client_destroy() */
         free(c->opts.schema_searchpath);
 
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
         int i;
         for (i = 0; i < c->opts.ch_bind_count; ++i) {
             close(c->opts.ch_binds[i].sock);
@@ -136,7 +136,7 @@ nc_client_context_createkey(void)
     int r;
 
     /* initiate */
-    while ((r = pthread_key_create(&nc_client_context_key, nc_client_context_free)) == EAGAIN);
+    while ((r = pthread_key_create(&nc_client_context_key, nc_client_context_free)) == EAGAIN) {}
     pthread_setspecific(nc_client_context_key, NULL);
 }
 
@@ -311,7 +311,7 @@ struct clb_data_s {
 
 static char *
 retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_data_s *clb_data,
-                               LYS_INFORMAT *format)
+        LYS_INFORMAT *format)
 {
     char *localfile = NULL;
     FILE *f;
@@ -319,8 +319,8 @@ retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_dat
     char *model_data = NULL;
 
     if (lys_search_localfile(ly_ctx_get_searchdirs(clb_data->session->ctx),
-                             !(ly_ctx_get_options(clb_data->session->ctx) & LY_CTX_DISABLE_SEARCHDIR_CWD),
-                             name, rev, &localfile, format)) {
+            !(ly_ctx_get_options(clb_data->session->ctx) & LY_CTX_DISABLE_SEARCHDIR_CWD),
+            name, rev, &localfile, format)) {
         return NULL;
     }
     if (localfile) {
@@ -328,7 +328,7 @@ retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_dat
         f = fopen(localfile, "r");
         if (!f) {
             ERR("Session %u: unable to open \"%s\" file to get schema (%s).",
-                clb_data->session->id, localfile, strerror(errno));
+                    clb_data->session->id, localfile, strerror(errno));
             free(localfile);
             return NULL;
         }
@@ -337,7 +337,7 @@ retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_dat
         length = ftell(f);
         if (length < 0) {
             ERR("Session %u: unable to get size of schema file \"%s\".",
-                clb_data->session->id, localfile);
+                    clb_data->session->id, localfile);
             free(localfile);
             fclose(f);
             return NULL;
@@ -349,7 +349,7 @@ retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_dat
             ERRMEM;
         } else if ((l = fread(model_data, 1, length, f)) != length) {
             ERR("Session %u: reading schema from \"%s\" failed (%d bytes read, but %d expected).",
-                clb_data->session->id, localfile, l, length);
+                    clb_data->session->id, localfile, l, length);
             free(model_data);
             model_data = NULL;
         } else {
@@ -365,7 +365,7 @@ retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_dat
 
 static char *
 retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_data_s *clb_data,
-                               LYS_INFORMAT *format)
+        LYS_INFORMAT *format)
 {
     struct nc_rpc *rpc;
     struct lyd_node *envp = NULL, *op = NULL;
@@ -395,7 +395,7 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
     if (msg == NC_MSG_WOULDBLOCK) {
         ERR("Session %u: timeout for receiving reply to a <get-schema> expired.", clb_data->session->id);
         goto cleanup;
-    } else if (msg == NC_MSG_ERROR || !op) {
+    } else if ((msg == NC_MSG_ERROR) || !op) {
         ERR("Session %u: failed to receive a reply to <get-schema>.", clb_data->session->id);
         goto cleanup;
     }
@@ -436,7 +436,7 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
                 f = fopen(localfile, "w");
                 if (!f) {
                     WRN("Unable to store \"%s\" as a local copy of schema retrieved via <get-schema> (%s).",
-                        localfile, strerror(errno));
+                            localfile, strerror(errno));
                 } else {
                     fputs(model_data, f);
                     fclose(f);
@@ -452,7 +452,8 @@ cleanup:
     return model_data;
 }
 
-static void free_with_user_data(void *data, void *user_data)
+static void
+free_with_user_data(void *data, void *user_data)
 {
     free(data);
     (void)user_data;
@@ -476,7 +477,7 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *subm
             if (strcmp(mod_name, clb_data->schemas[u].name)) {
                 continue;
             }
-            if (!match || strcmp(mod_rev, clb_data->schemas[u].revision) > 0) {
+            if (!match || (strcmp(mod_rev, clb_data->schemas[u].revision) > 0)) {
                 mod_rev = clb_data->schemas[u].revision;
             }
             match = u + 1;
@@ -485,7 +486,7 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *subm
             /* valid situation if we are retrieving YANG 1.1 schema and have only capabilities for now
              * (when loading ietf-datastore for ietf-yang-library) */
             VRB("Session %u: unable to identify revision of the schema \"%s\" from the available server side information.",
-                clb_data->session->id, mod_name);
+                    clb_data->session->id, mod_name);
         }
     }
     if (submod_name) {
@@ -495,7 +496,7 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *subm
         } else if (match) {
             if (!clb_data->schemas[match - 1].submodules) {
                 VRB("Session %u: Unable to identify revision of the requested submodule \"%s\", in schema \"%s\", from the available server side information.",
-                    clb_data->session->id, submod_name, mod_name);
+                        clb_data->session->id, submod_name, mod_name);
             } else {
                 for (v = 0; clb_data->schemas[match - 1].submodules[v].name; ++v) {
                     if (!strcmp(submod_name, clb_data->schemas[match - 1].submodules[v].name)) {
@@ -504,7 +505,7 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *subm
                 }
                 if (!rev) {
                     ERR("Session %u: requested submodule \"%s\" is not known for schema \"%s\" on server side.",
-                        clb_data->session->id, submod_name, mod_name);
+                            clb_data->session->id, submod_name, mod_name);
                     return LY_ENOTFOUND;
                 }
             }
@@ -554,7 +555,7 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *subm
 
     *free_module_data = free_with_user_data;
     *module_data = model_data;
-    return (*module_data ? LY_SUCCESS : LY_ENOTFOUND);
+    return *module_data ? LY_SUCCESS : LY_ENOTFOUND;
 }
 
 static int
@@ -565,7 +566,8 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
     struct ly_err_item *eitem;
     const char *module_data = NULL;
     LYS_INFORMAT format;
-    void (*free_module_data)(void*, void*) = NULL;
+
+    void (*free_module_data)(void *, void *) = NULL;
     struct clb_data_s clb_data;
 
     *mod = NULL;
@@ -659,7 +661,6 @@ free_schema_info(struct schema_info *list)
     free(list);
 }
 
-
 static int
 build_schema_info_yl(struct nc_session *session, struct schema_info **result)
 {
@@ -692,7 +693,7 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
     }
     if (msg == NC_MSG_ERROR) {
         WRN("Session %u: failed to send request for yang-library data.",
-            session->id);
+                session->id);
         goto cleanup;
     }
 
@@ -779,7 +780,7 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
                 v = 0;
                 LY_LIST_FOR(lyd_child(modules->dnodes[u]), iter) {
                     mod = modules->dnodes[u]->schema->module;
-                    if (mod == iter->schema->module && !strcmp(iter->schema->name, "submodule")) {
+                    if ((mod == iter->schema->module) && !strcmp(iter->schema->name, "submodule")) {
                         LY_LIST_FOR(lyd_child(iter), child) {
                             if (mod != child->schema->module) {
                                 continue;
@@ -816,7 +817,7 @@ build_schema_info_cpblts(char **cpblts, struct schema_info **result)
     uint32_t u, v, feature_count;
     char *module_cpblt, *ptr, *ptr2;
 
-    for (u = 0; cpblts[u]; ++u);
+    for (u = 0; cpblts[u]; ++u) {}
     (*result) = calloc(u + 1, sizeof **result);
     if (!(*result)) {
         ERRMEM;
@@ -1168,7 +1169,7 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
 
     if (connect(sock, (struct sockaddr *)&sun, sizeof(sun)) < 0) {
         ERR("cannot connect to sock server %s (%s)",
-            address, strerror(errno));
+                address, strerror(errno));
         goto fail;
     }
 
@@ -1218,8 +1219,9 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
 
 fail:
     nc_session_free(session, NULL);
-    if (sock >= 0)
+    if (sock >= 0) {
         close(sock);
+    }
     return NULL;
 }
 
@@ -1239,8 +1241,8 @@ _non_blocking_connect(int timeout, int *sock_pending, struct addrinfo *res, stru
     uint16_t port;
     char str[INET6_ADDRSTRLEN];
 
-    if (sock_pending && *sock_pending != -1) {
-        VRB("Trying to connect the pending socket %d.", *sock_pending );
+    if (sock_pending && (*sock_pending != -1)) {
+        VRB("Trying to connect the pending socket %d.", *sock_pending);
         sock = *sock_pending;
     } else {
         assert(res);
@@ -1364,7 +1366,7 @@ nc_sock_connect(const char *host, uint16_t port, int timeout, struct nc_keepaliv
         for (res = res_list; res != NULL; res = res->ai_next) {
             sock = _non_blocking_connect(timeout, sock_pending, res, ka);
             if (sock == -1) {
-                if (!sock_pending || *sock_pending == -1) {
+                if (!sock_pending || (*sock_pending == -1)) {
                     /* try the next resource */
                     continue;
                 } else {
@@ -1424,7 +1426,7 @@ error:
     return -1;
 }
 
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
 
 int
 nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
@@ -1491,9 +1493,9 @@ nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
         client_opts.ch_bind_count = 0;
     } else {
         for (i = 0; i < client_opts.ch_bind_count; ++i) {
-            if ((!address || !strcmp(client_opts.ch_binds[i].address, address))
-                    && (!port || (client_opts.ch_binds[i].port == port))
-                    && (!ti || (client_opts.ch_bind_ti[i] == ti))) {
+            if ((!address || !strcmp(client_opts.ch_binds[i].address, address)) &&
+                    (!port || (client_opts.ch_binds[i].port == port)) &&
+                    (!ti || (client_opts.ch_bind_ti[i] == ti))) {
                 close(client_opts.ch_binds[i].sock);
                 free((char *)client_opts.ch_binds[i].address);
 
@@ -1617,7 +1619,7 @@ API void
 nc_client_destroy(void)
 {
     nc_client_set_schema_searchpath(NULL);
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
     nc_client_ch_del_bind(NULL, 0, 0);
 #endif
 #ifdef NC_ENABLED_SSH
@@ -2042,7 +2044,7 @@ nc_recv_notif(struct nc_session *session, int timeout, struct lyd_node **envp, s
     } else if (!op) {
         ERRARG("op");
         return NC_MSG_ERROR;
-    } else if (session->status != NC_STATUS_RUNNING || session->side != NC_CLIENT) {
+    } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR("Session %u: invalid session to receive Notifications.", session->id);
         return NC_MSG_ERROR;
     }
@@ -2056,6 +2058,7 @@ nc_recv_notif_thread(void *arg)
 {
     struct nc_ntf_thread_arg *ntarg;
     struct nc_session *session;
+
     void (*notif_clb)(struct nc_session *session, const struct lyd_node *envp, const struct lyd_node *op);
     struct lyd_node *envp, *op;
     NC_MSG_TYPE msgtype;
@@ -2210,7 +2213,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     } else if (!msgid) {
         ERRARG("msgid");
         return NC_MSG_ERROR;
-    } else if (session->status != NC_STATUS_RUNNING || session->side != NC_CLIENT) {
+    } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR("Session %u: invalid session to send RPCs.", session->id);
         return NC_MSG_ERROR;
     }

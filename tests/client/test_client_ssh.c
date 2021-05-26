@@ -1,21 +1,21 @@
+#include <errno.h>
+#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <setjmp.h>
-#include <sys/types.h>
 #include <sys/socket.h>
-#include <errno.h>
+#include <sys/types.h>
 
 #include <cmocka.h>
+#include <config.h>
 #include <libyang/libyang.h>
+#include <log.h>
 #include <session_client.h>
 #include <session_client_ch.h>
 #include <session_p.h>
-#include <log.h>
-#include <config.h>
 #include "tests/config.h"
 
-#include <libssh/libssh.h>
 #include <libssh/callbacks.h>
+#include <libssh/libssh.h>
 #include <libssh/server.h>
 
 static int
@@ -149,7 +149,6 @@ __wrap_ssh_userauth_password(ssh_session session, const char *username, const ch
     (void)session;
     check_expected(password);
     check_expected(username);
-
 
     return (int)mock();
 }
@@ -368,6 +367,7 @@ test_nc_client_ssh_setting_auth_privkey_passphrase_clb(void **state)
     (void)state;
     char *(*ret_f)(const char *privkey_path, void *priv);
     char *priv_data_ret;
+
     /* set first callback */
     nc_client_ssh_set_auth_privkey_passphrase_clb(test_passphrase_clb1, "DATA");
     nc_client_ssh_get_auth_privkey_passphrase_clb(&ret_f, (void **)&priv_data_ret);
@@ -387,12 +387,13 @@ test_nc_client_ssh_adding_keypair(void **state)
     (void)state;
     int ret;
     const char *pubkey1, *pubkey2;
+
     /* at the beginning keypair count should be 0 */
     ret = nc_client_ssh_get_keypair_count();
     assert_int_equal(ret, 0);
 
     /* add first key pair */
-    ret = nc_client_ssh_add_keypair(TESTS_DIR"/data/key_dsa.pub", TESTS_DIR"/data/key_dsa");
+    ret = nc_client_ssh_add_keypair(TESTS_DIR "/data/key_dsa.pub", TESTS_DIR "/data/key_dsa");
     assert_int_equal(ret, 0);
     ret = nc_client_ssh_get_keypair_count();
     assert_int_equal(ret, 1);
@@ -480,6 +481,7 @@ test_nc_client_ssh_setting_username(void **state)
     (void)state;
     int ret;
     const char *username_ret;
+
     username_ret = nc_client_ssh_get_username();
     /* username is set to "username" in setup_f */
     assert_string_equal(username_ret, "username");
@@ -588,7 +590,7 @@ test_nc_connect_ssh_pubkey_succesfull(void **state)
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_INTERACTIVE, -1);
 
     /* add keypair for authentication */
-    ret = nc_client_ssh_add_keypair(TESTS_DIR"/data/key_dsa.pub", TESTS_DIR"/data/key_dsa");
+    ret = nc_client_ssh_add_keypair(TESTS_DIR "/data/key_dsa.pub", TESTS_DIR "/data/key_dsa");
     assert_int_equal(ret, 0);
 
     /* fake succesfull connection */

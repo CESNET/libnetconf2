@@ -14,23 +14,23 @@
 #define _QNX_SOURCE /* getpeereid */
 #define _GNU_SOURCE /* signals, threads, SO_PEERCRED */
 
-#include <stdint.h>
-#include <stdlib.h>
+#include <arpa/inet.h>
 #include <errno.h>
-#include <string.h>
-#include <poll.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/un.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
+#include <poll.h>
 #include <pthread.h>
-#include <time.h>
-#include <signal.h>
 #include <pwd.h>
+#include <signal.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/un.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "compat.h"
 #include "libnetconf.h"
@@ -202,7 +202,6 @@ nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives *ka
     struct sockaddr_in *saddr4;
     struct sockaddr_in6 *saddr6;
 
-
     if (!strchr(address, ':')) {
         is_ipv4 = 1;
     } else {
@@ -308,7 +307,7 @@ nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *opts)
         }
     }
 
-    if (opts->uid != (uid_t)-1 || opts->gid != (gid_t)-1) {
+    if ((opts->uid != (uid_t)-1) || (opts->gid != (gid_t)-1)) {
         if (chown(sun.sun_path, opts->uid, opts->gid) < 0) {
             ERR("Failed to set unix socket uid/gid (%s).", strerror(errno));
             goto fail;
@@ -410,7 +409,7 @@ sock_host_inet(const struct sockaddr_in *addr, char **host, uint16_t *port)
 static int
 sock_host_inet6(const struct sockaddr_in6 *addr, char **host, uint16_t *port)
 {
-    *host =  malloc(INET6_ADDRSTRLEN);
+    *host = malloc(INET6_ADDRSTRLEN);
     if (!(*host)) {
         ERRMEM;
         return -1;
@@ -563,7 +562,7 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
             identifier = lyd_get_value(child);
         } else if (!strcmp(child->schema->name, "version")) {
             revision = lyd_get_value(child);
-            if (revision && revision[0] == '\0') {
+            if (revision && (revision[0] == '\0')) {
                 revision = NULL;
             }
         } else if (!strcmp(child->schema->name, "format")) {
@@ -686,7 +685,7 @@ nc_server_init(struct ly_ctx *ctx)
     errno = 0;
 
     if (pthread_rwlockattr_init(&attr) == 0) {
-#if defined(HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
+#if defined (HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
         if (pthread_rwlockattr_setkind_np(&attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP) == 0) {
             if (pthread_rwlock_init(&server_opts.endpt_lock, &attr) != 0) {
                 ERR("%s: failed to init rwlock(%s).", __FUNCTION__, strerror(errno));
@@ -722,7 +721,7 @@ nc_server_destroy(void)
     server_opts.passwd_auth_data = NULL;
     server_opts.passwd_auth_data_free = NULL;
 
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
     nc_server_del_endpt(NULL, 0);
     nc_server_ch_del_client(NULL);
 #endif
@@ -1202,7 +1201,7 @@ nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
     /* UNLOCK */
     ret2 = nc_ps_unlock(ps, q_id, __func__);
 
-    return (ret || ret2 ? -1 : 0);
+    return ret || ret2 ? -1 : 0;
 }
 
 API struct nc_session *
@@ -1287,7 +1286,8 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
         ret = NC_PSPOLL_REPLY_ERROR;
         reply = nc_server_reply_err(nc_err(server_opts.ctx, NC_ERR_MALFORMED_MSG));
         goto send_reply;
-    } if (r == -1) {
+    }
+    if (r == -1) {
         return NC_PSPOLL_ERROR;
     } else if (!r) {
         return NC_PSPOLL_TIMEOUT;
@@ -1413,7 +1413,7 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, struct nc_se
             /* no callback, reply with a not-implemented error */
             reply = nc_server_reply_err(nc_err(server_opts.ctx, NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_PROT));
         } else {
-          reply = global_rpc_clb(rpc->rpc, session);
+            reply = global_rpc_clb(rpc->rpc, session);
         }
     } else {
         clb = (nc_rpc_clb)rpc_act->priv;
@@ -1455,13 +1455,14 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
 {
     struct pollfd pfd;
     int r, ret = 0;
+
 #ifdef NC_ENABLED_SSH
     struct nc_session *new;
 #endif
 
     /* check timeout first */
-    if (!(session->flags & NC_SESSION_CALLHOME) && !session->opts.server.ntf_status && server_opts.idle_timeout
-            && (now_mono >= session->opts.server.last_rpc + server_opts.idle_timeout)) {
+    if (!(session->flags & NC_SESSION_CALLHOME) && !session->opts.server.ntf_status && server_opts.idle_timeout &&
+            (now_mono >= session->opts.server.last_rpc + server_opts.idle_timeout)) {
         sprintf(msg, "session idle timeout elapsed");
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_TIMEOUT;
@@ -1496,8 +1497,8 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
                 session->flags &= ~NC_SESSION_SSH_NEW_MSG;
                 if (session->ti.libssh.next) {
                     for (new = session->ti.libssh.next; new != session; new = new->ti.libssh.next) {
-                        if ((new->status == NC_STATUS_STARTING) && new->ti.libssh.channel
-                                && (new->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
+                        if ((new->status == NC_STATUS_STARTING) && new->ti.libssh.channel &&
+                                (new->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
                             /* new NETCONF SSH channel */
                             ret = NC_PSPOLL_SSH_CHANNEL;
                             break;
@@ -1858,7 +1859,7 @@ nc_get_uid(int sock, uid_t *uid)
 static int
 nc_accept_unix(struct nc_session *session, int sock)
 {
-#if defined(SO_PEERCRED) || defined(HAVE_GETPEEREID)
+#if defined (SO_PEERCRED) || defined (HAVE_GETPEEREID)
     const struct passwd *pw;
     char *username;
     session->ti_type = NC_TI_UNIX;
@@ -2184,18 +2185,19 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
         address = bind->address;
     }
 
-    if (!set_addr && endpt->ti == NC_TI_UNIX) {
+    if (!set_addr && (endpt->ti == NC_TI_UNIX)) {
         ret = -1;
         goto cleanup;
     }
 
     /* we have all the information we need to create a listening socket */
-    if (address && (port || endpt->ti == NC_TI_UNIX)) {
+    if (address && (port || (endpt->ti == NC_TI_UNIX))) {
         /* create new socket, close the old one */
-        if (endpt->ti == NC_TI_UNIX)
+        if (endpt->ti == NC_TI_UNIX) {
             sock = nc_sock_listen_unix(address, endpt->opts.unixsock);
-        else
+        } else {
             sock = nc_sock_listen_inet(address, port, &endpt->ka);
+        }
         if (sock == -1) {
             ret = -1;
             goto cleanup;
@@ -2251,7 +2253,7 @@ nc_server_endpt_set_address(const char *endpt_name, const char *address)
     return nc_server_endpt_set_address_port(endpt_name, address, 0);
 }
 
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
 
 API int
 nc_server_endpt_set_port(const char *endpt_name, uint16_t port)
@@ -2278,8 +2280,9 @@ nc_server_endpt_set_perms(const char *endpt_name, mode_t mode, uid_t uid, gid_t 
 
     /* ENDPT LOCK */
     endpt = nc_server_endpt_lock_get(endpt_name, 0, &i);
-    if (!endpt)
+    if (!endpt) {
         return -1;
+    }
 
     if (endpt->ti != NC_TI_UNIX) {
         ret = -1;
@@ -2490,7 +2493,7 @@ cleanup:
     return msgtype;
 }
 
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
 
 /* client is expected to be locked */
 static int

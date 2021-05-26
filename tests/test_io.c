@@ -19,17 +19,17 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <cmocka.h>
 #include <libyang/libyang.h>
 
 #include <messages_p.h>
-#include <session_p.h>
 #include <session_client.h>
+#include <session_p.h>
 #include "tests/config.h"
 
 struct wr {
@@ -46,10 +46,10 @@ setup_write(void **state)
 
     w = malloc(sizeof *w);
     w->session = calloc(1, sizeof *w->session);
-    ly_ctx_new(TESTS_DIR"/data/modules", 0, &w->session->ctx);
+    ly_ctx_new(TESTS_DIR "/data/modules", 0, &w->session->ctx);
 
     /* ietf-netconf */
-    fd = open(TESTS_DIR"/data/modules/ietf-netconf.yin", O_RDONLY);
+    fd = open(TESTS_DIR "/data/modules/ietf-netconf.yin", O_RDONLY);
     if (fd == -1) {
         free(w);
         return -1;
@@ -106,7 +106,7 @@ test_write_rpc(void **state)
 
     do {
         type = nc_send_rpc(w->session, w->rpc, 1000, &msgid);
-    } while(type == NC_MSG_WOULDBLOCK);
+    } while (type == NC_MSG_WOULDBLOCK);
 
     assert_int_equal(type, NC_MSG_RPC);
 
@@ -147,7 +147,7 @@ test_write_rpc_bad(void **state)
 
     do {
         type = nc_send_rpc(w->session, w->rpc, 1000, &msgid);
-    } while(type == NC_MSG_WOULDBLOCK);
+    } while (type == NC_MSG_WOULDBLOCK);
 
     assert_int_equal(type, NC_MSG_ERROR);
 }
@@ -172,13 +172,15 @@ test_write_rpc_11_bad(void **state)
     return test_write_rpc_bad(state);
 }
 
-int main(void)
+int
+main(void)
 {
     const struct CMUnitTest io[] = {
         cmocka_unit_test_setup_teardown(test_write_rpc_10, setup_write, teardown_write),
         cmocka_unit_test_setup_teardown(test_write_rpc_10_bad, setup_write, teardown_write),
         cmocka_unit_test_setup_teardown(test_write_rpc_11, setup_write, teardown_write),
-        cmocka_unit_test_setup_teardown(test_write_rpc_11_bad, setup_write, teardown_write)};
+        cmocka_unit_test_setup_teardown(test_write_rpc_11_bad, setup_write, teardown_write)
+    };
 
     return cmocka_run_group_tests(io, NULL, NULL);
 }

@@ -33,9 +33,9 @@ extern "C" {
 
 #endif
 
-#include "session.h"
-#include "netconf.h"
 #include "messages_client.h"
+#include "netconf.h"
+#include "session.h"
 
 /**
  * @addtogroup client
@@ -192,7 +192,7 @@ struct nc_session *nc_connect_unix(const char *address, struct ly_ctx *ctx);
  * @param[in] priv Optional private data to be passed to the callback function.
  */
 void nc_client_ssh_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
-                                              void *priv);
+        void *priv);
 
 /**
  * @brief Get currently set SSH authentication hostkey check (knownhosts) callback and its private data previously set
@@ -202,7 +202,7 @@ void nc_client_ssh_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const ch
  * @param[out] priv Currently set (optional) private data to be passed to the callback function.
  */
 void nc_client_ssh_get_auth_hostkey_check_clb(int (**auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
-                                              void **priv);
+        void **priv);
 
 /**
  * @brief Set SSH password authentication callback.
@@ -216,7 +216,7 @@ void nc_client_ssh_get_auth_hostkey_check_clb(int (**auth_hostkey_check)(const c
  * @param[in] priv Optional private data to be passed to the callback function.
  */
 void nc_client_ssh_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname, void *priv),
-                                         void *priv);
+        void *priv);
 
 /**
  * @brief Get currently set SSH password authentication callback and its private data previously set
@@ -226,7 +226,7 @@ void nc_client_ssh_set_auth_password_clb(char *(*auth_password)(const char *user
  * @param[out] priv Currently set (optional) private data to be passed to the callback function.
  */
 void nc_client_ssh_get_auth_password_clb(char *(**auth_password)(const char *username, const char *hostname, void *priv),
-                                         void **priv);
+        void **priv);
 
 /**
  * @brief Set SSH interactive authentication callback.
@@ -241,8 +241,8 @@ void nc_client_ssh_get_auth_password_clb(char *(**auth_password)(const char *use
  * @param[in] priv Optional private data to be passed to the callback function.
  */
 void nc_client_ssh_set_auth_interactive_clb(char *(*auth_interactive)(const char *auth_name, const char *instruction,
-                                                                      const char *prompt, int echo, void *priv),
-                                            void *priv);
+        const char *prompt, int echo, void *priv),
+        void *priv);
 
 /**
  * @brief Get currently set SSH interactive authentication callback and its private data previously set
@@ -252,8 +252,8 @@ void nc_client_ssh_set_auth_interactive_clb(char *(*auth_interactive)(const char
  * @param[out] priv Currently set (optional) private data to be passed to the callback function.
  */
 void nc_client_ssh_get_auth_interactive_clb(char *(**auth_interactive)(const char *auth_name, const char *instruction,
-                                                                       const char *prompt, int echo, void *priv),
-                                            void **priv);
+        const char *prompt, int echo, void *priv),
+        void **priv);
 
 /**
  * @brief Set SSH publickey authentication encrypted private key passphrase callback.
@@ -267,7 +267,7 @@ void nc_client_ssh_get_auth_interactive_clb(char *(**auth_interactive)(const cha
  * @param[in] priv Optional private data to be passed to the callback function.
  */
 void nc_client_ssh_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path, void *priv),
-                                                   void *priv);
+        void *priv);
 
 /**
  * @brief Get currently set SSH publickey authentication encrypted private key passphrase callback and its private data
@@ -277,7 +277,7 @@ void nc_client_ssh_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphra
  * @param[out] priv Currently set (optional) private data to be passed to the callback function.
  */
 void nc_client_ssh_get_auth_privkey_passphrase_clb(char *(**auth_privkey_passphrase)(const char *privkey_path, void *priv),
-                                                   void **priv);
+        void **priv);
 
 /**
  * @brief Add an SSH public and private key pair to be used for client authentication.

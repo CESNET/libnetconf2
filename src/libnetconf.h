@@ -17,10 +17,10 @@
 #define NC_LIBNETCONF_H_
 
 #include "config.h"
-#include "netconf.h"
 #include "log_p.h"
-#include "session_p.h"
 #include "messages_p.h"
+#include "netconf.h"
+#include "session_p.h"
 
 /* Tests whether string is empty or non-empty. */
 #define strisempty(str) ((str)[0] == '\0')

@@ -14,20 +14,20 @@
 
 #define _GNU_SOURCE
 
-#include <string.h>
 #include <poll.h>
+#include <string.h>
 #include <unistd.h>
 
-#include <openssl/ssl.h>
-#include <openssl/evp.h>
 #include <openssl/err.h>
-#include <openssl/x509v3.h>
+#include <openssl/evp.h>
+#include <openssl/ssl.h>
 #include <openssl/x509.h>
+#include <openssl/x509v3.h>
 
 #include "compat.h"
+#include "libnetconf.h"
 #include "session_server.h"
 #include "session_server_ch.h"
-#include "libnetconf.h"
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 #define X509_STORE_CTX_get_by_subject X509_STORE_get_by_subject
@@ -151,7 +151,7 @@ base64der_to_privatekey(const char *in, const char *key_str)
     }
 
     if (asprintf(&buf, "%s%s%s%s%s%s%s", "-----BEGIN ", key_str, " PRIVATE KEY-----\n", in, "\n-----END ",
-                key_str, " PRIVATE KEY-----") == -1) {
+            key_str, " PRIVATE KEY-----") == -1) {
         return NULL;
     }
     bio = BIO_new_mem_buf(buf, strlen(buf));
@@ -191,7 +191,7 @@ cert_pubkey_match(X509 *cert1, X509 *cert2)
 static int
 nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type, char **username)
 {
-    STACK_OF(GENERAL_NAME) *san_names;
+    STACK_OF(GENERAL_NAME) * san_names;
     GENERAL_NAME *san_name;
     ASN1_OCTET_STRING *ip;
     int i, san_count;
@@ -228,8 +228,8 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
             san_name = sk_GENERAL_NAME_value(san_names, i);
 
             /* rfc822Name (email) */
-            if ((map_type == NC_TLS_CTN_SAN_ANY || map_type == NC_TLS_CTN_SAN_RFC822_NAME) &&
-                    san_name->type == GEN_EMAIL) {
+            if (((map_type == NC_TLS_CTN_SAN_ANY) || (map_type == NC_TLS_CTN_SAN_RFC822_NAME)) &&
+                    (san_name->type == GEN_EMAIL)) {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
                 *username = strdup((char *)ASN1_STRING_data(san_name->d.rfc822Name));
 #else
@@ -243,8 +243,8 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
             }
 
             /* dNSName */
-            if ((map_type == NC_TLS_CTN_SAN_ANY || map_type == NC_TLS_CTN_SAN_DNS_NAME) &&
-                    san_name->type == GEN_DNS) {
+            if (((map_type == NC_TLS_CTN_SAN_ANY) || (map_type == NC_TLS_CTN_SAN_DNS_NAME)) &&
+                    (san_name->type == GEN_DNS)) {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
                 *username = strdup((char *)ASN1_STRING_data(san_name->d.dNSName));
 #else
@@ -258,8 +258,8 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
             }
 
             /* iPAddress */
-            if ((map_type == NC_TLS_CTN_SAN_ANY || map_type == NC_TLS_CTN_SAN_IP_ADDRESS) &&
-                    san_name->type == GEN_IPADD) {
+            if (((map_type == NC_TLS_CTN_SAN_ANY) || (map_type == NC_TLS_CTN_SAN_IP_ADDRESS)) &&
+                    (san_name->type == GEN_IPADD)) {
                 ip = san_name->d.iPAddress;
                 if (ip->length == 4) {
                     if (asprintf(username, "%d.%d.%d.%d", ip->data[0], ip->data[1], ip->data[2], ip->data[3]) == -1) {
@@ -358,7 +358,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
                 break;
             }
 
-        /* SHA-1 */
+            /* SHA-1 */
         } else if (!strncmp(ctn->fingerprint, "02", 2)) {
             if (!digest_sha1) {
                 if (X509_digest(cert, EVP_sha1(), buf, &buf_len) != 1) {
@@ -379,7 +379,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
                 break;
             }
 
-        /* SHA-224 */
+            /* SHA-224 */
         } else if (!strncmp(ctn->fingerprint, "03", 2)) {
             if (!digest_sha224) {
                 if (X509_digest(cert, EVP_sha224(), buf, &buf_len) != 1) {
@@ -400,7 +400,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
                 break;
             }
 
-        /* SHA-256 */
+            /* SHA-256 */
         } else if (!strncmp(ctn->fingerprint, "04", 2)) {
             if (!digest_sha256) {
                 if (X509_digest(cert, EVP_sha256(), buf, &buf_len) != 1) {
@@ -421,7 +421,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
                 break;
             }
 
-        /* SHA-384 */
+            /* SHA-384 */
         } else if (!strncmp(ctn->fingerprint, "05", 2)) {
             if (!digest_sha384) {
                 if (X509_digest(cert, EVP_sha384(), buf, &buf_len) != 1) {
@@ -442,7 +442,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
                 break;
             }
 
-        /* SHA-512 */
+            /* SHA-512 */
         } else if (!strncmp(ctn->fingerprint, "06", 2)) {
             if (!digest_sha512) {
                 if (X509_digest(cert, EVP_sha512(), buf, &buf_len) != 1) {
@@ -463,7 +463,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
                 break;
             }
 
-        /* unknown */
+            /* unknown */
         } else {
             WRN("Unknown fingerprint algorithm used (%s), skipping.", ctn->fingerprint);
         }
@@ -496,9 +496,10 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     X509 *cert;
     X509_CRL *crl;
     X509_REVOKED *revoked;
-    STACK_OF(X509) *cert_stack;
+
+    STACK_OF(X509) * cert_stack;
     EVP_PKEY *pubkey;
-    struct nc_session* session;
+    struct nc_session *session;
     struct nc_server_tls_opts *opts;
     const ASN1_INTEGER *serial;
     int i, n, rc, depth;
@@ -534,7 +535,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
                     /* we are just overriding the failed standard certificate verification (preverify_ok == 0),
                      * this callback will be called again with the same current certificate and preverify_ok == 1 */
                     VRB("Cert verify: fail (%s), but the client certificate is trusted, continuing.",
-                        X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
+                            X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
                     X509_STORE_CTX_set_error(x509_ctx, X509_V_OK);
                     sk_X509_pop_free(cert_stack, X509_free);
                     return 1;
@@ -572,7 +573,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         rc = X509_STORE_CTX_get_by_subject(store_ctx, X509_LU_CRL, subject, obj);
         X509_STORE_CTX_free(store_ctx);
         crl = X509_OBJECT_get0_X509_CRL(obj);
-        if (rc > 0 && crl) {
+        if ((rc > 0) && crl) {
             cp = X509_NAME_oneline(subject, NULL, 0);
             VRB("Cert verify CRL: issuer: %s.", cp);
             OPENSSL_free(cp);
@@ -625,7 +626,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         rc = X509_STORE_CTX_get_by_subject(store_ctx, X509_LU_CRL, issuer, obj);
         X509_STORE_CTX_free(store_ctx);
         crl = X509_OBJECT_get0_X509_CRL(obj);
-        if (rc > 0 && crl) {
+        if ((rc > 0) && crl) {
             /* check if the current certificate is revoked by this CRL */
             n = sk_X509_REVOKED_num(X509_CRL_get_REVOKED(crl));
             for (i = 0; i < n; i++) {
@@ -708,9 +709,10 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     X509 *cert;
     X509_CRL *crl;
     X509_REVOKED *revoked;
-    STACK_OF(X509) *cert_stack;
+
+    STACK_OF(X509) * cert_stack;
     EVP_PKEY *pubkey;
-    struct nc_session* session;
+    struct nc_session *session;
     struct nc_server_tls_opts *opts;
     long serial;
     int i, n, rc, depth;
@@ -748,7 +750,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
                     /* we are just overriding the failed standard certificate verification (preverify_ok == 0),
                      * this callback will be called again with the same current certificate and preverify_ok == 1 */
                     VRB("Cert verify: fail (%s), but the client certificate is trusted, continuing.",
-                        X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
+                            X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
                     X509_STORE_CTX_set_error(x509_ctx, X509_V_OK);
                     sk_X509_pop_free(cert_stack, X509_free);
                     return 1;
@@ -785,7 +787,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         rc = X509_STORE_CTX_get_by_subject(&store_ctx, X509_LU_CRL, subject, &obj);
         X509_STORE_CTX_cleanup(&store_ctx);
         crl = obj.data.crl;
-        if (rc > 0 && crl) {
+        if ((rc > 0) && crl) {
             cp = X509_NAME_oneline(subject, NULL, 0);
             VRB("Cert verify CRL: issuer: %s.", cp);
             OPENSSL_free(cp);
@@ -837,7 +839,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         rc = X509_STORE_CTX_get_by_subject(&store_ctx, X509_LU_CRL, issuer, &obj);
         X509_STORE_CTX_cleanup(&store_ctx);
         crl = obj.data.crl;
-        if (rc > 0 && crl) {
+        if ((rc > 0) && crl) {
             /* check if the current certificate is revoked by this CRL */
             n = sk_X509_REVOKED_num(X509_CRL_get_REVOKED(crl));
             for (i = 0; i < n; i++) {
@@ -1386,7 +1388,7 @@ nc_server_tls_add_ctn(uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE m
         new->next = opts->ctn;
         opts->ctn = new;
     } else {
-        for (ctn = opts->ctn; ctn->next && ctn->next->id <= id; ctn = ctn->next);
+        for (ctn = opts->ctn; ctn->next && ctn->next->id <= id; ctn = ctn->next) {}
         if (ctn->id == id) {
             /* it exists already */
             new = ctn;
@@ -1488,10 +1490,10 @@ nc_server_tls_del_ctn(int64_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE ma
         prev = NULL;
         ctn = opts->ctn;
         while (ctn) {
-            if (((id < 0) || (ctn->id == id))
-                    && (!fingerprint || !strcmp(ctn->fingerprint, fingerprint))
-                    && (!map_type || (ctn->map_type == map_type))
-                    && (!name || (ctn->name && !strcmp(ctn->name, name)))) {
+            if (((id < 0) || (ctn->id == id)) &&
+                    (!fingerprint || !strcmp(ctn->fingerprint, fingerprint)) &&
+                    (!map_type || (ctn->map_type == map_type)) &&
+                    (!name || (ctn->name && !strcmp(ctn->name, name)))) {
                 lydict_remove(server_opts.ctx, ctn->fingerprint);
                 lydict_remove(server_opts.ctx, ctn->name);
 
@@ -1564,7 +1566,7 @@ nc_server_tls_ch_client_endpt_del_ctn(const char *client_name, const char *endpt
 
 static int
 nc_server_tls_get_ctn(uint32_t *id, char **fingerprint, NC_TLS_CTN_MAPTYPE *map_type, char **name,
-                      struct nc_server_tls_opts *opts)
+        struct nc_server_tls_opts *opts)
 {
     struct nc_ctn *ctn;
     int ret = -1;
@@ -1684,7 +1686,7 @@ nc_tls_make_verify_key(void)
     pthread_key_create(&verify_key, NULL);
 }
 
-static X509*
+static X509 *
 tls_load_cert(const char *cert_path, const char *cert_data)
 {
     X509 *cert;
@@ -1698,10 +1700,10 @@ tls_load_cert(const char *cert_path, const char *cert_data)
     if (!cert) {
         if (cert_path) {
             ERR("Loading a trusted certificate (path \"%s\") failed (%s).", cert_path,
-                ERR_reason_error_string(ERR_get_error()));
+                    ERR_reason_error_string(ERR_get_error()));
         } else {
             ERR("Loading a trusted certificate (data \"%s\") failed (%s).", cert_data,
-                ERR_reason_error_string(ERR_get_error()));
+                    ERR_reason_error_string(ERR_get_error()));
         }
     }
     return cert;
@@ -1720,14 +1722,14 @@ nc_tls_ctx_set_server_cert_chain(SSL_CTX *tls_ctx, const char *cert_name)
     }
 
     if (server_opts.server_cert_chain_clb(cert_name, server_opts.server_cert_chain_data, &cert_paths,
-                                          &cert_path_count, &cert_data, &cert_data_count)) {
+            &cert_path_count, &cert_data, &cert_data_count)) {
         ERR("Server certificate chain callback failed.");
         return -1;
     }
 
     for (i = 0; i < cert_path_count; ++i) {
         cert = tls_load_cert(cert_paths[i], NULL);
-        if (!cert || SSL_CTX_add_extra_chain_cert(tls_ctx, cert) != 1) {
+        if (!cert || (SSL_CTX_add_extra_chain_cert(tls_ctx, cert) != 1)) {
             ERR("Loading the server certificate chain failed (%s).", ERR_reason_error_string(ERR_get_error()));
             ret = -1;
             goto cleanup;
@@ -1736,7 +1738,7 @@ nc_tls_ctx_set_server_cert_chain(SSL_CTX *tls_ctx, const char *cert_name)
 
     for (i = 0; i < cert_data_count; ++i) {
         cert = tls_load_cert(NULL, cert_data[i]);
-        if (!cert || SSL_CTX_add_extra_chain_cert(tls_ctx, cert) != 1) {
+        if (!cert || (SSL_CTX_add_extra_chain_cert(tls_ctx, cert) != 1)) {
             ERR("Loading the server certificate chain failed (%s).", ERR_reason_error_string(ERR_get_error()));
             ret = -1;
             goto cleanup;
@@ -1774,7 +1776,7 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
     }
 
     if (server_opts.server_cert_clb(cert_name, server_opts.server_cert_data, &cert_path, &cert_data, &privkey_path,
-                &privkey_data, &privkey_type)) {
+            &privkey_data, &privkey_type)) {
         ERR("Server certificate callback failed.");
         return -1;
     }
@@ -1827,6 +1829,7 @@ static void
 tls_store_add_trusted_cert(X509_STORE *cert_store, const char *cert_path, const char *cert_data)
 {
     X509 *cert = tls_load_cert(cert_path, cert_data);
+
     if (!cert) {
         return;
     }
@@ -1857,7 +1860,7 @@ nc_tls_store_set_trusted_certs(X509_STORE *cert_store, const char **trusted_cert
         cert_paths = cert_data = NULL;
         cert_path_count = cert_data_count = 0;
         if (server_opts.trusted_cert_list_clb(trusted_cert_lists[i], server_opts.trusted_cert_list_data,
-                                              &cert_paths, &cert_path_count, &cert_data, &cert_data_count)) {
+                &cert_paths, &cert_path_count, &cert_data, &cert_data_count)) {
             ERR("Trusted certificate list callback for \"%s\" failed.", trusted_cert_lists[i]);
             return -1;
         }

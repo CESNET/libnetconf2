@@ -19,21 +19,21 @@
 extern "C" {
 #endif
 
-#include <stdint.h>
 #include <libyang/libyang.h>
+#include <stdint.h>
 
 #ifdef NC_ENABLED_TLS
 #   include <openssl/x509.h>
 #endif
 
 #ifdef NC_ENABLED_SSH
-#   include <libssh/libssh.h>
 #   include <libssh/callbacks.h>
+#   include <libssh/libssh.h>
 #   include <libssh/server.h>
 #endif
 
-#include "session.h"
 #include "netconf.h"
+#include "session.h"
 
 /**
  * @defgroup server_session Server Session
@@ -408,7 +408,7 @@ int nc_server_is_endpt(const char *name);
  */
 int nc_server_endpt_set_address(const char *endpt_name, const char *address);
 
-#if defined(NC_ENABLED_SSH) || defined(NC_ENABLED_TLS)
+#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
 
 /**
  * @brief Change endpoint listening port.
@@ -546,7 +546,7 @@ int nc_server_ssh_add_authkey_path(const char *pubkey_path, const char *username
  * @return 0 on success, -1 on not finding any match.
  */
 int nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64, NC_SSH_KEY_TYPE type,
-                              const char *username);
+        const char *username);
 
 /**
  * @brief Set the callback for SSH password authentication. If none is set, local system users are used.
@@ -578,7 +578,7 @@ void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const st
  * @param[in] user_data Optional arbitrary user data that will be passed to \p passwd_auth_clb.
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
  */
- void nc_server_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session *session, ssh_key key,
+void nc_server_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session *session, ssh_key key,
         void *user_data), void *user_data, void (*free_user_data)(void *user_data));
 
 /**
@@ -817,7 +817,7 @@ void nc_server_tls_endpt_clear_crls(const char *endpt_name);
  * @return 0 on success, -1 on error.
  */
 int nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char *fingerprint,
-                                NC_TLS_CTN_MAPTYPE map_type, const char *name);
+        NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
 /**
  * @brief Remove a cert-to-name entry.
@@ -830,7 +830,7 @@ int nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char 
  * @return 0 on success, -1 on not finding any match.
  */
 int nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *fingerprint,
-                                NC_TLS_CTN_MAPTYPE map_type, const char *name);
+        NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
 /**
  * @brief Get a cert-to-name entry.
@@ -847,7 +847,7 @@ int nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *
  * @return 0 on success, -1 on not finding any match.
  */
 int nc_server_tls_endpt_get_ctn(const char *endpt_name, uint32_t *id, char **fingerprint, NC_TLS_CTN_MAPTYPE *map_type,
-                                char **name);
+        char **name);
 
 /**
  * @brief Get client certificate.

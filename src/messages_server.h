@@ -19,8 +19,8 @@
 extern "C" {
 #endif
 
-#include <stdint.h>
 #include <libyang/libyang.h>
+#include <stdint.h>
 
 #include "netconf.h"
 #include "session.h"

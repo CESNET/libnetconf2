@@ -1,15 +1,15 @@
+#include <errno.h>
+#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <setjmp.h>
-#include <sys/types.h>
 #include <sys/socket.h>
-#include <errno.h>
+#include <sys/types.h>
 
 #include <cmocka.h>
-#include <libyang/libyang.h>
-#include <session_client.h>
-#include <log.h>
 #include <config.h>
+#include <libyang/libyang.h>
+#include <log.h>
+#include <session_client.h>
 #include "tests/config.h"
 
 static int
@@ -120,9 +120,9 @@ test_nc_connect_tls_succesfull(void **state)
     int ret;
     struct nc_session *session;
 
-    ret = nc_client_tls_set_cert_key_paths(TESTS_DIR"/data/client.crt", TESTS_DIR"/data/client.key");
+    ret = nc_client_tls_set_cert_key_paths(TESTS_DIR "/data/client.crt", TESTS_DIR "/data/client.key");
     assert_int_equal(ret, 0);
-    ret = nc_client_tls_set_trusted_ca_paths(NULL, TESTS_DIR"/data");
+    ret = nc_client_tls_set_trusted_ca_paths(NULL, TESTS_DIR "/data");
     assert_int_equal(ret, 0);
 
     will_return(__wrap_connect, 0);
@@ -171,9 +171,9 @@ test_nc_connect_tls_handshake_failed(void **state)
     int ret;
     struct nc_session *session;
 
-    ret = nc_client_tls_set_cert_key_paths(TESTS_DIR"/data/client.crt", TESTS_DIR"/data/client.key");
+    ret = nc_client_tls_set_cert_key_paths(TESTS_DIR "/data/client.crt", TESTS_DIR "/data/client.key");
     assert_int_equal(ret, 0);
-    ret = nc_client_tls_set_trusted_ca_paths(NULL, TESTS_DIR"/data");
+    ret = nc_client_tls_set_trusted_ca_paths(NULL, TESTS_DIR "/data");
     assert_int_equal(ret, 0);
 
     will_return(__wrap_connect, 0);
