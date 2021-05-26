@@ -93,7 +93,7 @@ else()
   set(LIBVAL_LIBRARIES ${LIBSRES_LIBRARY} ${LIBVAL_LIBRARY})
 
   include(FindPackageHandleStandardArgs)
-  find_package_handle_standard_args(LIBVAL DEFAULT_MSG LIBVAL_LIBRARIES LIBVAL_INCLUDE_DIRS)
+  find_package_handle_standard_args(LibVAL DEFAULT_MSG LIBVAL_LIBRARIES LIBVAL_INCLUDE_DIRS)
 
   # show the LIBVAL_INCLUDE_DIRS and LIBVAL_LIBRARIES variables only in the advanced view
   mark_as_advanced(LIBVAL_INCLUDE_DIRS LIBVAL_LIBRARIES)
