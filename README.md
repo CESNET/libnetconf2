@@ -33,6 +33,11 @@ another basic building block for the [**Netopeer2** toolset](https://github.com/
 For a reference implementation of NETCONF client and server, check the
 **Netopeer2** project.
 
+## Deprecation Notice
+
+libnetconf2 version 1 is deprecated and while still being supported, no new features or complex bugfixes
+will be implemented. It is recommended to switch to using version 2.
+
 ## Branches
 
 The project uses 2 main branches `master` and `devel`. Other branches should not be cloned. In `master` there are files of the
