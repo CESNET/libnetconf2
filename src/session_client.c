@@ -2197,9 +2197,9 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     struct nc_rpc_establishpush *rpc_estpush;
     struct nc_rpc_modifypush *rpc_modpush;
     struct nc_rpc_resyncsub *rpc_resyncsub;
-    struct lyd_node *data, *node, *cont;
+    struct lyd_node *data = NULL, *node, *cont;
     const struct lys_module *mod = NULL, *mod2 = NULL, *ietfncwd;
-    LY_ERR lyrc;
+    LY_ERR lyrc = 0;
     int i;
     char str[11];
     uint64_t cur_msgid;
@@ -2297,6 +2297,8 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         return NC_MSG_ERROR;
     }
 
+#define CHECK_LYRC_BREAK(func_call) if ((lyrc = func_call)) break;
+
     switch (rpc->type) {
     case NC_RPC_ACT_GENERIC:
         rpc_gen = (struct nc_rpc_act_generic *)rpc;
@@ -2309,7 +2311,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
             lyrc = lyd_parse_op(session->ctx, NULL, in, LYD_XML, LYD_TYPE_RPC_YANG, &data, NULL);
             ly_in_free(in, 0);
             if (lyrc) {
-                return NC_MSG_ERROR;
+                break;
             }
         }
         break;
@@ -2317,24 +2319,17 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_GETCONFIG:
         rpc_gc = (struct nc_rpc_getconfig *)rpc;
 
-        lyd_new_inner(NULL, mod, "get-config", 0, &data);
-        lyd_new_inner(data, mod, "source", 0, &cont);
-        if (lyd_new_term(cont, mod, ncds2str[rpc_gc->source], NULL, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "get-config", 0, &data));
+        CHECK_LYRC_BREAK(lyd_new_inner(data, mod, "source", 0, &cont));
+        CHECK_LYRC_BREAK(lyd_new_term(cont, mod, ncds2str[rpc_gc->source], NULL, 0, NULL));
         if (rpc_gc->filter) {
             if (!rpc_gc->filter[0] || (rpc_gc->filter[0] == '<')) {
-                lyd_new_any(data, mod, "filter", rpc_gc->filter, 0, LYD_ANYDATA_XML, 0, &node);
-                lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "subtree", 0, NULL);
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", rpc_gc->filter, 0, LYD_ANYDATA_XML, 0, &node));
+                CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "subtree", 0, NULL));
             } else {
-                lyd_new_any(data, mod, "filter", NULL, 0, LYD_ANYDATA_STRING, 0, &node);
-                lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "xpath", 0, NULL);
-                lyd_new_meta(NULL, node, NULL, "ietf-netconf:select", rpc_gc->filter, 0, NULL);
-            }
-            if (!node) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", NULL, 0, LYD_ANYDATA_STRING, 0, &node));
+                CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "xpath", 0, NULL));
+                CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:select", rpc_gc->filter, 0, NULL));
             }
         }
 
@@ -2342,156 +2337,109 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
             ietfncwd = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-with-defaults");
             if (!ietfncwd) {
                 ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
+                lyrc = LY_ENOTFOUND;
+                break;
             }
-            if (lyd_new_term(data, ietfncwd, "with-defaults", nc_wd2str(rpc_gc->wd_mode), 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, ietfncwd, "with-defaults", nc_wd2str(rpc_gc->wd_mode), 0, NULL));
         }
         break;
 
     case NC_RPC_EDIT:
         rpc_e = (struct nc_rpc_edit *)rpc;
 
-        lyd_new_inner(NULL, mod, "edit-config", 0, &data);
-        lyd_new_inner(data, mod, "target", 0, &cont);
-        if (lyd_new_term(cont, mod, ncds2str[rpc_e->target], NULL, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "edit-config", 0, &data));
+        CHECK_LYRC_BREAK(lyd_new_inner(data, mod, "target", 0, &cont));
+        CHECK_LYRC_BREAK(lyd_new_term(cont, mod, ncds2str[rpc_e->target], NULL, 0, NULL));
 
         if (rpc_e->default_op) {
-            if (lyd_new_term(data, mod, "default-operation", rpcedit_dfltop2str[rpc_e->default_op], 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "default-operation", rpcedit_dfltop2str[rpc_e->default_op], 0, NULL));
         }
-
         if (rpc_e->test_opt) {
-            if (lyd_new_term(data, mod, "test-option", rpcedit_testopt2str[rpc_e->test_opt], 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "test-option", rpcedit_testopt2str[rpc_e->test_opt], 0, NULL));
         }
-
         if (rpc_e->error_opt) {
-            if (lyd_new_term(data, mod, "error-option", rpcedit_erropt2str[rpc_e->error_opt], 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "error-option", rpcedit_erropt2str[rpc_e->error_opt], 0, NULL));
         }
-
         if (!rpc_e->edit_cont[0] || (rpc_e->edit_cont[0] == '<')) {
-            lyd_new_any(data, mod, "config", rpc_e->edit_cont, 0, LYD_ANYDATA_XML, 0, &node);
+            CHECK_LYRC_BREAK(lyd_new_any(data, mod, "config", rpc_e->edit_cont, 0, LYD_ANYDATA_XML, 0, NULL));
         } else {
-            lyd_new_term(data, mod, "url", rpc_e->edit_cont, 0, &node);
-        }
-        if (!node) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "url", rpc_e->edit_cont, 0, NULL));
         }
         break;
 
     case NC_RPC_COPY:
         rpc_cp = (struct nc_rpc_copy *)rpc;
 
-        lyd_new_inner(NULL, mod, "copy-config", 0, &data);
-        lyd_new_inner(data, mod, "target", 0, &cont);
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "copy-config", 0, &data));
+        CHECK_LYRC_BREAK(lyd_new_inner(data, mod, "target", 0, &cont));
         if (rpc_cp->url_trg) {
-            lyd_new_term(cont, mod, "url", rpc_cp->url_trg, 0, &node);
+            CHECK_LYRC_BREAK(lyd_new_term(cont, mod, "url", rpc_cp->url_trg, 0, NULL));
         } else {
-            lyd_new_term(cont, mod, ncds2str[rpc_cp->target], NULL, 0, &node);
-        }
-        if (!node) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
+            CHECK_LYRC_BREAK(lyd_new_term(cont, mod, ncds2str[rpc_cp->target], NULL, 0, NULL));
         }
 
-        lyd_new_inner(data, mod, "source", 0, &cont);
+        CHECK_LYRC_BREAK(lyd_new_inner(data, mod, "source", 0, &cont));
         if (rpc_cp->url_config_src) {
             if (!rpc_cp->url_config_src[0] || (rpc_cp->url_config_src[0] == '<')) {
-                lyd_new_any(cont, mod, "config", rpc_cp->url_config_src, 0, LYD_ANYDATA_XML, 0, &node);
+                CHECK_LYRC_BREAK(lyd_new_any(cont, mod, "config", rpc_cp->url_config_src, 0, LYD_ANYDATA_XML, 0, NULL));
             } else {
-                lyd_new_term(cont, mod, "url", rpc_cp->url_config_src, 0, &node);
+                CHECK_LYRC_BREAK(lyd_new_term(cont, mod, "url", rpc_cp->url_config_src, 0, NULL));
             }
         } else {
-            lyd_new_term(cont, mod, ncds2str[rpc_cp->source], NULL, 0, &node);
-        }
-        if (!node) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
+            CHECK_LYRC_BREAK(lyd_new_term(cont, mod, ncds2str[rpc_cp->source], NULL, 0, NULL));
         }
 
         if (rpc_cp->wd_mode) {
             ietfncwd = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-with-defaults");
             if (!ietfncwd) {
                 ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
+                lyrc = LY_ENOTFOUND;
+                break;
             }
-            if (lyd_new_term(data, ietfncwd, "with-defaults", nc_wd2str(rpc_cp->wd_mode), 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, ietfncwd, "with-defaults", nc_wd2str(rpc_cp->wd_mode), 0, NULL));
         }
         break;
 
     case NC_RPC_DELETE:
         rpc_del = (struct nc_rpc_delete *)rpc;
 
-        lyd_new_inner(NULL, mod, "delete-config", 0, &data);
-        lyd_new_inner(data, mod, "target", 0, &cont);
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "delete-config", 0, &data));
+        CHECK_LYRC_BREAK(lyd_new_inner(data, mod, "target", 0, &cont));
         if (rpc_del->url) {
-            lyd_new_term(cont, mod, "url", rpc_del->url, 0, &node);
+            CHECK_LYRC_BREAK(lyd_new_term(cont, mod, "url", rpc_del->url, 0, NULL));
         } else {
-            lyd_new_term(cont, mod, ncds2str[rpc_del->target], NULL, 0, &node);
-        }
-        if (!node) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
+            CHECK_LYRC_BREAK(lyd_new_term(cont, mod, ncds2str[rpc_del->target], NULL, 0, NULL));
         }
         break;
 
     case NC_RPC_LOCK:
         rpc_lock = (struct nc_rpc_lock *)rpc;
 
-        lyd_new_inner(NULL, mod, "lock", 0, &data);
-        lyd_new_inner(data, mod, "target", 0, &cont);
-        if (lyd_new_term(cont, mod, ncds2str[rpc_lock->target], NULL, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "lock", 0, &data));
+        CHECK_LYRC_BREAK(lyd_new_inner(data, mod, "target", 0, &cont));
+        CHECK_LYRC_BREAK(lyd_new_term(cont, mod, ncds2str[rpc_lock->target], NULL, 0, NULL));
         break;
 
     case NC_RPC_UNLOCK:
         rpc_lock = (struct nc_rpc_lock *)rpc;
 
-        lyd_new_inner(NULL, mod, "unlock", 0, &data);
-        lyd_new_inner(data, mod, "target", 0, &cont);
-        if (lyd_new_term(cont, mod, ncds2str[rpc_lock->target], NULL, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "unlock", 0, &data));
+        CHECK_LYRC_BREAK(lyd_new_inner(data, mod, "target", 0, &cont));
+        CHECK_LYRC_BREAK(lyd_new_term(cont, mod, ncds2str[rpc_lock->target], NULL, 0, NULL));
         break;
 
     case NC_RPC_GET:
         rpc_g = (struct nc_rpc_get *)rpc;
 
-        lyd_new_inner(NULL, mod, "get", 0, &data);
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "get", 0, &data));
         if (rpc_g->filter) {
             if (!rpc_g->filter[0] || (rpc_g->filter[0] == '<')) {
-                lyd_new_any(data, mod, "filter", rpc_g->filter, 0, LYD_ANYDATA_XML, 0, &node);
-                lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "subtree", 0, NULL);
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", rpc_g->filter, 0, LYD_ANYDATA_XML, 0, &node));
+                CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "subtree", 0, NULL));
             } else {
-                lyd_new_any(data, mod, "filter", NULL, 0, LYD_ANYDATA_STRING, 0, &node);
-                lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "xpath", 0, NULL);
-                lyd_new_meta(NULL, node, NULL, "ietf-netconf:select", rpc_g->filter, 0, NULL);
-            }
-            if (!node) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", NULL, 0, LYD_ANYDATA_STRING, 0, &node));
+                CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "xpath", 0, NULL));
+                CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:select", rpc_g->filter, 0, NULL));
             }
         }
 
@@ -2499,426 +2447,272 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
             ietfncwd = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-with-defaults");
             if (!ietfncwd) {
                 ERR("Session %u: missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
+                lyrc = LY_ENOTFOUND;
+                break;
             }
-            if (lyd_new_term(data, ietfncwd, "with-defaults", nc_wd2str(rpc_g->wd_mode), 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, ietfncwd, "with-defaults", nc_wd2str(rpc_g->wd_mode), 0, NULL));
         }
         break;
 
     case NC_RPC_KILL:
         rpc_k = (struct nc_rpc_kill *)rpc;
 
-        lyd_new_inner(NULL, mod, "kill-session", 0, &data);
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "kill-session", 0, &data));
         sprintf(str, "%u", rpc_k->sid);
-        if (lyd_new_term(data, mod, "session-id", str, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
+        CHECK_LYRC_BREAK(lyd_new_term(data, mod, "session-id", str, 0, NULL));
         break;
 
     case NC_RPC_COMMIT:
         rpc_com = (struct nc_rpc_commit *)rpc;
 
-        lyd_new_inner(NULL, mod, "commit", 0, &data);
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "commit", 0, &data));
         if (rpc_com->confirmed) {
-            if (lyd_new_term(data, mod, "confirmed", NULL, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "confirmed", NULL, 0, NULL));
         }
 
         if (rpc_com->confirm_timeout) {
             sprintf(str, "%u", rpc_com->confirm_timeout);
-            if (lyd_new_term(data, mod, "confirm-timeout", str, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "confirm-timeout", str, 0, NULL));
         }
-
         if (rpc_com->persist) {
-            if (lyd_new_term(data, mod, "persist", rpc_com->persist, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "persist", rpc_com->persist, 0, NULL));
         }
-
         if (rpc_com->persist_id) {
-            if (lyd_new_term(data, mod, "persist-id", rpc_com->persist_id, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "persist-id", rpc_com->persist_id, 0, NULL));
         }
         break;
 
     case NC_RPC_DISCARD:
-        lyd_new_inner(NULL, mod, "discard-changes", 0, &data);
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "discard-changes", 0, &data));
         break;
 
     case NC_RPC_CANCEL:
         rpc_can = (struct nc_rpc_cancel *)rpc;
 
-        lyd_new_inner(NULL, mod, "cancel-commit", 0, &data);
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "cancel-commit", 0, &data));
         if (rpc_can->persist_id) {
-            if (lyd_new_term(data, mod, "persist-id", rpc_can->persist_id, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "persist-id", rpc_can->persist_id, 0, NULL));
         }
         break;
 
     case NC_RPC_VALIDATE:
         rpc_val = (struct nc_rpc_validate *)rpc;
 
-        lyd_new_inner(NULL, mod, "validate", 0, &data);
-        lyd_new_inner(data, mod, "source", 0, &cont);
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "validate", 0, &data));
+        CHECK_LYRC_BREAK(lyd_new_inner(data, mod, "source", 0, &cont));
         if (rpc_val->url_config_src) {
             if (!rpc_val->url_config_src[0] || (rpc_val->url_config_src[0] == '<')) {
-                lyd_new_any(cont, mod, "config", rpc_val->url_config_src, 0, LYD_ANYDATA_XML, 0, &node);
+                CHECK_LYRC_BREAK(lyd_new_any(cont, mod, "config", rpc_val->url_config_src, 0, LYD_ANYDATA_XML, 0, NULL));
             } else {
-                lyd_new_term(cont, mod, "url", rpc_val->url_config_src, 0, &node);
+                CHECK_LYRC_BREAK(lyd_new_term(cont, mod, "url", rpc_val->url_config_src, 0, NULL));
             }
         } else {
-            lyd_new_term(cont, mod, ncds2str[rpc_val->source], NULL, 0, &node);
-        }
-        if (!node) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
+            CHECK_LYRC_BREAK(lyd_new_term(cont, mod, ncds2str[rpc_val->source], NULL, 0, NULL));
         }
         break;
 
     case NC_RPC_GETSCHEMA:
         rpc_gs = (struct nc_rpc_getschema *)rpc;
 
-        lyd_new_inner(NULL, mod, "get-schema", 0, &data);
-        if (lyd_new_term(data, mod, "identifier", rpc_gs->identifier, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "get-schema", 0, &data));
+        CHECK_LYRC_BREAK(lyd_new_term(data, mod, "identifier", rpc_gs->identifier, 0, NULL));
         if (rpc_gs->version) {
-            if (lyd_new_term(data, mod, "version", rpc_gs->version, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "version", rpc_gs->version, 0, NULL));
         }
         if (rpc_gs->format) {
-            if (lyd_new_term(data, mod, "format", rpc_gs->format, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "format", rpc_gs->format, 0, NULL));
         }
         break;
 
     case NC_RPC_SUBSCRIBE:
         rpc_sub = (struct nc_rpc_subscribe *)rpc;
 
-        lyd_new_inner(NULL, mod, "create-subscription", 0, &data);
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "create-subscription", 0, &data));
         if (rpc_sub->stream) {
-            if (lyd_new_term(data, mod, "stream", rpc_sub->stream, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "stream", rpc_sub->stream, 0, NULL));
         }
 
         if (rpc_sub->filter) {
             if (!rpc_sub->filter[0] || (rpc_sub->filter[0] == '<')) {
-                lyd_new_any(data, mod, "filter", rpc_sub->filter, 0, LYD_ANYDATA_XML, 0, &node);
-                lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "subtree", 0, NULL);
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", rpc_sub->filter, 0, LYD_ANYDATA_XML, 0, &node));
+                CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "subtree", 0, NULL));
             } else {
-                lyd_new_any(data, mod, "filter", NULL, 0, LYD_ANYDATA_STRING, 0, &node);
-                lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "xpath", 0, NULL);
-                lyd_new_meta(NULL, node, NULL, "ietf-netconf:select", rpc_sub->filter, 0, NULL);
-            }
-            if (!node) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", NULL, 0, LYD_ANYDATA_STRING, 0, &node));
+                CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "xpath", 0, NULL));
+                CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:select", rpc_sub->filter, 0, NULL));
             }
         }
-
         if (rpc_sub->start) {
-            if (lyd_new_term(data, mod, "startTime", rpc_sub->start, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "startTime", rpc_sub->start, 0, NULL));
         }
-
         if (rpc_sub->stop) {
-            if (lyd_new_term(data, mod, "stopTime", rpc_sub->stop, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "stopTime", rpc_sub->stop, 0, NULL));
         }
         break;
 
     case NC_RPC_GETDATA:
         rpc_getd = (struct nc_rpc_getdata *)rpc;
 
-        lyd_new_inner(NULL, mod, "get-data", 0, &data);
-        if (lyd_new_term(data, mod, "datastore", rpc_getd->datastore, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "get-data", 0, &data));
+        CHECK_LYRC_BREAK(lyd_new_term(data, mod, "datastore", rpc_getd->datastore, 0, NULL));
+
         if (rpc_getd->filter) {
             if (!rpc_getd->filter[0] || (rpc_getd->filter[0] == '<')) {
-                lyd_new_any(data, mod, "subtree-filter", rpc_getd->filter, 0, LYD_ANYDATA_XML, 0, &node);
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "subtree-filter", rpc_getd->filter, 0, LYD_ANYDATA_XML, 0, NULL));
             } else {
-                lyd_new_term(data, mod, "xpath-filter", rpc_getd->filter, 0, &node);
-            }
-            if (!node) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
+                CHECK_LYRC_BREAK(lyd_new_term(data, mod, "xpath-filter", rpc_getd->filter, 0, NULL));
             }
         }
         if (rpc_getd->config_filter) {
-            if (lyd_new_term(data, mod, "config-filter", rpc_getd->config_filter, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "config-filter", rpc_getd->config_filter, 0, NULL));
         }
         for (i = 0; i < rpc_getd->origin_filter_count; ++i) {
-            if (lyd_new_term(data, mod, rpc_getd->negated_origin_filter ? "negated-origin-filter" : "origin-filter",
-                    rpc_getd->origin_filter[i], 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, rpc_getd->negated_origin_filter ? "negated-origin-filter" :
+                    "origin-filter", rpc_getd->origin_filter[i], 0, NULL));
         }
         if (rpc_getd->max_depth) {
             sprintf(str, "%u", rpc_getd->max_depth);
-            if (lyd_new_term(data, mod, "max-depth", str, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "max-depth", str, 0, NULL));
         }
         if (rpc_getd->with_origin) {
-            if (lyd_new_term(data, mod, "with-origin", NULL, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "with-origin", NULL, 0, NULL));
         }
 
         if (rpc_getd->wd_mode) {
             /* "with-defaults" are used from a grouping so it belongs to the ietf-netconf-nmda module */
-            if (lyd_new_term(data, mod, "with-defaults", nc_wd2str(rpc_getd->wd_mode), 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "with-defaults", nc_wd2str(rpc_getd->wd_mode), 0, NULL));
         }
         break;
 
     case NC_RPC_EDITDATA:
         rpc_editd = (struct nc_rpc_editdata *)rpc;
 
-        lyd_new_inner(NULL, mod, "edit-data", 0, &data);
-        if (lyd_new_term(data, mod, "datastore", rpc_editd->datastore, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "edit-data", 0, &data));
+        CHECK_LYRC_BREAK(lyd_new_term(data, mod, "datastore", rpc_editd->datastore, 0, NULL));
 
         if (rpc_editd->default_op) {
-            if (lyd_new_term(data, mod, "default-operation", rpcedit_dfltop2str[rpc_editd->default_op], 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "default-operation", rpcedit_dfltop2str[rpc_editd->default_op], 0,
+                    NULL));
         }
-
         if (!rpc_editd->edit_cont[0] || (rpc_editd->edit_cont[0] == '<')) {
-            lyd_new_any(data, mod, "config", rpc_editd->edit_cont, 0, LYD_ANYDATA_XML, 0, &node);
+            CHECK_LYRC_BREAK(lyd_new_any(data, mod, "config", rpc_editd->edit_cont, 0, LYD_ANYDATA_XML, 0, NULL));
         } else {
-            lyd_new_term(data, mod, "url", rpc_editd->edit_cont, 0, &node);
-        }
-        if (!node) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "url", rpc_editd->edit_cont, 0, NULL));
         }
         break;
 
     case NC_RPC_ESTABLISHSUB:
         rpc_estsub = (struct nc_rpc_establishsub *)rpc;
 
-        lyd_new_inner(NULL, mod, "establish-subscription", 0, &data);
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "establish-subscription", 0, &data));
 
         if (rpc_estsub->filter) {
             if (!rpc_estsub->filter[0] || (rpc_estsub->filter[0] == '<')) {
-                lyd_new_any(data, mod, "stream-subtree-filter", rpc_estsub->filter, 0, LYD_ANYDATA_XML, 0, &node);
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "stream-subtree-filter", rpc_estsub->filter, 0, LYD_ANYDATA_XML,
+                        0, NULL));
             } else if (rpc_estsub->filter[0] == '/') {
-                lyd_new_term(data, mod, "stream-xpath-filter", rpc_estsub->filter, 0, &node);
+                CHECK_LYRC_BREAK(lyd_new_term(data, mod, "stream-xpath-filter", rpc_estsub->filter, 0, NULL));
             } else {
-                lyd_new_term(data, mod, "stream-filter-name", rpc_estsub->filter, 0, &node);
-            }
-            if (!node) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
+                CHECK_LYRC_BREAK(lyd_new_term(data, mod, "stream-filter-name", rpc_estsub->filter, 0, NULL));
             }
         }
-
-        if (lyd_new_term(data, mod, "stream", rpc_estsub->stream, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
+        CHECK_LYRC_BREAK(lyd_new_term(data, mod, "stream", rpc_estsub->stream, 0, NULL));
 
         if (rpc_estsub->start) {
-            if (lyd_new_term(data, mod, "replay-start-time", rpc_estsub->start, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "replay-start-time", rpc_estsub->start, 0, NULL));
         }
-
         if (rpc_estsub->stop) {
-            if (lyd_new_term(data, mod, "stop-time", rpc_estsub->stop, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "stop-time", rpc_estsub->stop, 0, NULL));
         }
-
         if (rpc_estsub->encoding) {
-            if (lyd_new_term(data, mod, "encoding", rpc_estsub->encoding, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "encoding", rpc_estsub->encoding, 0, NULL));
         }
         break;
 
     case NC_RPC_MODIFYSUB:
         rpc_modsub = (struct nc_rpc_modifysub *)rpc;
 
-        lyd_new_inner(NULL, mod, "modify-subscription", 0, &data);
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "modify-subscription", 0, &data));
 
         sprintf(str, "%u", rpc_modsub->id);
-        if (lyd_new_term(data, mod, "id", str, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
+        CHECK_LYRC_BREAK(lyd_new_term(data, mod, "id", str, 0, NULL));
 
         if (rpc_modsub->filter) {
             if (!rpc_modsub->filter[0] || (rpc_modsub->filter[0] == '<')) {
-                lyd_new_any(data, mod, "stream-subtree-filter", rpc_modsub->filter, 0, LYD_ANYDATA_XML, 0, &node);
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "stream-subtree-filter", rpc_modsub->filter, 0, LYD_ANYDATA_XML,
+                        0, NULL));
             } else if (rpc_modsub->filter[0] == '/') {
-                lyd_new_term(data, mod, "stream-xpath-filter", rpc_modsub->filter, 0, &node);
+                CHECK_LYRC_BREAK(lyd_new_term(data, mod, "stream-xpath-filter", rpc_modsub->filter, 0, NULL));
             } else {
-                lyd_new_term(data, mod, "stream-filter-name", rpc_modsub->filter, 0, &node);
-            }
-            if (!node) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
+                CHECK_LYRC_BREAK(lyd_new_term(data, mod, "stream-filter-name", rpc_modsub->filter, 0, NULL));
             }
         }
-
         if (rpc_modsub->stop) {
-            if (lyd_new_term(data, mod, "stop-time", rpc_modsub->stop, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "stop-time", rpc_modsub->stop, 0, NULL));
         }
         break;
 
     case NC_RPC_DELETESUB:
         rpc_delsub = (struct nc_rpc_deletesub *)rpc;
 
-        lyd_new_inner(NULL, mod, "delete-subscription", 0, &data);
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "delete-subscription", 0, &data));
 
         sprintf(str, "%u", rpc_delsub->id);
-        if (lyd_new_term(data, mod, "id", str, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
+        CHECK_LYRC_BREAK(lyd_new_term(data, mod, "id", str, 0, NULL));
         break;
 
     case NC_RPC_KILLSUB:
         rpc_killsub = (struct nc_rpc_killsub *)rpc;
 
-        lyd_new_inner(NULL, mod, "kill-subscription", 0, &data);
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "kill-subscription", 0, &data));
 
         sprintf(str, "%u", rpc_killsub->id);
-        if (lyd_new_term(data, mod, "id", str, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
+        CHECK_LYRC_BREAK(lyd_new_term(data, mod, "id", str, 0, NULL));
         break;
 
     case NC_RPC_ESTABLISHPUSH:
         rpc_estpush = (struct nc_rpc_establishpush *)rpc;
 
-        lyd_new_inner(NULL, mod, "establish-subscription", 0, &data);
-
-        if (lyd_new_term(data, mod2, "datastore", rpc_estpush->datastore, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "establish-subscription", 0, &data));
+        CHECK_LYRC_BREAK(lyd_new_term(data, mod2, "datastore", rpc_estpush->datastore, 0, NULL));
 
         if (rpc_estpush->filter) {
             if (!rpc_estpush->filter[0] || (rpc_estpush->filter[0] == '<')) {
-                lyd_new_any(data, mod2, "datastore-subtree-filter", rpc_estpush->filter, 0, LYD_ANYDATA_XML, 0, &node);
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod2, "datastore-subtree-filter", rpc_estpush->filter, 0,
+                        LYD_ANYDATA_XML, 0, NULL));
             } else if (rpc_estpush->filter[0] == '/') {
-                lyd_new_term(data, mod2, "datastore-xpath-filter", rpc_estpush->filter, 0, &node);
+                CHECK_LYRC_BREAK(lyd_new_term(data, mod2, "datastore-xpath-filter", rpc_estpush->filter, 0, NULL));
             } else {
-                lyd_new_term(data, mod2, "selection-filter-ref", rpc_estpush->filter, 0, &node);
-            }
-            if (!node) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
+                CHECK_LYRC_BREAK(lyd_new_term(data, mod2, "selection-filter-ref", rpc_estpush->filter, 0, NULL));
             }
         }
 
         if (rpc_estpush->stop) {
-            if (lyd_new_term(data, mod, "stop-time", rpc_estpush->stop, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "stop-time", rpc_estpush->stop, 0, NULL));
         }
-
         if (rpc_estpush->encoding) {
-            if (lyd_new_term(data, mod, "encoding", rpc_estpush->encoding, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "encoding", rpc_estpush->encoding, 0, NULL));
         }
 
         if (rpc_estpush->periodic) {
-            if (lyd_new_inner(data, mod2, "periodic", 0, &cont)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
-
+            CHECK_LYRC_BREAK(lyd_new_inner(data, mod2, "periodic", 0, &cont));
             sprintf(str, "%" PRIu32, rpc_estpush->period);
-            if (lyd_new_term(cont, mod2, "period", str, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
-
+            CHECK_LYRC_BREAK(lyd_new_term(cont, mod2, "period", str, 0, NULL));
             if (rpc_estpush->anchor_time) {
-                if (lyd_new_term(cont, mod2, "anchor-time", rpc_estpush->anchor_time, 0, NULL)) {
-                    lyd_free_tree(data);
-                    return NC_MSG_ERROR;
-                }
+                CHECK_LYRC_BREAK(lyd_new_term(cont, mod2, "anchor-time", rpc_estpush->anchor_time, 0, NULL));
             }
         } else {
-            if (lyd_new_inner(data, mod2, "on-change", 0, &cont)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
-
+            CHECK_LYRC_BREAK(lyd_new_inner(data, mod2, "on-change", 0, &cont));
             if (rpc_estpush->dampening_period) {
                 sprintf(str, "%" PRIu32, rpc_estpush->dampening_period);
-                if (lyd_new_term(cont, mod2, "dampening-period", str, 0, NULL)) {
-                    lyd_free_tree(data);
-                    return NC_MSG_ERROR;
-                }
+                CHECK_LYRC_BREAK(lyd_new_term(cont, mod2, "dampening-period", str, 0, NULL));
             }
-
-            if (lyd_new_term(cont, mod2, "sync-on-start", rpc_estpush->sync_on_start ? "true" : "false", 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
-
+            CHECK_LYRC_BREAK(lyd_new_term(cont, mod2, "sync-on-start", rpc_estpush->sync_on_start ? "true" : "false", 0,
+                    NULL));
             if (rpc_estpush->excluded_change) {
                 for (i = 0; rpc_estpush->excluded_change[i]; ++i) {
-                    if (lyd_new_term(cont, mod2, "excluded-change", rpc_estpush->excluded_change[i], 0, NULL)) {
-                        lyd_free_tree(data);
-                        return NC_MSG_ERROR;
-                    }
+                    CHECK_LYRC_BREAK(lyd_new_term(cont, mod2, "excluded-change", rpc_estpush->excluded_change[i], 0,
+                            NULL));
                 }
             }
         }
@@ -2927,70 +2721,38 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_MODIFYPUSH:
         rpc_modpush = (struct nc_rpc_modifypush *)rpc;
 
-        lyd_new_inner(NULL, mod, "modify-subscription", 0, &data);
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "modify-subscription", 0, &data));
 
         sprintf(str, "%u", rpc_modpush->id);
-        if (lyd_new_term(data, mod, "id", str, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
-
-        if (lyd_new_term(data, mod2, "datastore", rpc_modpush->datastore, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
+        CHECK_LYRC_BREAK(lyd_new_term(data, mod, "id", str, 0, NULL));
+        CHECK_LYRC_BREAK(lyd_new_term(data, mod2, "datastore", rpc_modpush->datastore, 0, NULL));
 
         if (rpc_modpush->filter) {
             if (!rpc_modpush->filter[0] || (rpc_modpush->filter[0] == '<')) {
-                lyd_new_any(data, mod2, "datastore-subtree-filter", rpc_modpush->filter, 0, LYD_ANYDATA_XML, 0, &node);
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod2, "datastore-subtree-filter", rpc_modpush->filter, 0,
+                        LYD_ANYDATA_XML, 0, NULL));
             } else if (rpc_modpush->filter[0] == '/') {
-                lyd_new_term(data, mod2, "datastore-xpath-filter", rpc_modpush->filter, 0, &node);
+                CHECK_LYRC_BREAK(lyd_new_term(data, mod2, "datastore-xpath-filter", rpc_modpush->filter, 0, NULL));
             } else {
-                lyd_new_term(data, mod2, "selection-filter-ref", rpc_modpush->filter, 0, &node);
-            }
-            if (!node) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
+                CHECK_LYRC_BREAK(lyd_new_term(data, mod2, "selection-filter-ref", rpc_modpush->filter, 0, NULL));
             }
         }
-
         if (rpc_modpush->stop) {
-            if (lyd_new_term(data, mod, "stop-time", rpc_modpush->stop, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
+            CHECK_LYRC_BREAK(lyd_new_term(data, mod, "stop-time", rpc_modpush->stop, 0, NULL));
         }
 
         if (rpc_modpush->periodic) {
-            if (lyd_new_inner(data, mod2, "periodic", 0, &cont)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
-
+            CHECK_LYRC_BREAK(lyd_new_inner(data, mod2, "periodic", 0, &cont));
             sprintf(str, "%" PRIu32, rpc_modpush->period);
-            if (lyd_new_term(cont, mod2, "period", str, 0, NULL)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
-
+            CHECK_LYRC_BREAK(lyd_new_term(cont, mod2, "period", str, 0, NULL));
             if (rpc_modpush->anchor_time) {
-                if (lyd_new_term(cont, mod2, "anchor-time", rpc_modpush->anchor_time, 0, NULL)) {
-                    lyd_free_tree(data);
-                    return NC_MSG_ERROR;
-                }
+                CHECK_LYRC_BREAK(lyd_new_term(cont, mod2, "anchor-time", rpc_modpush->anchor_time, 0, NULL));
             }
         } else {
-            if (lyd_new_inner(data, mod2, "on-change", 0, &cont)) {
-                lyd_free_tree(data);
-                return NC_MSG_ERROR;
-            }
-
+            CHECK_LYRC_BREAK(lyd_new_inner(data, mod2, "on-change", 0, &cont));
             if (rpc_modpush->dampening_period) {
                 sprintf(str, "%" PRIu32, rpc_modpush->dampening_period);
-                if (lyd_new_term(cont, mod2, "dampening-period", str, 0, NULL)) {
-                    lyd_free_tree(data);
-                    return NC_MSG_ERROR;
-                }
+                CHECK_LYRC_BREAK(lyd_new_term(cont, mod2, "dampening-period", str, 0, NULL));
             }
         }
         break;
@@ -2998,13 +2760,9 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_RESYNCSUB:
         rpc_resyncsub = (struct nc_rpc_resyncsub *)rpc;
 
-        lyd_new_inner(NULL, mod, "resync-subscription", 0, &data);
-
+        CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "resync-subscription", 0, &data));
         sprintf(str, "%u", rpc_resyncsub->id);
-        if (lyd_new_term(data, mod, "id", str, 0, NULL)) {
-            lyd_free_tree(data);
-            return NC_MSG_ERROR;
-        }
+        CHECK_LYRC_BREAK(lyd_new_term(data, mod, "id", str, 0, NULL));
         break;
 
     case NC_RPC_UNKNOWN:
@@ -3012,8 +2770,11 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         return NC_MSG_ERROR;
     }
 
-    if (!data) {
-        /* error was already printed */
+#undef CHECK_LYRC_BREAK
+
+    if (lyrc) {
+        ERR("Session %u: failed to create RPC, perhaps a required feature is disabled.", session->id);
+        lyd_free_tree(data);
         return NC_MSG_ERROR;
     }
 
