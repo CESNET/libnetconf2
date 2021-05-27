@@ -2,6 +2,7 @@
 
 [![BSD license](https://img.shields.io/badge/License-BSD-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Build](https://github.com/CESNET/libnetconf2/workflows/libnetconf2%20CI/badge.svg)](https://github.com/CESNET/libnetconf2/actions?query=workflow%3A%22libnetconf2+CI%22)
+[![Docs](https://img.shields.io/badge/docs-link-blue)](https://netopeer.liberouter.org/doc/libnetconf2/)
 [![Coverity Scan Build Status](https://scan.coverity.com/projects/7642/badge.svg)](https://scan.coverity.com/projects/7642)
 
 **libnetconf2** is a NETCONF library in C intended for building NETCONF clients
