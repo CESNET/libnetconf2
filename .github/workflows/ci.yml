@@ -10,9 +10,8 @@ on:
       - devel
 
 env:
-  DEFAULT_OPTIONS: -DENABLE_BUILD_TESTS=ON -DENABLE_DNSSEC=ON
   DEFAULT_PACKAGES: libcmocka-dev zlib1g-dev libssh-dev libssl-dev
-  COVERITY_PROJECT: sysrepo%2Fsysrepo
+  COVERITY_PROJECT: CESNET%2Flibnetconf2
 
 jobs:
   git-branch:
@@ -44,7 +43,7 @@ jobs:
             build-type: "Release",
             dep-build-type: "Release",
             cc: "gcc",
-            options: "",
+            options: "-DENABLE_BUILD_TESTS=ON -DENABLE_DNSSEC=ON",
             packages: "",
             snaps: "",
             make-prepend: "",
@@ -56,7 +55,7 @@ jobs:
             build-type: "Release",
             dep-build-type: "Release",
             cc: "clang",
-            options: "",
+            options: "-DENABLE_BUILD_TESTS=ON -DENABLE_DNSSEC=ON",
             packages: "",
             snaps: "",
             make-prepend: "",
@@ -68,7 +67,7 @@ jobs:
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "gcc",
-            options: "",
+            options: "-DENABLE_DNSSEC=ON",
             packages: "valgrind",
             snaps: "",
             make-prepend: "",
@@ -80,7 +79,7 @@ jobs:
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "clang",
-            options: "",
+            options: "-DENABLE_DNSSEC=ON",
             packages: "valgrind",
             snaps: "",
             make-prepend: "",
@@ -92,7 +91,7 @@ jobs:
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "gcc",
-            options: "DENABLE_TLS=OFF -DENABLE_SSH=ON",
+            options: "-DENABLE_TLS=OFF -DENABLE_SSH=ON",
             packages: "valgrind",
             snaps: "",
             make-prepend: "",
@@ -104,7 +103,7 @@ jobs:
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "gcc",
-            options: "DENABLE_TLS=ON -DENABLE_SSH=OFF",
+            options: "-DENABLE_TLS=ON -DENABLE_SSH=OFF",
             packages: "valgrind",
             snaps: "",
             make-prepend: "",
@@ -116,7 +115,7 @@ jobs:
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "gcc",
-            options: "DENABLE_TLS=OFF -DENABLE_SSH=OFF",
+            options: "-DENABLE_TLS=OFF -DENABLE_SSH=OFF",
             packages: "valgrind",
             snaps: "",
             make-prepend: "",
@@ -152,7 +151,7 @@ jobs:
             build-type: "Debug",
             dep-build-type: "Debug",
             cc: "clang",
-            options: "",
+            options: "-DENABLE_DNSSEC=ON",
             packages: "",
             snaps: "",
             make-prepend: "cov-build --dir cov-int",
@@ -164,7 +163,7 @@ jobs:
             build-type: "Debug",
             dep-build-type: "Debug",
             cc: "gcc",
-            options: "-DENABLE_COVERAGE=ON",
+            options: "-DENABLE_COVERAGE=ON -DENABLE_DNSSEC=ON",
             packages: "lcov",
             snaps: "",
             make-prepend: "",
@@ -240,7 +239,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          CC=${{ matrix.config.cc }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.config.build-type }} $DEFAULT_OPTIONS ${{ matrix.config.options }} ..
+          CC=${{ matrix.config.cc }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.config.build-type }} ${{ matrix.config.options }} ..
 
       - name: Build
         shell: bash
