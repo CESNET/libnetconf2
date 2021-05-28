@@ -357,7 +357,7 @@ sshauth_hostkey_check(const char *hostname, ssh_session session, void *UNUSED(pr
 #endif
 hostkey_not_known:
 #ifdef ENABLE_DNSSEC
-        if ((srv_pubkey_type != SSH_KEYTYPE_UNKNOWN) || (srv_pubkey_type != SSH_KEYTYPE_RSA1)) {
+        if ((srv_pubkey_type != SSH_KEYTYPE_UNKNOWN) && (srv_pubkey_type != SSH_KEYTYPE_RSA1)) {
             if (srv_pubkey_type == SSH_KEYTYPE_DSS) {
                 ret = sshauth_hostkey_hash_dnssec_check(hostname, hash_sha1, 2, 1);
             } else if (srv_pubkey_type == SSH_KEYTYPE_RSA) {
