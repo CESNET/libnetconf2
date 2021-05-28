@@ -612,8 +612,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
             ietfnc = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf");
             if (!ietfnc) {
                 WRN("Session %u: missing ietf-netconf schema in context, unable to send <close-session>.", session->id);
-            } else {
-                lyd_new_inner(NULL, ietfnc, "close-session", 0, &close_rpc);
+            } else if (!lyd_new_inner(NULL, ietfnc, "close-session", 0, &close_rpc)) {
                 nc_send_msg_io(session, NC_SESSION_FREE_LOCK_TIMEOUT, close_rpc);
                 switch (nc_read_msg_poll_io(session, NC_CLOSE_REPLY_TIMEOUT, &msg)) {
                 case 1:
