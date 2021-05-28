@@ -108,7 +108,8 @@ nc_server_ch_client_lock(const char *name, const char *endpt_name, NC_TRANSPORT_
                 break;
             }
             for (j = 0; j < client->ch_endpt_count; ++j) {
-                if (!strcmp(client->ch_endpts[j].name, endpt_name) && (!ti || (ti == client->ch_endpts[j].ti))) {
+                if ((!endpt_name || !strcmp(client->ch_endpts[j].name, endpt_name)) &&
+                        (!ti || (ti == client->ch_endpts[j].ti))) {
                     endpt = &client->ch_endpts[j];
                     break;
                 }
