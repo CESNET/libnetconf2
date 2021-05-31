@@ -2778,13 +2778,6 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         return NC_MSG_ERROR;
     }
 
-    if (lyd_validate_op(data, NULL, LYD_TYPE_RPC_YANG, NULL)) {
-        if (dofree) {
-            lyd_free_tree(data);
-        }
-        return NC_MSG_ERROR;
-    }
-
     /* send RPC, store its message ID */
     r = nc_send_msg_io(session, timeout, data);
     cur_msgid = session->opts.client.msgid;
