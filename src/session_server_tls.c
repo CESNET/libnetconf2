@@ -201,7 +201,7 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
         subject = X509_NAME_oneline(X509_get_subject_name(client_cert), NULL, 0);
         common_name = strstr(subject, "CN=");
         if (!common_name) {
-            WRN("Certificate does not include the commonName field.");
+            WRN(NULL, "Certificate does not include the commonName field.");
             free(subject);
             return 1;
         }
@@ -219,7 +219,7 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
         /* retrieve subjectAltName's rfc822Name (email), dNSName and iPAddress values */
         san_names = X509_get_ext_d2i(client_cert, NID_subject_alt_name, NULL, NULL);
         if (!san_names) {
-            WRN("Certificate has no SANs or failed to retrieve them.");
+            WRN(NULL, "Certificate has no SANs or failed to retrieve them.");
             return 1;
         }
 
@@ -279,7 +279,7 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
                     }
                     break;
                 } else {
-                    WRN("SAN IP address in an unknown format (length is %d).", ip->length);
+                    WRN(NULL, "SAN IP address in an unknown format (length is %d).", ip->length);
                 }
             }
         }
@@ -288,16 +288,16 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
         if (i < san_count) {
             switch (map_type) {
             case NC_TLS_CTN_SAN_RFC822_NAME:
-                WRN("Certificate does not include the SAN rfc822Name field.");
+                WRN(NULL, "Certificate does not include the SAN rfc822Name field.");
                 break;
             case NC_TLS_CTN_SAN_DNS_NAME:
-                WRN("Certificate does not include the SAN dNSName field.");
+                WRN(NULL, "Certificate does not include the SAN dNSName field.");
                 break;
             case NC_TLS_CTN_SAN_IP_ADDRESS:
-                WRN("Certificate does not include the SAN iPAddress field.");
+                WRN(NULL, "Certificate does not include the SAN iPAddress field.");
                 break;
             case NC_TLS_CTN_SAN_ANY:
-                WRN("Certificate does not include any relevant SAN fields.");
+                WRN(NULL, "Certificate does not include any relevant SAN fields.");
                 break;
             default:
                 break;
@@ -333,7 +333,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
     for (ctn = ctn_first; ctn; ctn = ctn->next) {
         /* first make sure the entry is valid */
         if (!ctn->fingerprint || !ctn->map_type || ((ctn->map_type == NC_TLS_CTN_SPECIFIED) && !ctn->name)) {
-            VRB("Cert verify CTN: entry with id %u not valid, skipping.", ctn->id);
+            VRB(NULL, "Cert verify CTN: entry with id %u not valid, skipping.", ctn->id);
             continue;
         }
 
@@ -341,7 +341,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
         if (!strncmp(ctn->fingerprint, "01", 2)) {
             if (!digest_md5) {
                 if (X509_digest(cert, EVP_md5(), buf, &buf_len) != 1) {
-                    ERR("Calculating MD5 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                    ERR(NULL, "Calculating MD5 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -350,7 +350,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_md5)) {
                 /* we got ourselves a winner! */
-                VRB("Cert verify CTN: entry with a matching fingerprint found.");
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
                 *map_type = ctn->map_type;
                 if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
                     *name = ctn->name;
@@ -362,7 +362,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
         } else if (!strncmp(ctn->fingerprint, "02", 2)) {
             if (!digest_sha1) {
                 if (X509_digest(cert, EVP_sha1(), buf, &buf_len) != 1) {
-                    ERR("Calculating SHA-1 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                    ERR(NULL, "Calculating SHA-1 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -371,7 +371,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha1)) {
                 /* we got ourselves a winner! */
-                VRB("Cert verify CTN: entry with a matching fingerprint found.");
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
                 *map_type = ctn->map_type;
                 if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
                     *name = ctn->name;
@@ -383,7 +383,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
         } else if (!strncmp(ctn->fingerprint, "03", 2)) {
             if (!digest_sha224) {
                 if (X509_digest(cert, EVP_sha224(), buf, &buf_len) != 1) {
-                    ERR("Calculating SHA-224 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                    ERR(NULL, "Calculating SHA-224 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -392,7 +392,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha224)) {
                 /* we got ourselves a winner! */
-                VRB("Cert verify CTN: entry with a matching fingerprint found.");
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
                 *map_type = ctn->map_type;
                 if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
                     *name = ctn->name;
@@ -404,7 +404,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
         } else if (!strncmp(ctn->fingerprint, "04", 2)) {
             if (!digest_sha256) {
                 if (X509_digest(cert, EVP_sha256(), buf, &buf_len) != 1) {
-                    ERR("Calculating SHA-256 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                    ERR(NULL, "Calculating SHA-256 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -413,7 +413,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha256)) {
                 /* we got ourselves a winner! */
-                VRB("Cert verify CTN: entry with a matching fingerprint found.");
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
                 *map_type = ctn->map_type;
                 if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
                     *name = ctn->name;
@@ -425,7 +425,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
         } else if (!strncmp(ctn->fingerprint, "05", 2)) {
             if (!digest_sha384) {
                 if (X509_digest(cert, EVP_sha384(), buf, &buf_len) != 1) {
-                    ERR("Calculating SHA-384 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                    ERR(NULL, "Calculating SHA-384 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -434,7 +434,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha384)) {
                 /* we got ourselves a winner! */
-                VRB("Cert verify CTN: entry with a matching fingerprint found.");
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
                 *map_type = ctn->map_type;
                 if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
                     *name = ctn->name;
@@ -446,7 +446,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
         } else if (!strncmp(ctn->fingerprint, "06", 2)) {
             if (!digest_sha512) {
                 if (X509_digest(cert, EVP_sha512(), buf, &buf_len) != 1) {
-                    ERR("Calculating SHA-512 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                    ERR(NULL, "Calculating SHA-512 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -455,7 +455,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha512)) {
                 /* we got ourselves a winner! */
-                VRB("Cert verify CTN: entry with a matching fingerprint found.");
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
                 *map_type = ctn->map_type;
                 if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
                     *name = ctn->name;
@@ -465,7 +465,7 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
 
             /* unknown */
         } else {
-            WRN("Unknown fingerprint algorithm used (%s), skipping.", ctn->fingerprint);
+            WRN(NULL, "Unknown fingerprint algorithm used (%s), skipping.", ctn->fingerprint);
         }
     }
 
@@ -534,7 +534,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
                 if (cert_pubkey_match(session->opts.server.client_cert, sk_X509_value(cert_stack, i))) {
                     /* we are just overriding the failed standard certificate verification (preverify_ok == 0),
                      * this callback will be called again with the same current certificate and preverify_ok == 1 */
-                    VRB("Cert verify: fail (%s), but the client certificate is trusted, continuing.",
+                    VRB(NULL, "Cert verify: fail (%s), but the client certificate is trusted, continuing.",
                             X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
                     X509_STORE_CTX_set_error(x509_ctx, X509_V_OK);
                     sk_X509_pop_free(cert_stack, X509_free);
@@ -544,23 +544,23 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
             sk_X509_pop_free(cert_stack, X509_free);
         }
 
-        ERR("Cert verify: fail (%s).", X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
+        ERR(NULL, "Cert verify: fail (%s).", X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
         return 0;
     }
 
     /* print cert verify info */
     depth = X509_STORE_CTX_get_error_depth(x509_ctx);
-    VRB("Cert verify: depth %d.", depth);
+    VRB(NULL, "Cert verify: depth %d.", depth);
 
     cert = X509_STORE_CTX_get_current_cert(x509_ctx);
     subject = X509_get_subject_name(cert);
     issuer = X509_get_issuer_name(cert);
 
     cp = X509_NAME_oneline(subject, NULL, 0);
-    VRB("Cert verify: subject: %s.", cp);
+    VRB(NULL, "Cert verify: subject: %s.", cp);
     OPENSSL_free(cp);
     cp = X509_NAME_oneline(issuer, NULL, 0);
-    VRB("Cert verify: issuer:  %s.", cp);
+    VRB(NULL, "Cert verify: issuer:  %s.", cp);
     OPENSSL_free(cp);
 
     /* check for revocation if set */
@@ -575,22 +575,22 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         crl = X509_OBJECT_get0_X509_CRL(obj);
         if ((rc > 0) && crl) {
             cp = X509_NAME_oneline(subject, NULL, 0);
-            VRB("Cert verify CRL: issuer: %s.", cp);
+            VRB(NULL, "Cert verify CRL: issuer: %s.", cp);
             OPENSSL_free(cp);
 
             last_update = X509_CRL_get0_lastUpdate(crl);
             next_update = X509_CRL_get0_nextUpdate(crl);
             cp = asn1time_to_str(last_update);
-            VRB("Cert verify CRL: last update: %s.", cp);
+            VRB(NULL, "Cert verify CRL: last update: %s.", cp);
             free(cp);
             cp = asn1time_to_str(next_update);
-            VRB("Cert verify CRL: next update: %s.", cp);
+            VRB(NULL, "Cert verify CRL: next update: %s.", cp);
             free(cp);
 
             /* verify the signature on this CRL */
             pubkey = X509_get_pubkey(cert);
             if (X509_CRL_verify(crl, pubkey) <= 0) {
-                ERR("Cert verify CRL: invalid signature.");
+                ERR(NULL, "Cert verify CRL: invalid signature.");
                 X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CRL_SIGNATURE_FAILURE);
                 X509_OBJECT_free(obj);
                 if (pubkey) {
@@ -604,13 +604,13 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
 
             /* check date of CRL to make sure it's not expired */
             if (!next_update) {
-                ERR("Cert verify CRL: invalid nextUpdate field.");
+                ERR(NULL, "Cert verify CRL: invalid nextUpdate field.");
                 X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD);
                 X509_OBJECT_free(obj);
                 return 0;
             }
             if (X509_cmp_current_time(next_update) < 0) {
-                ERR("Cert verify CRL: expired - revoking all certificates.");
+                ERR(NULL, "Cert verify CRL: expired - revoking all certificates.");
                 X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CRL_HAS_EXPIRED);
                 X509_OBJECT_free(obj);
                 return 0;
@@ -634,7 +634,8 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
                 serial = X509_REVOKED_get0_serialNumber(revoked);
                 if (ASN1_INTEGER_cmp(serial, X509_get_serialNumber(cert)) == 0) {
                     cp = X509_NAME_oneline(issuer, NULL, 0);
-                    ERR("Cert verify CRL: certificate with serial %ld (0x%lX) revoked per CRL from issuer %s.", serial, serial, cp);
+                    ERR(NULL, "Cert verify CRL: certificate with serial %ld (0x%lX) revoked per CRL from issuer %s.",
+                            serial, serial, cp);
                     OPENSSL_free(cp);
                     X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CERT_REVOKED);
                     X509_OBJECT_free(obj);
@@ -676,10 +677,10 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         lydict_insert_zc(server_opts.ctx, cp, &session->username);
     }
 
-    VRB("Cert verify CTN: new client username recognized as \"%s\".", session->username);
+    VRB(NULL, "Cert verify CTN: new client username recognized as \"%s\".", session->username);
 
     if (server_opts.user_verify_clb && !server_opts.user_verify_clb(session)) {
-        VRB("Cert verify: user verify callback revoked authorization.");
+        VRB(NULL, "Cert verify: user verify callback revoked authorization.");
         X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_APPLICATION_VERIFICATION);
         return 0;
     }
@@ -688,11 +689,11 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
 
 fail:
     if (depth > 0) {
-        VRB("Cert verify CTN: cert fail, cert-to-name will continue on the next cert in chain.");
+        VRB(NULL, "Cert verify CTN: cert fail, cert-to-name will continue on the next cert in chain.");
         return 1;
     }
 
-    VRB("Cert-to-name unsuccessful, dropping the new client.");
+    VRB(NULL, "Cert-to-name unsuccessful, dropping the new client.");
     X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_APPLICATION_VERIFICATION);
     return 0;
 }
@@ -749,7 +750,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
                 if (cert_pubkey_match(session->opts.server.client_cert, sk_X509_value(cert_stack, i))) {
                     /* we are just overriding the failed standard certificate verification (preverify_ok == 0),
                      * this callback will be called again with the same current certificate and preverify_ok == 1 */
-                    VRB("Cert verify: fail (%s), but the client certificate is trusted, continuing.",
+                    VRB(session, "Cert verify: fail (%s), but the client certificate is trusted, continuing.",
                             X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
                     X509_STORE_CTX_set_error(x509_ctx, X509_V_OK);
                     sk_X509_pop_free(cert_stack, X509_free);
@@ -759,23 +760,23 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
             sk_X509_pop_free(cert_stack, X509_free);
         }
 
-        ERR("Cert verify: fail (%s).", X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
+        ERR(session, "Cert verify: fail (%s).", X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
         return 0;
     }
 
     /* print cert verify info */
     depth = X509_STORE_CTX_get_error_depth(x509_ctx);
-    VRB("Cert verify: depth %d.", depth);
+    VRB(session, "Cert verify: depth %d.", depth);
 
     cert = X509_STORE_CTX_get_current_cert(x509_ctx);
     subject = X509_get_subject_name(cert);
     issuer = X509_get_issuer_name(cert);
 
     cp = X509_NAME_oneline(subject, NULL, 0);
-    VRB("Cert verify: subject: %s.", cp);
+    VRB(session, "Cert verify: subject: %s.", cp);
     OPENSSL_free(cp);
     cp = X509_NAME_oneline(issuer, NULL, 0);
-    VRB("Cert verify: issuer:  %s.", cp);
+    VRB(session, "Cert verify: issuer:  %s.", cp);
     OPENSSL_free(cp);
 
     /* check for revocation if set */
@@ -789,22 +790,22 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         crl = obj.data.crl;
         if ((rc > 0) && crl) {
             cp = X509_NAME_oneline(subject, NULL, 0);
-            VRB("Cert verify CRL: issuer: %s.", cp);
+            VRB(session, "Cert verify CRL: issuer: %s.", cp);
             OPENSSL_free(cp);
 
             last_update = X509_CRL_get_lastUpdate(crl);
             next_update = X509_CRL_get_nextUpdate(crl);
             cp = asn1time_to_str(last_update);
-            VRB("Cert verify CRL: last update: %s.", cp);
+            VRB(session, "Cert verify CRL: last update: %s.", cp);
             free(cp);
             cp = asn1time_to_str(next_update);
-            VRB("Cert verify CRL: next update: %s.", cp);
+            VRB(session, "Cert verify CRL: next update: %s.", cp);
             free(cp);
 
             /* verify the signature on this CRL */
             pubkey = X509_get_pubkey(cert);
             if (X509_CRL_verify(crl, pubkey) <= 0) {
-                ERR("Cert verify CRL: invalid signature.");
+                ERR(session, "Cert verify CRL: invalid signature.");
                 X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CRL_SIGNATURE_FAILURE);
                 X509_OBJECT_free_contents(&obj);
                 if (pubkey) {
@@ -818,13 +819,13 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
 
             /* check date of CRL to make sure it's not expired */
             if (!next_update) {
-                ERR("Cert verify CRL: invalid nextUpdate field.");
+                ERR(session, "Cert verify CRL: invalid nextUpdate field.");
                 X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD);
                 X509_OBJECT_free_contents(&obj);
                 return 0;
             }
             if (X509_cmp_current_time(next_update) < 0) {
-                ERR("Cert verify CRL: expired - revoking all certificates.");
+                ERR(session, "Cert verify CRL: expired - revoking all certificates.");
                 X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CRL_HAS_EXPIRED);
                 X509_OBJECT_free_contents(&obj);
                 return 0;
@@ -847,7 +848,8 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
                 if (ASN1_INTEGER_cmp(revoked->serialNumber, X509_get_serialNumber(cert)) == 0) {
                     serial = ASN1_INTEGER_get(revoked->serialNumber);
                     cp = X509_NAME_oneline(issuer, NULL, 0);
-                    ERR("Cert verify CRL: certificate with serial %ld (0x%lX) revoked per CRL from issuer %s.", serial, serial, cp);
+                    ERR(session, "Cert verify CRL: certificate with serial %ld (0x%lX) revoked per CRL from issuer %s.",
+                            serial, serial, cp);
                     OPENSSL_free(cp);
                     X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CERT_REVOKED);
                     X509_OBJECT_free_contents(&obj);
@@ -889,10 +891,10 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         lydict_insert_zc(server_opts.ctx, cp, &session->username);
     }
 
-    VRB("Cert verify CTN: new client username recognized as \"%s\".", session->username);
+    VRB(session, "Cert verify CTN: new client username recognized as \"%s\".", session->username);
 
     if (server_opts.user_verify_clb && !server_opts.user_verify_clb(session)) {
-        VRB("Cert verify: user verify callback revoked authorization.");
+        VRB(session, "Cert verify: user verify callback revoked authorization.");
         X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_APPLICATION_VERIFICATION);
         return 0;
     }
@@ -901,11 +903,11 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
 
 fail:
     if (depth > 0) {
-        VRB("Cert verify CTN: cert fail, cert-to-name will continue on the next cert in chain.");
+        VRB(session, "Cert verify CTN: cert fail, cert-to-name will continue on the next cert in chain.");
         return 1;
     }
 
-    VRB("Cert-to-name unsuccessful, dropping the new client.");
+    VRB(session, "Cert-to-name unsuccessful, dropping the new client.");
     X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_APPLICATION_VERIFICATION);
     return 0;
 }
@@ -1111,7 +1113,7 @@ nc_server_tls_del_trusted_cert_list(const char *name, struct nc_server_tls_opts 
         }
     }
 
-    ERR("Certificate list \"%s\" not found.", name);
+    ERR(NULL, "Certificate list \"%s\" not found.", name);
     return -1;
 }
 
@@ -1242,12 +1244,12 @@ nc_server_tls_set_crl_paths(const char *crl_file, const char *crl_dir, struct nc
     if (crl_file) {
         lookup = X509_STORE_add_lookup(opts->crl_store, X509_LOOKUP_file());
         if (!lookup) {
-            ERR("Failed to add a lookup method.");
+            ERR(NULL, "Failed to add a lookup method.");
             goto fail;
         }
 
         if (X509_LOOKUP_load_file(lookup, crl_file, X509_FILETYPE_PEM) != 1) {
-            ERR("Failed to add a revocation lookup file (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(NULL, "Failed to add a revocation lookup file (%s).", ERR_reason_error_string(ERR_get_error()));
             goto fail;
         }
     }
@@ -1255,12 +1257,12 @@ nc_server_tls_set_crl_paths(const char *crl_file, const char *crl_dir, struct nc
     if (crl_dir) {
         lookup = X509_STORE_add_lookup(opts->crl_store, X509_LOOKUP_hash_dir());
         if (!lookup) {
-            ERR("Failed to add a lookup method.");
+            ERR(NULL, "Failed to add a lookup method.");
             goto fail;
         }
 
         if (X509_LOOKUP_add_dir(lookup, crl_dir, X509_FILETYPE_PEM) != 1) {
-            ERR("Failed to add a revocation lookup directory (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(NULL, "Failed to add a revocation lookup directory (%s).", ERR_reason_error_string(ERR_get_error()));
             goto fail;
         }
     }
@@ -1699,10 +1701,10 @@ tls_load_cert(const char *cert_path, const char *cert_data)
 
     if (!cert) {
         if (cert_path) {
-            ERR("Loading a trusted certificate (path \"%s\") failed (%s).", cert_path,
+            ERR(NULL, "Loading a trusted certificate (path \"%s\") failed (%s).", cert_path,
                     ERR_reason_error_string(ERR_get_error()));
         } else {
-            ERR("Loading a trusted certificate (data \"%s\") failed (%s).", cert_data,
+            ERR(NULL, "Loading a trusted certificate (data \"%s\") failed (%s).", cert_data,
                     ERR_reason_error_string(ERR_get_error()));
         }
     }
@@ -1723,14 +1725,14 @@ nc_tls_ctx_set_server_cert_chain(SSL_CTX *tls_ctx, const char *cert_name)
 
     if (server_opts.server_cert_chain_clb(cert_name, server_opts.server_cert_chain_data, &cert_paths,
             &cert_path_count, &cert_data, &cert_data_count)) {
-        ERR("Server certificate chain callback failed.");
+        ERR(NULL, "Server certificate chain callback failed.");
         return -1;
     }
 
     for (i = 0; i < cert_path_count; ++i) {
         cert = tls_load_cert(cert_paths[i], NULL);
         if (!cert || (SSL_CTX_add_extra_chain_cert(tls_ctx, cert) != 1)) {
-            ERR("Loading the server certificate chain failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(NULL, "Loading the server certificate chain failed (%s).", ERR_reason_error_string(ERR_get_error()));
             ret = -1;
             goto cleanup;
         }
@@ -1739,7 +1741,7 @@ nc_tls_ctx_set_server_cert_chain(SSL_CTX *tls_ctx, const char *cert_name)
     for (i = 0; i < cert_data_count; ++i) {
         cert = tls_load_cert(NULL, cert_data[i]);
         if (!cert || (SSL_CTX_add_extra_chain_cert(tls_ctx, cert) != 1)) {
-            ERR("Loading the server certificate chain failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(NULL, "Loading the server certificate chain failed (%s).", ERR_reason_error_string(ERR_get_error()));
             ret = -1;
             goto cleanup;
         }
@@ -1768,30 +1770,30 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
     EVP_PKEY *pkey = NULL;
 
     if (!cert_name) {
-        ERR("Server certificate not set.");
+        ERR(NULL, "Server certificate not set.");
         return -1;
     } else if (!server_opts.server_cert_clb) {
-        ERR("Callback for retrieving the server certificate is not set.");
+        ERR(NULL, "Callback for retrieving the server certificate is not set.");
         return -1;
     }
 
     if (server_opts.server_cert_clb(cert_name, server_opts.server_cert_data, &cert_path, &cert_data, &privkey_path,
             &privkey_data, &privkey_type)) {
-        ERR("Server certificate callback failed.");
+        ERR(NULL, "Server certificate callback failed.");
         return -1;
     }
 
     /* load the certificate */
     if (cert_path) {
         if (SSL_CTX_use_certificate_file(tls_ctx, cert_path, SSL_FILETYPE_PEM) != 1) {
-            ERR("Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(NULL, "Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
             ret = -1;
             goto cleanup;
         }
     } else {
         cert = base64der_to_cert(cert_data);
         if (!cert || (SSL_CTX_use_certificate(tls_ctx, cert) != 1)) {
-            ERR("Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(NULL, "Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
             ret = -1;
             goto cleanup;
         }
@@ -1800,14 +1802,14 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
     /* load the private key */
     if (privkey_path) {
         if (SSL_CTX_use_PrivateKey_file(tls_ctx, privkey_path, SSL_FILETYPE_PEM) != 1) {
-            ERR("Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(NULL, "Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
             ret = -1;
             goto cleanup;
         }
     } else {
         pkey = base64der_to_privatekey(privkey_data, nc_keytype2str(privkey_type));
         if (!pkey || (SSL_CTX_use_PrivateKey(tls_ctx, pkey) != 1)) {
-            ERR("Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(NULL, "Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
             ret = -1;
             goto cleanup;
         }
@@ -1836,7 +1838,7 @@ tls_store_add_trusted_cert(X509_STORE *cert_store, const char *cert_path, const 
 
     /* add the trusted certificate */
     if (X509_STORE_add_cert(cert_store, cert) != 1) {
-        ERR("Adding a trusted certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ERR(NULL, "Adding a trusted certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
         X509_free(cert);
         return;
     }
@@ -1852,7 +1854,7 @@ nc_tls_store_set_trusted_certs(X509_STORE *cert_store, const char **trusted_cert
     int cert_path_count, cert_data_count;
 
     if (!server_opts.trusted_cert_list_clb) {
-        ERR("Callback for retrieving trusted certificate lists is not set.");
+        ERR(NULL, "Callback for retrieving trusted certificate lists is not set.");
         return -1;
     }
 
@@ -1861,7 +1863,7 @@ nc_tls_store_set_trusted_certs(X509_STORE *cert_store, const char **trusted_cert
         cert_path_count = cert_data_count = 0;
         if (server_opts.trusted_cert_list_clb(trusted_cert_lists[i], server_opts.trusted_cert_list_data,
                 &cert_paths, &cert_path_count, &cert_data, &cert_data_count)) {
-            ERR("Trusted certificate list callback for \"%s\" failed.", trusted_cert_lists[i]);
+            ERR(NULL, "Trusted certificate list callback for \"%s\" failed.", trusted_cert_lists[i]);
             return -1;
         }
 
@@ -1900,7 +1902,7 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
 #endif
     if (!tls_ctx) {
-        ERR("Failed to create TLS context.");
+        ERR(session, "Failed to create TLS context.");
         goto error;
     }
     SSL_CTX_set_verify(tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
@@ -1919,12 +1921,12 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     if (opts->trusted_ca_file) {
         lookup = X509_STORE_add_lookup(cert_store, X509_LOOKUP_file());
         if (!lookup) {
-            ERR("Failed to add a lookup method.");
+            ERR(session, "Failed to add a lookup method.");
             goto error;
         }
 
         if (X509_LOOKUP_load_file(lookup, opts->trusted_ca_file, X509_FILETYPE_PEM) != 1) {
-            ERR("Failed to add a trusted cert file (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(session, "Failed to add a trusted cert file (%s).", ERR_reason_error_string(ERR_get_error()));
             goto error;
         }
     }
@@ -1932,12 +1934,12 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     if (opts->trusted_ca_dir) {
         lookup = X509_STORE_add_lookup(cert_store, X509_LOOKUP_hash_dir());
         if (!lookup) {
-            ERR("Failed to add a lookup method.");
+            ERR(session, "Failed to add a lookup method.");
             goto error;
         }
 
         if (X509_LOOKUP_add_dir(lookup, opts->trusted_ca_dir, X509_FILETYPE_PEM) != 1) {
-            ERR("Failed to add a trusted cert directory (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(session, "Failed to add a trusted cert directory (%s).", ERR_reason_error_string(ERR_get_error()));
             goto error;
         }
     }
@@ -1950,7 +1952,7 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     tls_ctx = NULL;
 
     if (!session->ti.tls) {
-        ERR("Failed to create TLS structure from context.");
+        ERR(session, "Failed to create TLS structure from context.");
         goto error;
     }
 
@@ -1971,7 +1973,7 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
         if (timeout > -1) {
             nc_gettimespec_mono(&ts_cur);
             if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
-                ERR("SSL_accept timeout.");
+                ERR(session, "SSL_accept timeout.");
                 return 0;
             }
         }
@@ -1980,13 +1982,13 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     if (ret != 1) {
         switch (SSL_get_error(session->ti.tls, ret)) {
         case SSL_ERROR_SYSCALL:
-            ERR("SSL_accept failed (%s).", strerror(errno));
+            ERR(session, "SSL_accept failed (%s).", strerror(errno));
             break;
         case SSL_ERROR_SSL:
-            ERR("SSL_accept failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(session, "SSL_accept failed (%s).", ERR_reason_error_string(ERR_get_error()));
             break;
         default:
-            ERR("SSL_accept failed.");
+            ERR(session, "SSL_accept failed.");
             break;
         }
         return -1;

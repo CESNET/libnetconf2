@@ -141,7 +141,7 @@ nc_sock_enable_keepalive(int sock, struct nc_keepalives *ka)
 
     opt = ka->enabled;
     if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof opt) == -1) {
-        ERR("Could not set SO_KEEPALIVE option (%s).", strerror(errno));
+        ERR(NULL, "Could not set SO_KEEPALIVE option (%s).", strerror(errno));
         return -1;
     }
     if (!ka->enabled) {
@@ -151,7 +151,7 @@ nc_sock_enable_keepalive(int sock, struct nc_keepalives *ka)
 #ifdef TCP_KEEPIDLE
     opt = ka->idle_time;
     if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &opt, sizeof opt) == -1) {
-        ERR("Setsockopt failed (%s).", strerror(errno));
+        ERR(NULL, "Setsockopt failed (%s).", strerror(errno));
         return -1;
     }
 #endif
@@ -159,7 +159,7 @@ nc_sock_enable_keepalive(int sock, struct nc_keepalives *ka)
 #ifdef TCP_KEEPCNT
     opt = ka->max_probes;
     if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &opt, sizeof opt) == -1) {
-        ERR("Setsockopt failed (%s).", strerror(errno));
+        ERR(NULL, "Setsockopt failed (%s).", strerror(errno));
         return -1;
     }
 #endif
@@ -167,7 +167,7 @@ nc_sock_enable_keepalive(int sock, struct nc_keepalives *ka)
 #ifdef TCP_KEEPINTVL
     opt = ka->probe_interval;
     if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &opt, sizeof opt) == -1) {
-        ERR("Setsockopt failed (%s).", strerror(errno));
+        ERR(NULL, "Setsockopt failed (%s).", strerror(errno));
         return -1;
     }
 #endif
@@ -272,7 +272,7 @@ nc_session_rpc_lock(struct nc_session *session, int timeout, const char *func)
         }
 
         /* error */
-        ERR("%s: failed to RPC lock a session (%s).", func, strerror(ret));
+        ERR(session, "%s: failed to RPC lock a session (%s).", func, strerror(ret));
         return -1;
     }
 
@@ -284,7 +284,7 @@ nc_session_rpc_lock(struct nc_session *session, int timeout, const char *func)
     ret = pthread_mutex_unlock(&session->opts.server.rpc_lock);
     if (ret) {
         /* error */
-        ERR("%s: faile to RPC unlock a session (%s).", func, strerror(ret));
+        ERR(session, "%s: failed to RPC unlock a session (%s).", func, strerror(ret));
         return -1;
     }
 
@@ -320,10 +320,10 @@ nc_session_rpc_unlock(struct nc_session *session, int timeout, const char *func)
 
     if (ret && (ret != EBUSY) && (ret != ETIMEDOUT)) {
         /* error */
-        ERR("%s: failed to RPC lock a session (%s).", func, strerror(ret));
+        ERR(session, "%s: failed to RPC lock a session (%s).", func, strerror(ret));
         return -1;
     } else if (ret) {
-        WRN("%s: session RPC lock timeout, should not happen.");
+        WRN(session, "%s: session RPC lock timeout, should not happen.");
     }
 
     session->opts.server.rpc_inuse = 0;
@@ -334,7 +334,7 @@ nc_session_rpc_unlock(struct nc_session *session, int timeout, const char *func)
         ret = pthread_mutex_unlock(&session->opts.server.rpc_lock);
         if (ret) {
             /* error */
-            ERR("%s: failed to RPC unlock a session (%s).", func, strerror(ret));
+            ERR(session, "%s: failed to RPC unlock a session (%s).", func, strerror(ret));
             return -1;
         }
     }
@@ -371,7 +371,7 @@ nc_session_io_lock(struct nc_session *session, int timeout, const char *func)
         }
 
         /* error */
-        ERR("%s: failed to IO lock a session (%s).", func, strerror(ret));
+        ERR(session, "%s: failed to IO lock a session (%s).", func, strerror(ret));
         return -1;
     }
 
@@ -386,7 +386,7 @@ nc_session_io_unlock(struct nc_session *session, const char *func)
     ret = pthread_mutex_unlock(session->io_lock);
     if (ret) {
         /* error */
-        ERR("%s: failed to IO unlock a session (%s).", func, strerror(ret));
+        ERR(session, "%s: failed to IO unlock a session (%s).", func, strerror(ret));
         return -1;
     }
 
@@ -543,8 +543,7 @@ NC_MSG_TYPE
 nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op)
 {
     if (session->ctx != op->schema->module->ctx) {
-        ERR("Session %u: RPC \"%s\" was created in different context than that of the session.",
-                session->id, op->schema->name);
+        ERR(session, "RPC \"%s\" was created in different context than that of the session.", op->schema->name);
         return NC_MSG_ERROR;
     }
 
@@ -583,7 +582,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
             rpc_locked = 1;
         } else {
             /* else failed to lock it, too bad */
-            ERR("Session %u: freeing a session while an RPC is being processed.", session->id);
+            ERR(session, "Freeing a session while an RPC is being processed.");
         }
     }
 
@@ -611,24 +610,24 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
             /* send closing info to the other side */
             ietfnc = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf");
             if (!ietfnc) {
-                WRN("Session %u: missing ietf-netconf schema in context, unable to send <close-session>.", session->id);
+                WRN(session, "Missing ietf-netconf schema in context, unable to send <close-session>.");
             } else if (!lyd_new_inner(NULL, ietfnc, "close-session", 0, &close_rpc)) {
                 nc_send_msg_io(session, NC_SESSION_FREE_LOCK_TIMEOUT, close_rpc);
                 switch (nc_read_msg_poll_io(session, NC_CLOSE_REPLY_TIMEOUT, &msg)) {
                 case 1:
                     if (lyd_parse_op(session->ctx, close_rpc, msg, LYD_XML, LYD_TYPE_REPLY_NETCONF, &envp, NULL)) {
-                        WRN("Session %u: failed to parse <close-session> reply.", session->id);
+                        WRN(session, "Failed to parse <close-session> reply.");
                     } else if (!lyd_child(envp) || strcmp(LYD_NAME(lyd_child(envp)), "ok")) {
-                        WRN("Session %u: the reply to <close-session> was not <ok> as expected.", session->id);
+                        WRN(session, "Reply to <close-session> was not <ok> as expected.");
                     }
                     lyd_free_tree(envp);
                     ly_in_free(msg, 1);
                     break;
                 case 0:
-                    WRN("Session %u: timeout for receiving a reply to <close-session> elapsed.", session->id);
+                    WRN(session, "Timeout for receiving a reply to <close-session> elapsed.");
                     break;
                 case -1:
-                    ERR("Session %u: failed to receive a reply to <close-session>.", session->id);
+                    ERR(session, "Failed to receive a reply to <close-session>.");
                     break;
                 default:
                     /* cannot happen */
@@ -675,7 +674,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         pthread_mutex_unlock(&session->opts.server.ch_lock);
 
         if (r) {
-            ERR("Session %u: waiting for Call Home thread failed (%s).", session->id, strerror(r));
+            ERR(session, "Waiting for Call Home thread failed (%s).", strerror(r));
         }
     }
 
@@ -944,7 +943,7 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
     mod = ly_ctx_get_module_implemented(ctx, "ietf-netconf-with-defaults");
     if (mod) {
         if (!server_opts.wd_basic_mode) {
-            VRB("with-defaults capability will not be advertised even though \"ietf-netconf-with-defaults\" model is present, unknown basic-mode.");
+            VRB(NULL, "with-defaults capability will not be advertised even though \"ietf-netconf-with-defaults\" model is present, unknown basic-mode.");
         } else {
             strcpy(str, "urn:ietf:params:netconf:capability:with-defaults:1.0");
             switch (server_opts.wd_basic_mode) {
@@ -993,7 +992,7 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
     while ((mod = ly_ctx_get_module_iter(ctx, &u))) {
         if (!strcmp(mod->name, "ietf-yang-library")) {
             if (!mod->revision || (strcmp(mod->revision, "2016-06-21") && strcmp(mod->revision, "2019-01-04"))) {
-                ERR("Unknown \"ietf-yang-library\" revision, only 2016-06-21 and 2019-01-04 are supported.");
+                ERR(NULL, "Unknown \"ietf-yang-library\" revision, only 2016-06-21 and 2019-01-04 are supported.");
                 goto error;
             }
 
@@ -1127,7 +1126,7 @@ parse_cpblts(struct lyd_node *capabilities, char ***list)
         cpblt = (struct lyd_node_opaq *)iter;
 
         if (strcmp(cpblt->name.name, "capability") || !cpblt->name.module_ns || strcmp(cpblt->name.module_ns, NC_NS_BASE)) {
-            ERR("Unexpected <%s> element in client's <hello>.", cpblt->name.name);
+            ERR(NULL, "Unexpected <%s> element in client's <hello>.", cpblt->name.name);
             return -1;
         }
 
@@ -1135,7 +1134,7 @@ parse_cpblts(struct lyd_node *capabilities, char ***list)
         for (cpb_start = cpblt->value; isspace(cpb_start[0]); ++cpb_start) {}
         for (cpb_end = cpblt->value + strlen(cpblt->value); (cpb_end > cpblt->value) && isspace(cpb_end[-1]); --cpb_end) {}
         if (!cpb_start[0] || (cpb_end == cpblt->value)) {
-            ERR("Empty capability \"%s\" received.", cpblt->value);
+            ERR(NULL, "Empty capability \"%s\" received.", cpblt->value);
             return -1;
         }
 
@@ -1158,7 +1157,7 @@ parse_cpblts(struct lyd_node *capabilities, char ***list)
     }
 
     if (ver == -1) {
-        ERR("Peer does not support a compatible NETCONF version.");
+        ERR(NULL, "Peer does not support a compatible NETCONF version.");
     }
 
     return ver;
@@ -1221,7 +1220,7 @@ nc_recv_client_hello_io(struct nc_session *session)
     case 1:
         /* parse <hello> data */
         if (lyd_parse_data(session->ctx, NULL, msg, LYD_XML, LYD_PARSE_ONLY | LYD_PARSE_OPAQ, 0, &hello)) {
-            ERR("Failed to parse server <hello>.");
+            ERR(session, "Failed to parse server <hello>.");
             rc = NC_MSG_ERROR;
             goto cleanup;
         }
@@ -1233,28 +1232,28 @@ nc_recv_client_hello_io(struct nc_session *session)
                 continue;
             } else if (!strcmp(node->name.name, "session-id")) {
                 if (!node->value || !strlen(node->value)) {
-                    ERR("No value of <session-id> element in server <hello>.");
+                    ERR(session, "No value of <session-id> element in server <hello>.");
                     rc = NC_MSG_ERROR;
                     goto cleanup;
                 }
                 str = NULL;
                 id = strtoll(node->value, &str, 10);
                 if (*str || (id < 1) || (id > UINT32_MAX)) {
-                    ERR("Invalid value of <session-id> element in server <hello>.");
+                    ERR(session, "Invalid value of <session-id> element in server <hello>.");
                     rc = NC_MSG_ERROR;
                     goto cleanup;
                 }
                 session->id = (uint32_t)id;
                 continue;
             } else if (strcmp(node->name.name, "capabilities")) {
-                ERR("Unexpected <%s> element in server <hello>.", node->name.name);
+                ERR(session, "Unexpected <%s> element in server <hello>.", node->name.name);
                 rc = NC_MSG_ERROR;
                 goto cleanup;
             }
 
             if (flag) {
                 /* multiple capabilities elements */
-                ERR("Invalid <hello> message (multiple <capabilities> elements).");
+                ERR(session, "Invalid <hello> message (multiple <capabilities> elements).");
                 rc = NC_MSG_ERROR;
                 goto cleanup;
             }
@@ -1268,13 +1267,13 @@ nc_recv_client_hello_io(struct nc_session *session)
         }
 
         if (!session->id) {
-            ERR("Missing <session-id> in server <hello>.");
+            ERR(session, "Missing <session-id> in server <hello>.");
             rc = NC_MSG_ERROR;
             goto cleanup;
         }
         break;
     case 0:
-        ERR("Server <hello> timeout elapsed.");
+        ERR(session, "Server <hello> timeout elapsed.");
         rc = NC_MSG_WOULDBLOCK;
         break;
     default:
@@ -1303,7 +1302,7 @@ nc_recv_server_hello_io(struct nc_session *session)
     case 1:
         /* parse <hello> data */
         if (lyd_parse_data(session->ctx, NULL, msg, LYD_XML, LYD_PARSE_ONLY | LYD_PARSE_OPAQ, 0, &hello)) {
-            ERR("Failed to parse client <hello>.");
+            ERR(session, "Failed to parse client <hello>.");
             rc = NC_MSG_ERROR;
             goto cleanup;
         }
@@ -1315,14 +1314,14 @@ nc_recv_server_hello_io(struct nc_session *session)
             if (!node->name.module_ns || strcmp(node->name.module_ns, NC_NS_BASE)) {
                 continue;
             } else if (strcmp(node->name.name, "capabilities")) {
-                ERR("Unexpected <%s> element in client <hello>.", node->name.name);
+                ERR(session, "Unexpected <%s> element in client <hello>.", node->name.name);
                 rc = NC_MSG_BAD_HELLO;
                 goto cleanup;
             }
 
             if (flag) {
                 /* multiple capabilities elements */
-                ERR("Invalid <hello> message (multiple <capabilities> elements).");
+                ERR(session, "Invalid <hello> message (multiple <capabilities> elements).");
                 rc = NC_MSG_BAD_HELLO;
                 goto cleanup;
             }
@@ -1336,7 +1335,7 @@ nc_recv_server_hello_io(struct nc_session *session)
         }
         break;
     case 0:
-        ERR("Client <hello> timeout elapsed.");
+        ERR(session, "Client <hello> timeout elapsed.");
         rc = NC_MSG_WOULDBLOCK;
         break;
     default:

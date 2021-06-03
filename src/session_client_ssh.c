@@ -62,12 +62,12 @@ open_tty_noecho(const char *path, struct termios *oldterm)
     FILE *ret;
 
     if (!(ret = fopen(path, "r"))) {
-        ERR("Unable to open terminal \"%s\" for reading (%s).", path, strerror(errno));
+        ERR(NULL, "Unable to open terminal \"%s\" for reading (%s).", path, strerror(errno));
         return NULL;
     }
 
     if (tcgetattr(fileno(ret), oldterm)) {
-        ERR("Unable to get terminal \"%s\" settings (%s).", path, strerror(errno));
+        ERR(NULL, "Unable to get terminal \"%s\" settings (%s).", path, strerror(errno));
         fclose(ret);
         return NULL;
     }
@@ -77,7 +77,7 @@ open_tty_noecho(const char *path, struct termios *oldterm)
     newterm.c_lflag &= ~ICANON;
     tcflush(fileno(ret), TCIFLUSH);
     if (tcsetattr(fileno(ret), TCSANOW, &newterm)) {
-        ERR("Unable to change terminal \"%s\" settings for hiding password (%s).", path, strerror(errno));
+        ERR(NULL, "Unable to change terminal \"%s\" settings for hiding password (%s).", path, strerror(errno));
         fclose(ret);
         return NULL;
     }
@@ -97,13 +97,13 @@ nc_open_in(int echo, struct termios *oldterm)
     } else {
         in = fopen("/dev/tty", "r");
         if (!in) {
-            ERR("Unable to open terminal \"/dev/tty\" for reading (%s).", strerror(errno));
+            ERR(NULL, "Unable to open terminal \"/dev/tty\" for reading (%s).", strerror(errno));
         }
     }
 
     if (!in) {
         if ((ret = ttyname_r(STDIN_FILENO, buf, buflen))) {
-            ERR("ttyname_r failed (%s).", strerror(ret));
+            ERR(NULL, "ttyname_r failed (%s).", strerror(ret));
             return NULL;
         }
 
@@ -112,7 +112,7 @@ nc_open_in(int echo, struct termios *oldterm)
         } else {
             in = fopen(buf, "r");
             if (!in) {
-                ERR("Unable to open terminal \"%s\" for reading (%s).", buf, strerror(errno));
+                ERR(NULL, "Unable to open terminal \"%s\" for reading (%s).", buf, strerror(errno));
             }
         }
     }
@@ -129,16 +129,16 @@ nc_open_out(void)
 
     out = fopen("/dev/tty", "w");
     if (!out) {
-        ERR("Unable to open terminal \"/dev/tty\" for writing (%s).", strerror(errno));
+        ERR(NULL, "Unable to open terminal \"/dev/tty\" for writing (%s).", strerror(errno));
 
         if ((ret = ttyname_r(STDOUT_FILENO, buf, buflen))) {
-            ERR("ttyname_r failed (%s).", strerror(ret));
+            ERR(NULL, "ttyname_r failed (%s).", strerror(ret));
             return NULL;
         }
 
         out = fopen(buf, "w");
         if (!out) {
-            ERR("Unable to open terminal \"%s\" for writing (%s).", buf, strerror(errno));
+            ERR(NULL, "Unable to open terminal \"%s\" for writing (%s).", buf, strerror(errno));
         }
     }
 
@@ -150,7 +150,7 @@ nc_close_inout(FILE *inout, int echo, struct termios *oldterm)
 {
     if (inout) {
         if (!echo && (tcsetattr(fileno(inout), TCSANOW, oldterm) != 0)) {
-            ERR("Unable to restore terminal settings (%s).", strerror(errno));
+            ERR(NULL, "Unable to restore terminal settings (%s).", strerror(errno));
         }
         fclose(inout);
     }
@@ -202,13 +202,13 @@ sshauth_hostkey_hash_dnssec_check(const char *hostname, const unsigned char *sha
     }
 
     if (ns_initparse(buf, len, &handle) < 0) {
-        ERR("Failed to initialize DNSSEC response parser.");
+        ERR(NULL, "Failed to initialize DNSSEC response parser.");
         ret = 2;
         goto finish;
     }
 
     if ((i = libsres_msg_getflag(handle, ns_f_rcode))) {
-        ERR("DNSSEC query returned %d.", i);
+        ERR(NULL, "DNSSEC query returned %d.", i);
         ret = 2;
         goto finish;
     }
@@ -220,13 +220,13 @@ sshauth_hostkey_hash_dnssec_check(const char *hostname, const unsigned char *sha
 
     /* query section */
     if (ns_parserr(&handle, ns_s_qd, 0, &rr)) {
-        ERR("DNSSEC query section parser fail.");
+        ERR(NULL, "DNSSEC query section parser fail.");
         ret = 2;
         goto finish;
     }
 
     if (strcmp(hostname, ns_rr_name(rr)) || (ns_rr_type(rr) != 44) || (ns_rr_class(rr) != 1)) {
-        ERR("DNSSEC query in the answer does not match the original query.");
+        ERR(NULL, "DNSSEC query in the answer does not match the original query.");
         ret = 2;
         goto finish;
     }
@@ -304,7 +304,7 @@ sshauth_hostkey_check(const char *hostname, ssh_session session, void *UNUSED(pr
     ret = ssh_get_publickey(session, &srv_pubkey);
 #endif
     if (ret < 0) {
-        ERR("Unable to get server public key.");
+        ERR(NULL, "Unable to get server public key.");
         return -1;
     }
 
@@ -312,7 +312,7 @@ sshauth_hostkey_check(const char *hostname, ssh_session session, void *UNUSED(pr
     ret = ssh_get_publickey_hash(srv_pubkey, SSH_PUBLICKEY_HASH_SHA1, &hash_sha1, &hlen);
     ssh_key_free(srv_pubkey);
     if (ret < 0) {
-        ERR("Failed to calculate SHA1 hash of the server public key.");
+        ERR(NULL, "Failed to calculate SHA1 hash of the server public key.");
         return -1;
     }
 
@@ -331,7 +331,7 @@ sshauth_hostkey_check(const char *hostname, ssh_session session, void *UNUSED(pr
 #else
     case SSH_SERVER_KNOWN_CHANGED:
 #endif
-        ERR("Remote host key changed, the connection will be terminated!");
+        ERR(NULL, "Remote host key changed, the connection will be terminated!");
         goto error;
 
 #if (LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 9, 0))
@@ -339,7 +339,7 @@ sshauth_hostkey_check(const char *hostname, ssh_session session, void *UNUSED(pr
 #else
     case SSH_SERVER_FOUND_OTHER:
 #endif
-        WRN("Remote host key is not known, but a key of another type for this host is known. Continue with caution.");
+        WRN(NULL, "Remote host key is not known, but a key of another type for this host is known. Continue with caution.");
         goto hostkey_not_known;
 
 #if (LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 9, 0))
@@ -347,7 +347,7 @@ sshauth_hostkey_check(const char *hostname, ssh_session session, void *UNUSED(pr
 #else
     case SSH_SERVER_FILE_NOT_FOUND:
 #endif
-        WRN("Could not find the known hosts file.");
+        WRN(NULL, "Could not find the known hosts file.");
         goto hostkey_not_known;
 
 #if (LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 9, 0))
@@ -368,7 +368,7 @@ hostkey_not_known:
 
             /* DNSSEC SSHFP check successful, that's enough */
             if (!ret) {
-                VRB("DNSSEC SSHFP check successful.");
+                VRB(NULL, "DNSSEC SSHFP check successful.");
 #if (LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 9, 0))
                 ssh_session_update_known_hosts(session);
 #else
@@ -390,37 +390,37 @@ hostkey_not_known:
 
         /* try to get result from user */
         if (fprintf(out, "The authenticity of the host \'%s\' cannot be established.\n", hostname) < 1) {
-            ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+            ERR(NULL, "Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
             goto error;
         }
         if (fprintf(out, "%s key fingerprint is %s.\n", ssh_key_type_to_char(srv_pubkey_type), hexa) < 1) {
-            ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+            ERR(NULL, "Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
             goto error;
         }
 
 #ifdef ENABLE_DNSSEC
         if (ret == 2) {
             if (fprintf(out, "No matching host key fingerprint found using DNS.\n") < 1) {
-                ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+                ERR(NULL, "Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
                 goto error;
             }
         } else if (ret == 1) {
             if (fprintf(out, "Matching host key fingerprint found using DNS.\n") < 1) {
-                ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+                ERR(NULL, "Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
                 goto error;
             }
         }
 #endif
 
         if (fprintf(out, "Are you sure you want to continue connecting (yes/no)? ") < 1) {
-            ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+            ERR(NULL, "Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
             goto error;
         }
         fflush(out);
 
         do {
             if (fscanf(in, "%4s", answer) == EOF) {
-                ERR("Reading from input failed (%s).", feof(in) ? "EOF" : strerror(errno));
+                ERR(NULL, "Reading from input failed (%s).", feof(in) ? "EOF" : strerror(errno));
                 goto error;
             }
             while (((c = getc(in)) != EOF) && (c != '\n')) {}
@@ -434,13 +434,13 @@ hostkey_not_known:
                 ret = ssh_write_knownhost(session);
 #endif
                 if (ret != SSH_OK) {
-                    WRN("Adding the known host \"%s\" failed (%s).", hostname, ssh_get_error(session));
+                    WRN(NULL, "Adding the known host \"%s\" failed (%s).", hostname, ssh_get_error(session));
                 }
             } else if (!strcmp("no", answer)) {
                 goto error;
             } else {
                 if (fprintf(out, "Please type 'yes' or 'no': ") < 1) {
-                    ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+                    ERR(NULL, "Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
                     goto error;
                 }
                 fflush(out);
@@ -454,7 +454,7 @@ hostkey_not_known:
 #else
     case SSH_SERVER_ERROR:
 #endif
-        ERR("SSH error: %s", ssh_get_error(session));
+        ERR(NULL, "SSH error: %s", ssh_get_error(session));
         goto error;
     }
 
@@ -494,7 +494,7 @@ sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
     }
 
     if (fprintf(out, "%s@%s password: ", username, hostname) < 1) {
-        ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+        ERR(NULL, "Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
         goto error;
     }
     fflush(out);
@@ -549,15 +549,15 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
     }
 
     if (auth_name && (fprintf(out, "%s\n", auth_name) < 1)) {
-        ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+        ERR(NULL, "Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
         goto error;
     }
     if (instruction && (fprintf(out, "%s\n", instruction) < 1)) {
-        ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+        ERR(NULL, "Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
         goto error;
     }
     if (fputs(prompt, out) == EOF) {
-        ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+        ERR(NULL, "Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
         goto error;
     }
     fflush(out);
@@ -612,7 +612,7 @@ sshauth_privkey_passphrase(const char *privkey_path, void *UNUSED(priv))
     }
 
     if (fprintf(out, "Enter passphrase for the key '%s': ", privkey_path) < 1) {
-        ERR("Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
+        ERR(NULL, "Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
         goto error;
     }
     fflush(out);
@@ -880,16 +880,16 @@ _nc_client_ssh_add_keypair(const char *pub_key, const char *priv_key, struct nc_
     for (i = 0; i < opts->key_count; ++i) {
         if (!strcmp(opts->keys[i].pubkey_path, pub_key) || !strcmp(opts->keys[i].privkey_path, priv_key)) {
             if (strcmp(opts->keys[i].pubkey_path, pub_key)) {
-                WRN("Private key \"%s\" found with another public key \"%s\".",
+                WRN(NULL, "Private key \"%s\" found with another public key \"%s\".",
                         priv_key, opts->keys[i].pubkey_path);
                 continue;
             } else if (strcmp(opts->keys[i].privkey_path, priv_key)) {
-                WRN("Public key \"%s\" found with another private key \"%s\".",
+                WRN(NULL, "Public key \"%s\" found with another private key \"%s\".",
                         pub_key, opts->keys[i].privkey_path);
                 continue;
             }
 
-            ERR("SSH key pair already set.");
+            ERR(NULL, "SSH key pair already set.");
             return -1;
         }
     }
@@ -915,13 +915,13 @@ _nc_client_ssh_add_keypair(const char *pub_key, const char *priv_key, struct nc_
         /* 1st line - key type */
         if (!fgets(line, sizeof line, key)) {
             fclose(key);
-            ERR("fgets() on %s failed.", priv_key);
+            ERR(NULL, "fgets() on %s failed.", priv_key);
             return -1;
         }
         /* 2nd line - encryption information or key */
         if (!fgets(line, sizeof line, key)) {
             fclose(key);
-            ERR("fgets() on %s failed.", priv_key);
+            ERR(NULL, "fgets() on %s failed.", priv_key);
             return -1;
         }
         fclose(key);
@@ -1186,16 +1186,16 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
         }
     }
     if (ret == SSH_AGAIN) {
-        ERR("SSH connect timeout.");
+        ERR(session, "SSH connect timeout.");
         return 0;
     } else if (ret != SSH_OK) {
-        ERR("Starting the SSH session failed (%s).", ssh_get_error(ssh_sess));
-        DBG("Error code %d.", ssh_get_error_code(ssh_sess));
+        ERR(session, "Starting the SSH session failed (%s).", ssh_get_error(ssh_sess));
+        DBG(session, "Error code %d.", ssh_get_error_code(ssh_sess));
         return -1;
     }
 
     if (opts->auth_hostkey_check(session->host, ssh_sess, opts->auth_hostkey_check_priv)) {
-        ERR("Checking the host key failed.");
+        ERR(session, "Checking the host key failed.");
         return -1;
     }
 
@@ -1213,13 +1213,13 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
         }
     }
     if (ret_auth == SSH_AUTH_AGAIN) {
-        ERR("Request authentication methods timeout.");
+        ERR(session, "Request authentication methods timeout.");
         return 0;
     } else if (ret_auth == SSH_AUTH_ERROR) {
-        ERR("Authentication failed (%s).", ssh_get_error(ssh_sess));
+        ERR(session, "Authentication failed (%s).", ssh_get_error(ssh_sess));
         return -1;
     } else if (ret_auth == SSH_AUTH_SUCCESS) {
-        WRN("Server accepts \"none\" authentication method.")
+        WRN(session, "Server accepts \"none\" authentication method.")
         return 1;
     }
 
@@ -1228,15 +1228,15 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
 
     /* remove those disabled */
     if (opts->auth_pref[0].value < 0) {
-        VRB("Interactive SSH authentication method was disabled.");
+        VRB(session, "Interactive SSH authentication method was disabled.");
         userauthlist &= ~SSH_AUTH_METHOD_INTERACTIVE;
     }
     if (opts->auth_pref[1].value < 0) {
-        VRB("Password SSH authentication method was disabled.");
+        VRB(session, "Password SSH authentication method was disabled.");
         userauthlist &= ~SSH_AUTH_METHOD_PASSWORD;
     }
     if (opts->auth_pref[2].value < 0) {
-        VRB("Publickey SSH authentication method was disabled.");
+        VRB(session, "Publickey SSH authentication method was disabled.");
         userauthlist &= ~SSH_AUTH_METHOD_PUBLICKEY;
     }
 
@@ -1257,9 +1257,10 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
 
         if (!auth) {
             if (!attempt) {
-                ERR("Unable to authenticate to the remote server (no supported authentication methods detected).");
+                ERR(session, "Unable to authenticate to the remote server (no supported authentication methods detected).");
             } else {
-                ERR("Unable to authenticate to the remote server (all attempts via supported authentication methods failed).");
+                ERR(session, "Unable to authenticate to the remote server (all attempts via supported authentication "
+                        "methods failed).");
             }
             return -1;
         }
@@ -1269,10 +1270,10 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
         case NC_SSH_AUTH_PASSWORD:
             userauthlist &= ~SSH_AUTH_METHOD_PASSWORD;
 
-            VRB("Password authentication (host \"%s\", user \"%s\").", session->host, session->username);
+            VRB(session, "Password authentication (host \"%s\", user \"%s\").", session->host, session->username);
             s = opts->auth_password(session->username, session->host, opts->auth_password_priv);
             if (s == NULL) {
-                ERR("Unable to get the password.");
+                ERR(session, "Unable to get the password.");
                 return -1;
             }
 
@@ -1296,7 +1297,7 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
         case NC_SSH_AUTH_INTERACTIVE:
             userauthlist &= ~SSH_AUTH_METHOD_INTERACTIVE;
 
-            VRB("Keyboard-interactive authentication.");
+            VRB(session, "Keyboard-interactive authentication.");
 
             if (timeout > -1) {
                 nc_gettimespec_mono(&ts_timeout);
@@ -1348,25 +1349,25 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
         case NC_SSH_AUTH_PUBLICKEY:
             userauthlist &= ~SSH_AUTH_METHOD_PUBLICKEY;
 
-            VRB("Publickey athentication.");
+            VRB(session, "Publickey athentication.");
 
             /* if publickeys path not provided, we cannot continue */
             if (!opts->key_count) {
-                VRB("No key pair specified.");
+                VRB(session, "No key pair specified.");
                 break;
             }
 
             for (j = 0; j < opts->key_count; j++) {
-                VRB("Trying to authenticate using %spair \"%s\" \"%s\".",
+                VRB(session, "Trying to authenticate using %spair \"%s\" \"%s\".",
                         opts->keys[j].privkey_crypt ? "password-protected " : "", opts->keys[j].privkey_path,
                         opts->keys[j].pubkey_path);
 
                 ret = ssh_pki_import_pubkey_file(opts->keys[j].pubkey_path, &pubkey);
                 if (ret == SSH_EOF) {
-                    WRN("Failed to import the key \"%s\" (File access problem).", opts->keys[j].pubkey_path);
+                    WRN(session, "Failed to import the key \"%s\" (File access problem).", opts->keys[j].pubkey_path);
                     continue;
                 } else if (ret == SSH_ERROR) {
-                    WRN("Failed to import the key \"%s\" (SSH error).", opts->keys[j].pubkey_path);
+                    WRN(session, "Failed to import the key \"%s\" (SSH error).", opts->keys[j].pubkey_path);
                     continue;
                 }
 
@@ -1403,10 +1404,10 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
                     free(s);
                 }
                 if (ret == SSH_EOF) {
-                    WRN("Failed to import the key \"%s\" (File access problem).", opts->keys[j].privkey_path);
+                    WRN(session, "Failed to import the key \"%s\" (File access problem).", opts->keys[j].privkey_path);
                     continue;
                 } else if (ret == SSH_ERROR) {
-                    WRN("Failed to import the key \"%s\" (SSH error).", opts->keys[j].privkey_path);
+                    WRN(session, "Failed to import the key \"%s\" (SSH error).", opts->keys[j].privkey_path);
                     continue;
                 }
 
@@ -1434,19 +1435,19 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
 
         switch (ret_auth) {
         case SSH_AUTH_AGAIN:
-            ERR("Authentication response timeout.");
+            ERR(session, "Authentication response timeout.");
             return 0;
         case SSH_AUTH_ERROR:
-            ERR("Authentication failed (%s).", ssh_get_error(ssh_sess));
+            ERR(session, "Authentication failed (%s).", ssh_get_error(ssh_sess));
             return -1;
         case SSH_AUTH_DENIED:
-            WRN("Authentication denied.");
+            WRN(session, "Authentication denied.");
             break;
         case SSH_AUTH_PARTIAL:
-            VRB("Partial authentication success.");
+            VRB(session, "Partial authentication success.");
             break;
         case SSH_AUTH_SUCCESS:
-            VRB("Authentication successful.");
+            VRB(session, "Authentication successful.");
             break;
         case SSH_AUTH_INFO:
             ERRINT;
@@ -1472,12 +1473,12 @@ open_netconf_channel(struct nc_session *session, int timeout)
     ssh_sess = session->ti.libssh.session;
 
     if (!ssh_is_connected(ssh_sess)) {
-        ERR("SSH session not connected.");
+        ERR(session, "SSH session not connected.");
         return -1;
     }
 
     if (session->ti.libssh.channel) {
-        ERR("SSH channel already created.");
+        ERR(session, "SSH channel already created.");
         return -1;
     }
 
@@ -1497,12 +1498,12 @@ open_netconf_channel(struct nc_session *session, int timeout)
         }
     }
     if (ret == SSH_AGAIN) {
-        ERR("Opening an SSH channel timeout elapsed.");
+        ERR(session, "Opening an SSH channel timeout elapsed.");
         ssh_channel_free(session->ti.libssh.channel);
         session->ti.libssh.channel = NULL;
         return 0;
     } else if (ret == SSH_ERROR) {
-        ERR("Opening an SSH channel failed (%s).", ssh_get_error(ssh_sess));
+        ERR(session, "Opening an SSH channel failed (%s).", ssh_get_error(ssh_sess));
         ssh_channel_free(session->ti.libssh.channel);
         session->ti.libssh.channel = NULL;
         return -1;
@@ -1523,12 +1524,12 @@ open_netconf_channel(struct nc_session *session, int timeout)
         }
     }
     if (ret == SSH_AGAIN) {
-        ERR("Starting the \"netconf\" SSH subsystem timeout elapsed.");
+        ERR(session, "Starting the \"netconf\" SSH subsystem timeout elapsed.");
         ssh_channel_free(session->ti.libssh.channel);
         session->ti.libssh.channel = NULL;
         return 0;
     } else if (ret == SSH_ERROR) {
-        ERR("Starting the \"netconf\" SSH subsystem failed (%s).", ssh_get_error(ssh_sess));
+        ERR(session, "Starting the \"netconf\" SSH subsystem failed (%s).", ssh_get_error(ssh_sess));
         ssh_channel_free(session->ti.libssh.channel);
         session->ti.libssh.channel = NULL;
         return -1;
@@ -1582,7 +1583,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
         /* create and connect socket */
         sock = nc_sock_connect(host, port, -1, ka, NULL, &ip_host);
         if (sock == -1) {
-            ERR("Unable to connect to %s:%u (%s).", host, port, strerror(errno));
+            ERR(NULL, "Unable to connect to %s:%u (%s).", host, port, strerror(errno));
             goto fail;
         }
         ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_FD, &sock);
@@ -1605,7 +1606,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
             if (!opts->username) {
                 pw = getpwuid(getuid());
                 if (!pw) {
-                    ERR("Unknown username for the SSH connection (%s).", strerror(errno));
+                    ERR(NULL, "Unknown username for the SSH connection (%s).", strerror(errno));
                     goto fail;
                 }
                 username = strdup(pw->pw_name);
@@ -1698,7 +1699,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     if (!ssh_opts.username) {
         pw = getpwuid(getuid());
         if (!pw) {
-            ERR("Unknown username for the SSH connection (%s).", strerror(errno));
+            ERR(session, "Unknown username for the SSH connection (%s).", strerror(errno));
             return NULL;
         } else {
             username = pw->pw_name;
@@ -1719,7 +1720,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     session->ti_type = NC_TI_LIBSSH;
     session->ti.libssh.session = ssh_new();
     if (!session->ti.libssh.session) {
-        ERR("Unable to initialize SSH session.");
+        ERR(session, "Unable to initialize SSH session.");
         goto fail;
     }
 
@@ -1732,7 +1733,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     /* create and assign communication socket */
     sock = nc_sock_connect(host, port, -1, &client_opts.ka, NULL, &ip_host);
     if (sock == -1) {
-        ERR("Unable to connect to %s:%u (%s).", host, port, strerror(errno));
+        ERR(session, "Unable to connect to %s:%u (%s).", host, port, strerror(errno));
         goto fail;
     }
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_FD, &sock);
@@ -1860,7 +1861,7 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
 
     sess = ssh_new();
     if (!sess) {
-        ERR("Unable to initialize an SSH session.");
+        ERR(NULL, "Unable to initialize an SSH session.");
         close(sock);
         return NULL;
     }
@@ -1874,7 +1875,7 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
     if (!ssh_ch_opts.username) {
         pw = getpwuid(getuid());
         if (!pw) {
-            ERR("Unknown username for the SSH connection (%s).", strerror(errno));
+            ERR(NULL, "Unknown username for the SSH connection (%s).", strerror(errno));
             ssh_free(sess);
             return NULL;
         }

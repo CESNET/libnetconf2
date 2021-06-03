@@ -15,6 +15,8 @@
 #ifndef NC_LOG_H_
 #define NC_LOG_H_
 
+struct nc_session;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -69,14 +71,21 @@ void nc_libssh_thread_verbosity(int level);
 #endif
 
 /**
- * @brief Set libnetconf's print callback.
+ * @brief Deprecated, use ::nc_set_print_clb_session() instead.
+ *
+ * @param[in] clb Callback that is called for every message.
+ */
+void nc_set_print_clb(void (*clb)(NC_VERB_LEVEL, const char *));
+
+/**
+ * @brief Set libnetconf print callback.
  *
  * This callback is set for libnetconf2 and also libyang that is used internally. libyang
  * callback can be set explicitly, but must be done so after calling this function.
  *
  * @param[in] clb Callback that is called for every message.
  */
-void nc_set_print_clb(void (*clb)(NC_VERB_LEVEL, const char *));
+void nc_set_print_clb_session(void (*clb)(const struct nc_session *, NC_VERB_LEVEL, const char *));
 
 /** @} */
 
