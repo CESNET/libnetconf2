@@ -11,7 +11,6 @@ on:
 
 env:
   DEFAULT_PACKAGES: libcmocka-dev zlib1g-dev libssh-dev libssl-dev
-  COVERITY_PROJECT: CESNET%2Flibnetconf2
 
 jobs:
   git-branch:
@@ -145,30 +144,6 @@ jobs:
             make-prepend: "",
             make-target: "abi-check"
           }
-          - {
-            name: "Coverity",
-            os: "ubuntu-latest",
-            build-type: "Debug",
-            dep-build-type: "Debug",
-            cc: "clang",
-            options: "-DENABLE_DNSSEC=ON",
-            packages: "",
-            snaps: "",
-            make-prepend: "cov-build --dir cov-int",
-            make-target: ""
-          }
-          - {
-            name: "Codecov",
-            os: "ubuntu-latest",
-            build-type: "Debug",
-            dep-build-type: "Debug",
-            cc: "gcc",
-            options: "-DENABLE_COVERAGE=ON -DENABLE_DNSSEC=ON",
-            packages: "lcov",
-            snaps: "",
-            make-prepend: "",
-            make-target: ""
-          }
 
     steps:
       - uses: actions/checkout@v2
@@ -195,17 +170,6 @@ jobs:
           make
           sudo make install
         if: ${{ matrix.config.name == 'Debug, Ubuntu 18.04, gcc' }}
-
-      - name: Deps-coverity
-        shell: bash
-        working-directory: ${{ github.workspace }}
-        run: |
-          wget -q https://scan.coverity.com/download/linux64 --post-data "token=$TOKEN&project=$COVERITY_PROJECT" -O coverity-tools.tar.gz
-          mkdir coverity-tools
-          tar xzf coverity-tools.tar.gz --strip 1 -C coverity-tools
-        env:
-          TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
-        if: ${{ matrix.config.name == 'Coverity' }}
 
       - name: Deps-libyang
         shell: bash
@@ -247,25 +211,3 @@ jobs:
         shell: bash
         working-directory: ${{ github.workspace }}/build
         run: ctest --output-on-failure
-
-      - name: Upload to Coverity.com
-        shell: bash
-        working-directory: ${{ github.workspace }}/build
-        run: |
-          tar czvf libnetconf2.tgz cov-int
-          curl \
-            --form token=$TOKEN \
-            --form email=mvasko@cesnet.cz \
-            --form file=@libnetconf2.tgz \
-            --form version="`grep Version ./libnetconf2.pc | cut -d' ' -f 2`" \
-            --form description="libnetconf2 NETCONF library" \
-            https://scan.coverity.com/builds?project=$COVERITY_PROJECT
-        env:
-          TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
-        if: ${{ matrix.config.name == 'Coverity' && github.event_name == 'push' && needs.git-branch.outputs.branch-name == 'devel' }}
-
-      - name: Upload to Codecov.io
-        shell: bash
-        working-directory: ${{ github.workspace }}/build
-        run: bash <(curl -s https://codecov.io/bash)
-        if: ${{ matrix.config.name == 'Codecov' && github.event_name == 'push' }}
