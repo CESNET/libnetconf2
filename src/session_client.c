@@ -734,7 +734,7 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
         feature_count = 0;
         mod = ((struct lyd_node *)modules->dnodes[u])->schema->module;
         LY_LIST_FOR(lyd_child(modules->dnodes[u]), iter) {
-            if (iter->schema->module != mod) {
+            if (!iter->schema || (iter->schema->module != mod)) {
                 /* ignore node from other schemas (augments) */
                 continue;
             }
