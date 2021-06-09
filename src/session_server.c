@@ -1429,7 +1429,7 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, struct nc_se
     nc_server_reply_free(reply);
 
     if (r != NC_MSG_REPLY) {
-        ERR(session, "Failed to write reply (%s).", session->id, nc_msgtype2str[r]);
+        ERR(session, "Failed to write reply (%s).", nc_msgtype2str[r]);
         ret |= NC_PSPOLL_ERROR;
     }
 
