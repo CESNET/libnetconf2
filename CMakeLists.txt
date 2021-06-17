@@ -217,7 +217,6 @@ target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
 
 # check availability for some pthread functions
 set(CMAKE_REQUIRED_LIBRARIES pthread)
-check_include_file(stdatomic.h HAVE_STDATOMIC)
 check_function_exists(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
 
 # dependencies - openssl

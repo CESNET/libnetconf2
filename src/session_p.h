@@ -22,6 +22,7 @@
 
 #include <libyang/libyang.h>
 
+#include "compat.h"
 #include "libnetconf.h"
 #include "messages_client.h"
 #include "netconf.h"
@@ -294,12 +295,12 @@ struct nc_server_opts {
     pthread_rwlock_t ch_client_lock;
 
     /* Atomic IDs */
-    ATOMIC_UINT32_T new_session_id;
-    ATOMIC_UINT32_T new_client_id;
+    ATOMIC_T new_session_id;
+    ATOMIC_T new_client_id;
 };
 
 /**
- * Sleep time in msec to wait between nc_recv_notif() calls.
+ * Sleep time in usec to wait between nc_recv_notif() calls.
  */
 #define NC_CLIENT_NOTIF_THREAD_SLEEP 10000
 
@@ -440,7 +441,8 @@ struct nc_session {
             char **cpblts;                 /**< list of server's capabilities on client side */
             struct nc_msg_cont *replies;   /**< queue for RPC replies received instead of notifications */
             struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
-            ATOMIC_PTR ntf_tid;            /**< running notifications receiving thread */
+            ATOMIC_T ntf_thread;           /**< flag whether notification thread for this session is running or not,
+                                                2 means it should quit */
 
             /* client flags */
             /* some server modules failed to load so the data from them will be ignored - not use strict flag for parsing */

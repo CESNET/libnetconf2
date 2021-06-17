@@ -11,7 +11,7 @@
  *
  *     https://opensource.org/licenses/BSD-3-Clause
  */
-#define _DEFAULT_SOURCE
+#define _GNU_SOURCE
 
 #include <assert.h>
 #include <ctype.h>
@@ -561,17 +561,29 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     struct ly_in *msg;
     struct lyd_node *close_rpc, *envp;
     const struct lys_module *ietfnc;
-    struct timespec ts;
+    struct timespec ts, ts_cur;
     void *p;
 
     if (!session || (session->status == NC_STATUS_CLOSING)) {
         return;
     }
 
-    /* stop notifications loop if any */
-    if ((session->side == NC_CLIENT) && ATOMIC_LOAD(session->opts.client.ntf_tid)) {
-        ATOMIC_STORE(session->opts.client.ntf_tid, (uintptr_t)NULL);
-        /* the thread now knows it should quit */
+    /* stop notifications thread if any */
+    if ((session->side == NC_CLIENT) && ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread)) {
+        /* let the thread know it should quit */
+        ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread, 2);
+
+        /* wait for it */
+        nc_gettimespec_mono(&ts);
+        nc_addtimespec(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
+        while (ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread)) {
+            usleep(NC_TIMEOUT_STEP);
+            nc_gettimespec_mono(&ts_cur);
+            if (nc_difftimespec(&ts_cur, &ts) < 1) {
+                ERR(session, "Waiting for notification thread exit failed (timed out).");
+                break;
+            }
+        }
     }
 
     if (session->side == NC_SERVER) {

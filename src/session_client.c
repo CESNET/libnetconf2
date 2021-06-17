@@ -1602,7 +1602,7 @@ nc_session_ntf_thread_running(const struct nc_session *session)
         return 0;
     }
 
-    return ATOMIC_LOAD(session->opts.client.ntf_tid) ? 1 : 0;
+    return ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread) ? 1 : 0;
 }
 
 API void
@@ -2058,8 +2058,8 @@ nc_recv_notif_thread(void *arg)
     void (*notif_clb)(struct nc_session *session, const struct lyd_node *envp, const struct lyd_node *op);
     struct lyd_node *envp, *op;
     NC_MSG_TYPE msgtype;
-    pthread_t *ntf_tid;
 
+    /* detach ourselves */
     pthread_detach(pthread_self());
 
     ntarg = (struct nc_ntf_thread_arg *)arg;
@@ -2067,10 +2067,7 @@ nc_recv_notif_thread(void *arg)
     notif_clb = ntarg->notif_clb;
     free(ntarg);
 
-    /* remember our allocated tid, we will be freeing it */
-    ntf_tid = (pthread_t *)ATOMIC_LOAD(session->opts.client.ntf_tid);
-
-    while (ATOMIC_LOAD(session->opts.client.ntf_tid)) {
+    while (ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread) == 1) {
         msgtype = nc_recv_notif(session, NC_CLIENT_NOTIF_THREAD_SLEEP / 1000, &envp, &op);
         if (msgtype == NC_MSG_NOTIF) {
             notif_clb(session, envp, op);
@@ -2090,8 +2087,7 @@ nc_recv_notif_thread(void *arg)
     }
 
     VRB(session, "Notification thread exit.");
-    ATOMIC_STORE(session->opts.client.ntf_tid, (uintptr_t)NULL);
-    free(ntf_tid);
+    ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread, 0);
     return NULL;
 }
 
@@ -2100,7 +2096,7 @@ nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_s
         const struct lyd_node *envp, const struct lyd_node *op))
 {
     struct nc_ntf_thread_arg *ntarg;
-    pthread_t *tid;
+    pthread_t tid;
     int ret;
 
     if (!session) {
@@ -2112,7 +2108,7 @@ nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_s
     } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR(session, "Invalid session to receive Notifications.");
         return -1;
-    } else if (ATOMIC_LOAD(session->opts.client.ntf_tid)) {
+    } else if (ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread)) {
         ERR(session, "Separate notification thread is already running.");
         return -1;
     }
@@ -2125,21 +2121,14 @@ nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_s
     ntarg->session = session;
     ntarg->notif_clb = notif_clb;
 
-    tid = malloc(sizeof *tid);
-    if (!tid) {
-        ERRMEM;
-        free(ntarg);
-        return -1;
-    }
-    /* just so that nc_recv_notif_thread() does not immediately exit, the value does not matter */
-    ATOMIC_STORE(session->opts.client.ntf_tid, (uintptr_t)tid);
+    /* just so that nc_recv_notif_thread() does not immediately exit */
+    ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread, 1);
 
-    ret = pthread_create(tid, NULL, nc_recv_notif_thread, ntarg);
+    ret = pthread_create(&tid, NULL, nc_recv_notif_thread, ntarg);
     if (ret) {
         ERR(session, "Failed to create a new thread (%s).", strerror(errno));
         free(ntarg);
-        free(tid);
-        ATOMIC_STORE(session->opts.client.ntf_tid, (uintptr_t)NULL);
+        ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread, 0);
         return -1;
     }
 
