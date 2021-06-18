@@ -1,7 +1,7 @@
 /**
- * \file session_server.h
- * \author Michal Vasko <mvasko@cesnet.cz>
- * \brief libnetconf2 session server manipulation
+ * @file session_server.h
+ * @author Michal Vasko <mvasko@cesnet.cz>
+ * @brief libnetconf2 session server manipulation
  *
  * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
  *
@@ -23,13 +23,13 @@ extern "C" {
 #include <stdint.h>
 
 #ifdef NC_ENABLED_TLS
-#   include <openssl/x509.h>
+# include <openssl/x509.h>
 #endif
 
 #ifdef NC_ENABLED_SSH
-#   include <libssh/callbacks.h>
-#   include <libssh/libssh.h>
-#   include <libssh/server.h>
+# include <libssh/callbacks.h>
+# include <libssh/libssh.h>
+# include <libssh/server.h>
 #endif
 
 #include "netconf.h"
@@ -46,7 +46,7 @@ extern "C" {
 /**
  * @brief Prototype of callbacks that are called if some RPCs are received.
  *
- * If \p session termination reason is changed in the callback, one last reply
+ * If @p session termination reason is changed in the callback, one last reply
  * is sent and then the session is considered invalid.
  *
  * The callback is set via nc_set_global_rpc_clb().
@@ -175,8 +175,8 @@ int nc_server_set_capability(const char *value);
  * @brief Set the callback for getting yang-library capability identifier. If none is set, libyang context change count is used.
  *
  * @param[in] content_id_clb Callback that should return the yang-library content identifier.
- * @param[in] user_data Optional arbitrary user data that will be passed to \p content_id_clb.
- * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
+ * @param[in] user_data Optional arbitrary user data that will be passed to @p content_id_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
  */
 void nc_server_set_content_id_clb(char *(*content_id_clb)(void *user_data), void *user_data,
         void (*free_user_data)(void *user_data));
@@ -218,7 +218,7 @@ uint16_t nc_server_get_idle_timeout(void);
  * server options.
  *
  * @param[in] ctx Context to read most capabilities from.
- * @return Array of capabilities stored in the \p ctx dictionary, NULL on error.
+ * @return Array of capabilities stored in the @p ctx dictionary, NULL on error.
  */
 const char **nc_server_get_cpblts(struct ly_ctx *ctx);
 
@@ -231,7 +231,7 @@ const char **nc_server_get_cpblts(struct ly_ctx *ctx);
  * @param[in] ctx Context to read most capabilities from.
  * @param[in] version YANG version of the schemas to be included in result, with
  * LYS_VERSION_UNDEF the result is the same as from nc_server_get_cpblts().
- * @return Array of capabilities stored in the \p ctx dictionary, NULL on error.
+ * @return Array of capabilities stored in the @p ctx dictionary, NULL on error.
  */
 const char **nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version);
 
@@ -264,7 +264,7 @@ struct nc_pollsession *nc_ps_new(void);
 /**
  * @brief Free a pollsession structure.
  *
- * !IMPORTANT! Make sure that \p ps is not accessible (is not used)
+ * !IMPORTANT! Make sure that @p ps is not accessible (is not used)
  * by any thread before and after this call!
  *
  * @param[in] ps Pollsession structure to free.
@@ -275,7 +275,7 @@ void nc_ps_free(struct nc_pollsession *ps);
  * @brief Add a session to a pollsession structure.
  *
  * @param[in] ps Pollsession structure to modify.
- * @param[in] session Session to add to \p ps.
+ * @param[in] session Session to add to @p ps.
  * @return 0 on success, -1 on error.
  */
 int nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session);
@@ -284,7 +284,7 @@ int nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session);
  * @brief Remove a session from a pollsession structure.
  *
  * @param[in] ps Pollsession structure to modify.
- * @param[in] session Session to remove from \p ps.
+ * @param[in] session Session to remove from @p ps.
  * @return 0 on success, -1 on not found.
  */
 int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
@@ -301,10 +301,10 @@ struct nc_session *nc_ps_get_session(const struct nc_pollsession *ps, uint16_t i
 /**
  * @brief Learn the number of sessions in a pollsession structure.
  *
- * Does not lock \p ps structure for efficiency.
+ * Does not lock @p ps structure for efficiency.
  *
  * @param[in] ps Pollsession structure to check.
- * @return Number of sessions (even invalid ones) in \p ps, -1 on error.
+ * @return Number of sessions (even invalid ones) in @p ps, -1 on error.
  */
 uint16_t nc_ps_session_count(struct nc_pollsession *ps);
 
@@ -318,8 +318,8 @@ uint16_t nc_ps_session_count(struct nc_pollsession *ps);
 #define NC_PSPOLL_ERROR 0x0080         /**< Other fatal errors (they are printed). */
 
 #ifdef NC_ENABLED_SSH
-#   define NC_PSPOLL_SSH_MSG 0x00100      /**< SSH message received (and processed, if relevant, only with SSH support). */
-#   define NC_PSPOLL_SSH_CHANNEL 0x0200   /**< New SSH channel opened on an existing session (only with SSH support). */
+# define NC_PSPOLL_SSH_MSG 0x00100      /**< SSH message received (and processed, if relevant, only with SSH support). */
+# define NC_PSPOLL_SSH_CHANNEL 0x0200   /**< New SSH channel opened on an existing session (only with SSH support). */
 #endif
 
 /**
@@ -327,7 +327,7 @@ uint16_t nc_ps_session_count(struct nc_pollsession *ps);
  *
  * Only one event on one session is handled in one function call. If this event
  * is a session termination (#NC_PSPOLL_SESSION_TERM returned), the session
- * should be removed from \p ps.
+ * should be removed from @p ps.
  *
  * @param[in] ps Pollsession structure to use.
  * @param[in] timeout Poll timeout in milliseconds. 0 for non-blocking call, -1 for
@@ -342,7 +342,7 @@ int nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **sessi
  * @brief Remove sessions from a pollsession structure and
  *        call nc_session_free() on them.
  *
- * Calling this function with \p all false makes sense if nc_ps_poll() returned #NC_PSPOLL_SESSION_TERM.
+ * Calling this function with @p all false makes sense if nc_ps_poll() returned #NC_PSPOLL_SESSION_TERM.
  *
  * @param[in] ps Pollsession structure to clear.
  * @param[in] all Whether to free all sessions, or only the invalid ones.
@@ -374,7 +374,7 @@ int nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti);
  *
  * @param[in] name Endpoint name. NULL matches all endpoints.
  * @param[in] ti Endpoint transport protocol. NULL matches any protocol.
- *               Redundant to set if \p name is set, endpoint names are
+ *               Redundant to set if @p name is set, endpoint names are
  *               unique disregarding their protocol.
  * @return 0 on success, -1 on not finding any match.
  */
@@ -470,7 +470,7 @@ int nc_server_endpt_set_keepalives(const char *endpt_name, int idle_time, int ma
  *
  * Once a new (TCP/IP) conection is established a different (quite long) timeout
  * is used for waiting for transport-related data, which means this call can block
- * for much longer that \p timeout, but only with slow/faulty/malicious clients.
+ * for much longer that @p timeout, but only with slow/faulty/malicious clients.
  *
  * @param[in] timeout Timeout for receiving a new connection in milliseconds, 0 for
  *                    non-blocking call, -1 for infinite waiting.
@@ -483,8 +483,8 @@ NC_MSG_TYPE nc_accept(int timeout, struct nc_session **session);
 #ifdef NC_ENABLED_SSH
 
 /**
- * @brief Accept a new NETCONF session on an SSH session of a running NETCONF \p orig_session.
- *        Call this function only when nc_ps_poll() returns #NC_PSPOLL_SSH_CHANNEL on \p orig_session.
+ * @brief Accept a new NETCONF session on an SSH session of a running NETCONF @p orig_session.
+ *        Call this function only when nc_ps_poll() returns #NC_PSPOLL_SSH_CHANNEL on @p orig_session.
  *
  * @param[in] orig_session Session that has a new SSH channel ready.
  * @param[out] session New session.
@@ -495,8 +495,8 @@ NC_MSG_TYPE nc_session_accept_ssh_channel(struct nc_session *orig_session, struc
 
 /**
  * @brief Accept a new NETCONF session on an SSH session of a running NETCONF session
- *        that was polled in \p ps. Call this function only when nc_ps_poll() on \p ps returns #NC_PSPOLL_SSH_CHANNEL.
- *        The new session is only returned in \p session, it is not added to \p ps.
+ *        that was polled in @p ps. Call this function only when nc_ps_poll() on @p ps returns #NC_PSPOLL_SSH_CHANNEL.
+ *        The new session is only returned in @p session, it is not added to @p ps.
  *
  * @param[in] ps Unmodified pollsession structure from the previous nc_ps_poll() call.
  * @param[out] session New session.
@@ -551,10 +551,10 @@ int nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64
 /**
  * @brief Set the callback for SSH password authentication. If none is set, local system users are used.
  *
- * @param[in] passwd_auth_clb Callback that should authenticate the user. Username can be directly obtained from \p session.
+ * @param[in] passwd_auth_clb Callback that should authenticate the user. Username can be directly obtained from @p session.
  * Zero return indicates success, non-zero an error.
- * @param[in] user_data Optional arbitrary user data that will be passed to \p passwd_auth_clb.
- * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
+ * @param[in] user_data Optional arbitrary user data that will be passed to @p passwd_auth_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
  */
 void nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_session *session, const char *password,
         void *user_data), void *user_data, void (*free_user_data)(void *user_data));
@@ -564,8 +564,8 @@ void nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_se
  *
  * @param[in] interactive_auth_clb Callback that should authenticate the user.
  * Zero return indicates success, non-zero an error.
- * @param[in] user_data Optional arbitrary user data that will be passed to \p passwd_auth_clb.
- * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
+ * @param[in] user_data Optional arbitrary user data that will be passed to @p passwd_auth_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
  */
 void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session,
         const ssh_message msg, void *user_data), void *user_data, void (*free_user_data)(void *user_data));
@@ -575,8 +575,8 @@ void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const st
  *
  * @param[in] pubkey_auth_clb Callback that should authenticate the user.
  * Zero return indicates success, non-zero an error.
- * @param[in] user_data Optional arbitrary user data that will be passed to \p passwd_auth_clb.
- * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
+ * @param[in] user_data Optional arbitrary user data that will be passed to @p passwd_auth_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
  */
 void nc_server_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session *session, ssh_key key,
         void *user_data), void *user_data, void (*free_user_data)(void *user_data));
@@ -587,14 +587,14 @@ void nc_server_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_se
  *        the earlier ones.
  *
  * @param[in] hostkey_clb Callback that should return the key itself. Zero return indicates success, non-zero
- *                        an error. On success exactly ONE of \p privkey_path or \p privkey_data is expected
+ *                        an error. On success exactly ONE of @p privkey_path or @p privkey_data is expected
  *                        to be set. The one set will be freed.
- *                        - \p privkey_path expects a PEM file,
- *                        - \p privkey_data expects a base-64 encoded ANS.1 DER data,
- *                        - \p privkey_type type of the key in \p privkey_data. Use ::NC_SSH_KEY_UNKNOWN for
+ *                        - @p privkey_path expects a PEM file,
+ *                        - @p privkey_data expects a base-64 encoded ANS.1 DER data,
+ *                        - @p privkey_type type of the key in @p privkey_data. Use ::NC_SSH_KEY_UNKNOWN for
  *                          PKCS#8 key that includes the information about the key in its data.
- * @param[in] user_data Optional arbitrary user data that will be passed to \p hostkey_clb.
- * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
+ * @param[in] user_data Optional arbitrary user data that will be passed to @p hostkey_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
  */
 void nc_server_ssh_set_hostkey_clb(int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path,
         char **privkey_data, NC_SSH_KEY_TYPE *privkey_type), void *user_data, void (*free_user_data)(void *user_data));
@@ -614,8 +614,8 @@ int nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name, in
  * @brief Delete endpoint SSH host key. Their order is preserved.
  *
  * @param[in] endpt_name Existing endpoint name.
- * @param[in] name Name of the host key. NULL matches all the keys, but if \p idx != -1 then this must be NULL.
- * @param[in] idx Index of the hostkey. -1 matches all indices, but if \p name != NULL then this must be -1.
+ * @param[in] name Name of the host key. NULL matches all the keys, but if @p idx != -1 then this must be NULL.
+ * @param[in] idx Index of the hostkey. -1 matches all indices, but if @p name != NULL then this must be -1.
  * @return 0 on success, -1 on error.
  */
 int nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *name, int16_t idx);
@@ -625,7 +625,7 @@ int nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *name, in
  *
  * @param[in] endpt_name Exisitng endpoint name.
  * @param[in] key_mov Name of the host key that will be moved.
- * @param[in] key_after Name of the key that will preceed \p key_mov. NULL if \p key_mov is to be moved at the beginning.
+ * @param[in] key_after Name of the key that will preceed @p key_mov. NULL if @p key_mov is to be moved at the beginning.
  * @return 0 in success, -1 on error.
  */
 int nc_server_ssh_endpt_mov_hostkey(const char *endpt_name, const char *key_mov, const char *key_after);
@@ -635,7 +635,7 @@ int nc_server_ssh_endpt_mov_hostkey(const char *endpt_name, const char *key_mov,
  *
  * @param[in] endpt_name Exisitng endpoint name.
  * @param[in] name Name of an existing host key.
- * @param[in] new_name New name of the host key \p name.
+ * @param[in] new_name New name of the host key @p name.
  * @return 0 in success, -1 on error.
  */
 int nc_server_ssh_endpt_mod_hostkey(const char *endpt_name, const char *name, const char *new_name);
@@ -676,7 +676,7 @@ int nc_server_ssh_endpt_set_auth_attempts(const char *endpt_name, uint16_t auth_
  */
 int nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_timeout);
 
-/**@} Server SSH */
+/** @} Server SSH */
 
 #endif /* NC_ENABLED_SSH */
 
@@ -704,15 +704,15 @@ int nc_server_tls_endpt_set_server_cert(const char *endpt_name, const char *name
  * @brief Set the callback for retrieving server certificate and matching private key.
  *
  * @param[in] cert_clb Callback that should return the certificate and the key itself. Zero return indicates success,
- *                     non-zero an error. On success exactly ONE of \p cert_path or \p cert_data and ONE of
- *                     \p privkey_path and \p privkey_data is expected to be set. Those set will be freed.
- *                     - \p cert_path expects a PEM file,
- *                     - \p cert_data expects a base-64 encoded ASN.1 DER data,
- *                     - \p privkey_path expects a PEM file,
- *                     - \p privkey_data expects a base-64 encoded ANS.1 DER data,
- *                     - \p privkey_type type of the key in \p privkey_data.
- * @param[in] user_data Optional arbitrary user data that will be passed to \p cert_clb.
- * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
+ *                     non-zero an error. On success exactly ONE of @p cert_path or @p cert_data and ONE of
+ *                     @p privkey_path and @p privkey_data is expected to be set. Those set will be freed.
+ *                     - @p cert_path expects a PEM file,
+ *                     - @p cert_data expects a base-64 encoded ASN.1 DER data,
+ *                     - @p privkey_path expects a PEM file,
+ *                     - @p privkey_data expects a base-64 encoded ANS.1 DER data,
+ *                     - @p privkey_type type of the key in @p privkey_data.
+ * @param[in] user_data Optional arbitrary user data that will be passed to @p cert_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
  */
 void nc_server_tls_set_server_cert_clb(int (*cert_clb)(const char *name, void *user_data, char **cert_path, char **cert_data,
         char **privkey_path, char **privkey_data, NC_SSH_KEY_TYPE *privkey_type), void *user_data,
@@ -722,14 +722,14 @@ void nc_server_tls_set_server_cert_clb(int (*cert_clb)(const char *name, void *u
  * @brief Set the callback for retrieving server certificate chain
  *
  * @param[in] cert_chain_clb Callback that should return all the certificates of the chain. Zero return indicates success,
- *                           non-zero an error. On success, \p cert_paths and \p cert_data are expected to be set or left
+ *                           non-zero an error. On success, @p cert_paths and @p cert_data are expected to be set or left
  *                           NULL. Both will be (deeply) freed.
- *                           - \p cert_paths expect an array of PEM files,
- *                           - \p cert_path_count number of \p cert_paths array members,
- *                           - \p cert_data expect an array of base-64 encoded ASN.1 DER cert data,
- *                           - \p cert_data_count number of \p cert_data array members.
- * @param[in] user_data Optional arbitrary user data that will be passed to \p cert_clb.
- * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
+ *                           - @p cert_paths expect an array of PEM files,
+ *                           - @p cert_path_count number of @p cert_paths array members,
+ *                           - @p cert_data expect an array of base-64 encoded ASN.1 DER cert data,
+ *                           - @p cert_data_count number of @p cert_data array members.
+ * @param[in] user_data Optional arbitrary user data that will be passed to @p cert_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
  */
 void nc_server_tls_set_server_cert_chain_clb(int (*cert_chain_clb)(const char *name, void *user_data, char ***cert_paths,
         int *cert_path_count, char ***cert_data, int *cert_data_count), void *user_data, void (*free_user_data)(void *user_data));
@@ -748,14 +748,14 @@ int nc_server_tls_endpt_add_trusted_cert_list(const char *endpt_name, const char
  * @brief Set the callback for retrieving trusted certificates.
  *
  * @param[in] cert_list_clb Callback that should return all the certificates of a list. Zero return indicates success,
- *                          non-zero an error. On success, \p cert_paths and \p cert_data are expected to be set or left
+ *                          non-zero an error. On success, @p cert_paths and @p cert_data are expected to be set or left
  *                          NULL. Both will be (deeply) freed.
- *                          - \p cert_paths expect an array of PEM files,
- *                          - \p cert_path_count number of \p cert_paths array members,
- *                          - \p cert_data expect an array of base-64 encoded ASN.1 DER cert data,
- *                          - \p cert_data_count number of \p cert_data array members.
- * @param[in] user_data Optional arbitrary user data that will be passed to \p cert_clb.
- * @param[in] free_user_data Optional callback that will be called during cleanup to free any \p user_data.
+ *                          - @p cert_paths expect an array of PEM files,
+ *                          - @p cert_path_count number of @p cert_paths array members,
+ *                          - @p cert_data expect an array of base-64 encoded ASN.1 DER cert data,
+ *                          - @p cert_data_count number of @p cert_data array members.
+ * @param[in] user_data Optional arbitrary user data that will be passed to @p cert_clb.
+ * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
  */
 void nc_server_tls_set_trusted_cert_list_clb(int (*cert_list_clb)(const char *name, void *user_data, char ***cert_paths,
         int *cert_path_count, char ***cert_data, int *cert_data_count), void *user_data, void (*free_user_data)(void *user_data));
@@ -805,15 +805,15 @@ void nc_server_tls_endpt_clear_crls(const char *endpt_name);
 /**
  * @brief Add a cert-to-name entry.
  *
- * It is possible to add an entry step-by-step, specifying first only \p ip and in later calls
- * \p fingerprint, \p map_type, and optionally \p name spearately.
+ * It is possible to add an entry step-by-step, specifying first only @p ip and in later calls
+ * @p fingerprint, @p map_type, and optionally @p name spearately.
  *
  * @param[in] endpt_name Existing endpoint name.
  * @param[in] id Priority of the entry. It must be unique. If already exists, the entry with this id
  *               is modified.
  * @param[in] fingerprint Matching certificate fingerprint. If NULL, kept temporarily unset.
  * @param[in] map_type Type of username-certificate mapping. If 0, kept temporarily unset.
- * @param[in] name Specific username used only if \p map_type == NC_TLS_CTN_SPECIFED.
+ * @param[in] name Specific username used only if @p map_type == NC_TLS_CTN_SPECIFED.
  * @return 0 on success, -1 on error.
  */
 int nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char *fingerprint,
@@ -868,7 +868,7 @@ const X509 *nc_session_get_client_cert(const struct nc_session *session);
  */
 void nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *session));
 
-/**@} Server TLS */
+/** @} Server TLS */
 
 #endif /* NC_ENABLED_TLS */
 
@@ -921,7 +921,7 @@ int nc_session_get_notif_status(const struct nc_session *session);
  */
 int nc_session_is_callhome(const struct nc_session *session);
 
-/**@} Server Session */
+/** @} Server Session */
 
 #ifdef __cplusplus
 }

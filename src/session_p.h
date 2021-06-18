@@ -1,8 +1,8 @@
 /**
- * \file session_p.h
- * \author Radek Krejci <rkrejci@cesnet.cz>
- * \author Michal Vasko <mvasko@cesnet.cz>
- * \brief libnetconf2 session manipulation
+ * @file session_p.h
+ * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @author Michal Vasko <mvasko@cesnet.cz>
+ * @brief libnetconf2 session manipulation
  *
  * Copyright (c) 2017 - 2021 CESNET, z.s.p.o.
  *
@@ -30,14 +30,14 @@
 
 #ifdef NC_ENABLED_SSH
 
-#   include <libssh/callbacks.h>
-#   include <libssh/libssh.h>
-#   include <libssh/server.h>
+# include <libssh/callbacks.h>
+# include <libssh/libssh.h>
+# include <libssh/server.h>
 
 /* seconds */
-#   define NC_SSH_TIMEOUT 10
+# define NC_SSH_TIMEOUT 10
 /* number of all supported authentication methods */
-#   define NC_SSH_AUTH_COUNT 3
+# define NC_SSH_AUTH_COUNT 3
 
 /* ACCESS unlocked */
 struct nc_client_ssh_opts {
@@ -85,8 +85,8 @@ struct nc_server_ssh_opts {
 
 #ifdef NC_ENABLED_TLS
 
-#   include <openssl/bio.h>
-#   include <openssl/ssl.h>
+# include <openssl/bio.h>
+# include <openssl/ssl.h>
 
 /* ACCESS unlocked */
 struct nc_client_tls_opts {
@@ -542,7 +542,7 @@ int nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func);
 int nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func);
 
 /**
- * @brief Fill libyang context in \p session. Context models are based on the stored session
+ * @brief Fill libyang context in @p session. Context models are based on the stored session
  *        capabilities. If the server does not support \<get-schema\>, the models are searched
  *        for in the directory set using nc_client_schema_searchpath().
  *
@@ -552,7 +552,7 @@ int nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func);
 int nc_ctx_check_and_fill(struct nc_session *session);
 
 /**
- * @brief Perform NETCONF handshake on \p session.
+ * @brief Perform NETCONF handshake on @p session.
  *
  * @param[in] session NETCONF session to use.
  * @return NC_MSG_HELLO on success, NC_MSG_BAD_HELLO on client \<hello\> message parsing fail
@@ -607,7 +607,7 @@ int nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *o
  * @brief Accept a new connection on a listening socket.
  *
  * @param[in] binds Structure with the listening sockets.
- * @param[in] bind_count Number of \p binds.
+ * @param[in] bind_count Number of @p binds.
  * @param[in] timeout Timeout for accepting.
  * @param[out] host Host of the remote peer. Can be NULL.
  * @param[out] port Port of the new connection. Can be NULL.
@@ -710,7 +710,7 @@ int nc_accept_ssh_session(struct nc_session *session, int sock, int timeout);
  *
  * @param[in] sshsession SSH session the message arrived on.
  * @param[in] msg SSH message itself.
- * @param[in] data NETCONF session running on \p sshsession.
+ * @param[in] data NETCONF session running on @p sshsession.
  * @return 0 if the message was handled, 1 if it is left up to libssh.
  */
 int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
@@ -772,7 +772,7 @@ int nc_read_msg_poll_io(struct nc_session *session, int io_timeout, struct ly_in
  * @param[in] io_timeout Timeout in milliseconds. Negative value means infinite timeout,
  *            zero value causes to return immediately.
  * @param[out] msg Input handled with the NETCONF message (application layer data).
- * @param[in] passing_io_lock True if \p session IO lock is already held. This function always unlocks
+ * @param[in] passing_io_lock True if @p session IO lock is already held. This function always unlocks
  *            it before returning!
  * @return 1 on success.
  * @return 0 on timeout.

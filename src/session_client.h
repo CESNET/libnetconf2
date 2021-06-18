@@ -1,9 +1,9 @@
 /**
- * \file session_client.h
- * \author Michal Vasko <mvasko@cesnet.cz>
- * \brief libnetconf2 session client manipulation
+ * @file session_client.h
+ * @author Michal Vasko <mvasko@cesnet.cz>
+ * @brief libnetconf2 session client manipulation
  *
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -22,15 +22,11 @@ extern "C" {
 #include <libyang/libyang.h>
 
 #ifdef NC_ENABLED_SSH
-
-#include <libssh/libssh.h>
-
+# include <libssh/libssh.h>
 #endif
 
 #ifdef NC_ENABLED_TLS
-
-#include <openssl/ssl.h>
-
+# include <openssl/ssl.h>
 #endif
 
 #include "messages_client.h"
@@ -70,7 +66,7 @@ const char *nc_client_get_schema_searchpath(void);
  * @brief Set callback function to get missing schemas.
  *
  * @param[in] clb Callback responsible for returning the missing model.
- * @param[in] user_data Arbitrary data that will always be passed to the callback \p clb.
+ * @param[in] user_data Arbitrary data that will always be passed to the callback @p clb.
  * @return 0 on success, 1 on (memory allocation) failure.
  */
 int nc_client_set_schema_callback(ly_module_imp_clb clb, void *user_data);
@@ -324,7 +320,7 @@ int nc_client_ssh_get_keypair(int idx, const char **pub_key, const char **priv_k
  * - public key authentication (1)
  *
  * @param[in] auth_type Authentication method to modify the preference of.
- * @param[in] pref Preference of \p auth_type. Higher number increases priority, negative values disable the method.
+ * @param[in] pref Preference of @p auth_type. Higher number increases priority, negative values disable the method.
  */
 void nc_client_ssh_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref);
 
@@ -332,7 +328,7 @@ void nc_client_ssh_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref);
  * @brief Get SSH authentication method preference.
  *
  * @param[in] auth_type Authentication method to retrieve the prefrence of.
- * @return Preference of the \p auth_type.
+ * @return Preference of the @p auth_type.
  */
 int16_t nc_client_ssh_get_auth_pref(NC_SSH_AUTH_TYPE auth_type);
 
@@ -376,7 +372,7 @@ struct nc_session *nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx
  *
  * SSH session can have any options set, they will not be modified. If no options were set,
  * host 'localhost', port 22, and the username detected from the EUID is used. If socket is
- * set and connected only the host and the username must be set/is detected. Or the \p ssh_session
+ * set and connected only the host and the username must be set/is detected. Or the @p ssh_session
  * can already be authenticated in which case it is used directly.
  *
  * @param[in] ssh_session libssh structure representing SSH session object. After passing it
@@ -426,8 +422,8 @@ struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_
  * @brief Set client authentication identity - a certificate and a private key.
  *
  * @param[in] client_cert Path to the file containing the client certificate.
- * @param[in] client_key Path to the file containing the private key for the \p client_cert.
- *                       If NULL, key is expected to be stored with \p client_cert.
+ * @param[in] client_key Path to the file containing the private key for the @p client_cert.
+ *                       If NULL, key is expected to be stored with @p client_cert.
  * @return 0 on success, -1 on error.
  */
 int nc_client_tls_set_cert_key_paths(const char *client_cert, const char *client_key);
@@ -436,7 +432,7 @@ int nc_client_tls_set_cert_key_paths(const char *client_cert, const char *client
  * @brief Get client authentication identity - a certificate and a private key.
  *
  * @param[out] client_cert Path to the file containing the client certificate. Can be NULL.
- * @param[out] client_key Path to the file containing the private key for the \p client_cert. Can be NULL.
+ * @param[out] client_key Path to the file containing the private key for the @p client_cert. Can be NULL.
  */
 void nc_client_tls_get_cert_key_paths(const char **client_cert, const char **client_key);
 
@@ -528,7 +524,7 @@ struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
  * @brief Get session capabilities.
  *
  * @param[in] session Session to get the information from.
- * @return NULL-terminated array of the \p session capabilities.
+ * @return NULL-terminated array of the @p session capabilities.
  */
 const char * const *nc_session_get_cpblts(const struct nc_session *session);
 
@@ -562,7 +558,7 @@ int nc_session_ntf_thread_running(const struct nc_session *session);
  * @param[out] op Parsed NETCONF reply data, if any (none for \<ok\> or error replies). Set only on #NC_MSG_REPLY
  * and #NC_MSG_REPLY_ERR_MSGID return.
  * @return #NC_MSG_REPLY for success,
- *         #NC_MSG_WOULDBLOCK if \p timeout has elapsed,
+ *         #NC_MSG_WOULDBLOCK if @p timeout has elapsed,
  *         #NC_MSG_ERROR if reading has failed,
  *         #NC_MSG_NOTIF if a notification was read instead (call this function again to get the reply), and
  *         #NC_MSG_REPLY_ERR_MSGID if a reply with missing or wrong message-id was received.
@@ -580,7 +576,7 @@ NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64
  * @param[out] envp NETCONF notification XML envelopes.
  * @param[out] op Parsed NETCONF notification data.
  * @return #NC_MSG_NOTIF for success,
- *         #NC_MSG_WOULDBLOCK if \p timeout has elapsed,
+ *         #NC_MSG_WOULDBLOCK if @p timeout has elapsed,
  *         #NC_MSG_ERROR if reading has failed, and
  *         #NC_MSG_REPLY if a reply was read instead (call this function again to get a notification).
  */

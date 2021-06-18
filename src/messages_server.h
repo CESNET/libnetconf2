@@ -1,9 +1,9 @@
 /**
- * \file messages_server.h
- * \author Michal Vasko <mvasko@cesnet.cz>
- * \brief libnetconf2's functions and structures of server NETCONF messages.
+ * @file messages_server.h
+ * @author Michal Vasko <mvasko@cesnet.cz>
+ * @brief libnetconf2's functions and structures of server NETCONF messages.
  *
- * Copyright (c) 2015-2017 CESNET, z.s.p.o.
+ * Copyright (c) 2015-2021 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -98,7 +98,7 @@ struct nc_server_reply *nc_server_reply_ok(void);
  * @param[in] data Reply data tree. This tree must be valid according to
  * the RPC output of the RPC this is a reply to.
  * @param[in] wd with-default mode if applicable
- * @param[in] paramtype Determines how the \p data parameter is treated.
+ * @param[in] paramtype Determines how the @p data parameter is treated.
  * @return rpc-reply object, NULL on error.
  */
 struct nc_server_reply *nc_server_reply_data(struct lyd_node *data, NC_WD_MODE wd, NC_PARAMTYPE paramtype);
@@ -224,7 +224,7 @@ const char *nc_err_get_path(const struct lyd_node *err);
  *
  * @param[in] err Error opaque data node tree to modify.
  * @param[in] error_message New value of \<error-message\>.
- * @param[in] lang Optional language of \p error_message.
+ * @param[in] lang Optional language of @p error_message.
  * @return 0 on success, -1 on error.
  */
 int nc_err_set_msg(struct lyd_node *err, const char *error_message, const char *lang);
@@ -331,7 +331,7 @@ void nc_server_notif_free(struct nc_server_notif *notif);
  */
 const char *nc_server_notif_get_time(const struct nc_server_notif *notif);
 
-/**@} Client Messages */
+/** @} Client Messages */
 
 #ifdef __cplusplus
 }

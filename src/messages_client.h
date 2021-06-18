@@ -1,10 +1,10 @@
 /**
- * \file messages_client.h
- * \author Radek Krejci <rkrejci@cesnet.cz>
- * \author Michal Vasko <mvasko@cesnet.cz>
- * \brief libnetconf2's public functions and structures of NETCONF client messages.
+ * @file messages_client.h
+ * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @author Michal Vasko <mvasko@cesnet.cz>
+ * @brief libnetconf2's public functions and structures of NETCONF client messages.
  *
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -164,7 +164,7 @@ struct nc_rpc;
  * @brief Get the type of the RPC
  *
  * @param[in] rpc RPC to check the type of.
- * @return Type of \p rpc.
+ * @return Type of @p rpc.
  */
 NC_RPC_TYPE nc_rpc_get_type(const struct nc_rpc *rpc);
 
@@ -172,7 +172,7 @@ NC_RPC_TYPE nc_rpc_get_type(const struct nc_rpc *rpc);
  * @brief Create a generic NETCONF RPC or action
  *
  * Note that created object can be sent via any NETCONF session that shares the context
- * of the \p data.
+ * of the @p data.
  *
  * @param[in] data NETCONF RPC data as a data tree.
  * @param[in] paramtype How to further manage data parameters.
@@ -227,9 +227,9 @@ struct nc_rpc *nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, N
  * For details, see ::nc_rpc.
  *
  * @param[in] target Target datastore.
- * @param[in] url_trg Used instead \p target if the target is an URL.
+ * @param[in] url_trg Used instead @p target if the target is an URL.
  * @param[in] source Source datastore.
- * @param[in] url_or_config_src Used instead \p source if the source is an URL or a config.
+ * @param[in] url_or_config_src Used instead @p source if the source is an URL or a config.
  * @param[in] wd_mode Optional with-defaults capability mode.
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
@@ -243,7 +243,7 @@ struct nc_rpc *nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTOR
  * For details, see ::nc_rpc.
  *
  * @param[in] target Target datastore to delete.
- * @param[in] url Used instead \p target if the target is an URL.
+ * @param[in] url Used instead @p target if the target is an URL.
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
@@ -332,7 +332,7 @@ struct nc_rpc *nc_rpc_cancel(const char *persist_id, NC_PARAMTYPE paramtype);
  * For details, see ::nc_rpc.
  *
  * @param[in] source Source datastore being validated.
- * @param[in] url_or_config Used instead \p source if the source is an URL or a config.
+ * @param[in] url_or_config Used instead @p source if the source is an URL or a config.
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
  */
@@ -375,7 +375,7 @@ struct nc_rpc *nc_rpc_subscribe(const char *stream_name, const char *filter, con
  * @param[in] filter Optional filter data, an XML subtree or XPath expression (with JSON prefixes).
  * @param[in] config_filter Optional config filter, "true" for config-only data, "false" for state-only data.
  * @param[in] origin_filter Optional origin filter array, selects only nodes of this or derived origin.
- * @param[in] origin_filter_count Count of filters is \p origin_filter.
+ * @param[in] origin_filter_count Count of filters is @p origin_filter.
  * @param[in] neg_origin_filter Whether origin filters are negated or not.
  * @param[in] max_depth Maximum depth of returned subtrees, 0 for unlimited.
  * @param[in] with_origin Whether return data origin.

@@ -1,9 +1,9 @@
 /**
- * \file messages_p.h
- * \author Radek Krejci <rkrejci@cesnet.cz>
- * \brief libnetconf2's private functions and structures of NETCONF messages.
+ * @file messages_p.h
+ * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @brief libnetconf2's private functions and structures of NETCONF messages.
  *
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2021 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
