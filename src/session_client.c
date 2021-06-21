@@ -701,24 +701,27 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
         msg = nc_recv_reply(session, rpc, msgid, NC_READ_ACT_TIMEOUT * 1000, &envp, &op);
     } while (msg == NC_MSG_NOTIF || msg == NC_MSG_REPLY_ERR_MSGID);
     if (msg == NC_MSG_WOULDBLOCK) {
-        WRN(session, "Timeout for receiving reply to a <get> yang-library data expired.");
+        WRN(session, "Timeout for receiving reply to a <get-data> yang-library data expired.");
         goto cleanup;
     } else if (msg == NC_MSG_ERROR) {
-        WRN(session, "Failed to receive a reply to <get> of yang-library data.");
+        WRN(session, "Failed to receive a reply to <get-data> of yang-library data.");
         goto cleanup;
     } else if (!op || !lyd_child(op) || strcmp(lyd_child(op)->schema->name, "data")) {
-        WRN(session, "Unexpected reply without data to a yang-library <get> RPC.");
+        WRN(session, "Unexpected reply without data to a yang-library <get-data> RPC.");
         goto cleanup;
     }
 
     data = (struct lyd_node_any *)lyd_child(op);
     if (data->value_type != LYD_ANYDATA_DATATREE) {
-        WRN(session, "Unexpected data in reply to a yang-library <get> RPC.");
+        WRN(session, "Unexpected data in reply to a yang-library <get-data> RPC.");
+        goto cleanup;
+    } else if (!data->value.tree) {
+        WRN(session, "No data in reply to a yang-library <get-data> RPC.");
         goto cleanup;
     }
 
     if (lyd_find_xpath(data->value.tree, "/ietf-yang-library:modules-state/module", &modules)) {
-        WRN(session, "No module information in reply to a yang-library <get> RPC.");
+        WRN(session, "No module information in reply to a yang-library <get-data> RPC.");
         goto cleanup;
     }
 
