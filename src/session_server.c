@@ -391,9 +391,7 @@ sock_host_inet(const struct sockaddr_in *addr, char **host, uint16_t *port)
         return -1;
     }
 
-    if (port) {
-        *port = ntohs(addr->sin_port);
-    }
+    *port = ntohs(addr->sin_port);
 
     return 0;
 }
@@ -422,9 +420,7 @@ sock_host_inet6(const struct sockaddr_in6 *addr, char **host, uint16_t *port)
         return -1;
     }
 
-    if (port) {
-        *port = ntohs(addr->sin6_port);
-    }
+    *port = ntohs(addr->sin6_port);
 
     return 0;
 }
@@ -433,11 +429,12 @@ int
 nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host, uint16_t *port, uint16_t *idx)
 {
     sigset_t sigmask, origmask;
-    uint16_t i, j, pfd_count;
+    uint16_t i, j, pfd_count, client_port;
+    char *client_address;
     struct pollfd *pfd;
     struct sockaddr_storage saddr;
     socklen_t saddr_len = sizeof(saddr);
-    int ret, sock = -1, flags;
+    int ret, client_sock, sock = -1, flags;
 
     pfd = malloc(bind_count * sizeof *pfd);
     if (!pfd) {
@@ -507,43 +504,61 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
         return -1;
     }
 
-    ret = accept(sock, (struct sockaddr *)&saddr, &saddr_len);
-    if (ret < 0) {
+    /* accept connection */
+    client_sock = accept(sock, (struct sockaddr *)&saddr, &saddr_len);
+    if (client_sock < 0) {
         ERR("Accept failed (%s).", strerror(errno));
         return -1;
     }
-    VRB("Accepted a connection on %s:%u.", binds[i].address, binds[i].port);
 
     /* make the socket non-blocking */
-    if (((flags = fcntl(ret, F_GETFL)) == -1) || (fcntl(ret, F_SETFL, flags | O_NONBLOCK) == -1)) {
+    if (((flags = fcntl(client_sock, F_GETFL)) == -1) || (fcntl(client_sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
         ERR("Fcntl failed (%s).", strerror(errno));
-        close(ret);
-        return -1;
+        goto fail;
+    }
+
+    /* learn information about the client end */
+    if (saddr.ss_family == AF_UNIX) {
+        if (sock_host_unix(client_sock, &client_address)) {
+            goto fail;
+        }
+        client_port = 0;
+    } else if (saddr.ss_family == AF_INET) {
+        if (sock_host_inet((struct sockaddr_in *)&saddr, &client_address, &client_port)) {
+            goto fail;
+        }
+    } else if (saddr.ss_family == AF_INET6) {
+        if (sock_host_inet6((struct sockaddr_in6 *)&saddr, &client_address, &client_port)) {
+            goto fail;
+        }
+    } else {
+        ERR(NULL, "Source host of an unknown protocol family.");
+        goto fail;
+    }
+
+    if (saddr.ss_family == AF_UNIX) {
+        VRB(NULL, "Accepted a connection on %s.", binds[i].address);
+    } else {
+        VRB(NULL, "Accepted a connection on %s:%u from %s:%u.", binds[i].address, binds[i].port, client_address, client_port);
+    }
+
+    if (host) {
+        *host = client_address;
+    } else {
+        free(client_address);
+    }
+    if (port) {
+        *port = client_port;
     }
 
     if (idx) {
         *idx = i;
     }
+    return client_sock;
 
-    if (!host) {
-        return ret;
-    }
-
-    if (port) {
-        *port = 0;
-    }
-
-    if (saddr.ss_family == AF_UNIX) {
-        sock_host_unix(ret, host);
-    } else if (saddr.ss_family == AF_INET) {
-        sock_host_inet((struct sockaddr_in *)&saddr, host, port);
-    } else if (saddr.ss_family == AF_INET6) {
-        sock_host_inet6((struct sockaddr_in6 *)&saddr, host, port);
-    } else {
-        ERR("Source host of an unknown protocol family.");
-    }
-
-    return ret;
+fail:
+    close(client_sock);
+    return -1;
 }
 
 static struct nc_server_reply *
