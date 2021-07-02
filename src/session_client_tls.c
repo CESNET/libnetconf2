@@ -741,6 +741,7 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     return session;
 
 fail:
+    session->ti.tls = NULL;
     nc_session_free(session, NULL);
     return NULL;
 }
