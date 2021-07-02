@@ -750,19 +750,17 @@ struct nc_session *
 nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout)
 {
     int verify, ret;
-    SSL *tls;
-    struct nc_session *session;
+    SSL *tls = NULL;
+    struct nc_session *session = NULL;
     struct timespec ts_timeout, ts_cur;
 
     if (nc_client_tls_update_opts(&tls_ch_opts)) {
-        close(sock);
-        return NULL;
+        goto cleanup;
     }
 
     if (!(tls = SSL_new(tls_ch_opts.tls_ctx))) {
         ERR(NULL, "Failed to create new TLS session structure (%s).", ERR_reason_error_string(ERR_get_error()));
-        close(sock);
-        return NULL;
+        goto cleanup;
     }
 
     SSL_set_fd(tls, sock);
@@ -782,8 +780,7 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
             nc_gettimespec_mono(&ts_cur);
             if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
                 ERR(NULL, "SSL_connect timeout.");
-                SSL_free(tls);
-                return NULL;
+                goto cleanup;
             }
         }
     }
@@ -799,8 +796,7 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
             ERR(NULL, "SSL_connect failed.");
             break;
         }
-        SSL_free(tls);
-        return NULL;
+        goto cleanup;
     }
 
     /* check certificate verification result */
@@ -813,15 +809,23 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
         WRN(NULL, "Server certificate verification problem (%s).", X509_verify_cert_error_string(verify));
     }
 
+    /* connect */
     session = nc_connect_libssl(tls, ctx);
-    if (session) {
-        session->flags |= NC_SESSION_CALLHOME;
-
-        /* store information into session and the dictionary */
-        lydict_insert(session->ctx, host, 0, &session->host);
-        session->port = port;
-        lydict_insert(session->ctx, "certificate-based", 0, &session->username);
+    if (!session) {
+        goto cleanup;
     }
 
+    session->flags |= NC_SESSION_CALLHOME;
+
+    /* store information into session and the dictionary */
+    lydict_insert(session->ctx, host, 0, &session->host);
+    session->port = port;
+    lydict_insert(session->ctx, "certificate-based", 0, &session->username);
+
+cleanup:
+    if (!session) {
+        SSL_free(tls);
+        close(sock);
+    }
     return session;
 }
