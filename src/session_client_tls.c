@@ -779,6 +779,7 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
             if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
                 ERR("SSL_connect timeout.");
                 SSL_free(tls);
+                close(sock);
                 return NULL;
             }
         }
@@ -796,6 +797,7 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
             break;
         }
         SSL_free(tls);
+        close(sock);
         return NULL;
     }
 
