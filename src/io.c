@@ -914,7 +914,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
     va_list ap;
     int count, ret;
     const char *attrs;
-    struct lyd_node *op, *reply_envp, *node;
+    struct lyd_node *op, *reply_envp, *node, *next;
     struct lyd_node_opaq *rpc_envp;
     struct nc_server_notif *notif;
     struct nc_server_reply *reply;
@@ -988,7 +988,8 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         }
 
         /* build a rpc-reply opaque node that can be simply printed */
-        if (lyd_new_opaq2(NULL, session->ctx, "rpc-reply", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns, &reply_envp)) {
+        if (lyd_new_opaq2(NULL, session->ctx, "rpc-reply", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns,
+                &reply_envp)) {
             ERRINT;
             ret = NC_MSG_ERROR;
             goto cleanup;
@@ -1023,11 +1024,9 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
 
             node = ((struct nc_server_reply_data *)reply)->data;
             assert(node->schema->nodetype & (LYS_RPC | LYS_ACTION));
-            if (lyd_child(node)) {
+            LY_LIST_FOR_SAFE(lyd_child(node), next, node) {
                 /* temporary */
-                lyd_child(node)->parent = NULL;
-                lyd_insert_child(reply_envp, lyd_child(node));
-                ((struct lyd_node_inner *)node)->child = NULL;
+                lyd_insert_child(reply_envp, node);
             }
             break;
         case NC_RPL_ERROR:
@@ -1055,11 +1054,9 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
             lyd_free_tree(reply_envp);
             break;
         case NC_RPL_DATA:
-            if (lyd_child(reply_envp)) {
+            LY_LIST_FOR_SAFE(lyd_child(reply_envp), next, node) {
                 /* connect back to the reply structure */
-                lyd_child(reply_envp)->parent = NULL;
-                lyd_insert_child(((struct nc_server_reply_data *)reply)->data, lyd_child(reply_envp));
-                ((struct lyd_node_opaq *)reply_envp)->child = NULL;
+                lyd_insert_child(((struct nc_server_reply_data *)reply)->data, node);
             }
             lyd_free_tree(reply_envp);
             break;
