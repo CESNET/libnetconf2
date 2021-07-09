@@ -599,7 +599,7 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
             /* parse the schema */
             ly_ctx_set_module_imp_clb(session->ctx, retrieve_schema_data, &clb_data);
 
-            lys_parse_mem(session->ctx, module_data, format, (const struct lys_module **)mod);
+            lys_parse_mem(session->ctx, module_data, format, mod);
             if (*free_module_data) {
                 (*free_module_data)((char *)module_data, user_data);
             }
@@ -932,7 +932,7 @@ nc_ctx_fill_ietf_netconf(struct nc_session *session, struct schema_info *modules
     if (!ietfnc) {
         nc_ctx_load_module(session, "ietf-netconf", NULL, modules, user_clb, user_data, has_get_schema, &ietfnc);
         if (!ietfnc) {
-            lys_parse_mem(session->ctx, ietf_netconf_2013_09_29_yang, LYS_IN_YANG, (const struct lys_module **)&ietfnc);
+            lys_parse_mem(session->ctx, ietf_netconf_2013_09_29_yang, LYS_IN_YANG, &ietfnc);
         }
     }
     if (!ietfnc) {
