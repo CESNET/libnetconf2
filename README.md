@@ -113,6 +113,10 @@ For building the library documentation.
 Doxygen is a standard part of the most distribution, so ask your package
 manager for doxygen package.
 
+### gcov
+
+For code coverage, `gcov`, `lcov`, and `genhtml` are needed.
+
 ## Building libnetconf2
 
 ```
@@ -217,13 +221,10 @@ $ cmake -D MAX_PSPOLL_THREAD_COUNT:String="6" ..
 
 ### Code Coverage
 
-To generate statistical information about code coverage by tests, set
-`ENABLE_COVERAGE` option to `ON`:
+Based on the tests run, it is possible to generate code coverage report. But
+it must be enabled and these commands are needed to generate the report:
 ```
-$ cmake -D ENABLE_COVERAGE="ON" ..
-```
-and then the make's `coverage` target should be available to generate statistics:
-```
+$ cmake -DENABLE_COVERAGE=ON ..
 $ make
 $ make coverage
 ```
