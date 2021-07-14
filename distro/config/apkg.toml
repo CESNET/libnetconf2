@@ -1,0 +1,10 @@
+[project]
+name = "libnetconf2"
+make_archive_script = "distro/scripts/make-archive.sh"
+
+[upstream]
+archive_url = "https://github.com/CESNET/libnetconf2/archive/refs/tags/v{{ version }}.tar.gz"
+version_script = "distro/scripts/upstream-version.sh"
+
+[apkg]
+compat = 1
