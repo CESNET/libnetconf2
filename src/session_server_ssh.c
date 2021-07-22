@@ -677,32 +677,98 @@ nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts)
     nc_server_ssh_del_hostkey(NULL, -1, opts);
 }
 
+#ifdef HAVE_SHADOW
+
+static struct passwd *
+auth_password_getpwnam(const char *username, struct passwd *pwd_buf, char **buf, size_t *buf_size)
+{
+    struct passwd *pwd = NULL;
+    char *mem;
+
+    do {
+        errno = 0;
+        getpwnam_r(username, pwd_buf, *buf, *buf_size, &pwd);
+        if (pwd) {
+            /* entry found */
+            break;
+        }
+
+        if (errno == ERANGE) {
+            /* small buffer, enlarge */
+            *buf_size <<= 2;
+            mem = realloc(*buf, *buf_size);
+            if (!mem) {
+                ERRMEM;
+                return NULL;
+            }
+            *buf = mem;
+        }
+    } while (errno == ERANGE);
+
+    return pwd;
+}
+
+static struct spwd *
+auth_password_getspnam(const char *username, struct spwd *spwd_buf, char **buf, size_t *buf_size)
+{
+    struct spwd *spwd = NULL;
+    char *mem;
+
+    do {
+        errno = 0;
+# ifndef __QNXNTO__
+        getspnam_r(username, spwd_buf, *buf, *buf_size, &spwd);
+# else
+        spwd = getspnam_r(username, spwd_buf, *buf, *buf_size);
+# endif
+        if (spwd) {
+            /* entry found */
+            break;
+        }
+
+        if (errno == ERANGE) {
+            /* small buffer, enlarge */
+            *buf_size <<= 2;
+            mem = realloc(*buf, *buf_size);
+            if (!mem) {
+                ERRMEM;
+                return NULL;
+            }
+            *buf = mem;
+        }
+    } while (errno == ERANGE);
+
+    return spwd;
+}
+
 static char *
 auth_password_get_pwd_hash(const char *username)
 {
-#ifdef HAVE_SHADOW
     struct passwd *pwd, pwd_buf;
     struct spwd *spwd, spwd_buf;
-    char *pass_hash = NULL, buf[256];
+    char *pass_hash = NULL, *buf = NULL;
+    size_t buf_size = 256;
 
-    getpwnam_r(username, &pwd_buf, buf, 256, &pwd);
+    buf = malloc(buf_size);
+    if (!buf) {
+        ERRMEM;
+        goto error;
+    }
+
+    pwd = auth_password_getpwnam(username, &pwd_buf, &buf, &buf_size);
     if (!pwd) {
         VRB(NULL, "User \"%s\" not found locally.", username);
-        return NULL;
+        goto error;
     }
 
     if (!strcmp(pwd->pw_passwd, "x")) {
-# ifndef __QNXNTO__
-        getspnam_r(username, &spwd_buf, buf, 256, &spwd);
-# else
-        spwd = getspnam_r(username, &spwd_buf, buf, 256);
-# endif
+        spwd = auth_password_getspnam(username, &spwd_buf, &buf, &buf_size);
         if (!spwd) {
             VRB(NULL, "Failed to retrieve the shadow entry for \"%s\".", username);
-            return NULL;
+            goto error;
         } else if ((spwd->sp_expire > -1) && (spwd->sp_expire <= (time(NULL) / (60 * 60 * 24)))) {
             WRN(NULL, "User \"%s\" account has expired.", username);
-            return NULL;
+            goto error;
         }
 
         pass_hash = spwd->sp_pwdp;
@@ -712,24 +778,37 @@ auth_password_get_pwd_hash(const char *username)
 
     if (!pass_hash) {
         ERR(NULL, "No password could be retrieved for \"%s\".", username);
-        return NULL;
+        goto error;
     }
 
     /* check the hash structure for special meaning */
     if (!strcmp(pass_hash, "*") || !strcmp(pass_hash, "!")) {
         VRB(NULL, "User \"%s\" is not allowed to authenticate using a password.", username);
-        return NULL;
+        goto error;
     }
     if (!strcmp(pass_hash, "*NP*")) {
         VRB(NULL, "Retrieving password for \"%s\" from a NIS+ server not supported.", username);
-        return NULL;
+        goto error;
     }
 
+    free(buf);
     return strdup(pass_hash);
-#else
-    return strdup("");
-#endif
+
+error:
+    free(buf);
+    return NULL;
 }
+
+#else
+
+static char *
+auth_password_get_pwd_hash(const char *username)
+{
+    (void)username;
+    return strdup("");
+}
+
+#endif
 
 static int
 auth_password_compare_pwd(const char *pass_hash, const char *pass_clear)
