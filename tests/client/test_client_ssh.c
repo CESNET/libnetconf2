@@ -524,6 +524,7 @@ test_nc_connect_ssh_interactive_succesfull(void **state)
     session = nc_connect_ssh("127.0.0.1", 8080, NULL);
     assert_non_null(session);
 
+    will_return(__wrap_ssh_channel_poll_timeout, 0);
     nc_session_free(session, NULL);
 }
 
@@ -574,6 +575,7 @@ test_nc_connect_ssh_password_succesfull(void **state)
     assert_non_null(session);
 
     /* disconnect */
+    will_return(__wrap_ssh_channel_poll_timeout, 0);
     nc_session_free(session, NULL);
 }
 
@@ -613,6 +615,7 @@ test_nc_connect_ssh_pubkey_succesfull(void **state)
     assert_non_null(session);
 
     /* disconnect */
+    will_return(__wrap_ssh_channel_poll_timeout, 0);
     nc_session_free(session, NULL);
 }
 
@@ -625,6 +628,7 @@ test_nc_connect_connection_failed(void **state)
     errno = ECONNREFUSED;
     will_return(__wrap_connect, -1);
     will_return(__wrap_ssh_is_connected, 0);
+    will_return(__wrap_ssh_channel_poll_timeout, 0);
 
     session = nc_connect_ssh("127.0.0.1", 8080, NULL);
     assert_null(session);
@@ -654,6 +658,7 @@ test_nc_connect_ssh_bad_hello(void **state)
     will_return(__wrap_ssh_channel_open_session, 0);
     will_return(__wrap_ssh_channel_request_subsystem, 0);
     will_return(__wrap_nc_handshake_io, 4);
+    will_return(__wrap_ssh_channel_poll_timeout, 0);
 
     session = nc_connect_ssh("127.0.0.1", 8080, NULL);
     assert_null(session);
