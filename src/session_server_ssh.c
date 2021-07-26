@@ -597,6 +597,8 @@ nc_server_ssh_ch_client_endpt_set_auth_timeout(const char *client_name, const ch
 static int
 _nc_server_ssh_add_authkey(const char *pubkey_path, const char *pubkey_base64, NC_SSH_KEY_TYPE type, const char *username)
 {
+    int ret = 0;
+
     /* LOCK */
     pthread_mutex_lock(&server_opts.authkey_lock);
 
@@ -604,17 +606,18 @@ _nc_server_ssh_add_authkey(const char *pubkey_path, const char *pubkey_base64, N
     server_opts.authkeys = nc_realloc(server_opts.authkeys, server_opts.authkey_count * sizeof *server_opts.authkeys);
     if (!server_opts.authkeys) {
         ERRMEM;
-        return -1;
+        ret = -1;
+        goto cleanup;
     }
     lydict_insert(server_opts.ctx, pubkey_path, 0, &server_opts.authkeys[server_opts.authkey_count - 1].path);
     lydict_insert(server_opts.ctx, pubkey_base64, 0, &server_opts.authkeys[server_opts.authkey_count - 1].base64);
     server_opts.authkeys[server_opts.authkey_count - 1].type = type;
     lydict_insert(server_opts.ctx, username, 0, &server_opts.authkeys[server_opts.authkey_count - 1].username);
 
+cleanup:
     /* UNLOCK */
     pthread_mutex_unlock(&server_opts.authkey_lock);
-
-    return 0;
+    return ret;
 }
 
 API int
