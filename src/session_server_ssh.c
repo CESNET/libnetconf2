@@ -822,8 +822,9 @@ auth_password_get_pwd_hash(const char *username)
         goto error;
     }
 
+    pass_hash = strdup(pass_hash);
     free(buf);
-    return strdup(pass_hash);
+    return pass_hash;
 
 error:
     free(buf);
