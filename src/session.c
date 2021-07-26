@@ -618,6 +618,11 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
             free(p);
         }
 
+        /* receive any leftover messages */
+        while (nc_read_msg_poll_io(session, 0, &msg) == 1) {
+            ly_in_free(msg, 1);
+        }
+
         if (session->status == NC_STATUS_RUNNING) {
             /* send closing info to the other side */
             ietfnc = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf");
