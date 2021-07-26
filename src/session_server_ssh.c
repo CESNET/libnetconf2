@@ -148,7 +148,9 @@ nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name, int16_
     if (!endpt) {
         return -1;
     }
+
     ret = nc_server_ssh_add_hostkey(name, idx, endpt->opts.ssh);
+
     /* UNLOCK */
     pthread_rwlock_unlock(&server_opts.endpt_lock);
 
@@ -194,7 +196,9 @@ nc_server_ssh_ch_client_endpt_add_hostkey(const char *client_name, const char *e
     if (!endpt) {
         return -1;
     }
+
     ret = nc_server_ssh_add_hostkey(name, idx, endpt->opts.ssh);
+
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
@@ -271,7 +275,9 @@ nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *name, int16_
     if (!endpt) {
         return -1;
     }
+
     ret = nc_server_ssh_del_hostkey(name, idx, endpt->opts.ssh);
+
     /* UNLOCK */
     pthread_rwlock_unlock(&server_opts.endpt_lock);
 
@@ -290,7 +296,9 @@ nc_server_ssh_ch_client_endpt_del_hostkey(const char *client_name, const char *e
     if (!endpt) {
         return -1;
     }
+
     ret = nc_server_ssh_del_hostkey(name, idx, endpt->opts.ssh);
+
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
@@ -360,7 +368,9 @@ nc_server_ssh_endpt_mov_hostkey(const char *endpt_name, const char *key_mov, con
     if (!endpt) {
         return -1;
     }
+
     ret = nc_server_ssh_mov_hostkey(key_mov, key_after, endpt->opts.ssh);
+
     /* UNLOCK */
     pthread_rwlock_unlock(&server_opts.endpt_lock);
 
@@ -380,7 +390,9 @@ nc_server_ssh_ch_client_endpt_mov_hostkey(const char *client_name, const char *e
     if (!endpt) {
         return -1;
     }
+
     ret = nc_server_ssh_mov_hostkey(key_mov, key_after, endpt->opts.ssh);
+
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
@@ -405,7 +417,9 @@ nc_server_ssh_endpt_set_auth_methods(const char *endpt_name, int auth_methods)
     if (!endpt) {
         return -1;
     }
+
     ret = nc_server_ssh_set_auth_methods(auth_methods, endpt->opts.ssh);
+
     /* UNLOCK */
     pthread_rwlock_unlock(&server_opts.endpt_lock);
 
@@ -424,7 +438,9 @@ nc_server_ssh_ch_client_endpt_set_auth_methods(const char *client_name, const ch
     if (!endpt) {
         return -1;
     }
+
     ret = nc_server_ssh_set_auth_methods(auth_methods, endpt->opts.ssh);
+
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
@@ -442,7 +458,9 @@ nc_server_ssh_endpt_get_auth_methods(const char *endpt_name)
     if (!endpt) {
         return -1;
     }
+
     ret = endpt->opts.ssh->auth_methods;
+
     /* UNLOCK */
     pthread_rwlock_unlock(&server_opts.endpt_lock);
 
@@ -461,7 +479,9 @@ nc_server_ssh_ch_client_endpt_get_auth_methods(const char *client_name, const ch
     if (!endpt) {
         return -1;
     }
+
     ret = endpt->opts.ssh->auth_methods;
+
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
@@ -491,7 +511,9 @@ nc_server_ssh_endpt_set_auth_attempts(const char *endpt_name, uint16_t auth_atte
     if (!endpt) {
         return -1;
     }
+
     ret = nc_server_ssh_set_auth_attempts(auth_attempts, endpt->opts.ssh);
+
     /* UNLOCK */
     pthread_rwlock_unlock(&server_opts.endpt_lock);
 
@@ -510,7 +532,9 @@ nc_server_ssh_ch_client_endpt_set_auth_attempts(const char *client_name, const c
     if (!endpt) {
         return -1;
     }
+
     ret = nc_server_ssh_set_auth_attempts(auth_attempts, endpt->opts.ssh);
+
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
@@ -540,7 +564,9 @@ nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_timeo
     if (!endpt) {
         return -1;
     }
+
     ret = nc_server_ssh_set_auth_timeout(auth_timeout, endpt->opts.ssh);
+
     /* UNLOCK */
     pthread_rwlock_unlock(&server_opts.endpt_lock);
 
@@ -559,7 +585,9 @@ nc_server_ssh_ch_client_endpt_set_auth_timeout(const char *client_name, const ch
     if (!endpt) {
         return -1;
     }
+
     ret = nc_server_ssh_set_auth_timeout(auth_timeout, endpt->opts.ssh);
+
     /* UNLOCK */
     nc_server_ch_client_unlock(client);
 
