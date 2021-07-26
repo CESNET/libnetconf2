@@ -139,7 +139,7 @@ jobs:
             dep-build-type: "Debug",
             cc: "gcc",
             options: "",
-            packages: "abi-dumper abi-compliance-checker",
+            packages: "abi-dumper abi-compliance-checker snap",
             snaps: "core universal-ctags",
             make-prepend: "",
             make-target: "abi-check"
@@ -155,7 +155,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install $DEFAULT_PACKAGES ${{ matrix.config.packages }}
           if ${{ matrix.config.snaps != '' }}
-            then sudo snap install ${{ matrix.config.snaps }}
+            then sudo snap refresh; sudo snap install ${{ matrix.config.snaps }}
           fi
 
       - name: Deps-uncrustify
