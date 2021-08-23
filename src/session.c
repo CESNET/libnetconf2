@@ -194,6 +194,8 @@ nc_new_session(NC_SIDE side, int shared_ti)
 
         pthread_mutex_init(&sess->opts.server.ch_lock, NULL);
         pthread_cond_init(&sess->opts.server.ch_cond, NULL);
+    } else {
+        pthread_mutex_init(&sess->opts.client.msgs_lock, NULL);
     }
 
     if (!shared_ti) {
@@ -599,9 +601,11 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     if (session->side == NC_CLIENT) {
-        /* cleanup message queues */
-        /* notifications */
-        for (contiter = session->opts.client.notifs; contiter; ) {
+        /* MSGS LOCK */
+        pthread_mutex_lock(&session->opts.client.msgs_lock);
+
+        /* cleanup message queue*/
+        for (contiter = session->opts.client.msgs; contiter; ) {
             ly_in_free(contiter->msg, 1);
 
             p = contiter;
@@ -609,14 +613,8 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
             free(p);
         }
 
-        /* rpc replies */
-        for (contiter = session->opts.client.replies; contiter; ) {
-            ly_in_free(contiter->msg, 1);
-
-            p = contiter;
-            contiter = contiter->next;
-            free(p);
-        }
+        /* MSGS UNLOCK */
+        pthread_mutex_unlock(&session->opts.client.msgs_lock);
 
         /* receive any leftover messages */
         while (nc_read_msg_poll_io(session, 0, &msg) == 1) {
@@ -847,6 +845,8 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         /* free CH synchronization structures */
         pthread_cond_destroy(&session->opts.server.ch_cond);
         pthread_mutex_destroy(&session->opts.server.ch_lock);
+    } else {
+        pthread_mutex_destroy(&session->opts.client.msgs_lock);
     }
 
     free(session);
