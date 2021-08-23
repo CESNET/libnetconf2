@@ -20,6 +20,7 @@
 
 #include <arpa/inet.h>
 #include <assert.h>
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -1661,53 +1662,171 @@ recv_reply_check_msgid(struct nc_session *session, const struct lyd_node *envp, 
     return NC_MSG_REPLY;
 }
 
+/**
+ * @brief Used to roughly estimate the type of the message, does not actually parse or verify it.
+ *
+ * @param[in] session NETCONF session used to send error messages.
+ * @param[in] msg Message to check for type.
+ * @return NC_MSG_REPLY If format roughly matches a rpc-reply;
+ * @return NC_MSG_NOTIF If format roughly matches a notification;
+ * @return NC_MSG_ERROR If format is malformed or unrecognized.
+ */
+static NC_MSG_TYPE
+get_msg_type(struct nc_session *session, struct ly_in *msg)
+{
+    const char *str, *end;
+
+    str = ly_in_memory(msg, NULL);
+
+    while (*str) {
+        /* Skip whitespaces */
+        while (isspace(*str)) {
+            str++;
+        }
+
+        if (*str == '<') {
+            str++;
+            if (!strncmp(str, "!--", 3)) {
+                /* Skip comments */
+                end = "-->";
+                str = strstr(str, end);
+            } else if (!strncmp(str, "?xml", 4)) {
+                /* Skip xml declaration */
+                end = "?>";
+                str = strstr(str, end);
+            } else if (!strncmp(str, "rpc-reply", 9)) {
+                return NC_MSG_REPLY;
+            } else if (!strncmp(str, "notification", 12)) {
+                return NC_MSG_NOTIF;
+            } else {
+                ERR(session, "Unknown xml element '%.10s'.", str);
+                return NC_MSG_ERROR;
+            }
+            if (!str) {
+                /* No matching ending tag found */
+                ERR(session, "No matching ending tag '%s' found in xml message.", end);
+                return NC_MSG_ERROR;
+            }
+            str += strlen(end);
+        } else {
+            /* Not a valid xml */
+            ERR(session, "Unexpected character '%c' in xml message.", *str);
+            return NC_MSG_ERROR;
+        }
+    }
+
+    /* Unexpected end of message */
+    ERR(session, "Unexpected end of xml message.");
+    return NC_MSG_ERROR;
+}
+
+/**
+ * @brief Function to receive either replies or notifications.
+ *
+ * @param[in] session NETCONF session from which this function receives messages.
+ * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite.
+ * @param[in] expected Type of the message the caller desired.
+ * @param[out] message If receiving a message succeeded this is the message, NULL otherwise.
+ * @return NC_MSG_REPLY If a rpc-reply was received;
+ * @return NC_MSG_NOTIF If a notification was received;
+ * @return NC_MSG_ERROR If any error occured;
+ * @return NC_MSG_WOULDBLOCK If the timeout was reached.
+ */
+static NC_MSG_TYPE
+recv_msg(struct nc_session *session, int timeout, NC_MSG_TYPE expected, struct ly_in **message)
+{
+    struct nc_msg_cont **cont_ptr;
+    struct ly_in *msg = NULL;
+    struct nc_msg_cont *cont, *prev;
+    NC_MSG_TYPE ret = NC_MSG_ERROR;
+    int r;
+
+    *message = NULL;
+
+    /* MSGS LOCK */
+    pthread_mutex_lock(&session->opts.client.msgs_lock);
+
+    /* Find the expected message in the buffer */
+    prev = NULL;
+    for (cont = session->opts.client.msgs; cont && cont->type != expected; cont = cont->next) {
+        prev = cont;
+    }
+
+    if (cont) {
+        /* Remove found message from buffer */
+        if (prev) {
+            prev->next = cont->next;
+        } else {
+            session->opts.client.msgs = cont->next;
+        }
+
+        /* Use the buffer message */
+        ret = cont->type;
+        msg = cont->msg;
+        free(cont);
+        goto cleanup;
+    }
+
+    /* Read a message from the wire */
+    r = nc_read_msg_poll_io(session, timeout, &msg);
+    if (!r) {
+        ret = NC_MSG_WOULDBLOCK;
+        goto cleanup;
+    } else if (r == -1) {
+        ret = NC_MSG_ERROR;
+        goto cleanup;
+    }
+
+    /* Basic check to determine message type */
+    ret = get_msg_type(session, msg);
+    if (ret == NC_MSG_ERROR) {
+        goto cleanup;
+    }
+
+    /* If received a message of different type store it in the buffer */
+    if (ret != expected) {
+        cont_ptr = &session->opts.client.msgs;
+        while (*cont_ptr) {
+            cont_ptr = &((*cont_ptr)->next);
+        }
+        *cont_ptr = malloc(sizeof **cont_ptr);
+        if (!*cont_ptr) {
+            ERRMEM;
+            ret = NC_MSG_ERROR;
+            goto cleanup;
+        }
+        (*cont_ptr)->msg = msg;
+        (*cont_ptr)->type = ret;
+        msg = NULL;
+        (*cont_ptr)->next = NULL;
+    }
+
+cleanup:
+    /* MSGS UNLOCK */
+    pthread_mutex_unlock(&session->opts.client.msgs_lock);
+
+    if (ret == expected) {
+        *message = msg;
+    } else {
+        ly_in_free(msg, 1);
+    }
+    return ret;
+}
+
 static NC_MSG_TYPE
 recv_reply(struct nc_session *session, int timeout, struct lyd_node *op, uint64_t msgid, struct lyd_node **envp)
 {
-    int r;
     LY_ERR lyrc;
     struct ly_in *msg = NULL;
-    struct nc_msg_cont *cont, **cont_ptr;
     NC_MSG_TYPE ret = NC_MSG_ERROR;
 
     assert(op && (op->schema->nodetype & (LYS_RPC | LYS_ACTION)));
 
     *envp = NULL;
 
-    /* try to get rpc-reply from the session's queue */
-    while (session->opts.client.replies) {
-        cont = session->opts.client.replies;
-        session->opts.client.replies = cont->next;
-
-        msg = cont->msg;
-        free(cont);
-
-        /* parse */
-        lyrc = lyd_parse_op(NULL, op, msg, LYD_XML, LYD_TYPE_REPLY_NETCONF, envp, NULL);
-        if (!lyrc) {
-            ret = recv_reply_check_msgid(session, *envp, msgid);
-            goto cleanup;
-        } else if (lyrc != LY_ENOT) {
-            lyd_free_tree(*envp);
-            *envp = NULL;
-            ERR(session, "Received an invalid message (%s).", ly_errmsg(LYD_CTX(op)));
-            goto cleanup;
-        } else {
-            /* it was not a notification so it is nothing known */
-            ERR(session, "Received an unexpected message.");
-        }
-
-        /* try the next message */
-        ly_in_free(msg, 1);
-        msg = NULL;
-    }
-
-    /* read message from wire */
-    r = nc_read_msg_poll_io(session, timeout, &msg);
-    if (!r) {
-        ret = NC_MSG_WOULDBLOCK;
-        goto cleanup;
-    } else if (r == -1) {
+    /* Receive messages until a rpc-reply is found or a timeout or error reached */
+    ret = recv_msg(session, timeout, NC_MSG_REPLY, &msg);
+    if (ret != NC_MSG_REPLY) {
         goto cleanup;
     }
 
@@ -1716,29 +1835,11 @@ recv_reply(struct nc_session *session, int timeout, struct lyd_node *op, uint64_
     if (!lyrc) {
         ret = recv_reply_check_msgid(session, *envp, msgid);
         goto cleanup;
-    } else if (lyrc != LY_ENOT) {
-        lyd_free_tree(*envp);
-        *envp = NULL;
+    } else {
         ERR(session, "Received an invalid message (%s).", ly_errmsg(LYD_CTX(op)));
+        ret = NC_MSG_ERROR;
         goto cleanup;
     }
-
-    /* assume a notification, reset and store it */
-    ly_in_reset(msg);
-    cont_ptr = &session->opts.client.notifs;
-    while (*cont_ptr) {
-        cont_ptr = &((*cont_ptr)->next);
-    }
-    *cont_ptr = malloc(sizeof **cont_ptr);
-    if (!*cont_ptr) {
-        ERRMEM;
-        goto cleanup;
-    }
-    (*cont_ptr)->msg = msg;
-    msg = NULL;
-    (*cont_ptr)->next = NULL;
-
-    ret = NC_MSG_NOTIF;
 
 cleanup:
     ly_in_free(msg, 1);
@@ -1951,80 +2052,28 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
 static NC_MSG_TYPE
 recv_notif(struct nc_session *session, int timeout, struct lyd_node **envp, struct lyd_node **op)
 {
-    int r;
     LY_ERR lyrc;
     struct ly_in *msg = NULL;
-    struct nc_msg_cont *cont, **cont_ptr;
     NC_MSG_TYPE ret = NC_MSG_ERROR;
 
     *op = NULL;
     *envp = NULL;
 
-    /* try to get notification from the session's queue */
-    while (session->opts.client.notifs) {
-        cont = session->opts.client.notifs;
-        session->opts.client.notifs = cont->next;
-
-        msg = cont->msg;
-        free(cont);
-
-        /* parse */
-        lyrc = lyd_parse_op(session->ctx, NULL, msg, LYD_XML, LYD_TYPE_NOTIF_NETCONF, envp, op);
-        if (!lyrc) {
-            ret = NC_MSG_NOTIF;
-            goto cleanup;
-        } else if (lyrc != LY_ENOT) {
-            lyd_free_tree(*envp);
-            *envp = NULL;
-            ERR(session, "Received an invalid message (%s).", ly_errmsg(session->ctx));
-            goto cleanup;
-        } else {
-            /* it was not a rpc-reply so it is nothing known */
-            ERR(session, "Received an unexpected message.");
-        }
-
-        /* try the next message */
-        ly_in_free(msg, 1);
-        msg = NULL;
-    }
-
-    /* read message from wire */
-    r = nc_read_msg_poll_io(session, timeout, &msg);
-    if (!r) {
-        ret = NC_MSG_WOULDBLOCK;
-        goto cleanup;
-    } else if (r == -1) {
+    /* Receive messages until a notification is found or a timeout or error reached */
+    ret = recv_msg(session, timeout, NC_MSG_NOTIF, &msg);
+    if (ret != NC_MSG_NOTIF) {
         goto cleanup;
     }
 
-    /* parse */
+    /* Parse */
     lyrc = lyd_parse_op(session->ctx, NULL, msg, LYD_XML, LYD_TYPE_NOTIF_NETCONF, envp, op);
     if (!lyrc) {
-        ret = NC_MSG_NOTIF;
         goto cleanup;
-    } else if (lyrc != LY_ENOT) {
-        lyd_free_tree(*envp);
-        *envp = NULL;
+    } else {
         ERR(session, "Received an invalid message (%s).", ly_errmsg(session->ctx));
+        ret = NC_MSG_ERROR;
         goto cleanup;
     }
-
-    /* assume a rpc-reply, reset and store it */
-    ly_in_reset(msg);
-    cont_ptr = &session->opts.client.replies;
-    while (*cont_ptr) {
-        cont_ptr = &((*cont_ptr)->next);
-    }
-    *cont_ptr = malloc(sizeof **cont_ptr);
-    if (!*cont_ptr) {
-        ERRMEM;
-        goto cleanup;
-    }
-    (*cont_ptr)->msg = msg;
-    msg = NULL;
-    (*cont_ptr)->next = NULL;
-
-    ret = NC_MSG_REPLY;
 
 cleanup:
     ly_in_free(msg, 1);

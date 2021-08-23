@@ -376,10 +376,11 @@ typedef enum {
 #define NC_VERSION_10_ENDTAG_LEN 6
 
 /**
- * @brief Container to serialize PRC messages
+ * @brief Container to serialize RPC messages
  */
 struct nc_msg_cont {
     struct ly_in *msg;
+    NC_MSG_TYPE type;         /**< can be either NC_MSG_REPLY or NC_MSG_NOTIF */
     struct nc_msg_cont *next;
 };
 
@@ -398,8 +399,8 @@ struct nc_session {
 
     /* Transport implementation */
     NC_TRANSPORT_IMPL ti_type;   /**< transport implementation type to select items from ti union */
-    pthread_mutex_t *io_lock;    /**< input/output lock, note that in case of libssh TI, it will be shared
-                                      with other NETCONF sessions on the same SSH session (but different SSH channel) */
+    pthread_mutex_t *io_lock;    /**< input/output lock, note that in case of libssh TI, it will be shared with
+                                      other NETCONF sessions on the same SSH session (but different SSH channel) */
 
     union {
         struct {
@@ -439,8 +440,8 @@ struct nc_session {
             /* client side only data */
             uint64_t msgid;
             char **cpblts;                 /**< list of server's capabilities on client side */
-            struct nc_msg_cont *replies;   /**< queue for RPC replies received instead of notifications */
-            struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
+            pthread_mutex_t msgs_lock;     /**< lock for the msgs buffer */
+            struct nc_msg_cont *msgs;      /**< queue for messages received of different type than expected */
             ATOMIC_T ntf_thread;           /**< flag whether notification thread for this session is running or not,
                                                 2 means it should quit */
 
