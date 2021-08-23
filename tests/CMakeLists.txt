@@ -8,7 +8,7 @@ if (${SOURCE_FORMAT_ENABLED})
 endif()
 
 # list of all the tests in each directory
-set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_client_thread)
+set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_client_thread test_thread_messages)
 set(client_tests test_client test_client_messages)
 
 # add -Wl,--wrap flags
