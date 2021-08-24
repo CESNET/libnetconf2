@@ -240,6 +240,23 @@ Note that, with CMake, if you want to change the compiler or its options after
 you already ran CMake, you need to clear its cache first - the most simple way
 to do it is to remove all content from the 'build' directory.
 
+## Usage
+
+All public functions are available via 2 headers:
+```
+#include <nc_server.h>
+#include <nc_client.h>
+```
+
+You need to include either one if imeplementing a NETCONF server or a NETCONF client,
+respectively.
+
+To compile your program with libnetconf2, it is necessary to link it with it using the
+following linker parameters:
+```
+-lnetconf2
+```
+
 ## Tests
 
 The repository includes several tests built with [cmocka](https://cmocka.org/).
