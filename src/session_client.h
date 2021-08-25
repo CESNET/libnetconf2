@@ -548,6 +548,8 @@ int nc_session_ntf_thread_running(const struct nc_session *session);
 /**
  * @brief Receive NETCONF RPC reply.
  *
+ * @note This function can be called in a single thread only.
+ *
  * @param[in] session NETCONF session from which the function gets data. It must be the
  * client side session object.
  * @param[in] rpc Original RPC this should be the reply to.
