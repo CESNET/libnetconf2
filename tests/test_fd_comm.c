@@ -39,6 +39,7 @@ struct nc_session *server_session;
 struct nc_session *client_session;
 struct ly_ctx *ctx;
 pthread_mutex_t state_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_barrier_t barrier;
 int glob_state;
 
 struct nc_server_reply *
@@ -349,23 +350,6 @@ test_send_recv_data_11(void **state)
     test_send_recv_data();
 }
 
-static void
-test_notif_clb(struct nc_session *session, const struct lyd_node *UNUSED(envp), const struct lyd_node *op)
-{
-    assert_ptr_equal(session, client_session);
-    assert_string_equal(op->schema->name, "notificationComplete");
-
-    /* client notification received, update state */
-    pthread_mutex_lock(&state_lock);
-    while (glob_state != 2) {
-        pthread_mutex_unlock(&state_lock);
-        usleep(1000);
-        pthread_mutex_lock(&state_lock);
-    }
-    glob_state = 3;
-    pthread_mutex_unlock(&state_lock);
-}
-
 static void *
 server_send_notif_thread(void *arg)
 {
@@ -401,16 +385,40 @@ server_send_notif_thread(void *arg)
 
     /* update state */
     glob_state = 2;
+    pthread_barrier_wait(&barrier);
     pthread_mutex_unlock(&state_lock);
 
     return NULL;
+}
+
+static void *
+thread_recv_notif(void *arg)
+{
+    struct nc_session *session = (struct nc_session *)arg;
+    struct lyd_node *envp;
+    struct lyd_node *op;
+    NC_MSG_TYPE msgtype;
+
+    pthread_barrier_wait(&barrier);
+    msgtype = nc_recv_notif(session, 1000, &envp, &op);
+    assert_int_equal(msgtype, NC_MSG_NOTIF);
+    assert_string_equal(op->schema->name, "notificationComplete");
+
+    lyd_free_tree(envp);
+    lyd_free_tree(op);
+
+    pthread_mutex_lock(&state_lock);
+    glob_state = 3;
+    pthread_mutex_unlock(&state_lock);
+
+    return (void *)0;
 }
 
 static void
 test_send_recv_notif(void)
 {
     int ret;
-    pthread_t tid;
+    pthread_t tid[2];
     uint64_t msgid;
     NC_MSG_TYPE msgtype;
     struct nc_rpc *rpc;
@@ -425,8 +433,7 @@ test_send_recv_notif(void)
     assert_int_equal(msgtype, NC_MSG_RPC);
 
     /* client subscription */
-    ret = nc_recv_notif_dispatch(client_session, test_notif_clb);
-    assert_int_equal(ret, 0);
+    pthread_create(&tid[0], NULL, thread_recv_notif, client_session);
 
     /* create server */
     ps = nc_ps_new();
@@ -437,7 +444,7 @@ test_send_recv_notif(void)
     pthread_mutex_lock(&state_lock);
     glob_state = 0;
     pthread_mutex_unlock(&state_lock);
-    ret = pthread_create(&tid, NULL, server_send_notif_thread, NULL);
+    ret = pthread_create(&tid[1], NULL, server_send_notif_thread, NULL);
     assert_int_equal(ret, 0);
 
     /* server blocked on RPC */
@@ -450,7 +457,9 @@ test_send_recv_notif(void)
     pthread_mutex_unlock(&state_lock);
 
     /* server finished */
-    ret = pthread_join(tid, NULL);
+    ret = 0;
+    ret |= pthread_join(tid[0], NULL);
+    ret |= pthread_join(tid[1], NULL);
     assert_int_equal(ret, 0);
     nc_ps_free(ps);
 
@@ -493,6 +502,8 @@ main(void)
     const struct lys_module *module;
     struct lysc_node *node;
     const char *nc_features[] = {"candidate", NULL};
+
+    pthread_barrier_init(&barrier, NULL, 2);
 
     /* create ctx */
     ly_ctx_new(TESTS_DIR "/data/modules", 0, &ctx);
@@ -538,6 +549,7 @@ main(void)
 
     nc_server_destroy();
     ly_ctx_destroy(ctx);
+    pthread_barrier_destroy(&barrier);
 
     return ret;
 }
