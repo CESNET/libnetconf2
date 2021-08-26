@@ -534,9 +534,49 @@ int nc_session_rpc_lock(struct nc_session *session, int timeout, const char *fun
 
 int nc_session_rpc_unlock(struct nc_session *session, int timeout, const char *func);
 
+/**
+ * @brief Lock IO lock on a session.
+ *
+ * @param[in] session Session to lock.
+ * @param[in] timeout Timeout in msec to use.
+ * @param[in] func Caller function for logging.
+ * @return 1 on success;
+ * @return 0 on timeout;
+ * @return -1 on error.
+ */
 int nc_session_io_lock(struct nc_session *session, int timeout, const char *func);
 
+/**
+ * @brief Unlock IO lock on a session.
+ *
+ * @param[in] session Session to unlock.
+ * @param[in] func Caller function for logging.
+ * @return 1 on success;
+ * @return -1 on error.
+ */
 int nc_session_io_unlock(struct nc_session *session, const char *func);
+
+/**
+ * @brief Lock MSGS lock on a session.
+ *
+ * @param[in] session Session to lock.
+ * @param[in,out] timeout Timeout in msec to use. If positive and on successful lock, is updated based on what was elapsed.
+ * @param[in] func Caller function for logging.
+ * @return 1 on success;
+ * @return 0 on timeout;
+ * @return -1 on error.
+ */
+int nc_session_client_msgs_lock(struct nc_session *session, int *timeout, const char *func);
+
+/**
+ * @brief Unlock MSGS lock on a session.
+ *
+ * @param[in] session Session to unlock.
+ * @param[in] func Caller function for logging.
+ * @return 1 on success;
+ * @return -1 on error.
+ */
+int nc_session_client_msgs_unlock(struct nc_session *session, const char *func);
 
 int nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func);
 

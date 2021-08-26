@@ -1744,11 +1744,18 @@ recv_msg(struct nc_session *session, int timeout, NC_MSG_TYPE expected, struct l
     *message = NULL;
 
     /* MSGS LOCK */
-    pthread_mutex_lock(&session->opts.client.msgs_lock);
+    r = nc_session_client_msgs_lock(session, &timeout, __func__);
+    if (!r) {
+        ret = NC_MSG_WOULDBLOCK;
+        goto cleanup;
+    } else if (r == -1) {
+        ret = NC_MSG_ERROR;
+        goto cleanup;
+    }
 
     /* Find the expected message in the buffer */
     prev = NULL;
-    for (cont = session->opts.client.msgs; cont && cont->type != expected; cont = cont->next) {
+    for (cont = session->opts.client.msgs; cont && (cont->type != expected); cont = cont->next) {
         prev = cont;
     }
 
@@ -1764,23 +1771,23 @@ recv_msg(struct nc_session *session, int timeout, NC_MSG_TYPE expected, struct l
         ret = cont->type;
         msg = cont->msg;
         free(cont);
-        goto cleanup;
+        goto cleanup_unlock;
     }
 
     /* Read a message from the wire */
     r = nc_read_msg_poll_io(session, timeout, &msg);
     if (!r) {
         ret = NC_MSG_WOULDBLOCK;
-        goto cleanup;
+        goto cleanup_unlock;
     } else if (r == -1) {
         ret = NC_MSG_ERROR;
-        goto cleanup;
+        goto cleanup_unlock;
     }
 
     /* Basic check to determine message type */
     ret = get_msg_type(session, msg);
     if (ret == NC_MSG_ERROR) {
-        goto cleanup;
+        goto cleanup_unlock;
     }
 
     /* If received a message of different type store it in the buffer */
@@ -1793,18 +1800,19 @@ recv_msg(struct nc_session *session, int timeout, NC_MSG_TYPE expected, struct l
         if (!*cont_ptr) {
             ERRMEM;
             ret = NC_MSG_ERROR;
-            goto cleanup;
+            goto cleanup_unlock;
         }
         (*cont_ptr)->msg = msg;
-        (*cont_ptr)->type = ret;
         msg = NULL;
+        (*cont_ptr)->type = ret;
         (*cont_ptr)->next = NULL;
     }
 
-cleanup:
+cleanup_unlock:
     /* MSGS UNLOCK */
-    pthread_mutex_unlock(&session->opts.client.msgs_lock);
+    nc_session_client_msgs_unlock(session, __func__);
 
+cleanup:
     if (ret == expected) {
         *message = msg;
     } else {
