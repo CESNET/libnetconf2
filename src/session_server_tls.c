@@ -285,7 +285,7 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
         }
         sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
 
-        if (i < san_count) {
+        if (i == san_count) {
             switch (map_type) {
             case NC_TLS_CTN_SAN_RFC822_NAME:
                 WRN("Certificate does not include the SAN rfc822Name field.");
