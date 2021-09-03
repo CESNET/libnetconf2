@@ -639,7 +639,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     nc_gettimespec_mono(&ts_timeout);
     nc_addtimespec(&ts_timeout, NC_TRANSPORT_TIMEOUT);
     tlsauth_ch = 0;
-    while (((ret = SSL_connect(session->ti.tls)) == -1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
+    while (((ret = SSL_connect(session->ti.tls)) != 1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
         usleep(NC_TIMEOUT_STEP);
         nc_gettimespec_mono(&ts_cur);
         if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
@@ -653,7 +653,8 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
             ERR(NULL, "SSL_connect failed (%s).", errno ? strerror(errno) : "unexpected EOF");
             break;
         case SSL_ERROR_SSL:
-            ERR(NULL, "SSL_connect failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            unsigned long tls_err = ERR_get_error();
+            ERR(NULL, "SSL_connect failed (%s).", ERR_reason_error_string(tls_err));
             break;
         default:
             ERR(NULL, "SSL_connect failed.");
