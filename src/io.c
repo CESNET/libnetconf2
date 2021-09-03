@@ -181,7 +181,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
                     session->term_reason = NC_SESSION_TERM_DROPPED;
                     return -1;
                 case SSL_ERROR_SYSCALL:
-                    ERR(session, "SSL socket error (%s).", strerror(errno));
+                    ERR(session, "SSL socket error (%s).", errno ? strerror(errno) : "unexpected EOF");
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_OTHER;
                     return -1;

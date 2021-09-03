@@ -650,7 +650,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     if (ret != 1) {
         switch (SSL_get_error(session->ti.tls, ret)) {
         case SSL_ERROR_SYSCALL:
-            ERR(NULL, "SSL_connect failed (%s).", strerror(errno));
+            ERR(NULL, "SSL_connect failed (%s).", errno ? strerror(errno) : "unexpected EOF");
             break;
         case SSL_ERROR_SSL:
             ERR(NULL, "SSL_connect failed (%s).", ERR_reason_error_string(ERR_get_error()));
