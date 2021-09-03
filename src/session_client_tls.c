@@ -587,7 +587,9 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
 {
     struct nc_session *session = NULL;
     int sock, verify, ret;
+    unsigned long tls_err;
     struct timespec ts_timeout, ts_cur;
+    const char *peername;
     char *ip_host = NULL;
 
     if (!tls_opts.cert_path || (!tls_opts.ca_file && !tls_opts.ca_dir)) {
@@ -659,7 +661,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
             ERR(NULL, "SSL_connect failed (%s).", errno ? strerror(errno) : "unexpected EOF");
             break;
         case SSL_ERROR_SSL:
-            unsigned long tls_err = ERR_get_error();
+            tls_err = ERR_get_error();
             ERR(NULL, "SSL_connect failed (%s).", ERR_reason_error_string(tls_err));
             break;
         default:
@@ -673,7 +675,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     verify = SSL_get_verify_result(session->ti.tls);
     switch (verify) {
     case X509_V_OK:
-        const char *peername = SSL_get0_peername(session->ti.tls);
+        peername = SSL_get0_peername(session->ti.tls);
         VRB(NULL, "Server certificate successfully verified (domain \"%s\").", peername ? peername : "<unknown>");
         break;
     default:
