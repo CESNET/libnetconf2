@@ -635,6 +635,12 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     /* set the SSL_MODE_AUTO_RETRY flag to allow OpenSSL perform re-handshake automatically */
     SSL_set_mode(session->ti.tls, SSL_MODE_AUTO_RETRY);
 
+    /* server identity (hostname) verification */
+    if (!SSL_set1_host(session->ti.tls, host)) {
+        ERR(NULL, "Failed to set expected server hostname.");
+        goto fail;
+    }
+
     /* connect and perform the handshake */
     nc_gettimespec_mono(&ts_timeout);
     nc_addtimespec(&ts_timeout, NC_TRANSPORT_TIMEOUT);
@@ -667,7 +673,8 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     verify = SSL_get_verify_result(session->ti.tls);
     switch (verify) {
     case X509_V_OK:
-        VRB(NULL, "Server certificate successfully verified.");
+        const char *peername = SSL_get0_peername(session->ti.tls);
+        VRB(NULL, "Server certificate successfully verified (domain \"%s\").", peername ? peername : "<unknown>");
         break;
     default:
         WRN(NULL, "Server certificate verification problem (%s).", X509_verify_cert_error_string(verify));
