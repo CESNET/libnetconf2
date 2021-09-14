@@ -223,8 +223,11 @@ check_function_exists(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETK
 if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
     find_package(OpenSSL REQUIRED)
     if(ENABLE_TLS)
-        message(STATUS "OPENSSL found, required for TLS")
+        message(STATUS "OpenSSL found, required for TLS")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_TLS")
+    endif()
+    if(OPENSSL_VERSION VERSION_LESS 1.1.1)
+        message(WARNING "OpenSSL version ${OPENSSL_VERSION} is no longer maintained, consider an update.")
     endif()
 
     target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
