@@ -1,8 +1,8 @@
 /**
- * \file session_p.h
- * \author Radek Krejci <rkrejci@cesnet.cz>
- * \author Michal Vasko <mvasko@cesnet.cz>
- * \brief libnetconf2 session manipulation
+ * @file session_p.h
+ * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @author Michal Vasko <mvasko@cesnet.cz>
+ * @brief libnetconf2 session manipulation
  *
  * Copyright (c) 2017 - 2021 CESNET, z.s.p.o.
  *
@@ -22,6 +22,7 @@
 
 #include <libyang/libyang.h>
 
+#include "compat.h"
 #include "libnetconf.h"
 #include "messages_client.h"
 #include "netconf.h"
@@ -29,14 +30,14 @@
 
 #ifdef NC_ENABLED_SSH
 
-#   include <libssh/callbacks.h>
-#   include <libssh/libssh.h>
-#   include <libssh/server.h>
+# include <libssh/callbacks.h>
+# include <libssh/libssh.h>
+# include <libssh/server.h>
 
 /* seconds */
-#   define NC_SSH_TIMEOUT 10
+# define NC_SSH_TIMEOUT 10
 /* number of all supported authentication methods */
-#   define NC_SSH_AUTH_COUNT 3
+# define NC_SSH_AUTH_COUNT 3
 
 /* ACCESS unlocked */
 struct nc_client_ssh_opts {
@@ -84,8 +85,8 @@ struct nc_server_ssh_opts {
 
 #ifdef NC_ENABLED_TLS
 
-#   include <openssl/bio.h>
-#   include <openssl/ssl.h>
+# include <openssl/bio.h>
+# include <openssl/ssl.h>
 
 /* ACCESS unlocked */
 struct nc_client_tls_opts {
@@ -294,12 +295,12 @@ struct nc_server_opts {
     pthread_rwlock_t ch_client_lock;
 
     /* Atomic IDs */
-    ATOMIC_UINT32_T new_session_id;
-    ATOMIC_UINT32_T new_client_id;
+    ATOMIC_T new_session_id;
+    ATOMIC_T new_client_id;
 };
 
 /**
- * Sleep time in msec to wait between nc_recv_notif() calls.
+ * Sleep time in usec to wait between nc_recv_notif() calls.
  */
 #define NC_CLIENT_NOTIF_THREAD_SLEEP 10000
 
@@ -375,10 +376,11 @@ typedef enum {
 #define NC_VERSION_10_ENDTAG_LEN 6
 
 /**
- * @brief Container to serialize PRC messages
+ * @brief Container to serialize RPC messages
  */
 struct nc_msg_cont {
     struct ly_in *msg;
+    NC_MSG_TYPE type;         /**< can be either NC_MSG_REPLY or NC_MSG_NOTIF */
     struct nc_msg_cont *next;
 };
 
@@ -397,8 +399,8 @@ struct nc_session {
 
     /* Transport implementation */
     NC_TRANSPORT_IMPL ti_type;   /**< transport implementation type to select items from ti union */
-    pthread_mutex_t *io_lock;    /**< input/output lock, note that in case of libssh TI, it will be shared
-                                      with other NETCONF sessions on the same SSH session (but different SSH channel) */
+    pthread_mutex_t *io_lock;    /**< input/output lock, note that in case of libssh TI, it will be shared with
+                                      other NETCONF sessions on the same SSH session (but different SSH channel) */
 
     union {
         struct {
@@ -438,9 +440,10 @@ struct nc_session {
             /* client side only data */
             uint64_t msgid;
             char **cpblts;                 /**< list of server's capabilities on client side */
-            struct nc_msg_cont *replies;   /**< queue for RPC replies received instead of notifications */
-            struct nc_msg_cont *notifs;    /**< queue for notifications received instead of RPC reply */
-            ATOMIC_PTR ntf_tid;            /**< running notifications receiving thread */
+            pthread_mutex_t msgs_lock;     /**< lock for the msgs buffer */
+            struct nc_msg_cont *msgs;      /**< queue for messages received of different type than expected */
+            ATOMIC_T ntf_thread;           /**< flag whether notification thread for this session is running or not,
+                                                2 means it should quit */
 
             /* client flags */
             /* some server modules failed to load so the data from them will be ignored - not use strict flag for parsing */
@@ -531,16 +534,56 @@ int nc_session_rpc_lock(struct nc_session *session, int timeout, const char *fun
 
 int nc_session_rpc_unlock(struct nc_session *session, int timeout, const char *func);
 
+/**
+ * @brief Lock IO lock on a session.
+ *
+ * @param[in] session Session to lock.
+ * @param[in] timeout Timeout in msec to use.
+ * @param[in] func Caller function for logging.
+ * @return 1 on success;
+ * @return 0 on timeout;
+ * @return -1 on error.
+ */
 int nc_session_io_lock(struct nc_session *session, int timeout, const char *func);
 
+/**
+ * @brief Unlock IO lock on a session.
+ *
+ * @param[in] session Session to unlock.
+ * @param[in] func Caller function for logging.
+ * @return 1 on success;
+ * @return -1 on error.
+ */
 int nc_session_io_unlock(struct nc_session *session, const char *func);
+
+/**
+ * @brief Lock MSGS lock on a session.
+ *
+ * @param[in] session Session to lock.
+ * @param[in,out] timeout Timeout in msec to use. If positive and on successful lock, is updated based on what was elapsed.
+ * @param[in] func Caller function for logging.
+ * @return 1 on success;
+ * @return 0 on timeout;
+ * @return -1 on error.
+ */
+int nc_session_client_msgs_lock(struct nc_session *session, int *timeout, const char *func);
+
+/**
+ * @brief Unlock MSGS lock on a session.
+ *
+ * @param[in] session Session to unlock.
+ * @param[in] func Caller function for logging.
+ * @return 1 on success;
+ * @return -1 on error.
+ */
+int nc_session_client_msgs_unlock(struct nc_session *session, const char *func);
 
 int nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func);
 
 int nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func);
 
 /**
- * @brief Fill libyang context in \p session. Context models are based on the stored session
+ * @brief Fill libyang context in @p session. Context models are based on the stored session
  *        capabilities. If the server does not support \<get-schema\>, the models are searched
  *        for in the directory set using nc_client_schema_searchpath().
  *
@@ -550,7 +593,7 @@ int nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func);
 int nc_ctx_check_and_fill(struct nc_session *session);
 
 /**
- * @brief Perform NETCONF handshake on \p session.
+ * @brief Perform NETCONF handshake on @p session.
  *
  * @param[in] session NETCONF session to use.
  * @return NC_MSG_HELLO on success, NC_MSG_BAD_HELLO on client \<hello\> message parsing fail
@@ -605,7 +648,7 @@ int nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *o
  * @brief Accept a new connection on a listening socket.
  *
  * @param[in] binds Structure with the listening sockets.
- * @param[in] bind_count Number of \p binds.
+ * @param[in] bind_count Number of @p binds.
  * @param[in] timeout Timeout for accepting.
  * @param[out] host Host of the remote peer. Can be NULL.
  * @param[out] port Port of the new connection. Can be NULL.
@@ -708,7 +751,7 @@ int nc_accept_ssh_session(struct nc_session *session, int sock, int timeout);
  *
  * @param[in] sshsession SSH session the message arrived on.
  * @param[in] msg SSH message itself.
- * @param[in] data NETCONF session running on \p sshsession.
+ * @param[in] data NETCONF session running on @p sshsession.
  * @return 0 if the message was handled, 1 if it is left up to libssh.
  */
 int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
@@ -770,7 +813,7 @@ int nc_read_msg_poll_io(struct nc_session *session, int io_timeout, struct ly_in
  * @param[in] io_timeout Timeout in milliseconds. Negative value means infinite timeout,
  *            zero value causes to return immediately.
  * @param[out] msg Input handled with the NETCONF message (application layer data).
- * @param[in] passing_io_lock True if \p session IO lock is already held. This function always unlocks
+ * @param[in] passing_io_lock True if @p session IO lock is already held. This function always unlocks
  *            it before returning!
  * @return 1 on success.
  * @return 0 on timeout.

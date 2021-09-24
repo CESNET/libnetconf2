@@ -70,7 +70,7 @@ nc_server_endpt_lock_get(const char *name, NC_TRANSPORT_IMPL ti, uint16_t *idx)
     }
 
     if (!endpt) {
-        ERR("Endpoint \"%s\" was not found.", name);
+        ERR(NULL, "Endpoint \"%s\" was not found.", name);
         /* UNLOCK */
         pthread_rwlock_unlock(&server_opts.endpt_lock);
         return NULL;
@@ -108,7 +108,8 @@ nc_server_ch_client_lock(const char *name, const char *endpt_name, NC_TRANSPORT_
                 break;
             }
             for (j = 0; j < client->ch_endpt_count; ++j) {
-                if (!strcmp(client->ch_endpts[j].name, endpt_name) && (!ti || (ti == client->ch_endpts[j].ti))) {
+                if ((!endpt_name || !strcmp(client->ch_endpts[j].name, endpt_name)) &&
+                        (!ti || (ti == client->ch_endpts[j].ti))) {
                     endpt = &client->ch_endpts[j];
                     break;
                 }
@@ -118,12 +119,12 @@ nc_server_ch_client_lock(const char *name, const char *endpt_name, NC_TRANSPORT_
     }
 
     if (!client) {
-        ERR("Call Home client \"%s\" was not found.", name);
+        ERR(NULL, "Call Home client \"%s\" was not found.", name);
 
         /* READ UNLOCK */
         pthread_rwlock_unlock(&server_opts.ch_client_lock);
     } else if (endpt_name && ti && !endpt) {
-        ERR("Call Home client \"%s\" endpoint \"%s\" was not found.", name, endpt_name);
+        ERR(NULL, "Call Home client \"%s\" endpoint \"%s\" was not found.", name, endpt_name);
 
         /* READ UNLOCK */
         pthread_rwlock_unlock(&server_opts.ch_client_lock);
@@ -210,18 +211,18 @@ nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives *ka
 
     sock = socket((is_ipv4 ? AF_INET : AF_INET6), SOCK_STREAM, 0);
     if (sock == -1) {
-        ERR("Failed to create socket (%s).", strerror(errno));
+        ERR(NULL, "Failed to create socket (%s).", strerror(errno));
         goto fail;
     }
 
     /* these options will be inherited by accepted sockets */
     opt = 1;
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof opt) == -1) {
-        ERR("Could not set SO_REUSEADDR socket option (%s).", strerror(errno));
+        ERR(NULL, "Could not set SO_REUSEADDR socket option (%s).", strerror(errno));
         goto fail;
     }
     if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof opt) == -1) {
-        ERR("Could not set TCP_NODELAY socket option (%s).", strerror(errno));
+        ERR(NULL, "Could not set TCP_NODELAY socket option (%s).", strerror(errno));
         goto fail;
     }
 
@@ -237,12 +238,12 @@ nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives *ka
         saddr4->sin_port = htons(port);
 
         if (inet_pton(AF_INET, address, &saddr4->sin_addr) != 1) {
-            ERR("Failed to convert IPv4 address \"%s\".", address);
+            ERR(NULL, "Failed to convert IPv4 address \"%s\".", address);
             goto fail;
         }
 
         if (bind(sock, (struct sockaddr *)saddr4, sizeof(struct sockaddr_in)) == -1) {
-            ERR("Could not bind \"%s\" port %d (%s).", address, port, strerror(errno));
+            ERR(NULL, "Could not bind \"%s\" port %d (%s).", address, port, strerror(errno));
             goto fail;
         }
 
@@ -253,18 +254,18 @@ nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives *ka
         saddr6->sin6_port = htons(port);
 
         if (inet_pton(AF_INET6, address, &saddr6->sin6_addr) != 1) {
-            ERR("Failed to convert IPv6 address \"%s\".", address);
+            ERR(NULL, "Failed to convert IPv6 address \"%s\".", address);
             goto fail;
         }
 
         if (bind(sock, (struct sockaddr *)saddr6, sizeof(struct sockaddr_in6)) == -1) {
-            ERR("Could not bind \"%s\" port %d (%s).", address, port, strerror(errno));
+            ERR(NULL, "Could not bind \"%s\" port %d (%s).", address, port, strerror(errno));
             goto fail;
         }
     }
 
     if (listen(sock, NC_REVERSE_QUEUE) == -1) {
-        ERR("Unable to start listening on \"%s\" port %d (%s).", address, port, strerror(errno));
+        ERR(NULL, "Unable to start listening on \"%s\" port %d (%s).", address, port, strerror(errno));
         goto fail;
     }
 
@@ -286,7 +287,7 @@ nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *opts)
 
     sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (sock == -1) {
-        ERR("Failed to create socket (%s).", strerror(errno));
+        ERR(NULL, "Failed to create socket (%s).", strerror(errno));
         goto fail;
     }
 
@@ -296,26 +297,26 @@ nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *opts)
 
     unlink(sun.sun_path);
     if (bind(sock, (struct sockaddr *)&sun, sizeof(sun)) == -1) {
-        ERR("Could not bind \"%s\" (%s).", address, strerror(errno));
+        ERR(NULL, "Could not bind \"%s\" (%s).", address, strerror(errno));
         goto fail;
     }
 
     if (opts->mode != (mode_t)-1) {
         if (chmod(sun.sun_path, opts->mode) < 0) {
-            ERR("Failed to set unix socket permissions (%s).", strerror(errno));
+            ERR(NULL, "Failed to set unix socket permissions (%s).", strerror(errno));
             goto fail;
         }
     }
 
     if ((opts->uid != (uid_t)-1) || (opts->gid != (gid_t)-1)) {
         if (chown(sun.sun_path, opts->uid, opts->gid) < 0) {
-            ERR("Failed to set unix socket uid/gid (%s).", strerror(errno));
+            ERR(NULL, "Failed to set unix socket uid/gid (%s).", strerror(errno));
             goto fail;
         }
     }
 
     if (listen(sock, NC_REVERSE_QUEUE) == -1) {
-        ERR("Unable to start listening on \"%s\" (%s).", address, strerror(errno));
+        ERR(NULL, "Unable to start listening on \"%s\" (%s).", address, strerror(errno));
         goto fail;
     }
 
@@ -349,7 +350,7 @@ sock_host_unix(int acc_sock_fd, char **host)
     addr_len = sizeof(saddr);
 
     if (getsockname(acc_sock_fd, (struct sockaddr *)&saddr, &addr_len)) {
-        ERR("getsockname failed (%s).", strerror(errno));
+        ERR(NULL, "getsockname failed (%s).", strerror(errno));
         return -1;
     }
 
@@ -385,15 +386,13 @@ sock_host_inet(const struct sockaddr_in *addr, char **host, uint16_t *port)
     }
 
     if (!inet_ntop(AF_INET, &addr->sin_addr, *host, INET_ADDRSTRLEN)) {
-        ERR("inet_ntop failed(%s).");
+        ERR(NULL, "inet_ntop failed(%s).");
         free(*host);
         *host = NULL;
         return -1;
     }
 
-    if (port) {
-        *port = ntohs(addr->sin_port);
-    }
+    *port = ntohs(addr->sin_port);
 
     return 0;
 }
@@ -416,15 +415,13 @@ sock_host_inet6(const struct sockaddr_in6 *addr, char **host, uint16_t *port)
     }
 
     if (!inet_ntop(AF_INET6, &addr->sin6_addr, *host, INET6_ADDRSTRLEN)) {
-        ERR("inet_ntop failed(%s).");
+        ERR(NULL, "inet_ntop failed(%s).");
         free(*host);
         *host = NULL;
         return -1;
     }
 
-    if (port) {
-        *port = ntohs(addr->sin6_port);
-    }
+    *port = ntohs(addr->sin6_port);
 
     return 0;
 }
@@ -433,11 +430,12 @@ int
 nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host, uint16_t *port, uint16_t *idx)
 {
     sigset_t sigmask, origmask;
-    uint16_t i, j, pfd_count;
+    uint16_t i, j, pfd_count, client_port;
+    char *client_address;
     struct pollfd *pfd;
     struct sockaddr_storage saddr;
     socklen_t saddr_len = sizeof(saddr);
-    int ret, sock = -1, flags;
+    int ret, client_sock, sock = -1, flags;
 
     pfd = malloc(bind_count * sizeof *pfd);
     if (!pfd) {
@@ -475,7 +473,7 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
             free(pfd);
             return 0;
         } else if (ret == -1) {
-            ERR("Poll failed (%s).", strerror(errno));
+            ERR(NULL, "Poll failed (%s).", strerror(errno));
             free(pfd);
             return -1;
         }
@@ -507,47 +505,64 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
         return -1;
     }
 
-    ret = accept(sock, (struct sockaddr *)&saddr, &saddr_len);
-    if (ret < 0) {
-        ERR("Accept failed (%s).", strerror(errno));
+    /* accept connection */
+    client_sock = accept(sock, (struct sockaddr *)&saddr, &saddr_len);
+    if (client_sock < 0) {
+        ERR(NULL, "Accept failed (%s).", strerror(errno));
         return -1;
     }
-    VRB("Accepted a connection on %s:%u.", binds[i].address, binds[i].port);
 
     /* make the socket non-blocking */
-    if (((flags = fcntl(ret, F_GETFL)) == -1) || (fcntl(ret, F_SETFL, flags | O_NONBLOCK) == -1)) {
-        ERR("Fcntl failed (%s).", strerror(errno));
-        close(ret);
-        return -1;
+    if (((flags = fcntl(client_sock, F_GETFL)) == -1) || (fcntl(client_sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
+        ERR(NULL, "Fcntl failed (%s).", strerror(errno));
+        goto fail;
     }
 
-    if (idx) {
-        *idx = i;
-    }
-
-    if (!host) {
-        return ret;
-    }
-
-    if (port) {
-        *port = 0;
+    /* learn information about the client end */
+    if (saddr.ss_family == AF_UNIX) {
+        if (sock_host_unix(client_sock, &client_address)) {
+            goto fail;
+        }
+        client_port = 0;
+    } else if (saddr.ss_family == AF_INET) {
+        if (sock_host_inet((struct sockaddr_in *)&saddr, &client_address, &client_port)) {
+            goto fail;
+        }
+    } else if (saddr.ss_family == AF_INET6) {
+        if (sock_host_inet6((struct sockaddr_in6 *)&saddr, &client_address, &client_port)) {
+            goto fail;
+        }
+    } else {
+        ERR(NULL, "Source host of an unknown protocol family.");
+        goto fail;
     }
 
     if (saddr.ss_family == AF_UNIX) {
-        sock_host_unix(ret, host);
-    } else if (saddr.ss_family == AF_INET) {
-        sock_host_inet((struct sockaddr_in *)&saddr, host, port);
-    } else if (saddr.ss_family == AF_INET6) {
-        sock_host_inet6((struct sockaddr_in6 *)&saddr, host, port);
+        VRB(NULL, "Accepted a connection on %s.", binds[i].address);
     } else {
-        ERR("Source host of an unknown protocol family.");
+        VRB(NULL, "Accepted a connection on %s:%u from %s:%u.", binds[i].address, binds[i].port, client_address, client_port);
     }
 
-    return ret;
+    if (host) {
+        *host = client_address;
+    } else {
+        free(client_address);
+    }
+    if (port) {
+        *port = client_port;
+    }
+    if (idx) {
+        *idx = i;
+    }
+    return client_sock;
+
+fail:
+    close(client_sock);
+    return -1;
 }
 
 static struct nc_server_reply *
-nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(session))
+nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *session)
 {
     const char *identifier = NULL, *revision = NULL, *format = NULL;
     char *model_data = NULL;
@@ -569,7 +584,7 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *UNUSED(sessio
             format = lyd_get_value(child);
         }
     }
-    VRB("Schema \"%s@%s\" was requested.", identifier, revision ? revision : "<any>");
+    VRB(session, "Schema \"%s@%s\" was requested.", identifier, revision ? revision : "<any>");
 
     /* check revision */
     if (revision && (strlen(revision) != 10) && strcmp(revision, "1.0")) {
@@ -688,18 +703,18 @@ nc_server_init(struct ly_ctx *ctx)
 #if defined (HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
         if (pthread_rwlockattr_setkind_np(&attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP) == 0) {
             if (pthread_rwlock_init(&server_opts.endpt_lock, &attr) != 0) {
-                ERR("%s: failed to init rwlock(%s).", __FUNCTION__, strerror(errno));
+                ERR(NULL, "%s: failed to init rwlock(%s).", __FUNCTION__, strerror(errno));
             }
             if (pthread_rwlock_init(&server_opts.ch_client_lock, &attr) != 0) {
-                ERR("%s: failed to init rwlock(%s).", __FUNCTION__, strerror(errno));
+                ERR(NULL, "%s: failed to init rwlock(%s).", __FUNCTION__, strerror(errno));
             }
         } else {
-            ERR("%s: failed set attribute (%s).", __FUNCTION__, strerror(errno));
+            ERR(NULL, "%s: failed set attribute (%s).", __FUNCTION__, strerror(errno));
         }
 #endif
         pthread_rwlockattr_destroy(&attr);
     } else {
-        ERR("%s: failed init attribute (%s).", __FUNCTION__, strerror(errno));
+        ERR(NULL, "%s: failed init attribute (%s).", __FUNCTION__, strerror(errno));
     }
     return 0;
 }
@@ -881,7 +896,7 @@ nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **s
     (*session)->ctx = server_opts.ctx;
 
     /* assign new SID atomically */
-    (*session)->id = ATOMIC_INC(server_opts.new_session_id);
+    (*session)->id = ATOMIC_INC_RELAXED(server_opts.new_session_id);
 
     /* NETCONF handshake */
     msgtype = nc_handshake_io(*session);
@@ -977,20 +992,20 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
     /* LOCK */
     ret = pthread_mutex_timedlock(&ps->lock, &ts);
     if (ret) {
-        ERR("%s: failed to lock a pollsession (%s).", func, strerror(ret));
+        ERR(NULL, "%s: failed to lock a pollsession (%s).", func, strerror(ret));
         return -1;
     }
 
     /* check that the queue is long enough */
     if (ps->queue_len == NC_PS_QUEUE_SIZE) {
-        ERR("%s: pollsession queue size (%d) too small.", func, NC_PS_QUEUE_SIZE);
+        ERR(NULL, "%s: pollsession queue size (%d) too small.", func, NC_PS_QUEUE_SIZE);
         pthread_mutex_unlock(&ps->lock);
         return -1;
     }
 
     /* add ourselves into the queue */
     nc_ps_queue_add_id(ps, id);
-    DBL("PS 0x%p TID %lu queue: added %u, head %u, lenght %u", ps, (long unsigned int)pthread_self(), *id,
+    DBL(NULL, "PS 0x%p TID %lu queue: added %u, head %u, lenght %u", ps, (long unsigned int)pthread_self(), *id,
             ps->queue[ps->queue_begin], ps->queue_len);
 
     /* is it our turn? */
@@ -1009,7 +1024,7 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
                 break;
             }
 
-            ERR("%s: failed to wait for a pollsession condition (%s).", func, strerror(ret));
+            ERR(NULL, "%s: failed to wait for a pollsession condition (%s).", func, strerror(ret));
             /* remove ourselves from the queue */
             nc_ps_queue_remove_id(ps, *id);
             pthread_mutex_unlock(&ps->lock);
@@ -1035,7 +1050,7 @@ nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func)
     /* LOCK */
     ret = pthread_mutex_timedlock(&ps->lock, &ts);
     if (ret) {
-        ERR("%s: failed to lock a pollsession (%s).", func, strerror(ret));
+        ERR(NULL, "%s: failed to lock a pollsession (%s).", func, strerror(ret));
         ret = -1;
     }
 
@@ -1051,7 +1066,7 @@ nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func)
 
     /* remove ourselves from the queue */
     nc_ps_queue_remove_id(ps, id);
-    DBL("PS 0x%p TID %lu queue: removed %u, head %u, lenght %u", ps, (long unsigned int)pthread_self(), id,
+    DBL(NULL, "PS 0x%p TID %lu queue: removed %u, head %u, lenght %u", ps, (long unsigned int)pthread_self(), id,
             ps->queue[ps->queue_begin], ps->queue_len);
 
     /* broadcast to all other threads that the queue moved */
@@ -1091,7 +1106,7 @@ nc_ps_free(struct nc_pollsession *ps)
     }
 
     if (ps->queue_len) {
-        ERR("FATAL: Freeing a pollsession structure that is currently being worked with!");
+        ERR(NULL, "FATAL: Freeing a pollsession structure that is currently being worked with!");
     }
 
     for (i = 0; i < ps->session_count; i++) {
@@ -1273,7 +1288,7 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
         ERRARG("rpc");
         return NC_PSPOLL_ERROR;
     } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_SERVER)) {
-        ERR("Session %u: invalid session to receive RPCs.", session->id);
+        ERR(session, "Invalid session to receive RPCs.");
         return NC_PSPOLL_ERROR;
     }
 
@@ -1318,7 +1333,7 @@ send_reply:
             r = nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, (*rpc)->envp, reply);
             nc_server_reply_free(reply);
             if (r != NC_MSG_REPLY) {
-                ERR("Session %u: failed to write reply (%s), terminating session.", session->id, nc_msgtype2str[r]);
+                ERR(session, "Failed to write reply (%s), terminating session.", nc_msgtype2str[r]);
                 if (session->status != NC_STATUS_INVALID) {
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_OTHER;
@@ -1361,7 +1376,7 @@ nc_server_notif_send(struct nc_session *session, struct nc_server_notif *notif, 
     /* we do not need RPC lock for this, IO lock will be acquired properly */
     ret = nc_write_msg_io(session, timeout, NC_MSG_NOTIF, notif);
     if (ret != NC_MSG_NOTIF) {
-        ERR("Session %u: failed to write notification (%s).", session->id, nc_msgtype2str[ret]);
+        ERR(session, "Failed to write notification (%s).", nc_msgtype2str[ret]);
     }
 
     return ret;
@@ -1428,7 +1443,7 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, struct nc_se
     nc_server_reply_free(reply);
 
     if (r != NC_MSG_REPLY) {
-        ERR("Session %u: failed to write reply (%s).", session->id, nc_msgtype2str[r]);
+        ERR(session, "Failed to write reply (%s).", nc_msgtype2str[r]);
         ret |= NC_PSPOLL_ERROR;
     }
 
@@ -1659,11 +1674,11 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                         ret = nc_ps_poll_session_io(cur_session, NC_SESSION_LOCK_TIMEOUT, ts_cur.tv_sec, msg);
                         switch (ret) {
                         case NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR:
-                            ERR("Session %u: %s.", cur_session->id, msg);
+                            ERR(cur_session, "%s.", msg);
                             cur_ps_session->state = NC_PS_STATE_INVALID;
                             break;
                         case NC_PSPOLL_ERROR:
-                            ERR("Session %u: %s.", cur_session->id, msg);
+                            ERR(cur_session, "%s.", msg);
                             cur_ps_session->state = NC_PS_STATE_NONE;
                             break;
                         case NC_PSPOLL_TIMEOUT:
@@ -1848,7 +1863,7 @@ nc_get_uid(int sock, uid_t *uid)
 #endif
 
     if (ret < 0) {
-        ERR("Failed to get credentials from unix socket (%s).", strerror(errno));
+        ERR(NULL, "Failed to get credentials from unix socket (%s).", strerror(errno));
         return -1;
     }
     return 0;
@@ -1870,7 +1885,7 @@ nc_accept_unix(struct nc_session *session, int sock)
 
     pw = getpwuid(uid);
     if (pw == NULL) {
-        ERR("Failed to find username for uid=%u (%s).\n", uid, strerror(errno));
+        ERR(NULL, "Failed to find username for uid=%u (%s).\n", uid, strerror(errno));
         close(sock);
         return -1;
     }
@@ -1911,7 +1926,7 @@ nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti)
     /* check name uniqueness */
     for (i = 0; i < server_opts.endpt_count; ++i) {
         if (!strcmp(server_opts.endpts[i].name, name)) {
-            ERR("Endpoint \"%s\" already exists.", name);
+            ERR(NULL, "Endpoint \"%s\" already exists.", name);
             ret = -1;
             goto cleanup;
         }
@@ -2217,16 +2232,16 @@ nc_server_endpt_set_address_port(const char *endpt_name, const char *address, ui
     if (sock > -1) {
         switch (endpt->ti) {
         case NC_TI_UNIX:
-            VRB("Listening on %s for UNIX connections.", address);
+            VRB(NULL, "Listening on %s for UNIX connections.", address);
             break;
 #ifdef NC_ENABLED_SSH
         case NC_TI_LIBSSH:
-            VRB("Listening on %s:%u for SSH connections.", address, port);
+            VRB(NULL, "Listening on %s:%u for SSH connections.", address, port);
             break;
 #endif
 #ifdef NC_ENABLED_TLS
         case NC_TI_OPENSSL:
-            VRB("Listening on %s:%u for TLS connections.", address, port);
+            VRB(NULL, "Listening on %s:%u for TLS connections.", address, port);
             break;
 #endif
         default:
@@ -2377,7 +2392,7 @@ nc_accept(int timeout, struct nc_session **session)
     pthread_mutex_lock(&server_opts.bind_lock);
 
     if (!server_opts.endpt_count) {
-        ERR("No endpoints to accept sessions on.");
+        ERR(NULL, "No endpoints to accept sessions on.");
         /* BIND UNLOCK */
         pthread_mutex_unlock(&server_opts.bind_lock);
         return NC_MSG_ERROR;
@@ -2464,7 +2479,7 @@ nc_accept(int timeout, struct nc_session **session)
     pthread_rwlock_unlock(&server_opts.endpt_lock);
 
     /* assign new SID atomically */
-    (*session)->id = ATOMIC_INC(server_opts.new_session_id);
+    (*session)->id = ATOMIC_INC_RELAXED(server_opts.new_session_id);
 
     /* NETCONF handshake */
     msgtype = nc_handshake_io(*session);
@@ -2594,7 +2609,7 @@ nc_server_ch_add_client(const char *name)
     /* check name uniqueness */
     for (i = 0; i < server_opts.ch_client_count; ++i) {
         if (!strcmp(server_opts.ch_clients[i].name, name)) {
-            ERR("Call Home client \"%s\" already exists.", name);
+            ERR(NULL, "Call Home client \"%s\" already exists.", name);
             /* WRITE UNLOCK */
             pthread_rwlock_unlock(&server_opts.ch_client_lock);
             return -1;
@@ -2612,7 +2627,7 @@ nc_server_ch_add_client(const char *name)
     client = &server_opts.ch_clients[server_opts.ch_client_count - 1];
 
     lydict_insert(server_opts.ctx, name, 0, &client->name);
-    client->id = ATOMIC_INC(server_opts.new_client_id);
+    client->id = ATOMIC_INC_RELAXED(server_opts.new_client_id);
     client->ch_endpts = NULL;
     client->ch_endpt_count = 0;
     client->conn_type = 0;
@@ -2741,7 +2756,7 @@ nc_server_ch_client_add_endpt(const char *client_name, const char *endpt_name, N
 
     for (i = 0; i < client->ch_endpt_count; ++i) {
         if (!strcmp(client->ch_endpts[i].name, endpt_name)) {
-            ERR("Call Home client \"%s\" endpoint \"%s\" already exists.", client_name, endpt_name);
+            ERR(NULL, "Call Home client \"%s\" endpoint \"%s\" already exists.", client_name, endpt_name);
             goto cleanup;
         }
     }
@@ -3054,7 +3069,7 @@ nc_server_ch_client_periodic_set_period(const char *client_name, uint16_t period
     }
 
     if (client->conn_type != NC_CH_PERIOD) {
-        ERR("Call Home client \"%s\" is not of periodic connection type.", client_name);
+        ERR(NULL, "Call Home client \"%s\" is not of periodic connection type.", client_name);
         /* UNLOCK */
         nc_server_ch_client_unlock(client);
         return -1;
@@ -3085,7 +3100,7 @@ nc_server_ch_client_periodic_set_anchor_time(const char *client_name, time_t anc
     }
 
     if (client->conn_type != NC_CH_PERIOD) {
-        ERR("Call Home client \"%s\" is not of periodic connection type.", client_name);
+        ERR(NULL, "Call Home client \"%s\" is not of periodic connection type.", client_name);
         /* UNLOCK */
         nc_server_ch_client_unlock(client);
         return -1;
@@ -3116,7 +3131,7 @@ nc_server_ch_client_periodic_set_idle_timeout(const char *client_name, uint16_t 
     }
 
     if (client->conn_type != NC_CH_PERIOD) {
-        ERR("Call Home client \"%s\" is not of periodic connection type.", client_name);
+        ERR(NULL, "Call Home client \"%s\" is not of periodic connection type.", client_name);
         /* UNLOCK */
         nc_server_ch_client_unlock(client);
         return -1;
@@ -3195,7 +3210,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, struct nc_session **session)
         if (endpt->sock_pending > -1) {
             ++endpt->sock_retries;
             if (endpt->sock_retries == NC_SOCKET_CH_RETRIES) {
-                ERR("Failed to connect socket %d after %d retries, closing.", endpt->sock_pending, NC_SOCKET_CH_RETRIES);
+                ERR(NULL, "Failed to connect socket %d after %d retries, closing.", endpt->sock_pending, NC_SOCKET_CH_RETRIES);
                 close(endpt->sock_pending);
                 endpt->sock_pending = -1;
                 endpt->sock_retries = 0;
@@ -3258,7 +3273,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, struct nc_session **session)
     }
 
     /* assign new SID atomically */
-    (*session)->id = ATOMIC_INC(server_opts.new_session_id);
+    (*session)->id = ATOMIC_INC_RELAXED(server_opts.new_session_id);
 
     /* NETCONF handshake */
     msgtype = nc_handshake_io(*session);
@@ -3347,7 +3362,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
                 break;
             }
         } else if (r != ETIMEDOUT) {
-            ERR("Pthread condition timedwait failed (%s).", strerror(r));
+            ERR(session, "Pthread condition timedwait failed (%s).", strerror(r));
             ret = -1;
             break;
         }
@@ -3357,7 +3372,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
         nc_server_ch_client_lock(data->client_name, NULL, 0, &client);
         if (!client) {
             /* client was removed, finish thread */
-            VRB("Call Home client \"%s\" removed, but an established session will not be terminated.",
+            VRB(session, "Call Home client \"%s\" removed, but an established session will not be terminated.",
                     data->client_name);
             ret = 1;
             break;
@@ -3371,7 +3386,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
 
         nc_gettimespec_mono(&ts);
         if (!session->opts.server.ntf_status && idle_timeout && (ts.tv_sec >= session->opts.server.last_rpc + idle_timeout)) {
-            VRB("Call Home client \"%s\" session %u: session idle timeout elapsed.", client->name, session->id);
+            VRB(session, "Call Home client \"%s\": session idle timeout elapsed.", client->name);
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_TIMEOUT;
         }
@@ -3414,7 +3429,7 @@ nc_ch_client_thread(void *arg)
     cur_endpt = &client->ch_endpts[0];
     cur_endpt_name = strdup(cur_endpt->name);
 
-    VRB("Call Home client \"%s\" connecting...", data->client_name);
+    VRB(NULL, "Call Home client \"%s\" connecting...", data->client_name);
     while (1) {
         msgtype = nc_connect_ch_endpt(cur_endpt, &session);
 
@@ -3422,11 +3437,11 @@ nc_ch_client_thread(void *arg)
             /* UNLOCK */
             nc_server_ch_client_unlock(client);
 
-            VRB("Call Home client \"%s\" session %u established.", data->client_name, session->id);
+            VRB(NULL, "Call Home client \"%s\" session %u established.", data->client_name, session->id);
             if (nc_server_ch_client_thread_session_cond_wait(session, data)) {
                 goto cleanup;
             }
-            VRB("Call Home client \"%s\" session terminated.", data->client_name);
+            VRB(NULL, "Call Home client \"%s\" session terminated.", data->client_name);
 
             /* LOCK */
             client = nc_server_ch_client_with_endpt_lock(data->client_name);
@@ -3446,7 +3461,7 @@ nc_ch_client_thread(void *arg)
 
                 /* sleep until we should reconnect TODO wake up sometimes to check for new notifications */
                 reconnect_in = (time(NULL) - client->conn.period.anchor_time) % (client->conn.period.period * 60);
-                VRB("Call Home client \"%s\" reconnecting in %d seconds.", data->client_name, reconnect_in);
+                VRB(NULL, "Call Home client \"%s\" reconnecting in %d seconds.", data->client_name, reconnect_in);
                 sleep(reconnect_in);
 
                 /* LOCK */
@@ -3529,7 +3544,7 @@ nc_ch_client_thread(void *arg)
     }
 
 cleanup:
-    VRB("Call Home client \"%s\" thread exit.", data->client_name);
+    VRB(NULL, "Call Home client \"%s\" thread exit.", data->client_name);
     free(cur_endpt_name);
     free(data->client_name);
     free(data);
@@ -3567,7 +3582,7 @@ nc_connect_ch_client_dispatch(const char *client_name, int (*session_clb)(const 
 
     ret = pthread_create(&tid, NULL, nc_ch_client_thread, arg);
     if (ret) {
-        ERR("Creating a new thread failed (%s).", strerror(ret));
+        ERR(NULL, "Creating a new thread failed (%s).", strerror(ret));
         free(arg->client_name);
         free(arg);
         return -1;

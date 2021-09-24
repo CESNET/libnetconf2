@@ -524,6 +524,7 @@ test_nc_connect_ssh_interactive_succesfull(void **state)
     session = nc_connect_ssh("127.0.0.1", 8080, NULL);
     assert_non_null(session);
 
+    will_return(__wrap_ssh_channel_poll_timeout, 0);
     nc_session_free(session, NULL);
 }
 
@@ -574,6 +575,7 @@ test_nc_connect_ssh_password_succesfull(void **state)
     assert_non_null(session);
 
     /* disconnect */
+    will_return(__wrap_ssh_channel_poll_timeout, 0);
     nc_session_free(session, NULL);
 }
 
@@ -613,6 +615,7 @@ test_nc_connect_ssh_pubkey_succesfull(void **state)
     assert_non_null(session);
 
     /* disconnect */
+    will_return(__wrap_ssh_channel_poll_timeout, 0);
     nc_session_free(session, NULL);
 }
 

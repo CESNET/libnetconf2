@@ -1,9 +1,9 @@
 /**
- * \file session_server_ch.h
- * \author Michal Vasko <mvasko@cesnet.cz>
- * \brief libnetconf2 Call Home session server manipulation
+ * @file session_server_ch.h
+ * @author Michal Vasko <mvasko@cesnet.cz>
+ * @brief libnetconf2 Call Home session server manipulation
  *
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -73,9 +73,9 @@ int nc_server_ch_client_add_endpt(const char *client_name, const char *endpt_nam
  * @brief Remove a Call Home client endpoint.
  *
  * @param[in] client_name Existing client name.
- * @param[in] endpt_name Existing endpoint of \p client_name. NULL matches all endpoints.
+ * @param[in] endpt_name Existing endpoint of @p client_name. NULL matches all endpoints.
  * @param[in] ti Client transport protocol. NULL matches any protocol.
- *               Redundant to set if \p endpt_name is set, client names are
+ *               Redundant to set if @p endpt_name is set, client names are
  *               unique disregarding their protocol.
  * @return 0 on success, -1 on error.
  */
@@ -96,7 +96,7 @@ int nc_server_ch_client_is_endpt(const char *client_name, const char *endpt_name
  * On error the previous listening socket (if any) is left untouched.
  *
  * @param[in] client_name Existing Call Home client name.
- * @param[in] endpt_name Existing endpoint name of \p client_name.
+ * @param[in] endpt_name Existing endpoint name of @p client_name.
  * @param[in] address New listening address.
  * @return 0 on success, -1 on error.
  */
@@ -108,7 +108,7 @@ int nc_server_ch_client_endpt_set_address(const char *client_name, const char *e
  * On error the previous listening socket (if any) is left untouched.
  *
  * @param[in] client_name Existing Call Home client name.
- * @param[in] endpt_name Existing endpoint name of \p client_name.
+ * @param[in] endpt_name Existing endpoint name of @p client_name.
  * @param[in] port New listening port.
  * @return 0 on success, -1 on error.
  */
@@ -118,7 +118,7 @@ int nc_server_ch_client_endpt_set_port(const char *client_name, const char *endp
  * @brief Change Call Home client endpoint keepalives state. Affects only new connections.
  *
  * @param[in] client_name Existing Call Home client name.
- * @param[in] endpt_name Existing endpoint name of \p client_name.
+ * @param[in] endpt_name Existing endpoint name of @p client_name.
  * @param[in] enable Whether to enable or disable keepalives.
  * @return 0 on success, -1 on error.
  */
@@ -128,7 +128,7 @@ int nc_server_ch_client_endpt_enable_keepalives(const char *client_name, const c
  * @brief Change Call Home client endpoint keepalives parameters. Affects only new connections.
  *
  * @param[in] client_name Existing Call Home client name.
- * @param[in] endpt_name Existing endpoint name of \p client_name.
+ * @param[in] endpt_name Existing endpoint name of @p client_name.
  * @param[in] idle_time Keepalive idle time in seconds, 1 by default, -1 to keep previous value.
  * @param[in] max_probes Keepalive max probes sent, 10 by default, -1 to keep previous value.
  * @param[in] probe_interval Keepalive probe interval in seconds, 5 by default, -1 to keep previous value.
@@ -233,8 +233,8 @@ int nc_server_ssh_ch_client_endpt_add_hostkey(const char *client_name, const cha
  *
  * @param[in] client_name Existing Call Home client name.
  * @param[in] endpt_name Existing endpoint name of the client.
- * @param[in] name Name of the host key. NULL matches all the keys, but if \p idx != -1 then this must be NULL.
- * @param[in] idx Index of the hostkey. -1 matches all indices, but if \p name != NULL then this must be -1.
+ * @param[in] name Name of the host key. NULL matches all the keys, but if @p idx != -1 then this must be NULL.
+ * @param[in] idx Index of the hostkey. -1 matches all indices, but if @p name != NULL then this must be -1.
  * @return 0 on success, -1 on error.
  */
 int nc_server_ssh_ch_client_endpt_del_hostkey(const char *client_name, const char *endpt_name, const char *name, int16_t idx);
@@ -245,7 +245,7 @@ int nc_server_ssh_ch_client_endpt_del_hostkey(const char *client_name, const cha
  * @param[in] client_name Exisitng Call Home client name.
  * @param[in] endpt_name Existing endpoint name of the client.
  * @param[in] key_mov Name of the host key that will be moved.
- * @param[in] key_after Name of the key that will preceed \p key_mov. NULL if \p key_mov is to be moved at the beginning.
+ * @param[in] key_after Name of the key that will preceed @p key_mov. NULL if @p key_mov is to be moved at the beginning.
  * @return 0 in success, -1 on error.
  */
 int nc_server_ssh_ch_client_endpt_mov_hostkey(const char *client_name, const char *endpt_name, const char *key_mov,
@@ -378,8 +378,8 @@ void nc_server_tls_ch_client_endpt_clear_crls(const char *client_name, const cha
 /**
  * @brief Add a cert-to-name entry.
  *
- * It is possible to add an entry step-by-step, specifying first only \p ip and in later calls
- * \p fingerprint, \p map_type, and optionally \p name spearately.
+ * It is possible to add an entry step-by-step, specifying first only @p ip and in later calls
+ * @p fingerprint, @p map_type, and optionally @p name spearately.
  *
  * @param[in] client_name Existing Call Home client name.
  * @param[in] endpt_name Existing endpoint name of the client.
@@ -387,7 +387,7 @@ void nc_server_tls_ch_client_endpt_clear_crls(const char *client_name, const cha
  *               is modified.
  * @param[in] fingerprint Matching certificate fingerprint. If NULL, kept temporarily unset.
  * @param[in] map_type Type of username-certificate mapping. If 0, kept temporarily unset.
- * @param[in] name Specific username used only if \p map_type == NC_TLS_CTN_SPECIFED.
+ * @param[in] name Specific username used only if @p map_type == NC_TLS_CTN_SPECIFED.
  * @return 0 on success, -1 on error.
  */
 int nc_server_tls_ch_client_endpt_add_ctn(const char *client_name, const char *endpt_name, uint32_t id,

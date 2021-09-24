@@ -1,9 +1,9 @@
 /**
- * \file session_client_ch.h
- * \author Michal Vasko <mvasko@cesnet.cz>
- * \brief libnetconf2 Call Home session client manipulation
+ * @file session_client_ch.h
+ * @author Michal Vasko <mvasko@cesnet.cz>
+ * @brief libnetconf2 Call Home session client manipulation
  *
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -20,6 +20,10 @@ extern "C" {
 #endif
 
 #include <libyang/libyang.h>
+
+#ifdef NC_ENABLED_SSH
+# include <libssh/libssh.h>
+#endif
 
 #include "messages_client.h"
 #include "netconf.h"
@@ -46,7 +50,7 @@ extern "C" {
  */
 int nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session);
 
-/**@} Client-side Call Home */
+/** @} Client-side Call Home */
 
 #endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
@@ -221,7 +225,7 @@ int nc_client_ssh_ch_get_keypair(int idx, const char **pub_key, const char **pri
  * - interactive authentication (1)
  *
  * @param[in] auth_type Authentication method to modify the preference of.
- * @param[in] pref Preference of \p auth_type. Higher number increases priority, negative values disable the method.
+ * @param[in] pref Preference of @p auth_type. Higher number increases priority, negative values disable the method.
  */
 void nc_client_ssh_ch_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref);
 
@@ -229,7 +233,7 @@ void nc_client_ssh_ch_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref);
  * @brief Get SSH Call Home authentication method preference.
  *
  * @param[in] auth_type Authentication method to retrieve the prefrence of.
- * @return Preference of the \p auth_type.
+ * @return Preference of the @p auth_type.
  */
 int16_t nc_client_ssh_ch_get_auth_pref(NC_SSH_AUTH_TYPE auth_type);
 
@@ -248,7 +252,7 @@ int nc_client_ssh_ch_set_username(const char *username);
  */
 const char *nc_client_ssh_ch_get_username(void);
 
-/**@} Client-side Call Home on SSH */
+/** @} Client-side Call Home on SSH */
 
 #endif /* NC_ENABLED_SSH */
 
@@ -284,8 +288,8 @@ int nc_client_tls_ch_del_bind(const char *address, uint16_t port);
  * @brief Set client Call Home authentication identity - a certificate and a private key.
  *
  * @param[in] client_cert Path to the file containing the client certificate.
- * @param[in] client_key Path to the file containing the private key for the \p client_cert.
- *                       If NULL, key is expected to be stored with \p client_cert.
+ * @param[in] client_key Path to the file containing the private key for the @p client_cert.
+ *                       If NULL, key is expected to be stored with @p client_cert.
  * @return 0 on success, -1 on error.
  */
 int nc_client_tls_ch_set_cert_key_paths(const char *client_cert, const char *client_key);
@@ -294,7 +298,7 @@ int nc_client_tls_ch_set_cert_key_paths(const char *client_cert, const char *cli
  * @brief Get client Call Home authentication identity - a certificate and a private key.
  *
  * @param[out] client_cert Path to the file containing the client certificate. Can be NULL.
- * @param[out] client_key Path to the file containing the private key for the \p client_cert.
+ * @param[out] client_key Path to the file containing the private key for the @p client_cert.
  *                        Can be NULL.
  */
 void nc_client_tls_ch_get_cert_key_paths(const char **client_cert, const char **client_key);
@@ -339,7 +343,7 @@ int nc_client_tls_ch_set_crl_paths(const char *crl_file, const char *crl_dir);
  */
 void nc_client_tls_ch_get_crl_paths(const char **crl_file, const char **crl_dir);
 
-/**@} Client-side Call Home on TLS */
+/** @} Client-side Call Home on TLS */
 
 #endif /* NC_ENABLED_TLS */
 

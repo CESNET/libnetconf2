@@ -23,29 +23,6 @@
 #define MOCK __attribute__((visibility("default")))
 
 /*
- * Support for atomic variables
- */
-#cmakedefine HAVE_STDATOMIC
-
-#ifdef HAVE_STDATOMIC
-# include <stdatomic.h>
-
-# define ATOMIC_UINT32_T atomic_uint_fast32_t
-# define ATOMIC_PTR atomic_uintptr_t
-# define ATOMIC_STORE(x, val) atomic_store(&(x), (val))
-# define ATOMIC_LOAD(x) atomic_load((atomic_uintptr_t *)&(x))
-# define ATOMIC_INC(x) atomic_fetch_add(&(x), 1)
-#else
-# include <stdint.h>
-
-# define ATOMIC_UINT32_T uint32_t
-# define ATOMIC_PTR void *
-# define ATOMIC_STORE(x, val) (x) = (val)
-# define ATOMIC_LOAD(x) (x)
-# define ATOMIC_INC(x) __sync_add_and_fetch(&(x), 1)
-#endif
-
-/*
  * Support for getpeereid
  */
 #cmakedefine HAVE_GETPEEREID

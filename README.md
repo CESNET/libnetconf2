@@ -3,7 +3,8 @@
 [![BSD license](https://img.shields.io/badge/License-BSD-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Build](https://github.com/CESNET/libnetconf2/workflows/libnetconf2%20CI/badge.svg)](https://github.com/CESNET/libnetconf2/actions?query=workflow%3A%22libnetconf2+CI%22)
 [![Docs](https://img.shields.io/badge/docs-link-blue)](https://netopeer.liberouter.org/doc/libnetconf2/)
-[![Coverity Scan Build Status](https://scan.coverity.com/projects/7642/badge.svg)](https://scan.coverity.com/projects/7642)
+[![Coverity](https://scan.coverity.com/projects/7642/badge.svg)](https://scan.coverity.com/projects/7642)
+[![Codecov](https://codecov.io/gh/CESNET/libnetconf2/branch/master/graph/badge.svg?token=HpKeW36N9D)](https://codecov.io/gh/CESNET/libnetconf2)
 
 **libnetconf2** is a NETCONF library in C intended for building NETCONF clients
 and servers. NETCONF is the [NETwork CONFiguration protocol](http://trac.tools.ietf.org/wg/netconf/trac/wiki)
@@ -46,55 +47,9 @@ and it occurs on the `master` branch, the **first response will likely be** to u
 
 ## libnetconf vs libnetconf2
 
-**libnetconf2** is being developed with experiences gained from the development
-of the [**libnetconf**](https://github.com/CESNET/libnetconf) library. Here are the
-main differences between the both libraries that would help you to decide which
-of them is more suitable for your needs.
-
-### libxml2 vs libyang
-
-To represent the schema and data trees, **libnetconf** uses libxml2, which is
-intended for different purposes - schema and data trees connected with YANG
-have specific needs and restrictions in comparison to more generic XML.
-Therefore, in **libnetconf2**, we have completely replaced libxml2 by
-[libyang](https://github.com/CESNET/libyang). It is much more efficient in work
-with YANG modeled data (which is the case of NETCONF messages) and this advantage
-then applies also to **libnetconf2**. The library connects data with the YANG
-schemas, so for example the data validation according to the provided YANG
-schemas is done internally by libyang instead of using external and extremely
-slow DSDL tools (as it was in the first generation of libnetconf).
-
-### Datastore
-
-**libnetconf** was trying to be all-in-one, so besides the NETCONF transport,
-it also implements configuration datastores, NETCONF Access Control Module or
-the NETCONF Event Notification storage. In contrast, to allow better design of
-the NETCONF servers, **libnetconf2** is focused strictly to the NETCONF
-transport and message manipulation.
-
-Therefore, all the features from **libnetconf** that are connected to the
-datastore implementation are not available in **libnetconf2**. In the case of
-the Netopeer2 server, all these features (and much more) are implemented as
-part of the server itself or its datastore implementation -
-[**sysrepo**](https://github.com/sysrepo/sysrepo).
-
-### Notifications
-
-While **libnetconf2** is able to send (on the server side) and receive (on the
-client side) the NETCONF Event Notification messages, its generation and storage
-is left up to the server implementation. In case of the Netopeer2 server, the
-Notifications implementation is split between the server itself (managing
-subscriptions) and sysrepo (Events storage).
-
-### Call Home
-
-Similarly as in case of Notifications, **libnetconf2** provides supporting
-functions implementing the Call Home mechanism, but its management (setting the
-connection parameters) is supposed to be done in the server. Again, as a
-reference implementation, you can check the Netopeer2 server.
-
-In contrast to **libnetconf**, **libnetconf2** actually implements more of the
-Call Home functionality.
+**libnetconf2** was developed with experiences gained from the development
+of the [**libnetconf**](https://github.com/CESNET/libnetconf) library, which
+is now obsolete and should not be used.
 
 # Installation
 
@@ -157,6 +112,10 @@ For building the library documentation.
 
 Doxygen is a standard part of the most distribution, so ask your package
 manager for doxygen package.
+
+### gcov
+
+For code coverage, `gcov`, `lcov`, and `genhtml` are needed.
 
 ## Building libnetconf2
 
@@ -262,13 +221,11 @@ $ cmake -D MAX_PSPOLL_THREAD_COUNT:String="6" ..
 
 ### Code Coverage
 
-To generate statistical information about code coverage by tests, set
-`ENABLE_COVERAGE` option to `ON`:
+Based on the tests run, it is possible to generate code coverage report. But
+it must be enabled and these commands are needed to generate the report:
 ```
-$ cmake -D ENABLE_COVERAGE="ON" ..
-```
-and then the make's `coverage` target should be available to generate statistics:
-```
+$ cmake -DENABLE_COVERAGE=ON ..
+$ make
 $ make coverage
 ```
 
@@ -282,6 +239,23 @@ Note that `gcc` compiler is required for this option and additional tools are re
 Note that, with CMake, if you want to change the compiler or its options after
 you already ran CMake, you need to clear its cache first - the most simple way
 to do it is to remove all content from the 'build' directory.
+
+## Usage
+
+All public functions are available via 2 headers:
+```
+#include <nc_server.h>
+#include <nc_client.h>
+```
+
+You need to include either one if imeplementing a NETCONF server or a NETCONF client,
+respectively.
+
+To compile your program with libnetconf2, it is necessary to link it with it using the
+following linker parameters:
+```
+-lnetconf2
+```
 
 ## Tests
 
@@ -297,7 +271,7 @@ $ make
 In case of the `Release` mode, the tests are not built by default (it requires
 additional dependency), but it can be enabled via cmake option:
 ```
-$ cmake -DENABLE_BUILD_TESTS=ON ..
+$ cmake -DENABLE_TESTS=ON ..
 ```
 
 Note that if the necessary [cmocka](https://cmocka.org/) headers are not present

@@ -13,6 +13,7 @@ include(UseCompat)
 include(ABICheck)
 include(SourceFormat)
 include(GenDoc)
+include(GenCoverage)
 
 if(POLICY CMP0075)
     cmake_policy(SET CMP0075 NEW)
@@ -54,66 +55,40 @@ endif()
 # micro version is changed with a set of small changes or bugfixes anywhere in the project.
 set(LIBNETCONF2_MAJOR_VERSION 2)
 set(LIBNETCONF2_MINOR_VERSION 0)
-set(LIBNETCONF2_MICRO_VERSION 1)
+set(LIBNETCONF2_MICRO_VERSION 17)
 set(LIBNETCONF2_VERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION}.${LIBNETCONF2_MICRO_VERSION})
 
 # Version of the library
 # Major version is changed with every backward non-compatible API/ABI change in libyang, minor version changes
 # with backward compatible change and micro version is connected with any internal change of the library.
 set(LIBNETCONF2_MAJOR_SOVERSION 2)
-set(LIBNETCONF2_MINOR_SOVERSION 0)
-set(LIBNETCONF2_MICRO_SOVERSION 1)
+set(LIBNETCONF2_MINOR_SOVERSION 1)
+set(LIBNETCONF2_MICRO_SOVERSION 13)
 set(LIBNETCONF2_SOVERSION_FULL ${LIBNETCONF2_MAJOR_SOVERSION}.${LIBNETCONF2_MINOR_SOVERSION}.${LIBNETCONF2_MICRO_SOVERSION})
 set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_SOVERSION})
 
 # libyang SO version required
 set(LIBYANG_DEP_SOVERSION_MAJOR 2)
 
-# build options
-if(("${BUILD_TYPE_UPPER}" STREQUAL "DEBUG") OR ("${BUILD_TYPE_UPPER}" STREQUAL "RELWITHDEBINFO"))
-    option(ENABLE_BUILD_TESTS "Build tests" ON)
-    option(ENABLE_VALGRIND_TESTS "Build tests with valgrind" ON)
-else()
-    option(ENABLE_BUILD_TESTS "Build tests" OFF)
-    option(ENABLE_VALGRIND_TESTS "Build tests with valgrind" OFF)
-endif()
-option(ENABLE_COVERAGE "Build code coverage report from tests" OFF)
-
-if(ENABLE_COVERAGE)
-    find_program(PATH_GCOV NAMES gcov)
-    if(NOT PATH_GCOV)
-        message(WARNING "'gcov' executable not found! Disabling building code coverage report.")
-        set(ENABLE_COVERAGE OFF)
-    endif()
-
-    find_program(PATH_LCOV NAMES lcov)
-    if(NOT PATH_LCOV)
-        message(WARNING "'lcov' executable not found! Disabling building code coverage report.")
-        set(ENABLE_COVERAGE OFF)
-    endif()
-
-    find_program(PATH_GENHTML NAMES genhtml)
-    if(NOT PATH_GENHTML)
-        message(WARNING "'genhtml' executable not found! Disabling building code coverage report.")
-        set(ENABLE_COVERAGE OFF)
-    endif()
-
-    if(NOT CMAKE_COMPILER_IS_GNUCC)
-        message(WARNING "Compiler is not gcc! Coverage may break the tests!")
-    endif()
-
-    if(ENABLE_COVERAGE)
-        set(CMAKE_C_FLAGS_COVERAGE "--coverage -fprofile-arcs -ftest-coverage")
-    endif()
-endif()
-
+#
 # compilation flags
+#
 set(CMAKE_C_FLAGS           "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_COVERAGE} -Wall -Wextra -fvisibility=hidden -std=gnu99")
 set(CMAKE_C_FLAGS_RELEASE   "-DNDEBUG -O2")
 set(CMAKE_C_FLAGS_DEBUG     "-g -O0")
 set(CMAKE_C_FLAGS_ABICHECK  "-g -Og")
 
+#
 # options
+#
+if(("${BUILD_TYPE_UPPER}" STREQUAL "DEBUG") OR ("${BUILD_TYPE_UPPER}" STREQUAL "RELWITHDEBINFO"))
+    option(ENABLE_TESTS "Build tests" ON)
+    option(ENABLE_VALGRIND_TESTS "Build tests with valgrind" ON)
+else()
+    option(ENABLE_TESTS "Build tests" OFF)
+    option(ENABLE_VALGRIND_TESTS "Build tests with valgrind" OFF)
+endif()
+option(ENABLE_COVERAGE "Build code coverage report from tests" OFF)
 option(ENABLE_SSH "Enable NETCONF over SSH support (via libssh)" ON)
 option(ENABLE_TLS "Enable NETCONF over TLS support (via OpenSSL)" ON)
 option(ENABLE_DNSSEC "Enable support for SSHFP retrieval using DNSSEC for SSH (requires OpenSSL and libval)" OFF)
@@ -123,12 +98,9 @@ set(MAX_PSPOLL_THREAD_COUNT 6 CACHE STRING "Maximum number of threads that could
 set(TIMEOUT_STEP 100 CACHE STRING "Number of microseconds tasks are repeated until timeout elapses")
 set(YANG_MODULE_DIR "${CMAKE_INSTALL_PREFIX}/share/yang/modules" CACHE STRING "Directory with common YANG modules")
 
-if(ENABLE_DNSSEC AND NOT ENABLE_SSH)
-    message(WARNING "DNSSEC SSHFP retrieval cannot be used without SSH support.")
-    set(ENABLE_DNSSEC OFF)
-endif()
-
-# source files
+#
+# sources
+#
 set(libsrc
     src/io.c
     src/log.c
@@ -185,10 +157,48 @@ set(format_sources
     tests/*.c
     tests/client/*.c)
 
+#
+# checks
+#
+if(ENABLE_DNSSEC AND NOT ENABLE_SSH)
+    message(WARNING "DNSSEC SSHFP retrieval cannot be used without SSH support.")
+    set(ENABLE_DNSSEC OFF)
+endif()
+
+if(ENABLE_VALGRIND_TESTS)
+    find_program(VALGRIND_FOUND valgrind)
+    if(NOT VALGRIND_FOUND)
+        message(WARNING "valgrind executable not found! Disabling memory leaks tests.")
+        set(ENABLE_VALGRIND_TESTS OFF)
+    else()
+        set(ENABLE_TESTS ON)
+    endif()
+endif()
+
+if(ENABLE_TESTS)
+    find_package(CMocka 1.0.0)
+    if(NOT CMOCKA_FOUND)
+        message(STATUS "Disabling tests because of missing CMocka")
+        set(ENABLE_TESTS OFF)
+    endif()
+endif()
+
+if(ENABLE_COVERAGE)
+    gen_coverage_enable(${ENABLE_TESTS})
+endif()
+
+if ("${BUILD_TYPE_UPPER}" STREQUAL "DEBUG")
+    source_format_enable()
+endif()
+
 if("${BUILD_TYPE_UPPER}" STREQUAL "DOCONLY")
     gen_doc("${doxy_files}" ${LIBNETCONF2_VERSION} ${LIBNETCONF2_DESCRIPTION} "")
     return()
 endif()
+
+#
+# targets
+#
 
 # use compat
 use_compat()
@@ -207,15 +217,17 @@ target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
 
 # check availability for some pthread functions
 set(CMAKE_REQUIRED_LIBRARIES pthread)
-check_include_file(stdatomic.h HAVE_STDATOMIC)
 check_function_exists(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
 
 # dependencies - openssl
 if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
     find_package(OpenSSL REQUIRED)
     if(ENABLE_TLS)
-        message(STATUS "OPENSSL found, required for TLS")
+        message(STATUS "OpenSSL found, required for TLS")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_TLS")
+    endif()
+    if(OPENSSL_VERSION VERSION_LESS 1.1.1)
+        message(WARNING "OpenSSL version ${OPENSSL_VERSION} is no longer maintained, consider an update.")
     endif()
 
     target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
@@ -300,25 +312,14 @@ if(PKG_CONFIG_FOUND)
     endif()
 endif()
 
-if ("${BUILD_TYPE_UPPER}" STREQUAL "DEBUG")
-    # enable before adding tests to let them detect that format checking is available - one of the tests is format checking
-    source_format_enable()
+# tests
+if(ENABLE_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
 endif()
 
-# source files to be covered by the 'format' target and a test with 'format-check' target
-source_format(${format_sources})
-
-if(ENABLE_VALGRIND_TESTS)
-    set(ENABLE_BUILD_TESTS ON)
-endif()
-
-if(ENABLE_BUILD_TESTS)
-    find_package(CMocka 1.0.0)
-    if(CMOCKA_FOUND)
-        enable_testing()
-        add_subdirectory(tests)
-    endif()
-endif()
+# create coverage target for generating coverage reports
+gen_coverage("test_.*" "test_.*_valgrind")
 
 # generate doxygen documentation for libnetconf2 API
 gen_doc("${doxy_files}" ${LIBNETCONF2_VERSION} ${LIBNETCONF2_DESCRIPTION} "")
@@ -327,6 +328,9 @@ gen_doc("${doxy_files}" ${LIBNETCONF2_VERSION} ${LIBNETCONF2_DESCRIPTION} "")
 if ("${BUILD_TYPE_UPPER}" STREQUAL "ABICHECK")
     lib_abi_check(netconf2 "${headers}" ${LIBNETCONF2_SOVERSION_FULL} e7402149e5b36de7acab2e38970a3a9d6a8165d5)
 endif()
+
+# source files to be covered by the 'format' target and a test with 'format-check' target
+source_format(${format_sources})
 
 # clean cmake cache
 add_custom_target(cleancache

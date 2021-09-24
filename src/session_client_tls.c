@@ -126,7 +126,7 @@ tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
         for (i = 0; i < n; i++) {
             revoked = sk_X509_REVOKED_value(X509_CRL_get_REVOKED(crl), i);
             if (ASN1_INTEGER_cmp(X509_REVOKED_get0_serialNumber(revoked), X509_get_serialNumber(cert)) == 0) {
-                ERR("Certificate revoked!");
+                ERR(NULL, "Certificate revoked!");
                 X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CERT_REVOKED);
                 X509_OBJECT_free(obj);
                 return 0; /* fail */
@@ -220,7 +220,7 @@ tlsauth_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
         for (i = 0; i < n; i++) {
             revoked = sk_X509_REVOKED_value(X509_CRL_get_REVOKED(crl), i);
             if (ASN1_INTEGER_cmp(revoked->serialNumber, X509_get_serialNumber(cert)) == 0) {
-                ERR("Certificate revoked!");
+                ERR(NULL, "Certificate revoked!");
                 X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CERT_REVOKED);
                 X509_OBJECT_free_contents(&obj);
                 return 0; /* fail */
@@ -510,14 +510,15 @@ nc_client_tls_update_opts(struct nc_client_tls_opts *opts)
         if (!(opts->tls_ctx = SSL_CTX_new(TLSv1_2_client_method())))
 #endif
         {
-            ERR("Unable to create OpenSSL context (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(NULL, "Unable to create OpenSSL context (%s).", ERR_reason_error_string(ERR_get_error()));
             return -1;
         }
         SSL_CTX_set_verify(opts->tls_ctx, SSL_VERIFY_PEER, tlsauth_verify_callback);
 
         /* get peer certificate */
         if (SSL_CTX_use_certificate_file(opts->tls_ctx, opts->cert_path, SSL_FILETYPE_PEM) != 1) {
-            ERR("Loading the client certificate from \'%s\' failed (%s).", opts->cert_path, ERR_reason_error_string(ERR_get_error()));
+            ERR(NULL, "Loading the client certificate from \'%s\' failed (%s).", opts->cert_path,
+                    ERR_reason_error_string(ERR_get_error()));
             return -1;
         }
 
@@ -528,12 +529,14 @@ nc_client_tls_update_opts(struct nc_client_tls_opts *opts)
             key = opts->key_path;
         }
         if (SSL_CTX_use_PrivateKey_file(opts->tls_ctx, key, SSL_FILETYPE_PEM) != 1) {
-            ERR("Loading the client priavte key from \'%s\' failed (%s).", key, ERR_reason_error_string(ERR_get_error()));
+            ERR(NULL, "Loading the client priavte key from \'%s\' failed (%s).", key,
+                    ERR_reason_error_string(ERR_get_error()));
             return -1;
         }
 
         if (!SSL_CTX_load_verify_locations(opts->tls_ctx, opts->ca_file, opts->ca_dir)) {
-            ERR("Failed to load the locations of trusted CA certificates (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(NULL, "Failed to load the locations of trusted CA certificates (%s).",
+                    ERR_reason_error_string(ERR_get_error()));
             return -1;
         }
     }
@@ -544,7 +547,7 @@ nc_client_tls_update_opts(struct nc_client_tls_opts *opts)
 
         opts->crl_store = X509_STORE_new();
         if (!opts->crl_store) {
-            ERR("Unable to create a certificate store (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(NULL, "Unable to create a certificate store (%s).", ERR_reason_error_string(ERR_get_error()));
             return -1;
         }
 
@@ -555,22 +558,22 @@ nc_client_tls_update_opts(struct nc_client_tls_opts *opts)
 
         if (opts->crl_file) {
             if (!(lookup = X509_STORE_add_lookup(opts->crl_store, X509_LOOKUP_file()))) {
-                ERR("Failed to add lookup method to CRL checking.");
+                ERR(NULL, "Failed to add lookup method to CRL checking.");
                 return -1;
             }
             if (X509_LOOKUP_add_dir(lookup, opts->crl_file, X509_FILETYPE_PEM) != 1) {
-                ERR("Failed to add the revocation lookup file \"%s\".", opts->crl_file);
+                ERR(NULL, "Failed to add the revocation lookup file \"%s\".", opts->crl_file);
                 return -1;
             }
         }
 
         if (opts->crl_dir) {
             if (!(lookup = X509_STORE_add_lookup(opts->crl_store, X509_LOOKUP_hash_dir()))) {
-                ERR("Failed to add lookup method to CRL checking.");
+                ERR(NULL, "Failed to add lookup method to CRL checking.");
                 return -1;
             }
             if (X509_LOOKUP_add_dir(lookup, opts->crl_dir, X509_FILETYPE_PEM) != 1) {
-                ERR("Failed to add the revocation lookup directory \"%s\".", opts->crl_dir);
+                ERR(NULL, "Failed to add the revocation lookup directory \"%s\".", opts->crl_dir);
                 return -1;
             }
         }
@@ -584,7 +587,9 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
 {
     struct nc_session *session = NULL;
     int sock, verify, ret;
+    unsigned long tls_err;
     struct timespec ts_timeout, ts_cur;
+    const char *peername;
     char *ip_host = NULL;
 
     if (!tls_opts.cert_path || (!tls_opts.ca_file && !tls_opts.ca_dir)) {
@@ -617,14 +622,14 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     /* fill the session */
     session->ti_type = NC_TI_OPENSSL;
     if (!(session->ti.tls = SSL_new(tls_opts.tls_ctx))) {
-        ERR("Failed to create a new TLS session structure (%s).", ERR_reason_error_string(ERR_get_error()));
+        ERR(NULL, "Failed to create a new TLS session structure (%s).", ERR_reason_error_string(ERR_get_error()));
         goto fail;
     }
 
     /* create and assign socket */
     sock = nc_sock_connect(host, port, -1, &client_opts.ka, NULL, &ip_host);
     if (sock == -1) {
-        ERR("Unable to connect to %s:%u (%s).", host, port, strerror(errno));
+        ERR(NULL, "Unable to connect to %s:%u (%s).", host, port, strerror(errno));
         goto fail;
     }
     SSL_set_fd(session->ti.tls, sock);
@@ -632,28 +637,37 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     /* set the SSL_MODE_AUTO_RETRY flag to allow OpenSSL perform re-handshake automatically */
     SSL_set_mode(session->ti.tls, SSL_MODE_AUTO_RETRY);
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L // >= 1.1.0
+    /* server identity (hostname) verification */
+    if (!SSL_set1_host(session->ti.tls, host)) {
+        ERR(NULL, "Failed to set expected server hostname.");
+        goto fail;
+    }
+#endif
+
     /* connect and perform the handshake */
     nc_gettimespec_mono(&ts_timeout);
     nc_addtimespec(&ts_timeout, NC_TRANSPORT_TIMEOUT);
     tlsauth_ch = 0;
-    while (((ret = SSL_connect(session->ti.tls)) == -1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
+    while (((ret = SSL_connect(session->ti.tls)) != 1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
         usleep(NC_TIMEOUT_STEP);
         nc_gettimespec_mono(&ts_cur);
         if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
-            ERR("SSL_connect timeout.");
+            ERR(NULL, "SSL_connect timeout.");
             goto fail;
         }
     }
     if (ret != 1) {
         switch (SSL_get_error(session->ti.tls, ret)) {
         case SSL_ERROR_SYSCALL:
-            ERR("SSL_connect failed (%s).", strerror(errno));
+            ERR(NULL, "SSL_connect failed (%s).", errno ? strerror(errno) : "unexpected EOF");
             break;
         case SSL_ERROR_SSL:
-            ERR("SSL_connect failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            tls_err = ERR_get_error();
+            ERR(NULL, "SSL_connect failed (%s).", ERR_reason_error_string(tls_err));
             break;
         default:
-            ERR("SSL_connect failed.");
+            ERR(NULL, "SSL_connect failed.");
             break;
         }
         goto fail;
@@ -663,10 +677,16 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     verify = SSL_get_verify_result(session->ti.tls);
     switch (verify) {
     case X509_V_OK:
-        VRB("Server certificate successfully verified.");
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L // >= 1.1.0
+        peername = SSL_get0_peername(session->ti.tls);
+        VRB(NULL, "Server certificate successfully verified (domain \"%s\").", peername ? peername : "<unknown>");
+#else
+        (void)peername;
+        VRB(NULL, "Server certificate successfully verified.");
+#endif
         break;
     default:
-        WRN("Server certificate verification problem (%s).", X509_verify_cert_error_string(verify));
+        WRN(NULL, "Server certificate verification problem (%s).", X509_verify_cert_error_string(verify));
     }
 
     if (nc_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
@@ -706,7 +726,7 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
         ERRARG("tls");
         return NULL;
     } else if (!SSL_is_init_finished(tls)) {
-        ERR("Supplied TLS session is not fully connected!");
+        ERR(NULL, "Supplied TLS session is not fully connected!");
         return NULL;
     }
 
@@ -738,6 +758,7 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     return session;
 
 fail:
+    session->ti.tls = NULL;
     nc_session_free(session, NULL);
     return NULL;
 }
@@ -746,19 +767,17 @@ struct nc_session *
 nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout)
 {
     int verify, ret;
-    SSL *tls;
-    struct nc_session *session;
+    SSL *tls = NULL;
+    struct nc_session *session = NULL;
     struct timespec ts_timeout, ts_cur;
 
     if (nc_client_tls_update_opts(&tls_ch_opts)) {
-        close(sock);
-        return NULL;
+        goto cleanup;
     }
 
     if (!(tls = SSL_new(tls_ch_opts.tls_ctx))) {
-        ERR("Failed to create new TLS session structure (%s).", ERR_reason_error_string(ERR_get_error()));
-        close(sock);
-        return NULL;
+        ERR(NULL, "Failed to create new TLS session structure (%s).", ERR_reason_error_string(ERR_get_error()));
+        goto cleanup;
     }
 
     SSL_set_fd(tls, sock);
@@ -777,47 +796,53 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
         if (timeout > -1) {
             nc_gettimespec_mono(&ts_cur);
             if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
-                ERR("SSL_connect timeout.");
-                SSL_free(tls);
-                return NULL;
+                ERR(NULL, "SSL_connect timeout.");
+                goto cleanup;
             }
         }
     }
     if (ret != 1) {
         switch (SSL_get_error(tls, ret)) {
         case SSL_ERROR_SYSCALL:
-            ERR("SSL_connect failed (%s).", strerror(errno));
+            ERR(NULL, "SSL_connect failed (%s).", strerror(errno));
             break;
         case SSL_ERROR_SSL:
-            ERR("SSL_connect failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(NULL, "SSL_connect failed (%s).", ERR_reason_error_string(ERR_get_error()));
             break;
         default:
-            ERR("SSL_connect failed.");
+            ERR(NULL, "SSL_connect failed.");
             break;
         }
-        SSL_free(tls);
-        return NULL;
+        goto cleanup;
     }
 
     /* check certificate verification result */
     verify = SSL_get_verify_result(tls);
     switch (verify) {
     case X509_V_OK:
-        VRB("Server certificate successfully verified.");
+        VRB(NULL, "Server certificate successfully verified.");
         break;
     default:
-        WRN("Server certificate verification problem (%s).", X509_verify_cert_error_string(verify));
+        WRN(NULL, "Server certificate verification problem (%s).", X509_verify_cert_error_string(verify));
     }
 
+    /* connect */
     session = nc_connect_libssl(tls, ctx);
-    if (session) {
-        session->flags |= NC_SESSION_CALLHOME;
-
-        /* store information into session and the dictionary */
-        lydict_insert(session->ctx, host, 0, &session->host);
-        session->port = port;
-        lydict_insert(session->ctx, "certificate-based", 0, &session->username);
+    if (!session) {
+        goto cleanup;
     }
 
+    session->flags |= NC_SESSION_CALLHOME;
+
+    /* store information into session and the dictionary */
+    lydict_insert(session->ctx, host, 0, &session->host);
+    session->port = port;
+    lydict_insert(session->ctx, "certificate-based", 0, &session->username);
+
+cleanup:
+    if (!session) {
+        SSL_free(tls);
+        close(sock);
+    }
     return session;
 }

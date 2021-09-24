@@ -3,7 +3,7 @@
  * \author Radek Krejci <rkrejci@cesnet.cz>
  * \brief libnetconf2 - log functions
  *
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -30,7 +30,8 @@
  */
 volatile uint8_t verbose_level = 0;
 
-void (*print_clb)(NC_VERB_LEVEL level, const char *msg);
+void (*depr_print_clb)(NC_VERB_LEVEL level, const char *msg);
+void (*print_clb)(const struct nc_session *session, NC_VERB_LEVEL level, const char *msg);
 
 API void
 nc_verbosity(NC_VERB_LEVEL level)
@@ -61,7 +62,7 @@ nc_libssh_thread_verbosity(int level)
 #endif
 
 static void
-prv_vprintf(NC_VERB_LEVEL level, const char *format, va_list args)
+prv_vprintf(const struct nc_session *session, NC_VERB_LEVEL level, const char *format, va_list args)
 {
 #define PRV_MSG_INIT_SIZE 256
     va_list args2;
@@ -96,7 +97,11 @@ prv_vprintf(NC_VERB_LEVEL level, const char *format, va_list args)
     }
 
     if (print_clb) {
-        print_clb(level, prv_msg);
+        print_clb(session, level, prv_msg);
+    } else if (depr_print_clb) {
+        depr_print_clb(level, prv_msg);
+    } else if (session && session->id) {
+        fprintf(stderr, "Session %u %s: %s\n", session->id, verb[level].label, prv_msg);
     } else {
         fprintf(stderr, "%s: %s\n", verb[level].label, prv_msg);
     }
@@ -107,24 +112,37 @@ cleanup:
 }
 
 void
-prv_printf(NC_VERB_LEVEL level, const char *format, ...)
+prv_printf(const struct nc_session *session, NC_VERB_LEVEL level, const char *format, ...)
 {
     va_list ap;
 
     va_start(ap, format);
-    prv_vprintf(level, format, ap);
+    prv_vprintf(session, level, format, ap);
     va_end(ap);
 }
 
 static void
 nc_ly_log_clb(LY_LOG_LEVEL lvl, const char *msg, const char *UNUSED(path))
 {
-    print_clb((NC_VERB_LEVEL)lvl, msg);
+    if (print_clb) {
+        print_clb(NULL, (NC_VERB_LEVEL)lvl, msg);
+    } else if (depr_print_clb) {
+        depr_print_clb((NC_VERB_LEVEL)lvl, msg);
+    }
 }
 
 API void
 nc_set_print_clb(void (*clb)(NC_VERB_LEVEL, const char *))
 {
+    print_clb = NULL;
+    depr_print_clb = clb;
+    ly_set_log_clb(nc_ly_log_clb, 1);
+}
+
+API void
+nc_set_print_clb_session(void (*clb)(const struct nc_session *, NC_VERB_LEVEL, const char *))
+{
     print_clb = clb;
+    depr_print_clb = NULL;
     ly_set_log_clb(nc_ly_log_clb, 1);
 }

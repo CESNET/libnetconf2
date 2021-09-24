@@ -124,15 +124,13 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
                     interrupted = 1;
                     break;
                 } else {
-                    ERR("Session %u: reading from file descriptor (%d) failed (%s).",
-                            session->id, fd, strerror(errno));
+                    ERR(session, "Reading from file descriptor (%d) failed (%s).", fd, strerror(errno));
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_OTHER;
                     return -1;
                 }
             } else if (r == 0) {
-                ERR("Session %u: communication file descriptor (%d) unexpectedly closed.",
-                        session->id, fd);
+                ERR(session, "Communication file descriptor (%d) unexpectedly closed.", fd);
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_DROPPED;
                 return -1;
@@ -147,14 +145,13 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
                 r = 0;
                 break;
             } else if (r == SSH_ERROR) {
-                ERR("Session %u: reading from the SSH channel failed (%s).", session->id,
-                        ssh_get_error(session->ti.libssh.session));
+                ERR(session, "Reading from the SSH channel failed (%s).", ssh_get_error(session->ti.libssh.session));
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_OTHER;
                 return -1;
             } else if (r == 0) {
                 if (ssh_channel_is_eof(session->ti.libssh.channel)) {
-                    ERR("Session %u: SSH channel unexpected EOF.", session->id);
+                    ERR(session, "SSH channel unexpected EOF.");
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_DROPPED;
                     return -1;
@@ -179,24 +176,24 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
                     r = 0;
                     break;
                 case SSL_ERROR_ZERO_RETURN:
-                    ERR("Session %u: communication socket unexpectedly closed (OpenSSL).", session->id);
+                    ERR(session, "Communication socket unexpectedly closed (OpenSSL).");
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_DROPPED;
                     return -1;
                 case SSL_ERROR_SYSCALL:
-                    ERR("Session %u: SSL socket error (%s).", session->id, strerror(errno));
+                    ERR(session, "SSL socket error (%s).", errno ? strerror(errno) : "unexpected EOF");
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_OTHER;
                     return -1;
                 case SSL_ERROR_SSL:
                     reasons = nc_ssl_error_get_reasons();
-                    ERR("Session %u: SSL error (%s).", session->id, reasons);
+                    ERR(session, "SSL error (%s).", reasons);
                     free(reasons);
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_OTHER;
                     return -1;
                 default:
-                    ERR("Session %u: unknown SSL error occured (err code %d).", session->id, e);
+                    ERR(session, "Unknown SSL error occured (err code %d).", e);
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_OTHER;
                     return -1;
@@ -214,9 +211,9 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
             nc_gettimespec_mono(&ts_cur);
             if ((nc_difftimespec(&ts_cur, &ts_inact_timeout) < 1) || (nc_difftimespec(&ts_cur, ts_act_timeout) < 1)) {
                 if (nc_difftimespec(&ts_cur, &ts_inact_timeout) < 1) {
-                    ERR("Session %u: inactive read timeout elapsed.", session->id);
+                    ERR(session, "Inactive read timeout elapsed.");
                 } else {
-                    ERR("Session %u: active read timeout elapsed.", session->id);
+                    ERR(session, "Active read timeout elapsed.");
                 }
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_OTHER;
@@ -292,8 +289,8 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint
     while (1) {
         if (limit && (count == limit)) {
             free(chunk);
-            WRN("Session %u: reading limit (%d) reached.", session->id, limit);
-            ERR("Session %u: invalid input data (missing \"%s\" sequence).", session->id, endtag);
+            WRN(session, "Reading limit (%d) reached.", limit);
+            ERR(session, "Invalid input data (missing \"%s\" sequence).", endtag);
             return -1;
         }
 
@@ -358,7 +355,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, struct ly_in **msg, i
     *msg = NULL;
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
-        ERR("Session %u: invalid session to read from.", session->id);
+        ERR(session, "Invalid session to read from.");
         ret = -1;
         goto cleanup;
     }
@@ -404,7 +401,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, struct ly_in **msg, i
                 /* end of chunked framing message */
                 free(chunk);
                 if (!data) {
-                    ERR("Session %u: invalid frame chunk delimiters.", session->id);
+                    ERR(session, "Invalid frame chunk delimiters.");
                     ret = -2;
                     goto cleanup;
                 }
@@ -415,7 +412,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, struct ly_in **msg, i
             chunk_len = strtoul(chunk, (char **)NULL, 10);
             free(chunk);
             if (!chunk_len) {
-                ERR("Session %u: invalid frame chunk size detected, fatal error.", session->id);
+                ERR(session, "Invalid frame chunk size detected, fatal error.");
                 ret = -2;
                 goto cleanup;
             }
@@ -448,7 +445,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, struct ly_in **msg, i
     nc_session_io_unlock(session, __func__);
     io_locked = 0;
 
-    DBG("Session %u: received message:\n%s\n", session->id, data);
+    DBG(session, "Received message:\n%s\n", data);
 
     /* build an input structure, eats data */
     if (ly_in_new_memory(data, msg)) {
@@ -475,7 +472,7 @@ nc_read_poll(struct nc_session *session, int io_timeout)
     struct pollfd fds;
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
-        ERR("Session %u: invalid session to poll.", session->id);
+        ERR(session, "Invalid session to poll.");
         return -1;
     }
 
@@ -485,13 +482,12 @@ nc_read_poll(struct nc_session *session, int io_timeout)
         /* EINTR is handled, it resumes waiting */
         ret = ssh_channel_poll_timeout(session->ti.libssh.channel, io_timeout, 0);
         if (ret == SSH_ERROR) {
-            ERR("Session %u: SSH channel poll error (%s).", session->id,
-                    ssh_get_error(session->ti.libssh.session));
+            ERR(session, "SSH channel poll error (%s).", ssh_get_error(session->ti.libssh.session));
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_OTHER;
             return -1;
         } else if (ret == SSH_EOF) {
-            ERR("Session %u: SSH channel unexpected EOF.", session->id);
+            ERR(session, "SSH channel unexpected EOF.");
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_DROPPED;
             return -1;
@@ -543,14 +539,14 @@ nc_read_poll(struct nc_session *session, int io_timeout)
     /* process the poll result, unified ret meaning for poll and ssh_channel poll */
     if (ret < 0) {
         /* poll failed - something really bad happened, close the session */
-        ERR("Session %u: poll error (%s).", session->id, strerror(errno));
+        ERR(session, "poll error (%s).", strerror(errno));
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_OTHER;
         return -1;
     } else { /* status > 0 */
         /* in case of standard (non-libssh) poll, there still can be an error */
         if (fds.revents & POLLERR) {
-            ERR("Session %u: communication channel error.", session->id);
+            ERR(session, "Communication channel error.");
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_OTHER;
             return -1;
@@ -558,7 +554,7 @@ nc_read_poll(struct nc_session *session, int io_timeout)
         /* Some poll() implementations may return POLLHUP|POLLIN when the other
          * side has closed but there is data left to read in the buffer. */
         if ((fds.revents & POLLHUP) && !(fds.revents & POLLIN)) {
-            ERR("Session %u: communication channel unexpectedly closed.", session->id);
+            ERR(session, "Communication channel unexpectedly closed.");
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_DROPPED;
             return -1;
@@ -577,7 +573,7 @@ nc_read_msg_poll_io(struct nc_session *session, int io_timeout, struct ly_in **m
     *msg = NULL;
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
-        ERR("Session %u: invalid session to read from.", session->id);
+        ERR(session, "Invalid session to read from.");
         return -1;
     }
 
@@ -638,7 +634,7 @@ nc_session_is_connected(struct nc_session *session)
     while (((ret = poll(&fds, 1, 0)) == -1) && (errno == EINTR)) {}
 
     if (ret == -1) {
-        ERR("Session %u: poll failed (%s).", session->id, strerror(errno));
+        ERR(session, "poll failed (%s).", strerror(errno));
         return 0;
     } else if ((ret > 0) && (fds.revents & (POLLHUP | POLLERR))) {
         return 0;
@@ -670,13 +666,13 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
 
     /* prevent SIGPIPE this way */
     if (!nc_session_is_connected(session)) {
-        ERR("Session %u: communication socket unexpectedly closed.", session->id);
+        ERR(session, "Communication socket unexpectedly closed.");
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_DROPPED;
         return -1;
     }
 
-    DBG("Session %u: sending message:\n%.*s\n", session->id, count, buf);
+    DBG(session, "Sending message:\n%.*s\n", count, buf);
 
     do {
         interrupted = 0;
@@ -691,7 +687,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
                 c = 0;
                 interrupted = 1;
             } else if (c < 0) {
-                ERR("Session %u: socket error (%s).", session->id, strerror(errno));
+                ERR(session, "socket error (%s).", strerror(errno));
                 return -1;
             }
             break;
@@ -700,9 +696,9 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
         case NC_TI_LIBSSH:
             if (ssh_channel_is_closed(session->ti.libssh.channel) || ssh_channel_is_eof(session->ti.libssh.channel)) {
                 if (ssh_channel_is_closed(session->ti.libssh.channel)) {
-                    ERR("Session %u: SSH channel unexpectedly closed.", session->id);
+                    ERR(session, "SSH channel unexpectedly closed.");
                 } else {
-                    ERR("Session %u: SSH channel unexpected EOF.", session->id);
+                    ERR(session, "SSH channel unexpected EOF.");
                 }
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_DROPPED;
@@ -710,7 +706,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
             }
             c = ssh_channel_write(session->ti.libssh.channel, (char *)(buf + written), count - written);
             if ((c == SSH_ERROR) || (c == -1)) {
-                ERR("Session %u: SSH channel write failed.", session->id);
+                ERR(session, "SSH channel write failed.");
                 return -1;
             }
             break;
@@ -723,22 +719,22 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
 
                 switch ((e = SSL_get_error(session->ti.tls, c))) {
                 case SSL_ERROR_ZERO_RETURN:
-                    ERR("Session %u: SSL connection was properly closed.", session->id);
+                    ERR(session, "SSL connection was properly closed.");
                     return -1;
                 case SSL_ERROR_WANT_WRITE:
                 case SSL_ERROR_WANT_READ:
                     c = 0;
                     break;
                 case SSL_ERROR_SYSCALL:
-                    ERR("Session %u: SSL socket error (%s).", session->id, strerror(errno));
+                    ERR(session, "SSL socket error (%s).", strerror(errno));
                     return -1;
                 case SSL_ERROR_SSL:
                     reasons = nc_ssl_error_get_reasons();
-                    ERR("Session %u: SSL error (%s).", session->id, reasons);
+                    ERR(session, "SSL error (%s).", reasons);
                     free(reasons);
                     return -1;
                 default:
-                    ERR("Session %u: unknown SSL error occured (err code %d).", session->id, e);
+                    ERR(session, "Unknown SSL error occured (err code %d).", e);
                     return -1;
                 }
             }
@@ -918,7 +914,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
     va_list ap;
     int count, ret;
     const char *attrs;
-    struct lyd_node *op, *reply_envp, *node;
+    struct lyd_node *op, *reply_envp, *node, *next;
     struct lyd_node_opaq *rpc_envp;
     struct nc_server_notif *notif;
     struct nc_server_reply *reply;
@@ -931,7 +927,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
     assert(session);
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
-        ERR("Session %u: invalid session to write to.", session->id);
+        ERR(session, "Invalid session to write to.");
         return NC_MSG_ERROR;
     }
 
@@ -992,7 +988,8 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         }
 
         /* build a rpc-reply opaque node that can be simply printed */
-        if (lyd_new_opaq2(NULL, session->ctx, "rpc-reply", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns, &reply_envp)) {
+        if (lyd_new_opaq2(NULL, session->ctx, "rpc-reply", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns,
+                &reply_envp)) {
             ERRINT;
             ret = NC_MSG_ERROR;
             goto cleanup;
@@ -1027,11 +1024,9 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
 
             node = ((struct nc_server_reply_data *)reply)->data;
             assert(node->schema->nodetype & (LYS_RPC | LYS_ACTION));
-            if (lyd_child(node)) {
+            LY_LIST_FOR_SAFE(lyd_child(node), next, node) {
                 /* temporary */
-                lyd_child(node)->parent = NULL;
-                lyd_insert_child(reply_envp, lyd_child(node));
-                ((struct lyd_node_inner *)node)->child = NULL;
+                lyd_insert_child(reply_envp, node);
             }
             break;
         case NC_RPL_ERROR:
@@ -1059,11 +1054,9 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
             lyd_free_tree(reply_envp);
             break;
         case NC_RPL_DATA:
-            if (lyd_child(reply_envp)) {
+            LY_LIST_FOR_SAFE(lyd_child(reply_envp), next, node) {
                 /* connect back to the reply structure */
-                lyd_child(reply_envp)->parent = NULL;
-                lyd_insert_child(((struct nc_server_reply_data *)reply)->data, lyd_child(reply_envp));
-                ((struct lyd_node_opaq *)reply_envp)->child = NULL;
+                lyd_insert_child(((struct nc_server_reply_data *)reply)->data, node);
             }
             lyd_free_tree(reply_envp);
             break;

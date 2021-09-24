@@ -107,7 +107,7 @@ nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_WD_MODE wd_mode, NC
     }
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter is neither an XML subtree nor an XPath expression (invalid first char '%c').", filter[0]);
+        ERR(NULL, "Filter is neither an XML subtree nor an XPath expression (invalid first char '%c').", filter[0]);
         return NULL;
     }
 
@@ -145,7 +145,7 @@ nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, NC_RPC_EDIT_TEST
     }
 
     if (edit_content[0] && (edit_content[0] != '<') && !isalpha(edit_content[0])) {
-        ERR("<edit-config> content is neither a URL nor an XML config (invalid first char '%c').", edit_content[0]);
+        ERR(NULL, "<edit-config> content is neither a URL nor an XML config (invalid first char '%c').", edit_content[0]);
         return NULL;
     }
 
@@ -185,7 +185,7 @@ nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTORE source, const
     }
 
     if (url_or_config_src && url_or_config_src[0] && (url_or_config_src[0] != '<') && !isalpha(url_or_config_src[0])) {
-        ERR("<copy-config> source is neither a URL nor an XML config (invalid first char '%c').", url_or_config_src[0]);
+        ERR(NULL, "<copy-config> source is neither a URL nor an XML config (invalid first char '%c').", url_or_config_src[0]);
         return NULL;
     }
 
@@ -292,7 +292,7 @@ nc_rpc_get(const char *filter, NC_WD_MODE wd_mode, NC_PARAMTYPE paramtype)
     struct nc_rpc_get *rpc;
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter is neither an XML subtree nor an XPath expression (invalid first char '%c').", filter[0]);
+        ERR(NULL, "Filter is neither an XML subtree nor an XPath expression (invalid first char '%c').", filter[0]);
         return NULL;
     }
 
@@ -415,7 +415,7 @@ nc_rpc_validate(NC_DATASTORE source, const char *url_or_config, NC_PARAMTYPE par
     }
 
     if (url_or_config && url_or_config[0] && (url_or_config[0] != '<') && !isalpha(url_or_config[0])) {
-        ERR("<validate> source is neither a URL nor an XML config (invalid first char '%c').", url_or_config[0]);
+        ERR(NULL, "<validate> source is neither a URL nor an XML config (invalid first char '%c').", url_or_config[0]);
         return NULL;
     }
 
@@ -481,7 +481,7 @@ nc_rpc_subscribe(const char *stream_name, const char *filter, const char *start_
     struct nc_rpc_subscribe *rpc;
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter is neither an XML subtree nor an XPath expression (invalid first char '%c').", filter[0]);
+        ERR(NULL, "Filter is neither an XML subtree nor an XPath expression (invalid first char '%c').", filter[0]);
         return NULL;
     }
 
@@ -526,7 +526,7 @@ nc_rpc_getdata(const char *datastore, const char *filter, const char *config_fil
     int i;
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter is neither an XML subtree nor an XPath expression (invalid first char '%c').", filter[0]);
+        ERR(NULL, "Filter is neither an XML subtree nor an XPath expression (invalid first char '%c').", filter[0]);
         return NULL;
     } else if (!datastore) {
         ERRARG("datastore");
@@ -600,7 +600,7 @@ nc_rpc_editdata(const char *datastore, NC_RPC_EDIT_DFLTOP default_op, const char
     }
 
     if (edit_content[0] && (edit_content[0] != '<') && !isalpha(edit_content[0])) {
-        ERR("<edit-data> content is neither a URL nor an XML config (invalid first char '%c').", edit_content[0]);
+        ERR(NULL, "<edit-data> content is neither a URL nor an XML config (invalid first char '%c').", edit_content[0]);
         return NULL;
     }
 
@@ -639,7 +639,8 @@ nc_rpc_establishsub(const char *filter, const char *stream_name, const char *sta
     }
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').", filter[0]);
+        ERR(NULL, "Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').",
+                filter[0]);
         return NULL;
     }
 
@@ -691,7 +692,8 @@ nc_rpc_modifysub(uint32_t id, const char *filter, const char *stop_time, NC_PARA
     }
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').", filter[0]);
+        ERR(NULL, "Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').",
+                filter[0]);
         return NULL;
     }
 
@@ -777,7 +779,8 @@ nc_rpc_establishpush_periodic(const char *datastore, const char *filter, const c
     }
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').", filter[0]);
+        ERR(NULL, "Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').",
+                filter[0]);
         return NULL;
     }
 
@@ -833,7 +836,8 @@ nc_rpc_establishpush_onchange(const char *datastore, const char *filter, const c
     }
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').", filter[0]);
+        ERR(NULL, "Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').",
+                filter[0]);
         return NULL;
     }
 
@@ -897,7 +901,8 @@ nc_rpc_modifypush_periodic(uint32_t id, const char *datastore, const char *filte
     }
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').", filter[0]);
+        ERR(NULL, "Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').",
+                filter[0]);
         return NULL;
     }
 
@@ -951,7 +956,8 @@ nc_rpc_modifypush_onchange(uint32_t id, const char *datastore, const char *filte
     }
 
     if (filter && filter[0] && (filter[0] != '<') && (filter[0] != '/') && !isalpha(filter[0])) {
-        ERR("Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').", filter[0]);
+        ERR(NULL, "Filter is not an XML subtree, an XPath expression, not a filter reference (invalid first char '%c').",
+                filter[0]);
         return NULL;
     }
 
