@@ -285,6 +285,11 @@ nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *opts)
     struct sockaddr_un sun;
     int sock = -1;
 
+    if (strlen(address) > sizeof(sun.sun_path) - 1) {
+        ERR(NULL, "Socket path \"%s\" is longer than maximum length %d.", address, (int)(sizeof(sun.sun_path) - 1));
+        goto fail;
+    }
+
     sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (sock == -1) {
         ERR(NULL, "Failed to create socket (%s).", strerror(errno));
@@ -293,7 +298,7 @@ nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *opts)
 
     memset(&sun, 0, sizeof(sun));
     sun.sun_family = AF_UNIX;
-    snprintf(sun.sun_path, sizeof(sun.sun_path), "%s", address);
+    snprintf(sun.sun_path, sizeof(sun.sun_path) - 1, "%s", address);
 
     unlink(sun.sun_path);
     if (bind(sock, (struct sockaddr *)&sun, sizeof(sun)) == -1) {
@@ -326,7 +331,6 @@ fail:
     if (sock > -1) {
         close(sock);
     }
-
     return -1;
 }
 
