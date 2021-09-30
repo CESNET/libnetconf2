@@ -532,14 +532,14 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, ch
             goto fail;
         }
     } else {
-        ERR(NULL, "Source host of an unknown protocol family.");
+        ERR("Source host of an unknown protocol family: %d.", (int)saddr.ss_family);
         goto fail;
     }
 
     if (saddr.ss_family == AF_UNIX) {
-        VRB(NULL, "Accepted a connection on %s.", binds[i].address);
+        VRB("Accepted a connection on %s.", binds[i].address);
     } else {
-        VRB(NULL, "Accepted a connection on %s:%u from %s:%u.", binds[i].address, binds[i].port, client_address, client_port);
+        VRB("Accepted a connection on %s:%u from %s:%u.", binds[i].address, binds[i].port, client_address, client_port);
     }
 
     if (host) {
