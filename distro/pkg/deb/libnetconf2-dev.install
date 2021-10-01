@@ -1,0 +1,5 @@
+usr/lib/*/libnetconf2.so
+usr/lib/*/pkgconfig/libnetconf2.pc
+usr/include/libnetconf2/*
+usr/include/nc_client.h
+usr/include/nc_server.h
