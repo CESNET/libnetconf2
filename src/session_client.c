@@ -1857,7 +1857,7 @@ cleanup:
 static int
 recv_reply_dup_rpc(struct nc_session *session, struct nc_rpc *rpc, struct lyd_node **op)
 {
-    LY_ERR lyrc;
+    LY_ERR lyrc = LY_SUCCESS;
     struct nc_rpc_act_generic *rpc_gen;
     struct ly_in *in;
     struct lyd_node *tree, *op2;

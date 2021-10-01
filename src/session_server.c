@@ -1880,7 +1880,7 @@ nc_accept_unix(struct nc_session *session, int sock)
     const struct passwd *pw;
     char *username;
     session->ti_type = NC_TI_UNIX;
-    uid_t uid;
+    uid_t uid = 0;
 
     if (nc_get_uid(sock, &uid)) {
         close(sock);
