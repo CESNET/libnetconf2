@@ -661,7 +661,7 @@ free_schema_info(struct schema_info *list)
 }
 
 static int
-build_schema_info_yl(struct nc_session *session, struct schema_info **result)
+build_schema_info_yl(struct nc_session *session, int has_get_data, struct schema_info **result)
 {
     struct nc_rpc *rpc = NULL;
     struct lyd_node *op = NULL, *envp = NULL;
@@ -672,16 +672,28 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
     uint32_t u, v, submodules_count, feature_count;
     struct lyd_node *iter, *child;
     struct lys_module *mod;
-    int ret = EXIT_SUCCESS;
+    int ret = 0;
+    const char *rpc_name;
 
     /* get yang-library data from the server */
-    if (nc_session_cpblt(session, "urn:ietf:params:netconf:capability:xpath:1.0")) {
-        rpc = nc_rpc_getdata("ietf-datastores:operational", "/ietf-yang-library:*", "false", NULL, 0, 0, 0, 0, 0,
-                NC_PARAMTYPE_CONST);
+    if (has_get_data) {
+        rpc_name = "get-data";
+        if (nc_session_cpblt(session, "urn:ietf:params:netconf:capability:xpath:1.0")) {
+            rpc = nc_rpc_getdata("ietf-datastores:operational", "/ietf-yang-library:*", "false", NULL, 0, 0, 0, 0, 0,
+                    NC_PARAMTYPE_CONST);
+        } else {
+            rpc = nc_rpc_getdata("ietf-datastores:operational",
+                    "<modules-state xmlns=\"urn:ietf:params:xml:ns:yang:ietf-yang-library\"/>", "false", NULL, 0, 0, 0, 0,
+                    0, NC_PARAMTYPE_CONST);
+        }
     } else {
-        rpc = nc_rpc_getdata("ietf-datastores:operational",
-                "<modules-state xmlns=\"urn:ietf:params:xml:ns:yang:ietf-yang-library\"/>", "false", NULL, 0, 0, 0, 0,
-                0, NC_PARAMTYPE_CONST);
+        rpc_name = "get";
+        if (nc_session_cpblt(session, "urn:ietf:params:netconf:capability:xpath:1.0")) {
+            rpc = nc_rpc_get("/ietf-yang-library:*", 0, NC_PARAMTYPE_CONST);
+        } else {
+            rpc = nc_rpc_get("<modules-state xmlns=\"urn:ietf:params:xml:ns:yang:ietf-yang-library\"/>", 0,
+                    NC_PARAMTYPE_CONST);
+        }
     }
     if (!rpc) {
         goto cleanup;
@@ -702,34 +714,34 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
         msg = nc_recv_reply(session, rpc, msgid, NC_READ_ACT_TIMEOUT * 1000, &envp, &op);
     } while (msg == NC_MSG_NOTIF || msg == NC_MSG_REPLY_ERR_MSGID);
     if (msg == NC_MSG_WOULDBLOCK) {
-        WRN(session, "Timeout for receiving reply to a <get-data> yang-library data expired.");
+        WRN(session, "Timeout for receiving reply to a <%s> yang-library data expired.", rpc_name);
         goto cleanup;
     } else if (msg == NC_MSG_ERROR) {
-        WRN(session, "Failed to receive a reply to <get-data> of yang-library data.");
+        WRN(session, "Failed to receive a reply to <%s> of yang-library data.", rpc_name);
         goto cleanup;
     } else if (!op || !lyd_child(op) || strcmp(lyd_child(op)->schema->name, "data")) {
-        WRN(session, "Unexpected reply without data to a yang-library <get-data> RPC.");
+        WRN(session, "Unexpected reply without data to a yang-library <%s> RPC.", rpc_name);
         goto cleanup;
     }
 
     data = (struct lyd_node_any *)lyd_child(op);
     if (data->value_type != LYD_ANYDATA_DATATREE) {
-        WRN(session, "Unexpected data in reply to a yang-library <get-data> RPC.");
+        WRN(session, "Unexpected data in reply to a yang-library <%s> RPC.", rpc_name);
         goto cleanup;
     } else if (!data->value.tree) {
-        WRN(session, "No data in reply to a yang-library <get-data> RPC.");
+        WRN(session, "No data in reply to a yang-library <%s> RPC.", rpc_name);
         goto cleanup;
     }
 
     if (lyd_find_xpath(data->value.tree, "/ietf-yang-library:modules-state/module", &modules)) {
-        WRN(session, "No module information in reply to a yang-library <get-data> RPC.");
+        WRN(session, "No module information in reply to a yang-library <%s> RPC.", rpc_name);
         goto cleanup;
     }
 
     (*result) = calloc(modules->count + 1, sizeof **result);
     if (!(*result)) {
         ERRMEM;
-        ret = EXIT_FAILURE;
+        ret = -1;
         goto cleanup;
     }
 
@@ -758,7 +770,7 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
                     ERRMEM;
                     free_schema_info(*result);
                     *result = NULL;
-                    ret = EXIT_FAILURE;
+                    ret = -1;
                     goto cleanup;
                 }
                 (*result)[u].features[feature_count] = strdup(lyd_get_value(iter));
@@ -775,7 +787,7 @@ build_schema_info_yl(struct nc_session *session, struct schema_info **result)
                 ERRMEM;
                 free_schema_info(*result);
                 *result = NULL;
-                ret = EXIT_FAILURE;
+                ret = -1;
                 goto cleanup;
             } else {
                 v = 0;
@@ -822,7 +834,7 @@ build_schema_info_cpblts(char **cpblts, struct schema_info **result)
     (*result) = calloc(u + 1, sizeof **result);
     if (!(*result)) {
         ERRMEM;
-        return EXIT_FAILURE;
+        return -1;
     }
 
     for (u = v = 0; cpblts[u]; ++u) {
@@ -878,14 +890,14 @@ build_schema_info_cpblts(char **cpblts, struct schema_info **result)
         ++v;
     }
 
-    return EXIT_SUCCESS;
+    return 0;
 }
 
 static int
 nc_ctx_fill(struct nc_session *session, struct schema_info *modules, ly_module_imp_clb user_clb, void *user_data,
         int has_get_schema)
 {
-    int ret = EXIT_FAILURE;
+    int ret = -1;
     struct lys_module *mod;
     uint32_t u;
 
@@ -916,7 +928,7 @@ nc_ctx_fill(struct nc_session *session, struct schema_info *modules, ly_module_i
     }
 
     /* success */
-    ret = EXIT_SUCCESS;
+    ret = 0;
 
 cleanup:
     return ret;
@@ -938,7 +950,7 @@ nc_ctx_fill_ietf_netconf(struct nc_session *session, struct schema_info *modules
     }
     if (!ietfnc) {
         ERR(session, "Loading base NETCONF schema failed.");
-        return 1;
+        return -1;
     }
 
     /* set supported capabilities from ietf-netconf */
@@ -956,7 +968,7 @@ nc_ctx_fill_ietf_netconf(struct nc_session *session, struct schema_info *modules
 int
 nc_ctx_check_and_fill(struct nc_session *session)
 {
-    int i, get_schema_support = 0, yanglib_support = 0, ret = -1;
+    int i, get_schema_support = 0, yanglib_support = 0, get_data_support = 0, ret = -1;
     ly_module_imp_clb old_clb = NULL;
     void *old_data = NULL;
     struct lys_module *mod = NULL;
@@ -1045,18 +1057,17 @@ nc_ctx_check_and_fill(struct nc_session *session)
             free(revision);
 
             /* ietf-netconf-nmda is needed to issue get-data */
-            if (nc_ctx_load_module(session, "ietf-netconf-nmda", NULL, server_modules, old_clb, old_data,
+            if (!nc_ctx_load_module(session, "ietf-netconf-nmda", NULL, server_modules, old_clb, old_data,
                     get_schema_support, &mod)) {
-                WRN(session, "Loading NETCONF ietf-netconf-nmda schema failed, unable to use get-data to retrieve "
-                        "yang-library data.");
-                yanglib_support = 0;
+                VRB(session, "Support for <get-data> from ietf-netcon-nmda found.");
+                get_data_support = 1;
             }
         }
     }
 
     /* prepare structured information about server's schemas */
     if (yanglib_support) {
-        if (build_schema_info_yl(session, &sm)) {
+        if (build_schema_info_yl(session, get_data_support, &sm)) {
             goto cleanup;
         } else if (!sm) {
             VRB(session, "Trying to use capabilities instead of ietf-yang-library data.");
