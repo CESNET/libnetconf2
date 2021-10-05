@@ -310,6 +310,15 @@ struct clb_data_s {
     int has_get_schema;
 };
 
+/**
+ * @brief Retrieve YANG schema content from a local file.
+ *
+ * @param[in] name Schema name.
+ * @param[in] rev Schema revision.
+ * @param[in] clb_data get-schema callback data.
+ * @param[out] format Schema format.
+ * @return Schema content.
+ */
 static char *
 retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_data_s *clb_data,
         LYS_INFORMAT *format)
@@ -362,6 +371,15 @@ retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_dat
     return model_data;
 }
 
+/**
+ * @brief Retrieve YANG schema content from a reply to get-schema RPC.
+ *
+ * @param[in] name Schema name.
+ * @param[in] rev Schema revision.
+ * @param[in] clb_data get-schema callback data.
+ * @param[out] format Schema format.
+ * @return Schema content.
+ */
 static char *
 retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_data_s *clb_data,
         LYS_INFORMAT *format)
@@ -458,6 +476,19 @@ free_with_user_data(void *data, void *user_data)
     (void)user_data;
 }
 
+/**
+ * @brief Retrieve YANG schema content.
+ *
+ * @param[in] mod_name Schema name.
+ * @param[in] mod_rev Schema revision.
+ * @param[in] submod_name Optional submodule name.
+ * @param[in] sub_rev Submodule revision.
+ * @param[in] user_data get-schema callback data.
+ * @param[out] format Schema format.
+ * @param[out] module_data Schema content.
+ * @param[out] free_module_data Callback for freeing @p module_data.
+ * @return LY_ERR value.
+ */
 static LY_ERR
 retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *submod_name, const char *sub_rev,
         void *user_data, LYS_INFORMAT *format, const char **module_data,
@@ -557,6 +588,20 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, const char *subm
     return *module_data ? LY_SUCCESS : LY_ENOTFOUND;
 }
 
+/**
+ * @brief Load a YANG schema into context.
+ *
+ * @param[in] session NC session.
+ * @param[in] name Schema name.
+ * @param[in] revision Schema revision.
+ * @param[in] schemas Server schema info built from capabilities.
+ * @param[in] user_clb User callback for retireving schema data.
+ * @param[in] user_data User data for @p user_clb.
+ * @param[in] has_get_schema Whether the server supports get-schema.
+ * @param[out] mod Loaded module.
+ * @return 0 on success.
+ * @return -1 on error.
+ */
 static int
 nc_ctx_load_module(struct nc_session *session, const char *name, const char *revision, struct schema_info *schemas,
         ly_module_imp_clb user_clb, void *user_data, int has_get_schema, struct lys_module **mod)
@@ -660,6 +705,15 @@ free_schema_info(struct schema_info *list)
     free(list);
 }
 
+/**
+ * @brief Build server schema info from ietf-yang-library data.
+ *
+ * @param[in] session NC session.
+ * @param[in] has_get_data Whether get-data RPC is available or only get.
+ * @param[out] result Server schemas.
+ * @return 0 on success.
+ * @return -1 on error.
+ */
 static int
 build_schema_info_yl(struct nc_session *session, int has_get_data, struct schema_info **result)
 {
@@ -818,12 +872,20 @@ cleanup:
     if (session->status != NC_STATUS_RUNNING) {
         /* something bad happened, discard the session */
         ERR(session, "Invalid session, discarding.");
-        ret = EXIT_FAILURE;
+        ret = -1;
     }
 
     return ret;
 }
 
+/**
+ * @brief Build server schema info from received capabilities.
+ *
+ * @param[in] cpblts Server capabilities.
+ * @param[out] result Server schemas.
+ * @return 0 on success.
+ * @return -1 on error.
+ */
 static int
 build_schema_info_cpblts(char **cpblts, struct schema_info **result)
 {
@@ -893,6 +955,17 @@ build_schema_info_cpblts(char **cpblts, struct schema_info **result)
     return 0;
 }
 
+/**
+ * @brief Fill client context based on server schema info.
+ *
+ * @param[in] session NC session with the context to modify.
+ * @param[in] modules Server schema info.
+ * @param[in] user_clb User callback for retrieving specific schemas.
+ * @param[in] user_data User data for @p user_clb.
+ * @param[in] has_get_schema Whether server supports get-schema RPC.
+ * @return 0 on success.
+ * @return -1 on error.
+ */
 static int
 nc_ctx_fill(struct nc_session *session, struct schema_info *modules, ly_module_imp_clb user_clb, void *user_data,
         int has_get_schema)
@@ -934,6 +1007,17 @@ cleanup:
     return ret;
 }
 
+/**
+ * @brief Fill client context with ietf-netconf schema.
+ *
+ * @param[in] session NC session with the context to modify.
+ * @param[in] modules Server schema info.
+ * @param[in] user_clb User callback for retrieving specific schemas.
+ * @param[in] user_data User data for @p user_clb.
+ * @param[in] has_get_schema Whether server supports get-schema RPC.
+ * @return 0 on success.
+ * @return -1 on error.
+ */
 static int
 nc_ctx_fill_ietf_netconf(struct nc_session *session, struct schema_info *modules, ly_module_imp_clb user_clb,
         void *user_data, int has_get_schema)
