@@ -102,7 +102,7 @@ compile and install it from [source](https://github.com/DNSSEC-Tools/DNSSEC-Tool
 Only the validator component (`DNSSEC-Tools/dnssec-tools/validator`) is needed.
 
 ### cmocka
-For running the tests (see the [Tests](#tests) section for more information).
+For running the tests cmocka 1.0.1 is required (see the [Tests](#tests) section for more information).
 ```
 $ sudo apt-get install libcmocka-dev
 ```
