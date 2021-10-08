@@ -58,7 +58,7 @@ setup_write(void **state)
     lys_parse_fd(w->session->ctx, fd, LYS_IN_YIN, NULL);
     close(fd);
 
-    pipe(pipes);
+    assert_return_code(pipe(pipes), errno);
 
     w->session->status = NC_STATUS_RUNNING;
     w->session->version = NC_VERSION_10;
@@ -110,7 +110,7 @@ test_write_rpc(void **state)
 
     assert_int_equal(type, NC_MSG_RPC);
 
-    write(w->session->ti.fd.out, "\n", 1);
+    assert_int_equal(write(w->session->ti.fd.out, "\n", 1), 1);
 }
 
 static void

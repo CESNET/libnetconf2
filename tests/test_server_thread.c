@@ -607,7 +607,7 @@ client_fork(void)
     int ret, clients = 0;
 
 #ifdef NC_ENABLED_SSH
-    pipe(pipes + clients * 2);
+    nc_assert(pipe(pipes + clients * 2) == 0);
 
     if (!(pids[clients] = fork())) {
         nc_client_init();
@@ -629,7 +629,7 @@ client_fork(void)
 #endif
 
 #ifdef NC_ENABLED_TLS
-    pipe(pipes + clients * 2);
+    nc_assert(pipe(pipes + clients * 2) == 0);
 
     if (!(pids[clients] = fork())) {
         nc_client_init();
