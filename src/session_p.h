@@ -514,6 +514,8 @@ struct nc_ntf_thread_arg {
 
 void *nc_realloc(void *ptr, size_t size);
 
+struct passwd *nc_getpwuid(uid_t uid, struct passwd *pwd_buf, char **buf, size_t *buf_size);
+
 NC_MSG_TYPE nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op);
 
 int nc_gettimespec_mono(struct timespec *ts);

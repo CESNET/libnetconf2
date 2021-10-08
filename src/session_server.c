@@ -1877,17 +1877,19 @@ static int
 nc_accept_unix(struct nc_session *session, int sock)
 {
 #if defined (SO_PEERCRED) || defined (HAVE_GETPEEREID)
-    const struct passwd *pw;
+    struct passwd *pw, pw_buf;
     char *username;
     session->ti_type = NC_TI_UNIX;
     uid_t uid = 0;
+    char *buf = NULL;
+    size_t buf_len = 0;
 
     if (nc_get_uid(sock, &uid)) {
         close(sock);
         return -1;
     }
 
-    pw = getpwuid(uid);
+    pw = nc_getpwuid(uid, &pw_buf, &buf, &buf_len);
     if (pw == NULL) {
         ERR(NULL, "Failed to find username for uid=%u (%s).\n", uid, strerror(errno));
         close(sock);

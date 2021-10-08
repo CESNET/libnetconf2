@@ -17,10 +17,12 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <poll.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -1157,4 +1159,40 @@ nc_realloc(void *ptr, size_t size)
     }
 
     return ret;
+}
+
+struct passwd *
+nc_getpwuid(uid_t uid, struct passwd *pwd_buf, char **buf, size_t *buf_size)
+{
+    struct passwd *pwd = NULL;
+    char *mem;
+    int r = 0;
+
+    do {
+        r = getpwuid_r(uid, pwd_buf, *buf, *buf_size, &pwd);
+        if (pwd) {
+            break;
+        }
+
+        if (r == ERANGE) {
+            if (!*buf_size) {
+                ssize_t size = sysconf(_SC_GETPW_R_SIZE_MAX);
+                if (size == -1) {
+                    *buf_size = 256;
+                } else {
+                    *buf_size = size;
+                }
+            } else {
+                *buf_size <<= 2;
+            }
+            mem = realloc(*buf, *buf_size);
+            if (!mem) {
+                ERRMEM;
+                return NULL;
+            }
+            *buf = mem;
+        }
+    } while (r == ERANGE);
+
+    return pwd;
 }
