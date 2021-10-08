@@ -1545,8 +1545,10 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
     char *host = NULL, *username = NULL, *ip_host;
     unsigned int port = 0;
     int sock;
-    struct passwd *pw;
+    struct passwd *pw, pw_buf;
     struct nc_session *session = NULL;
+    char *buf;
+    size_t buf_len;
 
     if (!ssh_session) {
         ERRARG("ssh_session");
@@ -1604,7 +1606,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
         /* remember username */
         if (!username) {
             if (!opts->username) {
-                pw = getpwuid(getuid());
+                pw = nc_getpwuid(getuid(), &pw_buf, &buf, &buf_len);
                 if (!pw) {
                     ERR(NULL, "Unknown username for the SSH connection (%s).", strerror(errno));
                     goto fail;
@@ -1683,8 +1685,10 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     int sock;
     uint32_t port_uint;
     char *username, *ip_host = NULL;
-    struct passwd *pw;
+    struct passwd *pw, pw_buf;
     struct nc_session *session = NULL;
+    char *buf = NULL;
+    size_t buf_len = 0;
 
     /* process parameters */
     if (!host || strisempty(host)) {
@@ -1697,7 +1701,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     port_uint = port;
 
     if (!ssh_opts.username) {
-        pw = getpwuid(getuid());
+        pw = nc_getpwuid(getuid(), &pw_buf, &buf, &buf_len);
         if (!pw) {
             ERR(session, "Unknown username for the SSH connection (%s).", strerror(errno));
             return NULL;
@@ -1855,9 +1859,11 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
 {
     const long ssh_timeout = NC_SSH_TIMEOUT;
     unsigned int uint_port;
-    struct passwd *pw;
+    struct passwd *pw, pw_buf;
     struct nc_session *session;
     ssh_session sess;
+    char *buf = NULL;
+    size_t buf_len = 0;
 
     sess = ssh_new();
     if (!sess) {
@@ -1873,7 +1879,7 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
     ssh_options_set(sess, SSH_OPTIONS_PORT, &uint_port);
     ssh_options_set(sess, SSH_OPTIONS_TIMEOUT, &ssh_timeout);
     if (!ssh_ch_opts.username) {
-        pw = getpwuid(getuid());
+        pw = nc_getpwuid(getuid(), &pw_buf, &buf, &buf_len);
         if (!pw) {
             ERR(NULL, "Unknown username for the SSH connection (%s).", strerror(errno));
             ssh_free(sess);

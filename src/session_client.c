@@ -1238,16 +1238,18 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
 {
     struct nc_session *session = NULL;
     struct sockaddr_un sun;
-    const struct passwd *pw;
+    struct passwd *pw, pw_buf;
     char *username;
     int sock = -1;
+    char *buf = NULL;
+    size_t buf_size = 0;
 
     if (address == NULL) {
         ERRARG("address");
         return NULL;
     }
 
-    pw = getpwuid(geteuid());
+    pw = nc_getpwuid(geteuid(), &pw_buf, &buf, &buf_size);
     if (pw == NULL) {
         ERR(NULL, "Failed to find username for euid=%u.\n", geteuid());
         goto fail;
