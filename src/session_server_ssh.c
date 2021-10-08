@@ -715,16 +715,16 @@ auth_password_getpwnam(const char *username, struct passwd *pwd_buf, char **buf,
 {
     struct passwd *pwd = NULL;
     char *mem;
+    int r = 0;
 
     do {
-        errno = 0;
-        getpwnam_r(username, pwd_buf, *buf, *buf_size, &pwd);
+        r = getpwnam_r(username, pwd_buf, *buf, *buf_size, &pwd);
         if (pwd) {
             /* entry found */
             break;
         }
 
-        if (errno == ERANGE) {
+        if (r == ERANGE) {
             /* small buffer, enlarge */
             *buf_size <<= 2;
             mem = realloc(*buf, *buf_size);
@@ -734,7 +734,7 @@ auth_password_getpwnam(const char *username, struct passwd *pwd_buf, char **buf,
             }
             *buf = mem;
         }
-    } while (errno == ERANGE);
+    } while (r == ERANGE);
 
     return pwd;
 }
@@ -744,11 +744,11 @@ auth_password_getspnam(const char *username, struct spwd *spwd_buf, char **buf, 
 {
     struct spwd *spwd = NULL;
     char *mem;
+    int r = 0;
 
     do {
-        errno = 0;
 # ifndef __QNXNTO__
-        getspnam_r(username, spwd_buf, *buf, *buf_size, &spwd);
+        r = getspnam_r(username, spwd_buf, *buf, *buf_size, &spwd);
 # else
         spwd = getspnam_r(username, spwd_buf, *buf, *buf_size);
 # endif
@@ -757,7 +757,7 @@ auth_password_getspnam(const char *username, struct spwd *spwd_buf, char **buf, 
             break;
         }
 
-        if (errno == ERANGE) {
+        if (r == ERANGE) {
             /* small buffer, enlarge */
             *buf_size <<= 2;
             mem = realloc(*buf, *buf_size);
@@ -767,7 +767,7 @@ auth_password_getspnam(const char *username, struct spwd *spwd_buf, char **buf, 
             }
             *buf = mem;
         }
-    } while (errno == ERANGE);
+    } while (r == ERANGE);
 
     return spwd;
 }
