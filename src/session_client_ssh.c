@@ -1705,7 +1705,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
         pw = nc_getpwuid(getuid(), &pw_buf, &buf, &buf_len);
         if (!pw) {
             ERR(session, "Unknown username for the SSH connection (%s).", strerror(errno));
-            return NULL;
+            goto fail;
         } else {
             username = pw->pw_name;
         }
@@ -1717,7 +1717,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     session = nc_new_session(NC_CLIENT, 0);
     if (!session) {
         ERRMEM;
-        return NULL;
+        goto fail;
     }
     session->status = NC_STATUS_STARTING;
 
