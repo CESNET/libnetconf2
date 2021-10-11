@@ -1249,12 +1249,6 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
         return NULL;
     }
 
-    pw = nc_getpwuid(geteuid(), &pw_buf, &buf, &buf_size);
-    if (pw == NULL) {
-        ERR(NULL, "Failed to find username for euid=%u.\n", geteuid());
-        goto fail;
-    }
-
     sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (sock < 0) {
         ERR(NULL, "Failed to create socket (%s).", strerror(errno));
@@ -1295,8 +1289,14 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
 
     lydict_insert(ctx, address, 0, &session->path);
 
+    pw = nc_getpwuid(geteuid(), &pw_buf, &buf, &buf_size);
+    if (!pw) {
+        ERR(NULL, "Failed to find username for UID %u.", (unsigned int)geteuid());
+        goto fail;
+    }
     username = strdup(pw->pw_name);
-    if (username == NULL) {
+    free(buf);
+    if (!username) {
         ERRMEM;
         goto fail;
     }

@@ -1547,8 +1547,8 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
     int sock;
     struct passwd *pw, pw_buf;
     struct nc_session *session = NULL;
-    char *buf;
-    size_t buf_len;
+    char *buf = NULL;
+    size_t buf_len = 0;
 
     if (!ssh_session) {
         ERRARG("ssh_session");
@@ -1612,6 +1612,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
                     goto fail;
                 }
                 username = strdup(pw->pw_name);
+                free(buf);
             } else {
                 username = strdup(opts->username);
             }
@@ -1771,9 +1772,11 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     session->port = port;
     lydict_insert(ctx, username, 0, &session->username);
 
+    free(buf);
     return session;
 
 fail:
+    free(buf);
     free(ip_host);
     nc_session_free(session, NULL);
     return NULL;
@@ -1886,6 +1889,7 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
             return NULL;
         }
         ssh_options_set(sess, SSH_OPTIONS_USER, pw->pw_name);
+        free(buf);
     } else {
         ssh_options_set(sess, SSH_OPTIONS_USER, ssh_ch_opts.username);
     }

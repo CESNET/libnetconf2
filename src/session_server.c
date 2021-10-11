@@ -1897,6 +1897,7 @@ nc_accept_unix(struct nc_session *session, int sock)
     }
 
     username = strdup(pw->pw_name);
+    free(buf);
     if (username == NULL) {
         ERRMEM;
         close(sock);
