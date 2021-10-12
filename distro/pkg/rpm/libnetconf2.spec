@@ -4,21 +4,21 @@ Release: {{ release }}%{?dist}
 Summary: NETCONF protocol library
 Url: https://github.com/CESNET/libnetconf2
 Source: libnetconf2-%{version}.tar.gz
-License: BSD-3-Clause
+License: BSD
 
 BuildRequires:  cmake
 BuildRequires:  make
 BuildRequires:  gcc
 BuildRequires:  libssh-devel
-BuildRequires:  libyang2-devel
 BuildRequires:  openssl-devel
+BuildRequires:  pkgconfig(libyang) >= 2
 
-%package -n libnetconf2-devel
+%package devel
 Summary:    Headers of libnetconf2 library
 Conflicts:  libnetconf-devel
-Requires:   %{name} = %{version}-%{release}
+Requires:   %{name}%{?_isa} = %{version}-%{release}
 
-%description -n libnetconf2-devel
+%description devel
 Headers of libnetconf library.
 
 %description
@@ -27,12 +27,13 @@ servers. NETCONF is the NETwork CONFiguration protocol introduced by IETF.
 
 
 %prep
-%setup -n libnetconf2-%{version}
+%autosetup -p1
 mkdir build
 
 %build
 cd build
-cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr \
+cmake \
+    -DCMAKE_INSTALL_PREFIX:PATH=%{_prefix} \
     -DCMAKE_BUILD_TYPE:String="Release" \
     -DCMAKE_C_FLAGS="${RPM_OPT_FLAGS}" \
     -DCMAKE_CXX_FLAGS="${RPM_OPT_FLAGS}" \
@@ -43,17 +44,11 @@ make
 cd build
 make DESTDIR=%{buildroot} install
 
-%post -p /sbin/ldconfig
-
-%postun -p /sbin/ldconfig
-
-
 %files
-%defattr(-,root,root)
+%license LICENSE
 %{_libdir}/libnetconf2.so.2*
 
-%files -n libnetconf2-devel
-%defattr(-,root,root)
+%files devel
 %{_libdir}/libnetconf2.so
 %{_libdir}/pkgconfig/libnetconf2.pc
 %{_includedir}/*.h
@@ -62,5 +57,5 @@ make DESTDIR=%{buildroot} install
 
 
 %changelog
-* Fri Jul 09 2021 Jakub Ružička <jakub.ruzicka@nic.cz> - {{ version }}-{{ release }}
+* Tue Oct 12 2021 Jakub Ružička <jakub.ruzicka@nic.cz> - {{ version }}-{{ release }}
 - upstream package
