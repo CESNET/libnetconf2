@@ -174,6 +174,8 @@ NC_RPC_TYPE nc_rpc_get_type(const struct nc_rpc *rpc);
  * Note that created object can be sent via any NETCONF session that shares the context
  * of the @p data.
  *
+ * @note In case of action, the \<action\> element is added automatically and should not be in @p data.
+ *
  * @param[in] data NETCONF RPC data as a data tree.
  * @param[in] paramtype How to further manage data parameters.
  * @return Created RPC object to send via a NETCONF session or NULL in case of (memory allocation) error.
@@ -184,6 +186,8 @@ struct nc_rpc *nc_rpc_act_generic(const struct lyd_node *data, NC_PARAMTYPE para
  * @brief Create a generic NETCONF RPC or action from an XML string
  *
  * For details, see ::nc_rpc.
+ *
+ * @note In case of action, the \<action\> element is added automatically and should not be in @p xml_str.
  *
  * @param[in] xml_str NETCONF RPC data as an XML string.
  * @param[in] paramtype How to further manage data parameters.

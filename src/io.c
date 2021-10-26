@@ -915,7 +915,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
 {
     va_list ap;
     int count, ret;
-    const char *attrs;
+    const char *attrs, *str;
     struct lyd_node *op, *reply_envp, *node, *next;
     struct lyd_node_opaq *rpc_envp;
     struct nc_server_notif *notif;
@@ -951,6 +951,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         op = va_arg(ap, struct lyd_node *);
         attrs = va_arg(ap, const char *);
 
+        /* <rpc> open */
         count = asprintf(&buf, "<rpc xmlns=\"%s\" message-id=\"%" PRIu64 "\"%s>",
                 NC_NS_BASE, session->opts.client.msgid + 1, attrs ? attrs : "");
         if (count == -1) {
@@ -961,11 +962,27 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         nc_write_clb((void *)&arg, buf, count, 0);
         free(buf);
 
+        if (op->schema->nodetype != LYS_RPC) {
+            /* <action> open */
+            str = "<action xmlns=\"urn:ietf:params:xml:ns:yang:1\">";
+            nc_write_clb((void *)&arg, str, strlen(str), 0);
+        }
+
+        /* rpc data */
         if (lyd_print_clb(nc_write_xmlclb, (void *)&arg, op, LYD_XML, LYD_PRINT_SHRINK)) {
             ret = NC_MSG_ERROR;
             goto cleanup;
         }
-        nc_write_clb((void *)&arg, "</rpc>", 6, 0);
+
+        if (op->schema->nodetype != LYS_RPC) {
+            /* <action> close */
+            str = "</action>";
+            nc_write_clb((void *)&arg, str, strlen(str), 0);
+        }
+
+        /* <rpc> close */
+        str = "</rpc>";
+        nc_write_clb((void *)&arg, str, strlen(str), 0);
 
         session->opts.client.msgid++;
         break;
