@@ -793,7 +793,9 @@ nc_server_rpc_free(struct nc_server_rpc *rpc)
     }
 
     lyd_free_tree(rpc->envp);
-    lyd_free_tree(rpc->rpc);
+
+    /* may be action */
+    lyd_free_all(rpc->rpc);
 
     free(rpc);
 }
