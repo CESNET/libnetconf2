@@ -601,8 +601,7 @@ int nc_recv_notif_dispatch(struct nc_session *session,
  * @brief Send NETCONF RPC message via the session.
  *
  * @param[in] session NETCONF session where the RPC will be written.
- * @param[in] rpc NETCOFN RPC object to send via specified session. Object can be created by
- *            nc_rpc_lock(), nc_rpc_unlock() and nc_rpc_generic() functions.
+ * @param[in] rpc NETCONF RPC object to send via the specified session.
  * @param[in] timeout Timeout for writing in milliseconds. Use negative value for infinite
  *            waiting and 0 for return if data cannot be sent immediately.
  * @param[out] msgid If RPC was successfully sent, this is it's message ID.
