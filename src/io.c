@@ -1182,34 +1182,31 @@ struct passwd *
 nc_getpwuid(uid_t uid, struct passwd *pwd_buf, char **buf, size_t *buf_size)
 {
     struct passwd *pwd = NULL;
-    char *mem;
-    int r = 0;
+    long sys_size;
+    int ret;
 
     do {
-        r = getpwuid_r(uid, pwd_buf, *buf, *buf_size, &pwd);
-        if (pwd) {
-            break;
+        if (!*buf_size) {
+            /* learn suitable buffer size */
+            sys_size = sysconf(_SC_GETPW_R_SIZE_MAX);
+            *buf_size = (sys_size == -1) ? 2048 : sys_size;
+        } else {
+            /* enlarge buffer */
+            *buf_size += 2048;
         }
 
-        if (r == ERANGE) {
-            if (!*buf_size) {
-                ssize_t size = sysconf(_SC_GETPW_R_SIZE_MAX);
-                if (size == -1) {
-                    *buf_size = 256;
-                } else {
-                    *buf_size = size;
-                }
-            } else {
-                *buf_size <<= 2;
-            }
-            mem = realloc(*buf, *buf_size);
-            if (!mem) {
-                ERRMEM;
-                return NULL;
-            }
-            *buf = mem;
+        /* allocate some buffer */
+        *buf = nc_realloc(*buf, *buf_size);
+        if (!*buf) {
+            ERRMEM;
+            return NULL;
         }
-    } while (r == ERANGE);
 
+        ret = getpwuid_r(uid, pwd_buf, *buf, *buf_size, &pwd);
+    } while (ret && (ret == ERANGE));
+
+    if (ret) {
+        ERR(NULL, "Retrieving UID \"%lu\" passwd entry failed (%s).", (unsigned long int)uid, strerror(ret));
+    }
     return pwd;
 }
