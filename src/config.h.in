@@ -1,8 +1,9 @@
 /**
- * \file config.h
- * \author Radek Krejci <rkrejci@cesnet.cz>
- * \brief libnetconf2 various configuration settings.
+ * @file config.h
+ * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @brief libnetconf2 various configuration settings.
  *
+ * @copyright
  * Copyright (c) 2015 - 2017 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").

@@ -1,9 +1,10 @@
 /**
- * \file session.h
- * \author Radek Krejci <rkrejci@cesnet.cz>
- * \brief libnetconf2 session manipulation
+ * @file session.h
+ * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @brief libnetconf2 session manipulation
  *
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * @copyright
+ * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.

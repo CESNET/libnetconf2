@@ -1,8 +1,9 @@
 /**
- * \file nc_server.h
- * \author Radek Krejci <rkrejci@cesnet.cz>
- * \brief libnetconf2's main public header for NETCONF servers.
+ * @file nc_server.h
+ * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @brief libnetconf2's main public header for NETCONF servers.
  *
+ * @copyright
  * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
