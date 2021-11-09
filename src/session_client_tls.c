@@ -1,11 +1,12 @@
 /**
- * \file session_client_tls.c
- * \author Radek Krejci <rkrejci@cesnet.cz>
- * \author Michal Vasko <mvasko@cesnet.cz>
- * \brief libnetconf2 - TLS specific session client transport functions
+ * @file session_client_tls.c
+ * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @author Michal Vasko <mvasko@cesnet.cz>
+ * @brief libnetconf2 - TLS specific session client transport functions
  *
  * This source is compiled only with libssl.
  *
+ * @copyright
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").

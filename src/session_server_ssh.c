@@ -1,9 +1,10 @@
 /**
- * \file session_server_ssh.c
- * \author Michal Vasko <mvasko@cesnet.cz>
- * \brief libnetconf2 SSH server session manipulation functions
+ * @file session_server_ssh.c
+ * @author Michal Vasko <mvasko@cesnet.cz>
+ * @brief libnetconf2 SSH server session manipulation functions
  *
- * Copyright (c) 2017 CESNET, z.s.p.o.
+ * @copyright
+ * Copyright (c) 2017 - 2021 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.

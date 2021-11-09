@@ -4,6 +4,7 @@
  * @author Michal Vasko <mvasko@cesnet.cz>
  * @brief libnetconf2 session manipulation
  *
+ * @copyright
  * Copyright (c) 2017 - 2021 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").

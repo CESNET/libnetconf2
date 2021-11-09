@@ -1,8 +1,9 @@
 /**
- * \file io.c
- * \author Radek Krejci <rkrejci@cesnet.cz>
- * \brief libnetconf2 - input/output functions
+ * @file io.c
+ * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @brief libnetconf2 - input/output functions
  *
+ * @copyright
  * Copyright (c) 2015 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").

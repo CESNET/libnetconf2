@@ -1,8 +1,9 @@
 /**
- * \file messages.c
- * \author Radek Krejci <rkrejci@cesnet.cz>
- * \brief libnetconf2 - NETCONF messages functions
+ * @file messages.c
+ * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @brief libnetconf2 - NETCONF messages functions
  *
+ * @copyright
  * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
