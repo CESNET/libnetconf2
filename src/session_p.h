@@ -73,7 +73,7 @@ struct nc_client_ssh_opts {
 /* ACCESS locked, separate locks */
 struct nc_server_ssh_opts {
     /* SSH bind options */
-    const char **hostkeys;
+    char **hostkeys;
     uint8_t hostkey_count;
 
     int auth_methods;
@@ -105,18 +105,18 @@ struct nc_client_tls_opts {
 
 /* ACCESS locked, separate locks */
 struct nc_server_tls_opts {
-    const char *server_cert;
-    const char **trusted_cert_lists;
+    char *server_cert;
+    char **trusted_cert_lists;
     uint16_t trusted_cert_list_count;
-    const char *trusted_ca_file;
-    const char *trusted_ca_dir;
+    char *trusted_ca_file;
+    char *trusted_ca_dir;
     X509_STORE *crl_store;
 
     struct nc_ctn {
         uint32_t id;
-        const char *fingerprint;
+        char *fingerprint;
         NC_TLS_CTN_MAPTYPE map_type;
-        const char *name;
+        char *name;
         struct nc_ctn *next;
     } *ctn;
 };
@@ -146,7 +146,7 @@ struct nc_client_opts {
     struct nc_keepalives ka;
 
     struct nc_bind {
-        const char *address;
+        char *address;
         uint16_t port;
         int sock;
         int pollin;
@@ -170,14 +170,11 @@ struct nc_client_context {
 };
 
 struct nc_server_opts {
-    /* ACCESS unlocked (dictionary locked internally in libyang) */
-    struct ly_ctx *ctx;
-
     /* ACCESS unlocked */
     NC_WD_MODE wd_basic_mode;
     int wd_also_supported;
     uint32_t capabilities_count;
-    const char **capabilities;
+    char **capabilities;
     char *(*content_id_clb)(void *user_data);
     void *content_id_data;
     void (*content_id_data_free)(void *data);
@@ -220,15 +217,16 @@ struct nc_server_opts {
 #ifdef NC_ENABLED_SSH
     /* ACCESS locked with authkey_lock */
     struct {
-        const char *path;
-        const char *base64;
+        char *path;
+        char *base64;
         NC_SSH_KEY_TYPE type;
-        const char *username;
+        char *username;
     } *authkeys;
     uint16_t authkey_count;
     pthread_mutex_t authkey_lock;
 
-    int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path, char **privkey_data, NC_SSH_KEY_TYPE *privkey_type);
+    int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path, char **privkey_data,
+            NC_SSH_KEY_TYPE *privkey_type);
     void *hostkey_data;
     void (*hostkey_data_free)(void *data);
 #endif
@@ -240,7 +238,7 @@ struct nc_server_opts {
     struct nc_bind *binds;
     pthread_mutex_t bind_lock;
     struct nc_endpt {
-        const char *name;
+        char *name;
         NC_TRANSPORT_IMPL ti;
         struct nc_keepalives ka;
         union {
@@ -259,11 +257,11 @@ struct nc_server_opts {
     /* ACCESS locked, add/remove CH clients - WRITE lock ch_client_lock
      *                modify CH clients - READ lock ch_client_lock + ch_client_lock */
     struct nc_ch_client {
-        const char *name;
+        char *name;
         struct nc_ch_endpt {
-            const char *name;
+            char *name;
             NC_TRANSPORT_IMPL ti;
-            const char *address;
+            char *address;
             uint16_t port;
             int sock_pending;
             int sock_retries;
@@ -423,10 +421,10 @@ struct nc_session {
         SSL *tls;
 #endif
     } ti;                          /**< transport implementation data */
-    const char *username;
-    const char *host;
+    char *username;
+    char *host;
     uint16_t port;
-    const char *path;              /**< socket path in case of unix socket */
+    char *path;                    /**< socket path in case of unix socket */
 
     /* other */
     struct ly_ctx *ctx;            /**< libyang context of the session */

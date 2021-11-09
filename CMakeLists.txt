@@ -74,7 +74,7 @@ set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_SOVERSION})
 # libyang SO version required
 set(LIBYANG_DEP_SOVERSION_MAJOR 2)
 
-set(CMAKE_C_FLAGS           "${CMAKE_C_FLAGS} -Wall -Wextra -fvisibility=hidden -std=gnu99")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -fvisibility=hidden -std=gnu99")
 
 #
 # options

@@ -319,9 +319,8 @@
  * Init
  * ====
  *
- * Server takes an argument for its [initialization function](@ref howtoinit).
- * In it, you set the server context, which determines what modules it
- * supports and what capabilities to advertise. Few capabilities that
+ * Server must start with [initialization](@ref howtoinit). Its capabilities are
+ * determined by the context used when accepting new NETCONF sessions. Few capabilities that
  * cannot be learnt from the context are set with separate functions
  * ::nc_server_set_capab_withdefaults() and generally ::nc_server_set_capability().
  * Timeout for receiving the _hello_ message on a new session can be set

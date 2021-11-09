@@ -705,9 +705,9 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     }
 
     /* store information into session and the dictionary */
-    lydict_insert_zc(ctx, ip_host, &session->host);
+    session->host = ip_host;
     session->port = port;
-    lydict_insert(ctx, "certificate-based", 0, &session->username);
+    session->username = strdup("certificate-based");
 
     return session;
 
@@ -835,9 +835,9 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
     session->flags |= NC_SESSION_CALLHOME;
 
     /* store information into session and the dictionary */
-    lydict_insert(session->ctx, host, 0, &session->host);
+    session->host = strdup(host);
     session->port = port;
-    lydict_insert(session->ctx, "certificate-based", 0, &session->username);
+    session->username = strdup("certificate-based");
 
 cleanup:
     if (!session) {

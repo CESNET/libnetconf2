@@ -41,6 +41,8 @@ pthread_barrier_t barrier;
 
 #if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
 
+struct ly_ctx *ctx;
+
 static void *
 server_thread(void *arg)
 {
@@ -56,7 +58,7 @@ server_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
 #if defined (NC_ENABLED_SSH) && defined (NC_ENABLED_TLS)
-    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, &session);
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, ctx, &session);
     nc_assert(msgtype == NC_MSG_HELLO);
 
     nc_ps_add_session(ps, session);
@@ -65,7 +67,7 @@ server_thread(void *arg)
     nc_ps_clear(ps, 0, NULL);
 #endif
 
-    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, &session);
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, ctx, &session);
     nc_assert(msgtype == NC_MSG_HELLO);
 
     nc_ps_add_session(ps, session);
@@ -657,7 +659,6 @@ int
 main(void)
 {
 #if _POSIX_BARRIERS >= 200112L
-    struct ly_ctx *ctx;
     int ret, i, clients = 0;
     pthread_t tids[thread_count];
 
@@ -674,7 +675,7 @@ main(void)
     nc_assert(ly_ctx_load_module(ctx, "module-a-dv", NULL, NULL));
     nc_assert(ly_ctx_load_module(ctx, "module-a-dv2", NULL, NULL));
 
-    nc_server_init(ctx);
+    nc_server_init();
 
     pthread_barrier_init(&barrier, NULL, thread_count);
 

@@ -71,8 +71,8 @@ server_thread(void *arg)
     const char *data;
     int poll;
 
-    nc_assert(!nc_server_init(args.ctx));
-    nc_assert(nc_accept_inout(args.in, args.out, "test", &sess) == NC_MSG_HELLO);
+    nc_assert(!nc_server_init());
+    nc_assert(nc_accept_inout(args.in, args.out, "test", args.ctx, &sess) == NC_MSG_HELLO);
     nc_session_inc_notif_status(sess);
     data =
             "<n1 xmlns=\"n1\">\n"

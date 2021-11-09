@@ -192,15 +192,43 @@ int nc_server_ch_client_set_start_with(const char *client_name, NC_CH_START_WITH
 int nc_server_ch_client_set_max_attempts(const char *client_name, uint8_t max_attempts);
 
 /**
- * @brief Establish a Call Home connection with a listening NETCONF client.
+ * @brief Callback for getting a locked context for new Call Home sessions.
+ *
+ * @param[in] cb_data Arbitrary ctx callback data.
+ * @return Context for the session to use during its lifetime;
+ * @return NULL on error and session fails to be created.
+ */
+typedef const struct ly_ctx *(*nc_server_ch_session_acquire_ctx_cb)(void *cb_data);
+
+/**
+ * @brief Callback for releasing a locked context for Call Home sessions.
+ *
+ * @param[in] cb_data Arbitrary ctx callback data.
+ */
+typedef void (*nc_server_ch_session_release_ctx_cb)(void *cb_data);
+
+/**
+ * @brief Callback for new Call Home sessions.
+ *
+ * @param[in] client_name Name of the CH client which established the session.
+ * @param[in] new_session New established CH session, the pointer is internally discarded afterwards.
+ * @return 0 on success;
+ * @return non-zero on error and @p new_session is freed.
+ */
+typedef int (*nc_server_ch_new_session_cb)(const char *client_name, struct nc_session *new_session);
+
+/**
+ * @brief Dispatch a thread connecting to a listening NETCONF client and creating Call Home sessions.
  *
  * @param[in] client_name Existing client name.
- * @param[out] session_clb Function that is called for every established session on the client. @p new_session
- * pointer is internally discarded afterwards. If the callback returns non-zero, the @p new_session is freed.
+ * @param[in] acquire_ctx_cb Callback for acquiring new session context.
+ * @param[in] release_ctx_cb Callback for releasing session context.
+ * @param[in] ctx_cb_data Arbitrary user data passed to @p acquire_ctx_cb and @p release_ctx_cb.
+ * @param[in] new_session_cb Callback called for every established session on the client.
  * @return 0 if the thread was successfully created, -1 on error.
  */
-int nc_connect_ch_client_dispatch(const char *client_name,
-        int (*session_clb)(const char *client_name, struct nc_session *new_session));
+int nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
+        nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb);
 
 /** @} Server-side Call Home */
 
