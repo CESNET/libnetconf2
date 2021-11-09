@@ -1,0 +1,32 @@
+/**
+ * @file nc_version.h
+ * @author Michal Vasko <mvasko@cesnet.cz>
+ * @brief libnetconf2 version information
+ *
+ * @copyright
+ * Copyright (c) 2021 CESNET, z.s.p.o.
+ *
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://opensource.org/licenses/BSD-3-Clause
+ */
+
+#ifndef NC_VERSION_H_
+#define NC_VERSION_H_
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define NC_VERSION_MAJOR @LIBNETCONF2_MAJOR_SOVERSION@ /**< libnetconf2 major version number */
+#define NC_VERSION_MINOR @LIBNETCONF2_MINOR_SOVERSION@ /**< libnetconf2 minor version number */
+#define NC_VERSION_MICRO @LIBNETCONF2_MICRO_SOVERSION@ /**< libnetconf2 micro version number */
+#define NC_VERSION "@LIBNETCONF2_SOVERSION_FULL@" /**< libnetconf2 version string */
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* NC_VERSION_H_ */

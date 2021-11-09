@@ -285,6 +285,7 @@ endif()
 configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)
 configure_file(nc_client.h.in nc_client.h)
 configure_file(nc_server.h.in nc_server.h)
+configure_file(nc_version.h.in nc_version.h)
 
 # install library
 install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -292,6 +293,7 @@ install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
 # install headers
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_client.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_server.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_version.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES ${headers} ${PROJECT_BINARY_DIR}/src/config.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libnetconf2)
 
 # install pkg-config file
