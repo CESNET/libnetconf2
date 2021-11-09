@@ -532,7 +532,7 @@ main(void)
     assert_non_null(node);
     node->priv = my_commit_rpc_clb;
 
-    nc_server_init(ctx);
+    nc_server_init();
 
     const struct CMUnitTest comm[] = {
         cmocka_unit_test_setup_teardown(test_send_recv_ok_10, setup_sessions, teardown_sessions),

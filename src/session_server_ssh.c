@@ -132,7 +132,7 @@ nc_server_ssh_add_hostkey(const char *name, int16_t idx, struct nc_server_ssh_op
     if (idx != opts->hostkey_count - 1) {
         memmove(opts->hostkeys + idx + 1, opts->hostkeys + idx, opts->hostkey_count - idx);
     }
-    lydict_insert(server_opts.ctx, name, 0, &opts->hostkeys[idx]);
+    opts->hostkeys[idx] = strdup(name);
 
     return 0;
 }
@@ -233,7 +233,7 @@ nc_server_ssh_del_hostkey(const char *name, int16_t idx, struct nc_server_ssh_op
 
     if (!name && (idx < 0)) {
         for (i = 0; i < opts->hostkey_count; ++i) {
-            lydict_remove(server_opts.ctx, opts->hostkeys[i]);
+            free(opts->hostkeys[i]);
         }
         free(opts->hostkeys);
         opts->hostkeys = NULL;
@@ -251,7 +251,7 @@ nc_server_ssh_del_hostkey(const char *name, int16_t idx, struct nc_server_ssh_op
     } else {
 remove_idx:
         --opts->hostkey_count;
-        lydict_remove(server_opts.ctx, opts->hostkeys[idx]);
+        free(opts->hostkeys[idx]);
         if (idx < opts->hostkey_count - 1) {
             memmove(opts->hostkeys + idx, opts->hostkeys + idx + 1, (opts->hostkey_count - idx) * sizeof *opts->hostkeys);
         }
@@ -310,7 +310,7 @@ nc_server_ssh_mov_hostkey(const char *key_mov, const char *key_after, struct nc_
 {
     uint8_t i;
     int16_t mov_idx = -1, after_idx = -1;
-    const char *bckup;
+    char *bckup;
 
     if (!key_mov) {
         ERRARG("key_mov");
@@ -609,10 +609,10 @@ _nc_server_ssh_add_authkey(const char *pubkey_path, const char *pubkey_base64, N
         ret = -1;
         goto cleanup;
     }
-    lydict_insert(server_opts.ctx, pubkey_path, 0, &server_opts.authkeys[server_opts.authkey_count - 1].path);
-    lydict_insert(server_opts.ctx, pubkey_base64, 0, &server_opts.authkeys[server_opts.authkey_count - 1].base64);
+    server_opts.authkeys[server_opts.authkey_count - 1].path = pubkey_path ? strdup(pubkey_path) : NULL;
+    server_opts.authkeys[server_opts.authkey_count - 1].base64 = pubkey_base64 ? strdup(pubkey_base64) : NULL;
     server_opts.authkeys[server_opts.authkey_count - 1].type = type;
-    lydict_insert(server_opts.ctx, username, 0, &server_opts.authkeys[server_opts.authkey_count - 1].username);
+    server_opts.authkeys[server_opts.authkey_count - 1].username = strdup(username);
 
 cleanup:
     /* UNLOCK */
@@ -663,9 +663,9 @@ nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64, NC
 
     if (!pubkey_path && !pubkey_base64 && !type && !username) {
         for (i = 0; i < server_opts.authkey_count; ++i) {
-            lydict_remove(server_opts.ctx, server_opts.authkeys[i].path);
-            lydict_remove(server_opts.ctx, server_opts.authkeys[i].base64);
-            lydict_remove(server_opts.ctx, server_opts.authkeys[i].username);
+            free(server_opts.authkeys[i].path);
+            free(server_opts.authkeys[i].base64);
+            free(server_opts.authkeys[i].username);
 
             ret = 0;
         }
@@ -678,9 +678,9 @@ nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64, NC
                     (!pubkey_base64 || !strcmp(server_opts.authkeys[i].base64, pubkey_base64)) &&
                     (!type || (server_opts.authkeys[i].type == type)) &&
                     (!username || !strcmp(server_opts.authkeys[i].username, username))) {
-                lydict_remove(server_opts.ctx, server_opts.authkeys[i].path);
-                lydict_remove(server_opts.ctx, server_opts.authkeys[i].base64);
-                lydict_remove(server_opts.ctx, server_opts.authkeys[i].username);
+                free(server_opts.authkeys[i].path);
+                free(server_opts.authkeys[i].base64);
+                free(server_opts.authkeys[i].username);
 
                 --server_opts.authkey_count;
                 if (i < server_opts.authkey_count) {
@@ -1119,10 +1119,10 @@ nc_sshcb_channel_subsystem(struct nc_session *session, ssh_channel channel, cons
         new_session->io_lock = session->io_lock;
         new_session->ti.libssh.channel = channel;
         new_session->ti.libssh.session = session->ti.libssh.session;
-        lydict_insert(server_opts.ctx, session->username, 0, &new_session->username);
-        lydict_insert(server_opts.ctx, session->host, 0, &new_session->host);
+        new_session->username = strdup(session->username);
+        new_session->host = strdup(session->host);
         new_session->port = session->port;
-        new_session->ctx = server_opts.ctx;
+        new_session->ctx = (struct ly_ctx *)session->ctx;
         new_session->flags = NC_SESSION_SSH_AUTHENTICATED | NC_SESSION_SSH_SUBSYS_NETCONF | NC_SESSION_SHAREDCTX;
     }
 
@@ -1276,7 +1276,7 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
                 return 1;
             }
 
-            lydict_insert(server_opts.ctx, username, 0, &session->username);
+            session->username = strdup(username);
         } else if (username) {
             if (strcmp(username, session->username)) {
                 ERR(session, "User \"%s\" changed its username to \"%s\".", session->username, username);
@@ -1398,7 +1398,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
 }
 
 static int
-nc_ssh_bind_add_hostkeys(ssh_bind sbind, const char **hostkeys, uint8_t hostkey_count)
+nc_ssh_bind_add_hostkeys(ssh_bind sbind, char **hostkeys, uint8_t hostkey_count)
 {
     uint8_t i;
     char *privkey_path, *privkey_data;

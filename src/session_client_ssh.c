@@ -1657,24 +1657,14 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
         goto fail;
     }
 
-    /* store information into the dictionary */
-    if (host) {
-        lydict_insert_zc(ctx, host, &session->host);
-    }
-    if (port) {
-        session->port = port;
-    }
-    if (username) {
-        lydict_insert_zc(ctx, username, &session->username);
-    }
+    /* store information if not previously */
+    session->host = host;
+    session->port = port;
+    session->username = username;
 
     return session;
 
 fail:
-    free(host);
-    session->host = NULL;
-    free(username);
-    session->username = NULL;
     nc_session_free(session, NULL);
     return NULL;
 }
@@ -1744,9 +1734,9 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_FD, &sock);
     ssh_set_blocking(session->ti.libssh.session, 0);
 
-    /* temporarily, for session connection */
-    session->host = host;
-    session->username = username;
+    /* store information for session connection */
+    session->host = strdup(host);
+    session->username = strdup(username);
     if ((connect_ssh_session(session, &ssh_opts, NC_TRANSPORT_TIMEOUT) != 1) ||
             (open_netconf_channel(session, NC_TRANSPORT_TIMEOUT) != 1)) {
         goto fail;
@@ -1767,10 +1757,10 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
         goto fail;
     }
 
-    /* store information into the dictionary */
-    lydict_insert_zc(ctx, ip_host, &session->host);
+    /* update information */
+    free(session->host);
+    session->host = ip_host;
     session->port = port;
-    lydict_insert(ctx, username, 0, &session->username);
 
     free(buf);
     return session;
@@ -1845,10 +1835,10 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
         goto fail;
     }
 
-    /* store information into session and the dictionary */
-    lydict_insert(ctx, session->host, 0, &new_session->host);
+    /* store information into session */
+    new_session->host = strdup(session->host);
     new_session->port = session->port;
-    lydict_insert(ctx, session->username, 0, &new_session->username);
+    new_session->username = strdup(session->username);
 
     return new_session;
 

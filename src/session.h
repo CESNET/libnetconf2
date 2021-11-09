@@ -197,7 +197,7 @@ const char *nc_session_get_path(const struct nc_session *session);
  * @param[in] session Session to get the information from.
  * @return Session context.
  */
-struct ly_ctx *nc_session_get_ctx(const struct nc_session *session);
+const struct ly_ctx *nc_session_get_ctx(const struct nc_session *session);
 
 /**
  * @brief Assign arbitrary data to a session.

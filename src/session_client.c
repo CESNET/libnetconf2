@@ -1287,7 +1287,7 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
     }
     ctx = session->ctx;
 
-    lydict_insert(ctx, address, 0, &session->path);
+    session->path = strdup(address);
 
     pw = nc_getpwuid(geteuid(), &pw_buf, &buf, &buf_size);
     if (!pw) {
@@ -1300,7 +1300,7 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
         ERRMEM;
         goto fail;
     }
-    lydict_insert_zc(ctx, username, &session->username);
+    session->username = username;
 
     /* NETCONF handshake */
     if (nc_handshake_io(session) != NC_MSG_HELLO) {

@@ -32,17 +32,12 @@
 #include <session_server.h>
 #include "tests/config.h"
 
-struct ly_ctx *ctx;
-
 static int
 setup_server(void **state)
 {
     (void)state;
 
-    ly_ctx_new(NULL, 0, &ctx);
-    assert_non_null(ctx);
-
-    nc_server_init(ctx);
+    nc_server_init();
 
     return 0;
 }
@@ -53,7 +48,6 @@ teardown_server(void **state)
     (void)state;
 
     nc_server_destroy();
-    ly_ctx_destroy(ctx);
 
     return 0;
 }

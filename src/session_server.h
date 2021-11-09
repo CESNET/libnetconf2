@@ -97,35 +97,13 @@ void nc_set_global_rpc_clb(nc_rpc_clb clb);
  */
 
 /**
- * @brief Initialize libssh and/or libssl/libcrypto and the server using a libyang context.
+ * @brief Initialize libssh and/or libssl/libcrypto and the server.
  *
- * The context is not modified internally, only its dictionary is used for holding
- * all the strings, which is thread-safe. Reading models is considered thread-safe
- * as models cannot be removed and are rarely modified (augments or deviations).
+ * Must be called before other nc_server* functions.
  *
- * If the RPC callbacks on schema nodes (mentioned in @ref howtoserver) are modified after
- * server initialization with that particular context, they will be called (changes
- * will take effect). However, there could be race conditions as the access to
- * these callbacks is not thread-safe.
- *
- * Server capabilities are generated based on its content. Changing the context
- * in ways that result in changed capabilities (adding models, changing features)
- * is discouraged after sessions are established as it is not possible to change
- * capabilities of a session.
- *
- * This context can safely be destroyed only after calling the last libnetconf2
- * function in an application.
- *
- * Supported RPCs of models in the context are expected to have their callback
- * in the corresponding RPC schema node set to a nc_rpc_clb function callback using nc_set_rpc_callback().
- * This callback is called by nc_ps_poll() if the particular RPC request is
- * received. Callbacks for ietf-netconf:get-schema (supporting YANG and YIN format
- * only) and ietf-netconf:close-session are set internally if left unset.
- *
- * @param[in] ctx Core NETCONF server context.
  * @return 0 on success, -1 on error.
  */
-int nc_server_init(struct ly_ctx *ctx);
+int nc_server_init(void);
 
 /**
  * @brief Destroy any dynamically allocated libssh and/or libssl/libcrypto and
@@ -218,9 +196,9 @@ uint16_t nc_server_get_idle_timeout(void);
  * server options.
  *
  * @param[in] ctx Context to read most capabilities from.
- * @return Array of capabilities stored in the @p ctx dictionary, NULL on error.
+ * @return Array of capabilities, NULL on error.
  */
-const char **nc_server_get_cpblts(struct ly_ctx *ctx);
+char **nc_server_get_cpblts(const struct ly_ctx *ctx);
 
 /**
  * @brief Get the server capabilities including the schemas with the specified YANG version.
@@ -231,9 +209,9 @@ const char **nc_server_get_cpblts(struct ly_ctx *ctx);
  * @param[in] ctx Context to read most capabilities from.
  * @param[in] version YANG version of the schemas to be included in result, with
  * LYS_VERSION_UNDEF the result is the same as from nc_server_get_cpblts().
- * @return Array of capabilities stored in the @p ctx dictionary, NULL on error.
+ * @return Array of capabilities, NULL on error.
  */
-const char **nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version);
+char **nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version);
 
 /** @} Server */
 
@@ -245,14 +223,18 @@ const char **nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION versio
 /**
  * @brief Accept a new session on a pre-established transport session.
  *
+ * For detailed description, look at ::nc_accept().
+ *
  * @param[in] fdin File descriptor to read (unencrypted) XML data from.
  * @param[in] fdout File descriptor to write (unencrypted) XML data to.
  * @param[in] username NETCONF username as provided by the transport protocol.
+ * @param[in] ctx Context for the session to use.
  * @param[out] session New session on success.
  * @return NC_MSG_HELLO on success, NC_MSG_BAD_HELLO on client \<hello\> message
  *         parsing fail, NC_MSG_WOULDBLOCK on timeout, NC_MSG_ERROR on other errors.
  */
-NC_MSG_TYPE nc_accept_inout(int fdin, int fdout, const char *username, struct nc_session **session);
+NC_MSG_TYPE nc_accept_inout(int fdin, int fdout, const char *username, const struct ly_ctx *ctx,
+        struct nc_session **session);
 
 /**
  * @brief Create an empty structure for polling sessions.
@@ -472,13 +454,23 @@ int nc_server_endpt_set_keepalives(const char *endpt_name, int idle_time, int ma
  * is used for waiting for transport-related data, which means this call can block
  * for much longer that @p timeout, but only with slow/faulty/malicious clients.
  *
+ * Server capabilities are generated based on the content of @p ctx. The context must
+ * not be destroyed before the accepted NETCONF session is freed.
+ *
+ * Supported RPCs of models in the context are expected to have their callback
+ * in the corresponding RPC schema node set to a nc_rpc_clb function callback using ::nc_set_rpc_callback().
+ * This callback is called by ::nc_ps_poll() if the particular RPC request is
+ * received. Callbacks for ietf-netconf:get-schema (supporting YANG and YIN format
+ * only) and ietf-netconf:close-session are set internally if left unset.
+ *
  * @param[in] timeout Timeout for receiving a new connection in milliseconds, 0 for
- *                    non-blocking call, -1 for infinite waiting.
+ * non-blocking call, -1 for infinite waiting.
+ * @param[in] ctx Context for the session to use.
  * @param[out] session New session.
  * @return NC_MSG_HELLO on success, NC_MSG_BAD_HELLO on client \<hello\> message
  *         parsing fail, NC_MSG_WOULDBLOCK on timeout, NC_MSG_ERROR on other errors.
  */
-NC_MSG_TYPE nc_accept(int timeout, struct nc_session **session);
+NC_MSG_TYPE nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session);
 
 #ifdef NC_ENABLED_SSH
 

@@ -563,7 +563,7 @@ nc_session_get_port(const struct nc_session *session)
     return session->port;
 }
 
-API struct ly_ctx *
+API const struct ly_ctx *
 nc_session_get_ctx(const struct nc_session *session)
 {
     if (!session) {
@@ -810,10 +810,10 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
                     session->ti.libssh.next = siter->ti.libssh.next;
 
                     /* free starting SSH NETCONF session (channel will be freed in ssh_free()) */
-                    lydict_remove(session->ctx, session->username);
-                    lydict_remove(session->ctx, session->host);
+                    free(session->username);
+                    free(session->host);
                     if (!(session->flags & NC_SESSION_SHAREDCTX)) {
-                        ly_ctx_destroy(session->ctx);
+                        ly_ctx_destroy((struct ly_ctx *)session->ctx);
                     }
 
                     free(siter);
@@ -886,9 +886,9 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         close(sock);
     }
 
-    lydict_remove(session->ctx, session->username);
-    lydict_remove(session->ctx, session->host);
-    lydict_remove(session->ctx, session->path);
+    free(session->username);
+    free(session->host);
+    free(session->path);
 
     /* final cleanup */
     if (session->side == NC_SERVER) {
@@ -905,7 +905,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     if (!(session->flags & NC_SESSION_SHAREDCTX)) {
-        ly_ctx_destroy(session->ctx);
+        ly_ctx_destroy((struct ly_ctx *)session->ctx);
     }
 
     if (session->side == NC_SERVER) {
@@ -920,7 +920,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 }
 
 static void
-add_cpblt(struct ly_ctx *ctx, const char *capab, const char ***cpblts, int *size, int *count)
+add_cpblt(const char *capab, char ***cpblts, int *size, int *count)
 {
     size_t len;
     int i;
@@ -952,18 +952,14 @@ add_cpblt(struct ly_ctx *ctx, const char *capab, const char ***cpblts, int *size
         }
     }
 
-    if (capab) {
-        lydict_insert(ctx, capab, 0, &(*cpblts)[*count]);
-    } else {
-        (*cpblts)[*count] = NULL;
-    }
+    (*cpblts)[*count] = capab ? strdup(capab) : NULL;
     ++(*count);
 }
 
-API const char **
-nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
+API char **
+nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
 {
-    const char **cpblts;
+    char **cpblts;
     const struct lys_module *mod;
     struct lysp_feature *feat;
     int size = 10, count, features_count = 0, dev_count = 0, str_len, len;
@@ -984,8 +980,8 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
         ERRMEM;
         goto error;
     }
-    lydict_insert(ctx, "urn:ietf:params:netconf:base:1.0", 0, &cpblts[0]);
-    lydict_insert(ctx, "urn:ietf:params:netconf:base:1.1", 0, &cpblts[1]);
+    cpblts[0] = strdup("urn:ietf:params:netconf:base:1.0");
+    cpblts[1] = strdup("urn:ietf:params:netconf:base:1.1");
     count = 2;
 
     /* capabilities */
@@ -993,22 +989,22 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
     mod = ly_ctx_get_module_implemented(ctx, "ietf-netconf");
     if (mod) {
         if (lys_feature_value(mod, "writable-running") == LY_SUCCESS) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:capability:writable-running:1.0", &cpblts, &size, &count);
+            add_cpblt("urn:ietf:params:netconf:capability:writable-running:1.0", &cpblts, &size, &count);
         }
         if (lys_feature_value(mod, "candidate") == LY_SUCCESS) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:capability:candidate:1.0", &cpblts, &size, &count);
+            add_cpblt("urn:ietf:params:netconf:capability:candidate:1.0", &cpblts, &size, &count);
             if (lys_feature_value(mod, "confirmed-commit") == LY_SUCCESS) {
-                add_cpblt(ctx, "urn:ietf:params:netconf:capability:confirmed-commit:1.1", &cpblts, &size, &count);
+                add_cpblt("urn:ietf:params:netconf:capability:confirmed-commit:1.1", &cpblts, &size, &count);
             }
         }
         if (lys_feature_value(mod, "rollback-on-error") == LY_SUCCESS) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:capability:rollback-on-error:1.0", &cpblts, &size, &count);
+            add_cpblt("urn:ietf:params:netconf:capability:rollback-on-error:1.0", &cpblts, &size, &count);
         }
         if (lys_feature_value(mod, "validate") == LY_SUCCESS) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:capability:validate:1.1", &cpblts, &size, &count);
+            add_cpblt("urn:ietf:params:netconf:capability:validate:1.1", &cpblts, &size, &count);
         }
         if (lys_feature_value(mod, "startup") == LY_SUCCESS) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:capability:startup:1.0", &cpblts, &size, &count);
+            add_cpblt("urn:ietf:params:netconf:capability:startup:1.0", &cpblts, &size, &count);
         }
 
         /* The URL capability must be set manually using nc_server_set_capability()
@@ -1016,11 +1012,11 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
          * https://tools.ietf.org/html/rfc6241#section-8.8.3
          */
         // if (lys_feature_value(mod, "url") == LY_SUCCESS) {
-        // add_cpblt(ctx, "urn:ietf:params:netconf:capability:url:1.0", &cpblts, &size, &count);
+        // add_cpblt("urn:ietf:params:netconf:capability:url:1.0", &cpblts, &size, &count);
         // }
 
         if (lys_feature_value(mod, "xpath") == LY_SUCCESS) {
-            add_cpblt(ctx, "urn:ietf:params:netconf:capability:xpath:1.0", &cpblts, &size, &count);
+            add_cpblt("urn:ietf:params:netconf:capability:xpath:1.0", &cpblts, &size, &count);
         }
     }
 
@@ -1061,14 +1057,14 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
                 }
                 str[strlen(str) - 1] = '\0';
 
-                add_cpblt(ctx, str, &cpblts, &size, &count);
+                add_cpblt(str, &cpblts, &size, &count);
             }
         }
     }
 
     /* other capabilities */
     for (u = 0; u < server_opts.capabilities_count; u++) {
-        add_cpblt(ctx, server_opts.capabilities[u], &cpblts, &size, &count);
+        add_cpblt(server_opts.capabilities[u], &cpblts, &size, &count);
     }
 
     /* models */
@@ -1100,12 +1096,12 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
                 /* new one (capab defined in RFC 8526 section 2) */
                 sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.1?revision=%s&content-id=%s",
                         mod->revision, yl_content_id);
-                add_cpblt(ctx, str, &cpblts, &size, &count);
+                add_cpblt(str, &cpblts, &size, &count);
             } else {
                 /* old one (capab defined in RFC 7950 section 5.6.4) */
                 sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.0?revision=%s&module-set-id=%s",
                         mod->revision, yl_content_id);
-                add_cpblt(ctx, str, &cpblts, &size, &count);
+                add_cpblt(str, &cpblts, &size, &count);
             }
             free(yl_content_id);
             continue;
@@ -1165,11 +1161,11 @@ nc_server_get_cpblts_version(struct ly_ctx *ctx, LYS_VERSION version)
             }
         }
 
-        add_cpblt(ctx, str, &cpblts, &size, &count);
+        add_cpblt(str, &cpblts, &size, &count);
     }
 
     /* ending NULL capability */
-    add_cpblt(ctx, NULL, &cpblts, &size, &count);
+    add_cpblt(NULL, &cpblts, &size, &count);
 
     return cpblts;
 
@@ -1178,8 +1174,8 @@ error:
     return NULL;
 }
 
-API const char **
-nc_server_get_cpblts(struct ly_ctx *ctx)
+API char **
+nc_server_get_cpblts(const struct ly_ctx *ctx)
 {
     return nc_server_get_cpblts_version(ctx, LYS_VERSION_UNDEF);
 }
@@ -1252,7 +1248,7 @@ nc_send_hello_io(struct nc_session *session)
 {
     NC_MSG_TYPE ret;
     int i, io_timeout;
-    const char **cpblts;
+    char **cpblts;
     uint32_t *sid;
 
     if (session->side == NC_CLIENT) {
@@ -1262,8 +1258,8 @@ nc_send_hello_io(struct nc_session *session)
             ERRMEM;
             return NC_MSG_ERROR;
         }
-        lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.0", 0, &cpblts[0]);
-        lydict_insert(session->ctx, "urn:ietf:params:netconf:base:1.1", 0, &cpblts[1]);
+        cpblts[0] = strdup("urn:ietf:params:netconf:base:1.0");
+        cpblts[1] = strdup("urn:ietf:params:netconf:base:1.1");
         cpblts[2] = NULL;
 
         io_timeout = NC_CLIENT_HELLO_TIMEOUT * 1000;
@@ -1281,7 +1277,7 @@ nc_send_hello_io(struct nc_session *session)
     ret = nc_write_msg_io(session, io_timeout, NC_MSG_HELLO, cpblts, sid);
 
     for (i = 0; cpblts[i]; ++i) {
-        lydict_remove(session->ctx, cpblts[i]);
+        free(cpblts[i]);
     }
     free(cpblts);
 
