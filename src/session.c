@@ -599,8 +599,8 @@ nc_session_get_data(const struct nc_session *session)
 NC_MSG_TYPE
 nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op)
 {
-    if (session->ctx != op->schema->module->ctx) {
-        ERR(session, "RPC \"%s\" was created in different context than that of the session.", op->schema->name);
+    if (session->ctx != LYD_CTX(op)) {
+        ERR(session, "RPC \"%s\" was created in different context than that of the session.", LYD_NAME(op));
         return NC_MSG_ERROR;
     }
 

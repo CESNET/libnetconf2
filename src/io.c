@@ -962,7 +962,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         nc_write_clb((void *)&arg, buf, count, 0);
         free(buf);
 
-        if (op->schema->nodetype != LYS_RPC) {
+        if (op->schema && (op->schema->nodetype & (LYS_CONTAINER | LYS_LIST))) {
             /* <action> open */
             str = "<action xmlns=\"urn:ietf:params:xml:ns:yang:1\">";
             nc_write_clb((void *)&arg, str, strlen(str), 0);
@@ -974,7 +974,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
             goto cleanup;
         }
 
-        if (op->schema->nodetype != LYS_RPC) {
+        if (op->schema && (op->schema->nodetype & (LYS_CONTAINER | LYS_LIST))) {
             /* <action> close */
             str = "</action>";
             nc_write_clb((void *)&arg, str, strlen(str), 0);
