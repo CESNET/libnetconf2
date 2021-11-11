@@ -326,7 +326,7 @@ gen_doc("${doxy_files}" ${LIBNETCONF2_VERSION} ${LIBNETCONF2_DESCRIPTION} "")
 
 # generate API/ABI report
 if ("${BUILD_TYPE_UPPER}" STREQUAL "ABICHECK")
-    lib_abi_check(netconf2 "${headers}" ${LIBNETCONF2_SOVERSION_FULL} e7402149e5b36de7acab2e38970a3a9d6a8165d5)
+    lib_abi_check(netconf2 "${headers}" ${LIBNETCONF2_SOVERSION_FULL} 0ad064839fc3b731528c95ac8ca8eb4cd047d0fe)
 endif()
 
 # source files to be covered by the 'format' target and a test with 'format-check' target
