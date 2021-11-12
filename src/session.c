@@ -811,10 +811,10 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
                     session->ti.libssh.next = siter->ti.libssh.next;
 
                     /* free starting SSH NETCONF session (channel will be freed in ssh_free()) */
-                    free(session->username);
-                    free(session->host);
-                    if (!(session->flags & NC_SESSION_SHAREDCTX)) {
-                        ly_ctx_destroy((struct ly_ctx *)session->ctx);
+                    free(siter->username);
+                    free(siter->host);
+                    if (!(siter->flags & NC_SESSION_SHAREDCTX)) {
+                        ly_ctx_destroy((struct ly_ctx *)siter->ctx);
                     }
 
                     free(siter);
