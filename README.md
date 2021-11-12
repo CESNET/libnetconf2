@@ -51,6 +51,11 @@ and it occurs on the `master` branch, the **first response will likely be** to u
 of the [**libnetconf**](https://github.com/CESNET/libnetconf) library, which
 is now obsolete and should not be used.
 
+## Packages
+
+Binary RPM or DEB packages of the latest release can be built locally using `apkg`, look into `README` in
+the `distro` directory.
+
 # Installation
 
 ## Required Dependencies
