@@ -13,7 +13,7 @@ Build-Depends: cmake,
 Vcs-Browser: https://github.com/CESNET/libnetconf2/tree/master
 Vcs-Git: https://github.com/CESNET/libnetconf2.git
 
-Package: libnetconf2-2
+Package: libnetconf2-3
 Depends: ${misc:Depends},
          ${shlibs:Depends}
 Architecture: any
@@ -28,7 +28,7 @@ Description: library implementing NETCONF protocol - runtime
 
 Package: libnetconf2-dev
 Depends: libyang2-dev,
-         libnetconf2-2 (= ${binary:Version}),
+         libnetconf2-3 (= ${binary:Version}),
          ${misc:Depends}
 Section: libdevel
 Architecture: any
