@@ -22,6 +22,7 @@ extern "C" {
 
 #include <libyang/libyang.h>
 #include <stdint.h>
+#include <sys/types.h>
 
 #ifdef NC_ENABLED_TLS
 # include <openssl/x509.h>
