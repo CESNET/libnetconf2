@@ -19,6 +19,7 @@
 extern "C" {
 #endif
 
+#include <sys/types.h>
 #include <libyang/libyang.h>
 #include <stdint.h>
 
