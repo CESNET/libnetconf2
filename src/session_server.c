@@ -3509,11 +3509,18 @@ nc_ch_client_thread(void *arg)
             /* session changed status -> it was disconnected for whatever reason,
              * persistent connection immediately tries to reconnect, periodic connects at specific times */
             if (client->conn_type == NC_CH_PERIOD) {
+                if (client->conn.period.anchor_time) {
+                    /* anchored */
+                    reconnect_in = (time(NULL) - client->conn.period.anchor_time) % (client->conn.period.period * 60);
+                } else {
+                    /* fixed timeout */
+                    reconnect_in = client->conn.period.period * 60;
+                }
+
                 /* UNLOCK */
                 nc_server_ch_client_unlock(client);
 
                 /* sleep until we should reconnect TODO wake up sometimes to check for new notifications */
-                reconnect_in = (time(NULL) - client->conn.period.anchor_time) % (client->conn.period.period * 60);
                 VRB(NULL, "Call Home client \"%s\" reconnecting in %d seconds.", data->client_name, reconnect_in);
                 sleep(reconnect_in);
 
