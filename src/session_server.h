@@ -87,9 +87,31 @@ void nc_session_set_status(struct nc_session *session, NC_STATUS status);
  * @brief Set a global nc_rpc_clb that is called if the particular RPC request is
  * received and the private field in the corresponding RPC schema node is NULL.
  *
+ * If this callback is set, the default callbacks for "get-schema" and "close-session" are not used.
+ *
  * @param[in] clb An user-defined nc_rpc_clb function callback, NULL to default.
  */
 void nc_set_global_rpc_clb(nc_rpc_clb clb);
+
+/**
+ * @brief Default RPC callback used for "ietf-netconf-monitoring:get-schema" RPC if no other specific
+ * or global callback is set.
+ *
+ * @param[in] rpc Received RPC.
+ * @param[in] session NC session @p rpc was received on.
+ * @return Server reply.
+ */
+struct nc_server_reply *nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *session);
+
+/**
+ * @brief Default RPC callback used for "ietf-netconf:close-session" RPC if no other specific
+ * or global callback is set.
+ *
+ * @param[in] rpc Received RPC.
+ * @param[in] session NC session @p rpc was received on.
+ * @return Server reply.
+ */
+struct nc_server_reply *nc_clb_default_close_session(struct lyd_node *rpc, struct nc_session *session);
 
 /** @} Server Session */
 
