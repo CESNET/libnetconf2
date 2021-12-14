@@ -566,7 +566,7 @@ fail:
     return -1;
 }
 
-static struct nc_server_reply *
+API struct nc_server_reply *
 nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *session)
 {
     const char *identifier = NULL, *revision = NULL, *format = NULL;
@@ -662,7 +662,7 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *session)
     return nc_server_reply_data(data, NC_WD_EXPLICIT, NC_PARAMTYPE_FREE);
 }
 
-static struct nc_server_reply *
+API struct nc_server_reply *
 nc_clb_default_close_session(struct lyd_node *UNUSED(rpc), struct nc_session *session)
 {
     session->term_reason = NC_SESSION_TERM_CLOSED;
@@ -678,6 +678,11 @@ static void
 nc_server_init_ctx(const struct ly_ctx *ctx)
 {
     struct lysc_node *rpc;
+
+    if (global_rpc_clb) {
+        /* expect it to handle these RPCs as well */
+        return;
+    }
 
     /* set default <get-schema> callback if not specified */
     rpc = NULL;
