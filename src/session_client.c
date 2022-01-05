@@ -1827,7 +1827,7 @@ get_msg_type(struct nc_session *session, struct ly_in *msg)
  * @param[out] message If receiving a message succeeded this is the message, NULL otherwise.
  * @return NC_MSG_REPLY If a rpc-reply was received;
  * @return NC_MSG_NOTIF If a notification was received;
- * @return NC_MSG_ERROR If any error occured;
+ * @return NC_MSG_ERROR If any error occurred;
  * @return NC_MSG_WOULDBLOCK If the timeout was reached.
  */
 static NC_MSG_TYPE
