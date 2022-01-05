@@ -196,7 +196,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
                     session->term_reason = NC_SESSION_TERM_OTHER;
                     return -1;
                 default:
-                    ERR(session, "Unknown SSL error occured (err code %d).", e);
+                    ERR(session, "Unknown SSL error occurred (err code %d).", e);
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_OTHER;
                     return -1;
@@ -737,7 +737,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
                     free(reasons);
                     return -1;
                 default:
-                    ERR(session, "Unknown SSL error occured (err code %d).", e);
+                    ERR(session, "Unknown SSL error occurred (err code %d).", e);
                     return -1;
                 }
             }

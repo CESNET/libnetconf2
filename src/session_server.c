@@ -1034,7 +1034,7 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
 
     /* add ourselves into the queue */
     nc_ps_queue_add_id(ps, id);
-    DBL(NULL, "PS 0x%p TID %lu queue: added %u, head %u, lenght %u", ps, (long unsigned int)pthread_self(), *id,
+    DBL(NULL, "PS 0x%p TID %lu queue: added %u, head %u, length %u", ps, (long unsigned int)pthread_self(), *id,
             ps->queue[ps->queue_begin], ps->queue_len);
 
     /* is it our turn? */
@@ -1095,7 +1095,7 @@ nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func)
 
     /* remove ourselves from the queue */
     nc_ps_queue_remove_id(ps, id);
-    DBL(NULL, "PS 0x%p TID %lu queue: removed %u, head %u, lenght %u", ps, (long unsigned int)pthread_self(), id,
+    DBL(NULL, "PS 0x%p TID %lu queue: removed %u, head %u, length %u", ps, (long unsigned int)pthread_self(), id,
             ps->queue[ps->queue_begin], ps->queue_len);
 
     /* broadcast to all other threads that the queue moved */
