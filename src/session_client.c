@@ -413,8 +413,11 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
     if (msg == NC_MSG_WOULDBLOCK) {
         ERR(clb_data->session, "Timeout for receiving reply to a <get-schema> expired.");
         goto cleanup;
-    } else if ((msg == NC_MSG_ERROR) || !op) {
+    } else if (msg == NC_MSG_ERROR) {
         ERR(clb_data->session, "Failed to receive a reply to <get-schema>.");
+        goto cleanup;
+    } else if (!op) {
+        WRN(clb_data->session, "Received an unexpected reply to <get-schema>.");
         goto cleanup;
     }
 
