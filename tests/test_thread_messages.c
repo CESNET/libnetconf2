@@ -90,9 +90,15 @@ server_thread(void *arg)
     ps = nc_ps_new();
     nc_assert(ps);
     nc_ps_add_session(ps, sess);
+
+    /* get for ietf-yang-library data; delete-config in test */
     poll = nc_ps_poll(ps, 1000, &sess);
-    nc_server_notif_send(sess, notif, 1000);
     nc_assert(poll == NC_PSPOLL_RPC);
+    poll = nc_ps_poll(ps, 1000, &sess);
+    nc_assert(poll == NC_PSPOLL_RPC);
+
+    nc_server_notif_send(sess, notif, 1000);
+
     nc_ps_clear(ps, 1, NULL);
     nc_ps_free(ps);
 
