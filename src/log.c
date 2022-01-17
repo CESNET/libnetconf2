@@ -29,7 +29,7 @@
 /**
  * @brief libnetconf verbose level variable
  */
-volatile uint8_t verbose_level = 0;
+ATOMIC_T verbose_level = 0;
 
 void (*depr_print_clb)(NC_VERB_LEVEL level, const char *msg);
 void (*print_clb)(const struct nc_session *session, NC_VERB_LEVEL level, const char *msg);
@@ -37,7 +37,7 @@ void (*print_clb)(const struct nc_session *session, NC_VERB_LEVEL level, const c
 API void
 nc_verbosity(NC_VERB_LEVEL level)
 {
-    verbose_level = level;
+    ATOMIC_STORE_RELAXED(verbose_level, level);
     ly_log_level((LY_LOG_LEVEL)level);
 }
 

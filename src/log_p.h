@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 
+#include "compat.h"
 #include "log.h"
 
 /*
@@ -36,16 +37,16 @@ void prv_printf(const struct nc_session *session, NC_VERB_LEVEL level, const cha
 /**
  * @brief Verbose level variable
  */
-extern volatile uint8_t verbose_level;
+extern ATOMIC_T verbose_level;
 
 /*
  * Verbose printing macros
  */
 #define ERR(session, format, args ...) prv_printf(session,NC_VERB_ERROR,format,##args)
-#define WRN(session, format, args ...) if(verbose_level>=NC_VERB_WARNING){prv_printf(session,NC_VERB_WARNING,format,##args);}
-#define VRB(session, format, args ...) if(verbose_level>=NC_VERB_VERBOSE){prv_printf(session,NC_VERB_VERBOSE,format,##args);}
-#define DBG(session, format, args ...) if(verbose_level>=NC_VERB_DEBUG){prv_printf(session,NC_VERB_DEBUG,format,##args);}
-#define DBL(session, format, args ...) if(verbose_level>=NC_VERB_DEBUG_LOWLVL){prv_printf(session,NC_VERB_DEBUG_LOWLVL,format,##args);}
+#define WRN(session, format, args ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_WARNING){prv_printf(session,NC_VERB_WARNING,format,##args);}
+#define VRB(session, format, args ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_VERBOSE){prv_printf(session,NC_VERB_VERBOSE,format,##args);}
+#define DBG(session, format, args ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_DEBUG){prv_printf(session,NC_VERB_DEBUG,format,##args);}
+#define DBL(session, format, args ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_DEBUG_LOWLVL){prv_printf(session,NC_VERB_DEBUG_LOWLVL,format,##args);}
 
 #define ERRMEM ERR(NULL, "%s: memory reallocation failed (%s:%d).", __func__, __FILE__, __LINE__)
 #define ERRARG(arg) ERR(NULL, "%s: invalid argument (%s).", __func__, arg)
