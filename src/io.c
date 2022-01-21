@@ -970,7 +970,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         }
 
         /* rpc data */
-        if (lyd_print_clb(nc_write_xmlclb, (void *)&arg, op, LYD_XML, LYD_PRINT_SHRINK)) {
+        if (lyd_print_clb(nc_write_xmlclb, (void *)&arg, op, LYD_XML, LYD_PRINT_SHRINK | LYD_PRINT_KEEPEMPTYCONT)) {
             ret = NC_MSG_ERROR;
             goto cleanup;
         }
