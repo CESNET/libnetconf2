@@ -134,7 +134,7 @@ main(void)
     int pipes[4];
     struct nc_session *sess;
     struct lyd_node *op, *envp;
-    struct ly_ctx *ctx;
+    struct ly_ctx *server_ctx, *client_ctx;
     struct nc_rpc *rpc;
     uint64_t msgid;
     NC_MSG_TYPE msgtype;
@@ -151,19 +151,23 @@ main(void)
     thread_arg.in = pipes[0];
     thread_arg.out = pipes[3];
 
-    /* Create context */
-    nc_assert(ly_ctx_new(TESTS_DIR "/data/modules", 0, &ctx) == LY_SUCCESS);
-    nc_assert(ly_ctx_load_module(ctx, "ietf-netconf", NULL, features));
-    nc_assert(ly_ctx_load_module(ctx, "notif1", NULL, NULL));
-    thread_arg.ctx = ctx;
+    /* Create both contexts */
+    nc_assert(ly_ctx_new(TESTS_DIR "/data/modules", 0, &server_ctx) == LY_SUCCESS);
+    nc_assert(ly_ctx_load_module(server_ctx, "ietf-netconf", NULL, features));
+    nc_assert(ly_ctx_load_module(server_ctx, "notif1", NULL, NULL));
+    thread_arg.ctx = server_ctx;
     nc_set_global_rpc_clb(rpc_clb);
+
+    nc_assert(ly_ctx_new(TESTS_DIR "/data/modules", 0, &client_ctx) == LY_SUCCESS);
+    nc_assert(ly_ctx_load_module(client_ctx, "ietf-netconf", NULL, features));
+    nc_assert(ly_ctx_load_module(client_ctx, "notif1", NULL, NULL));
 
     /* Start server thread */
     pthread_create(&t[0], NULL, server_thread, &thread_arg);
     nc_client_init();
 
     /* Listen for notifications */
-    sess = nc_connect_inout(pipes[2], pipes[1], ctx);
+    sess = nc_connect_inout(pipes[2], pipes[1], client_ctx);
     nc_assert(sess);
     pthread_create(&t[1], NULL, notif_thread, sess);
 
@@ -187,7 +191,8 @@ main(void)
 
     /* Cleanup */
     nc_session_free(sess, NULL);
-    ly_ctx_destroy(ctx);
+    ly_ctx_destroy(server_ctx);
+    ly_ctx_destroy(client_ctx);
     for (uint8_t i = 0; i < 4; i++) {
         close(pipes[i]);
     }
