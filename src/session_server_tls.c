@@ -198,6 +198,8 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
     int i, san_count;
     char *subject, *common_name;
 
+    *username = NULL;
+
     if (map_type == NC_TLS_CTN_COMMON_NAME) {
         subject = X509_NAME_oneline(X509_get_subject_name(client_cert), NULL, 0);
         common_name = strstr(subject, "CN=");
