@@ -651,10 +651,9 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *session)
         free(model_data);
         return NULL;
     }
-    lydict_insert_zc(session->ctx, model_data, (const char **)&model_data);
     if (lyd_new_any(data, NULL, "data", model_data, 1, LYD_ANYDATA_STRING, 1, NULL)) {
         ERRINT;
-        lydict_remove(session->ctx, model_data);
+        free(model_data);
         lyd_free_tree(data);
         return NULL;
     }

@@ -71,7 +71,9 @@ set(LIBNETCONF2_MICRO_SOVERSION 3)
 set(LIBNETCONF2_SOVERSION_FULL ${LIBNETCONF2_MAJOR_SOVERSION}.${LIBNETCONF2_MINOR_SOVERSION}.${LIBNETCONF2_MICRO_SOVERSION})
 set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_SOVERSION})
 
-# libyang SO version required
+# Version of libyang library that this project depends on
+set(LIBYANG_DEP_VERSION 2.0.159)
+set(LIBYANG_DEP_SOVERSION 2.18.1)
 set(LIBYANG_DEP_SOVERSION_MAJOR 2)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -fvisibility=hidden -std=gnu99")
@@ -263,7 +265,7 @@ if(ENABLE_DNSSEC)
 endif()
 
 # dependencies - libyang
-find_package(LibYANG ${LIBYANG_DEP_SOVERSION_MAJOR} REQUIRED)
+find_package(LibYANG ${LIBYANG_DEP_SOVERSION} REQUIRED)
 target_link_libraries(netconf2 ${LIBYANG_LIBRARIES})
 include_directories(${LIBYANG_INCLUDE_DIRS})
 
