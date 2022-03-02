@@ -112,7 +112,7 @@ void nc_client_init(void);
 
 /**
  * @brief Destroy all libssh and/or libssl/libcrypto dynamic memory and
- *        the client options, for both SSH and TLS, and for Call Home too.
+ * the client options, for both SSH and TLS, and for Call Home too.
  */
 void nc_client_destroy(void);
 
@@ -135,13 +135,9 @@ void nc_client_destroy(void);
  *
  * @param[in] fdin Input file descriptor for reading (clear) data from NETCONF server.
  * @param[in] fdout Output file descriptor for writing (clear) data for NETCONF server.
- * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
- *                (ignoring what is actually supported by the server side). If not set,
- *                YANG context is created for the session using \<get-schema\> (if supported
- *                by the server side) or/and by searching for YANG schemas in the searchpath
- *                (see nc_client_schema_searchpath()). In every case except not providing context
- *                to connect to a server supporting \<get-schema\> it is possible that
- *                the session context will not include all the models supported by the server.
+ * @param[in] ctx Optional custom context to use for the session. Disregarding whether set or not, any YANG modules
+ * not present and supported by the server are attempted to be loaded using \<get-schema\> (if supported) and/or by
+ * searching the searchpath (see ::nc_client_set_schema_searchpath()).
  * @return Created NETCONF session object or NULL in case of error.
  */
 struct nc_session *nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx);
@@ -154,13 +150,9 @@ struct nc_session *nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx);
  * by sending and processing NETCONF \<hello\> messages.
  *
  * @param[in] address Path to the unix socket.
- * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
- *                (ignoring what is actually supported by the server side). If not set,
- *                YANG context is created for the session using \<get-schema\> (if supported
- *                by the server side) or/and by searching for YANG schemas in the searchpath
- *                (see nc_client_schema_searchpath()). In every case except not providing context
- *                to connect to a server supporting \<get-schema\> it is possible that
- *                the session context will not include all the models supported by the server.
+ * @param[in] ctx Optional custom context to use for the session. Disregarding whether set or not, any YANG modules
+ * not present and supported by the server are attempted to be loaded using \<get-schema\> (if supported) and/or by
+ * searching the searchpath (see ::nc_client_set_schema_searchpath()).
  * @return Created NETCONF session object or NULL in case of error.
  */
 struct nc_session *nc_connect_unix(const char *address, struct ly_ctx *ctx);
@@ -355,15 +347,11 @@ const char *nc_client_ssh_get_username(void);
  * they are supposed to use nc_connect_libssh().
  *
  * @param[in] host Hostname or address (both Ipv4 and IPv6 are accepted) of the target server.
- *                 'localhost' is used by default if NULL is specified.
+ * 'localhost' is used by default if NULL is specified.
  * @param[in] port Port number of the target server. Default value 830 is used if 0 is specified.
- * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
- *                (ignoring what is actually supported by the server side). If not set,
- *                YANG context is created for the session using \<get-schema\> (if supported
- *                by the server side) or/and by searching for YANG schemas in the searchpath
- *                (see nc_client_schema_searchpath()). In every case except not providing context
- *                to connect to a server supporting \<get-schema\> it is possible that
- *                the session context will not include all the models supported by the server.
+ * @param[in] ctx Optional custom context to use for the session. Disregarding whether set or not, any YANG modules
+ * not present and supported by the server are attempted to be loaded using \<get-schema\> (if supported) and/or by
+ * searching the searchpath (see ::nc_client_set_schema_searchpath()).
  * @return Created NETCONF session object or NULL on error.
  */
 struct nc_session *nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx);
@@ -376,15 +364,11 @@ struct nc_session *nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx
  * set and connected only the host and the username must be set/is detected. Or the @p ssh_session
  * can already be authenticated in which case it is used directly.
  *
- * @param[in] ssh_session libssh structure representing SSH session object. After passing it
- *                        to libnetconf2 this way, it is fully managed by it (including freeing!).
- * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
- *                (ignoring what is actually supported by the server side). If not set,
- *                YANG context is created for the session using \<get-schema\> (if supported
- *                by the server side) or/and by searching for YANG schemas in the searchpath
- *                (see nc_client_schema_searchpath()). In every case except not providing context
- *                to connect to a server supporting \<get-schema\> it is possible that
- *                the session context will not include all the models supported by the server.
+ * @param[in] ssh_session libssh structure representing SSH session object. It is fully managed by the created session
+ * including freeing it.
+ * @param[in] ctx Optional custom context to use for the session. Disregarding whether set or not, any YANG modules
+ * not present and supported by the server are attempted to be loaded using \<get-schema\> (if supported) and/or by
+ * searching the searchpath (see ::nc_client_set_schema_searchpath()).
  * @return Created NETCONF session object or NULL on error.
  */
 struct nc_session *nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx);
@@ -393,14 +377,10 @@ struct nc_session *nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx
  * @brief Create another NETCONF session on existing SSH session using separated SSH channel.
  *
  * @param[in] session Existing NETCONF session. The session has to be created on SSH transport layer using libssh -
- *                    it has to be created by nc_connect_ssh(), nc_connect_libssh() or nc_connect_ssh_channel().
- * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
- *                (ignoring what is actually supported by the server side). If not set,
- *                YANG context is created for the session using \<get-schema\> (if supported
- *                by the server side) or/and by searching for YANG schemas in the searchpath
- *                (see nc_client_schema_searchpath()). In every case except not providing context
- *                to connect to a server supporting \<get-schema\> it is possible that
- *                the session context will not include all the models supported by the server.
+ * it has to be created by nc_connect_ssh(), nc_connect_libssh() or nc_connect_ssh_channel().
+ * @param[in] ctx Optional custom context to use for the session. Disregarding whether set or not, any YANG modules
+ * not present and supported by the server are attempted to be loaded using \<get-schema\> (if supported) and/or by
+ * searching the searchpath (see ::nc_client_set_schema_searchpath()).
  * @return Created NETCONF session object or NULL on error.
  */
 struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx);
@@ -479,18 +459,14 @@ void nc_client_tls_get_crl_paths(const char **crl_file, const char **crl_dir);
  * @brief Connect to the NETCONF server using TLS transport (via libssl)
  *
  * TLS session is created with the certificates set using nc_client_tls_* functions, which must be called beforehand!
- * If the caller needs to use specific TLS session properties, they are supposed to use nc_connect_libssl().
+ * If the caller needs to use specific TLS session properties, they are supposed to use ::nc_connect_libssl().
  *
  * @param[in] host Hostname or address (both Ipv4 and IPv6 are accepted) of the target server.
- *                 'localhost' is used by default if NULL is specified.
+ * 'localhost' is used by default if NULL is specified.
  * @param[in] port Port number of the target server. Default value 6513 is used if 0 is specified.
- * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
- *                (ignoring what is actually supported by the server side). If not set,
- *                YANG context is created for the session using \<get-schema\> (if supported
- *                by the server side) or/and by searching for YANG schemas in the searchpath
- *                (see nc_client_schema_searchpath()). In every case except not providing context
- *                to connect to a server supporting \<get-schema\> it is possible that
- *                the session context will not include all the models supported by the server.
+ * @param[in] ctx Optional custom context to use for the session. Disregarding whether set or not, any YANG modules
+ * not present and supported by the server are attempted to be loaded using \<get-schema\> (if supported) and/or by
+ * searching the searchpath (see ::nc_client_set_schema_searchpath()).
  * @return Created NETCONF session object or NULL on error.
  */
 struct nc_session *nc_connect_tls(const char *host, uint16_t port, struct ly_ctx *ctx);
@@ -501,13 +477,9 @@ struct nc_session *nc_connect_tls(const char *host, uint16_t port, struct ly_ctx
  * The TLS session supplied is expected to be fully connected and authenticated!
  *
  * @param[in] tls libssl structure representing the TLS session object.
- * @param[in] ctx Optional parameter. If set, provides strict YANG context for the session
- *                (ignoring what is actually supported by the server side). If not set,
- *                YANG context is created for the session using \<get-schema\> (if supported
- *                by the server side) or/and by searching for YANG schemas in the searchpath
- *                (see nc_client_schema_searchpath()). In every case except not providing context
- *                to connect to a server supporting \<get-schema\> it is possible that
- *                the session context will not include all the models supported by the server.
+ * @param[in] ctx Optional custom context to use for the session. Disregarding whether set or not, any YANG modules
+ * not present and supported by the server are attempted to be loaded using \<get-schema\> (if supported) and/or by
+ * searching the searchpath (see ::nc_client_set_schema_searchpath()).
  * @return Created NETCONF session object or NULL on error.
  */
 struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
