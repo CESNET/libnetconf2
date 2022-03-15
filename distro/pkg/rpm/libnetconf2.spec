@@ -46,7 +46,7 @@ make DESTDIR=%{buildroot} install
 
 %files
 %license LICENSE
-%{_libdir}/libnetconf2.so.2*
+%{_libdir}/libnetconf2.so.*
 
 %files devel
 %{_libdir}/libnetconf2.so
