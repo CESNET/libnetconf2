@@ -3389,12 +3389,12 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
     /* CH LOCK */
     pthread_mutex_lock(&session->opts.server.ch_lock);
 
-    session->flags |= NC_SESSION_CALLHOME;
+    session->flags |= NC_SESSION_CH_THREAD;
 
     /* give the session to the user */
     if (data->new_session_cb(data->client_name, session)) {
         /* something is wrong, free the session */
-        session->flags &= ~NC_SESSION_CALLHOME;
+        session->flags &= ~NC_SESSION_CH_THREAD;
 
         /* CH UNLOCK */
         pthread_mutex_unlock(&session->opts.server.ch_lock);
@@ -3449,8 +3449,9 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
 
     } while (session->status == NC_STATUS_RUNNING);
 
-    /* signal to nc_session_free() that CH registered this session not being valid anymore */
-    session->flags &= ~NC_SESSION_CALLHOME;
+    /* signal to nc_session_free() that CH thread is terminating */
+    session->flags &= ~NC_SESSION_CH_THREAD;
+    pthread_cond_signal(&session->opts.server.ch_cond);
 
     /* CH UNLOCK */
     pthread_mutex_unlock(&session->opts.server.ch_lock);

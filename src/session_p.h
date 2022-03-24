@@ -432,7 +432,8 @@ struct nc_session {
     void *data;                    /**< arbitrary user data */
     uint8_t flags;                 /**< various flags of the session */
 #define NC_SESSION_SHAREDCTX 0x01
-#define NC_SESSION_CALLHOME 0x02
+#define NC_SESSION_CALLHOME 0x02    /**< session is Call Home and ch_lock is initialized */
+#define NC_SESSION_CH_THREAD 0x04   /**< protected by ch_lock */
 
     union {
         struct {
@@ -446,7 +447,7 @@ struct nc_session {
 
             /* client flags */
             /* some server modules failed to load so the data from them will be ignored - not use strict flag for parsing */
-#           define NC_SESSION_CLIENT_NOT_STRICT 0x40
+#           define NC_SESSION_CLIENT_NOT_STRICT 0x08
         } client;
         struct {
             /* server side only data */
@@ -465,13 +466,13 @@ struct nc_session {
             /* server flags */
 #ifdef NC_ENABLED_SSH
             /* SSH session authenticated */
-#           define NC_SESSION_SSH_AUTHENTICATED 0x04
+#           define NC_SESSION_SSH_AUTHENTICATED 0x10
             /* netconf subsystem requested */
-#           define NC_SESSION_SSH_SUBSYS_NETCONF 0x08
+#           define NC_SESSION_SSH_SUBSYS_NETCONF 0x20
             /* new SSH message arrived */
-#           define NC_SESSION_SSH_NEW_MSG 0x10
+#           define NC_SESSION_SSH_NEW_MSG 0x40
             /* this session is passed to nc_sshcb_msg() */
-#           define NC_SESSION_SSH_MSG_CB 0x20
+#           define NC_SESSION_SSH_MSG_CB 0x80
 
             uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
 #endif

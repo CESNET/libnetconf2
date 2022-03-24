@@ -741,7 +741,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     /* mark session for closing */
     session->status = NC_STATUS_CLOSING;
 
-    if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
+    if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CH_THREAD)) {
         pthread_cond_signal(&session->opts.server.ch_cond);
 
         nc_gettimespec_real(&ts);
@@ -749,16 +749,17 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
         /* wait for CH thread to actually wake up and terminate */
         r = 0;
-        while (!r && (session->flags & NC_SESSION_CALLHOME)) {
+        while (!r && (session->flags & NC_SESSION_CH_THREAD)) {
             r = pthread_cond_timedwait(&session->opts.server.ch_cond, &session->opts.server.ch_lock, &ts);
         }
-
-        /* CH UNLOCK */
-        pthread_mutex_unlock(&session->opts.server.ch_lock);
-
         if (r) {
             ERR(session, "Waiting for Call Home thread failed (%s).", strerror(r));
         }
+    }
+
+    if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
+        /* CH UNLOCK */
+        pthread_mutex_unlock(&session->opts.server.ch_lock);
     }
 
     connected = nc_session_is_connected(session);
