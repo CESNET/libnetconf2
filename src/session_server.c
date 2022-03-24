@@ -3236,11 +3236,11 @@ nc_server_ch_client_set_max_attempts(const char *client_name, uint8_t max_attemp
 
 /* client lock is expected to be held */
 static NC_MSG_TYPE
-nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb, void *ctx_cb_data,
-        struct nc_session **session)
+nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
+        nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, struct nc_session **session)
 {
     NC_MSG_TYPE msgtype;
-    const struct ly_ctx *ctx;
+    const struct ly_ctx *ctx = NULL;
     int sock, ret;
     struct timespec ts_cur;
     char *ip_host;
@@ -3342,6 +3342,9 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
 fail:
     nc_session_free(*session, NULL);
     *session = NULL;
+    if (ctx) {
+        release_ctx_cb(ctx_cb_data);
+    }
     return msgtype;
 }
 
@@ -3399,8 +3402,10 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
         /* CH UNLOCK */
         pthread_mutex_unlock(&session->opts.server.ch_lock);
 
+        /* session terminated, release its context */
         nc_session_free(session, NULL);
-        goto release_ctx;
+        data->release_ctx_cb(data->ctx_cb_data);
+        return ret;
     }
 
     do {
@@ -3456,10 +3461,6 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
     /* CH UNLOCK */
     pthread_mutex_unlock(&session->opts.server.ch_lock);
 
-release_ctx:
-    /* session terminated, release its context */
-    data->release_ctx_cb(data->ctx_cb_data);
-
     return ret;
 }
 
@@ -3489,7 +3490,7 @@ nc_ch_client_thread(void *arg)
 
     VRB(NULL, "Call Home client \"%s\" connecting...", data->client_name);
     while (1) {
-        msgtype = nc_connect_ch_endpt(cur_endpt, data->acquire_ctx_cb, data->ctx_cb_data, &session);
+        msgtype = nc_connect_ch_endpt(cur_endpt, data->acquire_ctx_cb, data->release_ctx_cb, data->ctx_cb_data, &session);
 
         if (msgtype == NC_MSG_HELLO) {
             /* UNLOCK */
