@@ -825,7 +825,7 @@ build_schema_info_yl(struct nc_session *session, int has_get_data, struct schema
     } else if (msg == NC_MSG_ERROR) {
         WRN(session, "Failed to receive a reply to <%s> of yang-library data.", rpc_name);
         goto cleanup;
-    } else if (!op || !lyd_child(op) || strcmp(lyd_child(op)->schema->name, "data")) {
+    } else if (!op || !lyd_child(op) || !lyd_child(op)->schema || strcmp(lyd_child(op)->schema->name, "data")) {
         WRN(session, "Unexpected reply without data to a yang-library <%s> RPC.", rpc_name);
         goto cleanup;
     }
