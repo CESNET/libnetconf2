@@ -2006,6 +2006,8 @@ recv_reply(struct nc_session *session, int timeout, struct lyd_node *op, uint64_
         goto cleanup;
     } else {
         ERR(session, "Received an invalid message (%s).", ly_errmsg(LYD_CTX(op)));
+        lyd_free_tree(*envp);
+        *envp = NULL;
         ret = NC_MSG_ERROR;
         goto cleanup;
     }
@@ -2045,6 +2047,7 @@ recv_reply_dup_rpc(struct nc_session *session, struct nc_rpc *rpc, struct lyd_no
             lyrc = lyd_parse_op(session->ctx, NULL, in, LYD_XML, LYD_TYPE_RPC_YANG, &tree, &op2);
             ly_in_free(in, 0);
             if (lyrc) {
+                lyd_free_tree(tree);
                 return -1;
             }
 
@@ -2240,6 +2243,8 @@ recv_notif(struct nc_session *session, int timeout, struct lyd_node **envp, stru
         goto cleanup;
     } else {
         ERR(session, "Received an invalid message (%s).", ly_errmsg(session->ctx));
+        lyd_free_tree(*envp);
+        *envp = NULL;
         ret = NC_MSG_ERROR;
         goto cleanup;
     }
