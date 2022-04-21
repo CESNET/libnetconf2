@@ -1396,7 +1396,7 @@ nc_server_notif_send(struct nc_session *session, struct nc_server_notif *notif, 
     NC_MSG_TYPE ret;
 
     /* check parameters */
-    if (!session || (session->side != NC_SERVER) || !session->opts.server.ntf_status) {
+    if (!session || (session->side != NC_SERVER) || !nc_session_get_notif_status(session)) {
         ERRARG("session");
         return NC_MSG_ERROR;
     } else if (!notif || !notif->ntf || !notif->eventtime) {
@@ -1505,7 +1505,7 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
 #endif
 
     /* check timeout first */
-    if (!(session->flags & NC_SESSION_CALLHOME) && !session->opts.server.ntf_status && server_opts.idle_timeout &&
+    if (!(session->flags & NC_SESSION_CALLHOME) && !nc_session_get_notif_status(session) && server_opts.idle_timeout &&
             (now_mono >= session->opts.server.last_rpc + server_opts.idle_timeout)) {
         sprintf(msg, "session idle timeout elapsed");
         session->status = NC_STATUS_INVALID;
@@ -3443,7 +3443,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
         }
 
         nc_gettimespec_mono(&ts);
-        if (!session->opts.server.ntf_status && idle_timeout && (ts.tv_sec >= session->opts.server.last_rpc + idle_timeout)) {
+        if (!nc_session_get_notif_status(session) && idle_timeout && (ts.tv_sec >= session->opts.server.last_rpc + idle_timeout)) {
             VRB(session, "Call Home client \"%s\": session idle timeout elapsed.", client->name);
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_TIMEOUT;
@@ -3690,7 +3690,13 @@ nc_session_inc_notif_status(struct nc_session *session)
         return;
     }
 
+    /* NTF STATUS LOCK */
+    pthread_mutex_lock(&session->opts.server.ntf_status_lock);
+
     ++session->opts.server.ntf_status;
+
+    /* NTF STATUS UNLOCK */
+    pthread_mutex_unlock(&session->opts.server.ntf_status_lock);
 }
 
 API void
@@ -3701,20 +3707,36 @@ nc_session_dec_notif_status(struct nc_session *session)
         return;
     }
 
+    /* NTF STATUS LOCK */
+    pthread_mutex_lock(&session->opts.server.ntf_status_lock);
+
     if (session->opts.server.ntf_status) {
         --session->opts.server.ntf_status;
     }
+
+    /* NTF STATUS UNLOCK */
+    pthread_mutex_unlock(&session->opts.server.ntf_status_lock);
 }
 
 API int
 nc_session_get_notif_status(const struct nc_session *session)
 {
+    uint32_t ntf_status;
+
     if (!session || (session->side != NC_SERVER)) {
         ERRARG("session");
         return 0;
     }
 
-    return session->opts.server.ntf_status;
+    /* NTF STATUS LOCK */
+    pthread_mutex_lock(&((struct nc_session *)session)->opts.server.ntf_status_lock);
+
+    ntf_status = session->opts.server.ntf_status;
+
+    /* NTF STATUS UNLOCK */
+    pthread_mutex_unlock(&((struct nc_session *)session)->opts.server.ntf_status_lock);
+
+    return ntf_status;
 }
 
 API int

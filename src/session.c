@@ -189,9 +189,9 @@ nc_new_session(NC_SIDE side, int shared_ti)
     sess->side = side;
 
     if (side == NC_SERVER) {
+        pthread_mutex_init(&sess->opts.server.ntf_status_lock, NULL);
         pthread_mutex_init(&sess->opts.server.rpc_lock, NULL);
         pthread_cond_init(&sess->opts.server.rpc_cond, NULL);
-        sess->opts.server.rpc_inuse = 0;
 
         pthread_mutex_init(&sess->opts.server.ch_lock, NULL);
         pthread_cond_init(&sess->opts.server.ch_cond, NULL);
@@ -894,6 +894,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     /* final cleanup */
     if (session->side == NC_SERVER) {
+        pthread_mutex_destroy(&session->opts.server.ntf_status_lock);
         if (rpc_locked) {
             nc_session_rpc_unlock(session, NC_SESSION_LOCK_TIMEOUT, __func__);
         }
