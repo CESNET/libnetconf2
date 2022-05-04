@@ -1227,11 +1227,20 @@ nc_ctx_check_and_fill(struct nc_session *session)
         }
     }
 
+    /* compile all modules at once to avoid invalid errors or warnings */
+    ly_ctx_set_options(session->ctx, LY_CTX_EXPLICIT_COMPILE);
+
+    /* fill the context */
     if (nc_ctx_fill(session, server_modules, old_clb, old_data, get_schema_support)) {
         goto cleanup;
     }
 
-    /* succsess */
+    /* compile it */
+    if (ly_ctx_compile(session->ctx)) {
+        goto cleanup;
+    }
+
+    /* success */
     ret = 0;
 
     if (session->flags & NC_SESSION_CLIENT_NOT_STRICT) {
@@ -1245,6 +1254,7 @@ cleanup:
     /* set user callback back */
     ly_ctx_set_module_imp_clb(session->ctx, old_clb, old_data);
     ly_ctx_unset_options(session->ctx, LY_CTX_DISABLE_SEARCHDIRS);
+    ly_ctx_unset_options(session->ctx, LY_CTX_EXPLICIT_COMPILE);
 
     return ret;
 }
