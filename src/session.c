@@ -608,6 +608,60 @@ nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op)
     return nc_write_msg_io(session, io_timeout, NC_MSG_RPC, op, NULL);
 }
 
+/**
+ * @brief Send \<close-session\> and read the reply on a session.
+ *
+ * @param[in] session Closing NETCONF session.
+ */
+static void
+nc_session_free_close_session(struct nc_session *session)
+{
+    struct ly_in *msg;
+    struct lyd_node *close_rpc, *envp;
+    const struct lys_module *ietfnc;
+
+    ietfnc = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf");
+    if (!ietfnc) {
+        WRN(session, "Missing ietf-netconf schema in context, unable to send <close-session>.");
+        return;
+    }
+    if (lyd_new_inner(NULL, ietfnc, "close-session", 0, &close_rpc)) {
+        WRN(session, "Failed to create <close-session> RPC.");
+        return;
+    }
+
+    /* send the RPC */
+    nc_send_msg_io(session, NC_SESSION_FREE_LOCK_TIMEOUT, close_rpc);
+
+read_msg:
+    switch (nc_read_msg_poll_io(session, NC_CLOSE_REPLY_TIMEOUT, &msg)) {
+    case 1:
+        if (!strncmp(ly_in_memory(msg, NULL), "<notification", 13)) {
+            /* ignore */
+            ly_in_free(msg, 1);
+            goto read_msg;
+        }
+        if (lyd_parse_op(session->ctx, close_rpc, msg, LYD_XML, LYD_TYPE_REPLY_NETCONF, &envp, NULL)) {
+            WRN(session, "Failed to parse <close-session> reply.");
+        } else if (!lyd_child(envp) || strcmp(LYD_NAME(lyd_child(envp)), "ok")) {
+            WRN(session, "Reply to <close-session> was not <ok> as expected.");
+        }
+        lyd_free_tree(envp);
+        ly_in_free(msg, 1);
+        break;
+    case 0:
+        WRN(session, "Timeout for receiving a reply to <close-session> elapsed.");
+        break;
+    case -1:
+        ERR(session, "Failed to receive a reply to <close-session>.");
+        break;
+    default:
+        /* cannot happen */
+        break;
+    }
+    lyd_free_tree(close_rpc);
+}
+
 API void
 nc_session_free(struct nc_session *session, void (*data_free)(void *))
 {
@@ -617,8 +671,6 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     struct nc_session *siter;
     struct nc_msg_cont *contiter;
     struct ly_in *msg;
-    struct lyd_node *close_rpc, *envp;
-    const struct lys_module *ietfnc;
     struct timespec ts, ts_cur;
     void *p;
 
@@ -691,33 +743,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
             }
 
             /* send closing info to the other side */
-            ietfnc = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf");
-            if (!ietfnc) {
-                WRN(session, "Missing ietf-netconf schema in context, unable to send <close-session>.");
-            } else if (!lyd_new_inner(NULL, ietfnc, "close-session", 0, &close_rpc)) {
-                nc_send_msg_io(session, NC_SESSION_FREE_LOCK_TIMEOUT, close_rpc);
-                switch (nc_read_msg_poll_io(session, NC_CLOSE_REPLY_TIMEOUT, &msg)) {
-                case 1:
-                    if (lyd_parse_op(session->ctx, close_rpc, msg, LYD_XML, LYD_TYPE_REPLY_NETCONF, &envp, NULL)) {
-                        WRN(session, "Failed to parse <close-session> reply.");
-                    } else if (!lyd_child(envp) || strcmp(LYD_NAME(lyd_child(envp)), "ok")) {
-                        WRN(session, "Reply to <close-session> was not <ok> as expected.");
-                    }
-                    lyd_free_tree(envp);
-                    ly_in_free(msg, 1);
-                    break;
-                case 0:
-                    WRN(session, "Timeout for receiving a reply to <close-session> elapsed.");
-                    break;
-                case -1:
-                    ERR(session, "Failed to receive a reply to <close-session>.");
-                    break;
-                default:
-                    /* cannot happen */
-                    break;
-                }
-                lyd_free_tree(close_rpc);
-            }
+            nc_session_free_close_session(session);
         }
 
         /* list of server's capabilities */
