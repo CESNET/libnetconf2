@@ -262,6 +262,10 @@ following linker parameters:
 -lnetconf2
 ```
 
+## Examples
+
+See [examples](examples) directory for an example client and server.
+
 ## Tests
 
 The repository includes several tests built with [cmocka](https://cmocka.org/).

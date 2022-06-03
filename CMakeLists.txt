@@ -88,6 +88,7 @@ else()
     option(ENABLE_TESTS "Build tests" OFF)
     option(ENABLE_VALGRIND_TESTS "Build tests with valgrind" OFF)
 endif()
+option(ENABLE_EXAMPLES "Build examples" ON)
 option(ENABLE_COVERAGE "Build code coverage report from tests" OFF)
 option(ENABLE_SSH "Enable NETCONF over SSH support (via libssh)" ON)
 option(ENABLE_TLS "Enable NETCONF over TLS support (via OpenSSL)" ON)
@@ -152,6 +153,8 @@ set(doxy_files
 set(format_sources
     compat/*.c
     compat/*.h*
+    examples/*.c
+    examples/*.h*
     src/*.c
     src/*.h
     tests/*.c
@@ -311,6 +314,15 @@ if(PKG_CONFIG_FOUND)
         if(SUBSTR_LEN EQUAL 0)
             message(WARNING "pkg-config will not detect the new package after installation, adjust PKG_CONFIG_PATH using \"export PKG_CONFIG_PATH=\${PKG_CONFIG_PATH}:${CMAKE_INSTALL_LIBDIR}/pkgconfig\".")
         endif()
+    endif()
+endif()
+
+# examples
+if(ENABLE_EXAMPLES)
+    if(NOT ENABLE_SSH)
+        message(WARNING "Examples will not be compiled because SSH is disabled.")
+    else()
+        add_subdirectory(examples)
     endif()
 endif()
 
