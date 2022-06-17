@@ -27,6 +27,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <pwd.h>
+#include <security/pam_appl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -174,6 +175,13 @@ nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct 
     server_opts.interactive_auth_clb = interactive_auth_clb;
     server_opts.interactive_auth_data = user_data;
     server_opts.interactive_auth_data_free = free_user_data;
+}
+
+API void
+nc_server_ssh_set_pam_conf_path(const char *conf_name, const char *conf_dir)
+{
+    server_opts.conf_name = conf_name;
+    server_opts.conf_dir = conf_dir;
 }
 
 API void
@@ -403,6 +411,10 @@ nc_server_ssh_ch_client_endpt_mov_hostkey(const char *client_name, const char *e
 static int
 nc_server_ssh_set_auth_methods(int auth_methods, struct nc_server_ssh_opts *opts)
 {
+    if ((auth_methods & NC_SSH_AUTH_INTERACTIVE) && !server_opts.conf_name) {
+        ERR(NULL, "Unable to use Linux PAM Keyboard-Interactive method without setting the name of the PAM configuration file first.");
+        return 1;
+    }
     opts->auth_methods = auth_methods;
     return 0;
 }
@@ -907,32 +919,234 @@ nc_sshcb_auth_password(struct nc_session *session, ssh_message msg)
     }
 }
 
+/**
+ * @brief PAM conversation function, which serves as a callback for exchanging messages between a PAM module and user.
+ *
+ * @param[in] n_messages Number of messages.
+ * @param[in] msg PAM module's messages.
+ * @param[out] resp User responses.
+ * @param[in] appdata_ptr Callback's data.
+ * @return PAM_SUCCESS on success;
+ * @return PAM_BUF_ERR on memory allocation error;
+ * @return PAM_CONV_ERR otherwise.
+ */
+static int
+nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_response **resp, void *appdata_ptr)
+{
+    int i, j, n_answers, n_requests = n_messages;
+    const char **prompts;
+    char *echo;
+    const char *name = "Keyboard-Interactive Authentication";
+    const char *instruction = "Please enter your authentication token";
+    ssh_message reply = NULL;
+    struct nc_pam_thread_arg *clb_data = appdata_ptr;
+    ssh_session libssh_session;
+    struct timespec ts_timeout;
+    struct nc_server_ssh_opts *opts;
+
+    libssh_session = clb_data->session->ti.libssh.session;
+    opts = clb_data->session->data;
+
+    /* PAM_MAX_NUM_MSG == 32 by default */
+    if ((n_messages <= 0) || (n_messages >= PAM_MAX_NUM_MSG)) {
+        ERR(NULL, "Bad number of PAM message requests (#%d).", n_messages, PAM_MAX_NUM_MSG);
+        return PAM_CONV_ERR;
+    }
+
+    /* only accepting these 4 types of messages */
+    for (i = 0; i < n_messages; i++) {
+        int t = msg[i]->msg_style;
+        if ((t != PAM_PROMPT_ECHO_OFF) && (t != PAM_PROMPT_ECHO_ON) && (t != PAM_TEXT_INFO) && (t != PAM_ERROR_MSG)) {
+            ERR(NULL, "PAM conversation callback received a message of unknown type.");
+            return PAM_CONV_ERR;
+        }
+    }
+
+    /* display messages with errors and/or some information and count the amount of actual authentication challenges */
+    for (i = 0; i < n_messages; i++) {
+        if (msg[i]->msg_style == PAM_TEXT_INFO) {
+            VRB(NULL, "PAM conversation callback received a message with some information for the client (%s).", msg[i]->msg);
+            n_requests--;
+        }
+        if (msg[i]->msg_style == PAM_ERROR_MSG) {
+            ERR(NULL, "PAM conversation callback received an error message (%s).", msg[i]->msg);
+            return PAM_CONV_ERR;
+        }
+    }
+
+    *resp = calloc(n_requests, sizeof **resp);
+    if (!(*resp)) {
+        ERRMEM;
+        return PAM_BUF_ERR;
+    }
+
+    prompts = calloc(n_requests, sizeof *prompts);
+    if (!prompts) {
+        ERRMEM;
+        return PAM_BUF_ERR;
+    }
+
+    echo = calloc(n_requests, sizeof *echo);
+    if (!echo) {
+        ERRMEM;
+        free(prompts);
+        return PAM_BUF_ERR;
+    }
+
+    /* set the prompts for the user */
+    j = 0;
+    for (i = 0; i < n_messages; i++) {
+        if ((msg[i]->msg_style == PAM_PROMPT_ECHO_ON) || (msg[i]->msg_style == PAM_PROMPT_ECHO_OFF)) {
+            prompts[j++] = msg[i]->msg;
+        }
+    }
+
+    /* iterate over all the messages and adjust the echo array accordingly */
+    j = 0;
+    for (i = 0; i < n_messages; i++) {
+        if (msg[i]->msg_style == PAM_PROMPT_ECHO_ON) {
+            echo[j++] = 1;
+        }
+        if (msg[i]->msg_style == PAM_PROMPT_ECHO_OFF) {
+            /* no need to set to 0 because of calloc */
+            j++;
+        }
+    }
+
+    /* print all the keyboard-interactive challenges to the user */
+    ssh_message_auth_interactive_request(clb_data->msg, name, instruction, n_requests, prompts, echo);
+
+    if (opts->auth_timeout) {
+        nc_gettimespec_mono_add(&ts_timeout, opts->auth_timeout * 1000);
+    }
+
+    /* get user's replies */
+    while (1) {
+        if (!nc_session_is_connected(clb_data->session)) {
+            ERR(NULL, "Communication SSH socket unexpectedly closed.");
+            break;
+        }
+
+        reply = ssh_message_get(libssh_session);
+        if (reply) {
+            break;
+        }
+
+        usleep(NC_TIMEOUT_STEP);
+        if (opts->auth_timeout) {
+            if (nc_difftimespec_cur(&ts_timeout) < 1) {
+                /* timeout */
+                break;
+            }
+        }
+    }
+
+    if (!reply) {
+        free(prompts);
+        free(echo);
+        return PAM_CONV_ERR;
+    }
+
+    /* check if the amount of replies matches the amount of requests */
+    n_answers = ssh_userauth_kbdint_getnanswers(libssh_session);
+    if (n_answers != n_requests) {
+        WRN(NULL, "Expected %d response(s), got %d.", n_requests, n_answers);
+        free(prompts);
+        free(echo);
+        return PAM_CONV_ERR;
+    }
+
+    /* give the replies to a PAM module */
+    for (i = 0; i < n_answers; i++) {
+        (*resp)[i].resp = strdup(ssh_userauth_kbdint_getanswer(libssh_session, i));
+    }
+
+    ssh_message_free(reply);
+    free(prompts);
+    free(echo);
+    return PAM_SUCCESS;
+}
+
+/**
+ * @brief Handles authentication via Linux PAM.
+ *
+ * @param[in] session NETCONF session.
+ * @param[in] ssh_msg SSH message with a keyboard-interactive authentication request.
+ * @return PAM_SUCCESS on success;
+ * @return PAM error otherwise.
+ */
+static int
+nc_pam_auth(struct nc_session *session, ssh_message ssh_msg)
+{
+    pam_handle_t *pam_h = NULL;
+    int ret, expired_auth_tok = 0;
+    struct nc_pam_thread_arg clb_data;
+    struct pam_conv conv;
+
+    /* structure holding callback's data */
+    clb_data.msg = ssh_msg;
+    clb_data.session = session;
+
+    /* PAM conversation structure holding the callback and it's data */
+    conv.conv = nc_pam_conv_clb;
+    conv.appdata_ptr = &clb_data;
+
+    /* initialize PAM, the name and the directory of the configuration file has to be set
+     * via an API call before attempting to authenticate with a keyboard-interactive method */
+    ret = pam_start_confdir(server_opts.conf_name, session->username, &conv, server_opts.conf_dir, &pam_h);
+    if (ret != PAM_SUCCESS) {
+        ERR(NULL, "%s", pam_strerror(pam_h, ret));
+        goto cleanup;
+    }
+
+    /* authentication based on the modules listed in the configuration file */
+    ret = pam_authenticate(pam_h, 0);
+    if (ret == PAM_SUCCESS) {
+        /* validate user's account and authorization token in case they have expired */
+        ret = pam_acct_mgmt(pam_h, 0);
+    } else {
+        ERR(NULL, "%s", pam_strerror(pam_h, ret));
+        goto cleanup;
+    }
+
+    if (ret != PAM_SUCCESS) {
+        if (ret == PAM_NEW_AUTHTOK_REQD) {
+            /* token has expired so a new one will be generated */
+            WRN(NULL, "%s", pam_strerror(pam_h, ret));
+            ret = pam_chauthtok(pam_h, PAM_CHANGE_EXPIRED_AUTHTOK);
+            expired_auth_tok = 1;
+        } else {
+            ERR(NULL, "%s", pam_strerror(pam_h, ret));
+            goto cleanup;
+        }
+    }
+
+    if (expired_auth_tok) {
+        if (ret == PAM_SUCCESS) {
+            VRB(NULL, "Authentication token successfully updated.");
+        } else {
+            ERR(NULL, "%s", pam_strerror(pam_h, ret));
+            goto cleanup;
+        }
+    }
+
+cleanup:
+    if (pam_end(pam_h, ret) != PAM_SUCCESS) {
+        ERR(NULL, "%s", pam_strerror(pam_h, ret));
+    }
+    return ret;
+}
+
 static void
 nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
 {
     int auth_ret = 1;
-    char *pass_hash;
 
     if (server_opts.interactive_auth_clb) {
         auth_ret = server_opts.interactive_auth_clb(session, msg, server_opts.interactive_auth_data);
     } else {
-        if (!ssh_message_auth_kbdint_is_response(msg)) {
-            const char *prompts[] = {"Password: "};
-            char echo[] = {0};
-
-            ssh_message_auth_interactive_request(msg, "Interactive SSH Authentication", "Type your password:", 1, prompts, echo);
-            auth_ret = -1;
-        } else {
-            if (ssh_userauth_kbdint_getnanswers(session->ti.libssh.session) != 1) {// failed session
-                ssh_message_reply_default(msg);
-                return;
-            }
-            pass_hash = auth_password_get_pwd_hash(session->username);// get hashed password
-            if (pass_hash) {
-                /* Normalize auth_password_compare_pwd result to 0 or 1 */
-                auth_ret = !!auth_password_compare_pwd(pass_hash, ssh_userauth_kbdint_getanswer(session->ti.libssh.session, 0));
-                free(pass_hash);// free hashed password
-            }
+        if (nc_pam_auth(session, msg) == PAM_SUCCESS) {
+            auth_ret = 0;
         }
     }
 
@@ -1327,7 +1541,7 @@ static int
 nc_open_netconf_channel(struct nc_session *session, int timeout)
 {
     int ret;
-    struct timespec ts_timeout, ts_cur;
+    struct timespec ts_timeout;
 
     /* message callback is executed twice to give chance for the channel to be
      * created if timeout == 0 (it takes 2 messages, channel-open, subsystem-request) */
@@ -1364,8 +1578,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
     }
 
     if (timeout > -1) {
-        nc_gettimespec_mono(&ts_timeout);
-        nc_addtimespec(&ts_timeout, timeout);
+        nc_gettimespec_mono_add(&ts_timeout, timeout);
     }
     while (1) {
         if (!nc_session_is_connected(session)) {
@@ -1386,8 +1599,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
 
         usleep(NC_TIMEOUT_STEP);
         if (timeout > -1) {
-            nc_gettimespec_mono(&ts_cur);
-            if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
+            if (nc_difftimespec_cur(&ts_timeout) < 1) {
                 /* timeout */
                 ERR(session, "Failed to start \"netconf\" SSH subsystem for too long, disconnecting.");
                 break;
@@ -1454,7 +1666,8 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     ssh_bind sbind;
     struct nc_server_ssh_opts *opts;
     int libssh_auth_methods = 0, ret;
-    struct timespec ts_timeout, ts_cur;
+    struct timespec ts_timeout;
+    ssh_message msg;
 
     opts = session->data;
 
@@ -1491,7 +1704,6 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         return -1;
     }
 
-    ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, session);
     /* remember that this session was just set as nc_sshcb_msg() parameter */
     session->flags |= NC_SESSION_SSH_MSG_CB;
 
@@ -1506,15 +1718,13 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     ssh_set_blocking(session->ti.libssh.session, 0);
 
     if (timeout > -1) {
-        nc_gettimespec_mono(&ts_timeout);
-        nc_addtimespec(&ts_timeout, timeout);
+        nc_gettimespec_mono_add(&ts_timeout, timeout);
     }
     while ((ret = ssh_handle_key_exchange(session->ti.libssh.session)) == SSH_AGAIN) {
         /* this tends to take longer */
         usleep(NC_TIMEOUT_STEP * 20);
         if (timeout > -1) {
-            nc_gettimespec_mono(&ts_cur);
-            if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
+            if (nc_difftimespec_cur(&ts_timeout) < 1) {
                 break;
             }
         }
@@ -1529,8 +1739,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 
     /* authenticate */
     if (opts->auth_timeout) {
-        nc_gettimespec_mono(&ts_timeout);
-        nc_addtimespec(&ts_timeout, opts->auth_timeout * 1000);
+        nc_gettimespec_mono_add(&ts_timeout, opts->auth_timeout * 1000);
     }
     while (1) {
         if (!nc_session_is_connected(session)) {
@@ -1538,10 +1747,12 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
             return -1;
         }
 
-        if (ssh_execute_message_callbacks(session->ti.libssh.session) != SSH_OK) {
-            ERR(session, "Failed to receive SSH messages on a session (%s).",
-                    ssh_get_error(session->ti.libssh.session));
-            return -1;
+        msg = ssh_message_get(session->ti.libssh.session);
+        if (msg) {
+            if (nc_sshcb_msg(session->ti.libssh.session, msg, (void *) session)) {
+                ssh_message_reply_default(msg);
+            }
+            ssh_message_free(msg);
         }
 
         if (session->flags & NC_SESSION_SSH_AUTHENTICATED) {
@@ -1555,8 +1766,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 
         usleep(NC_TIMEOUT_STEP);
         if (opts->auth_timeout) {
-            nc_gettimespec_mono(&ts_cur);
-            if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
+            if (nc_difftimespec_cur(&ts_timeout) < 1) {
                 /* timeout */
                 break;
             }
@@ -1573,6 +1783,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         return 0;
     }
 
+    ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, session);
     /* open channel */
     ret = nc_open_netconf_channel(session, timeout);
     if (ret < 1) {
@@ -1628,9 +1839,9 @@ nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session
         return msgtype;
     }
 
-    nc_gettimespec_real(&ts_cur);
+    nc_gettimespec_real_add(&ts_cur, 0);
     new_session->opts.server.session_start = ts_cur.tv_sec;
-    nc_gettimespec_mono(&ts_cur);
+    nc_gettimespec_mono_add(&ts_cur, 0);
     new_session->opts.server.last_rpc = ts_cur.tv_sec;
     new_session->status = NC_STATUS_RUNNING;
     *session = new_session;
@@ -1699,9 +1910,9 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
         return msgtype;
     }
 
-    nc_gettimespec_real(&ts_cur);
+    nc_gettimespec_real_add(&ts_cur, 0);
     new_session->opts.server.session_start = ts_cur.tv_sec;
-    nc_gettimespec_mono(&ts_cur);
+    nc_gettimespec_mono_add(&ts_cur, 0);
     new_session->opts.server.last_rpc = ts_cur.tv_sec;
     new_session->status = NC_STATUS_RUNNING;
     *session = new_session;

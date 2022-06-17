@@ -257,6 +257,12 @@ if(ENABLE_SSH)
         target_link_libraries(netconf2 -llogin)
         list(APPEND CMAKE_REQUIRED_LIBRARIES login)
     endif()
+
+    # libpam
+    find_package(LibPAM REQUIRED)
+    target_link_libraries(netconf2 ${LIBPAM_LIBRARIES})
+    list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBPAM_LIBRARIES})
+    include_directories(${LIBPAM_INCLUDE_DIRS})
 endif()
 
 # dependencies - libval

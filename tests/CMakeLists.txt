@@ -8,7 +8,7 @@ if (${SOURCE_FORMAT_ENABLED})
 endif()
 
 # list of all the tests in each directory
-set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_client_thread test_thread_messages)
+set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_client_thread test_thread_messages test_pam)
 set(client_tests test_client test_client_messages)
 
 # add -Wl,--wrap flags
@@ -76,3 +76,16 @@ endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/src ${PROJECT_BINARY_DIR})
 configure_file("${PROJECT_SOURCE_DIR}/tests/config.h.in" "${PROJECT_BINARY_DIR}/tests/config.h" ESCAPE_QUOTES @ONLY)
+
+#compile PAM test module
+find_package(LibPAM REQUIRED)
+set(CMAKE_SHARED_LIBRARY_PREFIX  )
+add_library(pam_netconf SHARED ${CMAKE_SOURCE_DIR}/tests/pam/pam_netconf.c)
+target_link_libraries(pam_netconf ${LIBPAM_LIBRARIES})
+
+#generate PAM configuration file
+FILE(WRITE ${CMAKE_SOURCE_DIR}/tests/pam/netconf.conf
+"#%PAM-1.0\n"
+"auth required ${CMAKE_SOURCE_DIR}/tests/pam/pam_netconf.so\n"
+"account optional pam_permit.so"
+)

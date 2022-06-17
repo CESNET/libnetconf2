@@ -149,7 +149,7 @@ ssh_endpt_set_auth_methods_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_endpt_set_auth_methods("main_ssh", NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD | NC_SSH_AUTH_INTERACTIVE);
+    ret = nc_server_ssh_endpt_set_auth_methods("main_ssh", NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD);
     nc_assert(!ret);
 
     return NULL;

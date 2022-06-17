@@ -195,6 +195,8 @@ struct nc_server_opts {
     int (*interactive_auth_clb)(const struct nc_session *session, ssh_message msg, void *user_data);
     void *interactive_auth_data;
     void (*interactive_auth_data_free)(void *data);
+    const char *conf_name;
+    const char *conf_dir;
 #endif
 #ifdef NC_ENABLED_TLS
     int (*user_verify_clb)(const struct nc_session *session);
@@ -514,19 +516,25 @@ struct nc_ntf_thread_arg {
     void (*notif_clb)(struct nc_session *session, const struct lyd_node *envp, const struct lyd_node *op);
 };
 
+/* arguments for a PAM callback */
+struct nc_pam_thread_arg {
+    ssh_message msg;
+    struct nc_session *session;
+};
+
 void *nc_realloc(void *ptr, size_t size);
 
 struct passwd *nc_getpwuid(uid_t uid, struct passwd *pwd_buf, char **buf, size_t *buf_size);
 
 NC_MSG_TYPE nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op);
 
-int nc_gettimespec_mono(struct timespec *ts);
-
-int nc_gettimespec_real(struct timespec *ts);
-
 int32_t nc_difftimespec(const struct timespec *ts1, const struct timespec *ts2);
 
-void nc_addtimespec(struct timespec *ts, uint32_t msec);
+int nc_gettimespec_real_add(struct timespec *ts, uint32_t msec);
+
+int nc_gettimespec_mono_add(struct timespec *ts, uint32_t msec);
+
+int32_t nc_difftimespec_cur(const struct timespec *ts);
 
 const char *nc_keytype2str(NC_SSH_KEY_TYPE type);
 

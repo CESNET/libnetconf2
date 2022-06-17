@@ -19,6 +19,7 @@
 #endif
 
 #define TESTS_DIR "@CMAKE_SOURCE_DIR@/tests"
+#define PAM_CONF_DIR "@CMAKE_SOURCE_DIR@/tests/pam"
 
 @SSH_MACRO@
 @TLS_MACRO@
