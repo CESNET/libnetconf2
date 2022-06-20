@@ -96,7 +96,7 @@ struct nc_server_reply *nc_server_reply_ok(void);
 /**
  * @brief Create a DATA rpc-reply object.
  *
- * @param[in] data Reply data tree. This tree must be valid according to
+ * @param[in] data Reply data tree pointing to the RPC/action itself. This tree must be valid according to
  * the RPC output of the RPC this is a reply to.
  * @param[in] wd with-default mode if applicable
  * @param[in] paramtype Determines how the @p data parameter is treated.
@@ -107,7 +107,7 @@ struct nc_server_reply *nc_server_reply_data(struct lyd_node *data, NC_WD_MODE w
 /**
  * @brief Create an ERROR rpc-reply object.
  *
- * @param[in] err Errors as opaque data node tree. It will be freed with the returned object.
+ * @param[in] err Errors created by ::nc_err(). It will be freed with the returned object.
  * @return rpc-reply object, NULL on error.
  */
 struct nc_server_reply *nc_server_reply_err(struct lyd_node *err);
@@ -116,7 +116,7 @@ struct nc_server_reply *nc_server_reply_err(struct lyd_node *err);
  * @brief Add another error opaque data node tree to an ERROR rpc-reply object.
  *
  * @param[in] reply ERROR reply to add to.
- * @param[in] err Error as opaque data node tree. It will be freed with the returned object.
+ * @param[in] err Error created by ::nc_err(). It will be freed with the returned object.
  * @return 0 on success, -1 on errror.
  */
 int nc_server_reply_add_err(struct nc_server_reply *reply, struct lyd_node *err);
@@ -166,6 +166,7 @@ const struct lyd_node *nc_server_reply_get_last_err(const struct nc_server_reply
  * - #NC_ERR_DATA_MISSING
  * - #NC_ERR_MALFORMED_MSG
  *   - no additional arguments
+ * @param[in] ... Additional arguments depending on the @p tag used.
  * @return Opaque data node tree representing the error.
  */
 struct lyd_node *nc_err(const struct ly_ctx *ctx, NC_ERR tag, ...);

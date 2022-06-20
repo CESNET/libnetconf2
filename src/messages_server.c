@@ -47,7 +47,7 @@ nc_server_reply_data(struct lyd_node *data, NC_WD_MODE wd, NC_PARAMTYPE paramtyp
 {
     struct nc_server_reply_data *ret;
 
-    if (!data) {
+    if (!data || !(data->schema->nodetype & (LYS_RPC | LYS_ACTION))) {
         ERRARG("data");
         return NULL;
     }
