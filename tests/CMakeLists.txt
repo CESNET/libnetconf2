@@ -3,12 +3,18 @@ add_test(NAME headers
     COMMAND ${CMAKE_SOURCE_DIR}/compat/check_includes.sh ${CMAKE_SOURCE_DIR}/src/)
 
 # format
-if (${SOURCE_FORMAT_ENABLED})
+if(${SOURCE_FORMAT_ENABLED})
     add_test(NAME format WORKING_DIRECTORY ${CMAKE_BINARY_DIR} COMMAND cmake --build ${CMAKE_BINARY_DIR} --target format-check)
 endif()
 
 # list of all the tests in each directory
 set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_client_thread test_thread_messages)
+
+# only enable PAM tests if the version of PAM is greater than 1.4
+if(LIBPAM_HAVE_CONFDIR)
+    list(APPEND tests test_pam)
+endif()
+
 set(client_tests test_client test_client_messages)
 
 # add -Wl,--wrap flags
@@ -76,3 +82,20 @@ endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/src ${PROJECT_BINARY_DIR})
 configure_file("${PROJECT_SOURCE_DIR}/tests/config.h.in" "${PROJECT_BINARY_DIR}/tests/config.h" ESCAPE_QUOTES @ONLY)
+
+if(LIBPAM_HAVE_CONFDIR)
+
+    #compile PAM test module
+    add_library(pam_netconf SHARED ${CMAKE_SOURCE_DIR}/tests/pam/pam_netconf.c)
+    set_target_properties(pam_netconf PROPERTIES PREFIX "")
+    target_link_libraries(pam_netconf ${LIBPAM_LIBRARIES})
+
+    #generate PAM configuration file
+    file(WRITE ${CMAKE_SOURCE_DIR}/tests/pam/netconf.conf
+        "#%PAM-1.4\n"
+        "auth required ${CMAKE_SOURCE_DIR}/build/tests/pam_netconf.so\n"
+        "account required ${CMAKE_SOURCE_DIR}/build/tests/pam_netconf.so\n"
+        "password required ${CMAKE_SOURCE_DIR}/build/tests/pam_netconf.so\n"
+    )
+
+endif()

@@ -195,6 +195,8 @@ struct nc_server_opts {
     int (*interactive_auth_clb)(const struct nc_session *session, ssh_message msg, void *user_data);
     void *interactive_auth_data;
     void (*interactive_auth_data_free)(void *data);
+    char *conf_name;
+    char *conf_dir;
 #endif
 #ifdef NC_ENABLED_TLS
     int (*user_verify_clb)(const struct nc_session *session);
@@ -513,6 +515,18 @@ struct nc_ntf_thread_arg {
     struct nc_session *session;
     void (*notif_clb)(struct nc_session *session, const struct lyd_node *envp, const struct lyd_node *op);
 };
+
+#ifdef NC_ENABLED_SSH
+
+/**
+ * @brief PAM callback arguments.
+ */
+struct nc_pam_thread_arg {
+    ssh_message msg;            /**< libssh message */
+    struct nc_session *session; /**< NETCONF session */
+};
+
+#endif
 
 void *nc_realloc(void *ptr, size_t size);
 

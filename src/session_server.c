@@ -776,6 +776,12 @@ nc_server_destroy(void)
     }
     server_opts.hostkey_data = NULL;
     server_opts.hostkey_data_free = NULL;
+
+    /* PAM */
+    free(server_opts.conf_name);
+    free(server_opts.conf_dir);
+    server_opts.conf_name = NULL;
+    server_opts.conf_dir = NULL;
 #endif
 #ifdef NC_ENABLED_TLS
     if (server_opts.server_cert_data && server_opts.server_cert_data_free) {
@@ -1995,7 +2001,7 @@ nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti)
             goto cleanup;
         }
         server_opts.endpts[server_opts.endpt_count - 1].opts.ssh->auth_methods =
-                NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD | NC_SSH_AUTH_INTERACTIVE;
+                NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD;
         server_opts.endpts[server_opts.endpt_count - 1].opts.ssh->auth_attempts = 3;
         server_opts.endpts[server_opts.endpt_count - 1].opts.ssh->auth_timeout = 30;
         break;
@@ -2817,7 +2823,7 @@ nc_server_ch_client_add_endpt(const char *client_name, const char *endpt_name, N
             ERRMEM;
             goto cleanup;
         }
-        endpt->opts.ssh->auth_methods = NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD | NC_SSH_AUTH_INTERACTIVE;
+        endpt->opts.ssh->auth_methods = NC_SSH_AUTH_PUBLICKEY | NC_SSH_AUTH_PASSWORD;
         endpt->opts.ssh->auth_attempts = 3;
         endpt->opts.ssh->auth_timeout = 30;
         break;

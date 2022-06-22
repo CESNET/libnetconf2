@@ -100,16 +100,16 @@ nc_gettimespec_real_add(struct timespec *ts, uint32_t msec)
 int
 nc_gettimespec_mono_add(struct timespec *ts, uint32_t msec)
 {
-    #ifdef CLOCK_MONOTONIC_RAW
+#ifdef CLOCK_MONOTONIC_RAW
     if (clock_gettime(CLOCK_MONOTONIC_RAW, ts)) {
         return -1;
     }
-    #elif defined (CLOCK_MONOTONIC)
+#elif defined (CLOCK_MONOTONIC)
     if (clock_gettime(CLOCK_MONOTONIC, ts)) {
         return -1;
     }
-    #else
-    /* no monotonic clock available, return realtime */
+#else
+    /* no monotonic clock available, return real time */
     if (nc_gettimespec_real_add(ts, 0)) {
         return -1;
     }

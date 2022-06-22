@@ -7,7 +7,7 @@ __Q: Having a fresh installation of *netopeer2-server*, when I connect to it I s
 
 __A:__ You are using *libssh* that was compiled with *gcrypt* library
    as the crypto backend. It does not support default SSH keys generated
-   during *netopeer2-server* installation. To fix, disable suport for this
+   during *netopeer2-server* installation. To fix, disable support for this
    backend when compiling *libssh* so that some other one is used.
 
 __Q: When a new NETCONF session is being created, I see the error:__
@@ -36,3 +36,8 @@ __A:__ There are 2 most common reasons for this error. Either you are not using
    To fix, use a NETCONF client instead. Another reason may be that you are using *libssh*
    version 0.9.4. It includes a [regression bug](https://gitlab.com/libssh/libssh-mirror/-/merge_requests/101)
    that causes this problem and you must use another version to fix it.
+
+__Q: When I try to enter authentication tokens, they always echo back even though I set echo off:__
+
+__A:__ You are most likely using an older version of *libssh* which contains a bug.
+   The bug was fixed in *libssh* 0.9.0, so you must use at least that version.
