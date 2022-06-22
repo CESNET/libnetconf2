@@ -39,6 +39,11 @@
 #cmakedefine HAVE_CRYPT
 
 /*
+* Support for older PAM versions
+*/
+#cmakedefine LIBPAM_HAVE_CONFDIR
+
+/*
  * Location of installed basic YANG modules on the system
  */
 #define NC_YANG_DIR "@YANG_MODULE_DIR@"

@@ -447,11 +447,11 @@ test_nc_client_ssh_setting_auth_pref(void **state)
 
     /* check default prefference settings according to documentation */
     ret = nc_client_ssh_get_auth_pref(NC_SSH_AUTH_INTERACTIVE);
-    assert_int_equal(ret, 3);
+    assert_int_equal(ret, 1);
     ret = nc_client_ssh_get_auth_pref(NC_SSH_AUTH_PASSWORD);
     assert_int_equal(ret, 2);
     ret = nc_client_ssh_get_auth_pref(NC_SSH_AUTH_PUBLICKEY);
-    assert_int_equal(ret, 1);
+    assert_int_equal(ret, 3);
 
     /* try to set prefetence of non existing method */
     nc_client_ssh_set_auth_pref(42, 22);

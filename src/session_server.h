@@ -580,18 +580,32 @@ void nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_se
  *
  * @param[in] interactive_auth_clb Callback that should authenticate the user.
  * Zero return indicates success, non-zero an error.
- * @param[in] user_data Optional arbitrary user data that will be passed to @p passwd_auth_clb.
+ * @param[in] user_data Optional arbitrary user data that will be passed to @p interactive_auth_clb.
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
  */
 void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session,
         const ssh_message msg, void *user_data), void *user_data, void (*free_user_data)(void *user_data));
 
 /**
+ * @brief Set the name and a path to a PAM configuration file.
+ *
+ * @p conf_name has to be set via this function prior to using keyboard-interactive authentication method.
+ *
+ * @param[in] conf_name Name of the configuration file.
+ * @param[in] conf_dir Optional. The absolute path to the directory in which the configuration file
+ * with the name @p conf_name is located. A newer version (>= 1.4) of PAM library is required to be
+ * able to specify the path. If NULL is passed,
+ * then the PAM's system directories will be searched (usually /etc/pam.d/).
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_ssh_set_pam_conf_path(const char *conf_name, const char *conf_dir);
+
+/**
  * @brief Set the callback for SSH public key authentication. If none is set, local system users are used.
  *
  * @param[in] pubkey_auth_clb Callback that should authenticate the user.
  * Zero return indicates success, non-zero an error.
- * @param[in] user_data Optional arbitrary user data that will be passed to @p passwd_auth_clb.
+ * @param[in] user_data Optional arbitrary user data that will be passed to @p pubkey_auth_clb.
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
  */
 void nc_server_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session *session, ssh_key key,
@@ -642,7 +656,7 @@ int nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *name, in
  * @param[in] endpt_name Exisitng endpoint name.
  * @param[in] key_mov Name of the host key that will be moved.
  * @param[in] key_after Name of the key that will preceed @p key_mov. NULL if @p key_mov is to be moved at the beginning.
- * @return 0 in success, -1 on error.
+ * @return 0 on success, -1 on error.
  */
 int nc_server_ssh_endpt_mov_hostkey(const char *endpt_name, const char *key_mov, const char *key_after);
 
@@ -652,7 +666,7 @@ int nc_server_ssh_endpt_mov_hostkey(const char *endpt_name, const char *key_mov,
  * @param[in] endpt_name Exisitng endpoint name.
  * @param[in] name Name of an existing host key.
  * @param[in] new_name New name of the host key @p name.
- * @return 0 in success, -1 on error.
+ * @return 0 on success, -1 on error.
  */
 int nc_server_ssh_endpt_mod_hostkey(const char *endpt_name, const char *name, const char *new_name);
 

@@ -74,8 +74,10 @@ $ make
 ```
 
 ### libssh
-Required version is at least 0.7.1. This dependency can be removed by disabling
-SSH support (see the [Build Options](#build-options) section). Below si the basic
+Required version is at least 0.7.1. Recommended version is at least 0.9.0, because of a bug
+present in older versions, which echoes everything back when entering authentication tokens. 
+This dependency can be removed by disabling
+SSH support (see the [Build Options](#build-options) section). Below is the basic
 sequence of commands for compiling and installing it from source. However, there
 are packages for certain Linux distributions available [here](https://www.libssh.org/get-it/).
 ```
@@ -253,7 +255,7 @@ All public functions are available via 2 headers:
 #include <nc_client.h>
 ```
 
-You need to include either one if imeplementing a NETCONF server or a NETCONF client,
+You need to include either one if implementing a NETCONF server or a NETCONF client,
 respectively.
 
 To compile your program with libnetconf2, it is necessary to link it with it using the

@@ -70,7 +70,7 @@ static struct nc_client_context context_main = {
     },
 #ifdef NC_ENABLED_SSH
     .ssh_opts = {
-        .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 3}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 1}},
+        .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}},
         .auth_hostkey_check = sshauth_hostkey_check,
         .auth_password = sshauth_password,
         .auth_interactive = sshauth_interactive,
@@ -163,17 +163,17 @@ nc_client_context_location(void)
             e->refcount = 1;
 #ifdef NC_ENABLED_SSH
             e->ssh_opts.auth_pref[0].type = NC_SSH_AUTH_INTERACTIVE;
-            e->ssh_opts.auth_pref[0].value = 3;
+            e->ssh_opts.auth_pref[0].value = 1;
             e->ssh_opts.auth_pref[1].type = NC_SSH_AUTH_PASSWORD;
             e->ssh_opts.auth_pref[1].value = 2;
             e->ssh_opts.auth_pref[2].type = NC_SSH_AUTH_PUBLICKEY;
-            e->ssh_opts.auth_pref[2].value = 1;
+            e->ssh_opts.auth_pref[2].value = 3;
             e->ssh_opts.auth_hostkey_check = sshauth_hostkey_check;
             e->ssh_opts.auth_password = sshauth_password;
             e->ssh_opts.auth_interactive = sshauth_interactive;
             e->ssh_opts.auth_privkey_passphrase = sshauth_privkey_passphrase;
 
-            /* callhome settings are the same except the inverted auth methods preferences */
+            /* callhome settings are the same */
             memcpy(&e->ssh_ch_opts, &e->ssh_opts, sizeof e->ssh_ch_opts);
             e->ssh_ch_opts.auth_pref[0].value = 1;
             e->ssh_ch_opts.auth_pref[1].value = 2;
