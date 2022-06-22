@@ -1327,7 +1327,7 @@ static int
 nc_open_netconf_channel(struct nc_session *session, int timeout)
 {
     int ret;
-    struct timespec ts_timeout, ts_cur;
+    struct timespec ts_timeout;
 
     /* message callback is executed twice to give chance for the channel to be
      * created if timeout == 0 (it takes 2 messages, channel-open, subsystem-request) */
@@ -1364,8 +1364,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
     }
 
     if (timeout > -1) {
-        nc_gettimespec_mono(&ts_timeout);
-        nc_addtimespec(&ts_timeout, timeout);
+        nc_gettimespec_mono_add(&ts_timeout, timeout);
     }
     while (1) {
         if (!nc_session_is_connected(session)) {
@@ -1385,13 +1384,10 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
         }
 
         usleep(NC_TIMEOUT_STEP);
-        if (timeout > -1) {
-            nc_gettimespec_mono(&ts_cur);
-            if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
-                /* timeout */
-                ERR(session, "Failed to start \"netconf\" SSH subsystem for too long, disconnecting.");
-                break;
-            }
+        if ((timeout > -1) && (nc_difftimespec_cur(&ts_timeout) < 1)) {
+            /* timeout */
+            ERR(session, "Failed to start \"netconf\" SSH subsystem for too long, disconnecting.");
+            break;
         }
     }
 
@@ -1454,7 +1450,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     ssh_bind sbind;
     struct nc_server_ssh_opts *opts;
     int libssh_auth_methods = 0, ret;
-    struct timespec ts_timeout, ts_cur;
+    struct timespec ts_timeout;
 
     opts = session->data;
 
@@ -1506,17 +1502,13 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     ssh_set_blocking(session->ti.libssh.session, 0);
 
     if (timeout > -1) {
-        nc_gettimespec_mono(&ts_timeout);
-        nc_addtimespec(&ts_timeout, timeout);
+        nc_gettimespec_mono_add(&ts_timeout, timeout);
     }
     while ((ret = ssh_handle_key_exchange(session->ti.libssh.session)) == SSH_AGAIN) {
         /* this tends to take longer */
         usleep(NC_TIMEOUT_STEP * 20);
-        if (timeout > -1) {
-            nc_gettimespec_mono(&ts_cur);
-            if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
-                break;
-            }
+        if ((timeout > -1) && (nc_difftimespec_cur(&ts_timeout) < 1)) {
+            break;
         }
     }
     if (ret == SSH_AGAIN) {
@@ -1529,8 +1521,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
 
     /* authenticate */
     if (opts->auth_timeout) {
-        nc_gettimespec_mono(&ts_timeout);
-        nc_addtimespec(&ts_timeout, opts->auth_timeout * 1000);
+        nc_gettimespec_mono_add(&ts_timeout, opts->auth_timeout * 1000);
     }
     while (1) {
         if (!nc_session_is_connected(session)) {
@@ -1554,12 +1545,9 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         }
 
         usleep(NC_TIMEOUT_STEP);
-        if (opts->auth_timeout) {
-            nc_gettimespec_mono(&ts_cur);
-            if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
-                /* timeout */
-                break;
-            }
+        if ((opts->auth_timeout) && (nc_difftimespec_cur(&ts_timeout) < 1)) {
+            /* timeout */
+            break;
         }
     }
 
@@ -1628,9 +1616,9 @@ nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session
         return msgtype;
     }
 
-    nc_gettimespec_real(&ts_cur);
+    nc_gettimespec_real_add(&ts_cur, 0);
     new_session->opts.server.session_start = ts_cur.tv_sec;
-    nc_gettimespec_mono(&ts_cur);
+    nc_gettimespec_mono_add(&ts_cur, 0);
     new_session->opts.server.last_rpc = ts_cur.tv_sec;
     new_session->status = NC_STATUS_RUNNING;
     *session = new_session;
@@ -1699,9 +1687,9 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
         return msgtype;
     }
 
-    nc_gettimespec_real(&ts_cur);
+    nc_gettimespec_real_add(&ts_cur, 0);
     new_session->opts.server.session_start = ts_cur.tv_sec;
-    nc_gettimespec_mono(&ts_cur);
+    nc_gettimespec_mono_add(&ts_cur, 0);
     new_session->opts.server.last_rpc = ts_cur.tv_sec;
     new_session->status = NC_STATUS_RUNNING;
     *session = new_session;

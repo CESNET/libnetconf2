@@ -589,7 +589,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     struct nc_session *session = NULL;
     int sock, verify, ret;
     unsigned long tls_err;
-    struct timespec ts_timeout, ts_cur;
+    struct timespec ts_timeout;
     const char *peername;
     char *ip_host = NULL;
 
@@ -647,13 +647,11 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
 #endif
 
     /* connect and perform the handshake */
-    nc_gettimespec_mono(&ts_timeout);
-    nc_addtimespec(&ts_timeout, NC_TRANSPORT_TIMEOUT);
+    nc_gettimespec_mono_add(&ts_timeout, NC_TRANSPORT_TIMEOUT);
     tlsauth_ch = 0;
     while (((ret = SSL_connect(session->ti.tls)) != 1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
         usleep(NC_TIMEOUT_STEP);
-        nc_gettimespec_mono(&ts_cur);
-        if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
+        if (nc_difftimespec_cur(&ts_timeout) < 1) {
             ERR(NULL, "SSL_connect timeout.");
             goto fail;
         }
@@ -771,7 +769,7 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
     int verify, ret;
     SSL *tls = NULL;
     struct nc_session *session = NULL;
-    struct timespec ts_timeout, ts_cur;
+    struct timespec ts_timeout;
 
     if (nc_client_tls_update_opts(&tls_ch_opts)) {
         goto cleanup;
@@ -789,18 +787,14 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
 
     /* connect and perform the handshake */
     if (timeout > -1) {
-        nc_gettimespec_mono(&ts_timeout);
-        nc_addtimespec(&ts_timeout, timeout);
+        nc_gettimespec_mono_add(&ts_timeout, timeout);
     }
     tlsauth_ch = 1;
     while (((ret = SSL_connect(tls)) == -1) && (SSL_get_error(tls, ret) == SSL_ERROR_WANT_READ)) {
         usleep(NC_TIMEOUT_STEP);
-        if (timeout > -1) {
-            nc_gettimespec_mono(&ts_cur);
-            if (nc_difftimespec(&ts_cur, &ts_timeout) < 1) {
-                ERR(NULL, "SSL_connect timeout.");
-                goto cleanup;
-            }
+        if ((timeout > -1) && (nc_difftimespec_cur(&ts_timeout) < 1)) {
+            ERR(NULL, "SSL_connect timeout.");
+            goto cleanup;
         }
     }
     if (ret != 1) {

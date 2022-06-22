@@ -57,51 +57,29 @@
 extern struct nc_server_opts server_opts;
 
 int
-nc_gettimespec_mono(struct timespec *ts)
-{
-#ifdef CLOCK_MONOTONIC_RAW
-    return clock_gettime(CLOCK_MONOTONIC_RAW, ts);
-#elif defined (CLOCK_MONOTONIC)
-    return clock_gettime(CLOCK_MONOTONIC, ts);
-#else
-    /* no monotonic clock available, return realtime */
-    return nc_gettimespec_real(ts);
-#endif
-}
-
-int
-nc_gettimespec_real(struct timespec *ts)
+nc_gettimespec_real_add(struct timespec *ts, uint32_t msec)
 {
 #ifdef CLOCK_REALTIME
-    return clock_gettime(CLOCK_REALTIME, ts);
+    if (clock_gettime(CLOCK_REALTIME, ts)) {
+        return -1;
+    }
 #else
     int rc;
     struct timeval tv;
 
     rc = gettimeofday(&tv, NULL);
-    if (!rc) {
+    if (rc) {
+        return -1;
+    } else {
         ts->tv_sec = (time_t)tv.tv_sec;
         ts->tv_nsec = 1000L * (long)tv.tv_usec;
     }
-    return rc;
 #endif
-}
 
-/* ts1 < ts2 -> +, ts1 > ts2 -> -, returns milliseconds */
-int32_t
-nc_difftimespec(const struct timespec *ts1, const struct timespec *ts2)
-{
-    int64_t nsec_diff = 0;
+    if (!msec) {
+        return 0;
+    }
 
-    nsec_diff += (((int64_t)ts2->tv_sec) - ((int64_t)ts1->tv_sec)) * 1000000000L;
-    nsec_diff += ((int64_t)ts2->tv_nsec) - ((int64_t)ts1->tv_nsec);
-
-    return nsec_diff ? nsec_diff / 1000000L : 0;
-}
-
-void
-nc_addtimespec(struct timespec *ts, uint32_t msec)
-{
     assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
 
     ts->tv_sec += msec / 1000;
@@ -116,6 +94,60 @@ nc_addtimespec(struct timespec *ts, uint32_t msec)
     }
 
     assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
+    return 0;
+}
+
+int
+nc_gettimespec_mono_add(struct timespec *ts, uint32_t msec)
+{
+    #ifdef CLOCK_MONOTONIC_RAW
+    if (clock_gettime(CLOCK_MONOTONIC_RAW, ts)) {
+        return -1;
+    }
+    #elif defined (CLOCK_MONOTONIC)
+    if (clock_gettime(CLOCK_MONOTONIC, ts)) {
+        return -1;
+    }
+    #else
+    /* no monotonic clock available, return realtime */
+    if (nc_gettimespec_real_add(ts, 0)) {
+        return -1;
+    }
+#endif
+
+    if (!msec) {
+        return 0;
+    }
+
+    assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
+
+    ts->tv_sec += msec / 1000;
+    ts->tv_nsec += (msec % 1000) * 1000000L;
+
+    if (ts->tv_nsec >= 1000000000L) {
+        ++ts->tv_sec;
+        ts->tv_nsec -= 1000000000L;
+    } else if (ts->tv_nsec < 0) {
+        --ts->tv_sec;
+        ts->tv_nsec += 1000000000L;
+    }
+
+    assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
+    return 0;
+}
+
+int32_t
+nc_difftimespec_cur(const struct timespec *ts)
+{
+    struct timespec cur;
+    int64_t nsec_diff = 0;
+
+    nc_gettimespec_mono_add(&cur, 0);
+
+    nsec_diff += (((int64_t)ts->tv_sec) - ((int64_t)cur.tv_sec)) * 1000000000L;
+    nsec_diff += ((int64_t)ts->tv_nsec) - ((int64_t)cur.tv_nsec);
+
+    return nsec_diff / 1000000L;
 }
 
 const char *
@@ -231,8 +263,7 @@ nc_session_rpc_lock(struct nc_session *session, int timeout, const char *func)
     }
 
     if (timeout > 0) {
-        nc_gettimespec_real(&ts_timeout);
-        nc_addtimespec(&ts_timeout, timeout);
+        nc_gettimespec_real_add(&ts_timeout, timeout);
 
         /* LOCK */
         ret = pthread_mutex_timedlock(&session->opts.server.rpc_lock, &ts_timeout);
@@ -308,8 +339,7 @@ nc_session_rpc_unlock(struct nc_session *session, int timeout, const char *func)
     assert(session->opts.server.rpc_inuse);
 
     if (timeout > 0) {
-        nc_gettimespec_real(&ts_timeout);
-        nc_addtimespec(&ts_timeout, timeout);
+        nc_gettimespec_real_add(&ts_timeout, timeout);
 
         /* LOCK */
         ret = pthread_mutex_timedlock(&session->opts.server.rpc_lock, &ts_timeout);
@@ -352,8 +382,7 @@ nc_session_io_lock(struct nc_session *session, int timeout, const char *func)
     struct timespec ts_timeout;
 
     if (timeout > 0) {
-        nc_gettimespec_real(&ts_timeout);
-        nc_addtimespec(&ts_timeout, timeout);
+        nc_gettimespec_real_add(&ts_timeout, timeout);
 
         ret = pthread_mutex_timedlock(session->io_lock, &ts_timeout);
     } else if (!timeout) {
@@ -396,22 +425,20 @@ nc_session_client_msgs_lock(struct nc_session *session, int *timeout, const char
 {
     int ret;
     int32_t diff_msec;
-    struct timespec ts_timeout, ts_start, ts_end;
+    struct timespec ts_timeout, ts_start;
 
     assert(session->side == NC_CLIENT);
 
     if (*timeout > 0) {
         /* get current time */
-        nc_gettimespec_real(&ts_start);
+        nc_gettimespec_real_add(&ts_start, 0);
 
-        nc_gettimespec_real(&ts_timeout);
-        nc_addtimespec(&ts_timeout, *timeout);
+        nc_gettimespec_real_add(&ts_timeout, *timeout);
 
         ret = pthread_mutex_timedlock(&session->opts.client.msgs_lock, &ts_timeout);
         if (!ret) {
             /* update timeout based on what was elapsed */
-            nc_gettimespec_real(&ts_end);
-            diff_msec = nc_difftimespec(&ts_start, &ts_end);
+            diff_msec = nc_difftimespec_cur(&ts_start);
             *timeout -= diff_msec;
         }
     } else if (!*timeout) {
@@ -671,7 +698,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     struct nc_session *siter;
     struct nc_msg_cont *contiter;
     struct ly_in *msg;
-    struct timespec ts, ts_cur;
+    struct timespec ts;
     void *p;
 
     if (!session || (session->status == NC_STATUS_CLOSING)) {
@@ -684,12 +711,10 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread, 2);
 
         /* wait for it */
-        nc_gettimespec_mono(&ts);
-        nc_addtimespec(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
+        nc_gettimespec_mono_add(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
         while (ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread)) {
             usleep(NC_TIMEOUT_STEP);
-            nc_gettimespec_mono(&ts_cur);
-            if (nc_difftimespec(&ts_cur, &ts) < 1) {
+            if (nc_difftimespec_cur(&ts) < 1) {
                 ERR(session, "Waiting for notification thread exit failed (timed out).");
                 break;
             }
@@ -770,8 +795,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CH_THREAD)) {
         pthread_cond_signal(&session->opts.server.ch_cond);
 
-        nc_gettimespec_real(&ts);
-        nc_addtimespec(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
+        nc_gettimespec_real_add(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
 
         /* wait for CH thread to actually wake up and terminate */
         r = 0;

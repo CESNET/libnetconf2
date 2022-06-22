@@ -520,13 +520,33 @@ struct passwd *nc_getpwuid(uid_t uid, struct passwd *pwd_buf, char **buf, size_t
 
 NC_MSG_TYPE nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op);
 
-int nc_gettimespec_mono(struct timespec *ts);
+/**
+ * @brief Get the current real time if available and optionally add some time to it.
+ *
+ * @param[in,out] ts Timespec structure holding time.
+ * @param[in] msec Time in milliseconds to be added.
+ * @return 0 on success;
+ * @return -1 on error.
+ */
+int nc_gettimespec_real_add(struct timespec *ts, uint32_t msec);
 
-int nc_gettimespec_real(struct timespec *ts);
+/**
+ * @brief Get the current monotonic time if available and optionally add some time to it.
+ *
+ * @param[in,out] ts Timespec structure holding time.
+ * @param[in] msec Time in milliseconds to be added.
+ * @return 0 on success;
+ * @return -1 on error.
+ */
+int nc_gettimespec_mono_add(struct timespec *ts, uint32_t msec);
 
-int32_t nc_difftimespec(const struct timespec *ts1, const struct timespec *ts2);
-
-void nc_addtimespec(struct timespec *ts, uint32_t msec);
+/**
+ * @brief Get time difference based on the current time.
+ *
+ * @param[in] ts Timespec structure holding time from which the current time is going to be subtracted.
+ * @return Time difference in milliseconds.
+ */
+int32_t nc_difftimespec_cur(const struct timespec *ts);
 
 const char *nc_keytype2str(NC_SSH_KEY_TYPE type);
 
