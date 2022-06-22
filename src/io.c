@@ -92,7 +92,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
     size_t readd = 0;
     ssize_t r = -1;
     int fd, interrupted;
-    struct timespec ts_cur, ts_inact_timeout;
+    struct timespec ts_inact_timeout;
 
     assert(session);
     assert(buf);
@@ -105,8 +105,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
         return 0;
     }
 
-    nc_gettimespec_mono(&ts_inact_timeout);
-    nc_addtimespec(&ts_inact_timeout, inact_timeout);
+    nc_gettimespec_mono_add(&ts_inact_timeout, inact_timeout);
     do {
         interrupted = 0;
         switch (session->ti_type) {
@@ -211,9 +210,8 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
             if (!interrupted) {
                 usleep(NC_TIMEOUT_STEP);
             }
-            nc_gettimespec_mono(&ts_cur);
-            if ((nc_difftimespec(&ts_cur, &ts_inact_timeout) < 1) || (nc_difftimespec(&ts_cur, ts_act_timeout) < 1)) {
-                if (nc_difftimespec(&ts_cur, &ts_inact_timeout) < 1) {
+            if ((nc_difftimespec_cur(&ts_inact_timeout) < 1) || (nc_difftimespec_cur(ts_act_timeout) < 1)) {
+                if (nc_difftimespec_cur(&ts_inact_timeout) < 1) {
                     ERR(session, "Inactive read timeout elapsed.");
                 } else {
                     ERR(session, "Active read timeout elapsed.");
@@ -227,8 +225,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
             readd += r;
 
             /* reset inactive timeout */
-            nc_gettimespec_mono(&ts_inact_timeout);
-            nc_addtimespec(&ts_inact_timeout, inact_timeout);
+            nc_gettimespec_mono_add(&ts_inact_timeout, inact_timeout);
         }
 
     } while (readd < count);
@@ -363,8 +360,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, struct ly_in **msg, i
         goto cleanup;
     }
 
-    nc_gettimespec_mono(&ts_act_timeout);
-    nc_addtimespec(&ts_act_timeout, NC_READ_ACT_TIMEOUT * 1000);
+    nc_gettimespec_mono_add(&ts_act_timeout, NC_READ_ACT_TIMEOUT * 1000);
 
     if (!io_locked) {
         /* SESSION IO LOCK */
