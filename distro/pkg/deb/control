@@ -9,6 +9,7 @@ Build-Depends: cmake,
                libyang2-dev,
                libssl-dev,
                libssh-dev (>= 0.7.1),
+               libpam0g-dev,
                pkg-config
 Vcs-Browser: https://github.com/CESNET/libnetconf2/tree/master
 Vcs-Git: https://github.com/CESNET/libnetconf2.git

@@ -10,6 +10,7 @@ BuildRequires:  cmake
 BuildRequires:  gcc
 BuildRequires:  libssh-devel
 BuildRequires:  openssl-devel
+BuildRequires:  pam-devel
 BuildRequires:  pkgconfig(libyang) >= 2
 
 %package devel
