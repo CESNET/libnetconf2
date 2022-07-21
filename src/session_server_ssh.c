@@ -1066,7 +1066,7 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
         }
 
         usleep(NC_TIMEOUT_STEP);
-    } while ((opts->auth_timeout) && (nc_difftimespec_cur(&ts_timeout) >= 1));
+    } while ((opts->auth_timeout) && (nc_difftimespec_mono_cur(&ts_timeout) >= 1));
 
     if (!reply) {
         ERR(NULL, "Authentication timeout.");
@@ -1640,7 +1640,7 @@ nc_open_netconf_channel(struct nc_session *session, int timeout)
         }
 
         usleep(NC_TIMEOUT_STEP);
-        if ((timeout > -1) && (nc_difftimespec_cur(&ts_timeout) < 1)) {
+        if ((timeout > -1) && (nc_difftimespec_mono_cur(&ts_timeout) < 1)) {
             /* timeout */
             ERR(session, "Failed to start \"netconf\" SSH subsystem for too long, disconnecting.");
             break;
@@ -1763,7 +1763,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     while ((ret = ssh_handle_key_exchange(session->ti.libssh.session)) == SSH_AGAIN) {
         /* this tends to take longer */
         usleep(NC_TIMEOUT_STEP * 20);
-        if ((timeout > -1) && (nc_difftimespec_cur(&ts_timeout) < 1)) {
+        if ((timeout > -1) && (nc_difftimespec_mono_cur(&ts_timeout) < 1)) {
             break;
         }
     }
@@ -1803,7 +1803,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         }
 
         usleep(NC_TIMEOUT_STEP);
-        if ((opts->auth_timeout) && (nc_difftimespec_cur(&ts_timeout) < 1)) {
+        if ((opts->auth_timeout) && (nc_difftimespec_mono_cur(&ts_timeout) < 1)) {
             /* timeout */
             break;
         }

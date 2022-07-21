@@ -1972,7 +1972,7 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     }
     while (((ret = SSL_accept(session->ti.tls)) == -1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
         usleep(NC_TIMEOUT_STEP);
-        if ((timeout > -1) && (nc_difftimespec_cur(&ts_timeout) < 1)) {
+        if ((timeout > -1) && (nc_difftimespec_mono_cur(&ts_timeout) < 1)) {
             ERR(session, "SSL_accept timeout.");
             return 0;
         }

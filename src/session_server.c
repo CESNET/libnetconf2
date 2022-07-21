@@ -1771,7 +1771,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
         if (ret == NC_PSPOLL_TIMEOUT) {
             usleep(NC_TIMEOUT_STEP);
 
-            if ((timeout > -1) && (nc_difftimespec_cur(&ts_timeout) < 1)) {
+            if ((timeout > -1) && (nc_difftimespec_mono_cur(&ts_timeout) < 1)) {
                 /* final timeout */
                 break;
             }

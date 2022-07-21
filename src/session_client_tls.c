@@ -651,7 +651,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     tlsauth_ch = 0;
     while (((ret = SSL_connect(session->ti.tls)) != 1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
         usleep(NC_TIMEOUT_STEP);
-        if (nc_difftimespec_cur(&ts_timeout) < 1) {
+        if (nc_difftimespec_mono_cur(&ts_timeout) < 1) {
             ERR(NULL, "SSL_connect timeout.");
             goto fail;
         }
@@ -792,7 +792,7 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
     tlsauth_ch = 1;
     while (((ret = SSL_connect(tls)) == -1) && (SSL_get_error(tls, ret) == SSL_ERROR_WANT_READ)) {
         usleep(NC_TIMEOUT_STEP);
-        if ((timeout > -1) && (nc_difftimespec_cur(&ts_timeout) < 1)) {
+        if ((timeout > -1) && (nc_difftimespec_mono_cur(&ts_timeout) < 1)) {
             ERR(NULL, "SSL_connect timeout.");
             goto cleanup;
         }

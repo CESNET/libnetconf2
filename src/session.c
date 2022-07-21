@@ -137,7 +137,21 @@ nc_gettimespec_mono_add(struct timespec *ts, uint32_t msec)
 }
 
 int32_t
-nc_difftimespec_cur(const struct timespec *ts)
+nc_difftimespec_real_cur(const struct timespec *ts)
+{
+    struct timespec cur;
+    int64_t nsec_diff = 0;
+
+    nc_gettimespec_real_add(&cur, 0);
+
+    nsec_diff += (((int64_t)ts->tv_sec) - ((int64_t)cur.tv_sec)) * 1000000000L;
+    nsec_diff += ((int64_t)ts->tv_nsec) - ((int64_t)cur.tv_nsec);
+
+    return nsec_diff / 1000000L;
+}
+
+int32_t
+nc_difftimespec_mono_cur(const struct timespec *ts)
 {
     struct timespec cur;
     int64_t nsec_diff = 0;
@@ -438,7 +452,7 @@ nc_session_client_msgs_lock(struct nc_session *session, int *timeout, const char
         ret = pthread_mutex_timedlock(&session->opts.client.msgs_lock, &ts_timeout);
         if (!ret) {
             /* update timeout based on what was elapsed */
-            diff_msec = nc_difftimespec_cur(&ts_start);
+            diff_msec = nc_difftimespec_real_cur(&ts_start);
             *timeout -= diff_msec;
         }
     } else if (!*timeout) {
@@ -714,7 +728,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         nc_gettimespec_mono_add(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
         while (ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread)) {
             usleep(NC_TIMEOUT_STEP);
-            if (nc_difftimespec_cur(&ts) < 1) {
+            if (nc_difftimespec_mono_cur(&ts) < 1) {
                 ERR(session, "Waiting for notification thread exit failed (timed out).");
                 break;
             }

@@ -210,8 +210,8 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
             if (!interrupted) {
                 usleep(NC_TIMEOUT_STEP);
             }
-            if ((nc_difftimespec_cur(&ts_inact_timeout) < 1) || (nc_difftimespec_cur(ts_act_timeout) < 1)) {
-                if (nc_difftimespec_cur(&ts_inact_timeout) < 1) {
+            if ((nc_difftimespec_mono_cur(&ts_inact_timeout) < 1) || (nc_difftimespec_mono_cur(ts_act_timeout) < 1)) {
+                if (nc_difftimespec_mono_cur(&ts_inact_timeout) < 1) {
                     ERR(session, "Inactive read timeout elapsed.");
                 } else {
                     ERR(session, "Active read timeout elapsed.");

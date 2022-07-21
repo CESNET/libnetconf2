@@ -555,12 +555,20 @@ int nc_gettimespec_real_add(struct timespec *ts, uint32_t msec);
 int nc_gettimespec_mono_add(struct timespec *ts, uint32_t msec);
 
 /**
- * @brief Get time difference based on the current time.
+ * @brief Get real time difference based on the current time.
  *
- * @param[in] ts Timespec structure holding time from which the current time is going to be subtracted.
+ * @param[in] ts Timespec structure holding real time from which the current time is going to be subtracted.
  * @return Time difference in milliseconds.
  */
-int32_t nc_difftimespec_cur(const struct timespec *ts);
+int32_t nc_difftimespec_real_cur(const struct timespec *ts);
+
+/**
+ * @brief Get monotonic time difference based on the current time.
+ *
+ * @param[in] ts Timespec structure holding monotonic time from which the current time is going to be subtracted.
+ * @return Time difference in milliseconds.
+ */
+int32_t nc_difftimespec_mono_cur(const struct timespec *ts);
 
 const char *nc_keytype2str(NC_SSH_KEY_TYPE type);
 
