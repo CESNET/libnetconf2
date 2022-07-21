@@ -305,6 +305,26 @@ int nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session);
 struct nc_session *nc_ps_get_session(const struct nc_pollsession *ps, uint16_t idx);
 
 /**
+ * @brief Callback for finding a session in a pollsession structure.
+ *
+ * @param[in] session Considered NETCONF session.
+ * @param[in] cb_data User data.
+ * @return 0 if the session does not match.
+ * @return non-zero if the session matches and should be returned.
+ */
+typedef int (*nc_ps_session_match_cb)(struct nc_session *session, void *cb_data);
+
+/**
+ * @brief Find a session in a pollsession structure using a matching callback.
+ *
+ * @param[in] ps Pollsession structure to read from.
+ * @param[in] match_cb Matching callback to use.
+ * @param[in] cb_data User data passed to @p cb.
+ * @return Found session, NULL if none matched.
+ */
+struct nc_session *nc_ps_find_session(const struct nc_pollsession *ps, nc_ps_session_match_cb match_cb, void *cb_data);
+
+/**
  * @brief Learn the number of sessions in a pollsession structure.
  *
  * Does not lock @p ps structure for efficiency.

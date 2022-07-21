@@ -1274,6 +1274,36 @@ nc_ps_get_session(const struct nc_pollsession *ps, uint16_t idx)
     return ret;
 }
 
+API struct nc_session *
+nc_ps_find_session(const struct nc_pollsession *ps, nc_ps_session_match_cb match_cb, void *cb_data)
+{
+    uint8_t q_id;
+    uint16_t i;
+    struct nc_session *ret = NULL;
+
+    if (!ps) {
+        ERRARG("ps");
+        return NULL;
+    }
+
+    /* LOCK */
+    if (nc_ps_lock((struct nc_pollsession *)ps, &q_id, __func__)) {
+        return NULL;
+    }
+
+    for (i = 0; i < ps->session_count; ++i) {
+        if (match_cb(ps->sessions[i]->session, cb_data)) {
+            ret = ps->sessions[i]->session;
+            break;
+        }
+    }
+
+    /* UNLOCK */
+    nc_ps_unlock((struct nc_pollsession *)ps, q_id, __func__);
+
+    return ret;
+}
+
 API uint16_t
 nc_ps_session_count(struct nc_pollsession *ps)
 {
