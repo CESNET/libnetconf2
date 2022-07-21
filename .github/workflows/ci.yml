@@ -85,8 +85,8 @@ jobs:
             make-target: ""
           }
           - {
-            name: "SSH Only",
-            os: "ubuntu-18.04",
+            name: "SSH Only, Ubuntu 22.04",
+            os: "ubuntu-22.04",
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "gcc",
@@ -134,7 +134,7 @@ jobs:
           }
           - {
             name: "ABI Check",
-            os: "ubuntu-latest",
+            os: "ubuntu-18.04",
             build-type: "ABICheck",
             dep-build-type: "Debug",
             cc: "gcc",
@@ -148,10 +148,15 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Deps-packages
+      - name: libssh 0.7 repo
+        if: matrix.config.os == 'ubuntu-18.04' || matrix.config.os == 'ubuntu-20.04'
         shell: bash
         run: |
           sudo add-apt-repository ppa:kedazo/libssh-0.7.x -y
+
+      - name: Deps-packages
+        shell: bash
+        run: |
           sudo apt-get update
           sudo apt-get install $DEFAULT_PACKAGES ${{ matrix.config.packages }}
           if ${{ matrix.config.snaps != '' }}
@@ -210,4 +215,6 @@ jobs:
       - name: Test
         shell: bash
         working-directory: ${{ github.workspace }}/build
-        run: ctest --output-on-failure
+        run: |
+          export LSAN_OPTIONS=suppressions=${{ github.workspace }}/tests/library_lsan.supp
+          ctest --output-on-failure
