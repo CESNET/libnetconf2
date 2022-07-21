@@ -2201,9 +2201,6 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
     } else if (!rpc) {
         ERRARG("rpc");
         return NC_MSG_ERROR;
-    } else if (!msgid) {
-        ERRARG("msgid");
-        return NC_MSG_ERROR;
     } else if (!envp) {
         ERRARG("envp");
         return NC_MSG_ERROR;

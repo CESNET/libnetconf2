@@ -495,6 +495,55 @@ test_send_recv_notif_11(void **state)
     test_send_recv_notif();
 }
 
+static void
+test_send_recv_malformed_10(void **state)
+{
+    int ret;
+    struct nc_pollsession *ps;
+    struct nc_rpc *rpc;
+    struct lyd_node *envp, *op, *node;
+    NC_MSG_TYPE msgtype;
+    const char *msg;
+
+    (void)state;
+
+    server_session->version = NC_VERSION_10;
+    client_session->version = NC_VERSION_10;
+
+    /* write malformed message */
+    msg =
+            "<nc:rpc xmlns:nc=\"urn:ietf:params:xml:ns:netconf:base:1.0\">"
+            "  <nc:commit/>"
+            "</nc:rpc>"
+            "]]>]]>";
+    assert_int_equal(write(client_session->ti.fd.out, msg, strlen(msg)), strlen(msg));
+    rpc = nc_rpc_commit(0, 0, NULL, NULL, 0);
+    assert_non_null(rpc);
+
+    /* server RPC, send reply */
+    ps = nc_ps_new();
+    assert_non_null(ps);
+    nc_ps_add_session(ps, server_session);
+
+    ret = nc_ps_poll(ps, 0, NULL);
+    assert_int_equal(ret, NC_PSPOLL_BAD_RPC);
+
+    /* server finished */
+    nc_ps_free(ps);
+
+    /* client reply */
+    msgtype = nc_recv_reply(client_session, rpc, 0, 0, &envp, &op);
+    assert_int_equal(msgtype, NC_MSG_REPLY_ERR_MSGID);
+
+    nc_rpc_free(rpc);
+    assert_string_equal(LYD_NAME(lyd_child(envp)), "rpc-error");
+    lyd_find_sibling_opaq_next(lyd_child(lyd_child(envp)), "error-tag", &node);
+    assert_non_null(node);
+    assert_string_equal(((struct lyd_node_opaq *)node)->value, "missing-attribute");
+    lyd_free_tree(envp);
+    assert_null(op);
+}
+
 int
 main(void)
 {
@@ -539,6 +588,7 @@ main(void)
         cmocka_unit_test_setup_teardown(test_send_recv_error_10, setup_sessions, teardown_sessions),
         cmocka_unit_test_setup_teardown(test_send_recv_data_10, setup_sessions, teardown_sessions),
         cmocka_unit_test_setup_teardown(test_send_recv_notif_10, setup_sessions, teardown_sessions),
+        cmocka_unit_test_setup_teardown(test_send_recv_malformed_10, setup_sessions, teardown_sessions),
         cmocka_unit_test_setup_teardown(test_send_recv_ok_11, setup_sessions, teardown_sessions),
         cmocka_unit_test_setup_teardown(test_send_recv_error_11, setup_sessions, teardown_sessions),
         cmocka_unit_test_setup_teardown(test_send_recv_data_11, setup_sessions, teardown_sessions),

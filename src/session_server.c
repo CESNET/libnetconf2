@@ -16,6 +16,7 @@
 #define _GNU_SOURCE /* signals, threads, SO_PEERCRED */
 
 #include <arpa/inet.h>
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -1328,10 +1329,32 @@ nc_ps_session_count(struct nc_pollsession *ps)
     return session_count;
 }
 
+static NC_MSG_TYPE
+recv_rpc_check_msgid(struct nc_session *session, const struct lyd_node *envp)
+{
+    struct lyd_attr *attr;
+
+    assert(envp && !envp->schema);
+
+    /* find the message-id attribute */
+    LY_LIST_FOR(((struct lyd_node_opaq *)envp)->attr, attr) {
+        if (!strcmp(attr->name.name, "message-id")) {
+            break;
+        }
+    }
+
+    if (!attr) {
+        ERR(session, "Received an <rpc> without a message-id.");
+        return NC_MSG_REPLY_ERR_MSGID;
+    }
+
+    return NC_MSG_RPC;
+}
+
 /* should be called holding the session RPC lock! IO lock will be acquired as needed
  * returns: NC_PSPOLL_ERROR,
  *          NC_PSPOLL_TIMEOUT,
- *          NC_PSPOLL_BAD_RPC | NC_PSPOLL_REPLY_ERROR,
+ *          NC_PSPOLL_BAD_RPC,
  *          NC_PSPOLL_RPC
  */
 static int
@@ -1359,9 +1382,9 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
     r = nc_read_msg_io(session, io_timeout, &msg, 0);
     if (r == -2) {
         /* malformed message */
-        ret = NC_PSPOLL_REPLY_ERROR;
+        ret = NC_PSPOLL_BAD_RPC;
         reply = nc_server_reply_err(nc_err(session->ctx, NC_ERR_MALFORMED_MSG));
-        goto send_reply;
+        goto cleanup;
     }
     if (r == -1) {
         return NC_PSPOLL_ERROR;
@@ -1372,14 +1395,24 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
     *rpc = calloc(1, sizeof **rpc);
     if (!*rpc) {
         ERRMEM;
-        ret = NC_PSPOLL_REPLY_ERROR;
+        ret = NC_PSPOLL_BAD_RPC;
         goto cleanup;
     }
 
     /* parse the RPC */
-    if (lyd_parse_op(session->ctx, NULL, msg, LYD_XML, LYD_TYPE_RPC_NETCONF, &(*rpc)->envp, &(*rpc)->rpc)) {
+    if (!lyd_parse_op(session->ctx, NULL, msg, LYD_XML, LYD_TYPE_RPC_NETCONF, &(*rpc)->envp, &(*rpc)->rpc)) {
+        /* check message-id */
+        if (recv_rpc_check_msgid(session, (*rpc)->envp) == NC_MSG_RPC) {
+            /* valid RPC */
+            ret = NC_PSPOLL_RPC;
+        } else {
+            /* no message-id */
+            ret = NC_PSPOLL_BAD_RPC;
+            reply = nc_server_reply_err(nc_err(session->ctx, NC_ERR_MISSING_ATTR, NC_ERR_TYPE_RPC, "message-id", "rpc"));
+        }
+    } else {
         /* bad RPC received */
-        ret = NC_PSPOLL_REPLY_ERROR | NC_PSPOLL_BAD_RPC;
+        ret = NC_PSPOLL_BAD_RPC;
 
         if ((*rpc)->envp) {
             /* at least the envelopes were parsed */
@@ -1391,24 +1424,22 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
              * the server (RFC 6241 sec. 3) */
             reply = nc_server_reply_err(nc_err(session->ctx, NC_ERR_MALFORMED_MSG));
         }
-
-send_reply:
-        if (reply) {
-            r = nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, *rpc ? (*rpc)->envp : NULL, reply);
-            nc_server_reply_free(reply);
-            if (r != NC_MSG_REPLY) {
-                ERR(session, "Failed to write reply (%s), terminating session.", nc_msgtype2str[r]);
-                if (session->status != NC_STATUS_INVALID) {
-                    session->status = NC_STATUS_INVALID;
-                    session->term_reason = NC_SESSION_TERM_OTHER;
-                }
-            }
-        }
-    } else {
-        ret = NC_PSPOLL_RPC;
     }
 
 cleanup:
+    if (reply) {
+        /* send error reply */
+        r = nc_write_msg_io(session, io_timeout, NC_MSG_REPLY, *rpc ? (*rpc)->envp : NULL, reply);
+        nc_server_reply_free(reply);
+        if (r != NC_MSG_REPLY) {
+            ERR(session, "Failed to write reply (%s), terminating session.", nc_msgtype2str[r]);
+            if (session->status != NC_STATUS_INVALID) {
+                session->status = NC_STATUS_INVALID;
+                session->term_reason = NC_SESSION_TERM_OTHER;
+            }
+        }
+    }
+
     ly_in_free(msg, 1);
     if (ret != NC_PSPOLL_RPC) {
         nc_server_rpc_free(*rpc);
