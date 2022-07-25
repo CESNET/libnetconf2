@@ -1886,6 +1886,40 @@ nc_tls_store_set_trusted_certs(X509_STORE *cert_store, char **trusted_cert_lists
     return 0;
 }
 
+static int
+nc_server_tls_accept_check(int accept_ret, struct nc_session *session)
+{
+    int verify;
+
+    /* check certificate verification result */
+    verify = SSL_get_verify_result(session->ti.tls);
+    switch (verify) {
+    case X509_V_OK:
+        if (accept_ret == 1) {
+            VRB(session, "Client certificate verified.");
+        }
+        break;
+    default:
+        ERR(session, "Client certificate error (%s).", X509_verify_cert_error_string(verify));
+    }
+
+    if (accept_ret != 1) {
+        switch (SSL_get_error(session->ti.tls, accept_ret)) {
+        case SSL_ERROR_SYSCALL:
+            ERR(session, "SSL_accept failed (%s).", strerror(errno));
+            break;
+        case SSL_ERROR_SSL:
+            ERR(session, "SSL_accept failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            break;
+        default:
+            ERR(session, "SSL_accept failed.");
+            break;
+        }
+    }
+
+    return accept_ret;
+}
+
 int
 nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
 {
@@ -1977,19 +2011,7 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
             return 0;
         }
     }
-
-    if (ret != 1) {
-        switch (SSL_get_error(session->ti.tls, ret)) {
-        case SSL_ERROR_SYSCALL:
-            ERR(session, "SSL_accept failed (%s).", strerror(errno));
-            break;
-        case SSL_ERROR_SSL:
-            ERR(session, "SSL_accept failed (%s).", ERR_reason_error_string(ERR_get_error()));
-            break;
-        default:
-            ERR(session, "SSL_accept failed.");
-            break;
-        }
+    if (nc_server_tls_accept_check(ret, session) != 1) {
         return -1;
     }
 
