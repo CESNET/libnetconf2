@@ -128,7 +128,7 @@ client_thread(void *arg)
 
     /* set keyboard-interactive authentication callback */
     nc_client_ssh_set_auth_interactive_clb(auth_interactive, NULL);
-    session = nc_connect_ssh("0.0.0.0", 6001, NULL);
+    session = nc_connect_ssh("0.0.0.0", 6002, NULL);
     nc_assert(session);
 
     printf("SSH client finished.\n");
@@ -160,7 +160,7 @@ main(void)
     nc_assert(!ret);
     ret = nc_server_endpt_set_address("main_ssh", "0.0.0.0");
     nc_assert(!ret);
-    ret = nc_server_endpt_set_port("main_ssh", 6001);
+    ret = nc_server_endpt_set_port("main_ssh", 6002);
     nc_assert(!ret);
     ret = nc_server_ssh_endpt_add_hostkey("main_ssh", "key_rsa", -1);
     nc_assert(!ret);
