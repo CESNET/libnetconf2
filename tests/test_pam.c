@@ -167,7 +167,7 @@ main(void)
 
     /* in order to use the Linux PAM keyboard-interactive method,
      * the PAM module has to know where to find the desired configuration file */
-    ret = nc_server_ssh_set_pam_conf_path("netconf.conf", TESTS_DIR "/pam");
+    ret = nc_server_ssh_set_pam_conf_path("netconf.conf", BUILD_DIR "/tests");
     nc_assert(!ret);
 
     /* only want to test keyboard-interactive auth method */

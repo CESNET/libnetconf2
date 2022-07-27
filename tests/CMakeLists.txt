@@ -91,7 +91,7 @@ if(LIBPAM_HAVE_CONFDIR)
     target_link_libraries(pam_netconf ${LIBPAM_LIBRARIES})
 
     #generate PAM configuration file
-    file(WRITE ${CMAKE_SOURCE_DIR}/tests/pam/netconf.conf
+    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/netconf.conf
         "#%PAM-1.4\n"
         "auth required ${CMAKE_CURRENT_BINARY_DIR}/pam_netconf.so\n"
         "account required ${CMAKE_CURRENT_BINARY_DIR}/pam_netconf.so\n"
