@@ -66,6 +66,7 @@ struct nc_rpc {
 struct nc_rpc_act_generic {
     NC_RPC_TYPE type;       /**< NC_RPC_ACT_GENERIC */
     int has_data;           /**< 1 for content.data, 0 for content.xml_str */
+
     union {
         struct lyd_node *data;  /**< parsed RPC data */
         char *xml_str;          /**< raw XML string */
@@ -221,6 +222,7 @@ struct nc_rpc_establishpush {
     char *stop;
     char *encoding;
     int periodic;
+
     union {
         struct {
             uint32_t period;
@@ -242,6 +244,7 @@ struct nc_rpc_modifypush {
     char *filter;            /**< XML subtree (starts with '<'), an XPath (starts with '/'), or reference (start with alpha) */
     char *stop;
     int periodic;
+
     union {
         struct {
             uint32_t period;

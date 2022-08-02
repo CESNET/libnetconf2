@@ -295,6 +295,7 @@ nc_client_get_schema_callback(void **user_data)
 struct schema_info {
     char *name;
     char *revision;
+
     struct {
         char *name;
         char *revision;

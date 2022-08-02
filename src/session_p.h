@@ -160,6 +160,7 @@ struct nc_client_opts {
 struct nc_client_context {
     unsigned int refcount;
     struct nc_client_opts opts;
+
 #ifdef NC_ENABLED_SSH
     struct nc_client_ssh_opts ssh_opts;
     struct nc_client_ssh_opts ssh_ch_opts;
@@ -176,13 +177,16 @@ struct nc_server_opts {
     int wd_also_supported;
     uint32_t capabilities_count;
     char **capabilities;
+
     char *(*content_id_clb)(void *user_data);
     void *content_id_data;
+
     void (*content_id_data_free)(void *data);
 
     /* ACCESS unlocked */
     uint16_t hello_timeout;
     uint16_t idle_timeout;
+
 #ifdef NC_ENABLED_SSH
     int (*passwd_auth_clb)(const struct nc_session *session, const char *password, void *user_data);
     void *passwd_auth_data;
@@ -244,6 +248,7 @@ struct nc_server_opts {
         char *name;
         NC_TRANSPORT_IMPL ti;
         struct nc_keepalives ka;
+
         union {
 #ifdef NC_ENABLED_SSH
             struct nc_server_ssh_opts *ssh;
@@ -269,6 +274,7 @@ struct nc_server_opts {
             int sock_pending;
             int sock_retries;
             struct nc_keepalives ka;
+
             union {
 #ifdef NC_ENABLED_SSH
                 struct nc_server_ssh_opts *ssh;
@@ -280,6 +286,7 @@ struct nc_server_opts {
         } *ch_endpts;
         uint16_t ch_endpt_count;
         NC_CH_CONN_TYPE conn_type;
+
         union {
             struct {
                 uint16_t period;
@@ -513,6 +520,7 @@ struct nc_pollsession {
 
 struct nc_ntf_thread_arg {
     struct nc_session *session;
+
     void (*notif_clb)(struct nc_session *session, const struct lyd_node *envp, const struct lyd_node *op);
 };
 
