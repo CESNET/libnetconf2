@@ -41,3 +41,26 @@ __Q: When I try to enter authentication tokens, they always echo back even thoug
 
 __A:__ You are most likely using an older version of *libssh* which contains a bug.
    The bug was fixed in *libssh* 0.9.0, so you must use at least that version.
+
+__Q: When connecting over SSH and using publickey authentication, can I use a certificate:__
+
+__A:__ No, it is not possible. There are currently 2 main types of certificates - *X.509v3* and *OpenSSH*.
+   *X.509v3* certificates for Secure Shell Authentication are a part of *NETCONF* specification
+   according to [RFC 6187](https://datatracker.ietf.org/doc/html/rfc6187), however using them
+   is currently not supported by *libssh* (version 0.9.6 as of writing this), which *libnetconf2* depends on.
+   As per the RFC mentioned before there are currently these `publickey` algorithms for *X.509v3*
+   supported by *NETCONF*: `x509v3-ssh-dss`, `x509v3-ssh-rsa`, `x509v3-rsa2048-sha256` and the family of
+   Elliptic Curve Digital Signature Algorithms `x509v3-ecdsa-sha2-*`. *libssh* 0.9.6 supports
+   these certificate publickey algorithms: `ssh-ed25519-cert-v01@openssh.com`,
+   `ecdsa-sha2-nistp521-cert-v01@openssh.com`, `ecdsa-sha2-nistp384-cert-v01@openssh.com`,
+   `ecdsa-sha2-nistp256-cert-v01@openssh.com`, `rsa-sha2-512-cert-v01@openssh.com`,
+   `rsa-sha2-256-cert-v01@openssh.com`, `ssh-rsa-cert-v01@openssh.com` and `ssh-dss-cert-v01@openssh.com`.
+
+
+   On the other hand there is a basic support for *OpenSSH* certificates in *libssh*.
+   The problem is that they are very minimalistic compared to *X.509v3* certificates
+   as per this [document](https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.certkeys?annotate=HEAD).
+   So when `publickey` authentication happens only the client's `publickey`,
+   which is extracted from the certificate, is sent to the server instead of the whole certificate.
+   This means that the `cert-to-name` process required by *NETCONF* can not take place. Specifically,
+   OpenSSH certificates are missing important fields such as `Common Name`, `Subject Alternative Name` and so on.
