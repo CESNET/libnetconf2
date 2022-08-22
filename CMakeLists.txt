@@ -251,12 +251,12 @@ if(ENABLE_SSH)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH")
 
     # crypt
-    if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "QNX")
-        target_link_libraries(netconf2 -lcrypt)
-        list(APPEND CMAKE_REQUIRED_LIBRARIES crypt)
-    else()
+    if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
         target_link_libraries(netconf2 -llogin)
         list(APPEND CMAKE_REQUIRED_LIBRARIES login)
+    elseif(NOT APPLE)
+        target_link_libraries(netconf2 -lcrypt)
+        list(APPEND CMAKE_REQUIRED_LIBRARIES crypt)
     endif()
 
     # libpam
