@@ -336,10 +336,11 @@ retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_dat
         return NULL;
     }
     if (localfile) {
-        VRB(clb_data->session, "Reading schema from localfile \"%s\".", localfile);
+        VRB(clb_data->session, "Reading schema \"%s@%s\" from local file \"%s\".", name, rev ? rev : "<latest>",
+                localfile);
         f = fopen(localfile, "r");
         if (!f) {
-            ERR(clb_data->session, "Unable to open \"%s\" file to get schema (%s).", localfile, strerror(errno));
+            ERR(clb_data->session, "Unable to open file \"%s\" (%s).", localfile, strerror(errno));
             free(localfile);
             return NULL;
         }
@@ -347,7 +348,7 @@ retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_dat
         fseek(f, 0, SEEK_END);
         length = ftell(f);
         if (length < 0) {
-            ERR(clb_data->session, "Unable to get size of schema file \"%s\".", localfile);
+            ERR(clb_data->session, "Unable to get the size of schema file \"%s\".", localfile);
             free(localfile);
             fclose(f);
             return NULL;
@@ -391,11 +392,10 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
     struct lyd_node_any *get_schema_data;
     NC_MSG_TYPE msg;
     uint64_t msgid;
-    char *localfile = NULL;
+    char *localfile = NULL, *envp_str = NULL, *model_data = NULL;
     FILE *f;
-    char *model_data = NULL;
 
-    VRB(clb_data->session, "Reading schema from server via get-schema.");
+    VRB(clb_data->session, "Reading schema \"%s@%s\" from server via get-schema.", name, rev ? rev : "<latest>");
     rpc = nc_rpc_getschema(name, rev, "yang", NC_PARAMTYPE_CONST);
 
     while ((msg = nc_send_rpc(clb_data->session, rpc, 0, &msgid)) == NC_MSG_WOULDBLOCK) {
@@ -418,7 +418,10 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
         ERR(clb_data->session, "Failed to receive a reply to <get-schema>.");
         goto cleanup;
     } else if (!op) {
-        WRN(clb_data->session, "Received an unexpected reply to <get-schema>.");
+        assert(envp);
+        lyd_print_mem(&envp_str, envp, LYD_XML, 0);
+        WRN(clb_data->session, "Received an unexpected reply to <get-schema>:\n%s", envp_str);
+        free(envp_str);
         goto cleanup;
     }
 
@@ -499,8 +502,6 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, void *user_data,
     struct clb_data_s *clb_data = (struct clb_data_s *)user_data;
     char *model_data = NULL;
 
-    VRB(clb_data->session, "Retrieving data for schema \"%s\", revision \"%s\".", mod_name, mod_rev ? mod_rev : "<latest>");
-
     /* 1. try to get data locally */
     model_data = retrieve_schema_data_localfile(mod_name, mod_rev, clb_data, format);
 
@@ -511,7 +512,7 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, void *user_data,
 
     /* 3. try to use user callback */
     if (!model_data && clb_data->user_clb) {
-        VRB(clb_data->session, "Reading schema via user callback.");
+        VRB(clb_data->session, "Reading schema \"%s@%s\" via user callback.", mod_name, mod_rev ? mod_rev : "<latest>");
         clb_data->user_clb(mod_name, mod_rev, NULL, NULL, clb_data->user_data, format, (const char **)&model_data,
                 free_module_data);
     }
@@ -590,8 +591,6 @@ retrieve_schema_data_imp(const char *mod_name, const char *mod_rev, const char *
         rev = mod_rev;
     }
 
-    VRB(clb_data->session, "Retrieving data for import schema \"%s\", revision \"%s\".", name, rev ? rev : "<latest>");
-
     if (match) {
         /* we have enough information to avoid communication with server and try to get the schema locally */
 
@@ -622,7 +621,7 @@ retrieve_schema_data_imp(const char *mod_name, const char *mod_rev, const char *
 
     /* 3. try to use user callback */
     if (!model_data && clb_data->user_clb) {
-        VRB(clb_data->session, "Reading schema via user callback.");
+        VRB(clb_data->session, "Reading schema \"%s@%s\" via user callback.", name, rev ? rev : "<latest>");
         clb_data->user_clb(mod_name, mod_rev, submod_name, sub_rev, clb_data->user_data, format,
                 (const char **)&model_data, free_module_data);
     }
