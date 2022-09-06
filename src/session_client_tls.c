@@ -714,6 +714,8 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
             goto fail;
         }
     }
+
+    /* check for errors */
     if (nc_client_tls_connect_check(ret, session->ti.tls) != 1) {
         goto fail;
     }
@@ -796,7 +798,7 @@ fail:
 struct nc_session *
 nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout)
 {
-    int verify, ret;
+    int ret;
     SSL *tls = NULL;
     struct nc_session *session = NULL;
     struct timespec ts_timeout;
@@ -827,29 +829,10 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
             goto cleanup;
         }
     }
-    if (ret != 1) {
-        switch (SSL_get_error(tls, ret)) {
-        case SSL_ERROR_SYSCALL:
-            ERR(NULL, "SSL_connect failed (%s).", strerror(errno));
-            break;
-        case SSL_ERROR_SSL:
-            ERR(NULL, "SSL_connect failed (%s).", ERR_reason_error_string(ERR_get_error()));
-            break;
-        default:
-            ERR(NULL, "SSL_connect failed.");
-            break;
-        }
-        goto cleanup;
-    }
 
-    /* check certificate verification result */
-    verify = SSL_get_verify_result(tls);
-    switch (verify) {
-    case X509_V_OK:
-        VRB(NULL, "Server certificate successfully verified.");
-        break;
-    default:
-        WRN(NULL, "Server certificate verification problem (%s).", X509_verify_cert_error_string(verify));
+    /* check for errors */
+    if (nc_client_tls_connect_check(ret, tls) != 1) {
+        goto cleanup;
     }
 
     /* connect */
