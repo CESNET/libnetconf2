@@ -281,7 +281,7 @@ int nc_client_tls_ch_add_bind_listen(const char *address, uint16_t port);
  *
  * @param[in] address IP address to bind to.
  * @param[in] port Port to bind to.
- * @param[in] hostname Expected server hostname, verified by TLS when connecting to it.
+ * @param[in] hostname Expected server hostname, verified by TLS when connecting to it. If NULL, the check is skipped.
  * @return 0 on success, -1 on error.
  */
 int nc_client_tls_ch_add_bind_hostname_listen(const char *address, uint16_t port, const char *hostname);
