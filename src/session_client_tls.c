@@ -495,7 +495,7 @@ nc_client_tls_ch_del_bind(const char *address, uint16_t port)
 }
 
 static int
-nc_client_tls_update_opts(struct nc_client_tls_opts *opts, const char *host)
+nc_client_tls_update_opts(struct nc_client_tls_opts *opts, const char *peername)
 {
     int rc = 0;
     char *key;
@@ -548,17 +548,19 @@ nc_client_tls_update_opts(struct nc_client_tls_opts *opts, const char *host)
         }
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L // >= 1.1.0
-        /* server identity (hostname) verification */
-        vpm = X509_VERIFY_PARAM_new();
-        if (!X509_VERIFY_PARAM_set1_host(vpm, host, 0)) {
-            ERR(NULL, "Failed to set expected server hostname (%s).", ERR_reason_error_string(ERR_get_error()));
-            rc = -1;
-            goto cleanup;
-        }
-        if (!SSL_CTX_set1_param(opts->tls_ctx, vpm)) {
-            ERR(NULL, "Failed to set verify params (%s).", ERR_reason_error_string(ERR_get_error()));
-            rc = -1;
-            goto cleanup;
+        if (peername) {
+            /* server identity (hostname) verification */
+            vpm = X509_VERIFY_PARAM_new();
+            if (!X509_VERIFY_PARAM_set1_host(vpm, peername, 0)) {
+                ERR(NULL, "Failed to set expected server hostname (%s).", ERR_reason_error_string(ERR_get_error()));
+                rc = -1;
+                goto cleanup;
+            }
+            if (!SSL_CTX_set1_param(opts->tls_ctx, vpm)) {
+                ERR(NULL, "Failed to set verify params (%s).", ERR_reason_error_string(ERR_get_error()));
+                rc = -1;
+                goto cleanup;
+            }
         }
 #endif
     }
@@ -806,7 +808,8 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
     struct nc_session *session = NULL;
     struct timespec ts_timeout;
 
-    if (nc_client_tls_update_opts(&tls_ch_opts, host)) {
+    /* create/update TLS structures without setting the peername */
+    if (nc_client_tls_update_opts(&tls_ch_opts, NULL)) {
         goto cleanup;
     }
 
