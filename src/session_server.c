@@ -3464,7 +3464,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
         /* CH UNLOCK */
         pthread_mutex_unlock(&session->opts.server.ch_lock);
 
-        /* session terminated, release its context */
+        /* session terminated, free it and release its context */
         nc_session_free(session, NULL);
         data->release_ctx_cb(data->ctx_cb_data);
         return ret;
@@ -3521,9 +3521,6 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
 
     /* CH UNLOCK */
     pthread_mutex_unlock(&session->opts.server.ch_lock);
-
-    /* session terminated, release its context */
-    data->release_ctx_cb(data->ctx_cb_data);
 
     return ret;
 }
