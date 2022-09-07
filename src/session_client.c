@@ -1600,7 +1600,7 @@ error:
 #if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
 
 int
-nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
+nc_client_ch_add_bind_listen(const char *address, uint16_t port, const char *hostname, NC_TRANSPORT_IMPL ti)
 {
     int sock;
 
@@ -1625,20 +1625,16 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IM
         return -1;
     }
 
-    client_opts.ch_bind_ti = nc_realloc(client_opts.ch_bind_ti, client_opts.ch_bind_count * sizeof *client_opts.ch_bind_ti);
-    if (!client_opts.ch_bind_ti) {
+    client_opts.ch_binds_aux = nc_realloc(client_opts.ch_binds_aux, client_opts.ch_bind_count * sizeof *client_opts.ch_binds_aux);
+    if (!client_opts.ch_binds_aux) {
         ERRMEM;
         close(sock);
         return -1;
     }
-    client_opts.ch_bind_ti[client_opts.ch_bind_count - 1] = ti;
+    client_opts.ch_binds_aux[client_opts.ch_bind_count - 1].ti = ti;
+    client_opts.ch_binds_aux[client_opts.ch_bind_count - 1].hostname = hostname ? strdup(hostname) : NULL;
 
     client_opts.ch_binds[client_opts.ch_bind_count - 1].address = strdup(address);
-    if (!client_opts.ch_binds[client_opts.ch_bind_count - 1].address) {
-        ERRMEM;
-        close(sock);
-        return -1;
-    }
     client_opts.ch_binds[client_opts.ch_bind_count - 1].port = port;
     client_opts.ch_binds[client_opts.ch_bind_count - 1].sock = sock;
     client_opts.ch_binds[client_opts.ch_bind_count - 1].pollin = 0;
@@ -1655,28 +1651,40 @@ nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
     if (!address && !port && !ti) {
         for (i = 0; i < client_opts.ch_bind_count; ++i) {
             close(client_opts.ch_binds[i].sock);
-            free((char *)client_opts.ch_binds[i].address);
+            free(client_opts.ch_binds[i].address);
+
+            free(client_opts.ch_binds_aux[i].hostname);
 
             ret = 0;
         }
+        client_opts.ch_bind_count = 0;
+
         free(client_opts.ch_binds);
         client_opts.ch_binds = NULL;
-        client_opts.ch_bind_count = 0;
+
+        free(client_opts.ch_binds_aux);
+        client_opts.ch_binds_aux = NULL;
     } else {
         for (i = 0; i < client_opts.ch_bind_count; ++i) {
             if ((!address || !strcmp(client_opts.ch_binds[i].address, address)) &&
                     (!port || (client_opts.ch_binds[i].port == port)) &&
-                    (!ti || (client_opts.ch_bind_ti[i] == ti))) {
+                    (!ti || (client_opts.ch_binds_aux[i].ti == ti))) {
                 close(client_opts.ch_binds[i].sock);
-                free((char *)client_opts.ch_binds[i].address);
+                free(client_opts.ch_binds[i].address);
 
                 --client_opts.ch_bind_count;
                 if (!client_opts.ch_bind_count) {
                     free(client_opts.ch_binds);
                     client_opts.ch_binds = NULL;
+
+                    free(client_opts.ch_binds_aux);
+                    client_opts.ch_binds_aux = NULL;
                 } else if (i < client_opts.ch_bind_count) {
-                    memcpy(&client_opts.ch_binds[i], &client_opts.ch_binds[client_opts.ch_bind_count], sizeof *client_opts.ch_binds);
-                    client_opts.ch_bind_ti[i] = client_opts.ch_bind_ti[client_opts.ch_bind_count];
+                    memcpy(&client_opts.ch_binds[i], &client_opts.ch_binds[client_opts.ch_bind_count],
+                            sizeof *client_opts.ch_binds);
+
+                    memcpy(&client_opts.ch_binds_aux[i], &client_opts.ch_binds_aux[client_opts.ch_bind_count],
+                            sizeof *client_opts.ch_binds_aux);
                 }
 
                 ret = 0;
@@ -1703,20 +1711,20 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
     }
 
     sock = nc_sock_accept_binds(client_opts.ch_binds, client_opts.ch_bind_count, timeout, &host, &port, &idx);
-
     if (sock < 1) {
         free(host);
         return sock;
     }
 
 #ifdef NC_ENABLED_SSH
-    if (client_opts.ch_bind_ti[idx] == NC_TI_LIBSSH) {
+    if (client_opts.ch_binds_aux[idx].ti == NC_TI_LIBSSH) {
         *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
     } else
 #endif
 #ifdef NC_ENABLED_TLS
-    if (client_opts.ch_bind_ti[idx] == NC_TI_OPENSSL) {
-        *session = nc_accept_callhome_tls_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
+    if (client_opts.ch_binds_aux[idx].ti == NC_TI_OPENSSL) {
+        *session = nc_accept_callhome_tls_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT,
+                client_opts.ch_binds_aux[idx].hostname);
     } else
 #endif
     {

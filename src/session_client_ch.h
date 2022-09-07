@@ -277,6 +277,16 @@ const char *nc_client_ssh_ch_get_username(void);
 int nc_client_tls_ch_add_bind_listen(const char *address, uint16_t port);
 
 /**
+ * @brief Add a new client bind and start listening on it for TLS Call Home connections coming from the specified hostname.
+ *
+ * @param[in] address IP address to bind to.
+ * @param[in] port Port to bind to.
+ * @param[in] hostname Expected server hostname, verified by TLS when connecting to it.
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_tls_ch_add_bind_hostname_listen(const char *address, uint16_t port, const char *hostname);
+
+/**
  * @brief Remove a TLS listening client bind.
  *
  * @param[in] address IP address the socket was bound to. NULL matches all.

@@ -462,7 +462,7 @@ void nc_client_tls_get_crl_paths(const char **crl_file, const char **crl_dir);
  * If the caller needs to use specific TLS session properties, they are supposed to use ::nc_connect_libssl().
  *
  * @param[in] host Hostname or address (both Ipv4 and IPv6 are accepted) of the target server.
- * 'localhost' is used by default if NULL is specified.
+ * 'localhost' is used by default if NULL is specified. It is verified by TLS when connecting to it.
  * @param[in] port Port number of the target server. Default value 6513 is used if 0 is specified.
  * @param[in] ctx Optional custom context to use for the session. Disregarding whether set or not, any YANG modules
  * not present and supported by the server are attempted to be loaded using \<get-schema\> (if supported) and/or by

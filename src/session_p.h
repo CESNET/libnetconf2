@@ -152,7 +152,10 @@ struct nc_client_opts {
         int sock;
         int pollin;
     } *ch_binds;
-    NC_TRANSPORT_IMPL *ch_bind_ti;
+    struct {
+        NC_TRANSPORT_IMPL ti;
+        char *hostname;
+    } *ch_binds_aux;
     uint16_t ch_bind_count;
 };
 
@@ -745,10 +748,11 @@ void nc_server_ch_client_unlock(struct nc_ch_client *client);
  *
  * @param[in] address Address to bind to.
  * @param[in] port Port to bind to.
+ * @param[in] hostname Expected server hostname, may be NULL.
  * @param[in] ti Transport to use.
  * @return 0 on success, -1 on error.
  */
-int nc_client_ch_add_bind_listen(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti);
+int nc_client_ch_add_bind_listen(const char *address, uint16_t port, const char *hostname, NC_TRANSPORT_IMPL ti);
 
 /**
  * @brief Remove a client Call Home bind, stop listening on it.
@@ -819,7 +823,8 @@ void _nc_client_ssh_destroy_opts(struct nc_client_ssh_opts *opts);
 
 #ifdef NC_ENABLED_TLS
 
-struct nc_session *nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout);
+struct nc_session *nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx,
+        int timeout, const char *peername);
 
 /**
  * @brief Establish TLS transport on a socket.

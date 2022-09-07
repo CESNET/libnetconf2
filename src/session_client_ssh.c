@@ -1146,7 +1146,7 @@ nc_client_ssh_ch_get_username(void)
 API int
 nc_client_ssh_ch_add_bind_listen(const char *address, uint16_t port)
 {
-    return nc_client_ch_add_bind_listen(address, port, NC_TI_LIBSSH);
+    return nc_client_ch_add_bind_listen(address, port, NULL, NC_TI_LIBSSH);
 }
 
 API int

@@ -485,7 +485,13 @@ nc_client_tls_ch_get_crl_paths(const char **crl_file, const char **crl_dir)
 API int
 nc_client_tls_ch_add_bind_listen(const char *address, uint16_t port)
 {
-    return nc_client_ch_add_bind_listen(address, port, NC_TI_OPENSSL);
+    return nc_client_ch_add_bind_listen(address, port, NULL, NC_TI_OPENSSL);
+}
+
+API int
+nc_client_tls_ch_add_bind_hostname_listen(const char *address, uint16_t port, const char *hostname)
+{
+    return nc_client_ch_add_bind_listen(address, port, hostname, NC_TI_OPENSSL);
 }
 
 API int
@@ -801,15 +807,15 @@ fail:
 }
 
 struct nc_session *
-nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout)
+nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout, const char *peername)
 {
     int ret;
     SSL *tls = NULL;
     struct nc_session *session = NULL;
     struct timespec ts_timeout;
 
-    /* create/update TLS structures without setting the peername */
-    if (nc_client_tls_update_opts(&tls_ch_opts, NULL)) {
+    /* create/update TLS structures with explicit expected peername, if any set, the host is just the IP */
+    if (nc_client_tls_update_opts(&tls_ch_opts, peername)) {
         goto cleanup;
     }
 
