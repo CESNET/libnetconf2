@@ -152,6 +152,7 @@ struct nc_client_opts {
         int sock;
         int pollin;
     } *ch_binds;
+
     struct {
         NC_TRANSPORT_IMPL ti;
         char *hostname;
