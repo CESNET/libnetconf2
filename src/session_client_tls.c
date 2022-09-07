@@ -620,17 +620,9 @@ cleanup:
 }
 
 static int
-nc_client_tls_connect_check(int connect_ret, SSL *tls)
+nc_client_tls_connect_check(int connect_ret, SSL *tls, const char *peername)
 {
     int verify;
-    const char *peername = "<unknown>";
-
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L // >= 1.1.0
-    /* get peer name (hostname of the server end) */
-    if (SSL_get0_peername(tls)) {
-        peername = SSL_get0_peername(tls);
-    }
-#endif
 
     /* check certificate verification result */
     verify = SSL_get_verify_result(tls);
@@ -727,7 +719,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     }
 
     /* check for errors */
-    if (nc_client_tls_connect_check(ret, session->ti.tls) != 1) {
+    if (nc_client_tls_connect_check(ret, session->ti.tls, host) != 1) {
         goto fail;
     }
 
@@ -843,7 +835,7 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
     }
 
     /* check for errors */
-    if (nc_client_tls_connect_check(ret, tls) != 1) {
+    if (nc_client_tls_connect_check(ret, tls, peername ? peername : host) != 1) {
         goto cleanup;
     }
 
