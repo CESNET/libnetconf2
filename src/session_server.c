@@ -3589,7 +3589,7 @@ nc_ch_client_thread(void *arg)
                 nc_server_ch_client_unlock(client);
 
                 /* sleep until we should reconnect TODO wake up sometimes to check for new notifications */
-                VRB(NULL, "Call Home client \"%s\" reconnecting in %" PRIu32" seconds.", data->client_name, reconnect_in);
+                VRB(NULL, "Call Home client \"%s\" reconnecting in %" PRIu32 " seconds.", data->client_name, reconnect_in);
                 sleep(reconnect_in);
 
                 /* LOCK */
