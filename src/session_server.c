@@ -3337,7 +3337,8 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
         ERRMEM;
         close(sock);
         free(ip_host);
-        return NC_MSG_ERROR;
+        msgtype = NC_MSG_ERROR;
+        goto fail;
     }
     (*session)->status = NC_STATUS_STARTING;
     (*session)->ctx = (struct ly_ctx *)ctx;
