@@ -1906,13 +1906,13 @@ nc_server_tls_accept_check(int accept_ret, struct nc_session *session)
     if (accept_ret != 1) {
         switch (SSL_get_error(session->ti.tls, accept_ret)) {
         case SSL_ERROR_SYSCALL:
-            ERR(session, "SSL_accept failed (%s).", strerror(errno));
+            ERR(session, "SSL accept failed (%s).", strerror(errno));
             break;
         case SSL_ERROR_SSL:
-            ERR(session, "SSL_accept failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(session, "SSL accept failed (%s).", ERR_reason_error_string(ERR_get_error()));
             break;
         default:
-            ERR(session, "SSL_accept failed.");
+            ERR(session, "SSL accept failed.");
             break;
         }
     }
@@ -2007,7 +2007,7 @@ nc_accept_tls_session(struct nc_session *session, int sock, int timeout)
     while (((ret = SSL_accept(session->ti.tls)) == -1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
         usleep(NC_TIMEOUT_STEP);
         if ((timeout > -1) && (nc_difftimespec_mono_cur(&ts_timeout) < 1)) {
-            ERR(session, "SSL_accept timeout.");
+            ERR(session, "SSL accept timeout.");
             return 0;
         }
     }

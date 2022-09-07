@@ -615,18 +615,21 @@ static int
 nc_client_tls_connect_check(int connect_ret, SSL *tls)
 {
     int verify;
+    const char *peername = "<unknown>";
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L // >= 1.1.0
+    /* get peer name (hostname of the server end) */
+    if (SSL_get0_peername(tls)) {
+        peername = SSL_get0_peername(tls);
+    }
+#endif
 
     /* check certificate verification result */
     verify = SSL_get_verify_result(tls);
     switch (verify) {
     case X509_V_OK:
         if (connect_ret == 1) {
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L // >= 1.1.0
-            const char *peername = SSL_get0_peername(tls);
-            VRB(NULL, "Server certificate verified (domain \"%s\").", peername ? peername : "<unknown>");
-#else
-            VRB(NULL, "Server certificate verified.");
-#endif
+            VRB(NULL, "Server certificate verified (domain \"%s\").", peername);
         }
         break;
     default:
@@ -637,13 +640,13 @@ nc_client_tls_connect_check(int connect_ret, SSL *tls)
     if (connect_ret != 1) {
         switch (SSL_get_error(tls, connect_ret)) {
         case SSL_ERROR_SYSCALL:
-            ERR(NULL, "SSL_connect failed (%s).", errno ? strerror(errno) : "unexpected EOF");
+            ERR(NULL, "SSL connect to \"%s\" failed (%s).", peername, errno ? strerror(errno) : "unexpected EOF");
             break;
         case SSL_ERROR_SSL:
-            ERR(NULL, "SSL_connect failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ERR(NULL, "SSL connect to \"%s\" failed (%s).", peername, ERR_reason_error_string(ERR_get_error()));
             break;
         default:
-            ERR(NULL, "SSL_connect failed.");
+            ERR(NULL, "SSL connect to \"%s\" failed.", peername);
             break;
         }
     }
@@ -710,7 +713,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     while (((ret = SSL_connect(session->ti.tls)) != 1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
         usleep(NC_TIMEOUT_STEP);
         if (nc_difftimespec_mono_cur(&ts_timeout) < 1) {
-            ERR(NULL, "SSL_connect timeout.");
+            ERR(NULL, "SSL connect timeout.");
             goto fail;
         }
     }
@@ -825,7 +828,7 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
     while (((ret = SSL_connect(tls)) == -1) && (SSL_get_error(tls, ret) == SSL_ERROR_WANT_READ)) {
         usleep(NC_TIMEOUT_STEP);
         if ((timeout > -1) && (nc_difftimespec_mono_cur(&ts_timeout) < 1)) {
-            ERR(NULL, "SSL_connect timeout.");
+            ERR(NULL, "SSL connect timeout.");
             goto cleanup;
         }
     }
