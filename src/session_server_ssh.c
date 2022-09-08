@@ -1580,7 +1580,7 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
 
 /* ret 1 on success, 0 on timeout, -1 on error */
 static int
-nc_open_netconf_channel(struct nc_session *session, int timeout)
+nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, int timeout)
 {
     int ret;
     struct timespec ts_timeout;
@@ -1700,26 +1700,14 @@ nc_ssh_bind_add_hostkeys(ssh_bind sbind, char **hostkeys, uint8_t hostkey_count)
     return 0;
 }
 
-int
-nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
+static int
+nc_accept_ssh_session_auth(struct nc_session *session, const struct nc_server_ssh_opts *opts)
 {
-    ssh_bind sbind;
-    struct nc_server_ssh_opts *opts;
-    int libssh_auth_methods = 0, ret;
     struct timespec ts_timeout;
     ssh_message msg;
+    int libssh_auth_methods = 0;
 
-    opts = session->data;
-
-    /* other transport-specific data */
-    session->ti_type = NC_TI_LIBSSH;
-    session->ti.libssh.session = ssh_new();
-    if (!session->ti.libssh.session) {
-        ERR(NULL, "Failed to initialize a new SSH session.");
-        close(sock);
-        return -1;
-    }
-
+    /* configure accepted auth methods */
     if (opts->auth_methods & NC_SSH_AUTH_PUBLICKEY) {
         libssh_auth_methods |= SSH_AUTH_METHOD_PUBLICKEY;
     }
@@ -1730,50 +1718,6 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         libssh_auth_methods |= SSH_AUTH_METHOD_INTERACTIVE;
     }
     ssh_set_auth_methods(session->ti.libssh.session, libssh_auth_methods);
-
-    sbind = ssh_bind_new();
-    if (!sbind) {
-        ERR(session, "Failed to create an SSH bind.");
-        close(sock);
-        return -1;
-    }
-
-    if (nc_ssh_bind_add_hostkeys(sbind, opts->hostkeys, opts->hostkey_count)) {
-        close(sock);
-        ssh_bind_free(sbind);
-        return -1;
-    }
-
-    /* remember that this session was just set as nc_sshcb_msg() parameter */
-    session->flags |= NC_SESSION_SSH_MSG_CB;
-
-    if (ssh_bind_accept_fd(sbind, session->ti.libssh.session, sock) == SSH_ERROR) {
-        ERR(session, "SSH failed to accept a new connection (%s).", ssh_get_error(sbind));
-        close(sock);
-        ssh_bind_free(sbind);
-        return -1;
-    }
-    ssh_bind_free(sbind);
-
-    ssh_set_blocking(session->ti.libssh.session, 0);
-
-    if (timeout > -1) {
-        nc_gettimespec_mono_add(&ts_timeout, timeout);
-    }
-    while ((ret = ssh_handle_key_exchange(session->ti.libssh.session)) == SSH_AGAIN) {
-        /* this tends to take longer */
-        usleep(NC_TIMEOUT_STEP * 20);
-        if ((timeout > -1) && (nc_difftimespec_mono_cur(&ts_timeout) < 1)) {
-            break;
-        }
-    }
-    if (ret == SSH_AGAIN) {
-        ERR(session, "SSH key exchange timeout.");
-        return 0;
-    } else if (ret != SSH_OK) {
-        ERR(session, "SSH key exchange error (%s).", ssh_get_error(session->ti.libssh.session));
-        return -1;
-    }
 
     /* authenticate */
     if (opts->auth_timeout) {
@@ -1819,17 +1763,96 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         return 0;
     }
 
+    return 1;
+}
+
+int
+nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
+{
+    ssh_bind sbind = NULL;
+    struct nc_server_ssh_opts *opts;
+    int rc = 1, r;
+    struct timespec ts_timeout;
+
+    opts = session->data;
+
+    /* other transport-specific data */
+    session->ti_type = NC_TI_LIBSSH;
+    session->ti.libssh.session = ssh_new();
+    if (!session->ti.libssh.session) {
+        ERR(NULL, "Failed to initialize a new SSH session.");
+        rc = -1;
+        goto cleanup;
+    }
+
+    sbind = ssh_bind_new();
+    if (!sbind) {
+        ERR(session, "Failed to create an SSH bind.");
+        rc = -1;
+        goto cleanup;
+    }
+
+    /* configure host keys */
+    if (nc_ssh_bind_add_hostkeys(sbind, opts->hostkeys, opts->hostkey_count)) {
+        rc = -1;
+        goto cleanup;
+    }
+
+    /* accept new connection on the bind */
+    if (ssh_bind_accept_fd(sbind, session->ti.libssh.session, sock) == SSH_ERROR) {
+        ERR(session, "SSH failed to accept a new connection (%s).", ssh_get_error(sbind));
+        rc = -1;
+        goto cleanup;
+    }
+    sock = -1;
+
+    ssh_set_blocking(session->ti.libssh.session, 0);
+
+    if (timeout > -1) {
+        nc_gettimespec_mono_add(&ts_timeout, timeout);
+    }
+    while ((r = ssh_handle_key_exchange(session->ti.libssh.session)) == SSH_AGAIN) {
+        /* this tends to take longer */
+        usleep(NC_TIMEOUT_STEP * 20);
+        if ((timeout > -1) && (nc_difftimespec_mono_cur(&ts_timeout) < 1)) {
+            break;
+        }
+    }
+    if (r == SSH_AGAIN) {
+        ERR(session, "SSH key exchange timeout.");
+        rc = 0;
+        goto cleanup;
+    } else if (r != SSH_OK) {
+        ERR(session, "SSH key exchange error (%s).", ssh_get_error(session->ti.libssh.session));
+        rc = -1;
+        goto cleanup;
+    }
+
+    /* authenticate */
+    if ((rc = nc_accept_ssh_session_auth(session, opts)) != 1) {
+        goto cleanup;
+    }
+
     /* set the message callback after a successful authentication */
     ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, session);
 
-    /* open channel */
-    ret = nc_open_netconf_channel(session, timeout);
-    if (ret < 1) {
-        return ret;
+    /* remember that this session was just set as nc_sshcb_msg() parameter */
+    session->flags |= NC_SESSION_SSH_MSG_CB;
+
+    /* open channel and request 'netconf' subsystem */
+    if ((rc = nc_accept_ssh_session_open_netconf_channel(session, timeout)) != 1) {
+        goto cleanup;
     }
 
+    /* all SSH messages were processed */
     session->flags &= ~NC_SESSION_SSH_NEW_MSG;
-    return 1;
+
+cleanup:
+    if (sock > -1) {
+        close(sock);
+    }
+    ssh_bind_free(sbind);
+    return rc;
 }
 
 API NC_MSG_TYPE
