@@ -92,8 +92,8 @@ clb_hostkeys(const char *name, void *UNUSED(user_data), char **privkey_path, cha
     if (!strcmp(name, "key_rsa")) {
         *privkey_path = strdup(TESTS_DIR "/data/key_rsa");
         return 0;
-    } else if (!strcmp(name, "key_dsa")) {
-        *privkey_path = strdup(TESTS_DIR "/data/key_dsa");
+    } else if (!strcmp(name, "key_ecdsa")) {
+        *privkey_path = strdup(TESTS_DIR "/data/key_ecdsa");
         return 0;
     }
 
@@ -135,7 +135,7 @@ ssh_endpt_set_hostkey_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_endpt_add_hostkey("main_ssh", "key_dsa", -1);
+    ret = nc_server_ssh_endpt_add_hostkey("main_ssh", "key_ecdsa", -1);
     nc_assert(!ret);
 
     return NULL;
@@ -205,7 +205,7 @@ ssh_endpt_del_authkey_thread(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    ret = nc_server_ssh_del_authkey(TESTS_DIR "/data/key_dsa.pub", NULL, 0, "test2");
+    ret = nc_server_ssh_del_authkey(TESTS_DIR "/data/key_ecdsa.pub", NULL, 0, "test2");
     nc_assert(!ret);
 
     return NULL;
@@ -701,7 +701,7 @@ main(void)
     ++clients;
 
     /* for ssh_endpt_del_authkey */
-    ret = nc_server_ssh_add_authkey_path(TESTS_DIR "/data/key_dsa.pub", "test2");
+    ret = nc_server_ssh_add_authkey_path(TESTS_DIR "/data/key_ecdsa.pub", "test2");
     nc_assert(!ret);
 
     ret = nc_server_add_endpt("secondary", NC_TI_LIBSSH);

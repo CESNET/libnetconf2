@@ -393,7 +393,7 @@ test_nc_client_ssh_adding_keypair(void **state)
     assert_int_equal(ret, 0);
 
     /* add first key pair */
-    ret = nc_client_ssh_add_keypair(TESTS_DIR "/data/key_dsa.pub", TESTS_DIR "/data/key_dsa");
+    ret = nc_client_ssh_add_keypair(TESTS_DIR "/data/key_ecdsa.pub", TESTS_DIR "/data/key_ecdsa");
     assert_int_equal(ret, 0);
     ret = nc_client_ssh_get_keypair_count();
     assert_int_equal(ret, 1);
@@ -592,7 +592,7 @@ test_nc_connect_ssh_pubkey_succesfull(void **state)
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_INTERACTIVE, -1);
 
     /* add keypair for authentication */
-    ret = nc_client_ssh_add_keypair(TESTS_DIR "/data/key_dsa.pub", TESTS_DIR "/data/key_dsa");
+    ret = nc_client_ssh_add_keypair(TESTS_DIR "/data/key_ecdsa.pub", TESTS_DIR "/data/key_ecdsa");
     assert_int_equal(ret, 0);
 
     /* fake succesfull connection */
