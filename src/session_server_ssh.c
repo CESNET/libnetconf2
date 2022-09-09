@@ -750,6 +750,15 @@ nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts)
 
 #ifdef HAVE_SHADOW
 
+/**
+ * @brief Get passwd entry for a user.
+ *
+ * @param[in] username Name of the user.
+ * @param[in] pwd_buf Passwd entry buffer.
+ * @param[in,out] buf Passwd entry string buffer.
+ * @param[in,out] buf_size Current @p buf size.
+ * @return Found passwd entry for the user, NULL if none found.
+ */
 static struct passwd *
 auth_password_getpwnam(const char *username, struct passwd *pwd_buf, char **buf, size_t *buf_size)
 {
@@ -779,6 +788,15 @@ auth_password_getpwnam(const char *username, struct passwd *pwd_buf, char **buf,
     return pwd;
 }
 
+/**
+ * @brief Get shadow entry for a user.
+ *
+ * @param[in] username Name of the user.
+ * @param[in] spwd_buf Shadow entry buffer.
+ * @param[in,out] buf Shadow entry string buffer.
+ * @param[in,out] buf_size Current @p buf size.
+ * @return Found shadow entry for the user, NULL if none found.
+ */
 static struct spwd *
 auth_password_getspnam(const char *username, struct spwd *spwd_buf, char **buf, size_t *buf_size)
 {
@@ -812,6 +830,12 @@ auth_password_getspnam(const char *username, struct spwd *spwd_buf, char **buf, 
     return spwd;
 }
 
+/**
+ * @brief Get hashed system apssword for a user.
+ *
+ * @param[in] username Name of the user.
+ * @return Hashed password of @p username.
+ */
 static char *
 auth_password_get_pwd_hash(const char *username)
 {
@@ -873,6 +897,12 @@ error:
 
 #else
 
+/**
+ * @brief Get hashed system password for a user.
+ *
+ * @param[in] username Name of the user.
+ * @return Hashed password of @p username.
+ */
 static char *
 auth_password_get_pwd_hash(const char *username)
 {
@@ -882,12 +912,20 @@ auth_password_get_pwd_hash(const char *username)
 
 #endif
 
+/**
+ * @brief Compare hashed password with a cleartext password for a match.
+ *
+ * @param[in] pass_hash Hashed password.
+ * @param[in] pass_clear Cleartext password.
+ * @return 0 on match.
+ * @return non-zero if not a match.
+ */
 static int
 auth_password_compare_pwd(const char *pass_hash, const char *pass_clear)
 {
     char *new_pass_hash;
 
-#if defined (HAVE_CRYPT_R)
+#ifdef HAVE_CRYPT_R
     struct crypt_data cdata;
 #endif
 
@@ -902,7 +940,7 @@ auth_password_compare_pwd(const char *pass_hash, const char *pass_clear)
         }
     }
 
-#if defined (HAVE_CRYPT_R)
+#ifdef HAVE_CRYPT_R
     cdata.initialized = 0;
     new_pass_hash = crypt_r(pass_clear, pass_hash, &cdata);
 #else
@@ -1210,6 +1248,12 @@ nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
     }
 }
 
+/**
+ * @brief Compare SSH key with configured authorized keys and return the username of the matching one, if any.
+ *
+ * @param[in] key Presented SSH key to compare.
+ * @return Authorized key username, NULL if no match was found.
+ */
 static const char *
 auth_pubkey_compare_key(ssh_key key)
 {
@@ -1650,6 +1694,15 @@ nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, int timeo
     return 0;
 }
 
+/**
+ * @brief Set hostkeys to be used for an SSH bind.
+ *
+ * @param[in] sbind SSH bind to use.
+ * @param[in] hostkeys Array of hostkeys.
+ * @param[in] hostkey_count Count of @p hostkeys.
+ * @return 0 on success.
+ * @return -1 on error.
+ */
 static int
 nc_ssh_bind_add_hostkeys(ssh_bind sbind, char **hostkeys, uint8_t hostkey_count)
 {
