@@ -703,13 +703,151 @@ read_msg:
     lyd_free_tree(close_rpc);
 }
 
+/**
+ * @brief Free transport implementation members of a session.
+ *
+ * @param[in] session Session to free.
+ * @param[out] multisession Whether there are other NC sessions on the same SSH sessions.
+ */
+static void
+nc_session_free_transport(struct nc_session *session, int *multisession)
+{
+    int connected; /* flag to indicate whether the transport socket is still connected */
+    int sock = -1, r;
+    struct nc_session *siter;
+
+    *multisession = 0;
+    connected = nc_session_is_connected(session);
+
+    /* transport implementation cleanup */
+    switch (session->ti_type) {
+    case NC_TI_FD:
+        /* nothing needed - file descriptors were provided by caller,
+         * so it is up to the caller to close them correctly
+         * TODO use callbacks
+         */
+        /* just to avoid compiler warning */
+        (void)connected;
+        (void)siter;
+        break;
+
+    case NC_TI_UNIX:
+        sock = session->ti.unixsock.sock;
+        (void)connected;
+        (void)siter;
+        break;
+
+#ifdef NC_ENABLED_SSH
+    case NC_TI_LIBSSH:
+        if (connected) {
+            ssh_channel_free(session->ti.libssh.channel);
+        }
+        /* There can be multiple NETCONF sessions on the same SSH session (NETCONF session maps to
+         * SSH channel). So destroy the SSH session only if there is no other NETCONF session using
+         * it. Also, avoid concurrent free by multiple threads of sessions that share the SSH session.
+         */
+        /* SESSION IO LOCK */
+        r = nc_session_io_lock(session, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
+
+        if (session->ti.libssh.next) {
+            for (siter = session->ti.libssh.next; siter != session; siter = siter->ti.libssh.next) {
+                if (siter->status != NC_STATUS_STARTING) {
+                    *multisession = 1;
+                    break;
+                }
+            }
+        }
+
+        if (!*multisession) {
+            /* it's not multisession yet, but we still need to free the starting sessions */
+            if (session->ti.libssh.next) {
+                do {
+                    siter = session->ti.libssh.next;
+                    session->ti.libssh.next = siter->ti.libssh.next;
+
+                    /* free starting SSH NETCONF session (channel will be freed in ssh_free()) */
+                    free(siter->username);
+                    free(siter->host);
+                    if (!(siter->flags & NC_SESSION_SHAREDCTX)) {
+                        ly_ctx_destroy((struct ly_ctx *)siter->ctx);
+                    }
+
+                    free(siter);
+                } while (session->ti.libssh.next != session);
+            }
+            /* remember sock so we can close it */
+            sock = ssh_get_fd(session->ti.libssh.session);
+            if (connected) {
+                ssh_disconnect(session->ti.libssh.session);
+                sock = -1;
+            }
+            ssh_free(session->ti.libssh.session);
+        } else {
+            /* remove the session from the list */
+            for (siter = session->ti.libssh.next; siter->ti.libssh.next != session; siter = siter->ti.libssh.next) {}
+            if (session->ti.libssh.next == siter) {
+                /* there will be only one session */
+                siter->ti.libssh.next = NULL;
+            } else {
+                /* there are still multiple sessions, keep the ring list */
+                siter->ti.libssh.next = session->ti.libssh.next;
+            }
+            /* change nc_sshcb_msg() argument, we need a RUNNING session and this one will be freed */
+            if (session->flags & NC_SESSION_SSH_MSG_CB) {
+                siter = session->ti.libssh.next;
+                while (siter && (siter->status != NC_STATUS_RUNNING)) {
+                    if (siter->ti.libssh.next == session) {
+                        ERRINT;
+                        break;
+                    }
+                    siter = siter->ti.libssh.next;
+                }
+                /* siter may be NULL in case all the sessions terminated at the same time (socket was disconnected),
+                 * we set session to NULL because we do not expect any new message to arrive */
+                ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, siter);
+                if (siter) {
+                    siter->flags |= NC_SESSION_SSH_MSG_CB;
+                }
+            }
+        }
+
+        /* SESSION IO UNLOCK */
+        if (r == 1) {
+            nc_session_io_unlock(session, __func__);
+        }
+        break;
+#endif
+
+#ifdef NC_ENABLED_TLS
+    case NC_TI_OPENSSL:
+        /* remember sock so we can close it */
+        sock = SSL_get_fd(session->ti.tls);
+
+        if (connected) {
+            SSL_shutdown(session->ti.tls);
+        }
+        SSL_free(session->ti.tls);
+
+        if (session->side == NC_SERVER) {
+            X509_free(session->opts.server.client_cert);
+        }
+        break;
+#endif
+    case NC_TI_NONE:
+        break;
+    }
+
+    /* close socket separately */
+    if (sock > -1) {
+        close(sock);
+    }
+}
+
 API void
 nc_session_free(struct nc_session *session, void (*data_free)(void *))
 {
-    int r, i, rpc_locked = 0, msgs_locked = 0, sock = -1, timeout;
-    int connected; /* flag to indicate whether the transport socket is still connected */
+    int r, i, rpc_locked = 0, msgs_locked = 0, timeout;
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
-    struct nc_session *siter;
     struct nc_msg_cont *contiter;
     struct ly_in *msg;
     struct timespec ts;
@@ -826,137 +964,14 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         pthread_mutex_unlock(&session->opts.server.ch_lock);
     }
 
-    connected = nc_session_is_connected(session);
-
     /* transport implementation cleanup */
-    switch (session->ti_type) {
-    case NC_TI_FD:
-        /* nothing needed - file descriptors were provided by caller,
-         * so it is up to the caller to close them correctly
-         * TODO use callbacks
-         */
-        /* just to avoid compiler warning */
-        (void)connected;
-        (void)siter;
-        break;
+    nc_session_free_transport(session, &multisession);
 
-    case NC_TI_UNIX:
-        sock = session->ti.unixsock.sock;
-        (void)connected;
-        (void)siter;
-        break;
-
-#ifdef NC_ENABLED_SSH
-    case NC_TI_LIBSSH:
-        if (connected) {
-            ssh_channel_free(session->ti.libssh.channel);
-        }
-        /* There can be multiple NETCONF sessions on the same SSH session (NETCONF session maps to
-         * SSH channel). So destroy the SSH session only if there is no other NETCONF session using
-         * it. Also, avoid concurrent free by multiple threads of sessions that share the SSH session.
-         */
-        /* SESSION IO LOCK */
-        r = nc_session_io_lock(session, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
-
-        multisession = 0;
-        if (session->ti.libssh.next) {
-            for (siter = session->ti.libssh.next; siter != session; siter = siter->ti.libssh.next) {
-                if (siter->status != NC_STATUS_STARTING) {
-                    multisession = 1;
-                    break;
-                }
-            }
-        }
-
-        if (!multisession) {
-            /* it's not multisession yet, but we still need to free the starting sessions */
-            if (session->ti.libssh.next) {
-                do {
-                    siter = session->ti.libssh.next;
-                    session->ti.libssh.next = siter->ti.libssh.next;
-
-                    /* free starting SSH NETCONF session (channel will be freed in ssh_free()) */
-                    free(siter->username);
-                    free(siter->host);
-                    if (!(siter->flags & NC_SESSION_SHAREDCTX)) {
-                        ly_ctx_destroy((struct ly_ctx *)siter->ctx);
-                    }
-
-                    free(siter);
-                } while (session->ti.libssh.next != session);
-            }
-            /* remember sock so we can close it */
-            sock = ssh_get_fd(session->ti.libssh.session);
-            if (connected) {
-                ssh_disconnect(session->ti.libssh.session);
-                sock = -1;
-            }
-            ssh_free(session->ti.libssh.session);
-        } else {
-            /* remove the session from the list */
-            for (siter = session->ti.libssh.next; siter->ti.libssh.next != session; siter = siter->ti.libssh.next) {}
-            if (session->ti.libssh.next == siter) {
-                /* there will be only one session */
-                siter->ti.libssh.next = NULL;
-            } else {
-                /* there are still multiple sessions, keep the ring list */
-                siter->ti.libssh.next = session->ti.libssh.next;
-            }
-            /* change nc_sshcb_msg() argument, we need a RUNNING session and this one will be freed */
-            if (session->flags & NC_SESSION_SSH_MSG_CB) {
-                siter = session->ti.libssh.next;
-                while (siter && siter->status != NC_STATUS_RUNNING) {
-                    if (siter->ti.libssh.next == session) {
-                        ERRINT;
-                        break;
-                    }
-                    siter = siter->ti.libssh.next;
-                }
-                /* siter may be NULL in case all the sessions terminated at the same time (socket was disconnected),
-                 * we set session to NULL because we do not expect any new message to arrive */
-                ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, siter);
-                if (siter) {
-                    siter->flags |= NC_SESSION_SSH_MSG_CB;
-                }
-            }
-        }
-
-        /* SESSION IO UNLOCK */
-        if (r == 1) {
-            nc_session_io_unlock(session, __func__);
-        }
-        break;
-#endif
-
-#ifdef NC_ENABLED_TLS
-    case NC_TI_OPENSSL:
-        /* remember sock so we can close it */
-        sock = SSL_get_fd(session->ti.tls);
-
-        if (connected) {
-            SSL_shutdown(session->ti.tls);
-        }
-        SSL_free(session->ti.tls);
-
-        if (session->side == NC_SERVER) {
-            X509_free(session->opts.server.client_cert);
-        }
-        break;
-#endif
-    case NC_TI_NONE:
-        break;
-    }
-
-    /* close socket separately */
-    if (sock > -1) {
-        close(sock);
-    }
-
+    /* final cleanup */
     free(session->username);
     free(session->host);
     free(session->path);
 
-    /* final cleanup */
     if (session->side == NC_SERVER) {
         pthread_mutex_destroy(&session->opts.server.ntf_status_lock);
         if (rpc_locked) {
