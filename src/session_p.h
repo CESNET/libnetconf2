@@ -425,7 +425,12 @@ struct nc_session {
 #ifdef NC_ENABLED_SSH
         struct {
             ssh_channel channel;
-            ssh_session session;
+            ssh_channel_callbacks channel_cb;
+            struct nc_session_libssh_shared {
+                ssh_session session;
+                ssh_server_callbacks server_cb;
+                ssh_event event;
+            } *shared;
             struct nc_session *next; /**< pointer to the next NETCONF session on the same
                                           SSH session, but different SSH channel. If no such session exists, it is NULL.
                                           otherwise there is a ring list of the NETCONF sessions */
@@ -484,10 +489,6 @@ struct nc_session {
 #           define NC_SESSION_SSH_AUTHENTICATED 0x10
             /* netconf subsystem requested */
 #           define NC_SESSION_SSH_SUBSYS_NETCONF 0x20
-            /* new SSH message arrived */
-#           define NC_SESSION_SSH_NEW_MSG 0x40
-            /* this session is passed to nc_sshcb_msg() */
-#           define NC_SESSION_SSH_MSG_CB 0x80
 
             uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
 #endif
@@ -796,6 +797,17 @@ void nc_destroy(void);
 struct nc_session *nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout);
 
 /**
+ * @brief Create the shared structure for a NC session and init all its members.
+ *
+ * @param[in] session NC session to use.
+ * @param[in] ssh_session Optional existing SSH session to use.
+ * @param[in] use_event Whether to allocate and use SSH server callbacks and SSH event.
+ * @return 0 on success.
+ * @return -1 on error.
+ */
+int nc_session_ssh_shared_new(struct nc_session *session, ssh_session ssh_session, int use_event);
+
+/**
  * @brief Establish SSH transport on a socket.
  *
  * @param[in] session Session structure of the new connection.
@@ -804,16 +816,6 @@ struct nc_session *nc_accept_callhome_ssh_sock(int sock, const char *host, uint1
  * @return 1 on success, 0 on timeout, -1 on error.
  */
 int nc_accept_ssh_session(struct nc_session *session, int sock, int timeout);
-
-/**
- * @brief Callback called when a new SSH message is received.
- *
- * @param[in] sshsession SSH session the message arrived on.
- * @param[in] msg SSH message itself.
- * @param[in] data NETCONF session running on @p sshsession.
- * @return 0 if the message was handled, 1 if it is left up to libssh.
- */
-int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
 
 void nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts);
 

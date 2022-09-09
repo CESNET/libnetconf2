@@ -1555,14 +1555,13 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, const struct
  *          NC_PSPOLL_ERROR, (msg filled)
  *          NC_PSPOLL_TIMEOUT,
  *          NC_PSPOLL_RPC (some application data available),
- *          NC_PSPOLL_SSH_CHANNEL,
- *          NC_PSPOLL_SSH_MSG
+ *          NC_PSPOLL_SSH_CHANNEL
  */
 static int
 nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mono, char *msg)
 {
     struct pollfd pfd;
-    int r, ret = 0;
+    int r, ret = 0, new_sess;
 
 #ifdef NC_ENABLED_SSH
     struct nc_session *new;
@@ -1595,31 +1594,26 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
             session->term_reason = NC_SESSION_TERM_DROPPED;
             ret = NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
         } else if (r == SSH_ERROR) {
-            sprintf(msg, "SSH channel poll error (%s)", ssh_get_error(session->ti.libssh.session));
+            sprintf(msg, "SSH channel poll error (%s)", ssh_get_error(session->ti.libssh.shared->session));
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_OTHER;
             ret = NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
         } else if (!r) {
-            if (session->flags & NC_SESSION_SSH_NEW_MSG) {
-                /* new SSH message */
-                session->flags &= ~NC_SESSION_SSH_NEW_MSG;
-                if (session->ti.libssh.next) {
-                    for (new = session->ti.libssh.next; new != session; new = new->ti.libssh.next) {
-                        if ((new->status == NC_STATUS_STARTING) && new->ti.libssh.channel &&
-                                (new->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
-                            /* new NETCONF SSH channel */
-                            ret = NC_PSPOLL_SSH_CHANNEL;
-                            break;
-                        }
-                    }
-                    if (new != session) {
-                        break;
-                    }
+            /* possibly a new SSH channel was opened */
+            new_sess = 0;
+            for (new = session->ti.libssh.next; new && (new != session); new = new->ti.libssh.next) {
+                if ((new->status == NC_STATUS_STARTING) && new->ti.libssh.channel &&
+                        (new->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
+                    new_sess = 1;
+                    break;
                 }
+            }
 
-                /* just some SSH message */
-                ret = NC_PSPOLL_SSH_MSG;
+            if (new_sess) {
+                /* new NETCONF SSH channel */
+                ret = NC_PSPOLL_SSH_CHANNEL;
             } else {
+                /* timeout */
                 ret = NC_PSPOLL_TIMEOUT;
             }
         } else {
@@ -1778,7 +1772,6 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                         case NC_PSPOLL_TIMEOUT:
 #ifdef NC_ENABLED_SSH
                         case NC_PSPOLL_SSH_CHANNEL:
-                        case NC_PSPOLL_SSH_MSG:
 #endif
                             cur_ps_session->state = NC_PS_STATE_NONE;
                             break;
@@ -1846,7 +1839,6 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
     case NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR:
 #ifdef NC_ENABLED_SSH
     case NC_PSPOLL_SSH_CHANNEL:
-    case NC_PSPOLL_SSH_MSG:
 #endif
         if (session) {
             *session = cur_session;

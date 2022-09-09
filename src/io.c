@@ -147,7 +147,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
                 r = 0;
                 break;
             } else if (r == SSH_ERROR) {
-                ERR(session, "Reading from the SSH channel failed (%s).", ssh_get_error(session->ti.libssh.session));
+                ERR(session, "Reading from the SSH channel failed (%s).", ssh_get_error(session->ti.libssh.shared->session));
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_OTHER;
                 return -1;
@@ -481,7 +481,7 @@ nc_read_poll(struct nc_session *session, int io_timeout)
         /* EINTR is handled, it resumes waiting */
         ret = ssh_channel_poll_timeout(session->ti.libssh.channel, io_timeout, 0);
         if (ret == SSH_ERROR) {
-            ERR(session, "SSH channel poll error (%s).", ssh_get_error(session->ti.libssh.session));
+            ERR(session, "SSH channel poll error (%s).", ssh_get_error(session->ti.libssh.shared->session));
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_OTHER;
             return -1;
@@ -611,7 +611,7 @@ nc_session_is_connected(struct nc_session *session)
         break;
 #ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
-        return ssh_is_connected(session->ti.libssh.session);
+        return ssh_is_connected(session->ti.libssh.shared->session);
 #endif
 #ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:

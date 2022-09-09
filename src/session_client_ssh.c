@@ -1175,7 +1175,7 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
     ssh_session ssh_sess;
     struct timespec ts_timeout;
 
-    ssh_sess = session->ti.libssh.session;
+    ssh_sess = session->ti.libssh.shared->session;
 
     nc_gettimespec_mono_add(&ts_timeout, NC_TRANSPORT_TIMEOUT);
     while ((ret = ssh_connect(ssh_sess)) == SSH_AGAIN) {
@@ -1445,7 +1445,7 @@ open_netconf_channel(struct nc_session *session, int timeout)
     int ret;
     struct timespec ts_timeout;
 
-    ssh_sess = session->ti.libssh.session;
+    ssh_sess = session->ti.libssh.shared->session;
 
     if (!ssh_is_connected(ssh_sess)) {
         ERR(session, "SSH session not connected.");
@@ -1526,11 +1526,13 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
     session = nc_new_session(NC_CLIENT, 0);
     if (!session) {
         ERRMEM;
-        return NULL;
+        goto fail;
     }
     session->status = NC_STATUS_STARTING;
     session->ti_type = NC_TI_LIBSSH;
-    session->ti.libssh.session = ssh_session;
+    if (nc_session_ssh_shared_new(session, ssh_session, 0)) {
+        goto fail;
+    }
 
     /* was port set? */
     ssh_options_get_port(ssh_session, &port);
@@ -1547,7 +1549,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
             ERRMEM;
             goto fail;
         }
-        ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
+        ssh_options_set(ssh_session, SSH_OPTIONS_HOST, host);
 
         /* create and connect socket */
         sock = nc_sock_connect(host, port, -1, ka, NULL, &ip_host);
@@ -1555,8 +1557,8 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
             ERR(NULL, "Unable to connect to %s:%u (%s).", host, port, strerror(errno));
             goto fail;
         }
-        ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_FD, &sock);
-        ssh_set_blocking(session->ti.libssh.session, 0);
+        ssh_options_set(ssh_session, SSH_OPTIONS_FD, &sock);
+        ssh_set_blocking(ssh_session, 0);
 
         free(host);
         host = ip_host;
@@ -1587,7 +1589,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
                 ERRMEM;
                 goto fail;
             }
-            ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
+            ssh_options_set(ssh_session, SSH_OPTIONS_USER, username);
         }
 
         /* connect and authenticate SSH session */
@@ -1680,17 +1682,15 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
 
     /* transport-specific data */
     session->ti_type = NC_TI_LIBSSH;
-    session->ti.libssh.session = ssh_new();
-    if (!session->ti.libssh.session) {
-        ERR(session, "Unable to initialize SSH session.");
+    if (nc_session_ssh_shared_new(session, NULL, 0)) {
         goto fail;
     }
 
     /* set some basic SSH session options */
-    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
-    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_PORT, &port_uint);
-    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
-    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_TIMEOUT, &timeout);
+    ssh_options_set(session->ti.libssh.shared->session, SSH_OPTIONS_HOST, host);
+    ssh_options_set(session->ti.libssh.shared->session, SSH_OPTIONS_PORT, &port_uint);
+    ssh_options_set(session->ti.libssh.shared->session, SSH_OPTIONS_USER, username);
+    ssh_options_set(session->ti.libssh.shared->session, SSH_OPTIONS_TIMEOUT, &timeout);
 
     /* create and assign communication socket */
     sock = nc_sock_connect(host, port, -1, &client_opts.ka, NULL, &ip_host);
@@ -1698,8 +1698,8 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
         ERR(session, "Unable to connect to %s:%u (%s).", host, port, strerror(errno));
         goto fail;
     }
-    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_FD, &sock);
-    ssh_set_blocking(session->ti.libssh.session, 0);
+    ssh_options_set(session->ti.libssh.shared->session, SSH_OPTIONS_FD, &sock);
+    ssh_set_blocking(session->ti.libssh.shared->session, 0);
 
     /* store information for session connection */
     session->host = strdup(host);
@@ -1765,7 +1765,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
 
     /* share some parameters including the IO lock (we are using one socket for both sessions) */
     new_session->ti_type = NC_TI_LIBSSH;
-    new_session->ti.libssh.session = session->ti.libssh.session;
+    new_session->ti.libssh.shared = session->ti.libssh.shared;
     new_session->io_lock = session->io_lock;
 
     /* append to the session ring list */

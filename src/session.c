@@ -743,6 +743,8 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
             ssh_channel_send_eof(session->ti.libssh.channel);
             ssh_channel_free(session->ti.libssh.channel);
         }
+        free(session->ti.libssh.channel_cb);
+
         /* There can be multiple NETCONF sessions on the same SSH session (NETCONF session maps to
          * SSH channel). So destroy the SSH session only if there is no other NETCONF session using
          * it. Also, avoid concurrent free by multiple threads of sessions that share the SSH session.
@@ -777,12 +779,15 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
                 } while (session->ti.libssh.next != session);
             }
             /* remember sock so we can close it */
-            sock = ssh_get_fd(session->ti.libssh.session);
+            sock = ssh_get_fd(session->ti.libssh.shared->session);
             if (connected) {
-                ssh_disconnect(session->ti.libssh.session);
+                ssh_disconnect(session->ti.libssh.shared->session);
                 sock = -1;
             }
-            ssh_free(session->ti.libssh.session);
+            ssh_free(session->ti.libssh.shared->session);
+            free(session->ti.libssh.shared->server_cb);
+            ssh_event_free(session->ti.libssh.shared->event);
+            free(session->ti.libssh.shared);
         } else {
             /* remove the session from the list */
             for (siter = session->ti.libssh.next; siter->ti.libssh.next != session; siter = siter->ti.libssh.next) {}
@@ -793,8 +798,8 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
                 /* there are still multiple sessions, keep the ring list */
                 siter->ti.libssh.next = session->ti.libssh.next;
             }
-            /* change nc_sshcb_msg() argument, we need a RUNNING session and this one will be freed */
-            if (session->flags & NC_SESSION_SSH_MSG_CB) {
+            /* change SSH callbacks user data argument, we need a RUNNING session and this one will be freed */
+            if (session->ti.libssh.shared->server_cb->userdata == session) {
                 siter = session->ti.libssh.next;
                 while (siter && (siter->status != NC_STATUS_RUNNING)) {
                     if (siter->ti.libssh.next == session) {
@@ -803,12 +808,9 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
                     }
                     siter = siter->ti.libssh.next;
                 }
-                /* siter may be NULL in case all the sessions terminated at the same time (socket was disconnected),
-                 * we set session to NULL because we do not expect any new message to arrive */
-                ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, siter);
-                if (siter) {
-                    siter->flags |= NC_SESSION_SSH_MSG_CB;
-                }
+
+                /* siter may be NULL in case all the sessions terminated at the same time (socket was disconnected) */
+                session->ti.libssh.shared->server_cb->userdata = siter;
             }
         }
 
