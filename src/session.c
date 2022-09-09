@@ -740,6 +740,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
 #ifdef NC_ENABLED_SSH
     case NC_TI_LIBSSH:
         if (connected) {
+            ssh_channel_send_eof(session->ti.libssh.channel);
             ssh_channel_free(session->ti.libssh.channel);
         }
         /* There can be multiple NETCONF sessions on the same SSH session (NETCONF session maps to
