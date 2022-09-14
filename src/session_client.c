@@ -660,13 +660,16 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
     struct clb_data_s clb_data;
 
     /* try to use a module from the context */
-    if (revision) {
-        *mod = ly_ctx_get_module(session->ctx, name, revision);
-    } else {
-        *mod = ly_ctx_get_module_implemented(session->ctx, name);
-        if (!*mod) {
+    *mod = ly_ctx_get_module_implemented(session->ctx, name);
+    if (!*mod) {
+        if (revision) {
+            *mod = ly_ctx_get_module(session->ctx, name, revision);
+        } else {
             *mod = ly_ctx_get_module_latest(session->ctx, name);
         }
+    } else if (revision && (!(*mod)->revision || strcmp((*mod)->revision, revision))) {
+        WRN(session, "Server implements module \"%s\" in revision \"%s\" but revision \"%s\" is already implemented"
+                " and will be used instead.", name, revision, (*mod)->revision ? (*mod)->revision : "<none>");
     }
 
     if (*mod) {
