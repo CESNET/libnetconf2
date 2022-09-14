@@ -226,14 +226,14 @@ nc_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx)
             return EXIT_FAILURE;
         }
 
-        /* user path must be first, the first path is used to store schemas retreived via get-schema */
+        /* user path must be first, the first path is used to store modules retreived via get-schema */
         if (client_opts.schema_searchpath) {
             ly_ctx_set_searchdir(ctx, client_opts.schema_searchpath);
         } else if (!access(NC_YANG_DIR, F_OK)) {
             ly_ctx_set_searchdir(ctx, NC_YANG_DIR);
         }
 
-        /* set callback for getting schemas, if provided */
+        /* set callback for getting modules, if provided */
         ly_ctx_set_module_imp_clb(ctx, client_opts.schema_clb, client_opts.schema_clb_data);
     } else {
         session->flags |= NC_SESSION_SHAREDCTX;
@@ -292,7 +292,7 @@ nc_client_get_schema_callback(void **user_data)
     return client_opts.schema_clb;
 }
 
-struct schema_info {
+struct module_info {
     char *name;
     char *revision;
 
@@ -307,22 +307,22 @@ struct schema_info {
 struct clb_data_s {
     void *user_data;
     ly_module_imp_clb user_clb;
-    struct schema_info *schemas;
+    struct module_info *modules;
     struct nc_session *session;
     int has_get_schema;
 };
 
 /**
- * @brief Retrieve YANG schema content from a local file.
+ * @brief Retrieve YANG module content from a local file.
  *
- * @param[in] name Schema name.
- * @param[in] rev Schema revision.
+ * @param[in] name Module name.
+ * @param[in] rev Module revision.
  * @param[in] clb_data get-schema callback data.
- * @param[out] format Schema format.
- * @return Schema content.
+ * @param[out] format Module format.
+ * @return Module content.
  */
 static char *
-retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_data_s *clb_data,
+retrieve_module_data_localfile(const char *name, const char *rev, struct clb_data_s *clb_data,
         LYS_INFORMAT *format)
 {
     char *localfile = NULL;
@@ -336,7 +336,7 @@ retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_dat
         return NULL;
     }
     if (localfile) {
-        VRB(clb_data->session, "Reading schema \"%s@%s\" from local file \"%s\".", name, rev ? rev : "<latest>",
+        VRB(clb_data->session, "Reading module \"%s@%s\" from local file \"%s\".", name, rev ? rev : "<latest>",
                 localfile);
         f = fopen(localfile, "r");
         if (!f) {
@@ -348,7 +348,7 @@ retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_dat
         fseek(f, 0, SEEK_END);
         length = ftell(f);
         if (length < 0) {
-            ERR(clb_data->session, "Unable to get the size of schema file \"%s\".", localfile);
+            ERR(clb_data->session, "Unable to get the size of module file \"%s\".", localfile);
             free(localfile);
             fclose(f);
             return NULL;
@@ -359,7 +359,7 @@ retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_dat
         if (!model_data) {
             ERRMEM;
         } else if ((l = fread(model_data, 1, length, f)) != length) {
-            ERR(clb_data->session, "Reading schema from \"%s\" failed (%d bytes read, but %d expected).", localfile, l,
+            ERR(clb_data->session, "Reading module from \"%s\" failed (%d bytes read, but %d expected).", localfile, l,
                     length);
             free(model_data);
             model_data = NULL;
@@ -375,16 +375,16 @@ retrieve_schema_data_localfile(const char *name, const char *rev, struct clb_dat
 }
 
 /**
- * @brief Retrieve YANG schema content from a reply to get-schema RPC.
+ * @brief Retrieve YANG module content from a reply to get-schema RPC.
  *
- * @param[in] name Schema name.
- * @param[in] rev Schema revision.
+ * @param[in] name Module name.
+ * @param[in] rev Module revision.
  * @param[in] clb_data get-schema callback data.
- * @param[out] format Schema format.
- * @return Schema content.
+ * @param[out] format Module format.
+ * @return Module content.
  */
 static char *
-retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_data_s *clb_data,
+retrieve_module_data_getschema(const char *name, const char *rev, struct clb_data_s *clb_data,
         LYS_INFORMAT *format)
 {
     struct nc_rpc *rpc;
@@ -395,7 +395,7 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
     char *localfile = NULL, *envp_str = NULL, *model_data = NULL;
     FILE *f;
 
-    VRB(clb_data->session, "Reading schema \"%s@%s\" from server via get-schema.", name, rev ? rev : "<latest>");
+    VRB(clb_data->session, "Reading module \"%s@%s\" from server via get-schema.", name, rev ? rev : "<latest>");
     rpc = nc_rpc_getschema(name, rev, "yang", NC_PARAMTYPE_CONST);
 
     while ((msg = nc_send_rpc(clb_data->session, rpc, 0, &msgid)) == NC_MSG_WOULDBLOCK) {
@@ -450,7 +450,7 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
         model_data = NULL;
     }
 
-    /* try to store the model_data into local schema repository */
+    /* try to store the model_data into local module repository */
     if (model_data) {
         *format = LYS_IN_YANG;
         if (client_opts.schema_searchpath) {
@@ -460,7 +460,7 @@ retrieve_schema_data_getschema(const char *name, const char *rev, struct clb_dat
             } else {
                 f = fopen(localfile, "w");
                 if (!f) {
-                    WRN(clb_data->session, "Unable to store \"%s\" as a local copy of schema retrieved via <get-schema> (%s).",
+                    WRN(clb_data->session, "Unable to store \"%s\" as a local copy of module retrieved via <get-schema> (%s).",
                             localfile, strerror(errno));
                 } else {
                     fputs(model_data, f);
@@ -485,34 +485,34 @@ free_with_user_data(void *data, void *user_data)
 }
 
 /**
- * @brief Retrieve YANG schema content.
+ * @brief Retrieve YANG module content.
  *
- * @param[in] mod_name Schema name.
- * @param[in] mod_rev Schema revision.
+ * @param[in] mod_name Module name.
+ * @param[in] mod_rev Module revision.
  * @param[in] user_data get-schema callback data.
- * @param[out] format Schema format.
- * @param[out] module_data Schema content.
+ * @param[out] format Module format.
+ * @param[out] module_data Module content.
  * @param[out] free_module_data Callback for freeing @p module_data.
  * @return LY_ERR value.
  */
 static LY_ERR
-retrieve_schema_data(const char *mod_name, const char *mod_rev, void *user_data, LYS_INFORMAT *format,
+retrieve_module_data(const char *mod_name, const char *mod_rev, void *user_data, LYS_INFORMAT *format,
         const char **module_data, void (**free_module_data)(void *model_data, void *user_data))
 {
     struct clb_data_s *clb_data = (struct clb_data_s *)user_data;
     char *model_data = NULL;
 
     /* 1. try to get data locally */
-    model_data = retrieve_schema_data_localfile(mod_name, mod_rev, clb_data, format);
+    model_data = retrieve_module_data_localfile(mod_name, mod_rev, clb_data, format);
 
     /* 2. try to use <get-schema> */
     if (!model_data && clb_data->has_get_schema) {
-        model_data = retrieve_schema_data_getschema(mod_name, mod_rev, clb_data, format);
+        model_data = retrieve_module_data_getschema(mod_name, mod_rev, clb_data, format);
     }
 
     /* 3. try to use user callback */
     if (!model_data && clb_data->user_clb) {
-        VRB(clb_data->session, "Reading schema \"%s@%s\" via user callback.", mod_name, mod_rev ? mod_rev : "<latest>");
+        VRB(clb_data->session, "Reading module \"%s@%s\" via user callback.", mod_name, mod_rev ? mod_rev : "<latest>");
         clb_data->user_clb(mod_name, mod_rev, NULL, NULL, clb_data->user_data, format, (const char **)&model_data,
                 free_module_data);
     }
@@ -523,20 +523,20 @@ retrieve_schema_data(const char *mod_name, const char *mod_rev, void *user_data,
 }
 
 /**
- * @brief Retrieve YANG import schema content.
+ * @brief Retrieve YANG import module content.
  *
- * @param[in] mod_name Schema name.
- * @param[in] mod_rev Schema revision.
+ * @param[in] mod_name Module name.
+ * @param[in] mod_rev Module revision.
  * @param[in] submod_name Optional submodule name.
  * @param[in] sub_rev Submodule revision.
  * @param[in] user_data get-schema callback data.
- * @param[out] format Schema format.
- * @param[out] module_data Schema content.
+ * @param[out] format Module format.
+ * @param[out] module_data Module content.
  * @param[out] free_module_data Callback for freeing @p module_data.
  * @return LY_ERR value.
  */
 static LY_ERR
-retrieve_schema_data_imp(const char *mod_name, const char *mod_rev, const char *submod_name, const char *sub_rev,
+retrieve_module_data_imp(const char *mod_name, const char *mod_rev, const char *submod_name, const char *sub_rev,
         void *user_data, LYS_INFORMAT *format, const char **module_data,
         void (**free_module_data)(void *model_data, void *user_data))
 {
@@ -545,23 +545,23 @@ retrieve_schema_data_imp(const char *mod_name, const char *mod_rev, const char *
     const char *name = NULL, *rev = NULL;
     char *model_data = NULL;
 
-    /* get and check the final name and revision of the schema to be retrieved */
+    /* get and check the final name and revision of the module to be retrieved */
     if (!mod_rev || !mod_rev[0]) {
         /* newest revision requested - get the newest revision from the list of available modules on server */
         match = 0;
-        for (u = 0; clb_data->schemas[u].name; ++u) {
-            if (strcmp(mod_name, clb_data->schemas[u].name)) {
+        for (u = 0; clb_data->modules[u].name; ++u) {
+            if (strcmp(mod_name, clb_data->modules[u].name)) {
                 continue;
             }
-            if (!match || (strcmp(mod_rev, clb_data->schemas[u].revision) > 0)) {
-                mod_rev = clb_data->schemas[u].revision;
+            if (!match || (strcmp(mod_rev, clb_data->modules[u].revision) > 0)) {
+                mod_rev = clb_data->modules[u].revision;
             }
             match = u + 1;
         }
         if (!match) {
-            /* valid situation if we are retrieving YANG 1.1 schema and have only capabilities for now
+            /* valid situation if we are retrieving YANG 1.1 module and have only capabilities for now
              * (when loading ietf-datastore for ietf-yang-library) */
-            VRB(clb_data->session, "Unable to identify revision of the import schema \"%s\" from "
+            VRB(clb_data->session, "Unable to identify revision of the import module \"%s\" from "
                     "the available server side information.", mod_name);
         }
     }
@@ -570,17 +570,17 @@ retrieve_schema_data_imp(const char *mod_name, const char *mod_rev, const char *
         if (sub_rev) {
             rev = sub_rev;
         } else if (match) {
-            if (!clb_data->schemas[match - 1].submodules) {
+            if (!clb_data->modules[match - 1].submodules) {
                 VRB(clb_data->session, "Unable to identify revision of the requested submodule \"%s\", "
-                        "in import schema \"%s\", from the available server side information.", submod_name, mod_name);
+                        "in import module \"%s\", from the available server side information.", submod_name, mod_name);
             } else {
-                for (v = 0; clb_data->schemas[match - 1].submodules[v].name; ++v) {
-                    if (!strcmp(submod_name, clb_data->schemas[match - 1].submodules[v].name)) {
-                        rev = sub_rev = clb_data->schemas[match - 1].submodules[v].revision;
+                for (v = 0; clb_data->modules[match - 1].submodules[v].name; ++v) {
+                    if (!strcmp(submod_name, clb_data->modules[match - 1].submodules[v].name)) {
+                        rev = sub_rev = clb_data->modules[match - 1].submodules[v].revision;
                     }
                 }
                 if (!rev) {
-                    ERR(clb_data->session, "Requested submodule \"%s\" is not found in import schema \"%s\" on server side.",
+                    ERR(clb_data->session, "Requested submodule \"%s\" is not found in import module \"%s\" on server side.",
                             submod_name, mod_name);
                     return LY_ENOTFOUND;
                 }
@@ -592,17 +592,17 @@ retrieve_schema_data_imp(const char *mod_name, const char *mod_rev, const char *
     }
 
     if (match) {
-        /* we have enough information to avoid communication with server and try to get the schema locally */
+        /* we have enough information to avoid communication with server and try to get the module locally */
 
         /* 1. try to get data locally */
-        model_data = retrieve_schema_data_localfile(name, rev, clb_data, format);
+        model_data = retrieve_module_data_localfile(name, rev, clb_data, format);
 
         /* 2. try to use <get-schema> */
         if (!model_data && clb_data->has_get_schema) {
-            model_data = retrieve_schema_data_getschema(name, rev, clb_data, format);
+            model_data = retrieve_module_data_getschema(name, rev, clb_data, format);
         }
     } else {
-        /* we are unsure which revision of the schema we should load, so first try to get
+        /* we are unsure which revision of the module we should load, so first try to get
          * the newest revision from the server via get-schema and only if the server does not
          * implement get-schema, try to load the newest revision locally. This is imperfect
          * solution, but there are situation when a client does not know what revision is
@@ -610,18 +610,18 @@ retrieve_schema_data_imp(const char *mod_name, const char *mod_rev, const char *
 
         /* 1. try to use <get-schema> */
         if (clb_data->has_get_schema) {
-            model_data = retrieve_schema_data_getschema(name, rev, clb_data, format);
+            model_data = retrieve_module_data_getschema(name, rev, clb_data, format);
         }
 
         /* 2. try to get data locally */
         if (!model_data) {
-            model_data = retrieve_schema_data_localfile(name, rev, clb_data, format);
+            model_data = retrieve_module_data_localfile(name, rev, clb_data, format);
         }
     }
 
     /* 3. try to use user callback */
     if (!model_data && clb_data->user_clb) {
-        VRB(clb_data->session, "Reading schema \"%s@%s\" via user callback.", name, rev ? rev : "<latest>");
+        VRB(clb_data->session, "Reading module \"%s@%s\" via user callback.", name, rev ? rev : "<latest>");
         clb_data->user_clb(mod_name, mod_rev, submod_name, sub_rev, clb_data->user_data, format,
                 (const char **)&model_data, free_module_data);
     }
@@ -632,14 +632,14 @@ retrieve_schema_data_imp(const char *mod_name, const char *mod_rev, const char *
 }
 
 /**
- * @brief Load a YANG schema into context.
+ * @brief Load a YANG module into context.
  *
  * @param[in] session NC session.
- * @param[in] name Schema name.
- * @param[in] revision Schema revision.
- * @param[in] features Enabled schema features.
- * @param[in] schemas Server schema info built from capabilities.
- * @param[in] user_clb User callback for retireving schema data.
+ * @param[in] name Module name.
+ * @param[in] revision Module revision.
+ * @param[in] features Enabled module features.
+ * @param[in] modules Server module info built from capabilities.
+ * @param[in] user_clb User callback for retrieving module data.
  * @param[in] user_data User data for @p user_clb.
  * @param[in] has_get_schema Whether the server supports get-schema.
  * @param[out] mod Loaded module.
@@ -648,7 +648,7 @@ retrieve_schema_data_imp(const char *mod_name, const char *mod_rev, const char *
  */
 static int
 nc_ctx_load_module(struct nc_session *session, const char *name, const char *revision, const char **features,
-        struct schema_info *schemas, ly_module_imp_clb user_clb, void *user_data, int has_get_schema, struct lys_module **mod)
+        struct module_info *modules, ly_module_imp_clb user_clb, void *user_data, int has_get_schema, struct lys_module **mod)
 {
     int ret = 0;
     struct ly_err_item *eitem;
@@ -675,13 +675,13 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
     if (*mod) {
         /* make the present module implemented and/or enable all its features */
         if (lys_set_implemented(*mod, features)) {
-            ERR(session, "Failed to implement schema \"%s\".", (*mod)->name);
+            ERR(session, "Failed to implement module \"%s\".", (*mod)->name);
             ret = -1;
         }
     } else {
         /* missing implemented module, load it ... */
         clb_data.has_get_schema = has_get_schema;
-        clb_data.schemas = schemas;
+        clb_data.modules = modules;
         clb_data.session = session;
         clb_data.user_clb = user_clb;
         clb_data.user_data = user_data;
@@ -691,13 +691,13 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
         ly_log_options(LY_LOSTORE);
 
         /* get module data */
-        retrieve_schema_data(name, revision, &clb_data, &format, &module_data, &free_module_data);
+        retrieve_module_data(name, revision, &clb_data, &format, &module_data, &free_module_data);
 
         if (module_data) {
             /* set import callback */
-            ly_ctx_set_module_imp_clb(session->ctx, retrieve_schema_data_imp, &clb_data);
+            ly_ctx_set_module_imp_clb(session->ctx, retrieve_module_data_imp, &clb_data);
 
-            /* parse the schema */
+            /* parse the module */
             ly_in_new_memory(module_data, &in);
             lys_parse(session->ctx, in, format, features, mod);
             ly_in_free(in, 0);
@@ -732,7 +732,7 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
 }
 
 static void
-free_schema_info(struct schema_info *list)
+free_module_info(struct module_info *list)
 {
     uint32_t u, v;
 
@@ -761,16 +761,16 @@ free_schema_info(struct schema_info *list)
 }
 
 /**
- * @brief Build server schema info from ietf-yang-library data.
+ * @brief Build server module info from ietf-yang-library data.
  *
  * @param[in] session NC session.
  * @param[in] has_get_data Whether get-data RPC is available or only get.
- * @param[out] result Server schemas.
+ * @param[out] result Server modules.
  * @return 0 on success.
  * @return -1 on error.
  */
 static int
-build_schema_info_yl(struct nc_session *session, int has_get_data, struct schema_info **result)
+build_module_info_yl(struct nc_session *session, int has_get_data, struct module_info **result)
 {
     struct nc_rpc *rpc = NULL;
     struct lyd_node *op = NULL, *envp = NULL;
@@ -877,7 +877,7 @@ build_schema_info_yl(struct nc_session *session, int has_get_data, struct schema
                 (*result)[u].features = nc_realloc((*result)[u].features, (feature_count + 2) * sizeof *(*result)[u].features);
                 if (!(*result)[u].features) {
                     ERRMEM;
-                    free_schema_info(*result);
+                    free_module_info(*result);
                     *result = NULL;
                     ret = -1;
                     goto cleanup;
@@ -894,7 +894,7 @@ build_schema_info_yl(struct nc_session *session, int has_get_data, struct schema
             (*result)[u].submodules = calloc(submodules_count + 1, sizeof *(*result)[u].submodules);
             if (!(*result)[u].submodules) {
                 ERRMEM;
-                free_schema_info(*result);
+                free_module_info(*result);
                 *result = NULL;
                 ret = -1;
                 goto cleanup;
@@ -934,15 +934,15 @@ cleanup:
 }
 
 /**
- * @brief Build server schema info from received capabilities.
+ * @brief Build server module info from received capabilities.
  *
  * @param[in] cpblts Server capabilities.
- * @param[out] result Server schemas.
+ * @param[out] result Server modules.
  * @return 0 on success.
  * @return -1 on error.
  */
 static int
-build_schema_info_cpblts(char **cpblts, struct schema_info **result)
+build_module_info_cpblts(char **cpblts, struct module_info **result)
 {
     uint32_t u, v, feature_count;
     char *module_cpblt, *ptr, *ptr2;
@@ -1011,18 +1011,18 @@ build_schema_info_cpblts(char **cpblts, struct schema_info **result)
 }
 
 /**
- * @brief Fill client context based on server schema info.
+ * @brief Fill client context based on server modules info.
  *
  * @param[in] session NC session with the context to modify.
- * @param[in] modules Server schema info.
- * @param[in] user_clb User callback for retrieving specific schemas.
+ * @param[in] modules Server modules info.
+ * @param[in] user_clb User callback for retrieving specific modules.
  * @param[in] user_data User data for @p user_clb.
  * @param[in] has_get_schema Whether server supports get-schema RPC.
  * @return 0 on success.
  * @return -1 on error.
  */
 static int
-nc_ctx_fill(struct nc_session *session, struct schema_info *modules, ly_module_imp_clb user_clb, void *user_data,
+nc_ctx_fill(struct nc_session *session, struct module_info *modules, ly_module_imp_clb user_clb, void *user_data,
         int has_get_schema)
 {
     int ret = -1;
@@ -1046,8 +1046,8 @@ nc_ctx_fill(struct nc_session *session, struct schema_info *modules, ly_module_i
                 goto cleanup;
             }
 
-            /* all loading ways failed, the schema will be ignored in the received data */
-            WRN(session, "Failed to load schema \"%s@%s\".", modules[u].name, modules[u].revision ?
+            /* all loading ways failed, the module will be ignored in the received data */
+            WRN(session, "Failed to load module \"%s@%s\".", modules[u].name, modules[u].revision ?
                     modules[u].revision : "<latest>");
             session->flags |= NC_SESSION_CLIENT_NOT_STRICT;
         }
@@ -1061,18 +1061,18 @@ cleanup:
 }
 
 /**
- * @brief Fill client context with ietf-netconf schema.
+ * @brief Fill client context with ietf-netconf module.
  *
  * @param[in] session NC session with the context to modify.
- * @param[in] modules Server schema info.
- * @param[in] user_clb User callback for retrieving specific schemas.
+ * @param[in] modules Server module info.
+ * @param[in] user_clb User callback for retrieving specific modules.
  * @param[in] user_data User data for @p user_clb.
  * @param[in] has_get_schema Whether server supports get-schema RPC.
  * @return 0 on success.
  * @return -1 on error.
  */
 static int
-nc_ctx_fill_ietf_netconf(struct nc_session *session, struct schema_info *modules, ly_module_imp_clb user_clb,
+nc_ctx_fill_ietf_netconf(struct nc_session *session, struct module_info *modules, ly_module_imp_clb user_clb,
         void *user_data, int has_get_schema)
 {
     uint32_t u;
@@ -1089,7 +1089,7 @@ nc_ctx_fill_ietf_netconf(struct nc_session *session, struct schema_info *modules
         }
     }
     if (!modules[u].name) {
-        ERR(session, "Base NETCONF schema not supported by the server.");
+        ERR(session, "Base NETCONF module not supported by the server.");
         return -1;
     }
 
@@ -1107,7 +1107,7 @@ nc_ctx_fill_ietf_netconf(struct nc_session *session, struct schema_info *modules
         }
     }
     if (!ietfnc) {
-        ERR(session, "Loading base NETCONF schema failed.");
+        ERR(session, "Loading base NETCONF module failed.");
         return -1;
     }
 
@@ -1122,7 +1122,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     void *old_data = NULL;
     struct lys_module *mod = NULL;
     char *revision;
-    struct schema_info *server_modules = NULL, *sm = NULL;
+    struct module_info *server_modules = NULL, *sm = NULL;
 
     assert(session->opts.client.cpblts && session->ctx);
 
@@ -1130,7 +1130,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     old_clb = ly_ctx_get_module_imp_clb(session->ctx, &old_data);
 
     /* switch off default searchpath to use only our callback integrating modifying searchpath algorithm to limit
-     * schemas only to those present on the server side */
+     * modules only to those present on the server side */
     ly_ctx_set_options(session->ctx, LY_CTX_DISABLE_SEARCHDIRS);
 
     /* our callback is set later with appropriate data */
@@ -1161,15 +1161,15 @@ nc_ctx_check_and_fill(struct nc_session *session)
         VRB(session, "Capability for yang-library support not found.");
     }
 
-    /* get information about server's schemas from capabilities list until we will have yang-library */
-    if (build_schema_info_cpblts(session->opts.client.cpblts, &server_modules) || !server_modules) {
-        ERR(session, "Unable to get server's schema information from the <hello>'s capabilities.");
+    /* get information about server's modules from capabilities list until we will have yang-library */
+    if (build_module_info_cpblts(session->opts.client.cpblts, &server_modules) || !server_modules) {
+        ERR(session, "Unable to get server module information from the <hello>'s capabilities.");
         goto cleanup;
     }
 
     /* get-schema is supported, load local ietf-netconf-monitoring so we can create <get-schema> RPCs */
     if (get_schema_support && lys_parse_mem(session->ctx, ietf_netconf_monitoring_2010_10_04_yang, LYS_IN_YANG, NULL)) {
-        WRN(session, "Loading NETCONF monitoring schema failed, cannot use <get-schema>.");
+        WRN(session, "Loading NETCONF monitoring module failed, cannot use <get-schema>.");
         get_schema_support = 0;
     }
 
@@ -1180,17 +1180,17 @@ nc_ctx_check_and_fill(struct nc_session *session)
 
     /* get correct version of ietf-yang-library into context */
     if (yanglib_support) {
-        /* use get schema to get server's ietf-yang-library */
+        /* use get-schema to get server's ietf-yang-library */
         revision = strstr(session->opts.client.cpblts[yanglib_support - 1], "revision=");
         if (!revision) {
-            WRN(session, "Loading NETCONF ietf-yang-library schema failed, missing revision in NETCONF <hello> message.");
+            WRN(session, "Loading NETCONF ietf-yang-library module failed, missing revision in NETCONF <hello> message.");
             WRN(session, "Unable to automatically use <get-schema>.");
             yanglib_support = 0;
         } else {
             revision = strndup(&revision[9], 10);
             if (nc_ctx_load_module(session, "ietf-yang-library", revision, NULL, server_modules, old_clb, old_data,
                     get_schema_support, &mod)) {
-                WRN(session, "Loading NETCONF ietf-yang-library schema failed, unable to use it to learn all "
+                WRN(session, "Loading NETCONF ietf-yang-library module failed, unable to use it to learn all "
                         "the supported modules.");
                 yanglib_support = 0;
             }
@@ -1198,7 +1198,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
                 /* we also need ietf-datastores to be implemented */
                 if (nc_ctx_load_module(session, "ietf-datastores", NULL, NULL, server_modules, old_clb, old_data,
                         get_schema_support, &mod)) {
-                    WRN(session, "Loading NETCONF ietf-datastores schema failed, unable to use yang-library "
+                    WRN(session, "Loading NETCONF ietf-datastores module failed, unable to use yang-library "
                             "to learn all the supported modules.");
                     yanglib_support = 0;
                 }
@@ -1216,16 +1216,16 @@ nc_ctx_check_and_fill(struct nc_session *session)
         }
     }
 
-    /* prepare structured information about server's schemas */
+    /* prepare structured information about server's modules */
     if (yanglib_support) {
-        if (build_schema_info_yl(session, get_data_support, &sm)) {
+        if (build_module_info_yl(session, get_data_support, &sm)) {
             goto cleanup;
         } else if (!sm) {
             VRB(session, "Trying to use capabilities instead of ietf-yang-library data.");
         } else {
             /* prefer yang-library information, currently we have it from capabilities used for getting correct
-             * yang-library schema */
-            free_schema_info(server_modules);
+             * yang-library module */
+            free_module_info(server_modules);
             server_modules = sm;
         }
     }
@@ -1247,12 +1247,12 @@ nc_ctx_check_and_fill(struct nc_session *session)
     ret = 0;
 
     if (session->flags & NC_SESSION_CLIENT_NOT_STRICT) {
-        WRN(session, "Some models failed to be loaded, any data from these models (and any other unknown) will "
+        WRN(session, "Some modules failed to be loaded, any data from these modules (and any other unknown) will "
                 "be ignored.");
     }
 
 cleanup:
-    free_schema_info(server_modules);
+    free_module_info(server_modules);
 
     /* set user callback back */
     ly_ctx_set_module_imp_clb(session->ctx, old_clb, old_data);
@@ -2180,7 +2180,7 @@ recv_reply_dup_rpc(struct nc_session *session, struct nc_rpc *rpc, struct lyd_no
     if (module_name && rpc_name) {
         mod = ly_ctx_get_module_implemented(session->ctx, module_name);
         if (!mod) {
-            ERR(session, "Missing \"%s\" schema in the context.", module_name);
+            ERR(session, "Missing \"%s\" module in the context.", module_name);
             return -1;
         }
 
@@ -2189,7 +2189,7 @@ recv_reply_dup_rpc(struct nc_session *session, struct nc_rpc *rpc, struct lyd_no
     }
     if (module_check) {
         if (!ly_ctx_get_module_implemented(session->ctx, module_check)) {
-            ERR(session, "Missing \"%s\" schema in the context.", module_check);
+            ERR(session, "Missing \"%s\" module in the context.", module_check);
             return -1;
         }
     }
@@ -2465,21 +2465,21 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_VALIDATE:
         mod = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf");
         if (!mod) {
-            ERR(session, "Missing \"ietf-netconf\" schema in the context.");
+            ERR(session, "Missing \"ietf-netconf\" module in the context.");
             return NC_MSG_ERROR;
         }
         break;
     case NC_RPC_GETSCHEMA:
         mod = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-monitoring");
         if (!mod) {
-            ERR(session, "Missing \"ietf-netconf-monitoring\" schema in the context.");
+            ERR(session, "Missing \"ietf-netconf-monitoring\" module in the context.");
             return NC_MSG_ERROR;
         }
         break;
     case NC_RPC_SUBSCRIBE:
         mod = ly_ctx_get_module_implemented(session->ctx, "notifications");
         if (!mod) {
-            ERR(session, "Missing \"notifications\" schema in the context.");
+            ERR(session, "Missing \"notifications\" module in the context.");
             return NC_MSG_ERROR;
         }
         break;
@@ -2487,7 +2487,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_EDITDATA:
         mod = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-nmda");
         if (!mod) {
-            ERR(session, "Missing \"ietf-netconf-nmda\" schema in the context.");
+            ERR(session, "Missing \"ietf-netconf-nmda\" module in the context.");
             return NC_MSG_ERROR;
         }
         break;
@@ -2497,7 +2497,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_KILLSUB:
         mod = ly_ctx_get_module_implemented(session->ctx, "ietf-subscribed-notifications");
         if (!mod) {
-            ERR(session, "Missing \"ietf-subscribed-notifications\" schema in the context.");
+            ERR(session, "Missing \"ietf-subscribed-notifications\" module in the context.");
             return NC_MSG_ERROR;
         }
         break;
@@ -2505,19 +2505,19 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     case NC_RPC_MODIFYPUSH:
         mod = ly_ctx_get_module_implemented(session->ctx, "ietf-subscribed-notifications");
         if (!mod) {
-            ERR(session, "Missing \"ietf-subscribed-notifications\" schema in the context.");
+            ERR(session, "Missing \"ietf-subscribed-notifications\" module in the context.");
             return NC_MSG_ERROR;
         }
         mod2 = ly_ctx_get_module_implemented(session->ctx, "ietf-yang-push");
         if (!mod2) {
-            ERR(session, "Missing \"ietf-yang-push\" schema in the context.");
+            ERR(session, "Missing \"ietf-yang-push\" module in the context.");
             return NC_MSG_ERROR;
         }
         break;
     case NC_RPC_RESYNCSUB:
         mod = ly_ctx_get_module_implemented(session->ctx, "ietf-yang-push");
         if (!mod) {
-            ERR(session, "Missing \"ietf-yang-push\" schema in the context.");
+            ERR(session, "Missing \"ietf-yang-push\" module in the context.");
             return NC_MSG_ERROR;
         }
         break;
@@ -2565,7 +2565,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         if (rpc_gc->wd_mode) {
             ietfncwd = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-with-defaults");
             if (!ietfncwd) {
-                ERR(session, "Missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
+                ERR(session, "Missing \"ietf-netconf-with-defaults\" module in the context.", session->id);
                 lyrc = LY_ENOTFOUND;
                 break;
             }
@@ -2621,7 +2621,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         if (rpc_cp->wd_mode) {
             ietfncwd = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-with-defaults");
             if (!ietfncwd) {
-                ERR(session, "Missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
+                ERR(session, "Missing \"ietf-netconf-with-defaults\" module in the context.", session->id);
                 lyrc = LY_ENOTFOUND;
                 break;
             }
@@ -2675,7 +2675,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         if (rpc_g->wd_mode) {
             ietfncwd = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-with-defaults");
             if (!ietfncwd) {
-                ERR(session, "Missing \"ietf-netconf-with-defaults\" schema in the context.", session->id);
+                ERR(session, "Missing \"ietf-netconf-with-defaults\" module in the context.", session->id);
                 lyrc = LY_ENOTFOUND;
                 break;
             }

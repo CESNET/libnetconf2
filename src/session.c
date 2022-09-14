@@ -663,7 +663,7 @@ nc_session_free_close_session(struct nc_session *session)
 
     ietfnc = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf");
     if (!ietfnc) {
-        WRN(session, "Missing ietf-netconf schema in context, unable to send <close-session>.");
+        WRN(session, "Missing ietf-netconf module in context, unable to send <close-session>.");
         return;
     }
     if (lyd_new_inner(NULL, ietfnc, "close-session", 0, &close_rpc)) {
@@ -1189,10 +1189,10 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
             free(yl_content_id);
             continue;
         } else if ((version == LYS_VERSION_1_0) && (mod->parsed->version > version)) {
-            /* skip YANG 1.1 schemas */
+            /* skip YANG 1.1 modules */
             continue;
         } else if ((version == LYS_VERSION_1_1) && (mod->parsed->version != version)) {
-            /* skip YANG 1.0 schemas */
+            /* skip YANG 1.0 modules */
             continue;
         }
 

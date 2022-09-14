@@ -590,7 +590,7 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *session)
             format = lyd_get_value(child);
         }
     }
-    VRB(session, "Schema \"%s@%s\" was requested.", identifier, revision ? revision : "<any>");
+    VRB(session, "Module \"%s@%s\" was requested.", identifier, revision ? revision : "<any>");
 
     /* check revision */
     if (revision && (strlen(revision) != 10) && strcmp(revision, "1.0")) {
@@ -617,7 +617,7 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *session)
     }
     if (!module && !submodule) {
         err = nc_err(session->ctx, NC_ERR_INVALID_VALUE, NC_ERR_TYPE_APP);
-        nc_err_set_msg(err, "The requested schema was not found.", "en");
+        nc_err_set_msg(err, "The requested module was not found.", "en");
         return nc_server_reply_err(err);
     }
 
