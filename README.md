@@ -56,81 +56,34 @@ is now obsolete and should not be used.
 Binary RPM or DEB packages of the latest release can be built locally using `apkg`, look into `README` in
 the `distro` directory.
 
-# Installation
+## Requirements
 
-## Required Dependencies
+* C compiler (gcc >= 4.8.4, clang >= 3.0, ...)
+* cmake >= 2.8.12
+* [libyang](https://github.com/CESNET/libyang)
+* libssh >= 0.7.1 (for SSH support)
+  * recommended >= 0.9.0
+* OpenSSL (for TLS support)
 
-Install the following libraries and tools the libnetconf2 depends on.
+#### Optional
 
-### libyang
-Follow the [libyang instructions](https://github.com/CESNET/libyang/blob/master/README.md),
-in short:
-```
-$ git clone https://github.com/CESNET/libyang.git
-$ cd libyang; mkdir build; cd build
-$ cmake ..
-$ make
-# make install
-```
+* libval (only for DNSSEC SSHFP retrieval)
+  * [DNSSEC-Tools/dnssec-tools/validator](https://github.com/DNSSEC-Tools/DNSSEC-Tools/tree/master/dnssec-tools/validator)
+    part of the DNSSEC-Tools suite
+* doxygen (for generating documentation)
+* cmocka >= 1.0.1 (for tests only, see [Tests](#Tests))
+* valgrind (for enhanced testing)
+* gcov (for code coverage)
+* lcov (for code coverage)
+* genhtml (for code coverage)
 
-### libssh
-Required version is at least 0.7.1. Recommended version is at least 0.9.0, because of a bug
-present in older versions, which echoes everything back when entering authentication tokens. 
-This dependency can be removed by disabling
-SSH support (see the [Build Options](#build-options) section). Below is the basic
-sequence of commands for compiling and installing it from source. However, there
-are packages for certain Linux distributions available [here](https://www.libssh.org/get-it/).
-```
-$ git clone http://git.libssh.org/projects/libssh.git
-$ cd libssh; mkdir build; cd build
-$ cmake ..
-$ make
-# make install
-```
-
-### OpenSSL
-This dependency is required when the TLS support is enabled, which it is by
-default but libssh requires it too. So, to remove this dependency, you need
-to disable both SSH and TLS (see the [Build Options](#build-options) section).
-
-OpenSSL is a standard part of the most distribution, so ask your package
-manager for OpenSSL package including the necessary development files
-(usually -dev or -devel package).
-
-## Optional Dependencies
-
-### libval (part of the DNSSEC-Tools suite)
-It is required only if DNSSEC SSHFP retrieval is enabled (it is disabled by
-default, see the [Build Options](#build-options) section).
-
-The easier way of installing it is as the libval-dev package (or a part of
-the dnssec-tools package), if you can find it for your distribution. Otherwise,
-compile and install it from [source](https://github.com/DNSSEC-Tools/DNSSEC-Tools/).
-Only the validator component (`DNSSEC-Tools/dnssec-tools/validator`) is needed.
-
-### cmocka
-For running the tests cmocka 1.0.1 is required (see the [Tests](#tests) section for more information).
-```
-$ sudo apt-get install libcmocka-dev
-```
-
-### Doxygen
-For building the library documentation.
-
-Doxygen is a standard part of the most distribution, so ask your package
-manager for doxygen package.
-
-### gcov
-
-For code coverage, `gcov`, `lcov`, and `genhtml` are needed.
-
-## Building libnetconf2
+## Building
 
 ```
 $ mkdir build; cd build
 $ cmake ..
 $ make
-# install
+# make install
 ```
 
 The library documentation can be generated directly from the source codes using
@@ -236,10 +189,7 @@ $ make
 $ make coverage
 ```
 
-Note that `gcc` compiler is required for this option and additional tools are required:
-* gcov
-* lcov
-* genhtml
+Note that `gcc` compiler is required for this option.
 
 ### CMake Notes
 
