@@ -349,11 +349,6 @@ struct nc_server_opts {
 #define NC_CH_NO_ENDPT_WAIT 1000
 
 /**
- * Time slept in msec after a failed Call Home endpoint session creation.
- */
-#define NC_CH_ENDPT_FAIL_WAIT 1000
-
-/**
  * Number of sockets kept waiting to be accepted.
  */
 #define NC_REVERSE_QUEUE 5

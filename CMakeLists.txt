@@ -98,6 +98,7 @@ set(READ_ACTIVE_TIMEOUT 300 CACHE STRING "Maximum number of seconds for receivin
 set(MAX_PSPOLL_THREAD_COUNT 6 CACHE STRING "Maximum number of threads that could simultaneously access a ps_poll structure")
 set(TIMEOUT_STEP 100 CACHE STRING "Number of microseconds tasks are repeated until timeout elapses")
 set(YANG_MODULE_DIR "${CMAKE_INSTALL_PREFIX}/share/yang/modules" CACHE STRING "Directory with common YANG modules")
+set(CALL_HOME_BACKOFF_WAIT 2 CACHE STRING "Number of seconds to wait between Call Home connection attempts")
 
 #
 # sources

@@ -3625,7 +3625,7 @@ nc_ch_client_thread(void *arg)
             nc_server_ch_client_unlock(client);
 
             /* session was not created */
-            usleep(NC_CH_ENDPT_FAIL_WAIT * 1000);
+            sleep(NC_CH_ENDPT_BACKOFF_WAIT);
 
             /* LOCK */
             client = nc_server_ch_client_with_endpt_lock(data->client_name);
