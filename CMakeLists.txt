@@ -261,18 +261,23 @@ if(ENABLE_SSH)
     endif()
 
     # libpam
-    find_package(LibPAM REQUIRED)
+    find_package(LibPAM)
+    if(LibPAM_FOUND)
+        set(HAVE_LIBPAM TRUE)
 
-    # enable PAM test if a PAM header file contains a declaration of a function pam_start_confdir
-    if (LIBPAM_HAVE_CONFDIR)
-      message(STATUS "LibPAM found, version >= 1.4, enabled PAM tests")
+        # enable PAM test if a PAM header file contains a declaration of a function pam_start_confdir
+        if (LIBPAM_HAVE_CONFDIR)
+            message(STATUS "LibPAM found, version >= 1.4, enabled PAM tests")
+        else()
+            message(STATUS "LibPAM found, version < 1.4, disabled PAM tests")
+        endif()
+
+        target_link_libraries(netconf2 ${LIBPAM_LIBRARIES})
+        list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBPAM_LIBRARIES})
+        include_directories(${LIBPAM_INCLUDE_DIRS})
     else()
-      message(STATUS "LibPAM found, version < 1.4, disabled PAM tests")
+        message(WARNING "LibPAM not found, PAM-based keyboard-interactive SSH server authentication method is disabled")
     endif()
-
-    target_link_libraries(netconf2 ${LIBPAM_LIBRARIES})
-    list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBPAM_LIBRARIES})
-    include_directories(${LIBPAM_INCLUDE_DIRS})
 endif()
 
 # dependencies - libval

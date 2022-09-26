@@ -23,11 +23,13 @@
 #ifdef HAVE_CRYPT
     #include <crypt.h>
 #endif
+#ifdef HAVE_LIBPAM
+    #include <security/pam_appl.h>
+#endif
 
 #include <errno.h>
 #include <fcntl.h>
 #include <pwd.h>
-#include <security/pam_appl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -180,23 +182,24 @@ nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct 
 API int
 nc_server_ssh_set_pam_conf_path(const char *conf_name, const char *conf_dir)
 {
+#ifdef HAVE_LIBPAM
     free(server_opts.conf_name);
     free(server_opts.conf_dir);
     server_opts.conf_name = NULL;
     server_opts.conf_dir = NULL;
 
     if (conf_dir) {
-#ifdef LIBPAM_HAVE_CONFDIR
+# ifdef LIBPAM_HAVE_CONFDIR
         server_opts.conf_dir = strdup(conf_dir);
         if (!(server_opts.conf_dir)) {
             ERRMEM;
             return -1;
         }
-#else
+# else
         ERR(NULL, "Failed to set PAM config directory because of old version of PAM. "
                 "Put the config file in the system directory (usually /etc/pam.d/).");
         return -1;
-#endif
+# endif
     }
 
     if (conf_name) {
@@ -208,6 +211,13 @@ nc_server_ssh_set_pam_conf_path(const char *conf_name, const char *conf_dir)
     }
 
     return 0;
+#else
+    (void)conf_name;
+    (void)conf_dir;
+
+    ERR(NULL, "PAM-based SSH authentication is not supported.");
+    return -1;
+#endif
 }
 
 API void
@@ -984,6 +994,8 @@ nc_sshcb_auth_password(struct nc_session *session, ssh_message msg)
     }
 }
 
+#ifdef HAVE_LIBPAM
+
 /**
  * @brief PAM conversation function, which serves as a callback for exchanging messages between the client and a PAM module.
  *
@@ -1168,13 +1180,13 @@ nc_pam_auth(struct nc_session *session, ssh_message ssh_msg)
     conv.appdata_ptr = &clb_data;
 
     /* initialize PAM and see if the given configuration file exists */
-#ifdef LIBPAM_HAVE_CONFDIR
+# ifdef LIBPAM_HAVE_CONFDIR
     /* PAM version >= 1.4 */
     ret = pam_start_confdir(server_opts.conf_name, session->username, &conv, server_opts.conf_dir, &pam_h);
-#else
+# else
     /* PAM version < 1.4 */
     ret = pam_start(server_opts.conf_name, session->username, &conv, &pam_h);
-#endif
+# endif
     if (ret != PAM_SUCCESS) {
         ERR(NULL, "PAM error occurred (%s).\n", pam_strerror(pam_h, ret));
         goto cleanup;
@@ -1219,6 +1231,8 @@ cleanup:
     return ret;
 }
 
+#endif
+
 static void
 nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
 {
@@ -1226,8 +1240,14 @@ nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
 
     if (server_opts.interactive_auth_clb) {
         auth_ret = server_opts.interactive_auth_clb(session, msg, server_opts.interactive_auth_data);
-    } else if (nc_pam_auth(session, msg) == PAM_SUCCESS) {
-        auth_ret = 0;
+    } else {
+#ifdef HAVE_LIBPAM
+        if (nc_pam_auth(session, msg) == PAM_SUCCESS) {
+            auth_ret = 0;
+        }
+#else
+        ERR(session, "PAM-based SSH authentication is not supported.");
+#endif
     }
 
     /* We have already sent a reply */
