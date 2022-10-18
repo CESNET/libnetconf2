@@ -67,6 +67,7 @@ the `distro` directory.
 
 #### Optional
 
+* libpam (for PAM-based SSH `keyboard-interactive` authentication method)
 * libval (only for DNSSEC SSHFP retrieval)
   * [DNSSEC-Tools/dnssec-tools/validator](https://github.com/DNSSEC-Tools/DNSSEC-Tools/tree/master/dnssec-tools/validator)
     part of the DNSSEC-Tools suite
