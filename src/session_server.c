@@ -1711,7 +1711,7 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
 API int
 nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
 {
-    int ret, r;
+    int ret = NC_PSPOLL_ERROR, r;
     uint8_t q_id;
     uint16_t i, j;
     char msg[256];
