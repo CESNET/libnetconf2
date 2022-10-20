@@ -1788,7 +1788,7 @@ nc_session_ntf_thread_running(const struct nc_session *session)
         return 0;
     }
 
-    return ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread) ? 1 : 0;
+    return ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread_running);
 }
 
 API void
@@ -2314,7 +2314,7 @@ nc_recv_notif_thread(void *arg)
     free_data = ntarg->free_data;
     free(ntarg);
 
-    while (ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread) == 1) {
+    while (ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread_running)) {
         msgtype = nc_recv_notif(session, NC_CLIENT_NOTIF_THREAD_SLEEP / 1000, &envp, &op);
         if (msgtype == NC_MSG_NOTIF) {
             notif_clb(session, envp, op, user_data);
@@ -2334,7 +2334,7 @@ nc_recv_notif_thread(void *arg)
     }
 
     VRB(session, "Notification thread exit.");
-    ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread, 0);
+    ATOMIC_DEC_RELAXED(session->opts.client.ntf_thread_count);
     if (free_data) {
         free_data(user_data);
     }
@@ -2365,9 +2365,6 @@ nc_recv_notif_dispatch_data(struct nc_session *session, nc_notif_dispatch_clb no
     } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR(session, "Invalid session to receive Notifications.");
         return -1;
-    } else if (ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread)) {
-        ERR(session, "Separate notification thread is already running.");
-        return -1;
     }
 
     ntarg = malloc(sizeof *ntarg);
@@ -2379,15 +2376,18 @@ nc_recv_notif_dispatch_data(struct nc_session *session, nc_notif_dispatch_clb no
     ntarg->notif_clb = notif_clb;
     ntarg->user_data = user_data;
     ntarg->free_data = free_data;
+    ATOMIC_INC_RELAXED(session->opts.client.ntf_thread_count);
 
     /* just so that nc_recv_notif_thread() does not immediately exit */
-    ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread, 1);
+    ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread_running, 1);
 
     ret = pthread_create(&tid, NULL, nc_recv_notif_thread, ntarg);
     if (ret) {
         ERR(session, "Failed to create a new thread (%s).", strerror(errno));
         free(ntarg);
-        ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread, 0);
+        if (ATOMIC_DEC_RELAXED(session->opts.client.ntf_thread_count) == 1) {
+            ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread_running, 0);
+        }
         return -1;
     }
 

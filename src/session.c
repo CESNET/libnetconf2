@@ -858,14 +858,14 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         return;
     }
 
-    /* stop notifications thread if any */
-    if ((session->side == NC_CLIENT) && ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread)) {
-        /* let the thread know it should quit */
-        ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread, 2);
+    /* stop notification threads if any */
+    if ((session->side == NC_CLIENT) && ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread_running)) {
+        /* let the threads know they should quit */
+        ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread_running, 0);
 
-        /* wait for it */
+        /* wait for them */
         nc_gettimespec_mono_add(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
-        while (ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread)) {
+        while (ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread_count)) {
             usleep(NC_TIMEOUT_STEP);
             if (nc_difftimespec_mono_cur(&ts) < 1) {
                 ERR(session, "Waiting for notification thread exit failed (timed out).");

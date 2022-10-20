@@ -451,8 +451,8 @@ struct nc_session {
             char **cpblts;                 /**< list of server's capabilities on client side */
             pthread_mutex_t msgs_lock;     /**< lock for the msgs buffer */
             struct nc_msg_cont *msgs;      /**< queue for messages received of different type than expected */
-            ATOMIC_T ntf_thread;           /**< flag whether notification thread for this session is running or not,
-                                                2 means it should quit */
+            ATOMIC_T ntf_thread_count;     /**< number of running notification threads */
+            ATOMIC_T ntf_thread_running;   /**< flag whether there are notification threads for this session running or not */
 
             /* client flags */
             /* some server modules failed to load so the data from them will be ignored - not use strict flag for parsing */
