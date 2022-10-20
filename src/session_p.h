@@ -522,6 +522,7 @@ struct nc_ntf_thread_arg {
     struct nc_session *session;
     nc_notif_dispatch_clb notif_clb;
     void *user_data;
+
     void (*free_data)(void *);
 };
 

@@ -2300,6 +2300,7 @@ nc_recv_notif_thread(void *arg)
     struct nc_session *session;
     nc_notif_dispatch_clb notif_clb;
     void *user_data;
+
     void (*free_data)(void *);
     struct lyd_node *envp, *op;
     NC_MSG_TYPE msgtype;
