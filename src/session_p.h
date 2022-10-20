@@ -28,6 +28,7 @@
 #include "messages_client.h"
 #include "netconf.h"
 #include "session.h"
+#include "session_client.h"
 
 #ifdef NC_ENABLED_SSH
 
@@ -519,8 +520,9 @@ struct nc_pollsession {
 
 struct nc_ntf_thread_arg {
     struct nc_session *session;
-
-    void (*notif_clb)(struct nc_session *session, const struct lyd_node *envp, const struct lyd_node *op);
+    nc_notif_dispatch_clb notif_clb;
+    void *user_data;
+    void (*free_data)(void *);
 };
 
 #ifdef NC_ENABLED_SSH

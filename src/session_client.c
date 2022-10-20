@@ -2298,8 +2298,9 @@ nc_recv_notif_thread(void *arg)
 {
     struct nc_ntf_thread_arg *ntarg;
     struct nc_session *session;
-
-    void (*notif_clb)(struct nc_session *session, const struct lyd_node *envp, const struct lyd_node *op);
+    nc_notif_dispatch_clb notif_clb;
+    void *user_data;
+    void (*free_data)(void *);
     struct lyd_node *envp, *op;
     NC_MSG_TYPE msgtype;
 
@@ -2309,12 +2310,14 @@ nc_recv_notif_thread(void *arg)
     ntarg = (struct nc_ntf_thread_arg *)arg;
     session = ntarg->session;
     notif_clb = ntarg->notif_clb;
+    user_data = ntarg->user_data;
+    free_data = ntarg->free_data;
     free(ntarg);
 
     while (ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread) == 1) {
         msgtype = nc_recv_notif(session, NC_CLIENT_NOTIF_THREAD_SLEEP / 1000, &envp, &op);
         if (msgtype == NC_MSG_NOTIF) {
-            notif_clb(session, envp, op);
+            notif_clb(session, envp, op, user_data);
             if (!strcmp(op->schema->name, "notificationComplete") && !strcmp(op->schema->module->name, "nc-notifications")) {
                 lyd_free_tree(envp);
                 lyd_free_tree(op);
@@ -2332,12 +2335,22 @@ nc_recv_notif_thread(void *arg)
 
     VRB(session, "Notification thread exit.");
     ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread, 0);
+    if (free_data) {
+        free_data(user_data);
+    }
+
     return NULL;
 }
 
 API int
-nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_session *session,
-        const struct lyd_node *envp, const struct lyd_node *op))
+nc_recv_notif_dispatch(struct nc_session *session, nc_notif_dispatch_clb notif_clb)
+{
+    return nc_recv_notif_dispatch_data(session, notif_clb, NULL, NULL);
+}
+
+API int
+nc_recv_notif_dispatch_data(struct nc_session *session, nc_notif_dispatch_clb notif_clb, void *user_data,
+        void (*free_data)(void *))
 {
     struct nc_ntf_thread_arg *ntarg;
     pthread_t tid;
@@ -2364,6 +2377,8 @@ nc_recv_notif_dispatch(struct nc_session *session, void (*notif_clb)(struct nc_s
     }
     ntarg->session = session;
     ntarg->notif_clb = notif_clb;
+    ntarg->user_data = user_data;
+    ntarg->free_data = free_data;
 
     /* just so that nc_recv_notif_thread() does not immediately exit */
     ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread, 1);

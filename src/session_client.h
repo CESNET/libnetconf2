@@ -545,9 +545,9 @@ NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64
  * @brief Receive NETCONF Notification.
  *
  * @param[in] session NETCONF session from which the function gets data. It must be the
- *            client side session object.
+ * client side session object.
  * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite
- *            waiting and 0 for immediate return if data are not available on the wire.
+ * waiting and 0 for immediate return if data are not available on the wire.
  * @param[out] envp NETCONF notification XML envelopes.
  * @param[out] op Parsed NETCONF notification data.
  * @return #NC_MSG_NOTIF for success,
@@ -558,17 +558,43 @@ NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64
 NC_MSG_TYPE nc_recv_notif(struct nc_session *session, int timeout, struct lyd_node **envp, struct lyd_node **op);
 
 /**
+ * @brief Callback for receiving notifications in a separate thread.
+ *
+ * @param[in] session NC session that received the notification.
+ * @param[in] envp Notification envelope data tree.
+ * @param[in] op Notification body data tree.
+ * @param[in] user_data Arbitrary user data passed to the callback.
+ */
+typedef void (*nc_notif_dispatch_clb)(struct nc_session *session, const struct lyd_node *envp, const struct lyd_node *op,
+        void *user_data);
+
+/**
  * @brief Receive NETCONF Notifications in a separate thread until the session is terminated
- *        or \<notificationComplete\> is received.
+ * or \<notificationComplete\> is received.
  *
  * @param[in] session Netconf session to read notifications from.
  * @param[in] notif_clb Function that is called for every received notification (including
- *            \<notificationComplete\>). Parameters are the session the notification was received on
- *            and the notification data.
+ * \<notificationComplete\>). Parameters are the session the notification was received on
+ * and the notification data.
  * @return 0 if the thread was successfully created, -1 on error.
  */
-int nc_recv_notif_dispatch(struct nc_session *session,
-        void (*notif_clb)(struct nc_session *session, const struct lyd_node *envp, const struct lyd_node *op));
+int nc_recv_notif_dispatch(struct nc_session *session, nc_notif_dispatch_clb notif_clb);
+
+/**
+ * @brief Receive NETCONF Notifications in a separate thread until the session is terminated
+ * or \<notificationComplete\> is received. Similar to ::nc_recv_notif_dispatch() but allows
+ * to set arbitrary user data that can be freed as well.
+ *
+ * @param[in] session Netconf session to read notifications from.
+ * @param[in] notif_clb Callback that is called for every received notification (including
+ * \<notificationComplete\>). Parameters are the session the notification was received on
+ * and the notification data.
+ * @param[in] user_data Arbitrary user data.
+ * @param[in] free_data Callback for freeing the user data after notif thread exit.
+ * @return 0 if the thread was successfully created, -1 on error.
+ */
+int nc_recv_notif_dispatch_data(struct nc_session *session, nc_notif_dispatch_clb notif_clb, void *user_data,
+        void (*free_data)(void *));
 
 /**
  * @brief Send NETCONF RPC message via the session.
@@ -576,7 +602,7 @@ int nc_recv_notif_dispatch(struct nc_session *session,
  * @param[in] session NETCONF session where the RPC will be written.
  * @param[in] rpc NETCONF RPC object to send via the specified session.
  * @param[in] timeout Timeout for writing in milliseconds. Use negative value for infinite
- *            waiting and 0 for return if data cannot be sent immediately.
+ * waiting and 0 for return if data cannot be sent immediately.
  * @param[out] msgid If RPC was successfully sent, this is it's message ID.
  * @return #NC_MSG_RPC on success,
  *         #NC_MSG_WOULDBLOCK in case of a busy session, and
@@ -586,7 +612,7 @@ NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int time
 
 /**
  * @brief Make a session not strict when sending RPCs and receiving RPC replies. In other words,
- *        it will silently skip unknown nodes without an error.
+ * it will silently skip unknown nodes without an error.
  *
  * Generally, no such data should be worked with, so use this function only when you know what you
  * are doing and you understand the consequences.
