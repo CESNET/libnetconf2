@@ -3295,7 +3295,18 @@ nc_server_ch_client_set_max_attempts(const char *client_name, uint8_t max_attemp
     return 0;
 }
 
-/* client lock is expected to be held */
+/**
+ * @brief Create a connection for an endpoint.
+ *
+ * Client lock is expected to be held.
+ *
+ * @param[in] endpt Endpoint to use.
+ * @param[in] acquire_ctx_cb Callback for acquiring the libyang context.
+ * @param[in] release_ctx_cb Callback for releasing the libyang context.
+ * @param[in] ctx_cb_data Context callbacks data.
+ * @param[out] session Created NC session.
+ * @return NC_MSG values.
+ */
 static NC_MSG_TYPE
 nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
         nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, struct nc_session **session)
@@ -3306,21 +3317,10 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
     struct timespec ts_cur;
     char *ip_host;
 
-    sock = nc_sock_connect(endpt->address, endpt->port, NC_SOCKET_CH_TIMEOUT, &endpt->ka, &endpt->sock_pending, &ip_host);
+    sock = nc_sock_connect(endpt->address, endpt->port, NC_CH_CONNECT_TIMEOUT, &endpt->ka, &endpt->sock_pending, &ip_host);
     if (sock < 0) {
-        if (endpt->sock_pending > -1) {
-            ++endpt->sock_retries;
-            if (endpt->sock_retries == NC_SOCKET_CH_RETRIES) {
-                ERR(NULL, "Failed to connect socket %d after %d retries, closing.", endpt->sock_pending, NC_SOCKET_CH_RETRIES);
-                close(endpt->sock_pending);
-                endpt->sock_pending = -1;
-                endpt->sock_retries = 0;
-            }
-        }
         return NC_MSG_ERROR;
     }
-    /* no need to store the socket as pending any longer */
-    endpt->sock_pending = -1;
 
     /* acquire context */
     ctx = acquire_ctx_cb(ctx_cb_data);
@@ -3548,8 +3548,10 @@ nc_ch_client_thread(void *arg)
     cur_endpt = &client->ch_endpts[0];
     cur_endpt_name = strdup(cur_endpt->name);
 
-    VRB(NULL, "Call Home client \"%s\" connecting...", data->client_name);
     while (1) {
+        if (!cur_attempts) {
+            VRB(NULL, "Call Home client \"%s\" endpoint \"%s\" connecting...", data->client_name, cur_endpt_name);
+        }
         msgtype = nc_connect_ch_endpt(cur_endpt, data->acquire_ctx_cb, data->release_ctx_cb, data->ctx_cb_data, &session);
 
         if (msgtype == NC_MSG_HELLO) {
@@ -3648,10 +3650,21 @@ nc_ch_client_thread(void *arg)
 
             if (next_endpt_index >= client->ch_endpt_count) {
                 /* endpoint was removed, start with the first one */
+                VRB(NULL, "Call Home client \"%s\" endpoint \"%s\" removed.", data->client_name, cur_endpt_name);
                 next_endpt_index = 0;
                 cur_attempts = 0;
             } else if (cur_attempts == client->max_attempts) {
                 /* we have tried to connect to this endpoint enough times */
+                VRB(NULL, "Call Home client \"%s\" endpoint \"%s\" failed connection attempt limit %" PRIu8 " reached.",
+                        data->client_name, cur_endpt_name, client->max_attempts);
+
+                /* clear a pending socket, if any */
+                cur_endpt = &client->ch_endpts[next_endpt_index];
+                if (cur_endpt->sock_pending > -1) {
+                    close(cur_endpt->sock_pending);
+                    cur_endpt->sock_pending = -1;
+                }
+
                 if (next_endpt_index < client->ch_endpt_count - 1) {
                     /* just go to the next endpoint */
                     ++next_endpt_index;
@@ -3659,7 +3672,6 @@ nc_ch_client_thread(void *arg)
                     /* cur_endpoint is the last, start with the first one */
                     next_endpt_index = 0;
                 }
-
                 cur_attempts = 0;
             } /* else we keep the current one */
         }

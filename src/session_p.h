@@ -277,7 +277,6 @@ struct nc_server_opts {
             char *address;
             uint16_t port;
             int sock_pending;
-            int sock_retries;
             struct nc_keepalives ka;
 
             union {
@@ -350,19 +349,14 @@ struct nc_server_opts {
 #define NC_CH_NO_ENDPT_WAIT 1000
 
 /**
+ * Timeout in msec for a Call Home socket to establish its connection.
+ */
+#define NC_CH_CONNECT_TIMEOUT 500
+
+/**
  * Number of sockets kept waiting to be accepted.
  */
 #define NC_REVERSE_QUEUE 5
-
-/**
- * Timeout for connecting Call Home socket to a client (s).
- */
-#define NC_SOCKET_CH_TIMEOUT 5
-
-/**
- * Number of retires of connection Call Home socket to a client.
- */
-#define NC_SOCKET_CH_RETRIES 5
 
 /**
  * @brief Type of the session
@@ -662,13 +656,15 @@ NC_MSG_TYPE nc_handshake_io(struct nc_session *session);
  *
  * @param[in] host Hostname to connect to.
  * @param[in] port Port to connect on.
- * @param[in] timeout for blocking the connect+select call (-1 for infinite).
+ * @param[in] timeout_ms Timeout in ms for blocking the connect + select call (-1 for infinite).
  * @param[in] ka Keepalives parameters.
- * @param[in,out] sock_pending for exchanging the pending socket, if the blocking timeout was != -1
+ * @param[in,out] sock_pending Previous pending socket. If set, equal to -1, and the connection is still in progress
+ * after @p timeout, it is set to the pending socket but -1 is returned. If NULL, the socket is closed on timeout.
  * @param[out] ip_host Optional parameter with string IP address of the connected host.
  * @return Connected socket or -1 on error.
  */
-int nc_sock_connect(const char *host, uint16_t port, int timeout, struct nc_keepalives *ka, int *sock_pending, char **ip_host);
+int nc_sock_connect(const char *host, uint16_t port, int timeout_ms, struct nc_keepalives *ka, int *sock_pending,
+        char **ip_host);
 
 /**
  * @brief Accept a new socket connection.

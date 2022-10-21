@@ -1399,12 +1399,18 @@ fail:
     return NULL;
 }
 
-/*
-   Helper for a non-blocking connect (which is required because of the locking
-   concept for e.g. call home settings). For more details see nc_sock_connect().
+/**
+ * @brief Try to connect a socket, optionally a pending one from a previous attempt.
+ *
+ * @param[in] timeout_ms Timeout in ms to wait for the connection to be fully established, -1 to block.
+ * @param[in,out] sock_pending Optional previously created socked that was not fully connected yet. If provided and
+ * connected, is set to -1.
+ * @param[in] res Addrinfo resource to use when creating a new socket.
+ * @param[in] ka Keepalives to set.
+ * @return Connected socket or -1 on error.
  */
 static int
-_non_blocking_connect(int timeout, int *sock_pending, struct addrinfo *res, struct nc_keepalives *ka)
+sock_connect(int timeout_ms, int *sock_pending, struct addrinfo *res, struct nc_keepalives *ka)
 {
     int flags, ret, error;
     int sock = -1;
@@ -1453,20 +1459,23 @@ _non_blocking_connect(int timeout, int *sock_pending, struct addrinfo *res, stru
             }
         }
     }
-    ts.tv_sec = timeout;
-    ts.tv_usec = 0;
 
     FD_ZERO(&wset);
     FD_SET(sock, &wset);
 
-    if ((ret = select(sock + 1, NULL, &wset, NULL, (timeout != -1) ? &ts : NULL)) < 0) {
+    /* wait for some data on the socket */
+    if (timeout_ms != -1) {
+        ts.tv_sec = timeout_ms / 1000;
+        ts.tv_usec = (timeout_ms % 1000) * 1000;
+    }
+    if ((ret = select(sock + 1, NULL, &wset, NULL, (timeout_ms != -1) ? &ts : NULL)) < 0) {
         ERR(NULL, "select() failed (%s).", strerror(errno));
         goto cleanup;
     }
 
     if (ret == 0) {
         /* there was a timeout */
-        VRB(NULL, "Timed out after %ds (%s).", timeout, strerror(errno));
+        VRB(NULL, "Timed out after %d ms (%s).", timeout_ms, strerror(errno));
         if (sock_pending) {
             /* no sock-close, we'll try it again */
             *sock_pending = sock;
@@ -1494,6 +1503,10 @@ _non_blocking_connect(int timeout, int *sock_pending, struct addrinfo *res, stru
         goto cleanup;
     }
 
+    /* connected */
+    if (sock_pending) {
+        *sock_pending = -1;
+    }
     return sock;
 
 cleanup:
@@ -1504,16 +1517,8 @@ cleanup:
     return -1;
 }
 
-/* A given timeout value limits the time how long the function blocks. If it has to block
-   only for some seconds, a socket connection might not yet have been fully established.
-   Therefore the active (pending) socket will be stored in *sock_pending, but the return
-   value will be -1. In such a case a subsequent invokation is required, by providing the
-   stored sock_pending, again.
-   In general, if this function returns -1, when a timeout has been given, this function
-   has to be invoked, until it returns a valid socket.
- */
 int
-nc_sock_connect(const char *host, uint16_t port, int timeout, struct nc_keepalives *ka, int *sock_pending, char **ip_host)
+nc_sock_connect(const char *host, uint16_t port, int timeout_ms, struct nc_keepalives *ka, int *sock_pending, char **ip_host)
 {
     int i, opt;
     int sock = sock_pending ? *sock_pending : -1;
@@ -1521,7 +1526,7 @@ nc_sock_connect(const char *host, uint16_t port, int timeout, struct nc_keepaliv
     char *buf, port_s[6]; /* length of string representation of short int */
     void *addr;
 
-    DBG(NULL, "nc_sock_connect(%s, %u, %d, %d)", host, port, timeout, sock);
+    DBG(NULL, "nc_sock_connect(%s, %u, %d, %d)", host, port, timeout_ms, sock);
 
     /* no pending socket */
     if (sock == -1) {
@@ -1538,7 +1543,7 @@ nc_sock_connect(const char *host, uint16_t port, int timeout, struct nc_keepaliv
         }
 
         for (res = res_list; res != NULL; res = res->ai_next) {
-            sock = _non_blocking_connect(timeout, sock_pending, res, ka);
+            sock = sock_connect(timeout_ms, sock_pending, res, ka);
             if (sock == -1) {
                 if (!sock_pending || (*sock_pending == -1)) {
                     /* try the next resource */
@@ -1582,7 +1587,7 @@ nc_sock_connect(const char *host, uint16_t port, int timeout, struct nc_keepaliv
     } else {
         /* try to get a connection with the pending socket */
         assert(sock_pending);
-        sock = _non_blocking_connect(timeout, sock_pending, NULL, ka);
+        sock = sock_connect(timeout_ms, sock_pending, NULL, ka);
     }
 
     return sock;
