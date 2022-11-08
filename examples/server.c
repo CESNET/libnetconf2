@@ -26,7 +26,6 @@
 #include <unistd.h>
 
 #include <libyang/libyang.h>
-#include <libyang/metadata.h>
 
 #include "log.h"
 #include "messages_server.h"
