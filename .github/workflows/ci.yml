@@ -15,7 +15,7 @@ env:
 jobs:
   git-branch:
     name: Get git branch
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     outputs:
       branch-name: ${{ steps.get-git-branch.outputs.branch-name }}
     steps:
@@ -26,7 +26,7 @@ jobs:
           else
             export GIT_BRANCH=${{ github.base_ref }}
           fi
-          echo "::set-output name=branch-name::$GIT_BRANCH"
+          echo "GIT_BRANCH=$GIT_BRANCH" >> $GITHUB_ENV
 
   build:
     name: ${{ matrix.config.name }}
@@ -37,8 +37,8 @@ jobs:
       matrix:
         config:
           - {
-            name: "Release, Ubuntu 18.04, gcc",
-            os: "ubuntu-18.04",
+            name: "Release, Ubuntu 22.04, gcc",
+            os: "ubuntu-22.04",
             build-type: "Release",
             dep-build-type: "Release",
             cc: "gcc",
@@ -49,8 +49,8 @@ jobs:
             make-target: ""
           }
           - {
-            name: "Release, Ubuntu 18.04, clang",
-            os: "ubuntu-18.04",
+            name: "Release, Ubuntu 22.04, clang",
+            os: "ubuntu-22.04",
             build-type: "Release",
             dep-build-type: "Release",
             cc: "clang",
@@ -61,8 +61,8 @@ jobs:
             make-target: ""
           }
           - {
-            name: "Debug, Ubuntu 18.04, gcc",
-            os: "ubuntu-18.04",
+            name: "Debug, Ubuntu 22.04, gcc",
+            os: "ubuntu-22.04",
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "gcc",
@@ -73,8 +73,8 @@ jobs:
             make-target: ""
           }
           - {
-            name: "Debug, Ubuntu 18.04, clang",
-            os: "ubuntu-18.04",
+            name: "Debug, Ubuntu 22.04, clang",
+            os: "ubuntu-22.04",
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "clang",
@@ -85,7 +85,7 @@ jobs:
             make-target: ""
           }
           - {
-            name: "SSH Only, Ubuntu 22.04",
+            name: "SSH Only",
             os: "ubuntu-22.04",
             build-type: "Debug",
             dep-build-type: "Release",
@@ -98,7 +98,7 @@ jobs:
           }
           - {
             name: "TLS Only",
-            os: "ubuntu-18.04",
+            os: "ubuntu-22.04",
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "gcc",
@@ -110,7 +110,7 @@ jobs:
           }
           - {
             name: "No SSH nor TLS",
-            os: "ubuntu-18.04",
+            os: "ubuntu-22.04",
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "gcc",
@@ -122,7 +122,7 @@ jobs:
           }
           - {
             name: "ASAN and UBSAN",
-            os: "ubuntu-18.04",
+            os: "ubuntu-22.04",
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "clang",
@@ -134,7 +134,7 @@ jobs:
           }
           - {
             name: "ABI Check",
-            os: "ubuntu-18.04",
+            os: "ubuntu-22.04",
             build-type: "ABICheck",
             dep-build-type: "Debug",
             cc: "gcc",
@@ -146,13 +146,7 @@ jobs:
           }
 
     steps:
-      - uses: actions/checkout@v2
-
-      - name: libssh 0.7 repo
-        if: matrix.config.os == 'ubuntu-18.04' || matrix.config.os == 'ubuntu-20.04'
-        shell: bash
-        run: |
-          sudo add-apt-repository ppa:kedazo/libssh-0.7.x -y
+      - uses: actions/checkout@v3
 
       - name: Deps-packages
         shell: bash
@@ -179,7 +173,7 @@ jobs:
       - name: Deps-libyang
         shell: bash
         run: |
-          git clone -b ${{needs.git-branch.outputs.branch-name}} https://github.com/CESNET/libyang.git
+          git clone -b $GIT_BRANCH https://github.com/CESNET/libyang.git
           cd libyang
           mkdir build
           cd build
