@@ -26,7 +26,7 @@ jobs:
           else
             export GIT_BRANCH=${{ github.base_ref }}
           fi
-          echo "GIT_BRANCH=$GIT_BRANCH" >> $GITHUB_ENV
+          echo "branch-name=$GIT_BRANCH" >> $GITHUB_OUTPUT
 
   build:
     name: ${{ matrix.config.name }}
@@ -37,7 +37,7 @@ jobs:
       matrix:
         config:
           - {
-            name: "Release, Ubuntu 22.04, gcc",
+            name: "Release, gcc",
             os: "ubuntu-22.04",
             build-type: "Release",
             dep-build-type: "Release",
@@ -49,7 +49,7 @@ jobs:
             make-target: ""
           }
           - {
-            name: "Release, Ubuntu 22.04, clang",
+            name: "Release, clang",
             os: "ubuntu-22.04",
             build-type: "Release",
             dep-build-type: "Release",
@@ -61,7 +61,7 @@ jobs:
             make-target: ""
           }
           - {
-            name: "Debug, Ubuntu 22.04, gcc",
+            name: "Debug, gcc",
             os: "ubuntu-22.04",
             build-type: "Debug",
             dep-build-type: "Release",
@@ -73,7 +73,7 @@ jobs:
             make-target: ""
           }
           - {
-            name: "Debug, Ubuntu 22.04, clang",
+            name: "Debug, clang",
             os: "ubuntu-22.04",
             build-type: "Debug",
             dep-build-type: "Release",
@@ -168,12 +168,12 @@ jobs:
           CC=${{ matrix.config.cc }} cmake ..
           make
           sudo make install
-        if: ${{ matrix.config.name == 'Debug, Ubuntu 18.04, gcc' }}
+        if: ${{ matrix.config.name == 'Debug, gcc' }}
 
       - name: Deps-libyang
         shell: bash
         run: |
-          git clone -b ${{ env.GIT_BRANCH }} https://github.com/CESNET/libyang.git
+          git clone -b ${{ needs.git-branch.outputs.branch-name }} https://github.com/CESNET/libyang.git
           cd libyang
           mkdir build
           cd build

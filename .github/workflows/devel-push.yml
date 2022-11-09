@@ -22,7 +22,7 @@ jobs:
           else
             export GIT_BRANCH=${{ github.base_ref }}
           fi
-          echo "GIT_BRANCH=$GIT_BRANCH" >> $GITHUB_ENV
+          echo "branch-name=$GIT_BRANCH" >> $GITHUB_OUTPUT
 
   build:
     name: ${{ matrix.config.name }}
@@ -84,7 +84,7 @@ jobs:
       - name: Deps-libyang
         shell: bash
         run: |
-          git clone -b ${{ env.GIT_BRANCH }} https://github.com/CESNET/libyang.git
+          git clone -b ${{ needs.git-branch.outputs.branch-name }} https://github.com/CESNET/libyang.git
           cd libyang
           mkdir build
           cd build
