@@ -713,7 +713,7 @@ static void
 nc_session_free_transport(struct nc_session *session, int *multisession)
 {
     int connected; /* flag to indicate whether the transport socket is still connected */
-    int sock = -1, r;
+    int sock = -1;
     struct nc_session *siter;
 
     *multisession = 0;
@@ -738,7 +738,9 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
         break;
 
 #ifdef NC_ENABLED_SSH
-    case NC_TI_LIBSSH:
+    case NC_TI_LIBSSH: {
+        int r;
+
         if (connected) {
             ssh_channel_send_eof(session->ti.libssh.channel);
             ssh_channel_free(session->ti.libssh.channel);
@@ -818,6 +820,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
             nc_session_io_unlock(session, __func__);
         }
         break;
+    }
 #endif
 
 #ifdef NC_ENABLED_TLS
@@ -851,7 +854,6 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     int r, i, rpc_locked = 0, msgs_locked = 0, timeout;
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
     struct nc_msg_cont *contiter;
-    struct nc_session *siter;
     struct ly_in *msg;
     struct timespec ts;
     void *p;
@@ -935,6 +937,9 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         }
 
         /* LY ext data */
+#ifdef NC_ENABLED_SSH
+        struct nc_session *siter;
+
         if ((session->flags & NC_SESSION_SHAREDCTX) && session->ti.libssh.next) {
             for (siter = session->ti.libssh.next; siter != session; siter = siter->ti.libssh.next) {
                 if (siter->status != NC_STATUS_STARTING) {
@@ -945,7 +950,9 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
                     break;
                 }
             }
-        } else {
+        } else
+#endif
+        {
             lyd_free_siblings(session->opts.client.ext_data);
         }
     }
