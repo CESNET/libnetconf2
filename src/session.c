@@ -793,6 +793,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
                 /* there are still multiple sessions, keep the ring list */
                 siter->ti.libssh.next = session->ti.libssh.next;
             }
+
             /* change nc_sshcb_msg() argument, we need a RUNNING session and this one will be freed */
             if (session->flags & NC_SESSION_SSH_MSG_CB) {
                 siter = session->ti.libssh.next;
@@ -850,6 +851,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     int r, i, rpc_locked = 0, msgs_locked = 0, timeout;
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
     struct nc_msg_cont *contiter;
+    struct nc_session *siter;
     struct ly_in *msg;
     struct timespec ts;
     void *p;
@@ -930,6 +932,21 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
                 free(session->opts.client.cpblts[i]);
             }
             free(session->opts.client.cpblts);
+        }
+
+        /* LY ext data */
+        if ((session->flags & NC_SESSION_SHAREDCTX) && session->ti.libssh.next) {
+            for (siter = session->ti.libssh.next; siter != session; siter = siter->ti.libssh.next) {
+                if (siter->status != NC_STATUS_STARTING) {
+                    /* move LY ext data to this session */
+                    assert(!siter->opts.client.ext_data);
+                    siter->opts.client.ext_data = session->opts.client.ext_data;
+                    session->opts.client.ext_data = NULL;
+                    break;
+                }
+            }
+        } else {
+            lyd_free_siblings(session->opts.client.ext_data);
         }
     }
 

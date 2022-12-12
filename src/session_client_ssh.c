@@ -50,7 +50,6 @@
 #include "session_client_ch.h"
 
 struct nc_client_context *nc_client_context_location(void);
-int nc_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx);
 
 #define client_opts nc_client_context_location()->opts
 #define ssh_opts nc_client_context_location()->ssh_opts
@@ -1609,7 +1608,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
      * SSH session is established and netconf channel opened, create a NETCONF session. (Application layer)
      */
 
-    if (nc_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
+    if (nc_client_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
         goto fail;
     }
     ctx = session->ctx;
@@ -1709,7 +1708,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
         goto fail;
     }
 
-    if (nc_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
+    if (nc_client_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
         goto fail;
     }
     ctx = session->ctx;
@@ -1787,7 +1786,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     }
     nc_session_io_unlock(new_session, __func__);
 
-    if (nc_session_new_ctx(new_session, ctx) != EXIT_SUCCESS) {
+    if (nc_client_session_new_ctx(new_session, ctx) != EXIT_SUCCESS) {
         goto fail;
     }
     ctx = session->ctx;

@@ -35,7 +35,6 @@
 #endif
 
 struct nc_client_context *nc_client_context_location(void);
-int nc_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx);
 
 #define client_opts nc_client_context_location()->opts
 #define tls_opts nc_client_context_location()->tls_opts
@@ -723,7 +722,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
         goto fail;
     }
 
-    if (nc_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
+    if (nc_client_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
         goto fail;
     }
     ctx = session->ctx;
@@ -774,7 +773,7 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
     session->ti_type = NC_TI_OPENSSL;
     session->ti.tls = tls;
 
-    if (nc_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
+    if (nc_client_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
         goto fail;
     }
     ctx = session->ctx;

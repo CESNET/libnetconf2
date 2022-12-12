@@ -64,6 +64,10 @@ server_thread(void *arg)
     nc_ps_add_session(ps, session);
     ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
     nc_assert(ret & NC_PSPOLL_RPC);
+    ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
+    nc_assert(ret & NC_PSPOLL_RPC);
+    ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
+    nc_assert(ret & NC_PSPOLL_RPC);
     nc_ps_clear(ps, 0, NULL);
 #endif
 
@@ -71,6 +75,10 @@ server_thread(void *arg)
     nc_assert(msgtype == NC_MSG_HELLO);
 
     nc_ps_add_session(ps, session);
+    ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
+    nc_assert(ret & NC_PSPOLL_RPC);
+    ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
+    nc_assert(ret & NC_PSPOLL_RPC);
     ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
     nc_assert(ret & NC_PSPOLL_RPC);
     nc_ps_clear(ps, 0, NULL);

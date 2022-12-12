@@ -447,6 +447,7 @@ struct nc_session {
             struct nc_msg_cont *msgs;      /**< queue for messages received of different type than expected */
             ATOMIC_T ntf_thread_count;     /**< number of running notification threads */
             ATOMIC_T ntf_thread_running;   /**< flag whether there are notification threads for this session running or not */
+            struct lyd_node *ext_data;     /**< LY ext data used in the context callback */
 
             /* client flags */
             /* some server modules failed to load so the data from them will be ignored - not use strict flag for parsing */
@@ -631,6 +632,8 @@ int nc_session_client_msgs_unlock(struct nc_session *session, const char *func);
 int nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func);
 
 int nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func);
+
+int nc_client_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx);
 
 /**
  * @brief Fill libyang context in @p session. Context models are based on the stored session
