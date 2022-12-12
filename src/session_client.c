@@ -477,27 +477,31 @@ retrieve_module_data_getschema(const char *name, const char *rev, struct clb_dat
         free(model_data);
         model_data = NULL;
     }
+    if (!model_data) {
+        goto cleanup;
+    }
+
+    /* set format */
+    *format = LYS_IN_YANG;
 
     /* try to store the model_data into local module repository */
-    if (model_data) {
-        *format = LYS_IN_YANG;
-        if (client_opts.schema_searchpath) {
-            if (asprintf(&localfile, "%s/%s%s%s.yang", client_opts.schema_searchpath, name, rev ? "@" : "",
-                    rev ? rev : "") == -1) {
-                ERRMEM;
+    lys_search_localfile(ly_ctx_get_searchdirs(clb_data->session->ctx), 0, name, rev, &localfile, NULL);
+    if (client_opts.schema_searchpath && !localfile) {
+        if (asprintf(&localfile, "%s/%s%s%s.yang", client_opts.schema_searchpath, name, rev ? "@" : "",
+                rev ? rev : "") == -1) {
+            ERRMEM;
+        } else {
+            f = fopen(localfile, "w");
+            if (!f) {
+                WRN(clb_data->session, "Unable to store \"%s\" as a local copy of module retrieved via <get-schema> (%s).",
+                        localfile, strerror(errno));
             } else {
-                f = fopen(localfile, "w");
-                if (!f) {
-                    WRN(clb_data->session, "Unable to store \"%s\" as a local copy of module retrieved via <get-schema> (%s).",
-                            localfile, strerror(errno));
-                } else {
-                    fputs(model_data, f);
-                    fclose(f);
-                }
-                free(localfile);
+                fputs(model_data, f);
+                fclose(f);
             }
         }
     }
+    free(localfile);
 
 cleanup:
     lyd_free_tree(envp);
