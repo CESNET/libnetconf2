@@ -254,8 +254,8 @@ nc_client_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx)
         if (client_opts.schema_searchpath) {
             ly_ctx_set_searchdir(ctx, client_opts.schema_searchpath);
         }
-        if (!access(NC_YANG_DIR, F_OK)) {
-            ly_ctx_set_searchdir(ctx, NC_YANG_DIR);
+        if (!access(NC_CLIENT_SEARCH_DIR, F_OK)) {
+            ly_ctx_set_searchdir(ctx, NC_CLIENT_SEARCH_DIR);
         }
 
         /* set callback for getting modules, if provided */

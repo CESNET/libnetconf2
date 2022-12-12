@@ -50,9 +50,9 @@
 #cmakedefine LIBPAM_HAVE_CONFDIR
 
 /*
- * Location of installed basic YANG modules on the system
+ * Location of installed YANG modules on the system
  */
-#define NC_YANG_DIR "@YANG_MODULE_DIR@"
+#define NC_CLIENT_SEARCH_DIR "@CLIENT_SEARCH_DIR@"
 
 /*
  * Inactive read timeout
