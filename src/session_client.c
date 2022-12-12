@@ -229,7 +229,8 @@ nc_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx)
         /* user path must be first, the first path is used to store modules retreived via get-schema */
         if (client_opts.schema_searchpath) {
             ly_ctx_set_searchdir(ctx, client_opts.schema_searchpath);
-        } else if (!access(NC_YANG_DIR, F_OK)) {
+        }
+        if (!access(NC_YANG_DIR, F_OK)) {
             ly_ctx_set_searchdir(ctx, NC_YANG_DIR);
         }
 
