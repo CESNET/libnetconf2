@@ -42,6 +42,8 @@ servers. NETCONF is the NETwork CONFiguration protocol introduced by IETF.
 %license LICENSE
 %doc README.md FAQ.md
 %{_libdir}/libnetconf2.so.*
+%{_datadir}/yang/modules/libnetconf2/*.yang
+%dir %{_datadir}/yang/modules/libnetconf2/
 
 %files devel
 %doc CODINGSTYLE.md

@@ -97,7 +97,7 @@ set(READ_INACTIVE_TIMEOUT 20 CACHE STRING "Maximum number of seconds waiting for
 set(READ_ACTIVE_TIMEOUT 300 CACHE STRING "Maximum number of seconds for receiving a full message")
 set(MAX_PSPOLL_THREAD_COUNT 6 CACHE STRING "Maximum number of threads that could simultaneously access a ps_poll structure")
 set(TIMEOUT_STEP 100 CACHE STRING "Number of microseconds tasks are repeated until timeout elapses")
-set(YANG_MODULE_DIR "${CMAKE_INSTALL_PREFIX}/share/yang/modules" CACHE STRING "Directory with common YANG modules")
+set(YANG_MODULE_DIR "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/yang/modules/libnetconf2" CACHE STRING "Directory where to copy the YANG modules to")
 set(CALL_HOME_BACKOFF_WAIT 2 CACHE STRING "Number of seconds to wait between Call Home connection attempts")
 
 #
@@ -312,6 +312,9 @@ configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/sr
 configure_file(nc_client.h.in nc_client.h)
 configure_file(nc_server.h.in nc_server.h)
 configure_file(nc_version.h.in nc_version.h)
+
+# install YANG modules
+install(DIRECTORY "${PROJECT_SOURCE_DIR}/modules/" DESTINATION ${YANG_MODULE_DIR} FILES_MATCHING PATTERN "*.yang")
 
 # install library
 install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
