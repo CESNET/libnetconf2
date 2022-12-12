@@ -275,12 +275,12 @@ init(struct ly_ctx **context, struct nc_pollsession **ps, const char *path, NC_T
 
         /* set endpoint listening port to the defined one */
         if (nc_server_endpt_set_port("main_ssh", SSH_PORT)) {
-            ERR_MSG_CLEANUP("Couldn't set address of end point.\n");
+            ERR_MSG_CLEANUP("Couldn't set port of end point.\n");
         }
 
         /* allow only 'password' SSH authentication method for the endpoint */
         if (nc_server_ssh_endpt_set_auth_methods("main_ssh", NC_SSH_AUTH_PASSWORD)) {
-            ERR_MSG_CLEANUP("Couldn't set address of end point.\n");
+            ERR_MSG_CLEANUP("Couldn't set authentication methods of end point.\n");
         }
     }
 
