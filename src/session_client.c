@@ -1230,7 +1230,7 @@ cleanup:
 int
 nc_ctx_check_and_fill(struct nc_session *session)
 {
-    int i, get_schema_support = 0, yanglib_support = 0, get_data_support = 0, xpath_support = 0, ret = -1;
+    int i, get_schema_support = 0, yanglib_support = 0, xpath_support = 0, nmda_support = 0, ret = -1;
     ly_module_imp_clb old_clb = NULL;
     void *old_data = NULL;
     struct lys_module *mod = NULL;
@@ -1257,18 +1257,14 @@ nc_ctx_check_and_fill(struct nc_session *session)
             yanglib_support = 1 + i;
         } else if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:netconf:capability:xpath:1.0", 44)) {
             xpath_support = 1 + i;
+        } else if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:xml:ns:yang:ietf-netconf-nmda", 45)) {
+            nmda_support = 1 + i;
         }
     }
-    if (get_schema_support) {
-        VRB(session, "Capability for <get-schema> support found.");
-    } else {
-        VRB(session, "Capability for <get-schema> support not found.");
-    }
-    if (yanglib_support) {
-        VRB(session, "Capability for yang-library support found.");
-    } else {
-        VRB(session, "Capability for yang-library support not found.");
-    }
+    VRB(session, "Capability for <get-schema> support%s found.", get_schema_support ? "" : " not");
+    VRB(session, "Capability for yang-library support%s found.", yanglib_support ? "" : " not");
+    VRB(session, "Capability for XPath filter support%s found.", xpath_support ? "" : " not");
+    VRB(session, "Capability for NMDA RPCs support%s found.", nmda_support ? "" : " not");
 
     /* get information about server's modules from capabilities list until we will have yang-library */
     if (build_module_info_cpblts(session->opts.client.cpblts, &server_modules) || !server_modules) {
@@ -1313,21 +1309,19 @@ nc_ctx_check_and_fill(struct nc_session *session)
                 }
             }
             free(revision);
-
-            /* ietf-netconf-nmda is needed to issue get-data */
-            if (!nc_ctx_load_module(session, "ietf-netconf-nmda", NULL, NULL, server_modules, old_clb, old_data,
-                    get_schema_support, &mod)) {
-                VRB(session, "Support for <get-data> from ietf-netconf-nmda found.");
-                get_data_support = 1;
-            } else {
-                VRB(session, "Support for <get-data> from ietf-netconf-nmda not found.");
-            }
         }
+    }
+
+    /* ietf-netconf-nmda is needed to issue get-data */
+    if (nmda_support && nc_ctx_load_module(session, "ietf-netconf-nmda", NULL, NULL, server_modules, old_clb, old_data,
+            get_schema_support, &mod)) {
+        WRN(session, "Loading NMDA module failed, unable to use <get-data>.");
+        nmda_support = 0;
     }
 
     /* prepare structured information about server's modules */
     if (yanglib_support) {
-        if (build_module_info_yl(session, get_data_support, xpath_support, &sm)) {
+        if (build_module_info_yl(session, nmda_support, xpath_support, &sm)) {
             goto cleanup;
         } else if (!sm) {
             VRB(session, "Trying to use capabilities instead of ietf-yang-library data.");
@@ -1353,7 +1347,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     }
 
     /* set support for schema-mount, if possible */
-    if (nc_ctx_schema_mount(session, get_data_support, xpath_support)) {
+    if (nc_ctx_schema_mount(session, nmda_support, xpath_support)) {
         goto cleanup;
     }
 
