@@ -2700,7 +2700,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         if (rpc_gc->wd_mode) {
             ietfncwd = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-with-defaults");
             if (!ietfncwd) {
-                ERR(session, "Missing \"ietf-netconf-with-defaults\" module in the context.", session->id);
+                ERR(session, "Missing \"ietf-netconf-with-defaults\" module in the context.");
                 lyrc = LY_ENOTFOUND;
                 break;
             }
@@ -2756,7 +2756,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         if (rpc_cp->wd_mode) {
             ietfncwd = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-with-defaults");
             if (!ietfncwd) {
-                ERR(session, "Missing \"ietf-netconf-with-defaults\" module in the context.", session->id);
+                ERR(session, "Missing \"ietf-netconf-with-defaults\" module in the context.");
                 lyrc = LY_ENOTFOUND;
                 break;
             }
@@ -2810,7 +2810,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         if (rpc_g->wd_mode) {
             ietfncwd = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-with-defaults");
             if (!ietfncwd) {
-                ERR(session, "Missing \"ietf-netconf-with-defaults\" module in the context.", session->id);
+                ERR(session, "Missing \"ietf-netconf-with-defaults\" module in the context.");
                 lyrc = LY_ENOTFOUND;
                 break;
             }

@@ -370,7 +370,7 @@ nc_session_rpc_unlock(struct nc_session *session, int timeout, const char *func)
         ERR(session, "%s: failed to RPC lock a session (%s).", func, strerror(ret));
         return -1;
     } else if (ret) {
-        WRN(session, "%s: session RPC lock timeout, should not happen.");
+        WRN(session, "%s: session RPC lock timeout, should not happen.", func);
     }
 
     session->opts.server.rpc_inuse = 0;
