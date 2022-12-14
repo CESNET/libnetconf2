@@ -861,6 +861,11 @@ nc_server_notif_new(struct lyd_node *event, char *eventtime, NC_PARAMTYPE paramt
     }
 
     ntf = malloc(sizeof *ntf);
+    if (!ntf) {
+        ERRMEM;
+        return NULL;
+    }
+
     if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
         ntf->eventtime = strdup(eventtime);
         if (lyd_dup_single(event, NULL, LYD_DUP_RECURSIVE, &ntf->ntf)) {
