@@ -1945,6 +1945,7 @@ nc_get_uid(int sock, uid_t *uid)
 #ifdef SO_PEERCRED
     struct ucred ucred;
     socklen_t len;
+
     len = sizeof(ucred);
     ret = getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &ucred, &len);
     if (!ret) {
@@ -1967,6 +1968,7 @@ nc_accept_unix(struct nc_session *session, int sock)
 #if defined (SO_PEERCRED) || defined (HAVE_GETPEEREID)
     struct passwd *pw, pw_buf;
     char *username;
+
     session->ti_type = NC_TI_UNIX;
     uid_t uid = 0;
     char *buf = NULL;

@@ -88,6 +88,7 @@ void nc_client_ssh_ch_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const
  */
 void nc_client_ssh_ch_get_auth_hostkey_check_clb(int (**auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
         void **priv);
+
 /**
  * @brief Set SSH Call Home password authentication callback.
  *

@@ -1203,7 +1203,7 @@ nc_getpwuid(uid_t uid, struct passwd *pwd_buf, char **buf, size_t *buf_size)
     } while (ret && (ret == ERANGE));
 
     if (ret) {
-        ERR(NULL, "Retrieving UID \"%lu\" passwd entry failed (%s).", (unsigned long int)uid, strerror(ret));
+        ERR(NULL, "Retrieving UID \"%lu\" passwd entry failed (%s).", (unsigned long)uid, strerror(ret));
     }
     return pwd;
 }

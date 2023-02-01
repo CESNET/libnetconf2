@@ -112,6 +112,7 @@ nc_client_context_free(void *ptr)
 
 #if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
         int i;
+
         for (i = 0; i < c->opts.ch_bind_count; ++i) {
             close(c->opts.ch_binds[i].sock);
             free((char *)c->opts.ch_binds[i].address);

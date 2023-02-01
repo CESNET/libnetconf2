@@ -1399,7 +1399,7 @@ nc_recv_client_hello_io(struct nc_session *session)
     struct lyd_node_opaq *node;
     int r, ver = -1, flag = 0;
     char *str;
-    long long int id;
+    long long id;
     NC_MSG_TYPE rc = NC_MSG_HELLO;
 
     r = nc_read_msg_poll_io(session, NC_CLIENT_HELLO_TIMEOUT * 1000, &msg);
