@@ -259,7 +259,7 @@ pam_sm_acct_mgmt(pam_handle_t *pam_h, int flags, int argc, const char *argv[])
     if (r != PAM_SUCCESS) {
         return r;
     }
-    if (!strcmp((const char *)username, "test")) {
+    if (!strcmp((const char *)username, "test_int")) {
         return PAM_NEW_AUTHTOK_REQD;
     }
     return PAM_SYSTEM_ERR;
@@ -291,7 +291,7 @@ pam_sm_chauthtok(pam_handle_t *pam_h, int flags, int argc, const char *argv[])
         if (r != PAM_SUCCESS) {
             return r;
         }
-        if (!strcmp((const char *)username, "test")) {
+        if (!strcmp((const char *)username, "test_int")) {
             return PAM_SUCCESS;
         } else {
             return PAM_SYSTEM_ERR;
@@ -299,7 +299,7 @@ pam_sm_chauthtok(pam_handle_t *pam_h, int flags, int argc, const char *argv[])
 
         /* change the authentication token in the second call */
     } else if (flags & PAM_UPDATE_AUTHTOK) {
-        r = pam_set_item(pam_h, PAM_AUTHTOK, "test");
+        r = pam_set_item(pam_h, PAM_AUTHTOK, "test_int");
         if (r == PAM_SUCCESS) {
             printf("[TEST #6] Passed.\n\n");
         } else {

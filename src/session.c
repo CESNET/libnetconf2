@@ -125,7 +125,7 @@ nc_keytype2str(NC_SSH_KEY_TYPE type)
 }
 
 int
-nc_sock_enable_keepalive(int sock, struct nc_keepalives *ka)
+nc_sock_configure_keepalive(int sock, struct nc_keepalives *ka)
 {
     int opt;
 
@@ -754,24 +754,6 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
                 /* there are still multiple sessions, keep the ring list */
                 siter->ti.libssh.next = session->ti.libssh.next;
             }
-
-            /* change nc_sshcb_msg() argument, we need a RUNNING session and this one will be freed */
-            if (session->flags & NC_SESSION_SSH_MSG_CB) {
-                siter = session->ti.libssh.next;
-                while (siter && (siter->status != NC_STATUS_RUNNING)) {
-                    if (siter->ti.libssh.next == session) {
-                        ERRINT;
-                        break;
-                    }
-                    siter = siter->ti.libssh.next;
-                }
-                /* siter may be NULL in case all the sessions terminated at the same time (socket was disconnected),
-                 * we set session to NULL because we do not expect any new message to arrive */
-                ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, siter);
-                if (siter) {
-                    siter->flags |= NC_SESSION_SSH_MSG_CB;
-                }
-            }
         }
 
         /* SESSION IO UNLOCK */
@@ -1032,6 +1014,8 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
     uint32_t i, u;
     LY_ARRAY_COUNT_TYPE v;
     char *yl_content_id;
+    uint32_t wd_also_supported;
+    uint32_t wd_basic_mode;
 
 #define NC_CPBLT_BUF_LEN 4096
     char str[NC_CPBLT_BUF_LEN];
@@ -1088,11 +1072,12 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
 
     mod = ly_ctx_get_module_implemented(ctx, "ietf-netconf-with-defaults");
     if (mod) {
-        if (!server_opts.wd_basic_mode) {
+        wd_basic_mode = ATOMIC_LOAD_RELAXED(server_opts.wd_basic_mode);
+        if (!wd_basic_mode) {
             VRB(NULL, "with-defaults capability will not be advertised even though \"ietf-netconf-with-defaults\" model is present, unknown basic-mode.");
         } else {
             strcpy(str, "urn:ietf:params:netconf:capability:with-defaults:1.0");
-            switch (server_opts.wd_basic_mode) {
+            switch (wd_basic_mode) {
             case NC_WD_ALL:
                 strcat(str, "?basic-mode=report-all");
                 break;
@@ -1107,18 +1092,19 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
                 break;
             }
 
-            if (server_opts.wd_also_supported) {
+            wd_also_supported = ATOMIC_LOAD_RELAXED(server_opts.wd_also_supported);
+            if (wd_also_supported) {
                 strcat(str, "&also-supported=");
-                if (server_opts.wd_also_supported & NC_WD_ALL) {
+                if (wd_also_supported & NC_WD_ALL) {
                     strcat(str, "report-all,");
                 }
-                if (server_opts.wd_also_supported & NC_WD_ALL_TAG) {
+                if (wd_also_supported & NC_WD_ALL_TAG) {
                     strcat(str, "report-all-tagged,");
                 }
-                if (server_opts.wd_also_supported & NC_WD_TRIM) {
+                if (wd_also_supported & NC_WD_TRIM) {
                     strcat(str, "trim,");
                 }
-                if (server_opts.wd_also_supported & NC_WD_EXPLICIT) {
+                if (wd_also_supported & NC_WD_EXPLICIT) {
                     strcat(str, "explicit,");
                 }
                 str[strlen(str) - 1] = '\0';
