@@ -111,7 +111,8 @@ set(libsrc
     src/messages_server.c
     src/session.c
     src/session_client.c
-    src/session_server.c)
+    src/session_server.c
+    src/config_server.c)
 
 if(ENABLE_SSH)
     list(APPEND libsrc
@@ -136,7 +137,8 @@ set(headers
     src/session_client.h
     src/session_client_ch.h
     src/session_server.h
-    src/session_server_ch.h)
+    src/session_server_ch.h
+    src/config_server.h)
 
 # files to generate doxygen from
 set(doxy_files

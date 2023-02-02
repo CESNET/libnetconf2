@@ -1,0 +1,35 @@
+module libnetconf2-netconf-server {
+  yang-version 1.1;
+  namespace "urn:cesnet:libnetconf2-netconf-server";
+  prefix np2;
+
+  import ietf-netconf-server {
+    prefix ncs;
+  }
+
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
+    leaf auth-attempts {
+      type uint16;
+      default 3;
+    }
+
+    leaf auth-timeout {
+      type uint16;
+      default 10;
+      units "seconds";
+    }
+  }
+
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication/ncs:users/ncs:user" {
+    container keyboard-interactive {
+      presence "";
+      leaf pam-config-file-name {
+        type string;
+        mandatory true;
+      }
+      leaf pam-config-file-dir {
+        type string;
+      }
+    }
+  }
+}

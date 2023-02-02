@@ -41,6 +41,33 @@
 /* number of all supported authentication methods */
 # define NC_SSH_AUTH_COUNT 3
 
+/**
+ * Enumeration of diff operation types.
+ */
+typedef enum {
+    NC_OP_NONE,
+    NC_OP_CREATE,
+    NC_OP_DELETE,
+    NC_OP_REPLACE
+} NC_OPERATION;
+
+/**
+ * Enumeration of key or certificate store type.
+ */
+typedef enum {
+    NC_STORE_LOCAL,     /**< key/certificate is stored locally in the ietf-netconf-server YANG data */
+    NC_STORE_KEYSTORE,  /**< key/certificate is stored externally in a keystore module YANG data */
+    NC_STORE_TRUSTSTORE /**< key/certificate is stored externally in a truststore module YANG data */
+} NC_STORE_TYPE;
+
+/**
+ * Enumeration of SSH public key representation types.
+ */
+typedef enum {
+    NC_SSH_PUBKEY_SSH2, /**< begins with BEGIN SSH2 PUBLICKEY, see RFC 4716 */
+    NC_SSH_PUBKEY_X509 /**< begins with BEGIN PUBLICKEY, see RFC 5280 sec. 4.1.2.7 */
+} NC_SSH_PUBKEY_TYPE;
+
 /* ACCESS unlocked */
 struct nc_client_ssh_opts {
     /* SSH authentication method preferences */
@@ -72,13 +99,71 @@ struct nc_client_ssh_opts {
     char *username;
 };
 
+struct nc_certificate {
+    char *name;
+    char *cert_data;
+};
+
+struct nc_keystore {
+    char *name;
+    char *pub_base64;
+    char *priv_base64;
+    NC_SSH_KEY_TYPE privkey_type;
+
+    struct nc_certificate *certs;
+    uint16_t cert_count;
+};
+
+struct nc_client_auth {
+    char *username;
+
+    NC_STORE_TYPE ks_type;
+    union {
+        struct {
+            struct nc_client_auth_pubkey {
+                char *name;
+                char *pub_base64;
+                NC_SSH_PUBKEY_TYPE pubkey_type;
+            } *pubkeys;
+            uint16_t pubkey_count;
+        };
+        char *ts_reference;
+    };
+
+    char *password;
+    char *pam_config_name;
+    char *pam_config_dir;
+    int supports_none;
+};
+
+struct nc_hostkey {
+    char *name;
+
+    NC_STORE_TYPE ks_type;
+    union {
+        struct {
+            NC_SSH_PUBKEY_TYPE pubkey_type;
+            char *pub_base64;
+            NC_SSH_KEY_TYPE privkey_type;
+            char *priv_base64;
+        };
+        struct nc_keystore *keystore;
+    };
+};
+
 /* ACCESS locked, separate locks */
 struct nc_server_ssh_opts {
-    /* SSH bind options */
-    char **hostkeys;
-    uint8_t hostkey_count;
+    struct nc_hostkey *hostkeys; /* everything in ks */
+    uint16_t hostkey_count;
 
-    int auth_methods;
+    struct nc_client_auth *auth_clients;
+    uint16_t client_count;
+
+    char *hostkey_algs;
+    char *encryption_algs;
+    char *kex_algs;
+    char *mac_algs;
+
     uint16_t auth_attempts;
     uint16_t auth_timeout;
 };
@@ -140,6 +225,13 @@ struct nc_server_unix_opts {
     gid_t gid;
 };
 
+struct nc_bind {
+    char *address;
+    uint16_t port;
+    int sock;
+    int pollin;
+};
+
 /* ACCESS unlocked */
 struct nc_client_opts {
     char *schema_searchpath;
@@ -147,12 +239,7 @@ struct nc_client_opts {
     void *schema_clb_data;
     struct nc_keepalives ka;
 
-    struct nc_bind {
-        char *address;
-        uint16_t port;
-        int sock;
-        int pollin;
-    } *ch_binds;
+    struct nc_bind *ch_binds;
 
     struct {
         NC_TRANSPORT_IMPL ti;
@@ -178,8 +265,8 @@ struct nc_client_context {
 
 struct nc_server_opts {
     /* ACCESS unlocked */
-    NC_WD_MODE wd_basic_mode;
-    int wd_also_supported;
+    ATOMIC_T wd_basic_mode;
+    ATOMIC_T wd_also_supported;
     uint32_t capabilities_count;
     char **capabilities;
 
@@ -189,8 +276,8 @@ struct nc_server_opts {
     void (*content_id_data_free)(void *data);
 
     /* ACCESS unlocked */
-    uint16_t hello_timeout;
-    uint16_t idle_timeout;
+    ATOMIC_T hello_timeout;
+    ATOMIC_T idle_timeout;
 
 #ifdef NC_ENABLED_SSH
     int (*passwd_auth_clb)(const struct nc_session *session, const char *password, void *user_data);
@@ -204,8 +291,6 @@ struct nc_server_opts {
     int (*interactive_auth_clb)(const struct nc_session *session, ssh_message msg, void *user_data);
     void *interactive_auth_data;
     void (*interactive_auth_data_free)(void *data);
-    char *conf_name;
-    char *conf_dir;
 #endif
 #ifdef NC_ENABLED_TLS
     int (*user_verify_clb)(const struct nc_session *session);
@@ -226,31 +311,14 @@ struct nc_server_opts {
     void (*trusted_cert_list_data_free)(void *data);
 #endif
 
-#ifdef NC_ENABLED_SSH
-    /* ACCESS locked with authkey_lock */
-    struct {
-        char *path;
-        char *base64;
-        NC_SSH_KEY_TYPE type;
-        char *username;
-    } *authkeys;
-    uint16_t authkey_count;
-    pthread_mutex_t authkey_lock;
+    pthread_rwlock_t config_lock;
+    struct nc_keystore *keystore; /**< store for keys/certificates */
+    uint16_t keystore_count;
 
-    int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path, char **privkey_data,
-            NC_SSH_KEY_TYPE *privkey_type);
-    void *hostkey_data;
-    void (*hostkey_data_free)(void *data);
-#endif
-
-    /* ACCESS locked, add/remove endpts/binds - bind_lock + WRITE endpt_lock (strict order!)
-     *                modify endpts - WRITE endpt_lock
-     *                access endpts - READ endpt_lock
-     *                modify/poll binds - bind_lock */
     struct nc_bind *binds;
-    pthread_mutex_t bind_lock;
     struct nc_endpt {
         char *name;
+        int changed;
         NC_TRANSPORT_IMPL ti;
         struct nc_keepalives ka;
 
@@ -265,7 +333,6 @@ struct nc_server_opts {
         } opts;
     } *endpts;
     uint16_t endpt_count;
-    pthread_rwlock_t endpt_lock;
 
     /* ACCESS locked, add/remove CH clients - WRITE lock ch_client_lock
      *                modify CH clients - READ lock ch_client_lock + ch_client_lock */
@@ -475,11 +542,6 @@ struct nc_session {
 #           define NC_SESSION_SSH_AUTHENTICATED 0x10
             /* netconf subsystem requested */
 #           define NC_SESSION_SSH_SUBSYS_NETCONF 0x20
-            /* new SSH message arrived */
-#           define NC_SESSION_SSH_NEW_MSG 0x40
-            /* this session is passed to nc_sshcb_msg() */
-#           define NC_SESSION_SSH_MSG_CB 0x80
-
             uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
 #endif
 #ifdef NC_ENABLED_TLS
@@ -529,6 +591,7 @@ struct nc_ntf_thread_arg {
 struct nc_pam_thread_arg {
     ssh_message msg;            /**< libssh message */
     struct nc_session *session; /**< NETCONF session */
+    struct nc_server_ssh_opts *opts; /**< SSH server opts */
 };
 
 #endif
@@ -577,7 +640,7 @@ int32_t nc_difftimespec_mono_cur(const struct timespec *ts);
 
 const char *nc_keytype2str(NC_SSH_KEY_TYPE type);
 
-int nc_sock_enable_keepalive(int sock, struct nc_keepalives *ka);
+int nc_sock_configure_keepalive(int sock, struct nc_keepalives *ka);
 
 struct nc_session *nc_new_session(NC_SIDE side, int shared_ti);
 
@@ -800,17 +863,17 @@ struct nc_session *nc_accept_callhome_ssh_sock(int sock, const char *host, uint1
  * @param[in] timeout Transport operations timeout in msec (not SSH authentication one).
  * @return 1 on success, 0 on timeout, -1 on error.
  */
-int nc_accept_ssh_session(struct nc_session *session, int sock, int timeout);
+int nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opts, int sock, int timeout);
 
 /**
- * @brief Callback called when a new SSH message is received.
+ * @brief Process a SSH message.
  *
- * @param[in] sshsession SSH session the message arrived on.
+ * @param[in] session Session structure of the connection.
+ * @param[in] opts Endpoint SSH options on which the session was created.
  * @param[in] msg SSH message itself.
- * @param[in] data NETCONF session running on @p sshsession.
  * @return 0 if the message was handled, 1 if it is left up to libssh.
  */
-int nc_sshcb_msg(ssh_session sshsession, ssh_message msg, void *data);
+int nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg);
 
 void nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts);
 

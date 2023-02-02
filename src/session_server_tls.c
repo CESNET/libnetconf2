@@ -954,7 +954,7 @@ nc_server_tls_endpt_set_server_cert(const char *endpt_name, const char *name)
     }
     ret = nc_server_tls_set_server_cert(name, endpt->opts.tls);
     /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
+    pthread_rwlock_unlock(&server_opts.config_lock);
 
     return ret;
 }
@@ -1047,7 +1047,7 @@ nc_server_tls_endpt_add_trusted_cert_list(const char *endpt_name, const char *na
     }
     ret = nc_server_tls_add_trusted_cert_list(name, endpt->opts.tls);
     /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
+    pthread_rwlock_unlock(&server_opts.config_lock);
 
     return ret;
 }
@@ -1138,7 +1138,7 @@ nc_server_tls_endpt_del_trusted_cert_list(const char *endpt_name, const char *na
     }
     ret = nc_server_tls_del_trusted_cert_list(name, endpt->opts.tls);
     /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
+    pthread_rwlock_unlock(&server_opts.config_lock);
 
     return ret;
 }
@@ -1203,7 +1203,7 @@ nc_server_tls_endpt_set_trusted_ca_paths(const char *endpt_name, const char *ca_
     }
     ret = nc_server_tls_set_trusted_ca_paths(ca_file, ca_dir, endpt->opts.tls);
     /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
+    pthread_rwlock_unlock(&server_opts.config_lock);
 
     return ret;
 }
@@ -1294,7 +1294,7 @@ nc_server_tls_endpt_set_crl_paths(const char *endpt_name, const char *crl_file, 
     }
     ret = nc_server_tls_set_crl_paths(crl_file, crl_dir, endpt->opts.tls);
     /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
+    pthread_rwlock_unlock(&server_opts.config_lock);
 
     return ret;
 }
@@ -1349,7 +1349,7 @@ nc_server_tls_endpt_clear_crls(const char *endpt_name)
     }
     nc_server_tls_clear_crls(endpt->opts.tls);
     /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
+    pthread_rwlock_unlock(&server_opts.config_lock);
 }
 
 API void
@@ -1444,7 +1444,7 @@ nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char *fin
     }
     ret = nc_server_tls_add_ctn(id, fingerprint, map_type, name, endpt->opts.tls);
     /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
+    pthread_rwlock_unlock(&server_opts.config_lock);
 
     return ret;
 }
@@ -1542,7 +1542,7 @@ nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *fing
     }
     ret = nc_server_tls_del_ctn(id, fingerprint, map_type, name, endpt->opts.tls);
     /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
+    pthread_rwlock_unlock(&server_opts.config_lock);
 
     return ret;
 }
@@ -1630,7 +1630,7 @@ nc_server_tls_endpt_get_ctn(const char *endpt_name, uint32_t *id, char **fingerp
     }
     ret = nc_server_tls_get_ctn(id, fingerprint, map_type, name, endpt->opts.tls);
     /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
+    pthread_rwlock_unlock(&server_opts.config_lock);
 
     return ret;
 }

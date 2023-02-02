@@ -52,5 +52,11 @@ extern ATOMIC_T verbose_level;
 #define ERRARG(arg) ERR(NULL, "%s: invalid argument (%s).", __func__, arg)
 #define ERRINIT ERR(NULL, "%s: libnetconf2 not initialized.", __func__)
 #define ERRINT ERR(NULL, "%s: internal error (%s:%d).", __func__, __FILE__, __LINE__)
+#define ERRNODE(name) ERR(NULL, "%s: missing node (%s) in the YANG data.", __func__, name)
+#define UNEXNODE(name) VRB(NULL, "%s: unexpected node (%s) in the YANG data.", __func__, name)
+#define CHECKNODE(node, name) if (strcmp(LYD_NAME(node), name)) { \
+                                  ERR(NULL, "%s: missing node (%s) in the YANG data.", __func__, name); \
+                                  return 1; \
+                              }
 
 #endif /* NC_LOG_PRIVATE_H_ */

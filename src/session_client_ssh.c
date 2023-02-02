@@ -167,6 +167,7 @@ _nc_client_ssh_destroy_opts(struct nc_client_ssh_opts *opts)
     }
     free(opts->keys);
     free(opts->username);
+    opts->key_count = 0;
     opts->keys = NULL;
     opts->username = NULL;
 }
@@ -1213,7 +1214,6 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
         ERR(session, "Authentication failed (%s).", ssh_get_error(ssh_sess));
         return -1;
     } else if (ret_auth == SSH_AUTH_SUCCESS) {
-        WRN(session, "Server accepts \"none\" authentication method.")
         return 1;
     }
 

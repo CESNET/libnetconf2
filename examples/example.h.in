@@ -21,6 +21,9 @@
 /* directory with library YANG modules */
 #define MODULES_DIR "@CMAKE_SOURCE_DIR@/modules"
 
+/* directory with examples source code and this header */
+#define EXAMPLES_DIR "@CMAKE_SOURCE_DIR@/examples"
+
 /* SSH listening IP address */
 #define SSH_ADDRESS "127.0.0.1"
 

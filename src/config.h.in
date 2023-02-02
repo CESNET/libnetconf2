@@ -52,6 +52,11 @@
 /*
  * Location of installed YANG modules on the system
  */
+#define NC_SERVER_SEARCH_DIR "@YANG_MODULE_DIR@"
+
+/*
+ * Location of installed YANG modules on the system
+ */
 #define NC_CLIENT_SEARCH_DIR "@CLIENT_SEARCH_DIR@"
 
 /*

@@ -1608,7 +1608,7 @@ sock_connect(int timeout_ms, int *sock_pending, struct addrinfo *res, struct nc_
     }
 
     /* enable keep-alive */
-    if (nc_sock_enable_keepalive(sock, ka)) {
+    if (nc_sock_configure_keepalive(sock, ka)) {
         goto cleanup;
     }
 

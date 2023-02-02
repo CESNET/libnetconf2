@@ -136,6 +136,23 @@ int nc_server_init(void);
 void nc_server_destroy(void);
 
 /**
+ * @brief Initialize a context which can serve as a default server context.
+ *
+ * Loads the default modules ietf-netconf and ietf-netconf-monitoring and their enabled features - ietf-netconf
+ * enabled features are : writable-running, candidate, rollback-on-error, validate, startup, url, xpath, confirmed-commit and
+ * ietf-netconf-monitoring has no features.
+ *
+ * If ctx is :
+ *      - NULL: a new context will be created and if the call is successful you have to free it,
+ *      - non NULL: context will be searched for the two modules and their features
+ *                  and if anything is missing, it will be implemented.
+ *
+ * @param[in,out] ctx Optional context in which the modules will be loaded. Created if ctx is null.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_init_ctx(struct ly_ctx **ctx);
+
+/**
  * @brief Set the with-defaults capability extra parameters.
  *
  * For the capability to be actually advertised, the server context must also
@@ -156,8 +173,8 @@ int nc_server_set_capab_withdefaults(NC_WD_MODE basic_mode, int also_supported);
  *
  * At least one argument must be non-NULL.
  *
- * @param[in,out] basic_mode basic-mode parameter.
- * @param[in,out] also_supported also-supported parameter.
+ * @param[out] basic_mode basic-mode parameter.
+ * @param[out] also_supported also-supported parameter.
  */
 void nc_server_get_capab_withdefaults(NC_WD_MODE *basic_mode, int *also_supported);
 
@@ -434,6 +451,8 @@ int nc_server_is_endpt(const char *name);
  */
 int nc_server_endpt_set_address(const char *endpt_name, const char *address);
 
+char * nc_server_endpt_get_address(const char *endpt_name);
+
 #if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
 
 /**
@@ -499,7 +518,8 @@ int nc_server_endpt_set_keepalives(const char *endpt_name, int idle_time, int ma
  * for much longer that @p timeout, but only with slow/faulty/malicious clients.
  *
  * Server capabilities are generated based on the content of @p ctx. The context must
- * not be destroyed before the accepted NETCONF session is freed.
+ * not be destroyed before the accepted NETCONF session is freed. Basic usable context may
+ * be created by calling ::nc_server_init_ctx().
  *
  * Supported RPCs of models in the context are expected to have their callback
  * in the corresponding RPC schema node set to a nc_rpc_clb function callback using ::nc_set_rpc_callback().
@@ -605,20 +625,6 @@ void nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_se
  */
 void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session,
         const ssh_message msg, void *user_data), void *user_data, void (*free_user_data)(void *user_data));
-
-/**
- * @brief Set the name and a path to a PAM configuration file.
- *
- * @p conf_name has to be set via this function prior to using keyboard-interactive authentication method.
- *
- * @param[in] conf_name Name of the configuration file.
- * @param[in] conf_dir Optional. The absolute path to the directory in which the configuration file
- * with the name @p conf_name is located. A newer version (>= 1.4) of PAM library is required to be
- * able to specify the path. If NULL is passed,
- * then the PAM's system directories will be searched (usually /etc/pam.d/).
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_set_pam_conf_path(const char *conf_name, const char *conf_dir);
 
 /**
  * @brief Set the callback for SSH public key authentication. If none is set, local system users are used.

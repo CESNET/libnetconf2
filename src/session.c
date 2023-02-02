@@ -182,7 +182,7 @@ nc_keytype2str(NC_SSH_KEY_TYPE type)
 }
 
 int
-nc_sock_enable_keepalive(int sock, struct nc_keepalives *ka)
+nc_sock_configure_keepalive(int sock, struct nc_keepalives *ka)
 {
     int opt;
 
@@ -794,24 +794,6 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
             } else {
                 /* there are still multiple sessions, keep the ring list */
                 siter->ti.libssh.next = session->ti.libssh.next;
-            }
-
-            /* change nc_sshcb_msg() argument, we need a RUNNING session and this one will be freed */
-            if (session->flags & NC_SESSION_SSH_MSG_CB) {
-                siter = session->ti.libssh.next;
-                while (siter && (siter->status != NC_STATUS_RUNNING)) {
-                    if (siter->ti.libssh.next == session) {
-                        ERRINT;
-                        break;
-                    }
-                    siter = siter->ti.libssh.next;
-                }
-                /* siter may be NULL in case all the sessions terminated at the same time (socket was disconnected),
-                 * we set session to NULL because we do not expect any new message to arrive */
-                ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, siter);
-                if (siter) {
-                    siter->flags |= NC_SESSION_SSH_MSG_CB;
-                }
             }
         }
 

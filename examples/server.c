@@ -27,6 +27,7 @@
 
 #include <libyang/libyang.h>
 
+#include "config_server.h"
 #include "log.h"
 #include "messages_server.h"
 #include "netconf.h"
@@ -34,6 +35,7 @@
 #include "session_server_ch.h"
 
 volatile int exit_application = 0;
+struct lyd_node *tree;
 
 static void
 sigint_handler(int signum)
@@ -52,6 +54,7 @@ get_rpc(struct lyd_node *rpc, struct nc_session *session)
     struct lyd_node *filter, *err;
     struct lyd_meta *m, *type = NULL, *select = NULL;
     struct ly_set *set = NULL;
+    LY_ERR ret;
 
     ctx = nc_session_get_ctx(session);
 
@@ -62,7 +65,8 @@ get_rpc(struct lyd_node *rpc, struct nc_session *session)
     }
 
     /* search for the optional filter in the RPC */
-    if (lyd_find_path(rpc, "filter", 0, &filter)) {
+    ret = lyd_find_path(rpc, "filter", 0, &filter);
+    if (ret && (ret != LY_ENOTFOUND)) {
         err = nc_err(ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
         goto error;
     }
@@ -199,106 +203,47 @@ help_print()
 }
 
 static int
-hostkey_callback(const char *name, void *user_data, char **privkey_path, char **privkey_data, NC_SSH_KEY_TYPE *privkey_type)
-{
-    /* return only known hostkey */
-    if (strcmp(name, "server_hostkey")) {
-        return 1;
-    }
-
-    /* the hostkey is in a file */
-    *privkey_path = strdup(user_data);
-    *privkey_data = NULL;
-    *privkey_type = NC_SSH_KEY_UNKNOWN;
-
-    return 0;
-}
-
-static int
-password_callback(const struct nc_session *session, const char *password, void *user_data)
-{
-    (void) user_data;
-    const char *username;
-
-    /* get username from the NETCONF session */
-    username = nc_session_get_username(session);
-
-    /* compare it with the defined username and password */
-    if (strcmp(username, SSH_USERNAME) || strcmp(password, SSH_PASSWORD)) {
-        return 1;
-    }
-
-    return 0;
-}
-
-static int
 init(struct ly_ctx **context, struct nc_pollsession **ps, const char *path, NC_TRANSPORT_IMPL server_type)
 {
-    struct lys_module *module;
     int rc = 0;
-    const char *features[] = {"*", NULL};
+    const char *config_file_path = EXAMPLES_DIR "/config.xml";
+
+    if (path) {
+        /* if a path is supplied, then use it */
+        config_file_path = path;
+    }
+
+    if (server_type == NC_TI_UNIX) {
+        ERR_MSG_CLEANUP("Only support SSH for now.\n");
+    }
+
+    /* create a libyang context that will determine which YANG modules will be supported by the server */
+    rc = ly_ctx_new(MODULES_DIR, 0, context);
+    if (rc) {
+        ERR_MSG_CLEANUP("Error while creating a new context.\n");
+    }
+
+    /* implement the base NETCONF modules */
+    rc = nc_server_init_ctx(context);
+    if (rc) {
+        ERR_MSG_CLEANUP("Error while initializing context.\n");
+    }
+
+    /* load all required modules for configuration, so the configuration of the server can be done */
+    rc = nc_server_config_load_modules(context);
+    if (rc) {
+        ERR_MSG_CLEANUP("Error loading modules required for configuration of the server.\n");
+    }
+
+    /* parse YANG data from a file, configure the server based on the parsed YANG configuration data */
+    rc = nc_server_config_setup_path(*context, config_file_path);
+    if (rc) {
+        ERR_MSG_CLEANUP("Error setting the path to the configuration data.\n");
+    }
 
     /* initialize the server */
     if (nc_server_init()) {
         ERR_MSG_CLEANUP("Error occurred while initializing the server.\n");
-    }
-
-    if (server_type == NC_TI_UNIX) {
-        /* add a new UNIX socket endpoint with an arbitrary name main_unix */
-        if (nc_server_add_endpt("main_unix", NC_TI_UNIX)) {
-            ERR_MSG_CLEANUP("Couldn't add end point.\n");
-        }
-
-        /* set endpoint listening address to the path from the parameter */
-        if (nc_server_endpt_set_address("main_unix", path)) {
-            ERR_MSG_CLEANUP("Couldn't set address of end point.\n");
-        }
-    } else {
-        /* add a new SSH endpoint with an arbitrary name main_ssh */
-        if (nc_server_add_endpt("main_ssh", NC_TI_LIBSSH)) {
-            ERR_MSG_CLEANUP("Couldn't add end point.\n");
-        }
-
-        /* set generic hostkey callback which will be used for retrieving all the hostkeys */
-        nc_server_ssh_set_hostkey_clb(hostkey_callback, (void *)path, NULL);
-
-        /* set 'password' SSH authentication callback */
-        nc_server_ssh_set_passwd_auth_clb(password_callback, NULL, NULL);
-
-        /* add a new hostkey called server_hostkey, whose data will be retrieved by the hostkey callback */
-        nc_server_ssh_endpt_add_hostkey("main_ssh", "server_hostkey", -1);
-
-        /* set endpoint listening address to the defined IP address */
-        if (nc_server_endpt_set_address("main_ssh", SSH_ADDRESS)) {
-            ERR_MSG_CLEANUP("Couldn't set address of end point.\n");
-        }
-
-        /* set endpoint listening port to the defined one */
-        if (nc_server_endpt_set_port("main_ssh", SSH_PORT)) {
-            ERR_MSG_CLEANUP("Couldn't set port of end point.\n");
-        }
-
-        /* allow only 'password' SSH authentication method for the endpoint */
-        if (nc_server_ssh_endpt_set_auth_methods("main_ssh", NC_SSH_AUTH_PASSWORD)) {
-            ERR_MSG_CLEANUP("Couldn't set authentication methods of end point.\n");
-        }
-    }
-
-    /* create a libyang context that will determine which YANG modules will be supported by the server */
-    if (ly_ctx_new(MODULES_DIR, 0, context)) {
-        ERR_MSG_CLEANUP("Couldn't create new libyang context.\n");
-    }
-
-    /* support and load the base NETCONF ietf-netconf module with all its features enabled */
-    module = ly_ctx_load_module(*context, "ietf-netconf", NULL, features);
-    if (!module) {
-        ERR_MSG_CLEANUP("Couldn't load ietf-netconf module.\n");
-    }
-
-    /* support get-schema RPC for the server to be able to send YANG modules */
-    module = ly_ctx_load_module(*context, "ietf-netconf-monitoring", NULL, features);
-    if (!module) {
-        ERR_MSG_CLEANUP("Couldn't load ietf-netconf-monitoring module.\n");
     }
 
     /* create a new poll session structure, which is used for polling RPCs sent by clients */
@@ -324,7 +269,7 @@ main(int argc, char **argv)
     struct ly_ctx *context = NULL;
     struct nc_session *session, *new_session;
     struct nc_pollsession *ps = NULL;
-    const char *unix_socket_path = NULL, *ssh_public_key_path = NULL;
+    const char *unix_socket_path = NULL, *config_file_path = NULL;
 
     struct option options[] = {
         {"help",    no_argument,        NULL, 'h'},
@@ -341,7 +286,7 @@ main(int argc, char **argv)
 
     opterr = 0;
 
-    while ((opt = getopt_long(argc, argv, "hu:s:d", options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, ":s:hu:d", options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             help_print();
@@ -356,9 +301,10 @@ main(int argc, char **argv)
             break;
 
         case 's':
-            ssh_public_key_path = optarg;
-            if (init(&context, &ps, ssh_public_key_path, NC_TI_LIBSSH)) {
+            config_file_path = optarg;
+            if (init(&context, &ps, config_file_path, NC_TI_LIBSSH)) {
                 ERR_MSG_CLEANUP("Failed to initialize a SSH server\n");
+                goto cleanup;
             }
             printf("Using SSH!\n");
             break;
@@ -366,6 +312,18 @@ main(int argc, char **argv)
         case 'd':
             nc_verbosity(NC_VERB_DEBUG);
             break;
+
+        case ':':
+            if (optopt == 's') {
+                if (init(&context, &ps, NULL, NC_TI_LIBSSH)) {
+                    ERR_MSG_CLEANUP("Failed to initialize a SSH server\n");
+                    goto cleanup;
+                }
+                printf("Using SSH!\n");
+                break;
+            } else {
+                ERR_MSG_CLEANUP("Invalid option or missing argument\n");
+            }
 
         default:
             ERR_MSG_CLEANUP("Invalid option or missing argument\n");
@@ -440,6 +398,7 @@ cleanup:
     }
     nc_ps_free(ps);
     nc_server_destroy();
+    lyd_free_all(tree);
     ly_ctx_destroy(context);
     return rc;
 }

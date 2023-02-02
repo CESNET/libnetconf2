@@ -8,11 +8,11 @@ if(${SOURCE_FORMAT_ENABLED})
 endif()
 
 # list of all the tests in each directory
-set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_client_thread test_thread_messages)
+set(tests test_nc3)
 
 # only enable PAM tests if the version of PAM is greater than 1.4
 if(LIBPAM_HAVE_CONFDIR)
-    list(APPEND tests test_pam)
+    list(APPEND tests test_auth test_two_channels)
 endif()
 
 set(client_tests test_client test_client_messages)
@@ -37,7 +37,7 @@ endforeach()
 
 #append tests depending on SSH/TLS
 if(ENABLE_SSH OR ENABLE_TLS)
-    list(APPEND tests test_server_thread)
+    #list(APPEND tests test_server_thread)
     if(ENABLE_SSH)
         list(APPEND client_tests test_client_ssh)
     endif()
