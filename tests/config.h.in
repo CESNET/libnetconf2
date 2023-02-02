@@ -19,6 +19,7 @@
 #endif
 
 #define TESTS_DIR "@CMAKE_SOURCE_DIR@/tests"
+#define MODULES_DIR "@CMAKE_SOURCE_DIR@/modules"
 #define BUILD_DIR "@CMAKE_BINARY_DIR@"
 
 @SSH_MACRO@

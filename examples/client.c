@@ -150,6 +150,7 @@ main(int argc, char **argv)
     }
 
     nc_client_init();
+
     /* set the path to search for schemas */
     nc_client_set_schema_searchpath(MODULES_DIR);
 
@@ -176,6 +177,7 @@ main(int argc, char **argv)
 
         case 'd':
             nc_verbosity(NC_VERB_DEBUG);
+            nc_libssh_thread_verbosity(2);
             break;
 
         default:
