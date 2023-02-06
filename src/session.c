@@ -4,7 +4,7 @@
  * @brief libnetconf2 - general session functions
  *
  * @copyright
- * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2023 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -56,112 +56,55 @@
 
 extern struct nc_server_opts server_opts;
 
-int
-nc_gettimespec_real_add(struct timespec *ts, uint32_t msec)
+void
+nc_timeouttime_get(struct timespec *ts, uint32_t add_ms)
 {
-#ifdef CLOCK_REALTIME
+    if (clock_gettime(COMPAT_CLOCK_ID, ts) == -1) {
+        ERR(NULL, "clock_gettime() failed (%s).", strerror(errno));
+        return;
+    }
+
+    if (!add_ms) {
+        return;
+    }
+
+    assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
+
+    ts->tv_sec += add_ms / 1000;
+    ts->tv_nsec += (add_ms % 1000) * 1000000L;
+
+    if (ts->tv_nsec >= 1000000000L) {
+        ++ts->tv_sec;
+        ts->tv_nsec -= 1000000000L;
+    } else if (ts->tv_nsec < 0) {
+        --ts->tv_sec;
+        ts->tv_nsec += 1000000000L;
+    }
+
+    assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
+}
+
+int32_t
+nc_timeouttime_cur_diff(const struct timespec *ts)
+{
+    struct timespec cur;
+    int64_t nsec_diff = 0;
+
+    nc_timeouttime_get(&cur, 0);
+
+    nsec_diff += (((int64_t)ts->tv_sec) - ((int64_t)cur.tv_sec)) * 1000000000L;
+    nsec_diff += ((int64_t)ts->tv_nsec) - ((int64_t)cur.tv_nsec);
+
+    return nsec_diff / 1000000L;
+}
+
+void
+nc_realtime_get(struct timespec *ts)
+{
     if (clock_gettime(CLOCK_REALTIME, ts)) {
-        return -1;
+        ERR(NULL, "clock_gettime() failed (%s).", strerror(errno));
+        return;
     }
-#else
-    int rc;
-    struct timeval tv;
-
-    rc = gettimeofday(&tv, NULL);
-    if (rc) {
-        return -1;
-    } else {
-        ts->tv_sec = (time_t)tv.tv_sec;
-        ts->tv_nsec = 1000L * (long)tv.tv_usec;
-    }
-#endif
-
-    if (!msec) {
-        return 0;
-    }
-
-    assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
-
-    ts->tv_sec += msec / 1000;
-    ts->tv_nsec += (msec % 1000) * 1000000L;
-
-    if (ts->tv_nsec >= 1000000000L) {
-        ++ts->tv_sec;
-        ts->tv_nsec -= 1000000000L;
-    } else if (ts->tv_nsec < 0) {
-        --ts->tv_sec;
-        ts->tv_nsec += 1000000000L;
-    }
-
-    assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
-    return 0;
-}
-
-int
-nc_gettimespec_mono_add(struct timespec *ts, uint32_t msec)
-{
-#ifdef CLOCK_MONOTONIC_RAW
-    if (clock_gettime(CLOCK_MONOTONIC_RAW, ts)) {
-        return -1;
-    }
-#elif defined (CLOCK_MONOTONIC)
-    if (clock_gettime(CLOCK_MONOTONIC, ts)) {
-        return -1;
-    }
-#else
-    /* no monotonic clock available, return real time */
-    if (nc_gettimespec_real_add(ts, 0)) {
-        return -1;
-    }
-#endif
-
-    if (!msec) {
-        return 0;
-    }
-
-    assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
-
-    ts->tv_sec += msec / 1000;
-    ts->tv_nsec += (msec % 1000) * 1000000L;
-
-    if (ts->tv_nsec >= 1000000000L) {
-        ++ts->tv_sec;
-        ts->tv_nsec -= 1000000000L;
-    } else if (ts->tv_nsec < 0) {
-        --ts->tv_sec;
-        ts->tv_nsec += 1000000000L;
-    }
-
-    assert((ts->tv_nsec >= 0) && (ts->tv_nsec < 1000000000L));
-    return 0;
-}
-
-int32_t
-nc_difftimespec_real_cur(const struct timespec *ts)
-{
-    struct timespec cur;
-    int64_t nsec_diff = 0;
-
-    nc_gettimespec_real_add(&cur, 0);
-
-    nsec_diff += (((int64_t)ts->tv_sec) - ((int64_t)cur.tv_sec)) * 1000000000L;
-    nsec_diff += ((int64_t)ts->tv_nsec) - ((int64_t)cur.tv_nsec);
-
-    return nsec_diff / 1000000L;
-}
-
-int32_t
-nc_difftimespec_mono_cur(const struct timespec *ts)
-{
-    struct timespec cur;
-    int64_t nsec_diff = 0;
-
-    nc_gettimespec_mono_add(&cur, 0);
-
-    nsec_diff += (((int64_t)ts->tv_sec) - ((int64_t)cur.tv_sec)) * 1000000000L;
-    nsec_diff += ((int64_t)ts->tv_nsec) - ((int64_t)cur.tv_nsec);
-
-    return nsec_diff / 1000000L;
 }
 
 const char *
@@ -277,13 +220,14 @@ nc_session_rpc_lock(struct nc_session *session, int timeout, const char *func)
     }
 
     if (timeout > 0) {
-        nc_gettimespec_real_add(&ts_timeout, timeout);
+        nc_timeouttime_get(&ts_timeout, timeout);
 
         /* LOCK */
-        ret = pthread_mutex_timedlock(&session->opts.server.rpc_lock, &ts_timeout);
+        ret = pthread_mutex_clocklock(&session->opts.server.rpc_lock, COMPAT_CLOCK_ID, &ts_timeout);
         if (!ret) {
             while (session->opts.server.rpc_inuse) {
-                ret = pthread_cond_timedwait(&session->opts.server.rpc_cond, &session->opts.server.rpc_lock, &ts_timeout);
+                ret = pthread_cond_clockwait(&session->opts.server.rpc_cond, &session->opts.server.rpc_lock,
+                        COMPAT_CLOCK_ID, &ts_timeout);
                 if (ret) {
                     pthread_mutex_unlock(&session->opts.server.rpc_lock);
                     break;
@@ -353,10 +297,10 @@ nc_session_rpc_unlock(struct nc_session *session, int timeout, const char *func)
     assert(session->opts.server.rpc_inuse);
 
     if (timeout > 0) {
-        nc_gettimespec_real_add(&ts_timeout, timeout);
+        nc_timeouttime_get(&ts_timeout, timeout);
 
         /* LOCK */
-        ret = pthread_mutex_timedlock(&session->opts.server.rpc_lock, &ts_timeout);
+        ret = pthread_mutex_clocklock(&session->opts.server.rpc_lock, COMPAT_CLOCK_ID, &ts_timeout);
     } else if (!timeout) {
         /* LOCK */
         ret = pthread_mutex_trylock(&session->opts.server.rpc_lock);
@@ -396,9 +340,9 @@ nc_session_io_lock(struct nc_session *session, int timeout, const char *func)
     struct timespec ts_timeout;
 
     if (timeout > 0) {
-        nc_gettimespec_real_add(&ts_timeout, timeout);
+        nc_timeouttime_get(&ts_timeout, timeout);
 
-        ret = pthread_mutex_timedlock(session->io_lock, &ts_timeout);
+        ret = pthread_mutex_clocklock(session->io_lock, COMPAT_CLOCK_ID, &ts_timeout);
     } else if (!timeout) {
         ret = pthread_mutex_trylock(session->io_lock);
     } else { /* timeout == -1 */
@@ -445,14 +389,14 @@ nc_session_client_msgs_lock(struct nc_session *session, int *timeout, const char
 
     if (*timeout > 0) {
         /* get current time */
-        nc_gettimespec_real_add(&ts_start, 0);
+        nc_timeouttime_get(&ts_start, 0);
 
-        nc_gettimespec_real_add(&ts_timeout, *timeout);
+        nc_timeouttime_get(&ts_timeout, *timeout);
 
-        ret = pthread_mutex_timedlock(&session->opts.client.msgs_lock, &ts_timeout);
+        ret = pthread_mutex_clocklock(&session->opts.client.msgs_lock, COMPAT_CLOCK_ID, &ts_timeout);
         if (!ret) {
             /* update timeout based on what was elapsed */
-            diff_msec = nc_difftimespec_real_cur(&ts_start);
+            diff_msec = nc_timeouttime_cur_diff(&ts_start);
             *timeout -= diff_msec;
         }
     } else if (!*timeout) {
@@ -868,10 +812,10 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread_running, 0);
 
         /* wait for them */
-        nc_gettimespec_mono_add(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
+        nc_timeouttime_get(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
         while (ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread_count)) {
             usleep(NC_TIMEOUT_STEP);
-            if (nc_difftimespec_mono_cur(&ts) < 1) {
+            if (nc_timeouttime_cur_diff(&ts) < 1) {
                 ERR(session, "Waiting for notification thread exit failed (timed out).");
                 break;
             }
@@ -972,12 +916,12 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CH_THREAD)) {
         pthread_cond_signal(&session->opts.server.ch_cond);
 
-        nc_gettimespec_real_add(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
+        nc_timeouttime_get(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
 
         /* wait for CH thread to actually wake up and terminate */
         r = 0;
         while (!r && (session->flags & NC_SESSION_CH_THREAD)) {
-            r = pthread_cond_timedwait(&session->opts.server.ch_cond, &session->opts.server.ch_lock, &ts);
+            r = pthread_cond_clockwait(&session->opts.server.ch_cond, &session->opts.server.ch_lock, COMPAT_CLOCK_ID, &ts);
         }
         if (r) {
             ERR(session, "Waiting for Call Home thread failed (%s).", strerror(r));

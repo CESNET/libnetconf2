@@ -1099,7 +1099,7 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
     }
 
     if (opts->auth_timeout) {
-        nc_gettimespec_mono_add(&ts_timeout, opts->auth_timeout * 1000);
+        nc_timeouttime_get(&ts_timeout, opts->auth_timeout * 1000);
     }
 
     /* get user's replies */
@@ -1116,7 +1116,7 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
         }
 
         usleep(NC_TIMEOUT_STEP);
-    } while ((opts->auth_timeout) && (nc_difftimespec_mono_cur(&ts_timeout) >= 1));
+    } while ((opts->auth_timeout) && (nc_timeouttime_cur_diff(&ts_timeout) >= 1));
 
     if (!reply) {
         ERR(NULL, "Authentication timeout.");
@@ -1684,7 +1684,7 @@ nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, int timeo
     }
 
     if (timeout > -1) {
-        nc_gettimespec_mono_add(&ts_timeout, timeout);
+        nc_timeouttime_get(&ts_timeout, timeout);
     }
     while (1) {
         if (!nc_session_is_connected(session)) {
@@ -1704,7 +1704,7 @@ nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, int timeo
         }
 
         usleep(NC_TIMEOUT_STEP);
-        if ((timeout > -1) && (nc_difftimespec_mono_cur(&ts_timeout) < 1)) {
+        if ((timeout > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
             /* timeout */
             ERR(session, "Failed to start \"netconf\" SSH subsystem for too long, disconnecting.");
             break;
@@ -1794,7 +1794,7 @@ nc_accept_ssh_session_auth(struct nc_session *session, const struct nc_server_ss
 
     /* authenticate */
     if (opts->auth_timeout) {
-        nc_gettimespec_mono_add(&ts_timeout, opts->auth_timeout * 1000);
+        nc_timeouttime_get(&ts_timeout, opts->auth_timeout * 1000);
     }
     while (1) {
         if (!nc_session_is_connected(session)) {
@@ -1820,7 +1820,7 @@ nc_accept_ssh_session_auth(struct nc_session *session, const struct nc_server_ss
         }
 
         usleep(NC_TIMEOUT_STEP);
-        if ((opts->auth_timeout) && (nc_difftimespec_mono_cur(&ts_timeout) < 1)) {
+        if ((opts->auth_timeout) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
             /* timeout */
             break;
         }
@@ -1882,12 +1882,12 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     ssh_set_blocking(session->ti.libssh.session, 0);
 
     if (timeout > -1) {
-        nc_gettimespec_mono_add(&ts_timeout, timeout);
+        nc_timeouttime_get(&ts_timeout, timeout);
     }
     while ((r = ssh_handle_key_exchange(session->ti.libssh.session)) == SSH_AGAIN) {
         /* this tends to take longer */
         usleep(NC_TIMEOUT_STEP * 20);
-        if ((timeout > -1) && (nc_difftimespec_mono_cur(&ts_timeout) < 1)) {
+        if ((timeout > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
             break;
         }
     }
@@ -1973,9 +1973,9 @@ nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session
         return msgtype;
     }
 
-    nc_gettimespec_real_add(&ts_cur, 0);
+    nc_realtime_get(&ts_cur);
     new_session->opts.server.session_start = ts_cur.tv_sec;
-    nc_gettimespec_mono_add(&ts_cur, 0);
+    nc_timeouttime_get(&ts_cur, 0);
     new_session->opts.server.last_rpc = ts_cur.tv_sec;
     new_session->status = NC_STATUS_RUNNING;
     *session = new_session;
@@ -2044,9 +2044,9 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
         return msgtype;
     }
 
-    nc_gettimespec_real_add(&ts_cur, 0);
+    nc_realtime_get(&ts_cur);
     new_session->opts.server.session_start = ts_cur.tv_sec;
-    nc_gettimespec_mono_add(&ts_cur, 0);
+    nc_timeouttime_get(&ts_cur, 0);
     new_session->opts.server.last_rpc = ts_cur.tv_sec;
     new_session->status = NC_STATUS_RUNNING;
     *session = new_session;

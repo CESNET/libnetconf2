@@ -941,9 +941,9 @@ nc_accept_inout(int fdin, int fdout, const char *username, const struct ly_ctx *
         return msgtype;
     }
 
-    nc_gettimespec_mono_add(&ts_cur, 0);
+    nc_timeouttime_get(&ts_cur, 0);
     (*session)->opts.server.last_rpc = ts_cur.tv_sec;
-    nc_gettimespec_real_add(&ts_cur, 0);
+    nc_realtime_get(&ts_cur);
     (*session)->opts.server.session_start = ts_cur.tv_sec;
 
     (*session)->status = NC_STATUS_RUNNING;
@@ -1021,10 +1021,10 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
     int ret;
     struct timespec ts;
 
-    nc_gettimespec_real_add(&ts, NC_PS_LOCK_TIMEOUT);
+    nc_timeouttime_get(&ts, NC_PS_LOCK_TIMEOUT);
 
     /* LOCK */
-    ret = pthread_mutex_timedlock(&ps->lock, &ts);
+    ret = pthread_mutex_clocklock(&ps->lock, COMPAT_CLOCK_ID, &ts);
     if (ret) {
         ERR(NULL, "%s: failed to lock a pollsession (%s).", func, strerror(ret));
         return -1;
@@ -1044,9 +1044,9 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
 
     /* is it our turn? */
     while (ps->queue[ps->queue_begin] != *id) {
-        nc_gettimespec_real_add(&ts, NC_PS_QUEUE_TIMEOUT);
+        nc_timeouttime_get(&ts, NC_PS_QUEUE_TIMEOUT);
 
-        ret = pthread_cond_timedwait(&ps->cond, &ps->lock, &ts);
+        ret = pthread_cond_clockwait(&ps->cond, &ps->lock, COMPAT_CLOCK_ID, &ts);
         if (ret) {
             /**
              * This may happen when another thread releases the lock and broadcasts the condition
@@ -1077,10 +1077,10 @@ nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func)
     int ret;
     struct timespec ts;
 
-    nc_gettimespec_real_add(&ts, NC_PS_LOCK_TIMEOUT);
+    nc_timeouttime_get(&ts, NC_PS_LOCK_TIMEOUT);
 
     /* LOCK */
-    ret = pthread_mutex_timedlock(&ps->lock, &ts);
+    ret = pthread_mutex_clocklock(&ps->lock, COMPAT_CLOCK_ID, &ts);
     if (ret) {
         ERR(NULL, "%s: failed to lock a pollsession (%s).", func, strerror(ret));
         ret = -1;
@@ -1736,9 +1736,9 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
     }
 
     /* fill timespecs */
-    nc_gettimespec_mono_add(&ts_cur, 0);
+    nc_timeouttime_get(&ts_cur, 0);
     if (timeout > -1) {
-        nc_gettimespec_mono_add(&ts_timeout, timeout);
+        nc_timeouttime_get(&ts_timeout, timeout);
     }
 
     /* poll all the sessions one-by-one */
@@ -1832,7 +1832,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
         if (ret == NC_PSPOLL_TIMEOUT) {
             usleep(NC_TIMEOUT_STEP);
 
-            if ((timeout > -1) && (nc_difftimespec_mono_cur(&ts_timeout) < 1)) {
+            if ((timeout > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
                 /* final timeout */
                 break;
             }
@@ -2590,9 +2590,9 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
         return msgtype;
     }
 
-    nc_gettimespec_mono_add(&ts_cur, 0);
+    nc_timeouttime_get(&ts_cur, 0);
     (*session)->opts.server.last_rpc = ts_cur.tv_sec;
-    nc_gettimespec_real_add(&ts_cur, 0);
+    nc_realtime_get(&ts_cur);
     (*session)->opts.server.session_start = ts_cur.tv_sec;
     (*session)->status = NC_STATUS_RUNNING;
 
@@ -3395,9 +3395,9 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
         goto fail;
     }
 
-    nc_gettimespec_mono_add(&ts_cur, 0);
+    nc_timeouttime_get(&ts_cur, 0);
     (*session)->opts.server.last_rpc = ts_cur.tv_sec;
-    nc_gettimespec_real_add(&ts_cur, 0);
+    nc_realtime_get(&ts_cur);
     (*session)->opts.server.session_start = ts_cur.tv_sec;
     (*session)->status = NC_STATUS_RUNNING;
 
@@ -3473,10 +3473,10 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
     }
 
     do {
-        nc_gettimespec_real_add(&ts, NC_CH_NO_ENDPT_WAIT);
+        nc_timeouttime_get(&ts, NC_CH_NO_ENDPT_WAIT);
 
         /* CH COND WAIT */
-        r = pthread_cond_timedwait(&session->opts.server.ch_cond, &session->opts.server.ch_lock, &ts);
+        r = pthread_cond_clockwait(&session->opts.server.ch_cond, &session->opts.server.ch_lock, COMPAT_CLOCK_ID, &ts);
         if (!r) {
             /* we were woken up, something probably happened */
             if (session->status != NC_STATUS_RUNNING) {
@@ -3505,7 +3505,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
             idle_timeout = 0;
         }
 
-        nc_gettimespec_mono_add(&ts, 0);
+        nc_timeouttime_get(&ts, 0);
         if (!nc_session_get_notif_status(session) && idle_timeout && (ts.tv_sec >= session->opts.server.last_rpc + idle_timeout)) {
             VRB(session, "Call Home client \"%s\": session idle timeout elapsed.", client->name);
             session->status = NC_STATUS_INVALID;

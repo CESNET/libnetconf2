@@ -540,40 +540,27 @@ struct passwd *nc_getpwuid(uid_t uid, struct passwd *pwd_buf, char **buf, size_t
 NC_MSG_TYPE nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op);
 
 /**
- * @brief Get the current real time if available and optionally add some time to it.
+ * @brief Get current clock (uses COMPAT_CLOCK_ID) time with an offset.
  *
- * @param[in,out] ts Timespec structure holding time.
- * @param[in] msec Time in milliseconds to be added.
- * @return 0 on success;
- * @return -1 on error.
+ * @param[out] ts Current time offset by @p add_ms.
+ * @param[in] add_ms Number of milliseconds to add.
  */
-int nc_gettimespec_real_add(struct timespec *ts, uint32_t msec);
+void nc_timeouttime_get(struct timespec *ts, uint32_t add_ms);
 
 /**
- * @brief Get the current monotonic time if available and optionally add some time to it.
- *
- * @param[in,out] ts Timespec structure holding time.
- * @param[in] msec Time in milliseconds to be added.
- * @return 0 on success;
- * @return -1 on error.
- */
-int nc_gettimespec_mono_add(struct timespec *ts, uint32_t msec);
-
-/**
- * @brief Get real time difference based on the current time.
+ * @brief Get time difference based on the current time (uses COMPAT_CLOCK_ID).
  *
  * @param[in] ts Timespec structure holding real time from which the current time is going to be subtracted.
  * @return Time difference in milliseconds.
  */
-int32_t nc_difftimespec_real_cur(const struct timespec *ts);
+int32_t nc_timeouttime_cur_diff(const struct timespec *ts);
 
 /**
- * @brief Get monotonic time difference based on the current time.
+ * @brief Get current CLOCK_REALTIME time.
  *
- * @param[in] ts Timespec structure holding monotonic time from which the current time is going to be subtracted.
- * @return Time difference in milliseconds.
+ * @param[out] ts Current real time.
  */
-int32_t nc_difftimespec_mono_cur(const struct timespec *ts);
+void nc_realtime_get(struct timespec *ts);
 
 const char *nc_keytype2str(NC_SSH_KEY_TYPE type);
 

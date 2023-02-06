@@ -707,11 +707,11 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     SSL_set_mode(session->ti.tls, SSL_MODE_AUTO_RETRY);
 
     /* connect and perform the handshake */
-    nc_gettimespec_mono_add(&ts_timeout, NC_TRANSPORT_TIMEOUT);
+    nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_TIMEOUT);
     tlsauth_ch = 0;
     while (((ret = SSL_connect(session->ti.tls)) != 1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
         usleep(NC_TIMEOUT_STEP);
-        if (nc_difftimespec_mono_cur(&ts_timeout) < 1) {
+        if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
             ERR(NULL, "SSL connect timeout.");
             goto fail;
         }
@@ -822,12 +822,12 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
 
     /* connect and perform the handshake */
     if (timeout > -1) {
-        nc_gettimespec_mono_add(&ts_timeout, timeout);
+        nc_timeouttime_get(&ts_timeout, timeout);
     }
     tlsauth_ch = 1;
     while (((ret = SSL_connect(tls)) == -1) && (SSL_get_error(tls, ret) == SSL_ERROR_WANT_READ)) {
         usleep(NC_TIMEOUT_STEP);
-        if ((timeout > -1) && (nc_difftimespec_mono_cur(&ts_timeout) < 1)) {
+        if ((timeout > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
             ERR(NULL, "SSL connect timeout.");
             goto cleanup;
         }

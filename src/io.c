@@ -105,7 +105,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
         return 0;
     }
 
-    nc_gettimespec_mono_add(&ts_inact_timeout, inact_timeout);
+    nc_timeouttime_get(&ts_inact_timeout, inact_timeout);
     do {
         interrupted = 0;
         switch (session->ti_type) {
@@ -210,8 +210,8 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
             if (!interrupted) {
                 usleep(NC_TIMEOUT_STEP);
             }
-            if ((nc_difftimespec_mono_cur(&ts_inact_timeout) < 1) || (nc_difftimespec_mono_cur(ts_act_timeout) < 1)) {
-                if (nc_difftimespec_mono_cur(&ts_inact_timeout) < 1) {
+            if ((nc_timeouttime_cur_diff(&ts_inact_timeout) < 1) || (nc_timeouttime_cur_diff(ts_act_timeout) < 1)) {
+                if (nc_timeouttime_cur_diff(&ts_inact_timeout) < 1) {
                     ERR(session, "Inactive read timeout elapsed.");
                 } else {
                     ERR(session, "Active read timeout elapsed.");
@@ -225,7 +225,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
             readd += r;
 
             /* reset inactive timeout */
-            nc_gettimespec_mono_add(&ts_inact_timeout, inact_timeout);
+            nc_timeouttime_get(&ts_inact_timeout, inact_timeout);
         }
 
     } while (readd < count);
@@ -360,7 +360,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, struct ly_in **msg, i
         goto cleanup;
     }
 
-    nc_gettimespec_mono_add(&ts_act_timeout, NC_READ_ACT_TIMEOUT * 1000);
+    nc_timeouttime_get(&ts_act_timeout, NC_READ_ACT_TIMEOUT * 1000);
 
     if (!io_locked) {
         /* SESSION IO LOCK */
