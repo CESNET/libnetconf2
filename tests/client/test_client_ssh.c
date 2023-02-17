@@ -29,6 +29,7 @@
 #include <session_client.h>
 #include <session_client_ch.h>
 #include <session_p.h>
+#include <session_server.h>
 #include "tests/config.h"
 
 #include <libssh/callbacks.h>
@@ -127,6 +128,7 @@ static int
 teardown_f(void **state)
 {
     (void)state;
+    nc_client_destroy();
     return 0;
 }
 
@@ -722,6 +724,7 @@ test_nc_connect_ssh_pubkey_succesfull(void **state)
     /* fake succesfull connection */
     will_return(__wrap_connect, 0);
     will_return(__wrap_ssh_connect, 0);
+    will_return(__wrap_nc_sock_listen_inet, 0);
     /* do not authenticate using no authentication method */
     will_return(__wrap_ssh_userauth_none, 1);
     will_return(__wrap_ssh_userauth_try_publickey, 0);
@@ -753,7 +756,12 @@ test_nc_connect_ssh_pubkey_succesfull(void **state)
 
     /* disconnect */
     will_return(__wrap_ssh_channel_poll_timeout, 0);
+
+    /* free everything used */
     nc_session_free(session, NULL);
+    lyd_free_all(tree);
+    nc_server_destroy();
+    ly_ctx_destroy(ctx);
 }
 
 static void
