@@ -8,11 +8,12 @@ if(${SOURCE_FORMAT_ENABLED})
 endif()
 
 # list of all the tests in each directory
-set(tests test_nc3)
+#set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_client_thread test_thread_messages)
+set(tests test_two_channels test_keystore)
 
 # only enable PAM tests if the version of PAM is greater than 1.4
 if(LIBPAM_HAVE_CONFDIR)
-    list(APPEND tests test_auth test_two_channels)
+    list(APPEND tests test_auth)
 endif()
 
 set(client_tests test_client test_client_messages)

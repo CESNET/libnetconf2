@@ -312,12 +312,6 @@ nc_server_del_private_key(struct nc_hostkey *hostkey)
 }
 
 static void
-nc_server_del_keystore_reference(struct nc_hostkey *hostkey)
-{
-    hostkey->keystore = NULL;
-}
-
-static void
 nc_server_del_auth_client_username(struct nc_client_auth *auth_client)
 {
     free(auth_client->username);
@@ -388,8 +382,6 @@ nc_server_del_hostkey(struct nc_server_ssh_opts *opts, struct nc_hostkey *hostke
     if (hostkey->ks_type == NC_STORE_LOCAL) {
         nc_server_del_public_key(hostkey);
         nc_server_del_private_key(hostkey);
-    } else if (hostkey->ks_type == NC_STORE_KEYSTORE) {
-        nc_server_del_keystore_reference(hostkey);
     }
 
     nc_server_del_hostkey_name(hostkey);
@@ -484,6 +476,38 @@ nc_server_del_endpt_ssh(struct nc_endpt *endpt, struct nc_bind *bind)
         server_opts.endpts = NULL;
         server_opts.binds = NULL;
     }
+}
+
+void
+nc_server_config_del_keystore(void)
+{
+    int i, j;
+    struct nc_keystore *ks = &server_opts.keystore;
+
+    /* delete all asymmetric keys */
+    for (i = 0; i < ks->asym_key_count; i++) {
+        free(ks->asym_keys[i].name);
+        free(ks->asym_keys[i].pub_base64);
+        free(ks->asym_keys[i].priv_base64);
+
+        for (j = 0; j < ks->asym_keys[i].cert_count; j++) {
+            /* free associated certificates */
+            free(ks->asym_keys[i].certs[j].name);
+            free(ks->asym_keys[i].certs[j].cert_base64);
+        }
+        free(ks->asym_keys[i].certs);
+        ks->asym_keys[i].cert_count = 0;
+    }
+    free(ks->asym_keys);
+    ks->asym_key_count = 0;
+
+    /* delete all symmetric keys */
+    for (i = 0; i < ks->sym_key_count; i++) {
+        free(ks->sym_keys[i].name);
+        free(ks->sym_keys[i].base64);
+    }
+    free(ks->sym_keys);
+    ks->sym_key_count = 0;
 }
 
 /* presence container */
@@ -1136,22 +1160,21 @@ static int
 nc_server_create_keystore_reference(const struct lyd_node *node, struct nc_hostkey *hostkey)
 {
     uint16_t i;
-    struct nc_keystore *ks = NULL;
+    struct nc_keystore *ks = &server_opts.keystore;
 
     /* lookup name */
-    for (i = 0; i < server_opts.keystore_count; i++) {
-        if (!strcmp(lyd_get_value(node), server_opts.keystore[i].name)) {
-            ks = &server_opts.keystore[i];
+    for (i = 0; i < ks->asym_key_count; i++) {
+        if (!strcmp(lyd_get_value(node), ks->asym_keys[i].name)) {
             break;
         }
     }
 
-    if (!ks) {
-        ERR(NULL, "Keystore (%s) not found.", lyd_get_value(node));
+    if (i == ks->asym_key_count) {
+        ERR(NULL, "Keystore \"%s\" not found.", lyd_get_value(node));
         return 1;
     }
 
-    hostkey->keystore = ks;
+    hostkey->ks_ref = &ks->asym_keys[i];
 
     return 0;
 }
@@ -1166,7 +1189,7 @@ nc_server_configure_keystore_reference(const struct lyd_node *node, NC_OPERATION
 
     assert(!strcmp(LYD_NAME(node), "keystore-reference"));
 
-    if ((equal_parent_name(node, 4, "server-identity")) && (equal_parent_name(node, 7, "listen"))) {
+    if ((equal_parent_name(node, 3, "server-identity")) && (equal_parent_name(node, 7, "listen"))) {
         if (nc_server_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
@@ -1182,7 +1205,7 @@ nc_server_configure_keystore_reference(const struct lyd_node *node, NC_OPERATION
                 goto cleanup;
             }
         } else {
-            hostkey->keystore = NULL;
+            hostkey->ks_ref = NULL;
         }
     }
 
@@ -2073,55 +2096,210 @@ nc_session_server_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op
 }
 
 static int
-nc_server_configure_certificates(const struct lyd_node *node, struct nc_keystore *ks)
+nc_server_configure_asymmetric_key_certificate(const struct lyd_node *tree, struct nc_ks_asym_key *key)
 {
     int ret = 0;
-    uint16_t cert_count;
+    struct lyd_node *node;
     void *tmp;
 
-    node = node->next;
-    if ((!node) || (strcmp(LYD_NAME(node), "certificate"))) {
-        WRN(NULL, "Certificates container is empty");
+    /* create new certificate */
+    tmp = realloc(key->certs, (key->cert_count + 1) * sizeof *key->certs);
+    if (!tmp) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+    key->certs = tmp;
+    key->cert_count++;
+
+    /* set name */
+    lyd_find_path(tree, "name", 0, &node);
+    assert(node);
+
+    key->certs[key->cert_count - 1].name = strdup(lyd_get_value(node));
+    if (!key->certs[key->cert_count - 1].name) {
+        ERRMEM;
+        ret = 1;
         goto cleanup;
     }
 
-    /* certificate list */
-    while (node) {
-        cert_count = ks->cert_count;
-        tmp = realloc(ks->certs, cert_count + 1);
-        if (!tmp) {
-            ERRMEM;
-            ret = 1;
-            goto cleanup;
-        }
-        ks->certs = tmp;
+    /* set certificate data */
+    lyd_find_path(tree, "cert-data", 0, &node);
+    assert(node);
 
-        ks->certs[cert_count].name = strdup(lyd_get_value(lyd_child(node)));
-        if (!ks->certs[cert_count].name) {
-            ERRMEM;
-            ret = 1;
-            goto cleanup;
-        }
-
-        ks->certs[cert_count].cert_data = strdup(lyd_get_value(lyd_child(node)->next));
-        if (!ks->certs[cert_count].cert_data) {
-            ERRMEM;
-            free(ks->certs[cert_count].name);
-            ret = 1;
-            goto cleanup;
-        }
-
-        ks->cert_count++;
+    key->certs[key->cert_count - 1].cert_base64 = strdup(lyd_get_value(node));
+    if (!key->certs[key->cert_count - 1].cert_base64) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
     }
 
 cleanup:
-    if (ret) {
-        for (cert_count = 0; cert_count < ks->cert_count; cert_count++) {
-            free(ks->certs[cert_count].name);
-            free(ks->certs[cert_count].cert_data);
-        }
-        free(ks->certs);
+    return ret;
+}
+
+static int
+nc_server_configure_asymmetric_key(const struct lyd_node *tree)
+{
+    int ret = 0;
+    struct lyd_node *node = NULL, *iter;
+    void *tmp;
+    struct nc_keystore *ks = &server_opts.keystore;
+    struct nc_ks_asym_key *key;
+    const char *format;
+
+    /* create new asymmetric key */
+    tmp = realloc(ks->asym_keys, (ks->asym_key_count + 1) * sizeof *ks->asym_keys);
+    if (!tmp) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
     }
+    ks->asym_keys = tmp;
+    memset(&ks->asym_keys[ks->asym_key_count], 0, sizeof *ks->asym_keys);
+    key = &ks->asym_keys[ks->asym_key_count];
+    ks->asym_key_count++;
+
+    /* set name */
+    lyd_find_path(tree, "name", 0, &node);
+    assert(node);
+
+    key->name = strdup(lyd_get_value(node));
+    if (!key->name) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* set public-key-format, mandatory */
+    lyd_find_path(tree, "public-key-format", 0, &node);
+    assert(node);
+
+    format = ((struct lyd_node_term *)node)->value.ident->name;
+    if (!strcmp(format, "ssh-public-key-format")) {
+        key->pubkey_type = NC_SSH_PUBKEY_X509;
+    } else if (!strcmp(format, "subject-public-key-info-format")) {
+        key->pubkey_type = NC_SSH_PUBKEY_SSH2;
+    } else {
+        ERR(NULL, "Public key format \"%s\" not supported.", format);
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* set public-key, mandatory */
+    lyd_find_path(tree, "public-key", 0, &node);
+    assert(node);
+
+    key->pub_base64 = strdup(lyd_get_value(node));
+    if (!key->pub_base64) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* set private-key-format */
+    ret = lyd_find_path(tree, "private-key-format", 0, &node);
+    if (!ret) {
+        format = ((struct lyd_node_term *)node)->value.ident->name;
+        if (!strcmp(format, "rsa-private-key-format")) {
+            key->privkey_type = NC_SSH_KEY_RSA;
+        } else if (!strcmp(format, "ec-private-key-format")) {
+            key->privkey_type = NC_SSH_KEY_ECDSA;
+        } else {
+            ERR(NULL, "Private key format (%s) not supported.", format);
+            ret = 1;
+            goto cleanup;
+        }
+    }
+
+    /* set private key, mandatory */
+    lyd_find_path(tree, "cleartext-private-key", 0, &node);
+    assert(node);
+
+    key->priv_base64 = strdup(lyd_get_value(node));
+    if (!key->priv_base64) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* set certificates associated with the key pair */
+    ret = lyd_find_path(tree, "certificates", 0, &node);
+    if (!ret) {
+        node = lyd_child(node);
+        if (node) {
+            /* certificate list instance */
+            LY_LIST_FOR(node, iter) {
+                if (nc_server_configure_asymmetric_key_certificate(iter, key)) {
+                    ret = 1;
+                    goto cleanup;
+                }
+            }
+        }
+    } else if (ret == LY_ENOTFOUND) {
+        /* certificates container not present, but it's ok */
+        ret = 0;
+    }
+
+cleanup:
+    return ret;
+}
+
+static int
+nc_server_configure_symmetric_key(const struct lyd_node *tree)
+{
+    int ret = 0;
+    const char *format;
+    struct lyd_node *node;
+    struct nc_keystore *ks = &server_opts.keystore;
+    struct nc_ks_sym_key *key;
+    void *tmp;
+
+    /* create new symmetric key */
+    tmp = realloc(ks->sym_keys, (ks->sym_key_count + 1) * sizeof *ks->sym_keys);
+    if (tmp) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+    memset(&ks->sym_keys[ks->sym_key_count], 0, sizeof *ks->sym_keys);
+    ks->sym_keys = tmp;
+    key = &ks->sym_keys[ks->sym_key_count];
+    ks->sym_key_count++;
+
+    /* set name */
+    lyd_find_path(tree, "name", 0, &node);
+    assert(node);
+
+    key->name = strdup(lyd_get_value(node));
+    if (!key->name) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* check if the identity matches with the supported one */
+    lyd_find_path(tree, "key-format", 0, &node);
+    assert(node);
+
+    format = ((struct lyd_node_term *)node)->value.ident->name;
+    if (strcmp(format, "symmetric-key-format")) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* set key data */
+    lyd_find_path(tree, "cleartext-key", 0, &node);
+    assert(node);
+
+    key->base64 = strdup(lyd_get_value(node));
+    if (!key->base64) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+cleanup:
     return ret;
 }
 
@@ -2130,99 +2308,51 @@ nc_fill_keystore(const struct lyd_node *data)
 {
     int ret = 0;
     uint32_t prev_lo;
-    struct lyd_node *tree, *node, *iter, *iter_tmp;
-    void *tmp;
-    struct nc_keystore *ks;
+    struct lyd_node *tree, *as_keys, *s_keys, *iter;
 
-    /* silently search for keystore node */
+    /* silently search for nodes, some of them may not be present */
     prev_lo = ly_log_options(0);
-    ret = lyd_find_path(data, "/ks:keystore", 0, &tree);
-    ly_log_options(prev_lo);
+
+    ret = lyd_find_path(data, "/ietf-keystore:keystore", 0, &tree);
     if (ret) {
         WRN(NULL, "Keystore container not found in the YANG data.");
-        return 0;
+        goto cleanup;
     }
 
-    /* asymmetric keys container */
-    lyd_find_path(tree, "asymmetric-keys", 0, (struct lyd_node **)&node);
-    if (!node) {
-        WRN(NULL, "Asymmetric keys container not found in the YANG data.");
-        return 0;
-    }
-
-    /* asymmetric key list */
-    lyd_find_path(node, "asymmetric-key", 0, (struct lyd_node **)&node);
-    if (!node) {
-        WRN(NULL, "Asymmetric keys container is empty.");
-        return 0;
-    }
-
-    LY_LIST_FOR(node, iter) {
-        tmp = realloc(server_opts.keystore, server_opts.keystore_count + 1);
-        if (!tmp) {
-            ERRMEM;
-            goto fail;
-        }
-        server_opts.keystore = tmp;
-        ks = &server_opts.keystore[server_opts.keystore_count];
-
-        iter_tmp = iter;
-        /* name */
-        iter_tmp = lyd_child(iter_tmp);
-        ks->name = strdup(lyd_get_value(iter_tmp));
-        if (!ks->name) {
-            ERRMEM;
-            goto fail;
-        }
-
-        /* mandatory public-key-format */
-        iter_tmp = iter_tmp->next;
-        if (nc_server_configure_public_key_format(iter_tmp, 0)) {
-            free(ks->name);
-            goto fail;
-        }
-
-        /* mandatory public-key */
-        iter_tmp = iter_tmp->next;
-        ks->pub_base64 = strdup(lyd_get_value(iter_tmp));
-        if (!ks->pub_base64) {
-            free(ks->name);
-            ERRMEM;
-            goto fail;
-        }
-
-        iter_tmp = iter_tmp->next;
-        while (iter_tmp) {
-            if (!strcmp(LYD_NAME(iter_tmp), "private-key-format")) {
-                if (nc_server_configure_private_key_format(iter_tmp, 0)) {
-                    goto fail;
-                }
-            } else if (!strcmp(LYD_NAME(iter_tmp), "private-key-type")) {
-                if ((!strcmp(LYD_NAME(lyd_child(iter_tmp)), "cleartext-private-key")) &&
-                        (!strcmp(LYD_NAME(lyd_child(lyd_child(iter_tmp))), "cleartext-private-key"))) {
-                    ks->priv_base64 = strdup(lyd_get_value(lyd_child(lyd_child(iter_tmp))));
-                    if (!ks->priv_base64) {
-                        ERRMEM;
-                        goto fail;
-                    }
-                }
-            } else if (!strcmp(LYD_NAME(iter_tmp), "certificates")) {
-                if (nc_server_configure_certificates(iter_tmp, ks)) {
-                    goto fail;
+    ret = lyd_find_path(tree, "asymmetric-keys", 0, &as_keys);
+    if (!ret) {
+        /* asymmetric keys container is present */
+        as_keys = lyd_child(as_keys);
+        if (as_keys && !strcmp(LYD_NAME(as_keys), "asymmetric-key")) {
+            /* asymmetric key list */
+            LY_LIST_FOR(as_keys, iter) {
+                if (nc_server_configure_asymmetric_key(iter)) {
+                    ret = 1;
+                    goto cleanup;
                 }
             }
-            /* todo CSR? */
-            iter_tmp = iter_tmp->next;
         }
-
-        server_opts.keystore_count++;
     }
 
-    return 0;
+    ret = lyd_find_path(tree, "symmetric-keys", 0, &s_keys);
+    if (!ret) {
+        /* symmetric keys container is present */
+        s_keys = lyd_child(s_keys);
+        if (s_keys && !strcmp(LYD_NAME(s_keys), "symmetric-key")) {
+            /* symmetric key list */
+            LY_LIST_FOR(s_keys, iter) {
+                if (nc_server_configure_symmetric_key(iter)) {
+                    ret = 1;
+                    goto cleanup;
+                }
+            }
+        }
+    }
 
-fail:
-    free(server_opts.keystore);
-    return 1;
+cleanup:
+    /* reset the logging options back to what they were */
+    ly_log_options(prev_lo);
+    return ret;
 }
 
 API int

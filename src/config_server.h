@@ -76,6 +76,11 @@ int nc_server_config_load_modules(struct ly_ctx **ctx);
  */
 int nc_server_configure_listen(NC_OPERATION op);
 
+/**
+ * @brief Deletes every key stored in the keystore.
+ */
+void nc_server_config_del_keystore(void);
+
 #ifdef __cplusplus
 }
 #endif
