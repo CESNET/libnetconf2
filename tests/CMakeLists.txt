@@ -50,7 +50,7 @@ endif()
 foreach(src IN LISTS libsrc)
     list(APPEND test_srcs "../${src}")
 endforeach()
-add_library(testobj OBJECT ${test_srcs})
+add_library(testobj OBJECT ${test_srcs} ${compatsrc})
 
 foreach(test_name IN LISTS tests)
     add_executable(${test_name} $<TARGET_OBJECTS:testobj> ${test_name}.c)
