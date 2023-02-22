@@ -13,6 +13,8 @@
  *     https://opensource.org/licenses/BSD-3-Clause
  */
 
+#define _GNU_SOURCE /* pthread_rwlock_t */
+
 #include <stdarg.h>
 #include <stdio.h>
 

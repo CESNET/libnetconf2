@@ -16,6 +16,8 @@
  *     https://opensource.org/licenses/BSD-3-Clause
  */
 
+#define _GNU_SOURCE /* pthread_rwlock_t, strdup */
+
 #include <assert.h>
 #include <errno.h>
 #include <string.h>

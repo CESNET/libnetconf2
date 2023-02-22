@@ -13,6 +13,8 @@
  *     https://opensource.org/licenses/BSD-3-Clause
  */
 
+#define _GNU_SOURCE
+
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>

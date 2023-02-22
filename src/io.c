@@ -14,6 +14,7 @@
  */
 
 #define _GNU_SOURCE /* asprintf, signals */
+
 #include <assert.h>
 #include <errno.h>
 #include <inttypes.h>

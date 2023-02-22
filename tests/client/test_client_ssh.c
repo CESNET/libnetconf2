@@ -1,3 +1,19 @@
+/**
+ * @file test_client_ssh.c
+ * @author David Sedlák <xsedla1d@stud.fit.vutbr.cz>
+ * @brief client SSH test
+ *
+ * Copyright (c) 2018 CESNET, z.s.p.o.
+ *
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://opensource.org/licenses/BSD-3-Clause
+ */
+
+#define _GNU_SOURCE
+
 #include <errno.h>
 #include <setjmp.h>
 #include <stdio.h>

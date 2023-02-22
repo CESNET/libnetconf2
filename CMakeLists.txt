@@ -76,7 +76,7 @@ set(LIBYANG_DEP_VERSION 2.1.19)
 set(LIBYANG_DEP_SOVERSION 2.28.0)
 set(LIBYANG_DEP_SOVERSION_MAJOR 2)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -fvisibility=hidden -std=gnu99")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -fvisibility=hidden -std=c99")
 
 #
 # options
