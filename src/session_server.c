@@ -282,13 +282,13 @@ fail:
 }
 
 int
-nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *opts)
+nc_sock_listen_unix(const struct nc_server_unix_opts *opts)
 {
     struct sockaddr_un sun;
     int sock = -1;
 
-    if (strlen(address) > sizeof(sun.sun_path) - 1) {
-        ERR(NULL, "Socket path \"%s\" is longer than maximum length %d.", address, (int)(sizeof(sun.sun_path) - 1));
+    if (strlen(opts->address) > sizeof(sun.sun_path) - 1) {
+        ERR(NULL, "Socket path \"%s\" is longer than maximum length %d.", opts->address, (int)(sizeof(sun.sun_path) - 1));
         goto fail;
     }
 
@@ -300,11 +300,11 @@ nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *opts)
 
     memset(&sun, 0, sizeof(sun));
     sun.sun_family = AF_UNIX;
-    snprintf(sun.sun_path, sizeof(sun.sun_path) - 1, "%s", address);
+    snprintf(sun.sun_path, sizeof(sun.sun_path) - 1, "%s", opts->address);
 
     unlink(sun.sun_path);
     if (bind(sock, (struct sockaddr *)&sun, sizeof(sun)) == -1) {
-        ERR(NULL, "Could not bind \"%s\" (%s).", address, strerror(errno));
+        ERR(NULL, "Could not bind \"%s\" (%s).", opts->address, strerror(errno));
         goto fail;
     }
 
@@ -323,7 +323,7 @@ nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *opts)
     }
 
     if (listen(sock, NC_REVERSE_QUEUE) == -1) {
-        ERR(NULL, "Unable to start listening on \"%s\" (%s).", address, strerror(errno));
+        ERR(NULL, "Unable to start listening on \"%s\" (%s).", opts->address, strerror(errno));
         goto fail;
     }
 

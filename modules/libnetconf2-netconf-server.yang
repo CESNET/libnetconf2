@@ -32,4 +32,24 @@ module libnetconf2-netconf-server {
       }
     }
   }
+
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport" {
+    case unix-socket {
+      container unix-socket {
+        leaf path {
+          type string;
+          mandatory true;
+        }
+        leaf mode {
+          type uint16;
+        }
+        leaf uid {
+          type uint16;
+        }
+        leaf gid {
+          type uint16;
+        }
+      }
+    }
+  }
 }

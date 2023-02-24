@@ -479,6 +479,35 @@ nc_server_del_endpt_ssh(struct nc_endpt *endpt, struct nc_bind *bind)
 }
 
 void
+nc_server_del_unix_socket(struct nc_bind *bind, struct nc_server_unix_opts *opts)
+{
+    if (bind->sock > -1) {
+        close(bind->sock);
+    }
+
+    free(bind->address);
+    free(opts->address);
+
+    free(opts);
+    opts = NULL;
+}
+
+void
+nc_server_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *bind)
+{
+    nc_server_del_endpt_name(endpt);
+    nc_server_del_unix_socket(bind, endpt->opts.unixsock);
+
+    server_opts.endpt_count--;
+    if (!server_opts.endpt_count) {
+        free(server_opts.endpts);
+        free(server_opts.binds);
+        server_opts.endpts = NULL;
+        server_opts.binds = NULL;
+    }
+}
+
+void
 nc_server_config_del_keystore(void)
 {
     int i, j;
@@ -520,7 +549,13 @@ nc_server_configure_listen(NC_OPERATION op)
 
     if (op == NC_OP_DELETE) {
         for (i = 0; i < server_opts.endpt_count; i++) {
-            nc_server_del_endpt_ssh(&server_opts.endpts[i], &server_opts.binds[i]);
+            if (server_opts.endpts[i].ti == NC_TI_LIBSSH) {
+                nc_server_del_endpt_ssh(&server_opts.endpts[i], &server_opts.binds[i]);
+            } else if (server_opts.endpts[i].ti == NC_TI_OPENSSL) {
+                /* todo */
+            } else {
+                nc_server_del_endpt_unix_socket(&server_opts.endpts[i], &server_opts.binds[i]);
+            }
         }
     }
 
@@ -676,7 +711,7 @@ nc_server_config_set_address_port(struct nc_endpt *endpt, struct nc_bind *bind, 
 {
     int sock = -1, set_addr, ret = 0;
 
-    assert((address && !port) || (!address && port));
+    assert((address && !port) || (!address && port) || (endpt->ti == NC_TI_UNIX));
 
     if (address) {
         set_addr = 1;
@@ -690,15 +725,15 @@ nc_server_config_set_address_port(struct nc_endpt *endpt, struct nc_bind *bind, 
         address = bind->address;
     }
 
-    if (!set_addr && (endpt->ti == NC_TI_UNIX)) {
-        ret = 1;
-        goto cleanup;
-    }
-
     /* we have all the information we need to create a listening socket */
-    if (address && port) {
+    if ((address && port) || (endpt->ti == NC_TI_UNIX)) {
         /* create new socket, close the old one */
-        sock = nc_sock_listen_inet(address, port, &endpt->ka);
+        if (endpt->ti == NC_TI_UNIX) {
+            sock = nc_sock_listen_unix(endpt->opts.unixsock);
+        } else {
+            sock = nc_sock_listen_inet(address, port, &endpt->ka);
+        }
+
         if (sock == -1) {
             ret = 1;
             goto cleanup;
@@ -712,6 +747,9 @@ nc_server_config_set_address_port(struct nc_endpt *endpt, struct nc_bind *bind, 
 
     if (sock > -1) {
         switch (endpt->ti) {
+        case NC_TI_UNIX:
+            VRB(NULL, "Listening on %s for UNIX connections.", endpt->opts.unixsock->address);
+            break;
 #ifdef NC_ENABLED_SSH
         case NC_TI_LIBSSH:
             VRB(NULL, "Listening on %s:%u for SSH connections.", address, port);
@@ -1911,6 +1949,92 @@ cleanup:
 }
 
 static int
+nc_server_create_unix_socket(struct nc_endpt *endpt)
+{
+    endpt->ti = NC_TI_UNIX;
+    endpt->opts.unixsock = calloc(1, sizeof *endpt->opts.unixsock);
+    if (!endpt->opts.unixsock) {
+        ERRMEM;
+        return 1;
+    }
+
+    /* set default values */
+    endpt->opts.unixsock->mode = -1;
+    endpt->opts.unixsock->uid = -1;
+    endpt->opts.unixsock->gid = -1;
+
+    return 0;
+}
+
+static int
+nc_server_configure_unix_socket(const struct lyd_node *node, NC_OPERATION op)
+{
+    int ret = 0;
+    uint32_t prev_lo;
+    struct nc_endpt *endpt;
+    struct nc_bind *bind;
+    struct nc_server_unix_opts *opts;
+    struct lyd_node *data = NULL;
+
+    assert(!strcmp(LYD_NAME(node), "unix-socket"));
+
+    if (nc_server_get_endpt(node, &endpt, &bind)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    if (op == NC_OP_CREATE) {
+        if (nc_server_create_unix_socket(endpt)) {
+            ret = 1;
+            goto cleanup;
+        }
+
+        opts = endpt->opts.unixsock;
+
+        lyd_find_path(node, "path", 0, &data);
+        assert(data);
+
+        opts->address = strdup(lyd_get_value(data));
+        bind->address = strdup(lyd_get_value(data));
+        if (!opts->address || !bind->address) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+
+        /* silently search for non-mandatory parameters */
+        prev_lo = ly_log_options(0);
+        ret = lyd_find_path(node, "mode", 0, &data);
+        if (!ret) {
+            opts->mode = strtol(lyd_get_value(data), NULL, 8);
+        }
+
+        ret = lyd_find_path(node, "uid", 0, &data);
+        if (!ret) {
+            opts->uid = strtol(lyd_get_value(data), NULL, 10);
+        }
+
+        ret = lyd_find_path(node, "gid", 0, &data);
+        if (!ret) {
+            opts->gid = strtol(lyd_get_value(data), NULL, 10);
+        }
+
+        /* reset the logging options */
+        ly_log_options(prev_lo);
+
+        ret = nc_server_config_set_address_port(endpt, bind, NULL, 0);
+        if (ret) {
+            goto cleanup;
+        }
+    } else if (op == NC_OP_DELETE) {
+        nc_server_del_unix_socket(bind, endpt->opts.unixsock);
+    }
+
+cleanup:
+    return ret;
+}
+
+static int
 nc_server_configure(const struct lyd_node *node, NC_OPERATION op)
 {
     const char *name = LYD_NAME(node);
@@ -2025,6 +2149,10 @@ nc_server_configure(const struct lyd_node *node, NC_OPERATION op)
         }
     } else if (!strcmp(name, "mac-alg")) {
         if (nc_server_configure_mac_alg(node, op)) {
+            goto error;
+        }
+    } else if (!strcmp(name, "unix-socket")) {
+        if (nc_server_configure_unix_socket(node, op)) {
             goto error;
         }
     } else if (!strcmp(name, "cert-data")) {} else if (!strcmp(name, "expiration-date")) {} else if (!strcmp(name, "asymmetric-key")) {} else if (!strcmp(name, "certificate")) {} else if (!strcmp(name, "key-format")) {} else if (!strcmp(name,
