@@ -23,9 +23,9 @@
 
 #include <cmocka.h>
 #include <config.h>
-#include <config_server.h>
 #include <libyang/libyang.h>
 #include <log.h>
+#include <server_config.h>
 #include <session_client.h>
 #include <session_client_ch.h>
 #include <session_p.h>
