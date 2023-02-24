@@ -27,10 +27,10 @@
 
 #include <libyang/libyang.h>
 
-#include "config_server.h"
 #include "log.h"
 #include "messages_server.h"
 #include "netconf.h"
+#include "server_config.h"
 #include "session_server.h"
 #include "session_server_ch.h"
 

@@ -1,5 +1,5 @@
 /**
- * @file config_server.h
+ * @file server_config.h
  * @author Roman Janota <janota@cesnet.cz>
  * @brief libnetconf2 server configuration
  *
@@ -74,7 +74,7 @@ int nc_server_config_load_modules(struct ly_ctx **ctx);
  * @param[in] op Operation to be done on the subtree. Only does something if the operation is NC_OP_DELETE.
  * @return 0 on success, 1 on error.
  */
-int nc_server_configure_listen(NC_OPERATION op);
+int nc_server_config_listen(NC_OPERATION op);
 
 /**
  * @brief Deletes every key stored in the keystore.
