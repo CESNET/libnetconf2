@@ -32,8 +32,8 @@
 
 #include "tests/config.h"
 
-#define NC_ACCEPT_TIMEOUT 5000
-#define NC_PS_POLL_TIMEOUT 500
+#define NC_ACCEPT_TIMEOUT 2000
+#define NC_PS_POLL_TIMEOUT 2000
 #define BACKOFF_TIMEOUT_USECS 100
 
 struct ly_ctx *ctx;

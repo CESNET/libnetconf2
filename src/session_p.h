@@ -234,6 +234,7 @@ struct nc_keepalives {
 
 /* ACCESS unlocked */
 struct nc_server_unix_opts {
+    char *address;
     mode_t mode;
     uid_t uid;
     gid_t gid;
@@ -756,11 +757,10 @@ int nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives
 /**
  * @brief Create a listening socket (AF_UNIX).
  *
- * @param[in] address UNIX address to listen on.
- * @param[in] opts The server options (unix permissions).
+ * @param[in] opts The server options (unix permissions and address of the socket).
  * @return Listening socket, -1 on error.
  */
-int nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *opts);
+int nc_sock_listen_unix(const struct nc_server_unix_opts *opts);
 
 /**
  * @brief Accept a new connection on a listening socket.
