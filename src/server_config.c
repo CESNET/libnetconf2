@@ -12,6 +12,9 @@
  *
  *     https://opensource.org/licenses/BSD-3-Clause
  */
+
+#define _GNU_SOURCE
+
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,7 +45,7 @@ static const char *supported_kex_algs[] = {
 static const char *supported_encryption_algs[] = {
     "chacha20-poly1305@openssh.com", "aes256-gcm@openssh.com", "aes128-gcm@openssh.com",
     "aes256-ctr", "aes192-ctr", "aes128-ctr", "aes256-cbc", "aes192-cbc", "aes128-cbc",
-    "blowfish-cbc", "3des-cbc", "none", NULL
+    "blowfish-cbc", "triple-des-cbc", "none", NULL
 };
 
 static const char *supported_mac_algs[] = {
@@ -2444,6 +2447,7 @@ nc_fill_keystore(const struct lyd_node *data)
     ret = lyd_find_path(data, "/ietf-keystore:keystore", 0, &tree);
     if (ret) {
         WRN(NULL, "Keystore container not found in the YANG data.");
+        ret = 0;
         goto cleanup;
     }
 
@@ -2600,7 +2604,7 @@ nc_server_config_setup(const struct lyd_node *data)
     int ret = 0;
     struct lyd_node *tree;
     struct lyd_meta *m;
-    NC_OPERATION op;
+    NC_OPERATION op = NC_OP_NONE;
 
     /* LOCK */
     pthread_rwlock_wrlock(&server_opts.config_lock);
