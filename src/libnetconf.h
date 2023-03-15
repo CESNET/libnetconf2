@@ -116,8 +116,9 @@
  * a case, be careful and avoid concurrent execution of the mentioned setters/getters and functions
  * creating connection (no matter if it is a standard NETCONF connection or Call Home).
  *
- * In the client, it is thread-safe to work with distinguish NETCONF sessions since the client
- * settings are thread-specific as described above.
+ * In the client, it is always thread-safe to work with a NETCONF session in a single thread since the client
+ * settings are thread-specific as described above. Generally, one can access a session in several threads
+ * as well but there is little incentive to do so.
  *
  * Server
  * ------
