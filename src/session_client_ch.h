@@ -4,7 +4,7 @@
  * @brief libnetconf2 Call Home session client manipulation
  *
  * @copyright
- * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2023 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -44,8 +44,10 @@ extern "C" {
  * @brief Accept a Call Home connection on any of the listening binds.
  *
  * @param[in] timeout Timeout for receiving a new connection in milliseconds, 0 for
- *            non-blocking call, -1 for infinite waiting.
- * @param[in] ctx Session context to use. Can be NULL.
+ * non-blocking call, -1 for infinite waiting.
+ * @param[in,out] ctx Optional custom context to use for the session. If not set, a default context is created.
+ * Any YANG modules not present in the context and supported by the server are loaded using \<get-schema\>
+ * (if supported) and/or by searching the searchpath (see ::nc_client_set_schema_searchpath()).
  * @param[out] session New session.
  * @return 1 on success, 0 on timeout, -1 on error.
  */
@@ -73,7 +75,7 @@ int nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **sess
  * nc_client_ssh_ch_get_auth_hostkey_check_clb()).
  *
  * @param[in] auth_hostkey_check Function to call, returns 0 on success, non-zero in error.
- *                               If NULL, the default callback is set.
+ * If NULL, the default callback is set.
  * @param[in] priv Optional private data to be passed to the callback function.
  */
 void nc_client_ssh_ch_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
@@ -97,7 +99,7 @@ void nc_client_ssh_ch_get_auth_hostkey_check_clb(int (**auth_hostkey_check)(cons
  * nc_client_ssh_ch_get_auth_password_clb()).
  *
  * @param[in] auth_password Function to call, returns the password for username\@hostname.
- *                          If NULL, the default callback is set.
+ * If NULL, the default callback is set.
  * @param[in] priv Optional private data to be passed to the callback function.
  */
 void nc_client_ssh_ch_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname, void *priv),
@@ -121,8 +123,7 @@ void nc_client_ssh_ch_get_auth_password_clb(char *(**auth_password)(const char *
  * nc_client_ssh_ch_get_auth_interactive_clb()).
  *
  * @param[in] auth_interactive Function to call for every question, returns the answer for
- *                             authentication name with instruction and echoing prompt.
- *                             If NULL, the default callback is set.
+ * authentication name with instruction and echoing prompt. If NULL, the default callback is set.
  * @param[in] priv Optional private data to be passed to the callback function.
  */
 void nc_client_ssh_ch_set_auth_interactive_clb(char *(*auth_interactive)(const char *auth_name, const char *instruction,
@@ -147,8 +148,8 @@ void nc_client_ssh_ch_get_auth_interactive_clb(char *(**auth_interactive)(const 
  * freeing the private data when necessary (the private data can be obtained by
  * nc_client_ssh_ch_get_auth_privkey_passphrase_clb()).
  *
- * @param[in] auth_privkey_passphrase Function to call for every question, returns
- *                                    the passphrase for the specific private key.
+ * @param[in] auth_privkey_passphrase Function to call for every question, returns the passphrase for the specific
+ * private key.
  * @param[in] priv Optional private data to be passed to the callback function.
  */
 void nc_client_ssh_ch_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path, void *priv),
@@ -301,7 +302,7 @@ int nc_client_tls_ch_del_bind(const char *address, uint16_t port);
  *
  * @param[in] client_cert Path to the file containing the client certificate.
  * @param[in] client_key Path to the file containing the private key for the @p client_cert.
- *                       If NULL, key is expected to be stored with @p client_cert.
+ * If NULL, key is expected to be stored with @p client_cert.
  * @return 0 on success, -1 on error.
  */
 int nc_client_tls_ch_set_cert_key_paths(const char *client_cert, const char *client_key);
@@ -310,8 +311,7 @@ int nc_client_tls_ch_set_cert_key_paths(const char *client_cert, const char *cli
  * @brief Get client Call Home authentication identity - a certificate and a private key.
  *
  * @param[out] client_cert Path to the file containing the client certificate. Can be NULL.
- * @param[out] client_key Path to the file containing the private key for the @p client_cert.
- *                        Can be NULL.
+ * @param[out] client_key Path to the file containing the private key for the @p client_cert. Can be NULL.
  */
 void nc_client_tls_ch_get_cert_key_paths(const char **client_cert, const char **client_key);
 
@@ -319,9 +319,9 @@ void nc_client_tls_ch_get_cert_key_paths(const char **client_cert, const char **
  * @brief Set client Call Home trusted CA certificates.
  *
  * @param[in] ca_file Location of the CA certificate file used to verify server certificates.
- *                    For more info, see the documentation for SSL_CTX_load_verify_locations() from OpenSSL.
+ * For more info, see the documentation for SSL_CTX_load_verify_locations() from OpenSSL.
  * @param[in] ca_dir Location of the CA certificates directory used to verify the server certificates.
- *                   For more info, see the documentation for SSL_CTX_load_verify_locations() from OpenSSL.
+ * For more info, see the documentation for SSL_CTX_load_verify_locations() from OpenSSL.
  * @return 0 on success, -1 on error.
  */
 int nc_client_tls_ch_set_trusted_ca_paths(const char *ca_file, const char *ca_dir);
@@ -329,10 +329,8 @@ int nc_client_tls_ch_set_trusted_ca_paths(const char *ca_file, const char *ca_di
 /**
  * @brief Get client Call Home trusted CA certificates.
  *
- * @param[out] ca_file Location of the CA certificate file used to verify server certificates.
- *                     Can be NULL.
- * @param[out] ca_dir Location of the CA certificates directory used to verify the server certificates.
- *                    Can be NULL.
+ * @param[out] ca_file Location of the CA certificate file used to verify server certificates. Can be NULL.
+ * @param[out] ca_dir Location of the CA certificates directory used to verify the server certificates. Can be NULL.
  */
 void nc_client_tls_ch_get_trusted_ca_paths(const char **ca_file, const char **ca_dir);
 
@@ -348,10 +346,8 @@ int nc_client_tls_ch_set_crl_paths(const char *crl_file, const char *crl_dir);
 /**
  * @brief Get client Call Home Certificate Revocation Lists.
  *
- * @param[out] crl_file Location of the CRL certificate file used to check for revocated certificates.
- *                      Can be NULL.
- * @param[out] crl_dir Location of the CRL certificate directory used to check for revocated certificates.
- *                     Can be NULL.
+ * @param[out] crl_file Location of the CRL certificate file used to check for revocated certificates. Can be NULL.
+ * @param[out] crl_dir Location of the CRL certificate directory used to check for revocated certificates. Can be NULL.
  */
 void nc_client_tls_ch_get_crl_paths(const char **crl_file, const char **crl_dir);
 
