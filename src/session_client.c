@@ -1634,6 +1634,8 @@ nc_sock_connect(const char *host, uint16_t port, int timeout_ms, struct nc_keepa
     struct addrinfo hints, *res_list = NULL, *res;
     char *buf, port_s[6]; /* length of string representation of short int */
     void *addr;
+    struct sockaddr saddr;
+    socklen_t addr_len;
 
     DBG(NULL, "nc_sock_connect(%s, %u, %d, %d)", host, port, timeout_ms, sock);
 
@@ -1697,6 +1699,31 @@ nc_sock_connect(const char *host, uint16_t port, int timeout_ms, struct nc_keepa
         /* try to get a connection with the pending socket */
         assert(sock_pending);
         sock = sock_connect(timeout_ms, sock_pending, NULL, ka);
+
+        if (sock > 0) {
+            if (getsockname(sock, (struct sockaddr *)&saddr, &addr_len)) {
+                ERR(NULL, "getsockname failed (%s).", strerror(errno));
+                goto error;
+            }
+
+            buf = malloc(INET6_ADDRSTRLEN);
+            if (!buf) {
+                ERRMEM;
+                goto error;
+            }
+            if (saddr.sa_family == AF_INET) {
+                addr = &((struct sockaddr_in *)&saddr)->sin_addr;
+            } else {
+                addr = &((struct sockaddr_in6 *)&saddr)->sin6_addr;
+            }
+            if (!inet_ntop(saddr.sa_family, addr, buf, INET6_ADDRSTRLEN)) {
+                ERR(NULL, "Converting host to IP address failed (%s).", strerror(errno));
+                free(buf);
+                goto error;
+            }
+
+            *ip_host = buf;
+        }
     }
 
     return sock;
