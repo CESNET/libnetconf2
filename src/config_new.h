@@ -136,7 +136,7 @@ int nc_server_config_ssh_new_mac_algs(const struct ly_ctx *ctx, const char *endp
         int alg_count, ...);
 
 /**
- * @brief Creates new YANG configuration data nodes for a user.
+ * @brief Creates new YANG configuration data nodes for a client, which supports the public key authentication method.
  *
  * @param[in] pubkey_path Path to a file containing the user's public key.
  * @param[in] ctx libyang context.
@@ -150,8 +150,61 @@ int nc_server_config_ssh_new_mac_algs(const struct ly_ctx *ctx, const char *endp
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_ssh_new_user(const char *pubkey_path, const struct ly_ctx *ctx, const char *endpt_name,
+int nc_server_config_ssh_new_client_auth_pubkey(const char *pubkey_path, const struct ly_ctx *ctx, const char *endpt_name,
         const char *user_name, const char *pubkey_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a client, which supports the password authentication method.
+ *
+ * This function sets the password for the given user.
+ *
+ * @param[in] password Cleartext user's password.
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's user might be changed.
+ * @param[in] user_name Arbitrary identifier of the user.
+ * If an user with this identifier already exists, it's contents will be changed.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_ssh_new_client_auth_password(const char *password, const struct ly_ctx *ctx, const char *endpt_name,
+        const char *user_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a client, which supports the none authentication method.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's user might be changed.
+ * @param[in] user_name Arbitrary identifier of the user.
+ * If an user with this identifier already exists, it's contents will be changed.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_ssh_new_client_auth_none(const struct ly_ctx *ctx, const char *endpt_name,
+        const char *user_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a client, which supports the interactive authentication method.
+ *
+ * @param[in] pam_config_name Name of the PAM configuration file.
+ * @param[in] pam_config_name Optional. The absolute path to the directory in which the configuration file
+ * with the name conf_name is located. A newer version (>= 1.4) of PAM library is required to be able to specify
+ * the path. If NULL is passed, then the PAM's system directories will be searched (usually /etc/pam.d/).
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's user might be changed.
+ * @param[in] user_name Arbitrary identifier of the user.
+ * If an user with this identifier already exists, it's contents will be changed.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_ssh_new_client_auth_interactive(const char *pam_config_name, const char *pam_config_dir,
+        const struct ly_ctx *ctx, const char *endpt_name,
+        const char *user_name, struct lyd_node **config);
 
 #ifdef __cplusplus
 }

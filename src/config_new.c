@@ -16,11 +16,13 @@
 #define _GNU_SOURCE
 
 #include <assert.h>
+#include <crypt.h>
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <openssl/buffer.h>
 #include <openssl/err.h>
@@ -32,6 +34,10 @@
 #include "libnetconf.h"
 #include "server_config.h"
 #include "session_server.h"
+
+#if !defined (HAVE_CRYPT_R)
+extern pthread_mutex_t crypt_lock;
+#endif
 
 static int
 nc_server_config_ssh_new_get_keys(const char *privkey_path, const char *pubkey_path,
@@ -779,7 +785,7 @@ cleanup:
 }
 
 API int
-nc_server_config_ssh_new_user(const char *pubkey_path, const struct ly_ctx *ctx, const char *endpt_name,
+nc_server_config_ssh_new_client_auth_pubkey(const char *pubkey_path, const struct ly_ctx *ctx, const char *endpt_name,
         const char *user_name, const char *pubkey_name, struct lyd_node **config)
 {
     int ret = 0;
@@ -841,5 +847,181 @@ nc_server_config_ssh_new_user(const char *pubkey_path, const struct ly_ctx *ctx,
 cleanup:
     free(tree_path);
     free(pubkey);
+    return ret;
+}
+
+API int
+nc_server_config_ssh_new_client_auth_password(const char *password, const struct ly_ctx *ctx, const char *endpt_name,
+        const char *user_name, struct lyd_node **config)
+{
+    int ret = 0;
+    char *tree_path = NULL, *hashed_pw = NULL;
+    struct lyd_node *new_tree;
+    const char *salt = "$6$idsizuippipk$";
+
+#ifdef HAVE_CRYPT_R
+    struct crypt_data cdata;
+#endif
+
+    /* prepare path where the leaf will get inserted */
+    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
+            "users/user[name='%s']", endpt_name, user_name);
+    if (!tree_path) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* create all the nodes in the path if they weren't there */
+    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
+    if (ret) {
+        goto cleanup;
+    }
+    if (!*config) {
+        *config = new_tree;
+    }
+
+    /* find the node where the leaf will get inserted */
+    ret = lyd_find_path(*config, tree_path, 0, &new_tree);
+    if (ret) {
+        goto cleanup;
+    }
+
+#ifdef HAVE_CRYPT_R
+    cdata.initialized = 0;
+    hashed_pw = crypt_r(password, salt, &data);
+#else
+    pthread_mutex_lock(&crypt_lock);
+    hashed_pw = crypt(password, salt);
+    pthread_mutex_unlock(&crypt_lock);
+#endif
+
+    if (!hashed_pw) {
+        ERR(NULL, "Hashing password failed.");
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* insert SHA-512 hashed password */
+    ret = lyd_new_term(new_tree, NULL, "password", hashed_pw, 0, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* Add all default nodes */
+    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(tree_path);
+    return ret;
+}
+
+API int
+nc_server_config_ssh_new_client_auth_none(const struct ly_ctx *ctx, const char *endpt_name,
+        const char *user_name, struct lyd_node **config)
+{
+    int ret = 0;
+    char *tree_path = NULL;
+    struct lyd_node *new_tree;
+
+    /* prepare path where the leaf will get inserted */
+    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
+            "users/user[name='%s']", endpt_name, user_name);
+    if (!tree_path) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* create all the nodes in the path if they weren't there */
+    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
+    if (ret) {
+        goto cleanup;
+    }
+    if (!*config) {
+        *config = new_tree;
+    }
+
+    /* find the node where the leaf will get inserted */
+    ret = lyd_find_path(*config, tree_path, 0, &new_tree);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* insert none leaf */
+    ret = lyd_new_term(new_tree, NULL, "none", NULL, 0, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* Add all default nodes */
+    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(tree_path);
+    return ret;
+}
+
+API int
+nc_server_config_ssh_new_client_auth_interactive(const char *pam_config_name, const char *pam_config_dir,
+        const struct ly_ctx *ctx, const char *endpt_name,
+        const char *user_name, struct lyd_node **config)
+{
+    int ret = 0;
+    char *tree_path = NULL;
+    struct lyd_node *new_tree;
+
+    /* prepare path where the leaf will get inserted */
+    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
+            "users/user[name='%s']/libnetconf2-netconf-server:keyboard-interactive", endpt_name, user_name);
+    if (!tree_path) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* create all the nodes in the path if they weren't there */
+    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
+    if (ret) {
+        goto cleanup;
+    }
+    if (!*config) {
+        *config = new_tree;
+    }
+
+    /* find the node where the leaf will get inserted */
+    ret = lyd_find_path(*config, tree_path, 0, &new_tree);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* insert file-name leaf */
+    ret = lyd_new_term(new_tree, NULL, "pam-config-file-name", pam_config_name, 0, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
+    if (pam_config_dir) {
+        /* insert file-path leaf */
+        ret = lyd_new_term(new_tree, NULL, "pam-config-file-dir", pam_config_dir, 0, NULL);
+        if (ret) {
+            goto cleanup;
+        }
+    }
+
+    /* Add all default nodes */
+    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(tree_path);
     return ret;
 }
