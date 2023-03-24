@@ -1509,6 +1509,43 @@ fail:
 }
 
 /**
+ * @brief Convert socket IP address to string.
+ *
+ * @param[in] saddr Sockaddr to convert.
+ * @param[out] str_ip String IP address.
+ * @return 0 on success.
+ * @return -1 on error.
+ */
+static int
+nc_saddr2str(const struct sockaddr *saddr, char **str_ip)
+{
+    void *addr;
+    socklen_t str_len;
+
+    assert((saddr->sa_family == AF_INET) || (saddr->sa_family == AF_INET6));
+
+    str_len = (saddr->sa_family == AF_INET) ? INET_ADDRSTRLEN : INET6_ADDRSTRLEN;
+    *str_ip = malloc(str_len);
+    if (!*str_ip) {
+        ERRMEM;
+        return -1;
+    }
+
+    if (saddr->sa_family == AF_INET) {
+        addr = &((struct sockaddr_in *)&saddr)->sin_addr;
+    } else {
+        addr = &((struct sockaddr_in6 *)&saddr)->sin6_addr;
+    }
+    if (!inet_ntop(saddr->sa_family, addr, *str_ip, str_len)) {
+        ERR(NULL, "Converting host to IP address failed (%s).", strerror(errno));
+        free(*str_ip);
+        return -1;
+    }
+
+    return 0;
+}
+
+/**
  * @brief Try to connect a socket, optionally a pending one from a previous attempt.
  *
  * @param[in] timeout_ms Timeout in ms to wait for the connection to be fully established, -1 to block.
@@ -1526,27 +1563,24 @@ sock_connect(int timeout_ms, int *sock_pending, struct addrinfo *res, struct nc_
     fd_set wset;
     struct timeval ts;
     socklen_t len = sizeof(int);
-    struct in_addr *addr;
     uint16_t port;
-    char str[INET6_ADDRSTRLEN];
+    char *str;
 
     if (sock_pending && (*sock_pending != -1)) {
         VRB(NULL, "Trying to connect the pending socket %d.", *sock_pending);
         sock = *sock_pending;
     } else {
         assert(res);
+        if (nc_saddr2str(res->ai_addr, &str)) {
+            return -1;
+        }
         if (res->ai_family == AF_INET6) {
-            addr = (struct in_addr *) &((struct sockaddr_in6 *)res->ai_addr)->sin6_addr;
             port = ntohs(((struct sockaddr_in6 *)res->ai_addr)->sin6_port);
         } else {
-            addr = &((struct sockaddr_in *)res->ai_addr)->sin_addr;
             port = ntohs(((struct sockaddr_in *)res->ai_addr)->sin_port);
         }
-        if (!inet_ntop(res->ai_family, addr, str, res->ai_addrlen)) {
-            WRN(NULL, "inet_ntop() failed (%s).", strerror(errno));
-        } else {
-            VRB(NULL, "Trying to connect via %s to %s:%u.", (res->ai_family == AF_INET6) ? "IPv6" : "IPv4", str, port);
-        }
+        VRB(NULL, "Trying to connect via %s to %s:%u.", (res->ai_family == AF_INET6) ? "IPv6" : "IPv4", str, port);
+        free(str);
 
         /* connect to a server */
         sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
@@ -1632,10 +1666,11 @@ nc_sock_connect(const char *host, uint16_t port, int timeout_ms, struct nc_keepa
     int i, opt;
     int sock = sock_pending ? *sock_pending : -1;
     struct addrinfo hints, *res_list = NULL, *res;
-    char *buf, port_s[6]; /* length of string representation of short int */
-    void *addr;
-    struct sockaddr saddr;
-    socklen_t addr_len;
+    char port_s[6]; /* length of string representation of short int */
+    struct sockaddr_storage saddr;
+    socklen_t addr_len = sizeof saddr;
+
+    *ip_host = NULL;
 
     DBG(NULL, "nc_sock_connect(%s, %u, %d, %d)", host, port, timeout_ms, sock);
 
@@ -1672,24 +1707,8 @@ nc_sock_connect(const char *host, uint16_t port, int timeout_ms, struct nc_keepa
                 goto error;
             }
 
-            if (ip_host && ((res->ai_family == AF_INET6) || (res->ai_family == AF_INET))) {
-                buf = malloc(INET6_ADDRSTRLEN);
-                if (!buf) {
-                    ERRMEM;
-                    goto error;
-                }
-                if (res->ai_family == AF_INET) {
-                    addr = &((struct sockaddr_in *)res->ai_addr)->sin_addr;
-                } else {
-                    addr = &((struct sockaddr_in6 *)res->ai_addr)->sin6_addr;
-                }
-                if (!inet_ntop(res->ai_family, addr, buf, INET6_ADDRSTRLEN)) {
-                    ERR(NULL, "Converting host to IP address failed (%s).", strerror(errno));
-                    free(buf);
-                    goto error;
-                }
-
-                *ip_host = buf;
+            if (nc_saddr2str(res->ai_addr, ip_host)) {
+                goto error;
             }
             break;
         }
@@ -1706,23 +1725,9 @@ nc_sock_connect(const char *host, uint16_t port, int timeout_ms, struct nc_keepa
                 goto error;
             }
 
-            buf = malloc(INET6_ADDRSTRLEN);
-            if (!buf) {
-                ERRMEM;
+            if (nc_saddr2str((struct sockaddr *)&saddr, ip_host)) {
                 goto error;
             }
-            if (saddr.sa_family == AF_INET) {
-                addr = &((struct sockaddr_in *)&saddr)->sin_addr;
-            } else {
-                addr = &((struct sockaddr_in6 *)&saddr)->sin6_addr;
-            }
-            if (!inet_ntop(saddr.sa_family, addr, buf, INET6_ADDRSTRLEN)) {
-                ERR(NULL, "Converting host to IP address failed (%s).", strerror(errno));
-                free(buf);
-                goto error;
-            }
-
-            *ip_host = buf;
         }
     }
 
