@@ -128,6 +128,11 @@ struct nc_keystore {
     uint16_t sym_key_count;
 };
 
+struct nc_auth_state {
+    int auth_method_count;
+    int auth_success_count;
+};
+
 struct nc_client_auth {
     char *username;
 
@@ -871,9 +876,10 @@ int nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts 
  * @param[in] session Session structure of the connection.
  * @param[in] opts Endpoint SSH options on which the session was created.
  * @param[in] msg SSH message itself.
+ * @param[in] state State of the authentication.
  * @return 0 if the message was handled, 1 if it is left up to libssh.
  */
-int nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg);
+int nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg, struct nc_auth_state *state);
 
 void nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts);
 
