@@ -5,7 +5,7 @@
  * @brief libnetconf2 session manipulation
  *
  * @copyright
- * Copyright (c) 2017 - 2021 CESNET, z.s.p.o.
+ * Copyright (c) 2017 - 2023 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 
 #ifndef NC_SESSION_PRIVATE_H_
 #define NC_SESSION_PRIVATE_H_
+
+#define _GNU_SOURCE
 
 #include <pthread.h>
 #include <stdint.h>
