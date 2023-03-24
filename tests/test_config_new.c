@@ -93,12 +93,10 @@ client_thread_pubkey(void *arg)
     ret = nc_client_set_schema_searchpath(MODULES_DIR);
     assert_int_equal(ret, 0);
 
-    ret = nc_client_ssh_set_username("test_config_new_openssh");
+    ret = nc_client_ssh_set_username("test");
     assert_int_equal(ret, 0);
 
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PUBLICKEY, 1);
-    nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PASSWORD, -1);
-    nc_client_ssh_set_auth_pref(NC_SSH_AUTH_INTERACTIVE, -1);
 
     ret = nc_client_ssh_add_keypair(TESTS_DIR "/data/key_rsa.pub", TESTS_DIR "/data/key_rsa");
     assert_int_equal(ret, 0);
@@ -166,7 +164,7 @@ setup_f(void **state)
     ret = nc_server_config_ssh_new_host_key_algs(ctx, "endpt", &tree, 1, "rsa-sha2-512");
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_ssh_new_user(TESTS_DIR "/data/key_rsa.pub", ctx, "endpt", "test_config_new_openssh", "pubkey", &tree);
+    ret = nc_server_config_ssh_new_client_auth_pubkey(TESTS_DIR "/data/key_rsa.pub", ctx, "endpt", "test", "pubkey", &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
