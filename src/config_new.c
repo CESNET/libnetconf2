@@ -22,13 +22,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <openssl/buffer.h>
 #include <openssl/err.h>
+#include <openssl/evp.h>
 #include <openssl/pem.h>
 
 #include "compat.h"
 #include "config_new.h"
 #include "libnetconf.h"
 #include "server_config.h"
+#include "session_server.h"
 
 static int
 nc_server_config_ssh_new_get_keys(const char *privkey_path, const char *pubkey_path,
@@ -258,6 +261,12 @@ nc_server_config_ssh_new_hostkey(const char *privkey_path, const char *pubkey_pa
         goto cleanup;
     }
 
+    /* Add all default nodes */
+    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
 cleanup:
     EVP_PKEY_free(priv_pkey);
     free(priv_key);
@@ -272,7 +281,7 @@ nc_server_config_ssh_new_address_port(const char *address, const char *port, con
 {
     int ret = 0;
     char *tree_path = NULL;
-    struct lyd_node *new_tree;
+    struct lyd_node *new_tree, *port_node;
 
     if (!address || !port || !ctx || !endpt_name || !config) {
         ERRARG("args");
@@ -297,9 +306,13 @@ nc_server_config_ssh_new_address_port(const char *address, const char *port, con
         *config = new_tree;
     }
 
-    /* lyd_new_path sets the out param to the first node created,
-     * so in case the original tree was empty new_tree has to be set correctly */
-    ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
+    if (!new_tree) {
+        /* no new nodes were created */
+        ret = lyd_find_path(*config, tree_path, 0, &new_tree);
+    } else {
+        /* config was NULL */
+        ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
+    }
     if (ret) {
         ERR(NULL, "Unable to find tcp-server-parameters container.");
         goto cleanup;
@@ -310,11 +323,22 @@ nc_server_config_ssh_new_address_port(const char *address, const char *port, con
         goto cleanup;
     }
 
-    ret = lyd_new_term(new_tree, NULL, "local-port", port, 0, NULL);
+    ret = lyd_find_path(new_tree, "local-port", 0, &port_node);
+    if (!ret) {
+        ret = lyd_change_term(port_node, port);
+    } else if (ret == LY_ENOTFOUND) {
+        ret = lyd_new_term(new_tree, NULL, "local-port", port, 0, NULL);
+    }
+
     if (ret) {
         goto cleanup;
     }
 
+    /* Add all default nodes */
+    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
 cleanup:
     free(tree_path);
     return ret;
@@ -341,6 +365,14 @@ nc_server_config_ssh_new_transport_params_prep(const struct ly_ctx *ctx, const c
     if (ret) {
         ERR(NULL, "Creating new path to transport-params failed.");
         goto cleanup;
+    }
+
+    if (!*alg_tree) {
+        /* no new nodes added */
+        ret = lyd_find_path(config, tree_path, 0, alg_tree);
+        if (ret) {
+            goto cleanup;
+        }
     }
 
 cleanup:
@@ -440,6 +472,11 @@ nc_server_config_ssh_new_host_key_algs(const struct ly_ctx *ctx, const char *end
         goto cleanup;
     }
 
+    /* Add all default nodes */
+    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
 cleanup:
     return ret;
 }
@@ -468,6 +505,11 @@ nc_server_config_ssh_new_key_exchange_algs(const struct ly_ctx *ctx, const char 
         goto cleanup;
     }
 
+    /* Add all default nodes */
+    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
 cleanup:
     return ret;
 }
@@ -496,6 +538,11 @@ nc_server_config_ssh_new_encryption_algs(const struct ly_ctx *ctx, const char *e
         goto cleanup;
     }
 
+    /* Add all default nodes */
+    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
 cleanup:
     return ret;
 }
@@ -524,6 +571,275 @@ nc_server_config_ssh_new_mac_algs(const struct ly_ctx *ctx, const char *endpt_na
         goto cleanup;
     }
 
+    /* Add all default nodes */
+    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
 cleanup:
+    return ret;
+}
+
+static int
+nc_server_config_ssh_read_openssh_pubkey(FILE *f, char **pubkey)
+{
+    int ret = 0;
+    char *buffer = NULL;
+    size_t len = 0;
+    char *start, *end;
+
+    if (getline(&buffer, &len, f) < 0) {
+        ERR(NULL, "Reading line from file failed.");
+        return 1;
+    }
+
+    if (len < 8) {
+        ERR(NULL, "Unexpected public key format.");
+        ret = 1;
+        goto cleanup;
+    }
+
+    start = buffer;
+    if (!strncmp(buffer, "ssh-rsa ", 8)) {
+        start += strlen("ssh-rsa ");
+        end = strchr(start, ' ');
+        if (!end) {
+            ERR(NULL, "Unexpected public key format.");
+            ret = 1;
+            goto cleanup;
+        }
+
+        *pubkey = strdup(start);
+        if (!*pubkey) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+
+        (*pubkey)[strlen(*pubkey) - strlen(end)] = '\0';
+    }
+
+cleanup:
+    free(buffer);
+    return ret;
+}
+
+static int
+nc_server_config_ssh_read_ssh2_pubkey(FILE *f, char **pubkey)
+{
+    char *buffer = NULL;
+    size_t len = 0;
+    size_t pubkey_len = 0;
+    void *tmp;
+
+    while (getline(&buffer, &len, f) > 0) {
+        if (!strncmp(buffer, "----", 4)) {
+            free(buffer);
+            buffer = NULL;
+            continue;
+        }
+
+        if (!strncmp(buffer, "Comment:", 8)) {
+            free(buffer);
+            buffer = NULL;
+            continue;
+        }
+
+        len = strlen(buffer);
+
+        tmp = realloc(*pubkey, pubkey_len + len + 1);
+        if (!tmp) {
+            ERRMEM;
+            free(buffer);
+            buffer = NULL;
+            return 1;
+        }
+
+        *pubkey = tmp;
+        memcpy(*pubkey + pubkey_len, buffer, len);
+        pubkey_len += len;
+        free(buffer);
+        buffer = NULL;
+    }
+
+    if (!pubkey_len) {
+        ERR(NULL, "Unexpected public key format.");
+        return 1;
+    }
+
+    (*pubkey)[pubkey_len - 1] = '\0';
+    free(buffer);
+    return 0;
+}
+
+static int
+nc_server_config_ssh_read_subject_pubkey(FILE *f, char **pubkey)
+{
+    int ret = 0;
+    EVP_PKEY *pkey;
+    BIO *bio;
+    BUF_MEM *mem;
+    char *tmp;
+
+    pkey = PEM_read_PUBKEY(f, NULL, NULL, NULL);
+    if (!pkey) {
+        ret = -1;
+        goto cleanup;
+    }
+
+    bio = BIO_new(BIO_s_mem());
+    if (!bio) {
+        ret = -1;
+        goto cleanup;
+    }
+
+    ret = PEM_write_bio_PUBKEY(bio, pkey);
+    if (!ret) {
+        ret = -1;
+        goto cleanup;
+    }
+    ret = 0;
+
+    BIO_get_mem_ptr(bio, &mem);
+    tmp = malloc(mem->length + 1);
+    if (!tmp) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    memcpy(tmp, mem->data, mem->length);
+    tmp[mem->length] = '\0';
+
+    *pubkey = strdup(tmp + strlen("-----BEGIN PUBLIC KEY-----\n"));
+    (*pubkey)[strlen(*pubkey) - strlen("\n-----END PUBLIC KEY-----\n")] = '\0';
+
+cleanup:
+    if (ret == -1) {
+        ERR(NULL, "Error getting public key from file (OpenSSL Error): \"%s\".", ERR_reason_error_string(ERR_get_error()));
+        ret = 1;
+    }
+
+    BIO_free(bio);
+    EVP_PKEY_free(pkey);
+    free(tmp);
+
+    return ret;
+}
+
+static int
+nc_server_config_ssh_new_get_pubkey(const char *pubkey_path, char **pubkey, NC_SSH_PUBKEY_TYPE *pubkey_type)
+{
+    int ret = 0;
+    FILE *f = NULL;
+    char *buffer = NULL;
+    size_t len = 0;
+
+    *pubkey = NULL;
+
+    f = fopen(pubkey_path, "r");
+    if (!f) {
+        ERR(NULL, "Unable to open file \"%s\".", pubkey_path);
+        ret = 1;
+        goto cleanup;
+    }
+
+    if (getline(&buffer, &len, f) < 0) {
+        ERR(NULL, "Error reading header from file \"%s\".", pubkey_path);
+        ret = 1;
+        goto cleanup;
+    }
+
+    rewind(f);
+
+    if (!strncmp(buffer, "-----BEGIN PUBLIC KEY-----\n", strlen("-----BEGIN PUBLIC KEY-----\n"))) {
+        ret = nc_server_config_ssh_read_subject_pubkey(f, pubkey);
+        *pubkey_type = NC_SSH_PUBKEY_X509;
+    } else if (!strncmp(buffer, "---- BEGIN SSH2 PUBLIC KEY ----\n", strlen("---- BEGIN SSH2 PUBLIC KEY ----\n"))) {
+        ret = nc_server_config_ssh_read_ssh2_pubkey(f, pubkey);
+        *pubkey_type = NC_SSH_PUBKEY_SSH2;
+    } else {
+        ret = nc_server_config_ssh_read_openssh_pubkey(f, pubkey);
+        *pubkey_type = NC_SSH_PUBKEY_SSH2;
+    }
+
+    if (ret) {
+        ERR(NULL, "Error getting public key from file \"%s\".", pubkey_path);
+        goto cleanup;
+    }
+
+cleanup:
+    if (f) {
+        fclose(f);
+    }
+
+    free(buffer);
+
+    return ret;
+}
+
+API int
+nc_server_config_ssh_new_user(const char *pubkey_path, const struct ly_ctx *ctx, const char *endpt_name,
+        const char *user_name, const char *pubkey_name, struct lyd_node **config)
+{
+    int ret = 0;
+    char *pubkey = NULL, *tree_path = NULL;
+    struct lyd_node *new_tree;
+    NC_SSH_PUBKEY_TYPE pubkey_type;
+
+    ret = nc_server_config_ssh_new_get_pubkey(pubkey_path, &pubkey, &pubkey_type);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* prepare path where leaves will get inserted */
+    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
+            "users/user[name='%s']/public-keys/local-definition/public-key[name='%s']", endpt_name, user_name, pubkey_name);
+    if (!tree_path) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* create all the nodes in the path if they weren't there */
+    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
+    if (ret) {
+        goto cleanup;
+    }
+    if (!*config) {
+        *config = new_tree;
+    }
+
+    /* find the node where leaves will get inserted */
+    ret = lyd_find_path(*config, tree_path, 0, &new_tree);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* insert pubkey format */
+    if (pubkey_type == NC_SSH_PUBKEY_SSH2) {
+        ret = lyd_new_term(new_tree, NULL, "public-key-format", "ietf-crypto-types:ssh-public-key-format", 0, NULL);
+    } else {
+        ret = lyd_new_term(new_tree, NULL, "public-key-format", "ietf-crypto-types:subject-public-key-info-format", 0, NULL);
+    }
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* insert pubkey b64 */
+    ret = lyd_new_term(new_tree, NULL, "public-key", pubkey, 0, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* Add all default nodes */
+    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(tree_path);
+    free(pubkey);
     return ret;
 }

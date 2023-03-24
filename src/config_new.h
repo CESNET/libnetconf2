@@ -135,6 +135,24 @@ int nc_server_config_ssh_new_encryption_algs(const struct ly_ctx *ctx, const cha
 int nc_server_config_ssh_new_mac_algs(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config,
         int alg_count, ...);
 
+/**
+ * @brief Creates new YANG configuration data nodes for a user.
+ *
+ * @param[in] pubkey_path Path to a file containing the user's public key.
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's user might be changed.
+ * @param[in] user_name Arbitrary identifier of the user.
+ * If an user with this identifier already exists, it's contents will be changed.
+ * @param[in] pubkey_name Arbitrary identifier of the user's public key.
+ * If a public key with this identifier already exists for this user, it's contents will be changed.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_ssh_new_user(const char *pubkey_path, const struct ly_ctx *ctx, const char *endpt_name,
+        const char *user_name, const char *pubkey_name, struct lyd_node **config);
+
 #ifdef __cplusplus
 }
 #endif
