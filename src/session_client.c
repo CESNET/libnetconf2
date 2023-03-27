@@ -1513,11 +1513,12 @@ fail:
  *
  * @param[in] saddr Sockaddr to convert.
  * @param[out] str_ip String IP address.
+ * @param[out] port Optional port.
  * @return 0 on success.
  * @return -1 on error.
  */
 static int
-nc_saddr2str(const struct sockaddr *saddr, char **str_ip)
+nc_saddr2str(const struct sockaddr *saddr, char **str_ip, uint16_t *port)
 {
     void *addr;
     socklen_t str_len;
@@ -1533,8 +1534,14 @@ nc_saddr2str(const struct sockaddr *saddr, char **str_ip)
 
     if (saddr->sa_family == AF_INET) {
         addr = &((struct sockaddr_in *)saddr)->sin_addr;
+        if (port) {
+            *port = ntohs(((struct sockaddr_in *)saddr)->sin_port);
+        }
     } else {
         addr = &((struct sockaddr_in6 *)saddr)->sin6_addr;
+        if (port) {
+            *port = ntohs(((struct sockaddr_in6 *)saddr)->sin6_port);
+        }
     }
     if (!inet_ntop(saddr->sa_family, addr, *str_ip, str_len)) {
         ERR(NULL, "Converting host to IP address failed (%s).", strerror(errno));
@@ -1571,13 +1578,8 @@ sock_connect(int timeout_ms, int *sock_pending, struct addrinfo *res, struct nc_
         sock = *sock_pending;
     } else {
         assert(res);
-        if (nc_saddr2str(res->ai_addr, &str)) {
+        if (nc_saddr2str(res->ai_addr, &str, &port)) {
             return -1;
-        }
-        if (res->ai_family == AF_INET6) {
-            port = ntohs(((struct sockaddr_in6 *)res->ai_addr)->sin6_port);
-        } else {
-            port = ntohs(((struct sockaddr_in *)res->ai_addr)->sin_port);
         }
         VRB(NULL, "Trying to connect via %s to %s:%u.", (res->ai_family == AF_INET6) ? "IPv6" : "IPv4", str, port);
         free(str);
@@ -1707,7 +1709,7 @@ nc_sock_connect(const char *host, uint16_t port, int timeout_ms, struct nc_keepa
                 goto error;
             }
 
-            if (nc_saddr2str(res->ai_addr, ip_host)) {
+            if (nc_saddr2str(res->ai_addr, ip_host, NULL)) {
                 goto error;
             }
             break;
@@ -1725,7 +1727,7 @@ nc_sock_connect(const char *host, uint16_t port, int timeout_ms, struct nc_keepa
                 goto error;
             }
 
-            if (nc_saddr2str((struct sockaddr *)&saddr, ip_host)) {
+            if (nc_saddr2str((struct sockaddr *)&saddr, ip_host, NULL)) {
                 goto error;
             }
         }
