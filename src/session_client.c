@@ -1532,9 +1532,9 @@ nc_saddr2str(const struct sockaddr *saddr, char **str_ip)
     }
 
     if (saddr->sa_family == AF_INET) {
-        addr = &((struct sockaddr_in *)&saddr)->sin_addr;
+        addr = &((struct sockaddr_in *)saddr)->sin_addr;
     } else {
-        addr = &((struct sockaddr_in6 *)&saddr)->sin6_addr;
+        addr = &((struct sockaddr_in6 *)saddr)->sin6_addr;
     }
     if (!inet_ntop(saddr->sa_family, addr, *str_ip, str_len)) {
         ERR(NULL, "Converting host to IP address failed (%s).", strerror(errno));
