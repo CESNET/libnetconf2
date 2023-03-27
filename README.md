@@ -28,7 +28,7 @@ NETCONF 1.0 ([RFC 4741](https://tools.ietf.org/html/rfc4741)) as well as NETCONF
 Monitoring and Configuration](https://www.liberouter.org/) department of
 [CESNET](http://www.ces.net/). Any testing or improving/fixing the library
 is welcome. Please inform us about your experiences with using **libnetconf2**
-via the [issue tracker](https://github.com/CESNET/libnetconf/issues).
+via the [issue tracker](https://github.com/CESNET/libnetconf2/issues).
 
 Besides the [**libyang**](https://github.com/CESNET/libyang), **libnetconf2** is
 another basic building block for the [**Netopeer2** toolset](https://github.com/CESNET/Netopeer2).
