@@ -1477,11 +1477,16 @@ nc_server_notif_send(struct nc_session *session, struct nc_server_notif *notif, 
     return ret;
 }
 
-/* must be called holding the session RPC lock! IO lock will be acquired as needed
- * returns: NC_PSPOLL_ERROR,
- *          NC_PSPOLL_ERROR | NC_PSPOLL_REPLY_ERROR,
- *          NC_PSPOLL_REPLY_ERROR,
- *          0
+/**
+ * @brief Send a reply acquiring IO lock as needed.
+ * Session RPC lock must be held!
+ *
+ * @param[in] session Session to use.
+ * @param[in] io_timeout Timeout to use for acquiring IO lock.
+ * @param[in] rpc RPC to sent.
+ * @return 0 on success.
+ * @return Bitmask of NC_PSPOLL_ERROR (any fatal error) and NC_PSPOLL_REPLY_ERROR (reply failed to be sent).
+ * @return NC_PSPOLL_ERROR on other errors.
  */
 static int
 nc_server_send_reply_io(struct nc_session *session, int io_timeout, const struct nc_server_rpc *rpc)
@@ -1550,13 +1555,20 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, const struct
     return ret;
 }
 
-/* session must be running and session RPC lock held!
- * returns: NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR, (msg filled)
- *          NC_PSPOLL_ERROR, (msg filled)
- *          NC_PSPOLL_TIMEOUT,
- *          NC_PSPOLL_RPC (some application data available),
- *          NC_PSPOLL_SSH_CHANNEL,
- *          NC_PSPOLL_SSH_MSG
+/**
+ * @brief Poll a session from pspoll acquiring IO lock as needed.
+ * Session must be running and session RPC lock held!
+ *
+ * @param[in] session Session to use.
+ * @param[in] io_timeout Timeout to use for acquiring IO lock.
+ * @param[in] now_mono Current monotonic timestamp.
+ * @param[in,out] msg Message to fill in case of an error.
+ * @return NC_PSPOLL_RPC if some application data are available.
+ * @return NC_PSPOLL_TIMEOUT if a timeout elapsed.
+ * @return NC_PSPOLL_SSH_CHANNEL if a new SSH channel has been created.
+ * @return NC_PSPOLL_SSH_MSG if just an SSH message has been processed.
+ * @return NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR if session has been terminated (@p msg filled).
+ * @return NC_PSPOLL_ERROR on other fatal errors (@p msg filled).
  */
 static int
 nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mono, char *msg)
