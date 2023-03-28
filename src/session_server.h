@@ -962,15 +962,6 @@ void nc_session_dec_notif_status(struct nc_session *session);
  */
 int nc_session_get_notif_status(const struct nc_session *session);
 
-/**
- * @brief Learn whether a session was created using Call Home or not.
- * Works only for server sessions.
- *
- * @param[in] session Session to get the information from.
- * @return 0 if a standard session, non-zero if a Call Home session.
- */
-int nc_session_is_callhome(const struct nc_session *session);
-
 /** @} Server Session */
 
 #ifdef __cplusplus

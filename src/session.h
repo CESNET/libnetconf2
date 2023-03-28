@@ -1,10 +1,11 @@
 /**
  * @file session.h
  * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @author Michal Vasko <mvasko@cesnet.cz>
  * @brief libnetconf2 session manipulation
  *
  * @copyright
- * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2023 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -215,6 +216,14 @@ void nc_session_set_data(struct nc_session *session, void *data);
  * @return Session-specific data.
  */
 void *nc_session_get_data(const struct nc_session *session);
+
+/**
+ * @brief Learn whether a session was created using Call Home or not.
+ *
+ * @param[in] session Session to get the information from.
+ * @return 0 if a standard session, non-zero if a Call Home session.
+ */
+int nc_session_is_callhome(const struct nc_session *session);
 
 /**
  * @brief Free the NETCONF session object.

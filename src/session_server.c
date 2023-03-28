@@ -3344,7 +3344,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
     }
     (*session)->status = NC_STATUS_STARTING;
     (*session)->ctx = (struct ly_ctx *)ctx;
-    (*session)->flags = NC_SESSION_SHAREDCTX;
+    (*session)->flags = NC_SESSION_SHAREDCTX | NC_SESSION_CALLHOME;
     (*session)->host = ip_host;
     (*session)->port = endpt->port;
 
@@ -3811,19 +3811,4 @@ nc_session_get_notif_status(const struct nc_session *session)
     pthread_mutex_unlock(&((struct nc_session *)session)->opts.server.ntf_status_lock);
 
     return ntf_status;
-}
-
-API int
-nc_session_is_callhome(const struct nc_session *session)
-{
-    if (!session || (session->side != NC_SERVER)) {
-        ERRARG("session");
-        return 0;
-    }
-
-    if (session->flags & NC_SESSION_CALLHOME) {
-        return 1;
-    }
-
-    return 0;
 }

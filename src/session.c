@@ -582,6 +582,21 @@ nc_session_get_data(const struct nc_session *session)
     return session->data;
 }
 
+API int
+nc_session_is_callhome(const struct nc_session *session)
+{
+    if (!session) {
+        ERRARG("session");
+        return 0;
+    }
+
+    if (session->flags & NC_SESSION_CALLHOME) {
+        return 1;
+    }
+
+    return 0;
+}
+
 NC_MSG_TYPE
 nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op)
 {
