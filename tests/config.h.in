@@ -24,3 +24,16 @@
 
 @SSH_MACRO@
 @TLS_MACRO@
+
+/* nc_server.h local includes (not to use the installed ones) */
+#include "netconf.h"
+#include "log.h"
+#include "messages_server.h"
+#include "server_config.h"
+#include "session_server.h"
+#include "session_server_ch.h"
+
+/* nc_client.h local includes (not to use the installed ones) */
+#include "messages_client.h"
+#include "session_client.h"
+#include "session_client_ch.h"

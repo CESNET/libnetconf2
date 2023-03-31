@@ -12,23 +12,18 @@
  *
  *     https://opensource.org/licenses/BSD-3-Clause
  */
+#define _GNU_SOURCE
 
 #include <errno.h>
 #include <pthread.h>
-#include <semaphore.h>
 #include <setjmp.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <cmocka.h>
-
-#include <libnetconf.h>
-#include <libyang/libyang.h>
-#include <log.h>
-#include <server_config.h>
-#include <session_client.h>
-#include <session_server.h>
 
 #include "tests/config.h"
 

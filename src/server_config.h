@@ -69,17 +69,181 @@ int nc_server_config_setup_path(const struct ly_ctx *ctx, const char *path);
 int nc_server_config_load_modules(struct ly_ctx **ctx);
 
 /**
- * @brief Configures the listen subtree in the ietf-netconf-server module.
+ * @brief Creates new YANG configuration data nodes for a hostkey.
  *
- * @param[in] op Operation to be done on the subtree. Only does something if the operation is NC_OP_DELETE.
- * @return 0 on success, 1 on error.
+ * @param[in] privkey_path Path to a file containing a private key.
+ * The private key has to be in a PEM format. Only RSA and ECDSA keys are supported.
+ * @param[in] pubkey_path Path to a file containing a public key. If NULL, public key will be
+ * generated from the private key.
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's hostkey might be changed.
+ * @param[in] hostkey_name Arbitrary identifier of the hostkey.
+ * If a hostkey with this identifier already exists, it's contents will be changed.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_listen(NC_OPERATION op);
+int nc_server_config_ssh_new_hostkey(const char *privkey_path, const char *pubkey_path, const struct ly_ctx *ctx,
+        const char *endpt_name, const char *hostkey_name, struct lyd_node **config);
 
 /**
- * @brief Deletes every key stored in the keystore.
+ * @brief Creates new YANG configuration data nodes for a local-address and local-port.
+ *
+ * @param[in] address New listening address.
+ * @param[in] port New listening port.
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's address and port will be overriden.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
  */
-void nc_server_config_del_keystore(void);
+int nc_server_config_ssh_new_address_port(const char *address, const char *port, const struct ly_ctx *ctx,
+        const char *endpt_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for host-key algorithms replacing any previous ones.
+ *
+ * Supported algorithms are: ssh-ed25519, ecdsa-sha2-nistp256, ecdsa-sha2-nistp384, ecdsa-sha2-nistp521,
+ * rsa-sha2-512, rsa-sha2-256, ssh-rsa and ssh-dss.
+ *
+ * @param[in] ctx libyang context
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's host-key algorithms will be replaced.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @param[in] alg_count Number of following algorithms.
+ * @param[in] ... String literals of host-key algorithms in a decreasing order of preference.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_ssh_new_host_key_algs(const struct ly_ctx *ctx, const char *endpt_name,
+        struct lyd_node **config, int alg_count, ...);
+
+/**
+ * @brief Creates new YANG configuration data nodes for key exchange algorithms replacing any previous ones.
+ *
+ * Supported algorithms are: diffie-hellman-group-exchange-sha1, curve25519-sha256, ecdh-sha2-nistp256,
+ * ecdh-sha2-nistp384, ecdh-sha2-nistp521, diffie-hellman-group18-sha512, diffie-hellman-group16-sha512,
+ * diffie-hellman-group-exchange-sha256 and diffie-hellman-group14-sha256.
+ *
+ * @param[in] ctx libyang context
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's key exchange algorithms will be replaced.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @param[in] alg_count Number of following algorithms.
+ * @param[in] ... String literals of key exchange algorithms in a decreasing order of preference.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_ssh_new_key_exchange_algs(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config,
+        int alg_count, ...);
+
+/**
+ * @brief Creates new YANG configuration data nodes for encryption algorithms replacing any previous ones.
+ *
+ * Supported algorithms are: aes256-ctr, aes192-ctr, aes128-ctr, aes256-cbc, aes192-cbc, aes128-cbc, blowfish-cbc
+ * triple-des-cbc and none.
+ *
+ * @param[in] ctx libyang context
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's encryption algorithms will be replaced.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @param[in] alg_count Number of following algorithms.
+ * @param[in] ... String literals of encryption algorithms in a decreasing order of preference.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_ssh_new_encryption_algs(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config,
+        int alg_count, ...);
+
+/**
+ * @brief Creates new YANG configuration data nodes for mac algorithms replacing any previous ones.
+ *
+ * Supported algorithms are: hmac-sha2-256, hmac-sha2-512 and hmac-sha1.
+ *
+ * @param[in] ctx libyang context
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's mac algorithms will be replaced.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @param[in] alg_count Number of following algorithms.
+ * @param[in] ... String literals of mac algorithms in a decreasing order of preference.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_ssh_new_mac_algs(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config,
+        int alg_count, ...);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a client, which supports the public key authentication method.
+ *
+ * @param[in] pubkey_path Path to a file containing the user's public key.
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's user might be changed.
+ * @param[in] user_name Arbitrary identifier of the user.
+ * If an user with this identifier already exists, it's contents will be changed.
+ * @param[in] pubkey_name Arbitrary identifier of the user's public key.
+ * If a public key with this identifier already exists for this user, it's contents will be changed.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_ssh_new_client_auth_pubkey(const char *pubkey_path, const struct ly_ctx *ctx, const char *endpt_name,
+        const char *user_name, const char *pubkey_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a client, which supports the password authentication method.
+ *
+ * This function sets the password for the given user.
+ *
+ * @param[in] password Cleartext user's password.
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's user might be changed.
+ * @param[in] user_name Arbitrary identifier of the user.
+ * If an user with this identifier already exists, it's contents will be changed.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_ssh_new_client_auth_password(const char *password, const struct ly_ctx *ctx, const char *endpt_name,
+        const char *user_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a client, which supports the none authentication method.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's user might be changed.
+ * @param[in] user_name Arbitrary identifier of the user.
+ * If an user with this identifier already exists, it's contents will be changed.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_ssh_new_client_auth_none(const struct ly_ctx *ctx, const char *endpt_name,
+        const char *user_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a client, which supports the interactive authentication method.
+ *
+ * @param[in] pam_config_name Name of the PAM configuration file.
+ * @param[in] pam_config_name Optional. The absolute path to the directory in which the configuration file
+ * with the name conf_name is located. A newer version (>= 1.4) of PAM library is required to be able to specify
+ * the path. If NULL is passed, then the PAM's system directories will be searched (usually /etc/pam.d/).
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's user might be changed.
+ * @param[in] user_name Arbitrary identifier of the user.
+ * If an user with this identifier already exists, it's contents will be changed.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_ssh_new_client_auth_interactive(const char *pam_config_name, const char *pam_config_dir,
+        const struct ly_ctx *ctx, const char *endpt_name,
+        const char *user_name, struct lyd_node **config);
 
 #ifdef __cplusplus
 }
