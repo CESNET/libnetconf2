@@ -196,7 +196,7 @@ nc_server_get_auth_client(const struct lyd_node *node, const struct nc_server_ss
  * @return 0 on success, 1 on error.
  */
 static int
-nc_server_get_pubkey(const struct lyd_node *node, const struct nc_client_auth *auth_client, struct nc_client_auth_pubkey **pubkey)
+nc_server_get_pubkey(const struct lyd_node *node, const struct nc_client_auth *auth_client, struct nc_public_key **pubkey)
 {
     uint16_t i;
     const char *pubkey_name;
@@ -296,8 +296,8 @@ nc_server_del_hostkey_name(struct nc_hostkey *hostkey)
 static void
 nc_server_del_public_key(struct nc_hostkey *hostkey)
 {
-    free(hostkey->pub_base64);
-    hostkey->pub_base64 = NULL;
+    free(hostkey->key.pub_base64);
+    hostkey->key.pub_base64 = NULL;
 }
 
 static void
@@ -310,8 +310,8 @@ nc_server_del_truststore_reference(struct nc_client_auth *client_auth)
 static void
 nc_server_del_private_key(struct nc_hostkey *hostkey)
 {
-    free(hostkey->priv_base64);
-    hostkey->priv_base64 = NULL;
+    free(hostkey->key.priv_base64);
+    hostkey->key.priv_base64 = NULL;
 }
 
 static void
@@ -322,14 +322,14 @@ nc_server_del_auth_client_username(struct nc_client_auth *auth_client)
 }
 
 static void
-nc_server_del_auth_client_pubkey_name(struct nc_client_auth_pubkey *pubkey)
+nc_server_del_auth_client_pubkey_name(struct nc_public_key *pubkey)
 {
     free(pubkey->name);
     pubkey->name = NULL;
 }
 
 static void
-nc_server_del_auth_client_pubkey_pub_base64(struct nc_client_auth_pubkey *pubkey)
+nc_server_del_auth_client_pubkey_pub_base64(struct nc_public_key *pubkey)
 {
     free(pubkey->pub_base64);
     pubkey->pub_base64 = NULL;
@@ -396,7 +396,7 @@ nc_server_del_hostkey(struct nc_server_ssh_opts *opts, struct nc_hostkey *hostke
 }
 
 static void
-nc_server_del_auth_client_pubkey(struct nc_client_auth *auth_client, struct nc_client_auth_pubkey *pubkey)
+nc_server_del_auth_client_pubkey(struct nc_client_auth *auth_client, struct nc_public_key *pubkey)
 {
     nc_server_del_auth_client_pubkey_name(pubkey);
     nc_server_del_auth_client_pubkey_pub_base64(pubkey);
@@ -1056,7 +1056,7 @@ nc_server_config_public_key_format(const struct lyd_node *node, NC_OPERATION op)
     const char *format;
     struct nc_endpt *endpt;
     struct nc_client_auth *auth_client;
-    struct nc_client_auth_pubkey *pubkey;
+    struct nc_public_key *pubkey;
     struct nc_hostkey *hostkey;
     int ret = 0;
 
@@ -1102,9 +1102,9 @@ nc_server_config_public_key_format(const struct lyd_node *node, NC_OPERATION op)
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
             if (!strcmp(format, "ssh-public-key-format")) {
-                hostkey->pubkey_type = NC_SSH_PUBKEY_SSH2;
+                hostkey->key.pubkey_type = NC_SSH_PUBKEY_SSH2;
             } else if (!strcmp(format, "subject-public-key-info-format")) {
-                hostkey->pubkey_type = NC_SSH_PUBKEY_X509;
+                hostkey->key.pubkey_type = NC_SSH_PUBKEY_X509;
             } else {
                 ERR(NULL, "Public key format (%s) not supported.", format);
             }
@@ -1139,9 +1139,9 @@ nc_server_config_private_key_format(const struct lyd_node *node, NC_OPERATION op
     format = ((struct lyd_node_term *)node)->value.ident->name;
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
         if (!strcmp(format, "rsa-private-key-format")) {
-            hostkey->privkey_type = NC_SSH_KEY_RSA;
+            hostkey->key.privkey_type = NC_SSH_KEY_RSA;
         } else if (!strcmp(format, "ec-private-key-format")) {
-            hostkey->privkey_type = NC_SSH_KEY_ECDSA;
+            hostkey->key.privkey_type = NC_SSH_KEY_ECDSA;
         } else {
             ERR(NULL, "Private key format (%s) not supported.", format);
         }
@@ -1155,8 +1155,8 @@ static int
 nc_server_replace_cleartext_private_key(const struct lyd_node *node, struct nc_hostkey *hostkey)
 {
     nc_server_del_private_key(hostkey);
-    hostkey->priv_base64 = strdup(lyd_get_value(node));
-    if (!hostkey->priv_base64) {
+    hostkey->key.priv_base64 = strdup(lyd_get_value(node));
+    if (!hostkey->key.priv_base64) {
         ERRMEM;
         return 1;
     }
@@ -1289,7 +1289,7 @@ cleanup:
 }
 
 static int
-nc_server_replace_auth_key_public_key_leaf(const struct lyd_node *node, struct nc_client_auth_pubkey *pubkey)
+nc_server_replace_auth_key_public_key_leaf(const struct lyd_node *node, struct nc_public_key *pubkey)
 {
     nc_server_del_auth_client_pubkey_pub_base64(pubkey);
 
@@ -1307,8 +1307,8 @@ nc_server_replace_host_key_public_key(const struct lyd_node *node, struct nc_hos
 {
     nc_server_del_public_key(hostkey);
 
-    hostkey->pub_base64 = strdup(lyd_get_value(node));
-    if (!hostkey->pub_base64) {
+    hostkey->key.pub_base64 = strdup(lyd_get_value(node));
+    if (!hostkey->key.pub_base64) {
         ERRMEM;
         return 1;
     }
@@ -1322,7 +1322,7 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
     struct nc_endpt *endpt;
     struct nc_hostkey *hostkey;
     struct nc_client_auth *auth_client;
-    struct nc_client_auth_pubkey *pubkey;
+    struct nc_public_key *pubkey;
     int ret = 0;
 
     assert(!strcmp(LYD_NAME(node), "public-key"));
@@ -2227,7 +2227,7 @@ nc_session_server_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op
 }
 
 static int
-nc_server_config_asymmetric_key_certificate(const struct lyd_node *tree, struct nc_ks_asym_key *key)
+nc_server_config_asymmetric_key_certificate(const struct lyd_node *tree, struct nc_asymmetric_key *key)
 {
     int ret = 0;
     struct lyd_node *node;
@@ -2276,7 +2276,7 @@ nc_server_config_asymmetric_key(const struct lyd_node *tree)
     struct lyd_node *node = NULL, *iter;
     void *tmp;
     struct nc_keystore *ks = &server_opts.keystore;
-    struct nc_ks_asym_key *key;
+    struct nc_asymmetric_key *key;
     const char *format;
 
     /* create new asymmetric key */
@@ -2383,7 +2383,7 @@ nc_server_config_symmetric_key(const struct lyd_node *tree)
     const char *format;
     struct lyd_node *node;
     struct nc_keystore *ks = &server_opts.keystore;
-    struct nc_ks_sym_key *key;
+    struct nc_symmetric_key *key;
     void *tmp;
 
     /* create new symmetric key */

@@ -101,90 +101,116 @@ struct nc_client_ssh_opts {
     char *username;
 };
 
+/**
+ * @brief A basic certificate.
+ */
 struct nc_certificate {
-    char *name;
-    char *cert_data;
+    char *name;         /**< Arbitrary name of the certificate. */
+    char *cert_base64;  /**< Base-64 encoded certificate. */
 };
 
+/**
+ * @brief An asymmetric key.
+ */
+struct nc_asymmetric_key {
+    char *name;                     /**< Arbitrary name of the key. */
+
+    NC_SSH_PUBKEY_TYPE pubkey_type; /**< Type of the public key. */
+    char *pub_base64;               /**< Base-64 encoded public key. */
+    NC_SSH_KEY_TYPE privkey_type;   /**< Type of the private key. */
+    char *priv_base64;              /**< Base-64 encoded private key. */
+
+    struct nc_certificate *certs;   /**< The certificates associated with this key. */
+    uint16_t cert_count;            /**< Number of certificates associated with this key. */
+};
+
+/**
+ * @brief A symmetric key.
+ */
+struct nc_symmetric_key {
+    char *name;     /**< Arbitrary name of the key. */
+    char *base64;   /**< Base-64 encoded key. */
+};
+
+/**
+ * @brief A public key.
+ */
+struct nc_public_key {
+    char *name;                     /**< Arbitrary name of the public key. */
+    NC_SSH_PUBKEY_TYPE pubkey_type; /**< Type of the public key. */
+    char *pub_base64;               /**< Base-64 encoded public key. */
+};
+
+/**
+ * @brief Keystore YANG module representation.
+ */
 struct nc_keystore {
-    struct nc_ks_asym_key {
-        char *name;
-        NC_SSH_PUBKEY_TYPE pubkey_type;
-        char *pub_base64;
-        NC_SSH_KEY_TYPE privkey_type;
-        char *priv_base64;
-        struct {
-            char *name;
-            char *cert_base64;
-        } *certs;
-        uint16_t cert_count;
-    } *asym_keys;
-    uint16_t asym_key_count;
+    struct nc_asymmetric_key *asym_keys;    /**< Stored asymmetric keys. */
+    uint16_t asym_key_count;                /**< Count of stored asymmetric keys. */
 
-    struct nc_ks_sym_key {
-        char *name;
-        char *base64;
-    } *sym_keys;
-    uint16_t sym_key_count;
+    struct nc_symmetric_key *sym_keys;      /**< Stored symmetric keys. */
+    uint16_t sym_key_count;                 /**< Count of stored symmetric keys. */
 };
 
+/**
+ * @brief Tracks the state of a client's authentication.
+ */
 struct nc_auth_state {
-    int auth_method_count;
-    int auth_success_count;
+    int auth_method_count;  /**< The number of auth. methods that the user supports. */
+    int auth_success_count; /**< The number of auth. methods that ended successfully. */
 };
 
+/**
+ * @brief A server's authorized client.
+ */
 struct nc_client_auth {
-    char *username;
+    char *username;                         /**< Arbitrary username. */
 
-    NC_STORE_TYPE ks_type;
+    NC_STORE_TYPE ks_type;                  /**< Specifies how/where the client's public key is stored. */
     union {
         struct {
-            struct nc_client_auth_pubkey {
-                char *name;
-                NC_SSH_PUBKEY_TYPE pubkey_type;
-                char *pub_base64;
-            } *pubkeys;
-            uint16_t pubkey_count;
+            struct nc_public_key *pubkeys;  /**< The client's public keys. */
+            uint16_t pubkey_count;          /**< The number of client's public keys. */
         };
-        char *ts_reference;
+        char *ts_reference;                 /**< Reference to a trust-store. */
     };
 
-    char *password;
-    char *pam_config_name;
-    char *pam_config_dir;
-    int supports_none;
+    char *password;                         /**< Client's password */
+    char *pam_config_name;                  /**< Client's PAM configuration file name. */
+    char *pam_config_dir;                   /**< Client's PAM configuration file directory. */
+    int supports_none;                      /**< Implies that the client supports the none authentication method. */
 };
 
+/**
+ * @brief The server's hostkey.
+ */
 struct nc_hostkey {
-    char *name;
+    char *name;                             /**<  Arbitrary name of the host key. */
 
-    NC_STORE_TYPE ks_type;
+    NC_STORE_TYPE ks_type;                  /**< Specifies how/where the key is stored. */
     union {
-        struct {
-            NC_SSH_PUBKEY_TYPE pubkey_type;
-            char *pub_base64;
-            NC_SSH_KEY_TYPE privkey_type;
-            char *priv_base64;
-        };
-        struct nc_ks_asym_key *ks_ref;
+        struct nc_asymmetric_key key;       /**< The server's hostkey. */
+        struct nc_asymmetric_key *ks_ref;   /**< Reference to a key-store. */
     };
 };
 
-/* ACCESS locked, separate locks */
+/**
+ * @brief Server options for configuring the SSH transport protocol.
+ */
 struct nc_server_ssh_opts {
-    struct nc_hostkey *hostkeys; /* everything in ks */
-    uint16_t hostkey_count;
+    struct nc_hostkey *hostkeys;            /**< Server's hostkeys. */
+    uint16_t hostkey_count;                 /**< Number of server's hostkeys. */
 
-    struct nc_client_auth *auth_clients;
-    uint16_t client_count;
+    struct nc_client_auth *auth_clients;    /**< Server's authorized clients. */
+    uint16_t client_count;                  /**< Number of server's authorized clients. */
 
-    char *hostkey_algs;
-    char *encryption_algs;
-    char *kex_algs;
-    char *mac_algs;
+    char *hostkey_algs;                     /**< Hostkey algorithms supported by the server. */
+    char *encryption_algs;                  /**< Encryption algorithms supported by the server. */
+    char *kex_algs;                         /**< Key exchange algorithms supported by the server. */
+    char *mac_algs;                         /**< MAC algorithms supported by the server. */
 
-    uint16_t auth_attempts;
-    uint16_t auth_timeout;
+    uint16_t auth_attempts;                 /**< Number of allowed authentication attempts. */
+    uint16_t auth_timeout;                  /**< Authentication timeout. */
 };
 
 #endif /* NC_ENABLED_SSH */
@@ -229,27 +255,34 @@ struct nc_server_tls_opts {
 
 #endif /* NC_ENABLED_TLS */
 
-/* ACCESS unlocked */
+/**
+ * @brief Keepalives configuration data.
+ */
 struct nc_keepalives {
-    int enabled;
-    uint16_t idle_time;
-    uint16_t max_probes;
-    uint16_t probe_interval;
+    int enabled;                /**< Indicates that keepalives are enabled. */
+    uint16_t idle_time;         /**< Idle timeout. */
+    uint16_t max_probes;        /**< Maximum number of probes. */
+    uint16_t probe_interval;    /**< Probe interval. */
 };
 
-/* ACCESS unlocked */
+/**
+ * @brief UNIX socket connection configuration.
+ */
 struct nc_server_unix_opts {
-    char *address;
-    mode_t mode;
-    uid_t uid;
-    gid_t gid;
+    char *address;  /**< Address of the socket. */
+    mode_t mode;    /**< Socket's mode. */
+    uid_t uid;      /**< Socket's uid. */
+    gid_t gid;      /**< Socket's gid. */
 };
 
+/**
+ * @brief Stores information about a bind.
+ */
 struct nc_bind {
-    char *address;
-    uint16_t port;
-    int sock;
-    int pollin;
+    char *address;  /**< Bind's address. */
+    uint16_t port;  /**< Bind's port. */
+    int sock;       /**< Bind's socket. */
+    int pollin;     /**< Specifies, which sockets to poll on. */
 };
 
 /* ACCESS unlocked */
