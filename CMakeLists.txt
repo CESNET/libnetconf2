@@ -139,8 +139,7 @@ set(headers
     src/session_client_ch.h
     src/session_server.h
     src/session_server_ch.h
-    src/server_config.h
-    src/config_new.h)
+    src/server_config.h)
 
 # files to generate doxygen from
 set(doxy_files
@@ -153,7 +152,8 @@ set(doxy_files
     src/session_client.h
     src/session_client_ch.h
     src/session_server.h
-    src/session_server_ch.h)
+    src/session_server_ch.h
+    src/server_config.h)
 
 # source files to be covered by the 'format' target
 set(format_sources

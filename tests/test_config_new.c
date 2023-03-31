@@ -13,7 +13,8 @@
  *     https://opensource.org/licenses/BSD-3-Clause
  */
 
-#include <errno.h>
+#define _GNU_SOURCE
+
 #include <pthread.h>
 #include <setjmp.h>
 #include <stdio.h>
@@ -21,14 +22,6 @@
 #include <string.h>
 
 #include <cmocka.h>
-
-#include <libnetconf.h>
-#include <libyang/libyang.h>
-#include <log.h>
-#include <server_config.h>
-#include <session_client.h>
-#include <session_server.h>
-#include "config_new.h"
 
 #include "tests/config.h"
 
@@ -83,8 +76,19 @@ ssh_hostkey_check_clb(const char *hostname, ssh_session session, void *priv)
     return 0;
 }
 
+static char *
+auth_password(const char *username, const char *hostname, void *priv)
+{
+    (void) username;
+    (void) hostname;
+    (void) priv;
+
+    /* set the reply to password authentication */
+    return strdup("testpassword123");
+}
+
 static void *
-client_thread_pubkey(void *arg)
+client_thread(void *arg)
 {
     int ret;
     struct nc_session *session = NULL;
@@ -93,13 +97,10 @@ client_thread_pubkey(void *arg)
     ret = nc_client_set_schema_searchpath(MODULES_DIR);
     assert_int_equal(ret, 0);
 
-    ret = nc_client_ssh_set_username("test");
+    ret = nc_client_ssh_set_username("client");
     assert_int_equal(ret, 0);
 
-    nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PUBLICKEY, 1);
-
-    ret = nc_client_ssh_add_keypair(TESTS_DIR "/data/key_rsa.pub", TESTS_DIR "/data/key_rsa");
-    assert_int_equal(ret, 0);
+    nc_client_ssh_set_auth_password_clb(auth_password, NULL);
 
     pthread_barrier_wait(&state->barrier);
     session = nc_connect_ssh("127.0.0.1", 10005, NULL);
@@ -111,14 +112,14 @@ client_thread_pubkey(void *arg)
 }
 
 static void
-test_nc_auth_pubkey(void **state)
+test_nc_config_new(void **state)
 {
     int ret, i;
     pthread_t tids[2];
 
     assert_non_null(state);
 
-    ret = pthread_create(&tids[0], NULL, client_thread_pubkey, *state);
+    ret = pthread_create(&tids[0], NULL, client_thread, *state);
     assert_int_equal(ret, 0);
     ret = pthread_create(&tids[1], NULL, server_thread, *state);
     assert_int_equal(ret, 0);
@@ -146,25 +147,32 @@ setup_f(void **state)
 
     *state = test_state;
 
+    /* new context */
     ret = ly_ctx_new(MODULES_DIR, 0, &ctx);
     assert_int_equal(ret, 0);
 
+    /* initialize the context by loading default modules */
     ret = nc_server_init_ctx(&ctx);
     assert_int_equal(ret, 0);
 
+    /* load ietf-netconf-server module and it's imports */
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
+    /* create new hostkey data */
     ret = nc_server_config_ssh_new_hostkey(TESTS_DIR "/data/server.key", NULL, ctx, "endpt", "hostkey", &tree);
     assert_int_equal(ret, 0);
 
+    /* create new address and port data */
     ret = nc_server_config_ssh_new_address_port("127.0.0.1", "10005", ctx, "endpt", &tree);
     assert_int_equal(ret, 0);
 
+    /* create the host-key algorithms data */
     ret = nc_server_config_ssh_new_host_key_algs(ctx, "endpt", &tree, 1, "rsa-sha2-512");
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_ssh_new_client_auth_pubkey(TESTS_DIR "/data/key_rsa.pub", ctx, "endpt", "test", "pubkey", &tree);
+    /* create the client authentication data, password only */
+    ret = nc_server_config_ssh_new_client_auth_password("testpassword123", ctx, "endpt", "client", &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
@@ -209,7 +217,7 @@ int
 main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup_teardown(test_nc_auth_pubkey, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_config_new, setup_f, teardown_f),
     };
 
     setenv("CMOCKA_TEST_ABORT", "1", 1);
