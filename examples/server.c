@@ -206,11 +206,12 @@ static int
 init(struct ly_ctx **context, struct nc_pollsession **ps, const char *path, NC_TRANSPORT_IMPL server_type)
 {
     int rc = 0;
-    const char *config_file_path = EXAMPLES_DIR "/config.xml";
+    const char *hostkey_path = TESTS_DIR "/data/server.key";
+    struct lyd_node *config = NULL;
 
     if (path) {
         /* if a path is supplied, then use it */
-        config_file_path = path;
+        hostkey_path = path;
     }
 
     if (server_type == NC_TI_UNIX) {
@@ -235,10 +236,29 @@ init(struct ly_ctx **context, struct nc_pollsession **ps, const char *path, NC_T
         ERR_MSG_CLEANUP("Error loading modules required for configuration of the server.\n");
     }
 
-    /* parse YANG data from a file, configure the server based on the parsed YANG configuration data */
-    rc = nc_server_config_setup_path(*context, config_file_path);
+    /* this is where the YANG configuration data gets generated,
+     * start by creating hostkey configuration data */
+    rc = nc_server_config_ssh_new_hostkey(hostkey_path, NULL, *context, "endpt", "hostkey", &config);
     if (rc) {
-        ERR_MSG_CLEANUP("Error setting the path to the configuration data.\n");
+        ERR_MSG_CLEANUP("Error creating new hostkey configuration data.\n");
+    }
+
+    /* create address and port configuration data */
+    rc = nc_server_config_ssh_new_address_port(SSH_ADDRESS, SSH_PORT, *context, "endpt", &config);
+    if (rc) {
+        ERR_MSG_CLEANUP("Error creating new address and port configuration data.\n");
+    }
+
+    /* create client authentication configuration data */
+    rc = nc_server_config_ssh_new_client_auth_password(SSH_PASSWORD, *context, "endpt", SSH_USERNAME, &config);
+    if (rc) {
+        ERR_MSG_CLEANUP("Error creating client authentication configuration data.\n");
+    }
+
+    /* apply the created configuration data */
+    rc = nc_server_config_setup(config);
+    if (rc) {
+        ERR_MSG_CLEANUP("Application of configuration data failed.\n");
     }
 
     /* initialize the server */
@@ -259,6 +279,7 @@ init(struct ly_ctx **context, struct nc_pollsession **ps, const char *path, NC_T
     signal(SIGINT, sigint_handler);
 
 cleanup:
+    lyd_free_all(config);
     return rc;
 }
 
@@ -269,7 +290,7 @@ main(int argc, char **argv)
     struct ly_ctx *context = NULL;
     struct nc_session *session, *new_session;
     struct nc_pollsession *ps = NULL;
-    const char *unix_socket_path = NULL, *config_file_path = NULL;
+    const char *unix_socket_path = NULL, *hostkey_path = NULL;
 
     struct option options[] = {
         {"help",    no_argument,        NULL, 'h'},
@@ -301,8 +322,8 @@ main(int argc, char **argv)
             break;
 
         case 's':
-            config_file_path = optarg;
-            if (init(&context, &ps, config_file_path, NC_TI_LIBSSH)) {
+            hostkey_path = optarg;
+            if (init(&context, &ps, hostkey_path, NC_TI_LIBSSH)) {
                 ERR_MSG_CLEANUP("Failed to initialize a SSH server\n");
                 goto cleanup;
             }

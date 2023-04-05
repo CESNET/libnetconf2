@@ -336,7 +336,8 @@ nc_server_config_ssh_new_address_port(const char *address, const char *port, con
         ret = lyd_new_term(new_tree, NULL, "local-port", port, 0, NULL);
     }
 
-    if (ret) {
+    if (ret && (ret != LY_EEXIST) && (ret != LY_ENOT)) {
+        /* only fail if there was actually an error */
         goto cleanup;
     }
 
