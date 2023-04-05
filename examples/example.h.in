@@ -24,11 +24,14 @@
 /* directory with examples source code and this header */
 #define EXAMPLES_DIR "@CMAKE_SOURCE_DIR@/examples"
 
+/* directory with tests and more importantly test key pairs */
+#define TESTS_DIR "@CMAKE_SOURCE_DIR@/tests"
+
 /* SSH listening IP address */
 #define SSH_ADDRESS "127.0.0.1"
 
 /* SSH listening port */
-#define SSH_PORT 830
+#define SSH_PORT "830"
 
 /* SSH 'password' authentication exptected username and password */
 #define SSH_USERNAME "admin"
