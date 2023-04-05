@@ -40,9 +40,14 @@ typedef enum {
 int nc_server_config_listen(NC_OPERATION op);
 
 /**
- * @brief Deletes every key stored in the keystore.
+ * @brief Deletes everything stored in the keystore.
  */
 void nc_server_config_del_keystore(void);
+
+/**
+ * @brief Deletes everything stored in the truststore.
+ */
+void nc_server_config_del_trustore(void);
 
 #ifdef __cplusplus
 }

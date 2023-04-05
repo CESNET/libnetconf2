@@ -109,6 +109,12 @@ struct nc_certificate {
     char *cert_base64;  /**< Base-64 encoded certificate. */
 };
 
+struct nc_certificate_bag {
+    char *name;
+    struct nc_certificate *certs;
+    uint16_t cert_count;
+};
+
 /**
  * @brief An asymmetric key.
  */
@@ -139,6 +145,20 @@ struct nc_public_key {
     char *name;                     /**< Arbitrary name of the public key. */
     NC_SSH_PUBKEY_TYPE pubkey_type; /**< Type of the public key. */
     char *pub_base64;               /**< Base-64 encoded public key. */
+};
+
+struct nc_public_key_bag {
+    char *name;
+    struct nc_public_key *pubkeys;
+    uint16_t pubkey_count;
+};
+
+struct nc_truststore {
+    struct nc_certificate_bag *cert_bags;
+    uint16_t cert_bag_count;
+
+    struct nc_public_key_bag *pub_bags;
+    uint16_t pub_bag_count;
 };
 
 /**
@@ -172,7 +192,7 @@ struct nc_client_auth {
             struct nc_public_key *pubkeys;  /**< The client's public keys. */
             uint16_t pubkey_count;          /**< The number of client's public keys. */
         };
-        char *ts_reference;                 /**< Reference to a trust-store. */
+        struct nc_public_key_bag *ts_ref;                 /**< Reference to a truststore. */
     };
 
     char *password;                         /**< Client's password */
@@ -370,7 +390,8 @@ struct nc_server_opts {
 #endif
 
     pthread_rwlock_t config_lock;
-    struct nc_keystore keystore; /**< store for keys/certificates */
+    struct nc_keystore keystore; /**< store for server's keys/certificates */
+    struct nc_truststore truststore;    /**< store for server client's keys/certificates */
 
     struct nc_bind *binds;
     struct nc_endpt {

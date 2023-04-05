@@ -301,13 +301,6 @@ nc_server_del_public_key(struct nc_hostkey *hostkey)
 }
 
 static void
-nc_server_del_truststore_reference(struct nc_client_auth *client_auth)
-{
-    free(client_auth->ts_reference);
-    client_auth->ts_reference = NULL;
-}
-
-static void
 nc_server_del_private_key(struct nc_hostkey *hostkey)
 {
     free(hostkey->key.priv_base64);
@@ -333,13 +326,6 @@ nc_server_del_auth_client_pubkey_pub_base64(struct nc_public_key *pubkey)
 {
     free(pubkey->pub_base64);
     pubkey->pub_base64 = NULL;
-}
-
-static void
-nc_server_del_auth_client_ts_reference(struct nc_client_auth *auth_client)
-{
-    free(auth_client->ts_reference);
-    auth_client->ts_reference = NULL;
 }
 
 static void
@@ -418,10 +404,6 @@ nc_server_del_auth_client(struct nc_server_ssh_opts *opts, struct nc_client_auth
         for (i = 0; i < pubkey_count; i++) {
             nc_server_del_auth_client_pubkey(auth_client, &auth_client->pubkeys[i]);
         }
-    } else if (auth_client->ks_type == NC_STORE_TRUSTSTORE) {
-        nc_server_del_auth_client_ts_reference(auth_client);
-    } else {
-        return;
     }
 
     nc_server_del_auth_client_password(auth_client);
@@ -528,9 +510,11 @@ nc_server_config_del_keystore(void)
             free(ks->asym_keys[i].certs[j].cert_base64);
         }
         free(ks->asym_keys[i].certs);
+        ks->asym_keys[i].certs = NULL;
         ks->asym_keys[i].cert_count = 0;
     }
     free(ks->asym_keys);
+    ks->asym_keys = NULL;
     ks->asym_key_count = 0;
 
     /* delete all symmetric keys */
@@ -539,7 +523,47 @@ nc_server_config_del_keystore(void)
         free(ks->sym_keys[i].base64);
     }
     free(ks->sym_keys);
+    ks->sym_keys = NULL;
     ks->sym_key_count = 0;
+}
+
+void
+nc_server_config_del_trustore(void)
+{
+    int i, j;
+    struct nc_truststore *ts = &server_opts.truststore;
+
+    /* delete all cert bags */
+    for (i = 0; i < ts->cert_bag_count; i++) {
+        free(ts->cert_bags[i].name);
+        for (j = 0; j < ts->cert_bags[i].cert_count; j++) {
+            /* free associated certificates */
+            free(ts->cert_bags[i].certs[j].name);
+            free(ts->cert_bags[i].certs[j].cert_base64);
+        }
+        free(ts->cert_bags[i].certs);
+        ts->cert_bags[i].certs = NULL;
+        ts->cert_bags[i].cert_count = 0;
+    }
+    free(ts->cert_bags);
+    ts->cert_bags = NULL;
+    ts->cert_bag_count = 0;
+
+    /* delete all pubkey bags */
+    for (i = 0; i < ts->pub_bag_count; i++) {
+        free(ts->pub_bags[i].name);
+        for (j = 0; j < ts->pub_bags[i].pubkey_count; j++) {
+            /* free associated pubkeys */
+            free(ts->pub_bags[i].pubkeys[j].name);
+            free(ts->pub_bags[i].pubkeys[j].pub_base64);
+        }
+        free(ts->pub_bags[i].pubkeys);
+        ts->pub_bags[i].pubkeys = NULL;
+        ts->pub_bags[i].pubkey_count = 0;
+    }
+    free(ts->pub_bags);
+    ts->pub_bags = NULL;
+    ts->pub_bag_count = 0;
 }
 
 /* presence container */
@@ -1525,14 +1549,22 @@ cleanup:
 static int
 nc_server_replace_truststore_reference(const struct lyd_node *node, struct nc_client_auth *client_auth)
 {
-    /*todo*/
-    nc_server_del_truststore_reference(client_auth);
+    uint16_t i;
+    struct nc_truststore *ts = &server_opts.truststore;
 
-    client_auth->ts_reference = strdup(lyd_get_value(node));
-    if (!client_auth->ts_reference) {
-        ERRMEM;
+    /* lookup name */
+    for (i = 0; i < ts->pub_bag_count; i++) {
+        if (!strcmp(lyd_get_value(node), ts->pub_bags[i].name)) {
+            break;
+        }
+    }
+
+    if (i == ts->pub_bag_count) {
+        ERR(NULL, "Truststore \"%s\" not found.", lyd_get_value(node));
         return 1;
     }
+
+    client_auth->ts_ref = &ts->pub_bags[i];
 
     return 0;
 }
@@ -1564,7 +1596,7 @@ nc_server_config_truststore_reference(const struct lyd_node *node, NC_OPERATION 
                 goto cleanup;
             }
         } else {
-            nc_server_del_truststore_reference(auth_client);
+            auth_client->ts_ref = NULL;
         }
     }
 
@@ -2308,9 +2340,9 @@ nc_server_config_asymmetric_key(const struct lyd_node *tree)
 
     format = ((struct lyd_node_term *)node)->value.ident->name;
     if (!strcmp(format, "ssh-public-key-format")) {
-        key->pubkey_type = NC_SSH_PUBKEY_X509;
-    } else if (!strcmp(format, "subject-public-key-info-format")) {
         key->pubkey_type = NC_SSH_PUBKEY_SSH2;
+    } else if (!strcmp(format, "subject-public-key-info-format")) {
+        key->pubkey_type = NC_SSH_PUBKEY_X509;
     } else {
         ERR(NULL, "Public key format \"%s\" not supported.", format);
         ret = 1;
@@ -2388,7 +2420,7 @@ nc_server_config_symmetric_key(const struct lyd_node *tree)
 
     /* create new symmetric key */
     tmp = realloc(ks->sym_keys, (ks->sym_key_count + 1) * sizeof *ks->sym_keys);
-    if (tmp) {
+    if (!tmp) {
         ERRMEM;
         ret = 1;
         goto cleanup;
@@ -2446,7 +2478,7 @@ nc_fill_keystore(const struct lyd_node *data)
 
     ret = lyd_find_path(data, "/ietf-keystore:keystore", 0, &tree);
     if (ret) {
-        WRN(NULL, "Keystore container not found in the YANG data.");
+        VRB(NULL, "Keystore container not found in the YANG data.");
         ret = 0;
         goto cleanup;
     }
@@ -2479,6 +2511,267 @@ nc_fill_keystore(const struct lyd_node *data)
                 }
             }
         }
+    }
+
+cleanup:
+    /* reset the logging options back to what they were */
+    ly_log_options(prev_lo);
+    return ret;
+}
+
+static int
+nc_server_config_create_truststore_certificate(const struct lyd_node *tree, struct nc_certificate_bag *bag)
+{
+    int ret = 0;
+    struct lyd_node *node;
+    void *tmp;
+    struct nc_certificate *cert;
+
+    /* create new certificate */
+    tmp = realloc(bag->certs, (bag->cert_count + 1) * sizeof *bag->certs);
+    if (!tmp) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+    memset(&bag->certs[bag->cert_count], 0, sizeof *bag->certs);
+    bag->certs = tmp;
+    cert = &bag->certs[bag->cert_count];
+    bag->cert_count++;
+
+    /* set name */
+    lyd_find_path(tree, "name", 0, &node);
+    assert(node);
+
+    cert->name = strdup(lyd_get_value(node));
+    if (!cert->name) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* set cert data */
+    lyd_find_path(tree, "cert-data", 0, &node);
+    assert(node);
+
+    cert->cert_base64 = strdup(lyd_get_value(node));
+    if (!cert->cert_base64) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+cleanup:
+    return ret;
+}
+
+static int
+nc_server_config_certificate_bag(const struct lyd_node *tree)
+{
+    int ret = 0;
+    struct lyd_node *node = NULL, *iter;
+    void *tmp;
+    struct nc_truststore *ts = &server_opts.truststore;
+    struct nc_certificate_bag *bag;
+
+    /* create new certificate bag */
+    tmp = realloc(ts->cert_bags, (ts->cert_bag_count + 1) * sizeof *ts->cert_bags);
+    if (!tmp) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+    ts->cert_bags = tmp;
+    memset(&ts->cert_bags[ts->cert_bag_count], 0, sizeof *ts->cert_bags);
+    bag = &ts->cert_bags[ts->cert_bag_count];
+    ts->cert_bag_count++;
+
+    /* set name */
+    lyd_find_path(tree, "name", 0, &node);
+    assert(node);
+
+    bag->name = strdup(lyd_get_value(node));
+    if (!bag->name) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* set certificates associated with this bag */
+    ret = lyd_find_path(tree, "certificate", 0, &node);
+    if (!ret) {
+        LY_LIST_FOR(node, iter) {
+            if (nc_server_config_create_truststore_certificate(iter, bag)) {
+                ret = 1;
+                goto cleanup;
+            }
+        }
+    } else if (ret == LY_ENOTFOUND) {
+        /* certificate list not present, but it's ok */
+        ret = 0;
+    }
+
+cleanup:
+    return ret;
+}
+
+static int
+nc_server_config_create_truststore_public_key(const struct lyd_node *tree, struct nc_public_key_bag *bag)
+{
+    int ret = 0;
+    struct lyd_node *node;
+    void *tmp;
+    struct nc_public_key *key;
+    const char *format;
+
+    /* create new public key */
+    tmp = realloc(bag->pubkeys, (bag->pubkey_count + 1) * sizeof *bag->pubkeys);
+    if (!tmp) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+    bag->pubkeys = tmp;
+    memset(&bag->pubkeys[bag->pubkey_count], 0, sizeof *bag->pubkeys);
+    key = &bag->pubkeys[bag->pubkey_count];
+    bag->pubkey_count++;
+
+    /* set name */
+    lyd_find_path(tree, "name", 0, &node);
+    assert(node);
+
+    key->name = strdup(lyd_get_value(node));
+    if (!key->name) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* set public-key-format, mandatory */
+    lyd_find_path(tree, "public-key-format", 0, &node);
+    assert(node);
+
+    format = ((struct lyd_node_term *)node)->value.ident->name;
+    if (!strcmp(format, "ssh-public-key-format")) {
+        key->pubkey_type = NC_SSH_PUBKEY_SSH2;
+    } else if (!strcmp(format, "subject-public-key-info-format")) {
+        key->pubkey_type = NC_SSH_PUBKEY_X509;
+    } else {
+        ERR(NULL, "Public key format \"%s\" not supported.", format);
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* set public key data */
+    lyd_find_path(tree, "public-key", 0, &node);
+    assert(node);
+
+    key->pub_base64 = strdup(lyd_get_value(node));
+    if (!key->pub_base64) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+cleanup:
+    return ret;
+}
+
+static int
+nc_server_config_public_key_bag(const struct lyd_node *tree)
+{
+    int ret = 0;
+    struct lyd_node *node = NULL, *iter;
+    void *tmp;
+    struct nc_truststore *ts = &server_opts.truststore;
+    struct nc_public_key_bag *bag;
+    const struct lysc_node *schema;
+
+    /* create new public key bag */
+    tmp = realloc(ts->pub_bags, (ts->pub_bag_count + 1) * sizeof *ts->pub_bags);
+    if (!tmp) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+    ts->pub_bags = tmp;
+    memset(&ts->pub_bags[ts->pub_bag_count], 0, sizeof *ts->pub_bags);
+    bag = &ts->pub_bags[ts->pub_bag_count];
+    ts->pub_bag_count++;
+
+    /* set name */
+    lyd_find_path(tree, "name", 0, &node);
+    assert(node);
+
+    bag->name = strdup(lyd_get_value(node));
+    if (!bag->name) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* get the schema node of public key so we can iterate over it's list */
+    schema = lys_find_path(NULL, tree->schema, "public-key", 0);
+    LYD_LIST_FOR_INST(node, schema, iter) {
+        /* set public keys associated with this bag */
+        if (nc_server_config_create_truststore_public_key(iter, bag)) {
+            ret = 1;
+            goto cleanup;
+        }
+    }
+
+cleanup:
+    return ret;
+}
+
+static int
+nc_fill_truststore(const struct lyd_node *data)
+{
+    int ret = 0;
+    struct lyd_node *tree, *cert_bags, *pub_bags, *iter;
+    uint32_t prev_lo;
+
+    /* silently search for nodes, some of them may not be present */
+    prev_lo = ly_log_options(0);
+
+    ret = lyd_find_path(data, "/ietf-truststore:truststore", 0, &tree);
+    if (ret) {
+        VRB(NULL, "Truststore container not found in the YANG data.");
+        ret = 0;
+        goto cleanup;
+    }
+
+    ret = lyd_find_path(tree, "certificate-bags", 0, &cert_bags);
+    if (!ret) {
+        /* certificate bags container is present */
+        cert_bags = lyd_child(cert_bags);
+        if (cert_bags && !strcmp(LYD_NAME(cert_bags), "certificate-bag")) {
+            /* certificate bag list */
+            LY_LIST_FOR(cert_bags, iter) {
+                if (nc_server_config_certificate_bag(iter)) {
+                    ret = 1;
+                    goto cleanup;
+                }
+            }
+        }
+    }
+
+    ret = lyd_find_path(tree, "public-key-bags", 0, &pub_bags);
+    if (!ret) {
+        /* public key bags container is present */
+        pub_bags = lyd_child(pub_bags);
+        if (pub_bags && !strcmp(LYD_NAME(pub_bags), "public-key-bag")) {
+            /* public key bag list */
+            LY_LIST_FOR(pub_bags, iter) {
+                if (nc_server_config_public_key_bag(iter)) {
+                    ret = 1;
+                    goto cleanup;
+                }
+            }
+        }
+    } else if (ret == LY_ENOTFOUND) {
+        /* it's not mandatory so it's ok */
+        ret = 0;
     }
 
 cleanup:
@@ -2612,6 +2905,12 @@ nc_server_config_setup(const struct lyd_node *data)
     ret = nc_fill_keystore(data);
     if (ret) {
         ERR(NULL, "Filling keystore failed.");
+        goto cleanup;
+    }
+
+    ret = nc_fill_truststore(data);
+    if (ret) {
+        ERR(NULL, "Filling truststore failed.");
         goto cleanup;
     }
 

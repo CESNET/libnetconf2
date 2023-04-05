@@ -9,7 +9,7 @@ endif()
 
 # list of all the tests in each directory
 #set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_client_thread test_thread_messages)
-set(tests test_two_channels test_keystore test_unix_socket test_config_new)
+set(tests test_two_channels test_keystore test_unix_socket test_config_new test_truststore)
 
 # only enable PAM tests if the version of PAM is greater than 1.4
 if(LIBPAM_HAVE_CONFDIR)
