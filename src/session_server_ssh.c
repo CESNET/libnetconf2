@@ -1859,6 +1859,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     struct nc_server_ssh_opts *opts;
     int rc = 1, r;
     struct timespec ts_timeout;
+    const char *err_msg;
 
     opts = session->data;
 
@@ -1909,7 +1910,11 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         rc = 0;
         goto cleanup;
     } else if (r != SSH_OK) {
-        ERR(session, "SSH key exchange error (%s).", ssh_get_error(session->ti.libssh.session));
+        err_msg = ssh_get_error(session->ti.libssh.session);
+        if (err_msg[0] == '\0') {
+            err_msg = "hostkey algorithm generated from the hostkey most likely not found in the set of configured hostkey algorithms";
+        }
+        ERR(session, "SSH key exchange error (%s).", err_msg);
         rc = -1;
         goto cleanup;
     }
