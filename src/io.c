@@ -1177,7 +1177,7 @@ nc_realloc(void *ptr, size_t size)
 }
 
 struct passwd *
-nc_getpwuid(uid_t uid, struct passwd *pwd_buf, char **buf, size_t *buf_size)
+nc_getpw(uid_t uid, const char *username, struct passwd *pwd_buf, char **buf, size_t *buf_size)
 {
     struct passwd *pwd = NULL;
     long sys_size;
@@ -1200,11 +1200,19 @@ nc_getpwuid(uid_t uid, struct passwd *pwd_buf, char **buf, size_t *buf_size)
             return NULL;
         }
 
-        ret = getpwuid_r(uid, pwd_buf, *buf, *buf_size, &pwd);
+        if (username) {
+            ret = getpwnam_r(username, pwd_buf, *buf, *buf_size, &pwd);
+        } else {
+            ret = getpwuid_r(uid, pwd_buf, *buf, *buf_size, &pwd);
+        }
     } while (ret && (ret == ERANGE));
 
     if (ret) {
-        ERR(NULL, "Retrieving UID \"%lu\" passwd entry failed (%s).", (unsigned long)uid, strerror(ret));
+        if (username) {
+            ERR(NULL, "Retrieving username \"%s\" passwd entry failed (%s).", username, strerror(ret));
+        } else {
+            ERR(NULL, "Retrieving UID \"%lu\" passwd entry failed (%s).", (unsigned long)uid, strerror(ret));
+        }
     }
     return pwd;
 }
