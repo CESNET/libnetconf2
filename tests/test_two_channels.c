@@ -152,17 +152,6 @@ server_thread(void *arg)
     return NULL;
 }
 
-static int
-ssh_hostkey_check_clb(const char *hostname, ssh_session session, void *priv)
-{
-    (void)hostname;
-    (void)session;
-    (void)priv;
-    /* redundant in this test, nonetheless this callback has to be set */
-
-    return 0;
-}
-
 static void *
 client_thread(void *arg)
 {
@@ -172,10 +161,12 @@ client_thread(void *arg)
 
     /* initialize client */
     nc_client_init();
+
+    /* skip all hostkey and known_hosts checks */
+    nc_client_ssh_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_SKIP);
+
     ret = nc_client_set_schema_searchpath(MODULES_DIR);
     assert_int_equal(ret, 0);
-    /* skip the knownhost check */
-    nc_client_ssh_set_auth_hostkey_check_clb(ssh_hostkey_check_clb, NULL);
 
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PUBLICKEY, 1);
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PASSWORD, -1);
