@@ -70,37 +70,6 @@ typedef enum {
     NC_SSH_PUBKEY_X509 /**< begins with BEGIN PUBLICKEY, see RFC 5280 sec. 4.1.2.7 */
 } NC_SSH_PUBKEY_TYPE;
 
-/* ACCESS unlocked */
-struct nc_client_ssh_opts {
-    /* SSH authentication method preferences */
-    struct {
-        NC_SSH_AUTH_TYPE type;
-        int16_t value;
-    } auth_pref[NC_SSH_AUTH_COUNT];
-
-    /* SSH key pairs */
-    struct {
-        char *pubkey_path;
-        char *privkey_path;
-        int8_t privkey_crypt;
-    } *keys;
-    uint16_t key_count;
-
-    /* SSH authentication callbacks */
-    int (*auth_hostkey_check)(const char *, ssh_session, void *);
-    char *(*auth_password)(const char *, const char *, void *);
-    char *(*auth_interactive)(const char *, const char *, const char *, int, void *);
-    char *(*auth_privkey_passphrase)(const char *, void *);
-
-    /* private data for the callbacks */
-    void *auth_hostkey_check_priv;
-    void *auth_password_priv;
-    void *auth_interactive_priv;
-    void *auth_privkey_passphrase_priv;
-
-    char *username;
-};
-
 /**
  * @brief A basic certificate.
  */
@@ -303,6 +272,38 @@ struct nc_bind {
     uint16_t port;  /**< Bind's port. */
     int sock;       /**< Bind's socket. */
     int pollin;     /**< Specifies, which sockets to poll on. */
+};
+
+/* ACCESS unlocked */
+struct nc_client_ssh_opts {
+    char *knownhosts_path;  /**< path to known_hosts file */
+    NC_KNOWNHOSTS_MODE knownhosts_mode; /**< implies whether to check known_hosts or not */
+
+    /* SSH authentication method preferences */
+    struct {
+        NC_SSH_AUTH_TYPE type;
+        int16_t value;
+    } auth_pref[NC_SSH_AUTH_COUNT];
+
+    /* SSH key pairs */
+    struct {
+        char *pubkey_path;
+        char *privkey_path;
+        int8_t privkey_crypt;
+    } *keys;
+    uint16_t key_count;
+
+    /* SSH authentication callbacks */
+    char *(*auth_password)(const char *, const char *, void *);
+    char *(*auth_interactive)(const char *, const char *, const char *, int, void *);
+    char *(*auth_privkey_passphrase)(const char *, void *);
+
+    /* private data for the callbacks */
+    void *auth_password_priv;
+    void *auth_interactive_priv;
+    void *auth_privkey_passphrase_priv;
+
+    char *username;
 };
 
 /* ACCESS unlocked */
@@ -671,7 +672,7 @@ struct nc_pam_thread_arg {
 
 void *nc_realloc(void *ptr, size_t size);
 
-struct passwd *nc_getpwuid(uid_t uid, struct passwd *pwd_buf, char **buf, size_t *buf_size);
+struct passwd *nc_getpw(uid_t uid, const char *username, struct passwd *pwd_buf, char **buf, size_t *buf_size);
 
 NC_MSG_TYPE nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op);
 

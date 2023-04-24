@@ -198,8 +198,6 @@
  *
  * Available in __nc_client.h__.
  *
- * - ::nc_client_ssh_set_auth_hostkey_check_clb()
- * - ::nc_client_ssh_get_auth_hostkey_check_clb()
  * - ::nc_client_ssh_set_auth_password_clb()
  * - ::nc_client_ssh_get_auth_password_clb()
  * - ::nc_client_ssh_set_auth_interactive_clb()

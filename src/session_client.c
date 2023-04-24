@@ -52,7 +52,6 @@
 static const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "candidate"};
 
 #ifdef NC_ENABLED_SSH
-int sshauth_hostkey_check(const char *hostname, ssh_session session, void *priv);
 char *sshauth_password(const char *username, const char *hostname, void *priv);
 char *sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo, void *priv);
 char *sshauth_privkey_passphrase(const char *privkey_path, void *priv);
@@ -71,14 +70,12 @@ static struct nc_client_context context_main = {
 #ifdef NC_ENABLED_SSH
     .ssh_opts = {
         .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}},
-        .auth_hostkey_check = sshauth_hostkey_check,
         .auth_password = sshauth_password,
         .auth_interactive = sshauth_interactive,
         .auth_privkey_passphrase = sshauth_privkey_passphrase
     },
     .ssh_ch_opts = {
         .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}},
-        .auth_hostkey_check = sshauth_hostkey_check,
         .auth_password = sshauth_password,
         .auth_interactive = sshauth_interactive,
         .auth_privkey_passphrase = sshauth_privkey_passphrase
@@ -169,7 +166,6 @@ nc_client_context_location(void)
             e->ssh_opts.auth_pref[1].value = 2;
             e->ssh_opts.auth_pref[2].type = NC_SSH_AUTH_PUBLICKEY;
             e->ssh_opts.auth_pref[2].value = 3;
-            e->ssh_opts.auth_hostkey_check = sshauth_hostkey_check;
             e->ssh_opts.auth_password = sshauth_password;
             e->ssh_opts.auth_interactive = sshauth_interactive;
             e->ssh_opts.auth_privkey_passphrase = sshauth_privkey_passphrase;
@@ -1486,7 +1482,7 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
 
     session->path = strdup(address);
 
-    pw = nc_getpwuid(geteuid(), &pw_buf, &buf, &buf_size);
+    pw = nc_getpw(geteuid(), NULL, &pw_buf, &buf, &buf_size);
     if (!pw) {
         ERR(NULL, "Failed to find username for UID %u.", (unsigned int)geteuid());
         goto fail;

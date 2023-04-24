@@ -180,28 +180,23 @@ struct nc_session *nc_connect_unix(const char *address, struct ly_ctx *ctx);
  */
 
 /**
- * @brief Set SSH authentication hostkey check (knownhosts) callback.
+ * @brief Set the behaviour of checking the host key and adding/reading entries to/from the known_hosts file.
  *
- * Repetitive calling causes replacing of the previous callback and its private data. Caller is responsible for
- * freeing the private data when necessary (the private data can be obtained by
- * nc_client_ssh_get_auth_hostkey_check_clb()).
- *
- * @param[in] auth_hostkey_check Function to call, returns 0 on success, non-zero in error.
- *                               If NULL, the default callback is set.
- * @param[in] priv Optional private data to be passed to the callback function.
+ * @param[in] mode Server host key checking mode.
  */
-void nc_client_ssh_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
-        void *priv);
+void nc_client_ssh_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_MODE mode);
 
 /**
- * @brief Get currently set SSH authentication hostkey check (knownhosts) callback and its private data previously set
- * by nc_client_ssh_set_auth_hostkey_check_clb().
+ * @brief Set the path to the known_hosts file.
  *
- * @param[out] auth_hostkey_check Currently set callback, NULL in case of the default callback.
- * @param[out] priv Currently set (optional) private data to be passed to the callback function.
+ * Repetetive calling replaces the value. If the given file doesn't exist and the process has sufficient
+ * rights, it gets created whenever the file is needed, otherwise an error occurs. If NULL is passed or the
+ * path isn't set, the default known_hosts file will be used.
+ *
+ * @param[in] path Path to the known_hosts file.
+ * @return 0 on success, 1 on error.
  */
-void nc_client_ssh_get_auth_hostkey_check_clb(int (**auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
-        void **priv);
+int nc_client_ssh_set_knownhosts_path(const char *path);
 
 /**
  * @brief Set SSH password authentication callback.

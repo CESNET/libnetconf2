@@ -2007,7 +2007,7 @@ nc_accept_unix(struct nc_session *session, int sock)
         return -1;
     }
 
-    pw = nc_getpwuid(uid, &pw_buf, &buf, &buf_len);
+    pw = nc_getpw(uid, NULL, &pw_buf, &buf, &buf_len);
     if (pw == NULL) {
         ERR(NULL, "Failed to find username for uid=%u (%s).\n", uid, strerror(errno));
         close(sock);

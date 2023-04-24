@@ -34,6 +34,17 @@ typedef enum {
     NC_SSH_AUTH_INTERACTIVE = 0x04 /**< interactive SSH authentication */
 } NC_SSH_AUTH_TYPE;
 
+/**
+ * @brief Enumeration of host key checking and known_hosts entry adding modes
+ */
+typedef enum {
+    NC_SSH_KNOWNHOSTS_ASK = 0,      /**< add a known_hosts entry, but with a prompt */
+    NC_SSH_KNOWNHOSTS_STRICT,       /**< do not add a known_hosts entry and the server's host key must be present in the configured known_hosts file */
+    NC_SSH_KNOWNHOSTS_ACCEPT_NEW,   /**< add a known_hosts entry without a prompt */
+    NC_SSH_KNOWNHOSTS_ACCEPT,       /**< add a known_hosts entry without a prompt and allow connections to servers which changed their host key */
+    NC_SSH_KNOWNHOSTS_SKIP          /**< do not add a known_hosts entry and skip all host key checks */
+} NC_SSH_KNOWNHOSTS_MODE;
+
 #endif /* NC_ENABLED_SSH */
 
 #ifdef NC_ENABLED_TLS
