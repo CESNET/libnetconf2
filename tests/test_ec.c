@@ -1,7 +1,7 @@
 /**
  * @file test_ec.c
  * @author Roman Janota <xjanot04@fit.vutbr.cz>
- * @brief libnetconf2 EC hostkey test
+ * @brief libnetconf2 EC keys authentication test
  *
  * @copyright
  * Copyright (c) 2023 CESNET, z.s.p.o.
@@ -34,68 +34,10 @@ struct ly_ctx *ctx;
 
 struct test_state {
     pthread_barrier_t barrier;
+    const char *client_username;
+    const char *client_privkey;
+    const char *client_pubkey;
 };
-
-const char *data =
-        "<netconf-server xmlns=\"urn:ietf:params:xml:ns:yang:ietf-netconf-server\" xmlns:yang=\"urn:ietf:params:xml:ns:yang:1\" yang:operation=\"none\">\n"
-        "    <listen yang:operation=\"create\">\n"
-        "        <idle-timeout>10</idle-timeout>\n"
-        "        <endpoint>\n"
-        "            <name>default-ssh</name>\n"
-        "            <ssh>\n"
-        "                <tcp-server-parameters>\n"
-        "                    <local-address>127.0.0.1</local-address>\n"
-        "                    <local-port>10005</local-port>\n"
-        "                </tcp-server-parameters>\n"
-        "                <ssh-server-parameters>\n"
-        "                    <server-identity>\n"
-        "                        <host-key>\n"
-        "                            <name>key</name>\n"
-        "                            <public-key>\n"
-        "                                <local-definition>\n"
-        "                                    <public-key-format xmlns:ct=\"urn:ietf:params:xml:ns:yang:ietf-crypto-types\">ct:ssh-public-key-format</public-key-format>\n"
-        "                                    <public-key>MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEje+TM7/KHx8zJ4HtVcehRNg6ZXLjeWpXWI7m2x9EeKBX+TgYElq0mIESw88s1HnPrT5AdaWeZymD+MSxd4dzwA==</public-key>\n"
-        "                                    <private-key-format xmlns:ct=\"urn:ietf:params:xml:ns:yang:ietf-crypto-types\">ct:ec-private-key-format</private-key-format>\n"
-        "                                    <cleartext-private-key>MHcCAQEEIGAq2oW59feizNqqUDqDyuLLQ7f1Y1WQHo5KGVuFhwQ/oAoGCCqGSM49AwEHoUQDQgAEje+TM7/KHx8zJ4HtVcehRNg6ZXLjeWpXWI7m2x9EeKBX+TgYElq0mIESw88s1HnPrT5AdaWeZymD+MSxd4dzwA==</cleartext-private-key>\n"
-        "                                </local-definition>\n"
-        "                            </public-key>\n"
-        "                        </host-key>\n"
-        "                    </server-identity>\n"
-        "                    <client-authentication>\n"
-        "                        <users>\n"
-        "                            <user>\n"
-        "                                <name>test_ec</name>\n"
-        "                                <public-keys>\n"
-        "                                    <local-definition>\n"
-        "                                        <public-key>\n"
-        "                                            <name>test</name>\n"
-        "                                            <public-key-format xmlns:ct=\"urn:ietf:params:xml:ns:yang:ietf-crypto-types\">ct:ssh-public-key-format</public-key-format>\n"
-        "                                            <public-key>AAAAB3NzaC1yc2EAAAADAQABAAABAQDPavVALiM7QwTIUAndO8E9GOkSDQWjuEwkzbJ3kOBPa7kkq71UOZFeecDjFb9eipkljfFys/JYHGQaYVF8/svT0KV5h7HlutRdF6yvqSEbjpbTORb27pdHX3iFEyDCwCIoq9vMeX+wyXnteyn01GpIL0ig0WAnvkqX/SPjuplX5ZItUSr0MhXM7fNSX50BD6G8IO0/djUcdMUcjTjGv73SxB9ZzLvxnhXuUJbzEJJJLj6qajyEIVaJSa73vA33JCD8qzarrsuITojVLPDFmeHwSAoB5dP86yop6e6ypuXzKxxef6yNXcE8oTj8UFYBIXsgIP2nBvWk41EaK0Vk3YFl</public-key>\n"
-        "                                        </public-key>\n"
-        "                                    </local-definition>\n"
-        "                                </public-keys>\n"
-        "                            </user>\n"
-        "                        </users>\n"
-        "                    </client-authentication>\n"
-        "                    <transport-params>\n"
-        "                        <host-key>\n"
-        "                            <host-key-alg xmlns:sshpka=\"urn:ietf:params:xml:ns:yang:iana-ssh-public-key-algs\">sshpka:ecdsa-sha2-nistp256</host-key-alg>\n"
-        "                        </host-key>\n"
-        "                        <key-exchange>\n"
-        "                            <key-exchange-alg xmlns:sshkea=\"urn:ietf:params:xml:ns:yang:iana-ssh-key-exchange-algs\">sshkea:curve25519-sha256</key-exchange-alg>\n"
-        "                        </key-exchange>\n"
-        "                        <encryption>\n"
-        "                            <encryption-alg xmlns:sshea=\"urn:ietf:params:xml:ns:yang:iana-ssh-encryption-algs\">sshea:aes256-ctr</encryption-alg>\n"
-        "                        </encryption>\n"
-        "                        <mac>\n"
-        "                            <mac-alg xmlns:sshma=\"urn:ietf:params:xml:ns:yang:iana-ssh-mac-algs\">sshma:hmac-sha2-512</mac-alg>\n"
-        "                        </mac>\n"
-        "                    </transport-params>\n"
-        "                </ssh-server-parameters>\n"
-        "            </ssh>\n"
-        "        </endpoint>\n"
-        "    </listen>\n"
-        "</netconf-server>\n";
 
 static void *
 server_thread(void *arg)
@@ -130,17 +72,6 @@ server_thread(void *arg)
     return NULL;
 }
 
-static int
-ssh_hostkey_check_clb(const char *hostname, ssh_session session, void *priv)
-{
-    (void)hostname;
-    (void)session;
-    (void)priv;
-    /* skip the knownhost check */
-
-    return 0;
-}
-
 static void *
 client_thread(void *arg)
 {
@@ -148,21 +79,24 @@ client_thread(void *arg)
     struct nc_session *session = NULL;
     struct test_state *state = arg;
 
+    /* skip all hostkey and known_hosts checks */
+    nc_client_ssh_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_SKIP);
+
     /* set directory where to search for modules */
     ret = nc_client_set_schema_searchpath(MODULES_DIR);
     assert_int_equal(ret, 0);
 
     /* set ssh username */
-    ret = nc_client_ssh_set_username("test_ec");
+    ret = nc_client_ssh_set_username(state->client_username);
     assert_int_equal(ret, 0);
 
     /* add client's key pair */
-    ret = nc_client_ssh_add_keypair(TESTS_DIR "/data/key_rsa.pub", TESTS_DIR "/data/key_rsa");
+    ret = nc_client_ssh_add_keypair(state->client_pubkey, state->client_privkey);
     assert_int_equal(ret, 0);
 
     pthread_barrier_wait(&state->barrier);
     /* connect */
-    session = nc_connect_ssh("127.0.0.1", 10005, NULL);
+    session = nc_connect_ssh("127.0.0.1", 10009, NULL);
     assert_non_null(session);
 
     nc_session_free(session, NULL);
@@ -171,15 +105,78 @@ client_thread(void *arg)
 }
 
 static void
-test_nc_ec(void **state)
+test_nc_ec256(void **state)
 {
     int ret, i;
     pthread_t tids[2];
+    struct test_state *client;
 
+    /* set specific data for the client */
     assert_non_null(state);
+    client = *state;
 
-    ret = pthread_create(&tids[0], NULL, client_thread, *state);
+    /* client */
+    client->client_username = "test_ec256";
+    client->client_pubkey = TESTS_DIR "/data/id_ecdsa256.pub";
+    client->client_privkey = TESTS_DIR "/data/id_ecdsa256";
+    ret = pthread_create(&tids[0], NULL, client_thread, client);
     assert_int_equal(ret, 0);
+
+    /* server */
+    ret = pthread_create(&tids[1], NULL, server_thread, *state);
+    assert_int_equal(ret, 0);
+
+    for (i = 0; i < 2; i++) {
+        pthread_join(tids[i], NULL);
+    }
+}
+
+static void
+test_nc_ec384(void **state)
+{
+    int ret, i;
+    pthread_t tids[2];
+    struct test_state *client;
+
+    /* set specific data for the client */
+    assert_non_null(state);
+    client = *state;
+
+    /* client */
+    client->client_username = "test_ec384";
+    client->client_pubkey = TESTS_DIR "/data/id_ecdsa384.pub";
+    client->client_privkey = TESTS_DIR "/data/id_ecdsa384";
+    ret = pthread_create(&tids[0], NULL, client_thread, client);
+    assert_int_equal(ret, 0);
+
+    /* server */
+    ret = pthread_create(&tids[1], NULL, server_thread, *state);
+    assert_int_equal(ret, 0);
+
+    for (i = 0; i < 2; i++) {
+        pthread_join(tids[i], NULL);
+    }
+}
+
+static void
+test_nc_ec521(void **state)
+{
+    int ret, i;
+    pthread_t tids[2];
+    struct test_state *client;
+
+    /* set specific data for the client */
+    assert_non_null(state);
+    client = *state;
+
+    /* client */
+    client->client_username = "test_ec521";
+    client->client_pubkey = TESTS_DIR "/data/id_ecdsa521.pub";
+    client->client_privkey = TESTS_DIR "/data/id_ecdsa521";
+    ret = pthread_create(&tids[0], NULL, client_thread, client);
+    assert_int_equal(ret, 0);
+
+    /* server */
     ret = pthread_create(&tids[1], NULL, server_thread, *state);
     assert_int_equal(ret, 0);
 
@@ -192,7 +189,7 @@ static int
 setup_f(void **state)
 {
     int ret;
-    struct lyd_node *tree;
+    struct lyd_node *tree = NULL;
     struct test_state *test_state;
 
     nc_verbosity(NC_VERB_VERBOSE);
@@ -218,8 +215,19 @@ setup_f(void **state)
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
-    /* parse yang data */
-    ret = lyd_parse_data_mem(ctx, data, LYD_XML, LYD_PARSE_NO_STATE | LYD_PARSE_STRICT, LYD_VALIDATE_NO_STATE, &tree);
+    ret = nc_server_config_ssh_new_hostkey(TESTS_DIR "/data/key_ecdsa", NULL, ctx, "endpt", "hostkey", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_ssh_new_address_port("127.0.0.1", "10009", ctx, "endpt", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_ssh_new_client_auth_pubkey(TESTS_DIR "/data/id_ecdsa256.pub", ctx, "endpt", "test_ec256", "pubkey", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_ssh_new_client_auth_pubkey(TESTS_DIR "/data/id_ecdsa384.pub", ctx, "endpt", "test_ec384", "pubkey", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_ssh_new_client_auth_pubkey(TESTS_DIR "/data/id_ecdsa521.pub", ctx, "endpt", "test_ec521", "pubkey", &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
@@ -232,9 +240,6 @@ setup_f(void **state)
     /* initialize server */
     ret = nc_server_init();
     assert_int_equal(ret, 0);
-
-    /* skip the knownhost check */
-    nc_client_ssh_set_auth_hostkey_check_clb(ssh_hostkey_check_clb, NULL);
 
     lyd_free_all(tree);
 
@@ -265,7 +270,9 @@ int
 main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup_teardown(test_nc_ec, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_ec256, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_ec384, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_ec521, setup_f, teardown_f),
     };
 
     setenv("CMOCKA_TEST_ABORT", "1", 1);
