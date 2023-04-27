@@ -311,7 +311,7 @@ nc_client_ssh_get_srv_pubkey_data(ssh_session session, enum ssh_keytypes_e *srv_
     ret = ssh_get_publickey(session, &srv_pubkey);
 #endif
     if (ret < 0) {
-        ERR(NULL, "Unable to get server public key.");
+        ERR(NULL, "Unable to get server's public key.");
         return -1;
     }
 

@@ -107,16 +107,30 @@ nc_realtime_get(struct timespec *ts)
     }
 }
 
+/**
+ * @brief Convert key type to string.
+ *
+ * @param[in] type Type of the key.
+ * @return String literal representing the key type or NULL.
+ */
 const char *
 nc_keytype2str(NC_SSH_KEY_TYPE type)
 {
     switch (type) {
+    case NC_SSH_KEY_UNKNOWN:
+        return "unknown";
     case NC_SSH_KEY_DSA:
         return "DSA";
     case NC_SSH_KEY_RSA:
         return "RSA";
     case NC_SSH_KEY_ECDSA:
         return "EC";
+    case NC_SSH_KEY_ECDSA_P256:
+        return "ECDSA_P256";
+    case NC_SSH_KEY_ECDSA_P384:
+        return "ECDSA_P384";
+    case NC_SSH_KEY_ECDSA_P521:
+        return "ECDSA_P521";
     default:
         break;
     }

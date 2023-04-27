@@ -607,24 +607,39 @@ nc_server_config_ssh_read_openssh_pubkey(FILE *f, char **pubkey)
     }
 
     start = buffer;
-    if (!strncmp(buffer, "ssh-rsa ", 8)) {
+    if (!strncmp(buffer, "ssh-dss ", 8)) {
+        ERR(NULL, "DSA public keys not supported.");
+        ret = 1;
+        goto cleanup;
+    } else if (!strncmp(buffer, "ssh-rsa ", 8)) {
         start += strlen("ssh-rsa ");
-        end = strchr(start, ' ');
-        if (!end) {
-            ERR(NULL, "Unexpected public key format.");
-            ret = 1;
-            goto cleanup;
-        }
-
-        *pubkey = strdup(start);
-        if (!*pubkey) {
-            ERRMEM;
-            ret = 1;
-            goto cleanup;
-        }
-
-        (*pubkey)[strlen(*pubkey) - strlen(end)] = '\0';
+    } else if (!strncmp(buffer, "ecdsa-sha2-nistp256 ", 20)) {
+        start += strlen("ecdsa-sha2-nistp256 ");
+    } else if (!strncmp(buffer, "ecdsa-sha2-nistp384 ", 20)) {
+        start += strlen("ecdsa-sha2-nistp384 ");
+    } else if (!strncmp(buffer, "ecdsa-sha2-nistp521 ", 20)) {
+        start += strlen("ecdsa-sha2-nistp521 ");
+    } else {
+        ERR(NULL, "Unknown public key type.");
+        ret = 1;
+        goto cleanup;
     }
+
+    end = strchr(start, ' ');
+    if (!end) {
+        ERR(NULL, "Unexpected public key format.");
+        ret = 1;
+        goto cleanup;
+    }
+
+    *pubkey = strdup(start);
+    if (!*pubkey) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    (*pubkey)[strlen(*pubkey) - strlen(end)] = '\0';
 
 cleanup:
     free(buffer);
