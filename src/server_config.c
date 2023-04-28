@@ -576,12 +576,24 @@ nc_server_config_listen(NC_OPERATION op)
 
     if (op == NC_OP_DELETE) {
         for (i = 0; i < server_opts.endpt_count; i++) {
-            if (server_opts.endpts[i].ti == NC_TI_LIBSSH) {
+            switch (server_opts.endpts[i].ti) {
+#ifdef NC_ENABLED_SSH
+            case NC_TI_LIBSSH:
                 nc_server_del_endpt_ssh(&server_opts.endpts[i], &server_opts.binds[i]);
-            } else if (server_opts.endpts[i].ti == NC_TI_OPENSSL) {
+                break;
+#endif
+#ifdef NC_ENABLED_TLS
+            case NC_TI_OPENSSL:
                 /* todo */
-            } else {
+                break;
+#endif
+            case NC_TI_UNIX:
                 nc_server_del_endpt_unix_socket(&server_opts.endpts[i], &server_opts.binds[i]);
+                break;
+            case NC_TI_NONE:
+            case NC_TI_FD:
+                ERRINT;
+                return 1;
             }
         }
     }

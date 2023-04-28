@@ -32,17 +32,6 @@
 #include "session.h"
 #include "session_client.h"
 
-#ifdef NC_ENABLED_SSH
-
-# include <libssh/callbacks.h>
-# include <libssh/libssh.h>
-# include <libssh/server.h>
-
-/* seconds */
-# define NC_SSH_TIMEOUT 10
-/* number of all supported authentication methods */
-# define NC_SSH_AUTH_COUNT 3
-
 /**
  * Enumeration of diff operation types.
  */
@@ -52,6 +41,8 @@ typedef enum {
     NC_OP_DELETE,
     NC_OP_REPLACE
 } NC_OPERATION;
+
+#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
 
 /**
  * Enumeration of key or certificate store type.
@@ -140,6 +131,19 @@ struct nc_keystore {
     struct nc_symmetric_key *sym_keys;      /**< Stored symmetric keys. */
     uint16_t sym_key_count;                 /**< Count of stored symmetric keys. */
 };
+
+#endif
+
+#ifdef NC_ENABLED_SSH
+
+# include <libssh/callbacks.h>
+# include <libssh/libssh.h>
+# include <libssh/server.h>
+
+/* seconds */
+# define NC_SSH_TIMEOUT 10
+/* number of all supported authentication methods */
+# define NC_SSH_AUTH_COUNT 3
 
 /**
  * @brief Tracks the state of a client's authentication.
@@ -274,10 +278,12 @@ struct nc_bind {
     int pollin;     /**< Specifies, which sockets to poll on. */
 };
 
+#ifdef NC_ENABLED_SSH
+
 /* ACCESS unlocked */
 struct nc_client_ssh_opts {
     char *knownhosts_path;  /**< path to known_hosts file */
-    NC_KNOWNHOSTS_MODE knownhosts_mode; /**< implies whether to check known_hosts or not */
+    NC_SSH_KNOWNHOSTS_MODE knownhosts_mode; /**< implies whether to check known_hosts or not */
 
     /* SSH authentication method preferences */
     struct {
@@ -305,6 +311,8 @@ struct nc_client_ssh_opts {
 
     char *username;
 };
+
+#endif
 
 /* ACCESS unlocked */
 struct nc_client_opts {
@@ -391,8 +399,11 @@ struct nc_server_opts {
 #endif
 
     pthread_rwlock_t config_lock;
+
+#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
     struct nc_keystore keystore; /**< store for server's keys/certificates */
     struct nc_truststore truststore;    /**< store for server client's keys/certificates */
+#endif
 
     struct nc_bind *binds;
     struct nc_endpt {
