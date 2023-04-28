@@ -251,6 +251,8 @@ nc_server_config_ssh_new_hostkey(const char *privkey_path, const char *pubkey_pa
         ret = lyd_new_term(new_tree, NULL, "private-key-format", "ietf-crypto-types:rsa-private-key-format", 0, NULL);
     } else if (EVP_PKEY_is_a(priv_pkey, "EC")) {
         ret = lyd_new_term(new_tree, NULL, "private-key-format", "ietf-crypto-types:ec-private-key-format", 0, NULL);
+    } else if (EVP_PKEY_is_a(priv_pkey, "ED25519")) {
+        ret = lyd_new_term(new_tree, NULL, "private-key-format", "libnetconf2-netconf-server:ed25519-private-key-format", 0, NULL);
     } else {
         ERR(NULL, "Private key type not supported.");
         ret = 1;
@@ -619,6 +621,8 @@ nc_server_config_ssh_read_openssh_pubkey(FILE *f, char **pubkey)
         start += strlen("ecdsa-sha2-nistp384 ");
     } else if (!strncmp(buffer, "ecdsa-sha2-nistp521 ", 20)) {
         start += strlen("ecdsa-sha2-nistp521 ");
+    } else if (!strncmp(buffer, "ssh-ed25519 ", 12)) {
+        start += strlen("ssh-ed25519 ");
     } else {
         ERR(NULL, "Unknown public key type.");
         ret = 1;

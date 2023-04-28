@@ -131,6 +131,8 @@ nc_keytype2str(NC_SSH_KEY_TYPE type)
         return "ECDSA_P384";
     case NC_SSH_KEY_ECDSA_P521:
         return "ECDSA_P521";
+    case NC_SSH_KEY_ED25519:
+        return NULL;
     default:
         break;
     }
