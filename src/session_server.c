@@ -1593,6 +1593,7 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
     int r, ret = 0;
 
 #ifdef NC_ENABLED_SSH
+    ssh_message ssh_msg;
     struct nc_session *new;
 #endif
 
