@@ -119,7 +119,8 @@ typedef enum {
     NC_SSH_KEY_ECDSA,       /**< only for private key */
     NC_SSH_KEY_ECDSA_P256,
     NC_SSH_KEY_ECDSA_P384,
-    NC_SSH_KEY_ECDSA_P521
+    NC_SSH_KEY_ECDSA_P521,
+    NC_SSH_KEY_ED25519
 } NC_SSH_KEY_TYPE;
 
 /**

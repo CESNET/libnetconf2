@@ -7,6 +7,10 @@ module libnetconf2-netconf-server {
     prefix ncs;
   }
 
+  import ietf-crypto-types {
+    prefix ct;
+  }
+
   augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
     leaf auth-attempts {
       type uint16;
@@ -51,5 +55,9 @@ module libnetconf2-netconf-server {
         }
       }
     }
+  }
+
+  identity ed25519-private-key-format {
+    base ct:private-key-format;
   }
 }

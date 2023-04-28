@@ -1178,6 +1178,8 @@ nc_server_config_private_key_format(const struct lyd_node *node, NC_OPERATION op
             hostkey->key.privkey_type = NC_SSH_KEY_RSA;
         } else if (!strcmp(format, "ec-private-key-format")) {
             hostkey->key.privkey_type = NC_SSH_KEY_ECDSA;
+        } else if (!strcmp(format, "ed25519-private-key-format")) {
+            hostkey->key.privkey_type = NC_SSH_KEY_ED25519;
         } else {
             ERR(NULL, "Private key format (%s) not supported.", format);
         }
