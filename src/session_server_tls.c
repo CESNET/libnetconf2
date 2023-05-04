@@ -920,10 +920,7 @@ nc_server_tls_endpt_set_server_cert(const char *endpt_name, const char *name)
     int ret;
     struct nc_endpt *endpt;
 
-    if (!endpt_name) {
-        ERRARG("endpt_name");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, endpt_name, -1);
 
     /* LOCK */
     endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_OPENSSL, NULL);
@@ -964,7 +961,7 @@ nc_server_tls_set_server_cert_clb(int (*cert_clb)(const char *name, void *user_d
         void (*free_user_data)(void *user_data))
 {
     if (!cert_clb) {
-        ERRARG("cert_clb");
+        ERRARG(NULL, "cert_clb");
         return;
     }
 
@@ -978,7 +975,7 @@ nc_server_tls_set_server_cert_chain_clb(int (*cert_chain_clb)(const char *name, 
         int *cert_path_count, char ***cert_data, int *cert_data_count), void *user_data, void (*free_user_data)(void *user_data))
 {
     if (!cert_chain_clb) {
-        ERRARG("cert_chain_clb");
+        ERRARG(NULL, "cert_chain_clb");
         return;
     }
 
@@ -990,10 +987,7 @@ nc_server_tls_set_server_cert_chain_clb(int (*cert_chain_clb)(const char *name, 
 static int
 nc_server_tls_add_trusted_cert_list(const char *name, struct nc_server_tls_opts *opts)
 {
-    if (!name) {
-        ERRARG("name");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, name, -1);
 
     ++opts->trusted_cert_list_count;
     opts->trusted_cert_lists = nc_realloc(opts->trusted_cert_lists,
@@ -1013,10 +1007,7 @@ nc_server_tls_endpt_add_trusted_cert_list(const char *endpt_name, const char *na
     int ret;
     struct nc_endpt *endpt;
 
-    if (!endpt_name) {
-        ERRARG("endpt_name");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, endpt_name, -1);
 
     /* LOCK */
     endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_OPENSSL, NULL);
@@ -1057,7 +1048,7 @@ nc_server_tls_set_trusted_cert_list_clb(int (*cert_list_clb)(const char *name, v
         void *user_data, void (*free_user_data)(void *user_data))
 {
     if (!cert_list_clb) {
-        ERRARG("cert_list_clb");
+        ERRARG(NULL, "cert_list_clb");
         return;
     }
 
@@ -1104,10 +1095,7 @@ nc_server_tls_endpt_del_trusted_cert_list(const char *endpt_name, const char *na
     int ret;
     struct nc_endpt *endpt;
 
-    if (!endpt_name) {
-        ERRARG("endpt_name");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, endpt_name, -1);
 
     /* LOCK */
     endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_OPENSSL, NULL);
@@ -1146,7 +1134,7 @@ static int
 nc_server_tls_set_trusted_ca_paths(const char *ca_file, const char *ca_dir, struct nc_server_tls_opts *opts)
 {
     if (!ca_file && !ca_dir) {
-        ERRARG("ca_file and ca_dir");
+        ERRARG(NULL, "ca_file and ca_dir");
         return -1;
     }
 
@@ -1169,10 +1157,7 @@ nc_server_tls_endpt_set_trusted_ca_paths(const char *endpt_name, const char *ca_
     int ret;
     struct nc_endpt *endpt;
 
-    if (!endpt_name) {
-        ERRARG("endpt_name");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, endpt_name, -1);
 
     /* LOCK */
     endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_OPENSSL, NULL);
@@ -1214,7 +1199,7 @@ nc_server_tls_set_crl_paths(const char *crl_file, const char *crl_dir, struct nc
     X509_LOOKUP *lookup;
 
     if (!crl_file && !crl_dir) {
-        ERRARG("crl_file and crl_dir");
+        ERRARG(NULL, "crl_file and crl_dir");
         return -1;
     }
 
@@ -1260,10 +1245,7 @@ nc_server_tls_endpt_set_crl_paths(const char *endpt_name, const char *crl_file, 
     int ret;
     struct nc_endpt *endpt;
 
-    if (!endpt_name) {
-        ERRARG("endpt_name");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, endpt_name, -1);
 
     /* LOCK */
     endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_OPENSSL, NULL);
@@ -1316,7 +1298,7 @@ nc_server_tls_endpt_clear_crls(const char *endpt_name)
     struct nc_endpt *endpt;
 
     if (!endpt_name) {
-        ERRARG("endpt_name");
+        ERRARG(NULL, "endpt_name");
         return;
     }
 
@@ -1410,10 +1392,7 @@ nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char *fin
     int ret;
     struct nc_endpt *endpt;
 
-    if (!endpt_name) {
-        ERRARG("endpt_name");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, endpt_name, -1);
 
     /* LOCK */
     endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_OPENSSL, NULL);
@@ -1508,10 +1487,7 @@ nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *fing
     int ret;
     struct nc_endpt *endpt;
 
-    if (!endpt_name) {
-        ERRARG("endpt_name");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, endpt_name, -1);
 
     /* LOCK */
     endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_OPENSSL, NULL);
@@ -1596,10 +1572,7 @@ nc_server_tls_endpt_get_ctn(const char *endpt_name, uint32_t *id, char **fingerp
     int ret;
     struct nc_endpt *endpt;
 
-    if (!endpt_name) {
-        ERRARG("endpt_name");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, endpt_name, -1);
 
     /* LOCK */
     endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_OPENSSL, NULL);
@@ -1639,7 +1612,7 @@ API const X509 *
 nc_session_get_client_cert(const struct nc_session *session)
 {
     if (!session || (session->side != NC_SERVER)) {
-        ERRARG("session");
+        ERRARG(session, "session");
         return NULL;
     }
 

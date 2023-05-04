@@ -262,10 +262,7 @@ nc_client_tls_destroy_opts(void)
 static int
 _nc_client_tls_set_cert_key_paths(const char *client_cert, const char *client_key, struct nc_client_tls_opts *opts)
 {
-    if (!client_cert) {
-        ERRARG("client_cert");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, client_cert, -1);
 
     free(opts->cert_path);
     free(opts->key_path);
@@ -307,7 +304,7 @@ static void
 _nc_client_tls_get_cert_key_paths(const char **client_cert, const char **client_key, struct nc_client_tls_opts *opts)
 {
     if (!client_cert && !client_key) {
-        ERRARG("client_cert and client_key");
+        ERRARG(NULL, "client_cert and client_key");
         return;
     }
 
@@ -335,7 +332,7 @@ static int
 _nc_client_tls_set_trusted_ca_paths(const char *ca_file, const char *ca_dir, struct nc_client_tls_opts *opts)
 {
     if (!ca_file && !ca_dir) {
-        ERRARG("ca_file and ca_dir");
+        ERRARG(NULL, "ca_file and ca_dir");
         return -1;
     }
 
@@ -383,7 +380,7 @@ static void
 _nc_client_tls_get_trusted_ca_paths(const char **ca_file, const char **ca_dir, struct nc_client_tls_opts *opts)
 {
     if (!ca_file && !ca_dir) {
-        ERRARG("ca_file and ca_dir");
+        ERRARG(NULL, "ca_file and ca_dir");
         return;
     }
 
@@ -411,7 +408,7 @@ static int
 _nc_client_tls_set_crl_paths(const char *crl_file, const char *crl_dir, struct nc_client_tls_opts *opts)
 {
     if (!crl_file && !crl_dir) {
-        ERRARG("crl_file and crl_dir");
+        ERRARG(NULL, "crl_file and crl_dir");
         return -1;
     }
 
@@ -459,7 +456,7 @@ static void
 _nc_client_tls_get_crl_paths(const char **crl_file, const char **crl_dir, struct nc_client_tls_opts *opts)
 {
     if (!crl_file && !crl_dir) {
-        ERRARG("crl_file and crl_dir");
+        ERRARG(NULL, "crl_file and crl_dir");
         return;
     }
 
@@ -757,10 +754,9 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
 {
     struct nc_session *session;
 
-    if (!tls) {
-        ERRARG("tls");
-        return NULL;
-    } else if (!SSL_is_init_finished(tls)) {
+    NC_CHECK_ARG_RET(NULL, tls, NULL);
+
+    if (!SSL_is_init_finished(tls)) {
         ERR(NULL, "Supplied TLS session is not fully connected!");
         return NULL;
     }

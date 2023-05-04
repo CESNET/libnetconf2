@@ -920,13 +920,7 @@ _nc_client_ssh_add_keypair(const char *pub_key, const char *priv_key, struct nc_
     FILE *key;
     char line[128];
 
-    if (!pub_key) {
-        ERRARG("pub_key");
-        return -1;
-    } else if (!priv_key) {
-        ERRARG("priv_key");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, pub_key, priv_key, -1);
 
     for (i = 0; i < opts->key_count; ++i) {
         if (!strcmp(opts->keys[i].pubkey_path, pub_key) || !strcmp(opts->keys[i].privkey_path, priv_key)) {
@@ -1000,7 +994,7 @@ static int
 _nc_client_ssh_del_keypair(int idx, struct nc_client_ssh_opts *opts)
 {
     if (idx >= opts->key_count) {
-        ERRARG("idx");
+        ERRARG(NULL, "idx");
         return -1;
     }
 
@@ -1059,10 +1053,10 @@ static int
 _nc_client_ssh_get_keypair(int idx, const char **pub_key, const char **priv_key, struct nc_client_ssh_opts *opts)
 {
     if (idx >= opts->key_count) {
-        ERRARG("idx");
+        ERRARG(NULL, "idx");
         return -1;
     } else if (!pub_key && !priv_key) {
-        ERRARG("pub_key and priv_key");
+        ERRARG(NULL, "pub_key and priv_key");
         return -1;
     }
 
@@ -1566,10 +1560,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
     char *buf = NULL;
     size_t buf_len = 0;
 
-    if (!ssh_session) {
-        ERRARG("ssh_session");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(NULL, ssh_session, NULL);
 
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
@@ -1823,10 +1814,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
 {
     struct nc_session *new_session, *ptr;
 
-    if (!session) {
-        ERRARG("session");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(session, session, NULL);
 
     /* prepare session structure */
     new_session = nc_new_session(NC_CLIENT, 1);

@@ -197,7 +197,7 @@ nc_client_set_thread_context(void *context)
     struct nc_client_context *old, *new;
 
     if (!context) {
-        ERRARG(context);
+        ERRARG(NULL, "context");
         return;
     }
 
@@ -1384,10 +1384,10 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     struct nc_session *session;
 
     if (fdin < 0) {
-        ERRARG("fdin");
+        ERRARG(NULL, "fdin");
         return NULL;
     } else if (fdout < 0) {
-        ERRARG("fdout");
+        ERRARG(NULL, "fdout");
         return NULL;
     }
 
@@ -1437,10 +1437,7 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
     char *buf = NULL;
     size_t buf_size = 0;
 
-    if (address == NULL) {
-        ERRARG("address");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(NULL, address, NULL);
 
     sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (sock < 0) {
@@ -1757,13 +1754,7 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, const char *hos
 {
     int sock;
 
-    if (!address) {
-        ERRARG("address");
-        return -1;
-    } else if (!port) {
-        ERRARG("port");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, address, port, -1);
 
     sock = nc_sock_listen_inet(address, port, &client_opts.ka);
     if (sock == -1) {
@@ -1855,11 +1846,10 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
     char *host = NULL;
     uint16_t port, idx;
 
+    NC_CHECK_ARG_RET(NULL, session, -1);
+
     if (!client_opts.ch_binds) {
         ERRINIT;
-        return -1;
-    } else if (!session) {
-        ERRARG("session");
         return -1;
     }
 
@@ -1899,10 +1889,7 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
 API const char * const *
 nc_session_get_cpblts(const struct nc_session *session)
 {
-    if (!session) {
-        ERRARG("session");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(session, session, NULL);
 
     return (const char * const *)session->opts.client.cpblts;
 }
@@ -1912,13 +1899,7 @@ nc_session_cpblt(const struct nc_session *session, const char *capab)
 {
     int i, len;
 
-    if (!session) {
-        ERRARG("session");
-        return NULL;
-    } else if (!capab) {
-        ERRARG("capab");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(session, session, capab, NULL);
 
     len = strlen(capab);
     for (i = 0; session->opts.client.cpblts[i]; ++i) {
@@ -1933,8 +1914,10 @@ nc_session_cpblt(const struct nc_session *session, const char *capab)
 API int
 nc_session_ntf_thread_running(const struct nc_session *session)
 {
-    if (!session || (session->side != NC_CLIENT)) {
-        ERRARG("session");
+    NC_CHECK_ARG_RET(session, session, 0);
+
+    if (session->side != NC_CLIENT) {
+        ERRARG(NULL, "session");
         return 0;
     }
 
@@ -2356,19 +2339,9 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
 {
     NC_MSG_TYPE ret;
 
-    if (!session) {
-        ERRARG("session");
-        return NC_MSG_ERROR;
-    } else if (!rpc) {
-        ERRARG("rpc");
-        return NC_MSG_ERROR;
-    } else if (!envp) {
-        ERRARG("envp");
-        return NC_MSG_ERROR;
-    } else if (!op) {
-        ERRARG("op");
-        return NC_MSG_ERROR;
-    } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
+    NC_CHECK_ARG_RET(session, session, rpc, envp, op, NC_MSG_ERROR);
+
+    if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR(session, "Invalid session to receive RPC replies.");
         return NC_MSG_ERROR;
     }
@@ -2425,16 +2398,9 @@ cleanup:
 API NC_MSG_TYPE
 nc_recv_notif(struct nc_session *session, int timeout, struct lyd_node **envp, struct lyd_node **op)
 {
-    if (!session) {
-        ERRARG("session");
-        return NC_MSG_ERROR;
-    } else if (!envp) {
-        ERRARG("envp");
-        return NC_MSG_ERROR;
-    } else if (!op) {
-        ERRARG("op");
-        return NC_MSG_ERROR;
-    } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
+    NC_CHECK_ARG_RET(session, session, envp, op, NC_MSG_ERROR);
+
+    if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR(session, "Invalid session to receive Notifications.");
         return NC_MSG_ERROR;
     }
@@ -2507,13 +2473,9 @@ nc_recv_notif_dispatch_data(struct nc_session *session, nc_notif_dispatch_clb no
     pthread_t tid;
     int ret;
 
-    if (!session) {
-        ERRARG("session");
-        return -1;
-    } else if (!notif_clb) {
-        ERRARG("notif_clb");
-        return -1;
-    } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
+    NC_CHECK_ARG_RET(session, session, notif_clb, -1);
+
+    if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR(session, "Invalid session to receive Notifications.");
         return -1;
     }
@@ -2599,16 +2561,9 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     char str[11];
     uint64_t cur_msgid;
 
-    if (!session) {
-        ERRARG("session");
-        return NC_MSG_ERROR;
-    } else if (!rpc) {
-        ERRARG("rpc");
-        return NC_MSG_ERROR;
-    } else if (!msgid) {
-        ERRARG("msgid");
-        return NC_MSG_ERROR;
-    } else if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
+    NC_CHECK_ARG_RET(session, session, rpc, msgid, NC_MSG_ERROR);
+
+    if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR(session, "Invalid session to send RPCs.");
         return NC_MSG_ERROR;
     }
@@ -3191,7 +3146,7 @@ API void
 nc_client_session_set_not_strict(struct nc_session *session)
 {
     if (session->side != NC_CLIENT) {
-        ERRARG("session");
+        ERRARG(NULL, "session");
         return;
     }
 

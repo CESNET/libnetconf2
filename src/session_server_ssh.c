@@ -551,10 +551,7 @@ nc_server_ssh_ch_client_endpt_get_auth_methods(const char *client_name, const ch
 static int
 nc_server_ssh_set_auth_attempts(uint16_t auth_attempts, struct nc_server_ssh_opts *opts)
 {
-    if (!auth_attempts) {
-        ERRARG("auth_attempts");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, auth_attempts, -1);
 
     opts->auth_attempts = auth_attempts;
     return 0;
@@ -604,10 +601,7 @@ nc_server_ssh_ch_client_endpt_set_auth_attempts(const char *client_name, const c
 static int
 nc_server_ssh_set_auth_timeout(uint16_t auth_timeout, struct nc_server_ssh_opts *opts)
 {
-    if (!auth_timeout) {
-        ERRARG("auth_timeout");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, auth_timeout, -1);
 
     opts->auth_timeout = auth_timeout;
     return 0;
@@ -1953,13 +1947,7 @@ nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session
     struct nc_session *new_session = NULL;
     struct timespec ts_cur;
 
-    if (!orig_session) {
-        ERRARG("orig_session");
-        return NC_MSG_ERROR;
-    } else if (!session) {
-        ERRARG("session");
-        return NC_MSG_ERROR;
-    }
+    NC_CHECK_ARG_RET(orig_session, orig_session, session, NC_MSG_ERROR);
 
     if ((orig_session->status == NC_STATUS_RUNNING) && (orig_session->ti_type == NC_TI_LIBSSH) &&
             orig_session->ti.libssh.next) {
@@ -2010,13 +1998,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     struct timespec ts_cur;
     uint16_t i;
 
-    if (!ps) {
-        ERRARG("ps");
-        return NC_MSG_ERROR;
-    } else if (!session) {
-        ERRARG("session");
-        return NC_MSG_ERROR;
-    }
+    NC_CHECK_ARG_RET(NULL, ps, session, NC_MSG_ERROR);
 
     /* LOCK */
     if (nc_ps_lock(ps, &q_id, __func__)) {
