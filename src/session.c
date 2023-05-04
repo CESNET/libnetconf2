@@ -455,10 +455,7 @@ nc_session_client_msgs_unlock(struct nc_session *session, const char *func)
 API NC_STATUS
 nc_session_get_status(const struct nc_session *session)
 {
-    if (!session) {
-        ERRARG("session");
-        return NC_STATUS_ERR;
-    }
+    NC_CHECK_ARG_RET(session, session, NC_STATUS_ERR);
 
     return session->status;
 }
@@ -466,10 +463,7 @@ nc_session_get_status(const struct nc_session *session)
 API NC_SESSION_TERM_REASON
 nc_session_get_term_reason(const struct nc_session *session)
 {
-    if (!session) {
-        ERRARG("session");
-        return NC_SESSION_TERM_ERR;
-    }
+    NC_CHECK_ARG_RET(session, session, NC_SESSION_TERM_ERR);
 
     return session->term_reason;
 }
@@ -477,10 +471,7 @@ nc_session_get_term_reason(const struct nc_session *session)
 API uint32_t
 nc_session_get_killed_by(const struct nc_session *session)
 {
-    if (!session) {
-        ERRARG("session");
-        return 0;
-    }
+    NC_CHECK_ARG_RET(session, session, 0);
 
     return session->killed_by;
 }
@@ -488,10 +479,7 @@ nc_session_get_killed_by(const struct nc_session *session)
 API uint32_t
 nc_session_get_id(const struct nc_session *session)
 {
-    if (!session) {
-        ERRARG("session");
-        return 0;
-    }
+    NC_CHECK_ARG_RET(session, session, 0);
 
     return session->id;
 }
@@ -499,10 +487,7 @@ nc_session_get_id(const struct nc_session *session)
 API int
 nc_session_get_version(const struct nc_session *session)
 {
-    if (!session) {
-        ERRARG("session");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(session, session, -1);
 
     return session->version == NC_VERSION_10 ? 0 : 1;
 }
@@ -510,10 +495,7 @@ nc_session_get_version(const struct nc_session *session)
 API NC_TRANSPORT_IMPL
 nc_session_get_ti(const struct nc_session *session)
 {
-    if (!session) {
-        ERRARG("session");
-        return 0;
-    }
+    NC_CHECK_ARG_RET(session, session, 0);
 
     return session->ti_type;
 }
@@ -521,10 +503,7 @@ nc_session_get_ti(const struct nc_session *session)
 API const char *
 nc_session_get_username(const struct nc_session *session)
 {
-    if (!session) {
-        ERRARG("session");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(session, session, NULL);
 
     return session->username;
 }
@@ -532,10 +511,7 @@ nc_session_get_username(const struct nc_session *session)
 API const char *
 nc_session_get_host(const struct nc_session *session)
 {
-    if (!session) {
-        ERRARG("session");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(session, session, NULL);
 
     return session->host;
 }
@@ -543,10 +519,8 @@ nc_session_get_host(const struct nc_session *session)
 API const char *
 nc_session_get_path(const struct nc_session *session)
 {
-    if (!session) {
-        ERRARG("session");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(session, session, NULL);
+
     if (session->ti_type != NC_TI_UNIX) {
         return NULL;
     }
@@ -557,10 +531,7 @@ nc_session_get_path(const struct nc_session *session)
 API uint16_t
 nc_session_get_port(const struct nc_session *session)
 {
-    if (!session) {
-        ERRARG("session");
-        return 0;
-    }
+    NC_CHECK_ARG_RET(session, session, 0);
 
     return session->port;
 }
@@ -568,10 +539,7 @@ nc_session_get_port(const struct nc_session *session)
 API const struct ly_ctx *
 nc_session_get_ctx(const struct nc_session *session)
 {
-    if (!session) {
-        ERRARG("session");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(session, session, NULL);
 
     return session->ctx;
 }
@@ -580,7 +548,7 @@ API void
 nc_session_set_data(struct nc_session *session, void *data)
 {
     if (!session) {
-        ERRARG("session");
+        ERRARG(NULL, "session");
         return;
     }
 
@@ -590,10 +558,7 @@ nc_session_set_data(struct nc_session *session, void *data)
 API void *
 nc_session_get_data(const struct nc_session *session)
 {
-    if (!session) {
-        ERRARG("session");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(session, session, NULL);
 
     return session->data;
 }
@@ -601,10 +566,7 @@ nc_session_get_data(const struct nc_session *session)
 API int
 nc_session_is_callhome(const struct nc_session *session)
 {
-    if (!session) {
-        ERRARG("session");
-        return 0;
-    }
+    NC_CHECK_ARG_RET(session, session, 0);
 
     if (session->flags & NC_SESSION_CALLHOME) {
         return 1;
@@ -1036,10 +998,7 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
 #define NC_CPBLT_BUF_LEN 4096
     char str[NC_CPBLT_BUF_LEN];
 
-    if (!ctx) {
-        ERRARG("ctx");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(NULL, ctx, NULL);
 
     cpblts = malloc(size * sizeof *cpblts);
     if (!cpblts) {

@@ -49,8 +49,10 @@ nc_server_reply_data(struct lyd_node *data, NC_WD_MODE wd, NC_PARAMTYPE paramtyp
 {
     struct nc_server_reply_data *ret;
 
-    if (!data || !(data->schema->nodetype & (LYS_RPC | LYS_ACTION))) {
-        ERRARG("data");
+    NC_CHECK_ARG_RET(NULL, data, NULL);
+
+    if (!(data->schema->nodetype & (LYS_RPC | LYS_ACTION))) {
+        ERR(NULL, "nc_server_reply_data bad data");
         return NULL;
     }
 
@@ -83,10 +85,7 @@ nc_server_reply_err(struct lyd_node *err)
 {
     struct nc_server_reply_error *ret;
 
-    if (!err) {
-        ERRARG("err");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(NULL, err, NULL);
 
     ret = malloc(sizeof *ret);
     if (!ret) {
@@ -104,11 +103,10 @@ nc_server_reply_add_err(struct nc_server_reply *reply, struct lyd_node *err)
 {
     struct nc_server_reply_error *err_rpl;
 
-    if (!reply || (reply->type != NC_RPL_ERROR)) {
-        ERRARG("reply");
-        return -1;
-    } else if (!err) {
-        ERRARG("err");
+    NC_CHECK_ARG_RET(NULL, reply, err, -1);
+
+    if (reply->type != NC_RPL_ERROR) {
+        ERR(NULL, "nc_server_reply_add_err: bad reply type");
         return -1;
     }
 
@@ -122,8 +120,10 @@ nc_server_reply_get_last_err(const struct nc_server_reply *reply)
 {
     struct nc_server_reply_error *err_rpl;
 
-    if (!reply || (reply->type != NC_RPL_ERROR)) {
-        ERRARG("reply");
+    NC_CHECK_ARG_RET(NULL, reply, NULL);
+
+    if (reply->type != NC_RPL_ERROR) {
+        ERR(NULL, "nc_server_reply_get_last_err: bad reply type");
         return NULL;
     }
 
@@ -273,10 +273,7 @@ nc_err(const struct ly_ctx *ctx, NC_ERR tag, ...)
     const char *arg1, *arg2;
     uint32_t sid;
 
-    if (!tag) {
-        ERRARG("tag");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(NULL, tag, NULL);
 
     /* rpc-error */
     if (lyd_new_opaq2(NULL, ctx, "rpc-error", NULL, NULL, NC_NS_BASE, &err)) {
@@ -294,7 +291,7 @@ nc_err(const struct ly_ctx *ctx, NC_ERR tag, ...)
     case NC_ERR_OP_NOT_SUPPORTED:
         type = (NC_ERR_TYPE)va_arg(ap, int); /* NC_ERR_TYPE enum is automatically promoted to int */
         if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
-            ERRARG("type");
+            ERRARG(NULL, "type");
             goto fail;
         }
         break;
@@ -307,7 +304,7 @@ nc_err(const struct ly_ctx *ctx, NC_ERR tag, ...)
     case NC_ERR_UNKNOWN_ATTR:
         type = (NC_ERR_TYPE)va_arg(ap, int);
         if (type == NC_ERR_TYPE_TRAN) {
-            ERRARG("type");
+            ERRARG(NULL, "type");
             goto fail;
         }
         break;
@@ -316,14 +313,14 @@ nc_err(const struct ly_ctx *ctx, NC_ERR tag, ...)
     case NC_ERR_UNKNOWN_ELEM:
         type = (NC_ERR_TYPE)va_arg(ap, int);
         if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
-            ERRARG("type");
+            ERRARG(NULL, "type");
             goto fail;
         }
         break;
     case NC_ERR_UNKNOWN_NS:
         type = (NC_ERR_TYPE)va_arg(ap, int);
         if ((type != NC_ERR_TYPE_PROT) && (type != NC_ERR_TYPE_APP)) {
-            ERRARG("type");
+            ERRARG(NULL, "type");
             goto fail;
         }
         break;
@@ -337,7 +334,7 @@ nc_err(const struct ly_ctx *ctx, NC_ERR tag, ...)
     case NC_ERR_OP_FAILED:
         type = (NC_ERR_TYPE)va_arg(ap, int);
         if (type == NC_ERR_TYPE_TRAN) {
-            ERRARG("type");
+            ERRARG(NULL, "type");
             goto fail;
         }
         break;
@@ -345,7 +342,7 @@ nc_err(const struct ly_ctx *ctx, NC_ERR tag, ...)
         type = NC_ERR_TYPE_RPC;
         break;
     default:
-        ERRARG("tag");
+        ERRARG(NULL, "tag");
         goto fail;
     }
     if (lyd_new_opaq2(err, NULL, "error-type", nc_err_type2str(type), NULL, NC_NS_BASE, NULL)) {
@@ -422,7 +419,7 @@ nc_err(const struct ly_ctx *ctx, NC_ERR tag, ...)
         nc_err_set_msg(err, "A message could not be handled because it failed to be parsed correctly.", "en");
         break;
     default:
-        ERRARG("tag");
+        ERRARG(NULL, "tag");
         goto fail;
     }
 
@@ -469,7 +466,7 @@ nc_err(const struct ly_ctx *ctx, NC_ERR tag, ...)
         nc_err_set_sid(err, sid);
         break;
     default:
-        ERRARG("tag");
+        ERRARG(NULL, "tag");
         goto fail;
     }
 
@@ -487,10 +484,7 @@ nc_err_get_type(const struct lyd_node *err)
 {
     struct lyd_node *match;
 
-    if (!err) {
-        ERRARG("err");
-        return 0;
-    }
+    NC_CHECK_ARG_RET(NULL, err, 0);
 
     lyd_find_sibling_opaq_next(lyd_child(err), "error-type", &match);
     if (match) {
@@ -505,10 +499,7 @@ nc_err_get_tag(const struct lyd_node *err)
 {
     struct lyd_node *match;
 
-    if (!err) {
-        ERRARG("err");
-        return 0;
-    }
+    NC_CHECK_ARG_RET(NULL, err, 0);
 
     lyd_find_sibling_opaq_next(lyd_child(err), "error-tag", &match);
     if (match) {
@@ -523,13 +514,7 @@ nc_err_set_app_tag(struct lyd_node *err, const char *error_app_tag)
 {
     struct lyd_node *match;
 
-    if (!err) {
-        ERRARG("err");
-        return -1;
-    } else if (!error_app_tag) {
-        ERRARG("error_app_tag");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, err, error_app_tag, -1);
 
     /* remove previous node */
     lyd_find_sibling_opaq_next(lyd_child(err), "error-app-tag", &match);
@@ -549,10 +534,7 @@ nc_err_get_app_tag(const struct lyd_node *err)
 {
     struct lyd_node *match;
 
-    if (!err) {
-        ERRARG("err");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(NULL, err, NULL);
 
     lyd_find_sibling_opaq_next(lyd_child(err), "error-app-tag", &match);
     if (match) {
@@ -567,13 +549,7 @@ nc_err_set_path(struct lyd_node *err, const char *error_path)
 {
     struct lyd_node *match;
 
-    if (!err) {
-        ERRARG("err");
-        return -1;
-    } else if (!error_path) {
-        ERRARG("error_path");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, err, error_path, -1);
 
     /* remove previous node */
     lyd_find_sibling_opaq_next(lyd_child(err), "error-path", &match);
@@ -593,10 +569,7 @@ nc_err_get_path(const struct lyd_node *err)
 {
     struct lyd_node *match;
 
-    if (!err) {
-        ERRARG("err");
-        return 0;
-    }
+    NC_CHECK_ARG_RET(NULL, err, NULL);
 
     lyd_find_sibling_opaq_next(lyd_child(err), "error-path", &match);
     if (match) {
@@ -612,13 +585,7 @@ nc_err_set_msg(struct lyd_node *err, const char *error_message, const char *lang
     struct lyd_node *match;
     struct lyd_attr *attr;
 
-    if (!err) {
-        ERRARG("err");
-        return -1;
-    } else if (!error_message) {
-        ERRARG("error_message");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, err, error_message, -1);
 
     /* remove previous message */
     lyd_find_sibling_opaq_next(lyd_child(err), "error-message", &match);
@@ -642,10 +609,7 @@ nc_err_get_msg(const struct lyd_node *err)
 {
     struct lyd_node *match;
 
-    if (!err) {
-        ERRARG("err");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(NULL, err, NULL);
 
     lyd_find_sibling_opaq_next(lyd_child(err), "error-message", &match);
     if (match) {
@@ -661,10 +625,7 @@ nc_err_set_sid(struct lyd_node *err, uint32_t session_id)
     struct lyd_node *match, *info;
     char buf[22];
 
-    if (!err) {
-        ERRARG("err");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, err, -1);
 
     /* find error-info */
     lyd_find_sibling_opaq_next(lyd_child(err), "error-info", &info);
@@ -691,13 +652,7 @@ nc_err_add_bad_attr(struct lyd_node *err, const char *attr_name)
 {
     struct lyd_node *info;
 
-    if (!err) {
-        ERRARG("err");
-        return -1;
-    } else if (!attr_name) {
-        ERRARG("attr_name");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, err, attr_name, -1);
 
     /* find error-info */
     lyd_find_sibling_opaq_next(lyd_child(err), "error-info", &info);
@@ -717,13 +672,7 @@ nc_err_add_bad_elem(struct lyd_node *err, const char *elem_name)
 {
     struct lyd_node *info;
 
-    if (!err) {
-        ERRARG("err");
-        return -1;
-    } else if (!elem_name) {
-        ERRARG("elem_name");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, err, elem_name, -1);
 
     /* find error-info */
     lyd_find_sibling_opaq_next(lyd_child(err), "error-info", &info);
@@ -743,13 +692,7 @@ nc_err_add_bad_ns(struct lyd_node *err, const char *ns_name)
 {
     struct lyd_node *info;
 
-    if (!err) {
-        ERRARG("err");
-        return -1;
-    } else if (!ns_name) {
-        ERRARG("ns_name");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, err, ns_name, -1);
 
     /* find error-info */
     lyd_find_sibling_opaq_next(lyd_child(err), "error-info", &info);
@@ -769,13 +712,7 @@ nc_err_add_info_other(struct lyd_node *err, struct lyd_node *other)
 {
     struct lyd_node *info;
 
-    if (!err) {
-        ERRARG("err");
-        return -1;
-    } else if (!other) {
-        ERRARG("other");
-        return -1;
-    }
+    NC_CHECK_ARG_RET(NULL, err, other, -1);
 
     /* find error-info */
     lyd_find_sibling_opaq_next(lyd_child(err), "error-info", &info);
@@ -840,13 +777,7 @@ nc_server_notif_new(struct lyd_node *event, char *eventtime, NC_PARAMTYPE paramt
     struct lyd_node *elem;
     int found;
 
-    if (!event) {
-        ERRARG("event");
-        return NULL;
-    } else if (!eventtime) {
-        ERRARG("eventtime");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(NULL, event, eventtime, NULL);
 
     /* check that there is a notification */
     found = 0;
@@ -858,7 +789,7 @@ nc_server_notif_new(struct lyd_node *event, char *eventtime, NC_PARAMTYPE paramt
         LYD_TREE_DFS_END(event, elem);
     }
     if (!found) {
-        ERRARG("event");
+        ERRARG(NULL, "event");
         return NULL;
     }
 
@@ -900,10 +831,7 @@ nc_server_notif_free(struct nc_server_notif *notif)
 API const char *
 nc_server_notif_get_time(const struct nc_server_notif *notif)
 {
-    if (!notif) {
-        ERRARG("notif");
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(NULL, notif, NULL);
 
     return notif->eventtime;
 }

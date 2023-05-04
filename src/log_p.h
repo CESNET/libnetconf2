@@ -42,21 +42,40 @@ extern ATOMIC_T verbose_level;
 /*
  * Verbose printing macros
  */
-#define ERR(session, format, args ...) prv_printf(session,NC_VERB_ERROR,format,##args)
-#define WRN(session, format, args ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_WARNING){prv_printf(session,NC_VERB_WARNING,format,##args);}
-#define VRB(session, format, args ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_VERBOSE){prv_printf(session,NC_VERB_VERBOSE,format,##args);}
-#define DBG(session, format, args ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_DEBUG){prv_printf(session,NC_VERB_DEBUG,format,##args);}
-#define DBL(session, format, args ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_DEBUG_LOWLVL){prv_printf(session,NC_VERB_DEBUG_LOWLVL,format,##args);}
+#define ERR(session, ...) prv_printf(session, NC_VERB_ERROR, __VA_ARGS__)
+#define WRN(session, ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_WARNING){prv_printf(session, NC_VERB_WARNING, __VA_ARGS__);}
+#define VRB(session, ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_VERBOSE){prv_printf(session, NC_VERB_VERBOSE, __VA_ARGS__);}
+#define DBG(session, ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_DEBUG){prv_printf(session, NC_VERB_DEBUG, __VA_ARGS__);}
+#define DBL(session, ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_DEBUG_LOWLVL){prv_printf(session, NC_VERB_DEBUG_LOWLVL, __VA_ARGS__);}
 
 #define ERRMEM ERR(NULL, "%s: memory reallocation failed (%s:%d).", __func__, __FILE__, __LINE__)
-#define ERRARG(arg) ERR(NULL, "%s: invalid argument (%s).", __func__, arg)
 #define ERRINIT ERR(NULL, "%s: libnetconf2 not initialized.", __func__)
 #define ERRINT ERR(NULL, "%s: internal error (%s:%d).", __func__, __FILE__, __LINE__)
 #define ERRNODE(name) ERR(NULL, "%s: missing node (%s) in the YANG data.", __func__, name)
-#define UNEXNODE(name) VRB(NULL, "%s: unexpected node (%s) in the YANG data.", __func__, name)
-#define CHECKNODE(node, name) if (strcmp(LYD_NAME(node), name)) { \
-                                  ERR(NULL, "%s: missing node (%s) in the YANG data.", __func__, name); \
-                                  return 1; \
-                              }
+#define ERRARG(session, ARG) ERR(session, "Invalid argument %s (%s()).", #ARG, __func__)
+
+#define GETMACRO1(_1, NAME, ...) NAME
+#define GETMACRO2(_1, _2, NAME, ...) NAME
+#define GETMACRO3(_1, _2, _3, NAME, ...) NAME
+#define GETMACRO4(_1, _2, _3, _4, NAME, ...) NAME
+#define GETMACRO5(_1, _2, _3, _4, _5, NAME, ...) NAME
+#define GETMACRO6(_1, _2, _3, _4, _5, _6, NAME, ...) NAME
+
+#define NC_CHECK_ARG_RET1(session, ARG, RETVAL) if (!(ARG)) {ERRARG(session, ARG);return RETVAL;}
+#define NC_CHECK_ARG_RET2(session, ARG1, ARG2, RETVAL) NC_CHECK_ARG_RET1(session, ARG1, RETVAL);NC_CHECK_ARG_RET1(session, ARG2, RETVAL)
+#define NC_CHECK_ARG_RET3(session, ARG1, ARG2, ARG3, RETVAL) NC_CHECK_ARG_RET2(session, ARG1, ARG2, RETVAL);NC_CHECK_ARG_RET1(session, ARG3, RETVAL)
+#define NC_CHECK_ARG_RET4(session, ARG1, ARG2, ARG3, ARG4, RETVAL) NC_CHECK_ARG_RET3(session, ARG1, ARG2, ARG3, RETVAL);\
+    NC_CHECK_ARG_RET1(session, ARG4, RETVAL)
+#define NC_CHECK_ARG_RET5(session, ARG1, ARG2, ARG3, ARG4, ARG5, RETVAL) NC_CHECK_ARG_RET4(session, ARG1, ARG2, ARG3, ARG4, RETVAL);\
+    NC_CHECK_ARG_RET1(session, ARG5, RETVAL)
+
+/**
+ * @brief Function's parameters checking macro
+ *
+ * @param session Session that is logged.
+ * @param ... Parameters of the function to check. The last parameter is the value that is returned on error.
+ */
+#define NC_CHECK_ARG_RET(session, ...) GETMACRO6(__VA_ARGS__, NC_CHECK_ARG_RET5, NC_CHECK_ARG_RET4, NC_CHECK_ARG_RET3, \
+    NC_CHECK_ARG_RET2, NC_CHECK_ARG_RET1, DUMMY) (session, __VA_ARGS__)
 
 #endif /* NC_LOG_PRIVATE_H_ */

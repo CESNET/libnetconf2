@@ -185,9 +185,7 @@ nc_server_config_ssh_new_hostkey(const char *privkey_path, const char *pubkey_pa
     char *tree_path = NULL;
     EVP_PKEY *priv_pkey = NULL;
 
-    if (!privkey_path || !config || !ctx || !endpt_name || !hostkey_name) {
-        ERRARG("privkey_path or config or ctx or endpt_name or hostkey_name");
-    }
+    NC_CHECK_ARG_RET(NULL, privkey_path, config, ctx, endpt_name, hostkey_name, 1);
 
     /* get the keys as a string from the given files */
     ret = nc_server_config_ssh_new_get_keys(privkey_path, pubkey_path, &priv_key, &pub_key, &priv_pkey);
@@ -291,11 +289,7 @@ nc_server_config_ssh_new_address_port(const char *address, const char *port, con
     char *tree_path = NULL;
     struct lyd_node *new_tree, *port_node;
 
-    if (!address || !port || !ctx || !endpt_name || !config) {
-        ERRARG("args");
-        ret = 1;
-        goto cleanup;
-    }
+    NC_CHECK_ARG_RET(NULL, address, port, ctx, endpt_name, config, 1);
 
     /* prepare path for instertion of leaves later */
     asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/tcp-server-parameters", endpt_name);

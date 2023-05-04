@@ -2884,11 +2884,7 @@ nc_server_config_setup_path(const struct ly_ctx *ctx, const char *path)
     struct lyd_node *tree = NULL;
     int ret = 0;
 
-    if (!path) {
-        ERRARG("Missing path parameter.");
-        ret = 1;
-        goto cleanup;
-    }
+    NC_CHECK_ARG_RET(NULL, path, 1);
 
     ret = lyd_parse_data_path(ctx, path, LYD_XML, LYD_PARSE_NO_STATE | LYD_PARSE_STRICT, LYD_VALIDATE_NO_STATE, &tree);
     if (ret) {
