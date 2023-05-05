@@ -113,7 +113,7 @@ set(libsrc
     src/session_client.c
     src/session_server.c
     src/server_config.c
-    src/config_new.c)
+    src/config_new_ssh.c)
 
 if(ENABLE_SSH)
     list(APPEND libsrc

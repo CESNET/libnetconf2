@@ -57,7 +57,73 @@ module libnetconf2-netconf-server {
     }
   }
 
+/*
   identity ed25519-private-key-format {
     base ct:private-key-format;
+    description
+      "This identity would indicate that the
+       private key is encoded in a ED25519PrivateKey
+       format. However no such format is currently
+       standardized or even exists.
+
+       If you wish to use a private key that uses
+       an ED25519 algorithm, you need to pick either
+       the private-key-info-format or
+       openssh-private-key-format identity.";
+  }
+*/
+
+  identity private-key-info-format {
+    base ct:private-key-format;
+    description
+      "Indicates that the private key is encoded
+       as a PrivateKeyInfo structure (from RFC 5208).
+
+       The expected header of the private key:
+       -----BEGIN PRIVATE KEY-----
+       The expected footer of the private key:
+       -----END PRIVATE KEY-----
+
+       Supported private key algorithms to use with
+       this format are: RSA, EC and ED25519.
+
+       Commonly used public key format for this
+       type of private key is represented by the
+       SubjectPublicKeyInfo identity.";
+
+    reference
+      "RFC 5208: PKCS #8: Private-Key Information
+                 Syntax Specification Version 1.2";
+  }
+
+  identity openssh-private-key-format {
+    base ct:private-key-format;
+    description
+      "Indicates that the private key is encoded
+       in the OpenSSH format.
+
+       The expected header of the private key:
+       -----BEGIN OPENSSH PRIVATE KEY-----
+       The expected footer of the private key:
+       -----END OPENSSH PRIVATE KEY-----
+
+       Supported private key algorithms to use with
+       this format are: RSA, EC and ED25519.
+
+       Commonly used public key format for this
+       type of private key is either the
+       SSH2 public key format (from RFC 4716)
+       or the Public key format defined in RFC 4253,
+       Section 6.6.";
+
+    reference
+      "The OpenSSH Private Key Format:
+        https://github.com/openssh/openssh-portable/blob/master/PROTOCOL.key
+
+       RFC 4716:
+        The Secure Shell (SSH) Public Key File Format
+
+       RFC 4253:
+        The Secure Shell (SSH) Transport Layer Protocol";
   }
 }

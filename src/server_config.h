@@ -84,7 +84,7 @@ int nc_server_config_load_modules(struct ly_ctx **ctx);
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_ssh_new_hostkey(const char *privkey_path, const char *pubkey_path, const struct ly_ctx *ctx,
+int nc_server_config_new_ssh_hostkey(const char *privkey_path, const char *pubkey_path, const struct ly_ctx *ctx,
         const char *endpt_name, const char *hostkey_name, struct lyd_node **config);
 
 /**
@@ -99,7 +99,7 @@ int nc_server_config_ssh_new_hostkey(const char *privkey_path, const char *pubke
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_ssh_new_address_port(const char *address, const char *port, const struct ly_ctx *ctx,
+int nc_server_config_new_ssh_address_port(const char *address, const char *port, const struct ly_ctx *ctx,
         const char *endpt_name, struct lyd_node **config);
 
 /**
@@ -117,7 +117,7 @@ int nc_server_config_ssh_new_address_port(const char *address, const char *port,
  * @param[in] ... String literals of host-key algorithms in a decreasing order of preference.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_ssh_new_host_key_algs(const struct ly_ctx *ctx, const char *endpt_name,
+int nc_server_config_new_ssh_host_key_algs(const struct ly_ctx *ctx, const char *endpt_name,
         struct lyd_node **config, int alg_count, ...);
 
 /**
@@ -136,7 +136,7 @@ int nc_server_config_ssh_new_host_key_algs(const struct ly_ctx *ctx, const char 
  * @param[in] ... String literals of key exchange algorithms in a decreasing order of preference.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_ssh_new_key_exchange_algs(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config,
+int nc_server_config_new_ssh_key_exchange_algs(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config,
         int alg_count, ...);
 
 /**
@@ -154,7 +154,7 @@ int nc_server_config_ssh_new_key_exchange_algs(const struct ly_ctx *ctx, const c
  * @param[in] ... String literals of encryption algorithms in a decreasing order of preference.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_ssh_new_encryption_algs(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config,
+int nc_server_config_new_ssh_encryption_algs(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config,
         int alg_count, ...);
 
 /**
@@ -171,7 +171,7 @@ int nc_server_config_ssh_new_encryption_algs(const struct ly_ctx *ctx, const cha
  * @param[in] ... String literals of mac algorithms in a decreasing order of preference.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_ssh_new_mac_algs(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config,
+int nc_server_config_new_ssh_mac_algs(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config,
         int alg_count, ...);
 
 /**
@@ -189,7 +189,7 @@ int nc_server_config_ssh_new_mac_algs(const struct ly_ctx *ctx, const char *endp
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_ssh_new_client_auth_pubkey(const char *pubkey_path, const struct ly_ctx *ctx, const char *endpt_name,
+int nc_server_config_new_ssh_client_auth_pubkey(const char *pubkey_path, const struct ly_ctx *ctx, const char *endpt_name,
         const char *user_name, const char *pubkey_name, struct lyd_node **config);
 
 /**
@@ -207,7 +207,7 @@ int nc_server_config_ssh_new_client_auth_pubkey(const char *pubkey_path, const s
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_ssh_new_client_auth_password(const char *password, const struct ly_ctx *ctx, const char *endpt_name,
+int nc_server_config_new_ssh_client_auth_password(const char *password, const struct ly_ctx *ctx, const char *endpt_name,
         const char *user_name, struct lyd_node **config);
 
 /**
@@ -222,7 +222,7 @@ int nc_server_config_ssh_new_client_auth_password(const char *password, const st
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_ssh_new_client_auth_none(const struct ly_ctx *ctx, const char *endpt_name,
+int nc_server_config_new_ssh_client_auth_none(const struct ly_ctx *ctx, const char *endpt_name,
         const char *user_name, struct lyd_node **config);
 
 /**
@@ -241,7 +241,7 @@ int nc_server_config_ssh_new_client_auth_none(const struct ly_ctx *ctx, const ch
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_ssh_new_client_auth_interactive(const char *pam_config_name, const char *pam_config_dir,
+int nc_server_config_new_ssh_client_auth_interactive(const char *pam_config_name, const char *pam_config_dir,
         const struct ly_ctx *ctx, const char *endpt_name,
         const char *user_name, struct lyd_node **config);
 
