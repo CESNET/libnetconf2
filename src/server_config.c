@@ -1175,11 +1175,13 @@ nc_server_config_private_key_format(const struct lyd_node *node, NC_OPERATION op
     format = ((struct lyd_node_term *)node)->value.ident->name;
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
         if (!strcmp(format, "rsa-private-key-format")) {
-            hostkey->key.privkey_type = NC_SSH_KEY_RSA;
+            hostkey->key.privkey_type = NC_PRIVKEY_FORMAT_RSA;
         } else if (!strcmp(format, "ec-private-key-format")) {
-            hostkey->key.privkey_type = NC_SSH_KEY_ECDSA;
-        } else if (!strcmp(format, "ed25519-private-key-format")) {
-            hostkey->key.privkey_type = NC_SSH_KEY_ED25519;
+            hostkey->key.privkey_type = NC_PRIVKEY_FORMAT_EC;
+        } else if (!strcmp(format, "subject-private-key-info-format")) {
+            hostkey->key.privkey_type = NC_PRIVKEY_FORMAT_PKCS8;
+        } else if (!strcmp(format, "openssh-private-key-format")) {
+            hostkey->key.privkey_type = NC_PRIVKEY_FORMAT_OPENSSH;
         } else {
             ERR(NULL, "Private key format (%s) not supported.", format);
         }
@@ -2379,13 +2381,15 @@ nc_server_config_asymmetric_key(const struct lyd_node *tree)
     if (!ret) {
         format = ((struct lyd_node_term *)node)->value.ident->name;
         if (!strcmp(format, "rsa-private-key-format")) {
-            key->privkey_type = NC_SSH_KEY_RSA;
+            key->privkey_type = NC_PRIVKEY_FORMAT_RSA;
         } else if (!strcmp(format, "ec-private-key-format")) {
-            key->privkey_type = NC_SSH_KEY_ECDSA;
+            key->privkey_type = NC_PRIVKEY_FORMAT_EC;
+        } else if (!strcmp(format, "subject-private-key-info-format")) {
+            key->privkey_type = NC_PRIVKEY_FORMAT_PKCS8;
+        } else if (!strcmp(format, "openssh-private-key-format")) {
+            key->privkey_type = NC_PRIVKEY_FORMAT_OPENSSH;
         } else {
             ERR(NULL, "Private key format (%s) not supported.", format);
-            ret = 1;
-            goto cleanup;
         }
     }
 

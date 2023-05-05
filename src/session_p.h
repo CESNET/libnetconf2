@@ -62,6 +62,16 @@ typedef enum {
 } NC_SSH_PUBKEY_TYPE;
 
 /**
+ * Enumeration of private key file formats.
+ */
+typedef enum {
+    NC_PRIVKEY_FORMAT_RSA,      /**< PKCS1 RSA format */
+    NC_PRIVKEY_FORMAT_EC,       /**< SEC1 EC format */
+    NC_PRIVKEY_FORMAT_PKCS8,    /**< PKCS8 format */
+    NC_PRIVKEY_FORMAT_OPENSSH   /**< OpenSSH format */
+} NC_PRIVKEY_FORMAT;
+
+/**
  * @brief A basic certificate.
  */
 struct nc_certificate {
@@ -83,7 +93,7 @@ struct nc_asymmetric_key {
 
     NC_SSH_PUBKEY_TYPE pubkey_type; /**< Type of the public key. */
     char *pub_base64;               /**< Base-64 encoded public key. */
-    NC_SSH_KEY_TYPE privkey_type;   /**< Type of the private key. */
+    NC_PRIVKEY_FORMAT privkey_type;   /**< Type of the private key. */
     char *priv_base64;              /**< Base-64 encoded private key. */
 
     struct nc_certificate *certs;   /**< The certificates associated with this key. */

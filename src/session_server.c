@@ -35,7 +35,7 @@
 #include <unistd.h>
 
 #include "compat.h"
-#include "config_new.h"
+#include "config_new_ssh.h"
 #include "libnetconf.h"
 #include "session_server.h"
 #include "session_server_ch.h"

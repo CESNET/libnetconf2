@@ -215,19 +215,19 @@ setup_f(void **state)
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_ssh_new_hostkey(TESTS_DIR "/data/key_ecdsa", NULL, ctx, "endpt", "hostkey", &tree);
+    ret = nc_server_config_new_ssh_hostkey(TESTS_DIR "/data/key_ecdsa", NULL, ctx, "endpt", "hostkey", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_ssh_new_address_port("127.0.0.1", "10009", ctx, "endpt", &tree);
+    ret = nc_server_config_new_ssh_address_port("127.0.0.1", "10009", ctx, "endpt", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_ssh_new_client_auth_pubkey(TESTS_DIR "/data/id_ecdsa256.pub", ctx, "endpt", "test_ec256", "pubkey", &tree);
+    ret = nc_server_config_new_ssh_client_auth_pubkey(TESTS_DIR "/data/id_ecdsa256.pub", ctx, "endpt", "test_ec256", "pubkey", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_ssh_new_client_auth_pubkey(TESTS_DIR "/data/id_ecdsa384.pub", ctx, "endpt", "test_ec384", "pubkey", &tree);
+    ret = nc_server_config_new_ssh_client_auth_pubkey(TESTS_DIR "/data/id_ecdsa384.pub", ctx, "endpt", "test_ec384", "pubkey", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_ssh_new_client_auth_pubkey(TESTS_DIR "/data/id_ecdsa521.pub", ctx, "endpt", "test_ec521", "pubkey", &tree);
+    ret = nc_server_config_new_ssh_client_auth_pubkey(TESTS_DIR "/data/id_ecdsa521.pub", ctx, "endpt", "test_ec521", "pubkey", &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */

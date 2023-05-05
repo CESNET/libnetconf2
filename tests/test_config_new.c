@@ -152,19 +152,19 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* create new hostkey data */
-    ret = nc_server_config_ssh_new_hostkey(TESTS_DIR "/data/server.key", NULL, ctx, "endpt", "hostkey", &tree);
+    ret = nc_server_config_new_ssh_hostkey(TESTS_DIR "/data/server.key", NULL, ctx, "endpt", "hostkey", &tree);
     assert_int_equal(ret, 0);
 
     /* create new address and port data */
-    ret = nc_server_config_ssh_new_address_port("127.0.0.1", "10005", ctx, "endpt", &tree);
+    ret = nc_server_config_new_ssh_address_port("127.0.0.1", "10005", ctx, "endpt", &tree);
     assert_int_equal(ret, 0);
 
     /* create the host-key algorithms data */
-    ret = nc_server_config_ssh_new_host_key_algs(ctx, "endpt", &tree, 1, "rsa-sha2-512");
+    ret = nc_server_config_new_ssh_host_key_algs(ctx, "endpt", &tree, 1, "rsa-sha2-512");
     assert_int_equal(ret, 0);
 
     /* create the client authentication data, password only */
-    ret = nc_server_config_ssh_new_client_auth_password("testpassword123", ctx, "endpt", "client", &tree);
+    ret = nc_server_config_new_ssh_client_auth_password("testpassword123", ctx, "endpt", "client", &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
