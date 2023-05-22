@@ -36,6 +36,7 @@
  * Enumeration of diff operation types.
  */
 typedef enum {
+    NC_OP_UNKNOWN = 0,
     NC_OP_NONE,
     NC_OP_CREATE,
     NC_OP_DELETE,
