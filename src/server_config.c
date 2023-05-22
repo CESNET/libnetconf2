@@ -2225,28 +2225,30 @@ nc_session_server_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op
 {
     struct lyd_node *child;
     struct lyd_meta *m;
-    NC_OPERATION current_op;
+    NC_OPERATION current_op = NC_OP_UNKNOWN;
 
     assert(node);
 
-    /* get current op */
-    LY_LIST_FOR(node->meta, m) {
-        if (!strcmp(m->name, "operation")) {
-            if (!strcmp(lyd_get_meta_value(m), "create")) {
-                current_op = NC_OP_CREATE;
-            } else if (!strcmp(lyd_get_meta_value(m), "delete")) {
-                current_op = NC_OP_DELETE;
-            } else if (!strcmp(lyd_get_meta_value(m), "replace")) {
-                current_op = NC_OP_REPLACE;
-            } else if (!strcmp(lyd_get_meta_value(m), "none")) {
-                current_op = NC_OP_NONE;
-            }
-            break;
+    /* get current op if there is any */
+    if ((m = lyd_find_meta(node->meta, NULL, "yang:operation"))) {
+        if (!strcmp(lyd_get_meta_value(m), "create")) {
+            current_op = NC_OP_CREATE;
+        } else if (!strcmp(lyd_get_meta_value(m), "delete")) {
+            current_op = NC_OP_DELETE;
+        } else if (!strcmp(lyd_get_meta_value(m), "replace")) {
+            current_op = NC_OP_REPLACE;
+        } else if (!strcmp(lyd_get_meta_value(m), "none")) {
+            current_op = NC_OP_NONE;
         }
     }
 
     /* node has no op, inherit from the parent */
-    if (!m) {
+    if (!current_op) {
+        if (!parent_op) {
+            ERR(NULL, "Unknown operation for node \"%s\".", LYD_NAME(node));
+            return 1;
+        }
+
         current_op = parent_op;
     }
 
@@ -2485,7 +2487,7 @@ cleanup:
 }
 
 static int
-nc_fill_keystore(const struct lyd_node *data)
+nc_server_config_fill_keystore(const struct lyd_node *data)
 {
     int ret = 0;
     uint32_t prev_lo;
@@ -2743,7 +2745,7 @@ cleanup:
 }
 
 static int
-nc_fill_truststore(const struct lyd_node *data)
+nc_server_config_fill_truststore(const struct lyd_node *data)
 {
     int ret = 0;
     struct lyd_node *tree, *cert_bags, *pub_bags, *iter;
@@ -2905,28 +2907,11 @@ cleanup:
     return ret;
 }
 
-API int
-nc_server_config_setup(const struct lyd_node *data)
+static int
+nc_server_config_fill_nectonf_server(const struct lyd_node *data, NC_OPERATION op)
 {
     int ret = 0;
     struct lyd_node *tree;
-    struct lyd_meta *m;
-    NC_OPERATION op = NC_OP_NONE;
-
-    /* LOCK */
-    pthread_rwlock_wrlock(&server_opts.config_lock);
-
-    ret = nc_fill_keystore(data);
-    if (ret) {
-        ERR(NULL, "Filling keystore failed.");
-        goto cleanup;
-    }
-
-    ret = nc_fill_truststore(data);
-    if (ret) {
-        ERR(NULL, "Filling truststore failed.");
-        goto cleanup;
-    }
 
     ret = lyd_find_path(data, "/ietf-netconf-server:netconf-server", 0, &tree);
     if (ret) {
@@ -2934,26 +2919,101 @@ nc_server_config_setup(const struct lyd_node *data)
         goto cleanup;
     }
 
-    LY_LIST_FOR(tree->meta, m) {
-        if (!strcmp(m->name, "operation")) {
-            if (!strcmp(lyd_get_meta_value(m), "create")) {
-                op = NC_OP_CREATE;
-            } else if (!strcmp(lyd_get_meta_value(m), "delete")) {
-                op = NC_OP_DELETE;
-            } else if (!strcmp(lyd_get_meta_value(m), "replace")) {
-                op = NC_OP_REPLACE;
-            } else if (!strcmp(lyd_get_meta_value(m), "none")) {
-                op = NC_OP_NONE;
-            } else {
-                ERR(NULL, "Unexpected operation (%s).", lyd_get_meta_value(m));
+    if (nc_session_server_parse_tree(tree, op)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+cleanup:
+    return ret;
+}
+
+API int
+nc_server_config_setup(const struct lyd_node *data)
+{
+    int ret = 0;
+
+    /* LOCK */
+    pthread_rwlock_wrlock(&server_opts.config_lock);
+
+    /* configure keystore */
+    ret = nc_server_config_fill_keystore(data);
+    if (ret) {
+        ERR(NULL, "Filling keystore failed.");
+        goto cleanup;
+    }
+
+    /* configure truststore */
+    ret = nc_server_config_fill_truststore(data);
+    if (ret) {
+        ERR(NULL, "Filling truststore failed.");
+        goto cleanup;
+    }
+
+    /* configure netconf-server */
+    ret = nc_server_config_fill_nectonf_server(data, NC_OP_UNKNOWN);
+    if (ret) {
+        ERR(NULL, "Filling netconf-server failed.");
+        goto cleanup;
+    }
+
+cleanup:
+    /* UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
+    return ret;
+}
+
+API int
+nc_server_config_setup2(const struct lyd_node *data)
+{
+    int ret = 0;
+    struct lyd_node *tree, *iter, *root;
+
+    /* LOCK */
+    pthread_rwlock_wrlock(&server_opts.config_lock);
+
+    /* find the netconf-server node */
+    ret = lyd_find_path(data, "/ietf-netconf-server:netconf-server", 0, &root);
+    if (ret) {
+        ERR(NULL, "Unable to find the netconf-server container in the YANG data.");
+        goto cleanup;
+    }
+
+    /* iterate through all the nodes and make sure there is no operation attribute */
+    LY_LIST_FOR(root, tree) {
+        LYD_TREE_DFS_BEGIN(tree, iter) {
+            if (lyd_find_meta(iter->meta, NULL, "yang:operation")) {
+                ERR(NULL, "Unexpected operation attribute in the YANG data.");
                 ret = 1;
                 goto cleanup;
             }
+            LYD_TREE_DFS_END(tree, iter);
         }
     }
 
-    if (nc_session_server_parse_tree(tree, op)) {
-        ret = 1;
+    /* delete the current configuration */
+    nc_server_config_listen(NC_OP_DELETE);
+    nc_server_config_del_keystore();
+    nc_server_config_del_trustore();
+
+    /* configure keystore */
+    ret = nc_server_config_fill_keystore(data);
+    if (ret) {
+        ERR(NULL, "Filling keystore failed.");
+        goto cleanup;
+    }
+
+    /* configure truststore */
+    ret = nc_server_config_fill_truststore(data);
+    if (ret) {
+        ERR(NULL, "Filling truststore failed.");
+        goto cleanup;
+    }
+
+    /* configure netconf-server */
+    ret = nc_server_config_fill_nectonf_server(data, NC_OP_CREATE);
+    if (ret) {
+        ERR(NULL, "Filling netconf-server failed.");
         goto cleanup;
     }
 
