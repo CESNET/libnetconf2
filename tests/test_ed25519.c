@@ -162,7 +162,7 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
-    ret = nc_server_config_setup(tree);
+    ret = nc_server_config_setup_diff(tree);
     assert_int_equal(ret, 0);
 
     /* initialize client */

@@ -30,15 +30,15 @@ extern "C" {
 /**
  * @brief Configure server based on the given diff data.
  *
- * Expected data is a validated instance of a ietf-netconf-server YANG data.
+ * Expected data are a validated instance of a ietf-netconf-server YANG data.
  * The data must be in the diff format and supported operations are: create, replace,
  * delete and none. Context must already have implemented the required modules, see
  * ::nc_config_load_modules().
  *
- * @param[in] data ietf-netconf-server YANG data.
+ * @param[in] diff ietf-netconf-server YANG diff data.
  * @return 0 on success, 1 on error.
  */
-int nc_server_config_setup(const struct lyd_node *data);
+int nc_server_config_setup_diff(const struct lyd_node *diff);
 
 /**
  * @brief Configure server based on the given data.
@@ -46,17 +46,17 @@ int nc_server_config_setup(const struct lyd_node *data);
  * Expected data is a validated instance of a ietf-netconf-server YANG data.
  * Behaves as if all the nodes in data had the replace operation. That means that the current configuration will be deleted
  * and just the given data will all be applied.
- * The data must not contain any operation attribute, see ::nc_config_setup() which works with diff.
+ * The data must not contain any operation attribute, see ::nc_config_setup_diff() which works with diff.
  * Context must already have implemented the required modules, see * ::nc_config_load_modules().
  *
  * @param[in] data ietf-netconf-server YANG data.
  * @return 0 on success, 1 on error.
  */
-int nc_server_config_setup2(const struct lyd_node *data);
+int nc_server_config_setup_data(const struct lyd_node *data);
 
 /**
  * @brief Configure server based on the given ietf-netconf-server YANG data.
- * Wrapper around ::nc_config_setup_server() hiding work with parsing the data.
+ * Wrapper around ::nc_config_setup_server_data() hiding work with parsing the data.
  *
  * @param[in] ctx libyang context.
  * @param[in] path Path to the file with YANG data in XML format.

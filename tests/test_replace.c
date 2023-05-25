@@ -1,7 +1,7 @@
 /**
- * @file test_truststore.c
+ * @file test_replace.c
  * @author Roman Janota <xjanot04@fit.vutbr.cz>
- * @brief libnetconf2 Truststore configuration and authentication test.
+ * @brief libnetconf2 Non-diff YANG data configuration test
  *
  * @copyright
  * Copyright (c) 2023 CESNET, z.s.p.o.
@@ -36,12 +36,12 @@ struct test_state {
     pthread_barrier_t barrier;
 };
 
-const char *data =
-        "<netconf-server xmlns=\"urn:ietf:params:xml:ns:yang:ietf-netconf-server\" xmlns:yang=\"urn:ietf:params:xml:ns:yang:1\" yang:operation=\"none\">\n"
-        "    <listen yang:operation=\"create\">\n"
+const char *old_data =
+        "<netconf-server xmlns=\"urn:ietf:params:xml:ns:yang:ietf-netconf-server\">\n"
+        "    <listen>\n"
         "        <idle-timeout>10</idle-timeout>\n"
         "        <endpoint>\n"
-        "            <name>default-ssh</name>\n"
+        "            <name>old-ssh</name>\n"
         "            <ssh>\n"
         "                <tcp-server-parameters>\n"
         "                    <local-address>127.0.0.1</local-address>\n"
@@ -50,7 +50,7 @@ const char *data =
         "                <ssh-server-parameters>\n"
         "                    <server-identity>\n"
         "                        <host-key>\n"
-        "                            <name>key</name>\n"
+        "                            <name>old_key</name>\n"
         "                            <public-key>\n"
         "                                <local-definition>\n"
         "                                    <public-key-format xmlns:ct=\"urn:ietf:params:xml:ns:yang:ietf-crypto-types\">ct:ssh-public-key-format</public-key-format>\n"
@@ -64,47 +64,63 @@ const char *data =
         "                    <client-authentication>\n"
         "                        <users>\n"
         "                            <user>\n"
-        "                                <name>test_truststore</name>\n"
-        "                                <public-keys>\n"
-        "                                    <truststore-reference>test_truststore</truststore-reference>\n"
-        "                                </public-keys>\n"
+        "                                <name>old_user</name>\n"
+        "                                <password>$6$xyz$lomVe5tZ2Gz9uSKKywzXuPcHhqjIByhBbqdUTx/jAwUnw7JRp7QHd4ORiEVqxeZg1NEJkHux.mETo9BFPSh1x.</password>\n"
         "                            </user>\n"
         "                        </users>\n"
         "                    </client-authentication>\n"
-        "                    <transport-params>\n"
-        "                        <host-key>\n"
-        "                            <host-key-alg xmlns:sshpka=\"urn:ietf:params:xml:ns:yang:iana-ssh-public-key-algs\">sshpka:rsa-sha2-512</host-key-alg>\n"
-        "                        </host-key>\n"
-        "                        <key-exchange>\n"
-        "                            <key-exchange-alg xmlns:sshkea=\"urn:ietf:params:xml:ns:yang:iana-ssh-key-exchange-algs\">sshkea:curve25519-sha256</key-exchange-alg>\n"
-        "                        </key-exchange>\n"
-        "                        <encryption>\n"
-        "                            <encryption-alg xmlns:sshea=\"urn:ietf:params:xml:ns:yang:iana-ssh-encryption-algs\">sshea:aes256-ctr</encryption-alg>\n"
-        "                        </encryption>\n"
-        "                        <mac>\n"
-        "                            <mac-alg xmlns:sshma=\"urn:ietf:params:xml:ns:yang:iana-ssh-mac-algs\">sshma:hmac-sha2-512</mac-alg>\n"
-        "                        </mac>\n"
-        "                    </transport-params>\n"
         "                </ssh-server-parameters>\n"
         "            </ssh>\n"
         "        </endpoint>\n"
         "    </listen>\n"
-        "</netconf-server>\n"
-        "\n"
-        "<truststore xmlns=\"urn:ietf:params:xml:ns:yang:ietf-truststore\" xmlns:yang=\"urn:ietf:params:xml:ns:yang:1\" yang:operation=\"create\">\n"
-        "    <public-key-bags>\n"
-        "        <public-key-bag>\n"
-        "            <name>test_truststore</name>\n"
-        "            <description>Let's hope this works</description>\n"
-        "            <public-key>\n"
-        "                <name>pubkey</name>\n"
-        "                <public-key-format xmlns:ct=\"urn:ietf:params:xml:ns:yang:ietf-crypto-types\">ct:ssh-public-key-format</public-key-format>\n"
-        "                <public-key>AAAAB3NzaC1yc2EAAAADAQABAAABAQDPavVALiM7QwTIUAndO8E9GOkSDQWjuEwkzbJ3kOBPa7kkq71UOZFeecDjFb9eipkljfFys/JYHGQaYVF8/svT0KV5h7HlutRdF6yvqSEbjpbTORb27pdHX3iFEyDCwCIoq9vMeX+wyXnteyn01GpIL0ig0WAnvkqX/SPjuplX5ZItUSr0MhXM7fNSX50BD6G8IO0/djUcdMUcjTjGv73SxB9ZzLvxnhXuUJbzEJJJLj6qajyEIVaJSa73vA33JCD8qzarrsuITojVLPDFmeHwSAoB5dP86yop6e6ypuXzKxxef6yNXcE8oTj8UFYBIXsgIP2nBvWk41EaK0Vk3YFl</public-key>\n"
-        "            </public-key>\n"
-        "        </public-key-bag>\n"
-        "    </public-key-bags>\n"
-        "</truststore>\n"
-;
+        "</netconf-server>\n";
+
+const char *new_data =
+        "<netconf-server xmlns=\"urn:ietf:params:xml:ns:yang:ietf-netconf-server\">\n"
+        "    <listen>\n"
+        "        <idle-timeout>10</idle-timeout>\n"
+        "        <endpoint>\n"
+        "            <name>new-ssh</name>\n"
+        "            <ssh>\n"
+        "                <tcp-server-parameters>\n"
+        "                    <local-address>127.0.0.1</local-address>\n"
+        "                    <local-port>10005</local-port>\n"
+        "                </tcp-server-parameters>\n"
+        "                <ssh-server-parameters>\n"
+        "                    <server-identity>\n"
+        "                        <host-key>\n"
+        "                            <name>new_key</name>\n"
+        "                            <public-key>\n"
+        "                                <local-definition>\n"
+        "                                    <public-key-format xmlns:ct=\"urn:ietf:params:xml:ns:yang:ietf-crypto-types\">ct:ssh-public-key-format</public-key-format>\n"
+        "                                    <public-key>AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBDRIB2eNSRWU+HNWRUGKr76ghCLg8RaMlUCps9lBjnc6ggaJl2Q+TOLn8se2wAdK3lYBMz3dcqR+SlU7eB8wJAc=</public-key>\n"
+        "                                    <private-key-format xmlns:ct=\"urn:ietf:params:xml:ns:yang:ietf-crypto-types\">ct:ec-private-key-format</private-key-format>\n"
+        "                                    <cleartext-private-key>MHcCAQEEICQ2fr9Jt2xluom0YQQ7HseE8YTo5reZRVcQENKUWOrooAoGCCqGSM49AwEHoUQDQgAENEgHZ41JFZT4c1ZFQYqvvqCEIuDxFoyVQKmz2UGOdzqCBomXZD5M4ufyx7bAB0reVgEzPd1ypH5KVTt4HzAkBw==</cleartext-private-key>\n"
+        "                                </local-definition>\n"
+        "                            </public-key>\n"
+        "                        </host-key>\n"
+        "                    </server-identity>\n"
+        "                    <client-authentication>\n"
+        "                        <users>\n"
+        "                            <user>\n"
+        "                                <name>new_user</name>\n"
+        "                                <public-keys>\n"
+        "                                    <local-definition>\n"
+        "                                        <public-key>\n"
+        "                                            <name>test</name>\n"
+        "                                            <public-key-format xmlns:ct=\"urn:ietf:params:xml:ns:yang:ietf-crypto-types\">ct:ssh-public-key-format</public-key-format>\n"
+        "                                            <public-key>AAAAB3NzaC1yc2EAAAADAQABAAABAQDPavVALiM7QwTIUAndO8E9GOkSDQWjuEwkzbJ3kOBPa7kkq71UOZFeecDjFb9eipkljfFys/JYHGQaYVF8/svT0KV5h7HlutRdF6yvqSEbjpbTORb27pdHX3iFEyDCwCIoq9vMeX+wyXnteyn01GpIL0ig0WAnvkqX/SPjuplX5ZItUSr0MhXM7fNSX50BD6G8IO0/djUcdMUcjTjGv73SxB9ZzLvxnhXuUJbzEJJJLj6qajyEIVaJSa73vA33JCD8qzarrsuITojVLPDFmeHwSAoB5dP86yop6e6ypuXzKxxef6yNXcE8oTj8UFYBIXsgIP2nBvWk41EaK0Vk3YFl</public-key>\n"
+        "                                        </public-key>\n"
+        "                                    </local-definition>\n"
+        "                                </public-keys>\n"
+        "                            </user>\n"
+        "                        </users>\n"
+        "                    </client-authentication>\n"
+        "                </ssh-server-parameters>\n"
+        "            </ssh>\n"
+        "        </endpoint>\n"
+        "    </listen>\n"
+        "</netconf-server>\n";
 
 static void *
 server_thread(void *arg)
@@ -152,14 +168,16 @@ client_thread(void *arg)
     assert_int_equal(ret, 0);
 
     /* set ssh username */
-    ret = nc_client_ssh_set_username("test_truststore");
+    ret = nc_client_ssh_set_username("new_user");
     assert_int_equal(ret, 0);
 
     /* add client's key pair */
     ret = nc_client_ssh_add_keypair(TESTS_DIR "/data/key_rsa.pub", TESTS_DIR "/data/key_rsa");
     assert_int_equal(ret, 0);
 
+    /* wait for the server to reach polling */
     pthread_barrier_wait(&state->barrier);
+
     /* connect */
     session = nc_connect_ssh("127.0.0.1", 10005, NULL);
     assert_non_null(session);
@@ -170,7 +188,7 @@ client_thread(void *arg)
 }
 
 static void
-test_nc_auth_truststore(void **state)
+nc_test_replace(void **state)
 {
     int ret, i;
     pthread_t tids[2];
@@ -191,7 +209,7 @@ static int
 setup_f(void **state)
 {
     int ret;
-    struct lyd_node *tree;
+    struct lyd_node *old_tree = NULL, *new_tree = NULL;
     struct test_state *test_state;
 
     nc_verbosity(NC_VERB_VERBOSE);
@@ -218,21 +236,32 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* parse yang data */
-    ret = lyd_parse_data_mem(ctx, data, LYD_XML, LYD_PARSE_NO_STATE | LYD_PARSE_STRICT, LYD_VALIDATE_NO_STATE, &tree);
+    ret = lyd_parse_data_mem(ctx, old_data, LYD_XML, LYD_PARSE_NO_STATE | LYD_PARSE_STRICT, LYD_VALIDATE_NO_STATE, &old_tree);
     assert_int_equal(ret, 0);
 
-    /* configure the server based on the data */
-    ret = nc_server_config_setup_diff(tree);
+    /* configure the server based on the yang data, treat them as if every node had replace operation */
+    ret = nc_server_config_setup_data(old_tree);
     assert_int_equal(ret, 0);
 
-    /* initialize client */
+    /* parse the new yang data */
+    ret = lyd_parse_data_mem(ctx, new_data, LYD_XML, LYD_PARSE_NO_STATE | LYD_PARSE_STRICT, LYD_VALIDATE_NO_STATE, &new_tree);
+    assert_int_equal(ret, 0);
+
+    /* configure the server based on the yang data, meaning
+     * everything configured will be deleted and only the new data applied
+     */
+    ret = nc_server_config_setup_data(new_tree);
+    assert_int_equal(ret, 0);
+
+    /* initialize the client */
     nc_client_init();
 
-    /* initialize server */
+    /* initialize the server */
     ret = nc_server_init();
     assert_int_equal(ret, 0);
 
-    lyd_free_all(tree);
+    lyd_free_all(old_tree);
+    lyd_free_all(new_tree);
 
     return 0;
 }
@@ -261,7 +290,7 @@ int
 main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup_teardown(test_nc_auth_truststore, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(nc_test_replace, setup_f, teardown_f),
     };
 
     setenv("CMOCKA_TEST_ABORT", "1", 1);

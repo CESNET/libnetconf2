@@ -234,7 +234,7 @@ setup_f(void **state)
     ret = lyd_parse_data_mem(ctx, data, LYD_XML, LYD_PARSE_NO_STATE | LYD_PARSE_STRICT, LYD_VALIDATE_NO_STATE, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_setup(tree);
+    ret = nc_server_config_setup_diff(tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_init();
