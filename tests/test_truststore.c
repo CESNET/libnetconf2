@@ -91,7 +91,7 @@ const char *data =
         "    </listen>\n"
         "</netconf-server>\n"
         "\n"
-        "<truststore xmlns=\"urn:ietf:params:xml:ns:yang:ietf-truststore\">\n"
+        "<truststore xmlns=\"urn:ietf:params:xml:ns:yang:ietf-truststore\" xmlns:yang=\"urn:ietf:params:xml:ns:yang:1\" yang:operation=\"create\">\n"
         "    <public-key-bags>\n"
         "        <public-key-bag>\n"
         "            <name>test_truststore</name>\n"

@@ -113,6 +113,8 @@ set(libsrc
     src/session_client.c
     src/session_server.c
     src/server_config.c
+    src/server_config_ks.c
+    src/server_config_ts.c
     src/config_new_ssh.c)
 
 if(ENABLE_SSH)

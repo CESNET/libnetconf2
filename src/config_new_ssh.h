@@ -64,24 +64,6 @@ typedef enum {
     NC_ALG_MAC
 } NC_ALG_TYPE;
 
-/**
- * @brief Configures the listen subtree in the ietf-netconf-server module.
- *
- * @param[in] op Operation to be done on the subtree. Only does something if the operation is NC_OP_DELETE.
- * @return 0 on success, 1 on error.
- */
-int nc_server_config_listen(NC_OPERATION op);
-
-/**
- * @brief Deletes everything stored in the keystore.
- */
-void nc_server_config_del_keystore(void);
-
-/**
- * @brief Deletes everything stored in the truststore.
- */
-void nc_server_config_del_trustore(void);
-
 #ifdef __cplusplus
 }
 #endif
