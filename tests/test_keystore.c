@@ -92,7 +92,7 @@ const char *data =
         "    </listen>\n"
         "</netconf-server>\n"
         "\n"
-        "<keystore xmlns=\"urn:ietf:params:xml:ns:yang:ietf-keystore\">\n"
+        "<keystore xmlns=\"urn:ietf:params:xml:ns:yang:ietf-keystore\" xmlns:yang=\"urn:ietf:params:xml:ns:yang:1\" yang:operation=\"create\">\n"
         "    <asymmetric-keys>\n"
         "        <asymmetric-key>\n"
         "            <name>test_keystore</name>\n"

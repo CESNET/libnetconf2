@@ -4,7 +4,7 @@
  * @brief libnetconf2 server configuration functions
  *
  * @copyright
- * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
+ * Copyright (c) 2022-2023 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@
 #include "compat.h"
 #include "libnetconf.h"
 #include "server_config.h"
+#include "server_config_p.h"
 #include "session_server.h"
 #include "session_server_ch.h"
 
@@ -55,16 +56,8 @@ static const char *supported_mac_algs[] = {
 
 extern struct nc_server_opts server_opts;
 
-/**
- * @brief Get the pointer to an endpoint structure based on node's location in the YANG data.
- *
- * @param[in] node Node from which the endpoint containing this node is derived.
- * @param[out] endpt Endpoint containing the node.
- * @param[out] bind Bind corresponding to the endpoint. Optional.
- * @return 0 on success, 1 on error.
- */
-static int
-nc_server_get_endpt(const struct lyd_node *node, struct nc_endpt **endpt, struct nc_bind **bind)
+int
+nc_server_config_get_endpt(const struct lyd_node *node, struct nc_endpt **endpt, struct nc_bind **bind)
 {
     uint16_t i;
     const char *endpt_name;
@@ -101,16 +94,8 @@ nc_server_get_endpt(const struct lyd_node *node, struct nc_endpt **endpt, struct
     return 1;
 }
 
-/**
- * @brief Get the pointer to a hostkey structure based on node's location in the YANG data.
- *
- * @param[in] node Node from which the hotkey containing this node is derived.
- * @param[in] opts Server SSH opts storing the array of the hostkey structures.
- * @param[out] hostkey Hostkey containing the node.
- * @return 0 on success, 1 on error.
- */
-static int
-nc_server_get_hostkey(const struct lyd_node *node, const struct nc_server_ssh_opts *opts, struct nc_hostkey **hostkey)
+int
+nc_server_config_get_hostkey(const struct lyd_node *node, const struct nc_server_ssh_opts *opts, struct nc_hostkey **hostkey)
 {
     uint16_t i;
     const char *hostkey_name;
@@ -144,16 +129,8 @@ nc_server_get_hostkey(const struct lyd_node *node, const struct nc_server_ssh_op
     return 1;
 }
 
-/**
- * @brief Get the pointer to a client authentication structure based on node's location in the YANG data.
- *
- * @param[in] node Node from which the client-authentication structure containing this node is derived.
- * @param[in] opts Server SSH opts storing the array of the client authentication structures.
- * @param[out] auth_client Client authentication structure containing the node.
- * @return 0 on success, 1 on error.
- */
-static int
-nc_server_get_auth_client(const struct lyd_node *node, const struct nc_server_ssh_opts *opts, struct nc_client_auth **auth_client)
+int
+nc_server_config_get_auth_client(const struct lyd_node *node, const struct nc_server_ssh_opts *opts, struct nc_client_auth **auth_client)
 {
     uint16_t i;
     const char *authkey_name;
@@ -187,16 +164,8 @@ nc_server_get_auth_client(const struct lyd_node *node, const struct nc_server_ss
     return 1;
 }
 
-/**
- * @brief Get the pointer to a client authentication public key structure based on node's location in the YANG data.
- *
- * @param[in] node Node from which the ca-public key structure containing this node is derived.
- * @param[in] auth_client Client authentication structure storing the array of the public key structures.
- * @param[out] pubkey Public key structure containing the node.
- * @return 0 on success, 1 on error.
- */
-static int
-nc_server_get_pubkey(const struct lyd_node *node, const struct nc_client_auth *auth_client, struct nc_public_key **pubkey)
+int
+nc_server_config_get_pubkey(const struct lyd_node *node, const struct nc_client_auth *auth_client, struct nc_public_key **pubkey)
 {
     uint16_t i;
     const char *pubkey_name;
@@ -231,15 +200,7 @@ nc_server_get_pubkey(const struct lyd_node *node, const struct nc_client_auth *a
     return 1;
 }
 
-/**
- * @brief Compares the nth-parent name.
- *
- * @param[in] node Node of which nth-parent to compare.
- * @param[in] parent_count Count of parents.
- * @param[in] parent_name Expected name of the parent.
- * @return 1 if the name matches, 0 otherwise.
- */
-static int
+int
 equal_parent_name(const struct lyd_node *node, uint16_t parent_count, const char *parent_name)
 {
     uint16_t i;
@@ -256,6 +217,40 @@ equal_parent_name(const struct lyd_node *node, uint16_t parent_count, const char
     }
 
     return 0;
+}
+
+int
+nc_server_config_realloc(const char *key_value, void **ptr, size_t size, uint16_t *count)
+{
+    int ret = 0;
+    void *tmp;
+    char **name;
+
+    tmp = realloc(*ptr, (*count + 1) * size);
+    if (!tmp) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+    *ptr = tmp;
+
+    /* set the newly allocated memory to 0 */
+    memset((char *)(*ptr) + (*count * size), 0, size);
+    (*count)++;
+
+    /* access the first member of the supposed structure */
+    name = (char **)((*ptr) + ((*count - 1) * size));
+
+    /* and set it's value */
+    *name = strdup(key_value);
+    if (!*name) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+cleanup:
+    return ret;
 }
 
 static void
@@ -492,85 +487,13 @@ nc_server_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *bind)
     }
 }
 
-void
-nc_server_config_del_keystore(void)
-{
-    int i, j;
-    struct nc_keystore *ks = &server_opts.keystore;
-
-    /* delete all asymmetric keys */
-    for (i = 0; i < ks->asym_key_count; i++) {
-        free(ks->asym_keys[i].name);
-        free(ks->asym_keys[i].pub_base64);
-        free(ks->asym_keys[i].priv_base64);
-
-        for (j = 0; j < ks->asym_keys[i].cert_count; j++) {
-            /* free associated certificates */
-            free(ks->asym_keys[i].certs[j].name);
-            free(ks->asym_keys[i].certs[j].cert_base64);
-        }
-        free(ks->asym_keys[i].certs);
-        ks->asym_keys[i].certs = NULL;
-        ks->asym_keys[i].cert_count = 0;
-    }
-    free(ks->asym_keys);
-    ks->asym_keys = NULL;
-    ks->asym_key_count = 0;
-
-    /* delete all symmetric keys */
-    for (i = 0; i < ks->sym_key_count; i++) {
-        free(ks->sym_keys[i].name);
-        free(ks->sym_keys[i].base64);
-    }
-    free(ks->sym_keys);
-    ks->sym_keys = NULL;
-    ks->sym_key_count = 0;
-}
-
-void
-nc_server_config_del_trustore(void)
-{
-    int i, j;
-    struct nc_truststore *ts = &server_opts.truststore;
-
-    /* delete all cert bags */
-    for (i = 0; i < ts->cert_bag_count; i++) {
-        free(ts->cert_bags[i].name);
-        for (j = 0; j < ts->cert_bags[i].cert_count; j++) {
-            /* free associated certificates */
-            free(ts->cert_bags[i].certs[j].name);
-            free(ts->cert_bags[i].certs[j].cert_base64);
-        }
-        free(ts->cert_bags[i].certs);
-        ts->cert_bags[i].certs = NULL;
-        ts->cert_bags[i].cert_count = 0;
-    }
-    free(ts->cert_bags);
-    ts->cert_bags = NULL;
-    ts->cert_bag_count = 0;
-
-    /* delete all pubkey bags */
-    for (i = 0; i < ts->pub_bag_count; i++) {
-        free(ts->pub_bags[i].name);
-        for (j = 0; j < ts->pub_bags[i].pubkey_count; j++) {
-            /* free associated pubkeys */
-            free(ts->pub_bags[i].pubkeys[j].name);
-            free(ts->pub_bags[i].pubkeys[j].pub_base64);
-        }
-        free(ts->pub_bags[i].pubkeys);
-        ts->pub_bags[i].pubkeys = NULL;
-        ts->pub_bags[i].pubkey_count = 0;
-    }
-    free(ts->pub_bags);
-    ts->pub_bags = NULL;
-    ts->pub_bag_count = 0;
-}
-
 /* presence container */
 int
-nc_server_config_listen(NC_OPERATION op)
+nc_server_config_listen(struct lyd_node *node, NC_OPERATION op)
 {
     uint16_t i;
+
+    (void) node;
 
     assert(op == NC_OP_CREATE || op == NC_OP_DELETE);
 
@@ -643,37 +566,14 @@ cleanup:
 static int
 nc_server_create_endpoint(const struct lyd_node *node)
 {
-    int ret = 0;
-    void *tmp;
-
-    tmp = realloc(server_opts.endpts, (server_opts.endpt_count + 1) * sizeof *server_opts.endpts);
-    if (!tmp) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
+    if (nc_server_create_bind()) {
+        return 1;
     }
-    server_opts.endpts = tmp;
-    memset(&server_opts.endpts[server_opts.endpt_count], 0, sizeof *server_opts.endpts);
 
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
 
-    server_opts.endpts[server_opts.endpt_count].name = strdup(lyd_get_value(node));
-    if (!server_opts.endpts[server_opts.endpt_count].name) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    if (nc_server_create_bind()) {
-        ret = 1;
-        goto cleanup;
-    }
-
-    server_opts.endpt_count++;
-
-cleanup:
-    return ret;
+    return nc_server_config_realloc(lyd_get_value(node), (void **)&server_opts.endpts, sizeof *server_opts.endpts, &server_opts.endpt_count);
 }
 
 /* list */
@@ -693,7 +593,7 @@ nc_server_config_endpoint(const struct lyd_node *node, NC_OPERATION op)
         }
     } else if (op == NC_OP_DELETE) {
         /* free all children */
-        if (nc_server_get_endpt(node, &endpt, &bind)) {
+        if (nc_server_config_get_endpt(node, &endpt, &bind)) {
             ret = 1;
             goto cleanup;
         }
@@ -727,7 +627,7 @@ nc_server_config_ssh(const struct lyd_node *node, NC_OPERATION op)
 
     assert(!strcmp(LYD_NAME(node), "ssh"));
 
-    if (nc_server_get_endpt(node, &endpt, &bind)) {
+    if (nc_server_config_get_endpt(node, &endpt, &bind)) {
         ret = 1;
         goto cleanup;
     }
@@ -823,7 +723,7 @@ nc_server_config_local_address(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "local-address"));
 
     if (equal_parent_name(node, 4, "listen")) {
-        if (nc_server_get_endpt(node, &endpt, &bind)) {
+        if (nc_server_config_get_endpt(node, &endpt, &bind)) {
             ret = 1;
             goto cleanup;
         }
@@ -857,7 +757,7 @@ nc_server_config_local_port(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "local-port"));
 
     if (equal_parent_name(node, 4, "listen")) {
-        if (nc_server_get_endpt(node, &endpt, &bind)) {
+        if (nc_server_config_get_endpt(node, &endpt, &bind)) {
             ret = 1;
             goto cleanup;
         }
@@ -890,7 +790,7 @@ nc_server_config_keepalives(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "keepalives"));
 
     if (equal_parent_name(node, 4, "listen")) {
-        if (nc_server_get_endpt(node, &endpt, &bind)) {
+        if (nc_server_config_get_endpt(node, &endpt, &bind)) {
             ret = 1;
             goto cleanup;
         }
@@ -921,7 +821,7 @@ nc_server_config_idle_time(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "idle-time"));
 
     if (equal_parent_name(node, 4, "listen")) {
-        if (nc_server_get_endpt(node, &endpt, &bind)) {
+        if (nc_server_config_get_endpt(node, &endpt, &bind)) {
             ret = 1;
             goto cleanup;
         }
@@ -952,7 +852,7 @@ nc_server_config_max_probes(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "max-probes"));
 
     if (equal_parent_name(node, 4, "listen")) {
-        if (nc_server_get_endpt(node, &endpt, &bind)) {
+        if (nc_server_config_get_endpt(node, &endpt, &bind)) {
             ret = 1;
             goto cleanup;
         }
@@ -983,7 +883,7 @@ nc_server_config_probe_interval(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "probe-interval"));
 
     if (equal_parent_name(node, 4, "listen")) {
-        if (nc_server_get_endpt(node, &endpt, &bind)) {
+        if (nc_server_config_get_endpt(node, &endpt, &bind)) {
             ret = 1;
             goto cleanup;
         }
@@ -1006,41 +906,10 @@ cleanup:
 static int
 nc_server_create_host_key(const struct lyd_node *node, struct nc_server_ssh_opts *opts)
 {
-    int ret = 0;
-    void *tmp;
+    node = lyd_child(node);
+    assert(!strcmp(LYD_NAME(node), "name"));
 
-    tmp = realloc(opts->hostkeys,
-            (opts->hostkey_count + 1) * sizeof *opts->hostkeys);
-    if (!tmp) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-    opts->hostkeys = tmp;
-
-    memset(&opts->hostkeys[opts->hostkey_count], 0, sizeof *opts->hostkeys);
-
-    opts->hostkeys[opts->hostkey_count].name = strdup(lyd_get_value(lyd_child(node)));
-    if (!opts->hostkeys[opts->hostkey_count].name) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* set union selector */
-    lyd_find_path(node, "public-key", 0, (struct lyd_node **)&node);
-    assert(node);
-
-    if (!lyd_find_path(node, "local-definition", 0, NULL)) {
-        opts->hostkeys[opts->hostkey_count].ks_type = NC_STORE_LOCAL;
-    } else {
-        opts->hostkeys[opts->hostkey_count].ks_type = NC_STORE_KEYSTORE;
-    }
-
-    opts->hostkey_count++;
-
-cleanup:
-    return ret;
+    return nc_server_config_realloc(lyd_get_value(node), (void **)&opts->hostkeys, sizeof *opts->hostkeys, &opts->hostkey_count);
 }
 
 /* list */
@@ -1054,7 +923,7 @@ nc_server_config_host_key(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "host-key"));
 
     if ((equal_parent_name(node, 1, "server-identity")) && (equal_parent_name(node, 5, "listen"))) {
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
@@ -1065,7 +934,7 @@ nc_server_config_host_key(const struct lyd_node *node, NC_OPERATION op)
                 goto cleanup;
             }
         } else if (op == NC_OP_DELETE) {
-            if (nc_server_get_hostkey(node, endpt->opts.ssh, &hostkey)) {
+            if (nc_server_config_get_hostkey(node, endpt->opts.ssh, &hostkey)) {
                 ret = 1;
                 goto cleanup;
             }
@@ -1101,37 +970,37 @@ nc_server_config_public_key_format(const struct lyd_node *node, NC_OPERATION op)
     format = ((struct lyd_node_term *)node)->value.ident->name;
 
     if ((equal_parent_name(node, 6, "client-authentication")) && (equal_parent_name(node, 10, "listen"))) {
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
 
-        if (nc_server_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
+        if (nc_server_config_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
             ret = 1;
             goto cleanup;
         }
 
-        if (nc_server_get_pubkey(node, auth_client, &pubkey)) {
+        if (nc_server_config_get_pubkey(node, auth_client, &pubkey)) {
             ret = 1;
             goto cleanup;
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
             if (!strcmp(format, "ssh-public-key-format")) {
-                pubkey->pubkey_type = NC_SSH_PUBKEY_X509;
-            } else if (!strcmp(format, "subject-public-key-info-format")) {
                 pubkey->pubkey_type = NC_SSH_PUBKEY_SSH2;
+            } else if (!strcmp(format, "subject-public-key-info-format")) {
+                pubkey->pubkey_type = NC_SSH_PUBKEY_X509;
             } else {
                 ERR(NULL, "Public key format (%s) not supported.", format);
             }
         }
     } else if ((equal_parent_name(node, 5, "server-identity")) && (equal_parent_name(node, 11, "listen"))) {
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
 
-        if (nc_server_get_hostkey(node, endpt->opts.ssh, &hostkey)) {
+        if (nc_server_config_get_hostkey(node, endpt->opts.ssh, &hostkey)) {
             ret = 1;
             goto cleanup;
         }
@@ -1162,12 +1031,12 @@ nc_server_config_private_key_format(const struct lyd_node *node, NC_OPERATION op
 
     assert(!strcmp(LYD_NAME(node), "private-key-format"));
 
-    if (nc_server_get_endpt(node, &endpt, NULL)) {
+    if (nc_server_config_get_endpt(node, &endpt, NULL)) {
         ret = 1;
         goto cleanup;
     }
 
-    if (nc_server_get_hostkey(node, endpt->opts.ssh, &hostkey)) {
+    if (nc_server_config_get_hostkey(node, endpt->opts.ssh, &hostkey)) {
         ret = 1;
         goto cleanup;
     }
@@ -1214,11 +1083,11 @@ nc_server_config_cleartext_private_key(const struct lyd_node *node, NC_OPERATION
     assert(!strcmp(LYD_NAME(node), "cleartext-private-key"));
 
     if ((equal_parent_name(node, 6, "ssh")) && (equal_parent_name(node, 8, "listen"))) {
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
-        if (nc_server_get_hostkey(node, endpt->opts.ssh, &hostkey)) {
+        if (nc_server_config_get_hostkey(node, endpt->opts.ssh, &hostkey)) {
             ret = 1;
             goto cleanup;
         }
@@ -1271,16 +1140,19 @@ nc_server_config_keystore_reference(const struct lyd_node *node, NC_OPERATION op
     assert(!strcmp(LYD_NAME(node), "keystore-reference"));
 
     if ((equal_parent_name(node, 3, "server-identity")) && (equal_parent_name(node, 7, "listen"))) {
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
-        if (nc_server_get_hostkey(node, endpt->opts.ssh, &hostkey)) {
+        if (nc_server_config_get_hostkey(node, endpt->opts.ssh, &hostkey)) {
             ret = 1;
             goto cleanup;
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+            /* set to keystore */
+            hostkey->ks_type = NC_STORE_KEYSTORE;
+
             ret = nc_server_create_keystore_reference(node, hostkey);
             if (ret) {
                 goto cleanup;
@@ -1297,35 +1169,12 @@ cleanup:
 static int
 nc_server_create_auth_key_public_key_list(const struct lyd_node *node, struct nc_client_auth *auth_client)
 {
-    int ret = 0;
-    void *tmp;
-
     assert(!strcmp(LYD_NAME(node), "public-key"));
-
-    tmp = realloc(auth_client->pubkeys, (auth_client->pubkey_count + 1) * sizeof *auth_client->pubkeys);
-    if (!tmp) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-    auth_client->pubkeys = tmp;
-
-    memset(&auth_client->pubkeys[auth_client->pubkey_count], 0, sizeof *auth_client->pubkeys);
 
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
 
-    auth_client->pubkeys[auth_client->pubkey_count].name = strdup(lyd_get_value(node));
-    if (!auth_client->pubkeys[auth_client->pubkey_count].name) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    ++auth_client->pubkey_count;
-
-cleanup:
-    return ret;
+    return nc_server_config_realloc(lyd_get_value(node), (void **)&auth_client->pubkeys, sizeof *auth_client->pubkeys, &auth_client->pubkey_count);
 }
 
 static int
@@ -1369,17 +1218,20 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
 
     if ((equal_parent_name(node, 3, "host-key")) && (equal_parent_name(node, 8, "listen"))) {
         /* server's public-key, mandatory leaf */
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
 
-        if (nc_server_get_hostkey(node, endpt->opts.ssh, &hostkey)) {
+        if (nc_server_config_get_hostkey(node, endpt->opts.ssh, &hostkey)) {
             ret = 1;
             goto cleanup;
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+            /* set to local */
+            hostkey->ks_type = NC_STORE_LOCAL;
+
             ret = nc_server_replace_host_key_public_key(node, hostkey);
             if (ret) {
                 goto cleanup;
@@ -1387,23 +1239,26 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
         }
     } else if ((equal_parent_name(node, 5, "client-authentication")) && (equal_parent_name(node, 9, "listen"))) {
         /* client auth pubkeys, list */
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
 
-        if (nc_server_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
+        if (nc_server_config_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
             ret = 1;
             goto cleanup;
         }
 
         if (op == NC_OP_CREATE) {
+            /* set to local */
+            auth_client->ks_type = NC_STORE_LOCAL;
+
             ret = nc_server_create_auth_key_public_key_list(node, auth_client);
             if (ret) {
                 goto cleanup;
             }
         } else if (op == NC_OP_DELETE) {
-            if (nc_server_get_pubkey(node, auth_client, &pubkey)) {
+            if (nc_server_config_get_pubkey(node, auth_client, &pubkey)) {
                 ret = 1;
                 goto cleanup;
             }
@@ -1412,17 +1267,17 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
         }
     } else if ((equal_parent_name(node, 6, "client-authentication")) && (equal_parent_name(node, 10, "listen"))) {
         /* client auth pubkey, leaf */
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
 
-        if (nc_server_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
+        if (nc_server_config_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
             ret = 1;
             goto cleanup;
         }
 
-        if (nc_server_get_pubkey(node, auth_client, &pubkey)) {
+        if (nc_server_config_get_pubkey(node, auth_client, &pubkey)) {
             ret = 1;
             goto cleanup;
         }
@@ -1444,41 +1299,10 @@ cleanup:
 static int
 nc_server_create_user(const struct lyd_node *node, struct nc_server_ssh_opts *opts)
 {
-    int ret = 0;
-    void *tmp;
+    node = lyd_child(node);
+    assert(!strcmp(LYD_NAME(node), "name"));
 
-    tmp = realloc(opts->auth_clients, (opts->client_count + 1) * sizeof *opts->auth_clients);
-    if (!tmp) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-    opts->auth_clients = tmp;
-
-    memset(&opts->auth_clients[opts->client_count], 0, sizeof *opts->auth_clients);
-
-    opts->auth_clients[opts->client_count].username = strdup(lyd_get_value(lyd_child(node)));
-    if (!opts->auth_clients[opts->client_count].username) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    lyd_find_path(node, "public-keys", 0, (struct lyd_node **)&node);
-
-    if (node) {
-        /* set union selector */
-        if (!lyd_find_path(node, "local-definition", 0, NULL)) {
-            opts->auth_clients[opts->client_count].ks_type = NC_STORE_LOCAL;
-        } else {
-            opts->auth_clients[opts->client_count].ks_type = NC_STORE_TRUSTSTORE;
-        }
-    }
-
-    ++opts->client_count;
-
-cleanup:
-    return ret;
+    return nc_server_config_realloc(lyd_get_value(node), (void **)&opts->auth_clients, sizeof *opts->auth_clients, &opts->client_count);
 }
 
 /* list */
@@ -1492,7 +1316,7 @@ nc_server_config_user(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "user"));
 
     if (equal_parent_name(node, 6, "listen")) {
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
@@ -1503,7 +1327,7 @@ nc_server_config_user(const struct lyd_node *node, NC_OPERATION op)
                 goto cleanup;
             }
         } else if (op == NC_OP_DELETE) {
-            if (nc_server_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
+            if (nc_server_config_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
                 ret = 1;
                 goto cleanup;
             }
@@ -1525,7 +1349,7 @@ nc_server_config_auth_attempts(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "auth-attempts"));
 
     if (equal_parent_name(node, 5, "listen")) {
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
@@ -1548,7 +1372,7 @@ nc_server_config_auth_timeout(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "auth-timeout"));
 
     if (equal_parent_name(node, 5, "listen")) {
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
@@ -1596,17 +1420,20 @@ nc_server_config_truststore_reference(const struct lyd_node *node, NC_OPERATION 
     assert(!strcmp(LYD_NAME(node), "truststore-reference"));
 
     if ((equal_parent_name(node, 1, "public-keys")) && (equal_parent_name(node, 8, "listen"))) {
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
 
-        if (nc_server_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
+        if (nc_server_config_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
             ret = 1;
             goto cleanup;
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+            /* set to truststore */
+            auth_client->ks_type = NC_STORE_TRUSTSTORE;
+
             ret = nc_server_replace_truststore_reference(node, auth_client);
             if (ret) {
                 goto cleanup;
@@ -1645,12 +1472,12 @@ nc_server_config_password(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "password"));
 
     if (equal_parent_name(node, 7, "listen")) {
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
 
-        if (nc_server_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
+        if (nc_server_config_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
             ret = 1;
             goto cleanup;
         }
@@ -1679,12 +1506,12 @@ nc_server_config_pam_name(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "pam-config-file-name"));
 
     if (equal_parent_name(node, 8, "listen")) {
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
 
-        if (nc_server_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
+        if (nc_server_config_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
             ret = 1;
             goto cleanup;
         }
@@ -1715,12 +1542,12 @@ nc_server_config_pam_dir(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "pam-config-file-dir"));
 
     if (equal_parent_name(node, 8, "listen")) {
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
 
-        if (nc_server_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
+        if (nc_server_config_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
             ret = 1;
             goto cleanup;
         }
@@ -1751,12 +1578,12 @@ nc_server_config_none(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "none"));
 
     if (equal_parent_name(node, 7, "listen")) {
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
 
-        if (nc_server_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
+        if (nc_server_config_get_auth_client(node, endpt->opts.ssh, &auth_client)) {
             ret = 1;
             goto cleanup;
         }
@@ -1841,7 +1668,7 @@ nc_server_config_host_key_alg(const struct lyd_node *node, NC_OPERATION op)
 
     if (equal_parent_name(node, 6, "listen")) {
         listen = 1;
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
@@ -1884,7 +1711,7 @@ nc_server_config_kex_alg(const struct lyd_node *node, NC_OPERATION op)
 
     if (equal_parent_name(node, 6, "listen")) {
         listen = 1;
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
@@ -1927,7 +1754,7 @@ nc_server_config_encryption_alg(const struct lyd_node *node, NC_OPERATION op)
 
     if (equal_parent_name(node, 6, "listen")) {
         listen = 1;
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
@@ -1970,7 +1797,7 @@ nc_server_config_mac_alg(const struct lyd_node *node, NC_OPERATION op)
 
     if (equal_parent_name(node, 6, "listen")) {
         listen = 1;
-        if (nc_server_get_endpt(node, &endpt, NULL)) {
+        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
         }
@@ -2029,7 +1856,7 @@ nc_server_config_unix_socket(const struct lyd_node *node, NC_OPERATION op)
 
     assert(!strcmp(LYD_NAME(node), "unix-socket"));
 
-    if (nc_server_get_endpt(node, &endpt, &bind)) {
+    if (nc_server_config_get_endpt(node, &endpt, &bind)) {
         ret = 1;
         goto cleanup;
     }
@@ -2086,12 +1913,12 @@ cleanup:
 }
 
 static int
-nc_server_configure(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION op)
 {
     const char *name = LYD_NAME(node);
 
     if (!strcmp(name, "listen")) {
-        if (nc_server_config_listen(op)) {
+        if (nc_server_config_listen(NULL, op)) {
             goto error;
         }
     } else if (!strcmp(name, "idle-timeout")) {
@@ -2221,11 +2048,12 @@ error:
 }
 
 int
-nc_session_server_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op)
+nc_session_server_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op, NC_MODULE module)
 {
     struct lyd_node *child;
     struct lyd_meta *m;
     NC_OPERATION current_op = NC_OP_UNKNOWN;
+    int ret;
 
     assert(node);
 
@@ -2258,8 +2086,15 @@ nc_session_server_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op
     case NC_OP_CREATE:
     case NC_OP_DELETE:
     case NC_OP_REPLACE:
-        if (nc_server_configure(node, current_op)) {
-            return 1;
+        if (module == NC_MODULE_NETCONF_SERVER) {
+            ret = nc_server_config_parse_netconf_server(node, current_op);
+        } else if (module == NC_MODULE_KEYSTORE) {
+            ret = nc_server_config_parse_keystore(node, current_op);
+        } else {
+            ret = nc_server_config_parse_truststore(node, current_op);
+        }
+        if (ret) {
+            return ret;
         }
         break;
     default:
@@ -2268,536 +2103,12 @@ nc_session_server_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op
 
     if (current_op != NC_OP_DELETE) {
         LY_LIST_FOR(lyd_child(node), child) {
-            if (nc_session_server_parse_tree(child, current_op)) {
+            if (nc_session_server_parse_tree(child, current_op, module)) {
                 return 1;
             }
         }
     }
     return 0;
-}
-
-static int
-nc_server_config_asymmetric_key_certificate(const struct lyd_node *tree, struct nc_asymmetric_key *key)
-{
-    int ret = 0;
-    struct lyd_node *node;
-    void *tmp;
-
-    /* create new certificate */
-    tmp = realloc(key->certs, (key->cert_count + 1) * sizeof *key->certs);
-    if (!tmp) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-    key->certs = tmp;
-    key->cert_count++;
-
-    /* set name */
-    lyd_find_path(tree, "name", 0, &node);
-    assert(node);
-
-    key->certs[key->cert_count - 1].name = strdup(lyd_get_value(node));
-    if (!key->certs[key->cert_count - 1].name) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* set certificate data */
-    lyd_find_path(tree, "cert-data", 0, &node);
-    assert(node);
-
-    key->certs[key->cert_count - 1].cert_base64 = strdup(lyd_get_value(node));
-    if (!key->certs[key->cert_count - 1].cert_base64) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-cleanup:
-    return ret;
-}
-
-static int
-nc_server_config_asymmetric_key(const struct lyd_node *tree)
-{
-    int ret = 0;
-    struct lyd_node *node = NULL, *iter;
-    void *tmp;
-    struct nc_keystore *ks = &server_opts.keystore;
-    struct nc_asymmetric_key *key;
-    const char *format;
-
-    /* create new asymmetric key */
-    tmp = realloc(ks->asym_keys, (ks->asym_key_count + 1) * sizeof *ks->asym_keys);
-    if (!tmp) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-    ks->asym_keys = tmp;
-    memset(&ks->asym_keys[ks->asym_key_count], 0, sizeof *ks->asym_keys);
-    key = &ks->asym_keys[ks->asym_key_count];
-    ks->asym_key_count++;
-
-    /* set name */
-    lyd_find_path(tree, "name", 0, &node);
-    assert(node);
-
-    key->name = strdup(lyd_get_value(node));
-    if (!key->name) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* set public-key-format, mandatory */
-    lyd_find_path(tree, "public-key-format", 0, &node);
-    assert(node);
-
-    format = ((struct lyd_node_term *)node)->value.ident->name;
-    if (!strcmp(format, "ssh-public-key-format")) {
-        key->pubkey_type = NC_SSH_PUBKEY_SSH2;
-    } else if (!strcmp(format, "subject-public-key-info-format")) {
-        key->pubkey_type = NC_SSH_PUBKEY_X509;
-    } else {
-        ERR(NULL, "Public key format \"%s\" not supported.", format);
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* set public-key, mandatory */
-    lyd_find_path(tree, "public-key", 0, &node);
-    assert(node);
-
-    key->pub_base64 = strdup(lyd_get_value(node));
-    if (!key->pub_base64) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* set private-key-format */
-    ret = lyd_find_path(tree, "private-key-format", 0, &node);
-    if (!ret) {
-        format = ((struct lyd_node_term *)node)->value.ident->name;
-        if (!strcmp(format, "rsa-private-key-format")) {
-            key->privkey_type = NC_PRIVKEY_FORMAT_RSA;
-        } else if (!strcmp(format, "ec-private-key-format")) {
-            key->privkey_type = NC_PRIVKEY_FORMAT_EC;
-        } else if (!strcmp(format, "subject-private-key-info-format")) {
-            key->privkey_type = NC_PRIVKEY_FORMAT_PKCS8;
-        } else if (!strcmp(format, "openssh-private-key-format")) {
-            key->privkey_type = NC_PRIVKEY_FORMAT_OPENSSH;
-        } else {
-            ERR(NULL, "Private key format (%s) not supported.", format);
-        }
-    }
-
-    /* set private key, mandatory */
-    lyd_find_path(tree, "cleartext-private-key", 0, &node);
-    assert(node);
-
-    key->priv_base64 = strdup(lyd_get_value(node));
-    if (!key->priv_base64) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* set certificates associated with the key pair */
-    ret = lyd_find_path(tree, "certificates", 0, &node);
-    if (!ret) {
-        node = lyd_child(node);
-        if (node) {
-            /* certificate list instance */
-            LY_LIST_FOR(node, iter) {
-                if (nc_server_config_asymmetric_key_certificate(iter, key)) {
-                    ret = 1;
-                    goto cleanup;
-                }
-            }
-        }
-    } else if (ret == LY_ENOTFOUND) {
-        /* certificates container not present, but it's ok */
-        ret = 0;
-    }
-
-cleanup:
-    return ret;
-}
-
-static int
-nc_server_config_symmetric_key(const struct lyd_node *tree)
-{
-    int ret = 0;
-    const char *format;
-    struct lyd_node *node;
-    struct nc_keystore *ks = &server_opts.keystore;
-    struct nc_symmetric_key *key;
-    void *tmp;
-
-    /* create new symmetric key */
-    tmp = realloc(ks->sym_keys, (ks->sym_key_count + 1) * sizeof *ks->sym_keys);
-    if (!tmp) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-    memset(&ks->sym_keys[ks->sym_key_count], 0, sizeof *ks->sym_keys);
-    ks->sym_keys = tmp;
-    key = &ks->sym_keys[ks->sym_key_count];
-    ks->sym_key_count++;
-
-    /* set name */
-    lyd_find_path(tree, "name", 0, &node);
-    assert(node);
-
-    key->name = strdup(lyd_get_value(node));
-    if (!key->name) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* check if the identity matches with the supported one */
-    lyd_find_path(tree, "key-format", 0, &node);
-    assert(node);
-
-    format = ((struct lyd_node_term *)node)->value.ident->name;
-    if (strcmp(format, "symmetric-key-format")) {
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* set key data */
-    lyd_find_path(tree, "cleartext-key", 0, &node);
-    assert(node);
-
-    key->base64 = strdup(lyd_get_value(node));
-    if (!key->base64) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-cleanup:
-    return ret;
-}
-
-static int
-nc_server_config_fill_keystore(const struct lyd_node *data)
-{
-    int ret = 0;
-    uint32_t prev_lo;
-    struct lyd_node *tree, *as_keys, *s_keys, *iter;
-
-    /* silently search for nodes, some of them may not be present */
-    prev_lo = ly_log_options(0);
-
-    ret = lyd_find_path(data, "/ietf-keystore:keystore", 0, &tree);
-    if (ret) {
-        VRB(NULL, "Keystore container not found in the YANG data.");
-        ret = 0;
-        goto cleanup;
-    }
-
-    ret = lyd_find_path(tree, "asymmetric-keys", 0, &as_keys);
-    if (!ret) {
-        /* asymmetric keys container is present */
-        as_keys = lyd_child(as_keys);
-        if (as_keys && !strcmp(LYD_NAME(as_keys), "asymmetric-key")) {
-            /* asymmetric key list */
-            LY_LIST_FOR(as_keys, iter) {
-                if (nc_server_config_asymmetric_key(iter)) {
-                    ret = 1;
-                    goto cleanup;
-                }
-            }
-        }
-    }
-
-    ret = lyd_find_path(tree, "symmetric-keys", 0, &s_keys);
-    if (!ret) {
-        /* symmetric keys container is present */
-        s_keys = lyd_child(s_keys);
-        if (s_keys && !strcmp(LYD_NAME(s_keys), "symmetric-key")) {
-            /* symmetric key list */
-            LY_LIST_FOR(s_keys, iter) {
-                if (nc_server_config_symmetric_key(iter)) {
-                    ret = 1;
-                    goto cleanup;
-                }
-            }
-        }
-    }
-
-cleanup:
-    /* reset the logging options back to what they were */
-    ly_log_options(prev_lo);
-    return ret;
-}
-
-static int
-nc_server_config_create_truststore_certificate(const struct lyd_node *tree, struct nc_certificate_bag *bag)
-{
-    int ret = 0;
-    struct lyd_node *node;
-    void *tmp;
-    struct nc_certificate *cert;
-
-    /* create new certificate */
-    tmp = realloc(bag->certs, (bag->cert_count + 1) * sizeof *bag->certs);
-    if (!tmp) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-    memset(&bag->certs[bag->cert_count], 0, sizeof *bag->certs);
-    bag->certs = tmp;
-    cert = &bag->certs[bag->cert_count];
-    bag->cert_count++;
-
-    /* set name */
-    lyd_find_path(tree, "name", 0, &node);
-    assert(node);
-
-    cert->name = strdup(lyd_get_value(node));
-    if (!cert->name) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* set cert data */
-    lyd_find_path(tree, "cert-data", 0, &node);
-    assert(node);
-
-    cert->cert_base64 = strdup(lyd_get_value(node));
-    if (!cert->cert_base64) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-cleanup:
-    return ret;
-}
-
-static int
-nc_server_config_certificate_bag(const struct lyd_node *tree)
-{
-    int ret = 0;
-    struct lyd_node *node = NULL, *iter;
-    void *tmp;
-    struct nc_truststore *ts = &server_opts.truststore;
-    struct nc_certificate_bag *bag;
-
-    /* create new certificate bag */
-    tmp = realloc(ts->cert_bags, (ts->cert_bag_count + 1) * sizeof *ts->cert_bags);
-    if (!tmp) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-    ts->cert_bags = tmp;
-    memset(&ts->cert_bags[ts->cert_bag_count], 0, sizeof *ts->cert_bags);
-    bag = &ts->cert_bags[ts->cert_bag_count];
-    ts->cert_bag_count++;
-
-    /* set name */
-    lyd_find_path(tree, "name", 0, &node);
-    assert(node);
-
-    bag->name = strdup(lyd_get_value(node));
-    if (!bag->name) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* set certificates associated with this bag */
-    ret = lyd_find_path(tree, "certificate", 0, &node);
-    if (!ret) {
-        LY_LIST_FOR(node, iter) {
-            if (nc_server_config_create_truststore_certificate(iter, bag)) {
-                ret = 1;
-                goto cleanup;
-            }
-        }
-    } else if (ret == LY_ENOTFOUND) {
-        /* certificate list not present, but it's ok */
-        ret = 0;
-    }
-
-cleanup:
-    return ret;
-}
-
-static int
-nc_server_config_create_truststore_public_key(const struct lyd_node *tree, struct nc_public_key_bag *bag)
-{
-    int ret = 0;
-    struct lyd_node *node;
-    void *tmp;
-    struct nc_public_key *key;
-    const char *format;
-
-    /* create new public key */
-    tmp = realloc(bag->pubkeys, (bag->pubkey_count + 1) * sizeof *bag->pubkeys);
-    if (!tmp) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-    bag->pubkeys = tmp;
-    memset(&bag->pubkeys[bag->pubkey_count], 0, sizeof *bag->pubkeys);
-    key = &bag->pubkeys[bag->pubkey_count];
-    bag->pubkey_count++;
-
-    /* set name */
-    lyd_find_path(tree, "name", 0, &node);
-    assert(node);
-
-    key->name = strdup(lyd_get_value(node));
-    if (!key->name) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* set public-key-format, mandatory */
-    lyd_find_path(tree, "public-key-format", 0, &node);
-    assert(node);
-
-    format = ((struct lyd_node_term *)node)->value.ident->name;
-    if (!strcmp(format, "ssh-public-key-format")) {
-        key->pubkey_type = NC_SSH_PUBKEY_SSH2;
-    } else if (!strcmp(format, "subject-public-key-info-format")) {
-        key->pubkey_type = NC_SSH_PUBKEY_X509;
-    } else {
-        ERR(NULL, "Public key format \"%s\" not supported.", format);
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* set public key data */
-    lyd_find_path(tree, "public-key", 0, &node);
-    assert(node);
-
-    key->pub_base64 = strdup(lyd_get_value(node));
-    if (!key->pub_base64) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-cleanup:
-    return ret;
-}
-
-static int
-nc_server_config_public_key_bag(const struct lyd_node *tree)
-{
-    int ret = 0;
-    struct lyd_node *node = NULL, *iter;
-    void *tmp;
-    struct nc_truststore *ts = &server_opts.truststore;
-    struct nc_public_key_bag *bag;
-    const struct lysc_node *schema;
-
-    /* create new public key bag */
-    tmp = realloc(ts->pub_bags, (ts->pub_bag_count + 1) * sizeof *ts->pub_bags);
-    if (!tmp) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-    ts->pub_bags = tmp;
-    memset(&ts->pub_bags[ts->pub_bag_count], 0, sizeof *ts->pub_bags);
-    bag = &ts->pub_bags[ts->pub_bag_count];
-    ts->pub_bag_count++;
-
-    /* set name */
-    lyd_find_path(tree, "name", 0, &node);
-    assert(node);
-
-    bag->name = strdup(lyd_get_value(node));
-    if (!bag->name) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* get the schema node of public key so we can iterate over it's list */
-    schema = lys_find_path(NULL, tree->schema, "public-key", 0);
-    LYD_LIST_FOR_INST(node, schema, iter) {
-        /* set public keys associated with this bag */
-        if (nc_server_config_create_truststore_public_key(iter, bag)) {
-            ret = 1;
-            goto cleanup;
-        }
-    }
-
-cleanup:
-    return ret;
-}
-
-static int
-nc_server_config_fill_truststore(const struct lyd_node *data)
-{
-    int ret = 0;
-    struct lyd_node *tree, *cert_bags, *pub_bags, *iter;
-    uint32_t prev_lo;
-
-    /* silently search for nodes, some of them may not be present */
-    prev_lo = ly_log_options(0);
-
-    ret = lyd_find_path(data, "/ietf-truststore:truststore", 0, &tree);
-    if (ret) {
-        VRB(NULL, "Truststore container not found in the YANG data.");
-        ret = 0;
-        goto cleanup;
-    }
-
-    ret = lyd_find_path(tree, "certificate-bags", 0, &cert_bags);
-    if (!ret) {
-        /* certificate bags container is present */
-        cert_bags = lyd_child(cert_bags);
-        if (cert_bags && !strcmp(LYD_NAME(cert_bags), "certificate-bag")) {
-            /* certificate bag list */
-            LY_LIST_FOR(cert_bags, iter) {
-                if (nc_server_config_certificate_bag(iter)) {
-                    ret = 1;
-                    goto cleanup;
-                }
-            }
-        }
-    }
-
-    ret = lyd_find_path(tree, "public-key-bags", 0, &pub_bags);
-    if (!ret) {
-        /* public key bags container is present */
-        pub_bags = lyd_child(pub_bags);
-        if (pub_bags && !strcmp(LYD_NAME(pub_bags), "public-key-bag")) {
-            /* public key bag list */
-            LY_LIST_FOR(pub_bags, iter) {
-                if (nc_server_config_public_key_bag(iter)) {
-                    ret = 1;
-                    goto cleanup;
-                }
-            }
-        }
-    } else if (ret == LY_ENOTFOUND) {
-        /* it's not mandatory so it's ok */
-        ret = 0;
-    }
-
-cleanup:
-    /* reset the logging options back to what they were */
-    ly_log_options(prev_lo);
-    return ret;
 }
 
 API int
@@ -2836,8 +2147,8 @@ nc_server_config_load_modules(struct ly_ctx **ctx)
     const char *iana_ssh_mac_algs[] = {NULL};
     /* all features */
     const char *iana_ssh_public_key_algs[] = {NULL};
-    /* all features */
-    const char *ietf_keystore[] = {"central-keystore-supported", "local-definitions-supported", "asymmetric-keys", "symmetric-keys", NULL};
+    /* no symmetric-keys */
+    const char *ietf_keystore[] = {"central-keystore-supported", "local-definitions-supported", "asymmetric-keys", NULL};
     /* no ssh-server-keepalives and local-user-auth-hostbased */
     const char *ietf_ssh_server[] = {"local-users-supported", "local-user-auth-publickey", "local-user-auth-password", "local-user-auth-none", NULL};
     /* all features */
@@ -2919,7 +2230,7 @@ nc_server_config_fill_nectonf_server(const struct lyd_node *data, NC_OPERATION o
         goto cleanup;
     }
 
-    if (nc_session_server_parse_tree(tree, op)) {
+    if (nc_session_server_parse_tree(tree, op, NC_MODULE_NETCONF_SERVER)) {
         ret = 1;
         goto cleanup;
     }
@@ -2937,14 +2248,14 @@ nc_server_config_setup(const struct lyd_node *data)
     pthread_rwlock_wrlock(&server_opts.config_lock);
 
     /* configure keystore */
-    ret = nc_server_config_fill_keystore(data);
+    ret = nc_server_config_fill_keystore(data, NC_OP_UNKNOWN);
     if (ret) {
         ERR(NULL, "Filling keystore failed.");
         goto cleanup;
     }
 
     /* configure truststore */
-    ret = nc_server_config_fill_truststore(data);
+    ret = nc_server_config_fill_truststore(data, NC_OP_UNKNOWN);
     if (ret) {
         ERR(NULL, "Filling truststore failed.");
         goto cleanup;
@@ -2992,19 +2303,19 @@ nc_server_config_setup2(const struct lyd_node *data)
     }
 
     /* delete the current configuration */
-    nc_server_config_listen(NC_OP_DELETE);
-    nc_server_config_del_keystore();
-    nc_server_config_del_trustore();
+    nc_server_config_listen(NULL, NC_OP_DELETE);
+    nc_server_config_ks_keystore(NULL, NC_OP_DELETE);
+    nc_server_config_ts_truststore(NULL, NC_OP_DELETE);
 
     /* configure keystore */
-    ret = nc_server_config_fill_keystore(data);
+    ret = nc_server_config_fill_keystore(data, NC_OP_CREATE);
     if (ret) {
         ERR(NULL, "Filling keystore failed.");
         goto cleanup;
     }
 
     /* configure truststore */
-    ret = nc_server_config_fill_truststore(data);
+    ret = nc_server_config_fill_truststore(data, NC_OP_CREATE);
     if (ret) {
         ERR(NULL, "Filling truststore failed.");
         goto cleanup;
