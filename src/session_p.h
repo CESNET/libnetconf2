@@ -170,7 +170,7 @@ struct nc_auth_state {
 struct nc_client_auth {
     char *username;                         /**< Arbitrary username. */
 
-    NC_STORE_TYPE ks_type;                  /**< Specifies how/where the client's public key is stored. */
+    NC_STORE_TYPE store;                  /**< Specifies how/where the client's public key is stored. */
     union {
         struct {
             struct nc_public_key *pubkeys;  /**< The client's public keys. */
@@ -191,7 +191,7 @@ struct nc_client_auth {
 struct nc_hostkey {
     char *name;                             /**<  Arbitrary name of the host key. */
 
-    NC_STORE_TYPE ks_type;                  /**< Specifies how/where the key is stored. */
+    NC_STORE_TYPE store;                  /**< Specifies how/where the key is stored. */
     union {
         struct nc_asymmetric_key key;       /**< The server's hostkey. */
         struct nc_asymmetric_key *ks_ref;   /**< Reference to a key-store. */
