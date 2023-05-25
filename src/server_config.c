@@ -2203,12 +2203,12 @@ nc_server_config_setup_path(const struct ly_ctx *ctx, const char *path)
 
     NC_CHECK_ARG_RET(NULL, path, 1);
 
-    ret = lyd_parse_data_path(ctx, path, LYD_XML, LYD_PARSE_NO_STATE | LYD_PARSE_STRICT, LYD_VALIDATE_NO_STATE, &tree);
+    ret = lyd_parse_data_path(ctx, path, LYD_UNKNOWN, LYD_PARSE_NO_STATE | LYD_PARSE_STRICT, LYD_VALIDATE_NO_STATE, &tree);
     if (ret) {
         goto cleanup;
     }
 
-    ret = nc_server_config_setup(tree);
+    ret = nc_server_config_setup_data(tree);
     if (ret) {
         goto cleanup;
     }
@@ -2240,7 +2240,7 @@ cleanup:
 }
 
 API int
-nc_server_config_setup(const struct lyd_node *data)
+nc_server_config_setup_diff(const struct lyd_node *data)
 {
     int ret = 0;
 
@@ -2275,7 +2275,7 @@ cleanup:
 }
 
 API int
-nc_server_config_setup2(const struct lyd_node *data)
+nc_server_config_setup_data(const struct lyd_node *data)
 {
     int ret = 0;
     struct lyd_node *tree, *iter, *root;
