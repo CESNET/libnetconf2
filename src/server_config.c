@@ -254,121 +254,121 @@ cleanup:
 }
 
 static void
-nc_server_del_auth_client_pam_name(struct nc_client_auth *auth_client)
+nc_server_config_del_auth_client_pam_name(struct nc_client_auth *auth_client)
 {
     free(auth_client->pam_config_name);
     auth_client->pam_config_name = NULL;
 }
 
 static void
-nc_server_del_auth_client_pam_dir(struct nc_client_auth *auth_client)
+nc_server_config_del_auth_client_pam_dir(struct nc_client_auth *auth_client)
 {
     free(auth_client->pam_config_dir);
     auth_client->pam_config_dir = NULL;
 }
 
 static void
-nc_server_del_endpt_name(struct nc_endpt *endpt)
+nc_server_config_del_endpt_name(struct nc_endpt *endpt)
 {
     free(endpt->name);
     endpt->name = NULL;
 }
 
 static void
-nc_server_del_local_address(struct nc_bind *bind)
+nc_server_config_del_local_address(struct nc_bind *bind)
 {
     free(bind->address);
     bind->address = NULL;
 }
 
 static void
-nc_server_del_hostkey_name(struct nc_hostkey *hostkey)
+nc_server_config_del_hostkey_name(struct nc_hostkey *hostkey)
 {
     free(hostkey->name);
     hostkey->name = NULL;
 }
 
 static void
-nc_server_del_public_key(struct nc_hostkey *hostkey)
+nc_server_config_del_public_key(struct nc_hostkey *hostkey)
 {
     free(hostkey->key.pub_base64);
     hostkey->key.pub_base64 = NULL;
 }
 
 static void
-nc_server_del_private_key(struct nc_hostkey *hostkey)
+nc_server_config_del_private_key(struct nc_hostkey *hostkey)
 {
     free(hostkey->key.priv_base64);
     hostkey->key.priv_base64 = NULL;
 }
 
 static void
-nc_server_del_auth_client_username(struct nc_client_auth *auth_client)
+nc_server_config_del_auth_client_username(struct nc_client_auth *auth_client)
 {
     free(auth_client->username);
     auth_client->username = NULL;
 }
 
 static void
-nc_server_del_auth_client_pubkey_name(struct nc_public_key *pubkey)
+nc_server_config_del_auth_client_pubkey_name(struct nc_public_key *pubkey)
 {
     free(pubkey->name);
     pubkey->name = NULL;
 }
 
 static void
-nc_server_del_auth_client_pubkey_pub_base64(struct nc_public_key *pubkey)
+nc_server_config_del_auth_client_pubkey_pub_base64(struct nc_public_key *pubkey)
 {
     free(pubkey->pub_base64);
     pubkey->pub_base64 = NULL;
 }
 
 static void
-nc_server_del_auth_client_password(struct nc_client_auth *auth_client)
+nc_server_config_del_auth_client_password(struct nc_client_auth *auth_client)
 {
     free(auth_client->password);
     auth_client->password = NULL;
 }
 
 static void
-nc_server_del_hostkey_algs(struct nc_server_ssh_opts *opts)
+nc_server_config_del_hostkey_algs(struct nc_server_ssh_opts *opts)
 {
     free(opts->hostkey_algs);
     opts->hostkey_algs = NULL;
 }
 
 static void
-nc_server_del_kex_algs(struct nc_server_ssh_opts *opts)
+nc_server_config_del_kex_algs(struct nc_server_ssh_opts *opts)
 {
     free(opts->kex_algs);
     opts->kex_algs = NULL;
 }
 
 static void
-nc_server_del_encryption_algs(struct nc_server_ssh_opts *opts)
+nc_server_config_del_encryption_algs(struct nc_server_ssh_opts *opts)
 {
     free(opts->encryption_algs);
     opts->encryption_algs = NULL;
 }
 
 static void
-nc_server_del_mac_algs(struct nc_server_ssh_opts *opts)
+nc_server_config_del_mac_algs(struct nc_server_ssh_opts *opts)
 {
     free(opts->mac_algs);
     opts->mac_algs = NULL;
 }
 
 static void
-nc_server_del_hostkey(struct nc_server_ssh_opts *opts, struct nc_hostkey *hostkey)
+nc_server_config_del_hostkey(struct nc_server_ssh_opts *opts, struct nc_hostkey *hostkey)
 {
-    assert(hostkey->ks_type == NC_STORE_LOCAL || hostkey->ks_type == NC_STORE_KEYSTORE);
+    assert(hostkey->store == NC_STORE_LOCAL || hostkey->store == NC_STORE_KEYSTORE);
 
-    if (hostkey->ks_type == NC_STORE_LOCAL) {
-        nc_server_del_public_key(hostkey);
-        nc_server_del_private_key(hostkey);
+    if (hostkey->store == NC_STORE_LOCAL) {
+        nc_server_config_del_public_key(hostkey);
+        nc_server_config_del_private_key(hostkey);
     }
 
-    nc_server_del_hostkey_name(hostkey);
+    nc_server_config_del_hostkey_name(hostkey);
     opts->hostkey_count--;
     if (!opts->hostkey_count) {
         free(opts->hostkeys);
@@ -377,10 +377,10 @@ nc_server_del_hostkey(struct nc_server_ssh_opts *opts, struct nc_hostkey *hostke
 }
 
 static void
-nc_server_del_auth_client_pubkey(struct nc_client_auth *auth_client, struct nc_public_key *pubkey)
+nc_server_config_del_auth_client_pubkey(struct nc_client_auth *auth_client, struct nc_public_key *pubkey)
 {
-    nc_server_del_auth_client_pubkey_name(pubkey);
-    nc_server_del_auth_client_pubkey_pub_base64(pubkey);
+    nc_server_config_del_auth_client_pubkey_name(pubkey);
+    nc_server_config_del_auth_client_pubkey_pub_base64(pubkey);
 
     auth_client->pubkey_count--;
     if (!auth_client->pubkey_count) {
@@ -390,21 +390,21 @@ nc_server_del_auth_client_pubkey(struct nc_client_auth *auth_client, struct nc_p
 }
 
 static void
-nc_server_del_auth_client(struct nc_server_ssh_opts *opts, struct nc_client_auth *auth_client)
+nc_server_config_del_auth_client(struct nc_server_ssh_opts *opts, struct nc_client_auth *auth_client)
 {
     uint16_t i, pubkey_count;
 
-    if (auth_client->ks_type == NC_STORE_LOCAL) {
+    if (auth_client->store == NC_STORE_LOCAL) {
         pubkey_count = auth_client->pubkey_count;
         for (i = 0; i < pubkey_count; i++) {
-            nc_server_del_auth_client_pubkey(auth_client, &auth_client->pubkeys[i]);
+            nc_server_config_del_auth_client_pubkey(auth_client, &auth_client->pubkeys[i]);
         }
     }
 
-    nc_server_del_auth_client_password(auth_client);
-    nc_server_del_auth_client_pam_name(auth_client);
-    nc_server_del_auth_client_pam_dir(auth_client);
-    nc_server_del_auth_client_username(auth_client);
+    nc_server_config_del_auth_client_password(auth_client);
+    nc_server_config_del_auth_client_pam_name(auth_client);
+    nc_server_config_del_auth_client_pam_dir(auth_client);
+    nc_server_config_del_auth_client_username(auth_client);
 
     opts->client_count--;
     if (!opts->client_count) {
@@ -414,11 +414,11 @@ nc_server_del_auth_client(struct nc_server_ssh_opts *opts, struct nc_client_auth
 }
 
 static void
-nc_server_del_ssh(struct nc_bind *bind, struct nc_server_ssh_opts *opts)
+nc_server_config_del_ssh(struct nc_bind *bind, struct nc_server_ssh_opts *opts)
 {
     uint16_t i, hostkey_count, client_count;
 
-    nc_server_del_local_address(bind);
+    nc_server_config_del_local_address(bind);
     if (bind->sock > -1) {
         close(bind->sock);
     }
@@ -426,28 +426,28 @@ nc_server_del_ssh(struct nc_bind *bind, struct nc_server_ssh_opts *opts)
     /* store in variable because it gets decremented in the function call */
     hostkey_count = opts->hostkey_count;
     for (i = 0; i < hostkey_count; i++) {
-        nc_server_del_hostkey(opts, &opts->hostkeys[i]);
+        nc_server_config_del_hostkey(opts, &opts->hostkeys[i]);
     }
 
     client_count = opts->client_count;
     for (i = 0; i < client_count; i++) {
-        nc_server_del_auth_client(opts, &opts->auth_clients[i]);
+        nc_server_config_del_auth_client(opts, &opts->auth_clients[i]);
     }
 
-    nc_server_del_hostkey_algs(opts);
-    nc_server_del_kex_algs(opts);
-    nc_server_del_encryption_algs(opts);
-    nc_server_del_mac_algs(opts);
+    nc_server_config_del_hostkey_algs(opts);
+    nc_server_config_del_kex_algs(opts);
+    nc_server_config_del_encryption_algs(opts);
+    nc_server_config_del_mac_algs(opts);
 
     free(opts);
     opts = NULL;
 }
 
 void
-nc_server_del_endpt_ssh(struct nc_endpt *endpt, struct nc_bind *bind)
+nc_server_config_del_endpt_ssh(struct nc_endpt *endpt, struct nc_bind *bind)
 {
-    nc_server_del_endpt_name(endpt);
-    nc_server_del_ssh(bind, endpt->opts.ssh);
+    nc_server_config_del_endpt_name(endpt);
+    nc_server_config_del_ssh(bind, endpt->opts.ssh);
 
     server_opts.endpt_count--;
     if (!server_opts.endpt_count) {
@@ -459,7 +459,7 @@ nc_server_del_endpt_ssh(struct nc_endpt *endpt, struct nc_bind *bind)
 }
 
 void
-nc_server_del_unix_socket(struct nc_bind *bind, struct nc_server_unix_opts *opts)
+nc_server_config_del_unix_socket(struct nc_bind *bind, struct nc_server_unix_opts *opts)
 {
     if (bind->sock > -1) {
         close(bind->sock);
@@ -473,10 +473,10 @@ nc_server_del_unix_socket(struct nc_bind *bind, struct nc_server_unix_opts *opts
 }
 
 void
-nc_server_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *bind)
+nc_server_config_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *bind)
 {
-    nc_server_del_endpt_name(endpt);
-    nc_server_del_unix_socket(bind, endpt->opts.unixsock);
+    nc_server_config_del_endpt_name(endpt);
+    nc_server_config_del_unix_socket(bind, endpt->opts.unixsock);
 
     server_opts.endpt_count--;
     if (!server_opts.endpt_count) {
@@ -502,7 +502,7 @@ nc_server_config_listen(struct lyd_node *node, NC_OPERATION op)
             switch (server_opts.endpts[i].ti) {
 #ifdef NC_ENABLED_SSH
             case NC_TI_LIBSSH:
-                nc_server_del_endpt_ssh(&server_opts.endpts[i], &server_opts.binds[i]);
+                nc_server_config_del_endpt_ssh(&server_opts.endpts[i], &server_opts.binds[i]);
                 break;
 #endif
 #ifdef NC_ENABLED_TLS
@@ -511,7 +511,7 @@ nc_server_config_listen(struct lyd_node *node, NC_OPERATION op)
                 break;
 #endif
             case NC_TI_UNIX:
-                nc_server_del_endpt_unix_socket(&server_opts.endpts[i], &server_opts.binds[i]);
+                nc_server_config_del_endpt_unix_socket(&server_opts.endpts[i], &server_opts.binds[i]);
                 break;
             case NC_TI_NONE:
             case NC_TI_FD:
@@ -543,7 +543,7 @@ nc_server_config_idle_timeout(const struct lyd_node *node, NC_OPERATION op)
 }
 
 static int
-nc_server_create_bind(void)
+nc_server_config_create_bind(void)
 {
     int ret = 0;
     void *tmp;
@@ -564,9 +564,9 @@ cleanup:
 }
 
 static int
-nc_server_create_endpoint(const struct lyd_node *node)
+nc_server_config_create_endpoint(const struct lyd_node *node)
 {
-    if (nc_server_create_bind()) {
+    if (nc_server_config_create_bind()) {
         return 1;
     }
 
@@ -587,7 +587,7 @@ nc_server_config_endpoint(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "endpoint"));
 
     if (op == NC_OP_CREATE) {
-        ret = nc_server_create_endpoint(node);
+        ret = nc_server_config_create_endpoint(node);
         if (ret) {
             goto cleanup;
         }
@@ -597,7 +597,7 @@ nc_server_config_endpoint(const struct lyd_node *node, NC_OPERATION op)
             ret = 1;
             goto cleanup;
         }
-        nc_server_del_endpt_ssh(endpt, bind);
+        nc_server_config_del_endpt_ssh(endpt, bind);
     }
 
 cleanup:
@@ -605,7 +605,7 @@ cleanup:
 }
 
 static int
-nc_server_create_ssh(struct nc_endpt *endpt)
+nc_server_config_create_ssh(struct nc_endpt *endpt)
 {
     endpt->ti = NC_TI_LIBSSH;
     endpt->opts.ssh = calloc(1, sizeof(struct nc_server_ssh_opts));
@@ -633,12 +633,12 @@ nc_server_config_ssh(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if (op == NC_OP_CREATE) {
-        ret = nc_server_create_ssh(endpt);
+        ret = nc_server_config_create_ssh(endpt);
         if (ret) {
             goto cleanup;
         }
     } else if (op == NC_OP_DELETE) {
-        nc_server_del_ssh(bind, endpt->opts.ssh);
+        nc_server_config_del_ssh(bind, endpt->opts.ssh);
     }
 
 cleanup:
@@ -728,7 +728,7 @@ nc_server_config_local_address(const struct lyd_node *node, NC_OPERATION op)
             goto cleanup;
         }
 
-        nc_server_del_local_address(bind);
+        nc_server_config_del_local_address(bind);
         bind->address = strdup(lyd_get_value(node));
         if (!bind->address) {
             ERRMEM;
@@ -904,7 +904,7 @@ cleanup:
 }
 
 static int
-nc_server_create_host_key(const struct lyd_node *node, struct nc_server_ssh_opts *opts)
+nc_server_config_create_host_key(const struct lyd_node *node, struct nc_server_ssh_opts *opts)
 {
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
@@ -929,7 +929,7 @@ nc_server_config_host_key(const struct lyd_node *node, NC_OPERATION op)
         }
 
         if (op == NC_OP_CREATE) {
-            ret = nc_server_create_host_key(node, endpt->opts.ssh);
+            ret = nc_server_config_create_host_key(node, endpt->opts.ssh);
             if (ret) {
                 goto cleanup;
             }
@@ -939,7 +939,7 @@ nc_server_config_host_key(const struct lyd_node *node, NC_OPERATION op)
                 goto cleanup;
             }
 
-            nc_server_del_hostkey(endpt->opts.ssh, hostkey);
+            nc_server_config_del_hostkey(endpt->opts.ssh, hostkey);
         }
     } else if (equal_parent_name(node, 1, "transport-params")) {
         /* just a container with the name host-key, nothing to be done */
@@ -1061,9 +1061,9 @@ cleanup:
 }
 
 static int
-nc_server_replace_cleartext_private_key(const struct lyd_node *node, struct nc_hostkey *hostkey)
+nc_server_config_replace_cleartext_private_key(const struct lyd_node *node, struct nc_hostkey *hostkey)
 {
-    nc_server_del_private_key(hostkey);
+    nc_server_config_del_private_key(hostkey);
     hostkey->key.priv_base64 = strdup(lyd_get_value(node));
     if (!hostkey->key.priv_base64) {
         ERRMEM;
@@ -1093,12 +1093,12 @@ nc_server_config_cleartext_private_key(const struct lyd_node *node, NC_OPERATION
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            ret = nc_server_replace_cleartext_private_key(node, hostkey);
+            ret = nc_server_config_replace_cleartext_private_key(node, hostkey);
             if (ret) {
                 goto cleanup;
             }
         } else {
-            nc_server_del_private_key(hostkey);
+            nc_server_config_del_private_key(hostkey);
         }
     }
 
@@ -1107,7 +1107,7 @@ cleanup:
 }
 
 static int
-nc_server_create_keystore_reference(const struct lyd_node *node, struct nc_hostkey *hostkey)
+nc_server_config_create_keystore_reference(const struct lyd_node *node, struct nc_hostkey *hostkey)
 {
     uint16_t i;
     struct nc_keystore *ks = &server_opts.keystore;
@@ -1151,9 +1151,9 @@ nc_server_config_keystore_reference(const struct lyd_node *node, NC_OPERATION op
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
             /* set to keystore */
-            hostkey->ks_type = NC_STORE_KEYSTORE;
+            hostkey->store = NC_STORE_KEYSTORE;
 
-            ret = nc_server_create_keystore_reference(node, hostkey);
+            ret = nc_server_config_create_keystore_reference(node, hostkey);
             if (ret) {
                 goto cleanup;
             }
@@ -1167,7 +1167,7 @@ cleanup:
 }
 
 static int
-nc_server_create_auth_key_public_key_list(const struct lyd_node *node, struct nc_client_auth *auth_client)
+nc_server_config_create_auth_key_public_key_list(const struct lyd_node *node, struct nc_client_auth *auth_client)
 {
     assert(!strcmp(LYD_NAME(node), "public-key"));
 
@@ -1178,9 +1178,9 @@ nc_server_create_auth_key_public_key_list(const struct lyd_node *node, struct nc
 }
 
 static int
-nc_server_replace_auth_key_public_key_leaf(const struct lyd_node *node, struct nc_public_key *pubkey)
+nc_server_config_replace_auth_key_public_key_leaf(const struct lyd_node *node, struct nc_public_key *pubkey)
 {
-    nc_server_del_auth_client_pubkey_pub_base64(pubkey);
+    nc_server_config_del_auth_client_pubkey_pub_base64(pubkey);
 
     pubkey->pub_base64 = strdup(lyd_get_value(node));
     if (!pubkey->pub_base64) {
@@ -1192,9 +1192,9 @@ nc_server_replace_auth_key_public_key_leaf(const struct lyd_node *node, struct n
 }
 
 static int
-nc_server_replace_host_key_public_key(const struct lyd_node *node, struct nc_hostkey *hostkey)
+nc_server_config_replace_host_key_public_key(const struct lyd_node *node, struct nc_hostkey *hostkey)
 {
-    nc_server_del_public_key(hostkey);
+    nc_server_config_del_public_key(hostkey);
 
     hostkey->key.pub_base64 = strdup(lyd_get_value(node));
     if (!hostkey->key.pub_base64) {
@@ -1230,9 +1230,9 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
             /* set to local */
-            hostkey->ks_type = NC_STORE_LOCAL;
+            hostkey->store = NC_STORE_LOCAL;
 
-            ret = nc_server_replace_host_key_public_key(node, hostkey);
+            ret = nc_server_config_replace_host_key_public_key(node, hostkey);
             if (ret) {
                 goto cleanup;
             }
@@ -1251,9 +1251,9 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
 
         if (op == NC_OP_CREATE) {
             /* set to local */
-            auth_client->ks_type = NC_STORE_LOCAL;
+            auth_client->store = NC_STORE_LOCAL;
 
-            ret = nc_server_create_auth_key_public_key_list(node, auth_client);
+            ret = nc_server_config_create_auth_key_public_key_list(node, auth_client);
             if (ret) {
                 goto cleanup;
             }
@@ -1263,7 +1263,7 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
                 goto cleanup;
             }
 
-            nc_server_del_auth_client_pubkey(auth_client, pubkey);
+            nc_server_config_del_auth_client_pubkey(auth_client, pubkey);
         }
     } else if ((equal_parent_name(node, 6, "client-authentication")) && (equal_parent_name(node, 10, "listen"))) {
         /* client auth pubkey, leaf */
@@ -1283,12 +1283,12 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            ret = nc_server_replace_auth_key_public_key_leaf(node, pubkey);
+            ret = nc_server_config_replace_auth_key_public_key_leaf(node, pubkey);
             if (ret) {
                 goto cleanup;
             }
         } else {
-            nc_server_del_auth_client_pubkey_pub_base64(pubkey);
+            nc_server_config_del_auth_client_pubkey_pub_base64(pubkey);
         }
     }
 
@@ -1297,7 +1297,7 @@ cleanup:
 }
 
 static int
-nc_server_create_user(const struct lyd_node *node, struct nc_server_ssh_opts *opts)
+nc_server_config_create_user(const struct lyd_node *node, struct nc_server_ssh_opts *opts)
 {
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
@@ -1322,7 +1322,7 @@ nc_server_config_user(const struct lyd_node *node, NC_OPERATION op)
         }
 
         if (op == NC_OP_CREATE) {
-            ret = nc_server_create_user(node, endpt->opts.ssh);
+            ret = nc_server_config_create_user(node, endpt->opts.ssh);
             if (ret) {
                 goto cleanup;
             }
@@ -1332,7 +1332,7 @@ nc_server_config_user(const struct lyd_node *node, NC_OPERATION op)
                 goto cleanup;
             }
 
-            nc_server_del_auth_client(endpt->opts.ssh, auth_client);
+            nc_server_config_del_auth_client(endpt->opts.ssh, auth_client);
         }
     }
 
@@ -1387,7 +1387,7 @@ cleanup:
 }
 
 static int
-nc_server_replace_truststore_reference(const struct lyd_node *node, struct nc_client_auth *client_auth)
+nc_server_config_replace_truststore_reference(const struct lyd_node *node, struct nc_client_auth *client_auth)
 {
     uint16_t i;
     struct nc_truststore *ts = &server_opts.truststore;
@@ -1432,9 +1432,9 @@ nc_server_config_truststore_reference(const struct lyd_node *node, NC_OPERATION 
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
             /* set to truststore */
-            auth_client->ks_type = NC_STORE_TRUSTSTORE;
+            auth_client->store = NC_STORE_TRUSTSTORE;
 
-            ret = nc_server_replace_truststore_reference(node, auth_client);
+            ret = nc_server_config_replace_truststore_reference(node, auth_client);
             if (ret) {
                 goto cleanup;
             }
@@ -1448,9 +1448,9 @@ cleanup:
 }
 
 static int
-nc_server_replace_password(const struct lyd_node *node, struct nc_client_auth *auth_client)
+nc_server_config_replace_password(const struct lyd_node *node, struct nc_client_auth *auth_client)
 {
-    nc_server_del_auth_client_password(auth_client);
+    nc_server_config_del_auth_client_password(auth_client);
 
     auth_client->password = strdup(lyd_get_value(node));
     if (!auth_client->password) {
@@ -1483,12 +1483,12 @@ nc_server_config_password(const struct lyd_node *node, NC_OPERATION op)
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            ret = nc_server_replace_password(node, auth_client);
+            ret = nc_server_config_replace_password(node, auth_client);
             if (ret) {
                 goto cleanup;
             }
         } else {
-            nc_server_del_auth_client_password(auth_client);
+            nc_server_config_del_auth_client_password(auth_client);
         }
     }
 
@@ -1517,7 +1517,7 @@ nc_server_config_pam_name(const struct lyd_node *node, NC_OPERATION op)
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            nc_server_del_auth_client_pam_name(auth_client);
+            nc_server_config_del_auth_client_pam_name(auth_client);
 
             auth_client->pam_config_name = strdup(lyd_get_value(node));
             if (!auth_client->pam_config_name) {
@@ -1553,7 +1553,7 @@ nc_server_config_pam_dir(const struct lyd_node *node, NC_OPERATION op)
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            nc_server_del_auth_client_pam_dir(auth_client);
+            nc_server_config_del_auth_client_pam_dir(auth_client);
             auth_client->pam_config_dir = strdup(lyd_get_value(node));
             if (!auth_client->pam_config_dir) {
                 ERRMEM;
@@ -1827,7 +1827,7 @@ cleanup:
 }
 
 static int
-nc_server_create_unix_socket(struct nc_endpt *endpt)
+nc_server_config_create_unix_socket(struct nc_endpt *endpt)
 {
     endpt->ti = NC_TI_UNIX;
     endpt->opts.unixsock = calloc(1, sizeof *endpt->opts.unixsock);
@@ -1862,7 +1862,7 @@ nc_server_config_unix_socket(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if (op == NC_OP_CREATE) {
-        if (nc_server_create_unix_socket(endpt)) {
+        if (nc_server_config_create_unix_socket(endpt)) {
             ret = 1;
             goto cleanup;
         }
@@ -1905,7 +1905,7 @@ nc_server_config_unix_socket(const struct lyd_node *node, NC_OPERATION op)
             goto cleanup;
         }
     } else if (op == NC_OP_DELETE) {
-        nc_server_del_unix_socket(bind, endpt->opts.unixsock);
+        nc_server_config_del_unix_socket(bind, endpt->opts.unixsock);
     }
 
 cleanup:
