@@ -11,6 +11,22 @@ module libnetconf2-netconf-server {
     prefix ct;
   }
 
+  import iana-ssh-public-key-algs {
+    prefix sshpka;
+  }
+
+  import iana-ssh-key-exchange-algs {
+    prefix sshkea;
+  }
+
+  import iana-ssh-encryption-algs {
+    prefix sshea;
+  }
+
+  import iana-ssh-mac-algs {
+    prefix sshma;
+  }
+
   /*
   identity ed25519-private-key-format {
     base ct:private-key-format;
@@ -79,6 +95,141 @@ module libnetconf2-netconf-server {
 
        RFC 4253:
         The Secure Shell (SSH) Transport Layer Protocol";
+  }
+
+  identity openssh-ssh-ed25519-cert-v01 {
+    base sshpka:public-key-alg-base;
+    description
+      "SSH-ED25519-CERT-V01@OPENSSH.COM";
+    reference
+      "OpenSSH PROTOCOL.certkeys:
+        https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.certkeys?annotate=HEAD";
+  }
+
+  identity openssh-ecdsa-sha2-nistp521-cert-v01 {
+    base sshpka:public-key-alg-base;
+    description
+      "ECDSA-SHA2-NISTP521-CERT-V01@OPENSSH.COM";
+    reference
+      "OpenSSH PROTOCOL.certkeys:
+        https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.certkeys?annotate=HEAD";
+  }
+
+  identity openssh-ecdsa-sha2-nistp384-cert-v01 {
+    base sshpka:public-key-alg-base;
+    description
+      "ECDSA-SHA2-NISTP384-CERT-V01@OPENSSH.COM";
+    reference
+      "OpenSSH PROTOCOL.certkeys:
+        https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.certkeys?annotate=HEAD";
+  }
+
+  identity openssh-ecdsa-sha2-nistp256-cert-v01 {
+    base sshpka:public-key-alg-base;
+    description
+      "ECDSA-SHA2-NISTP256-CERT-V01@OPENSSH.COM";
+    reference
+      "OpenSSH PROTOCOL.certkeys:
+        https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.certkeys?annotate=HEAD";
+  }
+
+  identity openssh-rsa-sha2-512-cert-v01 {
+    base sshpka:public-key-alg-base;
+    description
+      "RSA-SHA2-512-CERT-V01@OPENSSH.COM";
+    reference
+      "OpenSSH PROTOCOL.certkeys:
+        https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.certkeys?annotate=HEAD";
+  }
+
+  identity openssh-rsa-sha2-256-cert-v01 {
+    base sshpka:public-key-alg-base;
+    description
+      "RSA-SHA2-256-CERT-V01@OPENSSH.COM";
+    reference
+      "OpenSSH PROTOCOL.certkeys:
+        https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.certkeys?annotate=HEAD";
+  }
+
+  identity openssh-ssh-rsa-cert-v01 {
+    base sshpka:public-key-alg-base;
+    description
+      "SSH-RSA-CERT-V01@OPENSSH.COM";
+    reference
+      "OpenSSH PROTOCOL.certkeys:
+        https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.certkeys?annotate=HEAD";
+  }
+
+  identity openssh-ssh-dss-cert-v01 {
+    base sshpka:public-key-alg-base;
+    description
+      "SSH-DSS-CERT-V01@OPENSSH.COM";
+    reference
+      "OpenSSH PROTOCOL.certkeys:
+        https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.certkeys?annotate=HEAD";
+  }
+
+  identity libssh-curve25519-sha256 {
+    base sshkea:key-exchange-alg-base;
+    description
+      "CURVE25519-SHA256@LIBSSH.ORG";
+    reference
+      "curve25519-sha256@libssh.org specification:
+        https://git.libssh.org/projects/libssh.git/tree/doc/curve25519-sha256@libssh.org.txt";
+  }
+
+  identity openssh-chacha20-poly1305 {
+    base sshea:encryption-alg-base;
+    description
+      "CHACHA20-POLY1305@OPENSSH.COM";
+    reference
+      "OpenSSH PROTOCOL.chacha20poly1305:
+        https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.chacha20poly1305?annotate=HEAD";
+  }
+
+  identity openssh-aes256-gcm {
+    base sshea:encryption-alg-base;
+    description
+      "AES256-GCM@OPENSSH.COM";
+    reference
+      "OpenSSH PROTOCOL, Section 1.6:
+        https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL?annotate=HEAD";
+  }
+
+  identity openssh-aes128-gcm {
+    base sshea:encryption-alg-base;
+    description
+      "AES128-GCM@OPENSSH.COM";
+    reference
+      "OpenSSH PROTOCOL, Section 1.6:
+        https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL?annotate=HEAD";
+  }
+
+  identity openssh-hmac-sha2-256-etm {
+    base sshma:mac-alg-base;
+    description
+      "HMAC-SHA2-256-ETM@OPENSSH.COM";
+    reference
+      "OpenSSH PROTOCOL:
+        https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL?annotate=HEAD";
+  }
+
+  identity openssh-hmac-sha2-512-etm {
+    base sshma:mac-alg-base;
+    description
+      "HMAC-SHA2-512-ETM@OPENSSH.COM";
+    reference
+      "OpenSSH PROTOCOL:
+        https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL?annotate=HEAD";
+  }
+
+  identity openssh-hmac-sha1-etm {
+    base sshma:mac-alg-base;
+    description
+      "HMAC-SHA1-ETM@OPENSSH.COM";
+    reference
+      "OpenSSH PROTOCOL:
+        https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL?annotate=HEAD";
   }
 
   augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {

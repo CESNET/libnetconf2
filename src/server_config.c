@@ -29,28 +29,28 @@
 /* All libssh supported host-key, key-exchange, encryption and mac algorithms as of version 0.10.90 */
 
 static const char *supported_hostkey_algs[] = {
-    "ssh-ed25519-cert-v01@openssh.com", "ecdsa-sha2-nistp521-cert-v01@openssh.com",
-    "ecdsa-sha2-nistp384-cert-v01@openssh.com", "ecdsa-sha2-nistp256-cert-v01@openssh.com",
-    "rsa-sha2-512-cert-v01@openssh.com", "rsa-sha2-256-cert-v01@openssh.com",
-    "ssh-rsa-cert-v01@openssh.com", "ssh-dss-cert-v01@openssh.com",
+    "openssh-ssh-ed25519-cert-v01", "openssh-ecdsa-sha2-nistp521-cert-v01",
+    "openssh-ecdsa-sha2-nistp384-cert-v01", "openssh-ecdsa-sha2-nistp256-cert-v01",
+    "openssh-rsa-sha2-512-cert-v01", "openssh-rsa-sha2-256-cert-v01",
+    "openssh-ssh-rsa-cert-v01", "openssh-ssh-dss-cert-v01",
     "ssh-ed25519", "ecdsa-sha2-nistp521", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp256",
     "rsa-sha2-512", "rsa-sha2-256", "ssh-rsa", "ssh-dss", NULL
 };
 
 static const char *supported_kex_algs[] = {
-    "diffie-hellman-group-exchange-sha1", "curve25519-sha256", "curve25519-sha256@libssh.org",
+    "diffie-hellman-group-exchange-sha1", "curve25519-sha256", "libssh-curve25519-sha256",
     "ecdh-sha2-nistp256", "ecdh-sha2-nistp384", "ecdh-sha2-nistp521", "diffie-hellman-group18-sha512",
     "diffie-hellman-group16-sha512", "diffie-hellman-group-exchange-sha256", "diffie-hellman-group14-sha256", NULL
 };
 
 static const char *supported_encryption_algs[] = {
-    "chacha20-poly1305@openssh.com", "aes256-gcm@openssh.com", "aes128-gcm@openssh.com",
+    "openssh-chacha20-poly1305", "openssh-aes256-gcm", "openssh-aes128-gcm",
     "aes256-ctr", "aes192-ctr", "aes128-ctr", "aes256-cbc", "aes192-cbc", "aes128-cbc",
     "blowfish-cbc", "triple-des-cbc", "none", NULL
 };
 
 static const char *supported_mac_algs[] = {
-    "hmac-sha2-256-etm@openssh.com", "hmac-sha2-512-etm@openssh.com", "hmac-sha1-etm@openssh.com",
+    "openssh-hmac-sha2-256-etm", "openssh-hmac-sha2-512-etm", "openssh-hmac-sha1-etm",
     "hmac-sha2-256", "hmac-sha2-512", "hmac-sha1", NULL
 };
 
@@ -1609,11 +1609,38 @@ cleanup:
 }
 
 static int
-nc_server_config_transport_params(const char *alg, char **alg_store, NC_OPERATION op)
+nc_server_config_transport_params(const char *algorithm, char **alg_store, NC_OPERATION op)
 {
     int ret = 0, alg_found = 0;
-    char *substr, *haystack;
-    size_t alg_len = strlen(alg);
+    char *substr, *haystack, *alg = NULL;
+    size_t alg_len;
+
+    if (!strncmp(algorithm, "openssh-", 8)) {
+        /* if the name starts with openssh, convert it to it's original libssh accepted form */
+        asprintf(&alg, "%s@openssh.com", algorithm + 8);
+        if (!alg) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+    } else if (!strncmp(algorithm, "libssh-", 7)) {
+        /* if the name starts with libssh, convert it to it's original libssh accepted form */
+        asprintf(&alg, "%s@libssh.org", algorithm + 7);
+        if (!alg) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+    } else {
+        alg = strdup(algorithm);
+        if (!alg) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+    }
+
+    alg_len = strlen(alg);
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
         if (!*alg_store) {
@@ -1660,6 +1687,7 @@ nc_server_config_transport_params(const char *alg, char **alg_store, NC_OPERATIO
     }
 
 cleanup:
+    free(alg);
     return ret;
 }
 
