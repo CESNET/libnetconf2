@@ -478,7 +478,7 @@ nc_server_config_fill_keystore(const struct lyd_node *data, NC_OPERATION op)
         goto cleanup;
     }
 
-    if (nc_session_server_parse_tree(tree, op, NC_MODULE_KEYSTORE)) {
+    if (nc_server_config_parse_tree(tree, op, NC_MODULE_KEYSTORE)) {
         ret = 1;
         goto cleanup;
     }

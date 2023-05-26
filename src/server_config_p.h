@@ -106,7 +106,7 @@ int nc_server_config_realloc(const char *key_value, void **ptr, size_t size, uin
  * @param[in] module Module for which to parse the data - either ietf-netconf-server, ietf-keystore or ietf-truststore
  * @return 0 on success, 1 on error.
  */
-int nc_session_server_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op, NC_MODULE module);
+int nc_server_config_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op, NC_MODULE module);
 
 /**
  * @brief Configures the listen subtree in the ietf-netconf-server module.
