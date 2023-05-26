@@ -208,6 +208,8 @@ struct nc_server_ssh_opts {
     struct nc_client_auth *auth_clients;    /**< Server's authorized clients. */
     uint16_t client_count;                  /**< Number of server's authorized clients. */
 
+    struct nc_endpt *endpt_client_ref;      /**< Reference to another endpoint (used for client authentication). */
+
     char *hostkey_algs;                     /**< Hostkey algorithms supported by the server. */
     char *encryption_algs;                  /**< Encryption algorithms supported by the server. */
     char *kex_algs;                         /**< Key exchange algorithms supported by the server. */
@@ -419,7 +421,7 @@ struct nc_server_opts {
     struct nc_bind *binds;
     struct nc_endpt {
         char *name;
-        int changed;
+        char *referenced_endpt_name;
         NC_TRANSPORT_IMPL ti;
         struct nc_keepalives ka;
 

@@ -11,53 +11,7 @@ module libnetconf2-netconf-server {
     prefix ct;
   }
 
-  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
-    leaf auth-attempts {
-      type uint16;
-      default 3;
-    }
-
-    leaf auth-timeout {
-      type uint16;
-      default 10;
-      units "seconds";
-    }
-  }
-
-  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication/ncs:users/ncs:user" {
-    container keyboard-interactive {
-      presence "";
-      leaf pam-config-file-name {
-        type string;
-        mandatory true;
-      }
-      leaf pam-config-file-dir {
-        type string;
-      }
-    }
-  }
-
-  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport" {
-    case unix-socket {
-      container unix-socket {
-        leaf path {
-          type string;
-          mandatory true;
-        }
-        leaf mode {
-          type uint16;
-        }
-        leaf uid {
-          type uint16;
-        }
-        leaf gid {
-          type uint16;
-        }
-      }
-    }
-  }
-
-/*
+  /*
   identity ed25519-private-key-format {
     base ct:private-key-format;
     description
@@ -125,5 +79,83 @@ module libnetconf2-netconf-server {
 
        RFC 4253:
         The Secure Shell (SSH) Transport Layer Protocol";
+  }
+
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
+    leaf auth-attempts {
+      type uint16;
+      default 3;
+    }
+
+    leaf auth-timeout {
+      type uint16;
+      default 10;
+      units "seconds";
+    }
+  }
+
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication/ncs:users/ncs:user" {
+    container keyboard-interactive {
+      presence "";
+      leaf pam-config-file-name {
+        type string;
+        mandatory true;
+      }
+      leaf pam-config-file-dir {
+        type string;
+      }
+    }
+  }
+
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport" {
+    case unix-socket {
+      container unix-socket {
+        leaf path {
+          type string;
+          mandatory true;
+        }
+        leaf mode {
+          type uint16;
+        }
+        leaf uid {
+          type uint16;
+        }
+        leaf gid {
+          type uint16;
+        }
+      }
+    }
+  }
+
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
+    description
+      "Reference to another SSH endpoint's client-authentication container.
+       All the users set in the referencing endpoint will be tried first and if and only if
+       there is no match, the referenced endpoint's users will be tried. The references can be
+       multiple, however there must not be a cycle.";
+
+    leaf endpoint-client-auth {
+      type leafref {
+        path "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:name";
+      }
+
+      must "deref(.)/../*[local-name() = 'ssh']";
+    }
+  }
+
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:tls/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
+    description
+      "Reference to another TLS endpoint's client-authentication container.
+       All the users set in the referencing endpoint will be tried first and if and only if
+       there is no match, the referenced endpoint's users will be tried. The references can be
+       multiple, however there must not be a cycle.";
+
+    leaf endpoint-client-auth {
+      type leafref {
+        path "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:name";
+      }
+
+      must "deref(.)/../*[local-name() = 'tls']";
+    }
   }
 }

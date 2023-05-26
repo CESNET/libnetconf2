@@ -618,7 +618,7 @@ nc_server_config_fill_truststore(const struct lyd_node *data, NC_OPERATION op)
         goto cleanup;
     }
 
-    if (nc_session_server_parse_tree(tree, op, NC_MODULE_TRUSTSTORE)) {
+    if (nc_server_config_parse_tree(tree, op, NC_MODULE_TRUSTSTORE)) {
         ret = 1;
         goto cleanup;
     }

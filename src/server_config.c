@@ -275,6 +275,13 @@ nc_server_config_del_endpt_name(struct nc_endpt *endpt)
 }
 
 static void
+nc_server_config_del_endpt_reference(struct nc_endpt *endpt)
+{
+    free(endpt->referenced_endpt_name);
+    endpt->referenced_endpt_name = NULL;
+}
+
+static void
 nc_server_config_del_local_address(struct nc_bind *bind)
 {
     free(bind->address);
@@ -447,6 +454,7 @@ void
 nc_server_config_del_endpt_ssh(struct nc_endpt *endpt, struct nc_bind *bind)
 {
     nc_server_config_del_endpt_name(endpt);
+    nc_server_config_del_endpt_reference(endpt);
     nc_server_config_del_ssh(bind, endpt->opts.ssh);
 
     server_opts.endpt_count--;
@@ -491,14 +499,15 @@ nc_server_config_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *b
 int
 nc_server_config_listen(struct lyd_node *node, NC_OPERATION op)
 {
-    uint16_t i;
+    uint16_t i, endpt_count;
 
     (void) node;
 
     assert(op == NC_OP_CREATE || op == NC_OP_DELETE);
 
     if (op == NC_OP_DELETE) {
-        for (i = 0; i < server_opts.endpt_count; i++) {
+        endpt_count = server_opts.endpt_count;
+        for (i = 0; i < endpt_count; i++) {
             switch (server_opts.endpts[i].ti) {
 #ifdef NC_ENABLED_SSH
             case NC_TI_LIBSSH:
@@ -1912,6 +1921,129 @@ cleanup:
     return ret;
 }
 
+/**
+ * @brief Set all endpoint client auth references, which couldn't be set beforehand.
+ *
+ * The references that could not be set are those, which reference endpoints, which
+ * lie below the given endpoint in the YANG data (because of DFS tree parsing).
+ *
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_server_config_fill_endpt_client_auth(void)
+{
+    uint16_t i, j;
+
+    for (i = 0; i < server_opts.endpt_count; i++) {
+        /* go through all the endpoint */
+        if (server_opts.endpts[i].referenced_endpt_name) {
+            /* endpt has a reference, that hasn't been set yet */
+            for (j = i + 1; j < server_opts.endpt_count; j++) {
+                /* go through all the remaining endpts */
+                if (!strcmp(server_opts.endpts[i].referenced_endpt_name, server_opts.endpts[j].name)) {
+                    /* found the endpoint we were looking for */
+                    if (server_opts.endpts[i].ti == NC_TI_LIBSSH) {
+                        server_opts.endpts[i].opts.ssh->endpt_client_ref = &server_opts.endpts[j];
+                        break;
+                    } else {
+                        ERRINT;
+                        return 1;
+                    }
+                }
+            }
+
+            /* didn't find the endpoint */
+            if (j == server_opts.endpt_count) {
+                ERR(NULL, "Endpoint \"%s\" referenced by \"%s\" not found.",
+                        server_opts.endpts[i].referenced_endpt_name, server_opts.endpts[i].name);
+                return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int
+nc_server_config_endpoint_client_auth_has_cycle(struct nc_endpt *original, struct nc_endpt *next, NC_TRANSPORT_IMPL transport)
+{
+    if (transport == NC_TI_LIBSSH) {
+        if (next->opts.ssh->endpt_client_ref) {
+            if (next->opts.ssh->endpt_client_ref == original) {
+                return 1;
+            } else {
+                return nc_server_config_endpoint_client_auth_has_cycle(original, next->opts.ssh->endpt_client_ref, NC_TI_LIBSSH);
+            }
+        } else {
+            return 0;
+        }
+    } else {
+        ERRINT;
+        return 1;
+    }
+}
+
+static int
+nc_server_config_endpoint_client_auth(const struct lyd_node *node, NC_OPERATION op)
+{
+    int ret = 0;
+    uint16_t i;
+    const char *endpt_name;
+    struct nc_endpt *endpt;
+
+    assert(!strcmp(LYD_NAME(node), "endpoint-client-auth"));
+
+    /* get current endpoint */
+    ret = nc_server_config_get_endpt(node, &endpt, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
+    if (op == NC_OP_DELETE) {
+        endpt->opts.ssh->endpt_client_ref = NULL;
+        goto cleanup;
+    }
+
+    /* find the endpoint leafref is referring to */
+    endpt_name = lyd_get_value(node);
+    for (i = 0; i < server_opts.endpt_count; i++) {
+        if (!strcmp(endpt_name, server_opts.endpts[i].name)) {
+            break;
+        }
+    }
+
+    if (i == server_opts.endpt_count) {
+        /* endpt not found, save the name and try to look it up later */
+        endpt->referenced_endpt_name = strdup(endpt_name);
+        if (!endpt->referenced_endpt_name) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+        goto cleanup;
+    }
+
+    /* check for self reference */
+    if (endpt == &server_opts.endpts[i]) {
+        ERR(NULL, "Self client authentication reference detected.");
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* check for cyclic references */
+    ret = nc_server_config_endpoint_client_auth_has_cycle(endpt, &server_opts.endpts[i], endpt->ti);
+    if (ret) {
+        ERR(NULL, "Cyclic client authentication reference detected.");
+        goto cleanup;
+    }
+
+    /* assign the current endpt the referrenced endpt */
+    endpt->opts.ssh->endpt_client_ref = &server_opts.endpts[i];
+
+cleanup:
+    return ret;
+}
+
 static int
 nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION op)
 {
@@ -2033,6 +2165,10 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
         if (nc_server_config_unix_socket(node, op)) {
             goto error;
         }
+    } else if (!strcmp(name, "endpoint-client-auth")) {
+        if (nc_server_config_endpoint_client_auth(node, op)) {
+            goto error;
+        }
     } else if (!strcmp(name, "cert-data")) {} else if (!strcmp(name, "expiration-date")) {} else if (!strcmp(name, "asymmetric-key")) {} else if (!strcmp(name, "certificate")) {} else if (!strcmp(name, "key-format")) {} else if (!strcmp(name,
             "cleartext-key")) {} else if (!strcmp(name, "hidden-key")) {} else if (!strcmp(name, "id_hint")) {} else if (!strcmp(name, "external-identity")) {} else if (!strcmp(name, "hash")) {} else if (!strcmp(name, "context")) {} else if (!strcmp(name,
             "target-protocol")) {} else if (!strcmp(name, "target-kdf")) {} else if (!strcmp(name, "client-authentication")) {} else if (!strcmp(name, "ca-certs")) {} else if (!strcmp(name, "ee-certs")) {} else if (!strcmp(name,
@@ -2048,7 +2184,7 @@ error:
 }
 
 int
-nc_session_server_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op, NC_MODULE module)
+nc_server_config_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op, NC_MODULE module)
 {
     struct lyd_node *child;
     struct lyd_meta *m;
@@ -2103,7 +2239,7 @@ nc_session_server_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op
 
     if (current_op != NC_OP_DELETE) {
         LY_LIST_FOR(lyd_child(node), child) {
-            if (nc_session_server_parse_tree(child, current_op, module)) {
+            if (nc_server_config_parse_tree(child, current_op, module)) {
                 return 1;
             }
         }
@@ -2230,7 +2366,12 @@ nc_server_config_fill_nectonf_server(const struct lyd_node *data, NC_OPERATION o
         goto cleanup;
     }
 
-    if (nc_session_server_parse_tree(tree, op, NC_MODULE_NETCONF_SERVER)) {
+    if (nc_server_config_parse_tree(tree, op, NC_MODULE_NETCONF_SERVER)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    if (nc_server_config_fill_endpt_client_auth()) {
         ret = 1;
         goto cleanup;
     }
