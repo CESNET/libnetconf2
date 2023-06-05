@@ -92,6 +92,7 @@ option(ENABLE_EXAMPLES "Build examples" ON)
 option(ENABLE_COVERAGE "Build code coverage report from tests" OFF)
 option(ENABLE_SSH "Enable NETCONF over SSH support (via libssh)" ON)
 option(ENABLE_TLS "Enable NETCONF over TLS support (via OpenSSL)" ON)
+# option(ENABLE_SSH_TLS "Enable NETCONF over SSH and TLS support (via libssh and OpenSSL)" ON)
 option(ENABLE_DNSSEC "Enable support for SSHFP retrieval using DNSSEC for SSH (requires OpenSSL and libval)" OFF)
 set(READ_INACTIVE_TIMEOUT 20 CACHE STRING "Maximum number of seconds waiting for new data once some data have arrived")
 set(READ_ACTIVE_TIMEOUT 300 CACHE STRING "Maximum number of seconds for receiving a full message")
@@ -115,19 +116,21 @@ set(libsrc
     src/server_config.c
     src/server_config_ks.c
     src/server_config_ts.c
-    src/config_new_ssh.c)
+    src/config_new.c)
 
 if(ENABLE_SSH)
     list(APPEND libsrc
         src/session_client_ssh.c
-        src/session_server_ssh.c)
+        src/session_server_ssh.c
+        src/config_new_ssh.c)
     set(SSH_MACRO "#ifndef NC_ENABLED_SSH\n#define NC_ENABLED_SSH\n#endif")
 endif()
 
 if(ENABLE_TLS)
     list(APPEND libsrc
         src/session_client_tls.c
-        src/session_server_tls.c)
+        src/session_server_tls.c
+        src/config_new_tls.c)
     set(TLS_MACRO "#ifndef NC_ENABLED_TLS\n#define NC_ENABLED_TLS\n#endif")
 endif()
 
@@ -145,7 +148,7 @@ set(headers
 
 # files to generate doxygen from
 set(doxy_files
-    src/libnetconf.h
+    doc/libnetconf.doc
     src/log.h
     src/netconf.h
     src/session.h
@@ -233,13 +236,10 @@ check_function_exists(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETK
 
 # dependencies - openssl
 if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
-    find_package(OpenSSL REQUIRED)
+    find_package(OpenSSL 3.0.0 REQUIRED)
     if(ENABLE_TLS)
         message(STATUS "OpenSSL found, required for TLS")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_TLS")
-    endif()
-    if(OPENSSL_VERSION VERSION_LESS 1.1.1)
-        message(WARNING "OpenSSL version ${OPENSSL_VERSION} is no longer maintained, consider an update.")
     endif()
 
     target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
@@ -248,10 +248,7 @@ endif()
 
 # dependencies - libssh
 if(ENABLE_SSH)
-    find_package(LibSSH 0.7.1 REQUIRED)
-    if(LIBSSH_VERSION VERSION_EQUAL 0.9.3 OR LIBSSH_VERSION VERSION_EQUAL 0.9.4)
-        message(FATAL_ERROR "LibSSH ${LIBSSH_VERSION} includes regression bugs and libnetconf2 will NOT work properly, try to use another version")
-    endif()
+    find_package(LibSSH 0.9.5 REQUIRED)
 
     target_link_libraries(netconf2 ${LIBSSH_LIBRARIES})
     list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBSSH_LIBRARIES})

@@ -42,9 +42,12 @@
 #include <libyang/libyang.h>
 
 #include "compat.h"
-#include "libnetconf.h"
-#include "messages_client.h"
+#include "config.h"
+#include "log_p.h"
+#include "messages_p.h"
 #include "session_client.h"
+#include "session_client_ch.h"
+#include "session_p.h"
 
 #include "../modules/ietf_netconf@2013-09-29_yang.h"
 #include "../modules/ietf_netconf_monitoring@2010-10-04_yang.h"

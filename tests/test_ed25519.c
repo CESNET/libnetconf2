@@ -152,13 +152,13 @@ setup_f(void **state)
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_hostkey(TESTS_DIR "/data/server.key", NULL, ctx, "endpt", "hostkey", &tree);
+    ret = nc_server_config_new_ssh_hostkey(ctx, "endpt", "hostkey", TESTS_DIR "/data/server.key", NULL, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_address_port("127.0.0.1", "10009", ctx, "endpt", &tree);
+    ret = nc_server_config_new_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", "10009", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_client_auth_pubkey(TESTS_DIR "/data/id_ed25519.pub", ctx, "endpt", "test_ed25519", "pubkey", &tree);
+    ret = nc_server_config_new_ssh_client_auth_pubkey(ctx, "endpt", "test_ed25519", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */

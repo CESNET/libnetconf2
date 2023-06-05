@@ -17,13 +17,17 @@
 
 #include <assert.h>
 #include <ctype.h>
-#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <libyang/libyang.h>
 
-#include "libnetconf.h"
+#include "compat.h"
+#include "config.h"
+#include "log_p.h"
+#include "messages_client.h"
+#include "messages_p.h"
+#include "netconf.h"
 
 const char *rpcedit_dfltop2str[] = {NULL, "merge", "replace", "none"};
 const char *rpcedit_testopt2str[] = {NULL, "test-then-set", "set", "test-only"};

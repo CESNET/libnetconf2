@@ -20,8 +20,6 @@
 extern "C" {
 #endif
 
-#include <time.h>
-
 /**
  * @addtogroup misc
  * @{

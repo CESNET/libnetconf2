@@ -22,10 +22,8 @@ extern "C" {
 
 #include <libyang/libyang.h>
 #include <stdint.h>
+#include <stdlib.h>
 
-#include "compat.h"
-#include "libnetconf.h"
-#include "netconf.h"
 #include "session_p.h"
 
 /**
@@ -47,6 +45,7 @@ typedef enum {
  */
 int nc_server_config_get_endpt(const struct lyd_node *node, struct nc_endpt **endpt, struct nc_bind **bind);
 
+#ifdef NC_ENABLED_SSH
 /**
  * @brief Get the pointer to a hostkey structure based on node's location in the YANG data.
  *
@@ -77,6 +76,8 @@ int nc_server_config_get_auth_client(const struct lyd_node *node, const struct n
  */
 int nc_server_config_get_pubkey(const struct lyd_node *node, const struct nc_client_auth *auth_client, struct nc_public_key **pubkey);
 
+#endif /* NC_ENABLED_SSH */
+
 /**
  * @brief Compares the nth-parent name.
  *
@@ -86,6 +87,14 @@ int nc_server_config_get_pubkey(const struct lyd_node *node, const struct nc_cli
  * @return 1 if the name matches, 0 otherwise.
  */
 int equal_parent_name(const struct lyd_node *node, uint16_t parent_count, const char *parent_name);
+
+/**
+ * @brief Get private key type from YANG identity stored in a string.
+ *
+ * @param[in] format Value of the YANG identityref.
+ * @return Private key format on success, NC_PRIVKEY_FORMAT_UNKNOWN otherwise.
+ */
+NC_PRIVKEY_FORMAT nc_server_config_get_private_key_type(const char *format);
 
 /**
  * @brief Generic realloc function for arrays of structures representing YANG lists whose first member is the key (char *)

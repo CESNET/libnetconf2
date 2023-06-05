@@ -83,8 +83,12 @@ server_thread(void *arg)
 static void *
 client_thread(void *arg)
 {
+    int ret = 0;
     struct nc_session *session = NULL;
     struct test_state *state = arg;
+
+    ret = nc_client_set_schema_searchpath(MODULES_DIR);
+    assert_int_equal(ret, 0);
 
     pthread_barrier_wait(&state->barrier);
     session = nc_connect_unix("/tmp/nc2_test_unix_sock", NULL);

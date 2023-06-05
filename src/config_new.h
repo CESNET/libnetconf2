@@ -1,7 +1,7 @@
 /**
- * @file config_new_ssh.h
+ * @file config_new.h
  * @author Roman Janota <janota@cesnet.cz>
- * @brief libnetconf2 server new configuration creation
+ * @brief libnetconf2 server new configuration creation header
  *
  * @copyright
  * Copyright (c) 2023 CESNET, z.s.p.o.
@@ -13,8 +13,8 @@
  *     https://opensource.org/licenses/BSD-3-Clause
  */
 
-#ifndef NC_CONFIG_NEW_SSH_H_
-#define NC_CONFIG_NEW_SSH_H_
+#ifndef NC_CONFIG_NEW_H_
+#define NC_CONFIG_NEW_H_
 
 #include <libyang/libyang.h>
 
@@ -57,6 +57,12 @@ extern "C" {
 /* public key's SubjectPublicKeyInfo format footer */
 #define NC_SUBJECT_PUBKEY_INFO_FOOTER "\n-----END PUBLIC KEY-----\n"
 
+/* certificate's PEM format header */
+#define NC_PEM_CERTIFICATE_HEADER "-----BEGIN CERTIFICATE-----\n"
+
+/* certificate's PEM format footer */
+#define NC_PEM_CERTIFICATE_FOOTER "\n-----END CERTIFICATE-----\n"
+
 typedef enum {
     NC_ALG_HOSTKEY,
     NC_ALG_KEY_EXCHANGE,
@@ -64,8 +70,19 @@ typedef enum {
     NC_ALG_MAC
 } NC_ALG_TYPE;
 
+int nc_server_config_new_get_keys(const char *privkey_path, const char *pubkey_path,
+        char **privkey, char **pubkey, NC_PRIVKEY_FORMAT *privkey_type, NC_PUBKEY_FORMAT *pubkey_type);
+
+int nc_server_config_new_get_pubkey(const char *pubkey_path, char **pubkey, NC_PUBKEY_FORMAT *pubkey_type);
+
+int nc_server_config_new_read_certificate(const char *cert_path, char **cert);
+
+int nc_config_new_check_add_operation(const struct ly_ctx *ctx, struct lyd_node *top);
+
+const char * nc_config_new_privkey_format_to_identityref(NC_PRIVKEY_FORMAT format);
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* NC_CONFIG_NEW_SSH_H_ */
+#endif /* NC_CONFIG_NEW_H_ */

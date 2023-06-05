@@ -18,8 +18,6 @@
 #include <ctype.h>
 #include <errno.h>
 #include <libyang/libyang.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,9 +28,10 @@
 #include <unistd.h>
 
 #include "compat.h"
-#include "libnetconf.h"
-#include "session.h"
-#include "session_server.h"
+#include "config.h"
+#include "log_p.h"
+#include "netconf.h"
+#include "session_p.h"
 
 #ifdef NC_ENABLED_SSH
 
@@ -107,37 +106,21 @@ nc_realtime_get(struct timespec *ts)
     }
 }
 
-/**
- * @brief Convert key type to string.
- *
- * @param[in] type Type of the key.
- * @return String literal representing the key type or NULL.
- */
 const char *
-nc_keytype2str(NC_SSH_KEY_TYPE type)
+nc_privkey_format_to_str(NC_PRIVKEY_FORMAT format)
 {
-    switch (type) {
-    case NC_SSH_KEY_UNKNOWN:
-        return "unknown";
-    case NC_SSH_KEY_DSA:
-        return "DSA";
-    case NC_SSH_KEY_RSA:
+    switch (format) {
+    case NC_PRIVKEY_FORMAT_RSA:
         return "RSA";
-    case NC_SSH_KEY_ECDSA:
+    case NC_PRIVKEY_FORMAT_EC:
         return "EC";
-    case NC_SSH_KEY_ECDSA_P256:
-        return "ECDSA_P256";
-    case NC_SSH_KEY_ECDSA_P384:
-        return "ECDSA_P384";
-    case NC_SSH_KEY_ECDSA_P521:
-        return "ECDSA_P521";
-    case NC_SSH_KEY_ED25519:
+    case NC_PRIVKEY_FORMAT_X509:
         return NULL;
+    case NC_PRIVKEY_FORMAT_OPENSSH:
+        return "OPENSSH";
     default:
-        break;
+        return NULL;
     }
-
-    return NULL;
 }
 
 int

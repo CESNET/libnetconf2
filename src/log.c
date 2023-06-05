@@ -17,6 +17,7 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <libyang/libyang.h>
 
@@ -25,8 +26,9 @@
 #endif
 
 #include "compat.h"
-#include "libnetconf.h"
+#include "config.h"
 #include "log.h"
+#include "session_p.h"
 
 /**
  * @brief libnetconf verbose level variable

@@ -16,7 +16,7 @@
 #ifndef NC_LOG_PRIVATE_H_
 #define NC_LOG_PRIVATE_H_
 
-#include <stdint.h>
+#include <stdarg.h>
 
 #include "compat.h"
 #include "log.h"
@@ -51,7 +51,6 @@ extern ATOMIC_T verbose_level;
 #define ERRMEM ERR(NULL, "%s: memory reallocation failed (%s:%d).", __func__, __FILE__, __LINE__)
 #define ERRINIT ERR(NULL, "%s: libnetconf2 not initialized.", __func__)
 #define ERRINT ERR(NULL, "%s: internal error (%s:%d).", __func__, __FILE__, __LINE__)
-#define ERRNODE(name) ERR(NULL, "%s: missing node (%s) in the YANG data.", __func__, name)
 #define ERRARG(session, ARG) ERR(session, "Invalid argument %s (%s()).", #ARG, __func__)
 
 #define GETMACRO1(_1, NAME, ...) NAME
