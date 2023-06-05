@@ -45,9 +45,11 @@
 #include <libyang/libyang.h>
 
 #include "compat.h"
-#include "libnetconf.h"
+#include "config.h"
+#include "log_p.h"
 #include "session_client.h"
 #include "session_client_ch.h"
+#include "session_p.h"
 
 struct nc_client_context *nc_client_context_location(void);
 
@@ -1690,7 +1692,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     char *known_hosts_path = NULL;
 
     /* process parameters */
-    if (!host || strisempty(host)) {
+    if (!host || (host[0] == '\0')) {
         host = "localhost";
     }
 

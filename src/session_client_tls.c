@@ -28,9 +28,11 @@
 #include <openssl/ossl_typ.h>
 #include <openssl/x509.h>
 
-#include "libnetconf.h"
+#include "config.h"
+#include "log_p.h"
 #include "session_client.h"
 #include "session_client_ch.h"
+#include "session_p.h"
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 #define X509_STORE_CTX_get_by_subject X509_STORE_get_by_subject
@@ -666,7 +668,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     }
 
     /* process parameters */
-    if (!host || strisempty(host)) {
+    if (!host || (host[0] == '\0')) {
         host = "localhost";
     }
 

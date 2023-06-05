@@ -16,10 +16,13 @@
 #ifndef NC_MESSAGES_P_H_
 #define NC_MESSAGES_P_H_
 
+#include <stdint.h>
+
 #include <libyang/libyang.h>
 
 #include "messages_client.h"
 #include "messages_server.h"
+#include "netconf.h"
 
 extern const char *rpcedit_dfltop2str[];
 extern const char *rpcedit_testopt2str[];

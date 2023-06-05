@@ -238,19 +238,19 @@ init(struct ly_ctx **context, struct nc_pollsession **ps, const char *path, NC_T
 
     /* this is where the YANG configuration data gets generated,
      * start by creating hostkey configuration data */
-    rc = nc_server_config_new_ssh_hostkey(hostkey_path, NULL, *context, "endpt", "hostkey", &config);
+    rc = nc_server_config_new_ssh_hostkey(*context, "endpt", "hostkey", hostkey_path, NULL, &config);
     if (rc) {
         ERR_MSG_CLEANUP("Error creating new hostkey configuration data.\n");
     }
 
     /* create address and port configuration data */
-    rc = nc_server_config_new_ssh_address_port(SSH_ADDRESS, SSH_PORT, *context, "endpt", &config);
+    rc = nc_server_config_new_address_port(*context, "endpt", NC_TI_LIBSSH, SSH_ADDRESS, SSH_PORT, &config);
     if (rc) {
         ERR_MSG_CLEANUP("Error creating new address and port configuration data.\n");
     }
 
     /* create client authentication configuration data */
-    rc = nc_server_config_new_ssh_client_auth_password(SSH_PASSWORD, *context, "endpt", SSH_USERNAME, &config);
+    rc = nc_server_config_new_ssh_client_auth_password(*context, "endpt", SSH_USERNAME, SSH_PASSWORD, &config);
     if (rc) {
         ERR_MSG_CLEANUP("Error creating client authentication configuration data.\n");
     }

@@ -16,12 +16,16 @@
 #define _GNU_SOURCE
 
 #include <assert.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include <libyang/libyang.h>
+
 #include "compat.h"
-#include "libnetconf.h"
+#include "log_p.h"
 #include "server_config_p.h"
+#include "session_p.h"
 
 extern struct nc_server_opts server_opts;
 
@@ -206,15 +210,15 @@ nc_server_config_get_public_key(const struct lyd_node *node, const struct nc_pub
 static void
 nc_server_config_ts_del_cert_data(struct nc_certificate *cert)
 {
-    free(cert->cert_base64);
-    cert->cert_base64 = NULL;
+    free(cert->data);
+    cert->data = NULL;
 }
 
 static void
 nc_server_config_ts_del_public_key_base64(struct nc_public_key *pkey)
 {
-    free(pkey->pub_base64);
-    pkey->pub_base64 = NULL;
+    free(pkey->data);
+    pkey->data = NULL;
 }
 
 static void
@@ -422,8 +426,8 @@ nc_server_config_ts_cert_data(const struct lyd_node *node, NC_OPERATION op)
         }
 
         nc_server_config_ts_del_cert_data(cert);
-        cert->cert_base64 = strdup(lyd_get_value(node));
-        if (!cert->cert_base64) {
+        cert->data = strdup(lyd_get_value(node));
+        if (!cert->data) {
             ERRMEM;
             return 1;
         }
@@ -510,8 +514,8 @@ nc_server_config_ts_public_key(const struct lyd_node *node, NC_OPERATION op)
 
         /* replace the public key */
         nc_server_config_ts_del_public_key_base64(pkey);
-        pkey->pub_base64 = strdup(lyd_get_value(node));
-        if (!pkey->pub_base64) {
+        pkey->data = strdup(lyd_get_value(node));
+        if (!pkey->data) {
             ERRMEM;
             ret = 1;
             goto cleanup;
@@ -541,9 +545,9 @@ nc_server_config_ts_public_key_format(const struct lyd_node *node, NC_OPERATION 
 
     format = ((struct lyd_node_term *)node)->value.ident->name;
     if (!strcmp(format, "ssh-public-key-format")) {
-        pkey->pubkey_type = NC_SSH_PUBKEY_SSH2;
+        pkey->type = NC_PUBKEY_FORMAT_SSH2;
     } else if (!strcmp(format, "subject-public-key-info-format")) {
-        pkey->pubkey_type = NC_SSH_PUBKEY_X509;
+        pkey->type = NC_PUBKEY_FORMAT_X509;
     } else {
         ERR(NULL, "Public key format (%s) not supported.", format);
     }

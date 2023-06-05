@@ -24,8 +24,11 @@
 #include <libyang/libyang.h>
 
 #include "compat.h"
-#include "libnetconf.h"
-#include "session_server.h"
+#include "config.h"
+#include "log_p.h"
+#include "messages_p.h"
+#include "messages_server.h"
+#include "netconf.h"
 
 extern struct nc_server_opts server_opts;
 

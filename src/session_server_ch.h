@@ -22,6 +22,7 @@ extern "C" {
 
 #include <libyang/libyang.h>
 #include <stdint.h>
+#include <time.h>
 
 #include "netconf.h"
 #include "session.h"

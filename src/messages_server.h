@@ -20,8 +20,10 @@
 extern "C" {
 #endif
 
-#include <libyang/libyang.h>
+#include <stdarg.h>
 #include <stdint.h>
+
+#include <libyang/libyang.h>
 
 #include "netconf.h"
 #include "session.h"

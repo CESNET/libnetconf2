@@ -9,7 +9,7 @@ endif()
 
 # list of all the tests in each directory
 #set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_client_thread test_thread_messages)
-set(tests test_two_channels test_keystore test_unix_socket test_config_new test_truststore test_ec test_ed25519 test_replace test_endpt_share_clients)
+set(tests test_unix_socket)
 
 # only enable PAM tests if the version of PAM is greater than 1.4
 if(LIBPAM_HAVE_CONFDIR)
@@ -37,15 +37,12 @@ foreach(mock_func IN LISTS ${test}_mock_funcs)
 endforeach()
 
 #append tests depending on SSH/TLS
-if(ENABLE_SSH OR ENABLE_TLS)
-    #list(APPEND tests test_server_thread)
-    if(ENABLE_SSH)
-        list(APPEND client_tests test_client_ssh)
-    endif()
+if(ENABLE_SSH)
+    list(APPEND tests test_two_channels test_keystore test_config_new test_truststore test_ec test_ed25519 test_replace test_endpt_share_clients)
+endif()
 
-    if(ENABLE_TLS)
-        list(APPEND client_tests test_client_tls)
-    endif()
+if(ENABLE_TLS)
+    list(APPEND tests test_tls)
 endif()
 
 foreach(src IN LISTS libsrc)

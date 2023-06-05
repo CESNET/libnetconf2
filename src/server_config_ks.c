@@ -16,12 +16,16 @@
 #define _GNU_SOURCE
 
 #include <assert.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include <libyang/libyang.h>
+
 #include "compat.h"
-#include "libnetconf.h"
+#include "log_p.h"
 #include "server_config_p.h"
+#include "session_p.h"
 
 extern struct nc_server_opts server_opts;
 
@@ -117,8 +121,8 @@ nc_server_config_ks_del_asymmetric_key_cert(struct nc_asymmetric_key *key, struc
     free(cert->name);
     cert->name = NULL;
 
-    free(cert->cert_base64);
-    cert->cert_base64 = NULL;
+    free(cert->data);
+    cert->data = NULL;
 
     key->cert_count--;
     if (key->cert_count == 0) {
@@ -130,22 +134,22 @@ nc_server_config_ks_del_asymmetric_key_cert(struct nc_asymmetric_key *key, struc
 static void
 nc_server_config_ks_del_public_key(struct nc_asymmetric_key *key)
 {
-    free(key->pub_base64);
-    key->pub_base64 = NULL;
+    free(key->pubkey_data);
+    key->pubkey_data = NULL;
 }
 
 static void
 nc_server_config_ks_del_private_key(struct nc_asymmetric_key *key)
 {
-    free(key->priv_base64);
-    key->priv_base64 = NULL;
+    free(key->privkey_data);
+    key->privkey_data = NULL;
 }
 
 static void
 nc_server_config_ks_del_cert_data(struct nc_certificate *cert)
 {
-    free(cert->cert_base64);
-    cert->cert_base64 = NULL;
+    free(cert->data);
+    cert->data = NULL;
 }
 
 static void
@@ -252,9 +256,9 @@ nc_server_config_ks_public_key_format(const struct lyd_node *node, NC_OPERATION 
 
     format = ((struct lyd_node_term *)node)->value.ident->name;
     if (!strcmp(format, "ssh-public-key-format")) {
-        key->pubkey_type = NC_SSH_PUBKEY_SSH2;
+        key->pubkey_type = NC_PUBKEY_FORMAT_SSH2;
     } else if (!strcmp(format, "subject-public-key-info-format")) {
-        key->pubkey_type = NC_SSH_PUBKEY_X509;
+        key->pubkey_type = NC_PUBKEY_FORMAT_X509;
     } else {
         ERR(NULL, "Public key format (%s) not supported.", format);
     }
@@ -277,8 +281,8 @@ nc_server_config_ks_public_key(const struct lyd_node *node, NC_OPERATION op)
 
     /* replace the pubkey */
     nc_server_config_ks_del_public_key(key);
-    key->pub_base64 = strdup(lyd_get_value(node));
-    if (!key->pub_base64) {
+    key->pubkey_data = strdup(lyd_get_value(node));
+    if (!key->pubkey_data) {
         ERRMEM;
         return 1;
     }
@@ -291,6 +295,9 @@ nc_server_config_ks_private_key_format(const struct lyd_node *node, NC_OPERATION
 {
     struct nc_asymmetric_key *key;
     const char *format;
+    NC_PRIVKEY_FORMAT privkey_type;
+
+    (void) op;
 
     assert(!strcmp(LYD_NAME(node), "private-key-format"));
 
@@ -299,19 +306,15 @@ nc_server_config_ks_private_key_format(const struct lyd_node *node, NC_OPERATION
     }
 
     format = ((struct lyd_node_term *)node)->value.ident->name;
-    if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        if (!strcmp(format, "rsa-private-key-format")) {
-            key->privkey_type = NC_PRIVKEY_FORMAT_RSA;
-        } else if (!strcmp(format, "ec-private-key-format")) {
-            key->privkey_type = NC_PRIVKEY_FORMAT_EC;
-        } else if (!strcmp(format, "subject-private-key-info-format")) {
-            key->privkey_type = NC_PRIVKEY_FORMAT_PKCS8;
-        } else if (!strcmp(format, "openssh-private-key-format")) {
-            key->privkey_type = NC_PRIVKEY_FORMAT_OPENSSH;
-        } else {
-            ERR(NULL, "Private key format (%s) not supported.", format);
-        }
+    if (!format) {
+        return 1;
     }
+
+    privkey_type = nc_server_config_get_private_key_type(format);
+    if (privkey_type == NC_PRIVKEY_FORMAT_UNKNOWN) {
+        return 1;
+    }
+    key->privkey_type = privkey_type;
 
     return 0;
 }
@@ -330,8 +333,8 @@ nc_server_config_ks_cleartext_private_key(const struct lyd_node *node, NC_OPERAT
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
         /* replace the privkey */
         nc_server_config_ks_del_private_key(key);
-        key->priv_base64 = strdup(lyd_get_value(node));
-        if (!key->priv_base64) {
+        key->privkey_data = strdup(lyd_get_value(node));
+        if (!key->privkey_data) {
             ERRMEM;
             return 1;
         }
@@ -401,8 +404,8 @@ nc_server_config_ks_cert_data(const struct lyd_node *node, NC_OPERATION op)
 
         /* replace the cert data */
         nc_server_config_ks_del_cert_data(cert);
-        cert->cert_base64 = strdup(lyd_get_value(node));
-        if (!cert->cert_base64) {
+        cert->data = strdup(lyd_get_value(node));
+        if (!cert->data) {
             ERRMEM;
             return 1;
         }

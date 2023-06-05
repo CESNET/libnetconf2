@@ -22,6 +22,7 @@
 #include <pwd.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -30,12 +31,18 @@
 
 #ifdef NC_ENABLED_TLS
 #   include <openssl/err.h>
+#   include <openssl/ssl.h>
 #endif
 
 #include <libyang/libyang.h>
 
 #include "compat.h"
-#include "libnetconf.h"
+#include "config.h"
+#include "log_p.h"
+#include "messages_p.h"
+#include "netconf.h"
+#include "session.h"
+#include "session_p.h"
 
 const char *nc_msgtype2str[] = {
     "error",
