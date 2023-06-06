@@ -68,41 +68,17 @@ jobs:
             make-target: ""
           }
           - {
-            name: "SSH Only",
+            name: "No SSH nor TLS",
             os: "ubuntu-22.04",
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "gcc",
-            options: "-DENABLE_TLS=OFF -DENABLE_SSH=ON",
+            options: "-DENABLE_TESTS=ON -DENABLE_SSH_TLS=OFF",
             packages: "valgrind",
             snaps: "",
             make-prepend: "",
             make-target: ""
           }
-          # - {
-          #   name: "TLS Only",
-          #   os: "ubuntu-22.04",
-          #   build-type: "Debug",
-          #   dep-build-type: "Release",
-          #   cc: "gcc",
-          #   options: "-DENABLE_TLS=ON -DENABLE_SSH=OFF",
-          #   packages: "valgrind",
-          #   snaps: "",
-          #   make-prepend: "",
-          #   make-target: ""
-          # }
-          # - {
-          #   name: "No SSH nor TLS",
-          #   os: "ubuntu-22.04",
-          #   build-type: "Debug",
-          #   dep-build-type: "Release",
-          #   cc: "gcc",
-          #   options: "-DENABLE_TLS=OFF -DENABLE_SSH=OFF",
-          #   packages: "valgrind",
-          #   snaps: "",
-          #   make-prepend: "",
-          #   make-target: ""
-          # }
           - {
             name: "ASAN and UBSAN",
             os: "ubuntu-22.04",
