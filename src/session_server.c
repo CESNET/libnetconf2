@@ -1021,10 +1021,8 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
     int ret;
     struct timespec ts;
 
-    nc_timeouttime_get(&ts, NC_PS_LOCK_TIMEOUT);
-
     /* LOCK */
-    ret = pthread_mutex_clocklock(&ps->lock, COMPAT_CLOCK_ID, &ts);
+    ret = pthread_mutex_lock(&ps->lock);
     if (ret) {
         ERR(NULL, "%s: failed to lock a pollsession (%s).", func, strerror(ret));
         return -1;
@@ -1075,12 +1073,9 @@ int
 nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func)
 {
     int ret;
-    struct timespec ts;
-
-    nc_timeouttime_get(&ts, NC_PS_LOCK_TIMEOUT);
 
     /* LOCK */
-    ret = pthread_mutex_clocklock(&ps->lock, COMPAT_CLOCK_ID, &ts);
+    ret = pthread_mutex_lock(&ps->lock);
     if (ret) {
         ERR(NULL, "%s: failed to lock a pollsession (%s).", func, strerror(ret));
         ret = -1;
