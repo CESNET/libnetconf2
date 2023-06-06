@@ -379,7 +379,6 @@ nc_client_ssh_auth_hostkey_check(const char *hostname, uint16_t port, ssh_sessio
         goto error;
     }
 
-
     state = ssh_session_is_known_server(session);
     switch (state) {
     case SSH_KNOWN_HOSTS_OK:

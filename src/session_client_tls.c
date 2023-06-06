@@ -409,8 +409,7 @@ nc_client_tls_update_opts(struct nc_client_tls_opts *opts, const char *peername)
     if (!opts->tls_ctx || opts->tls_ctx_change) {
         SSL_CTX_free(opts->tls_ctx);
         /* prepare global SSL context, highest available method is negotiated autmatically  */
-        if (!(opts->tls_ctx = SSL_CTX_new(TLS_client_method())))
-        {
+        if (!(opts->tls_ctx = SSL_CTX_new(TLS_client_method()))) {
             ERR(NULL, "Unable to create OpenSSL context (%s).", ERR_reason_error_string(ERR_get_error()));
             rc = -1;
             goto cleanup;

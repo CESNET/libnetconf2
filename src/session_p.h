@@ -39,7 +39,6 @@ typedef enum {
     NC_OP_REPLACE
 } NC_OPERATION;
 
-
 /**
  * Enumeration of key or certificate store type.
  */
@@ -51,8 +50,8 @@ typedef enum {
 
 #ifdef NC_ENABLED_SSH_TLS
 
-#include <openssl/ssl.h>
 #include <libssh/libssh.h>
+#include <openssl/ssl.h>
 
 /* seconds */
 #define NC_SSH_TIMEOUT 10

@@ -160,7 +160,7 @@ nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const char
     }
 
     /* prepare path for instertion of leaves later */
-    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/server-identity/certificate/local-definition", endpt_name);
+    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/server-identity/certificate/inline-definition", endpt_name);
     if (!tree_path) {
         ERRMEM;
         ret = 1;
@@ -184,7 +184,7 @@ nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const char
         ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
     }
     if (ret) {
-        ERR(NULL, "Unable to find local-definition container.");
+        ERR(NULL, "Unable to find inline-definition container.");
         goto cleanup;
     }
 
@@ -285,7 +285,7 @@ nc_server_config_new_tls_client_certificate(const struct ly_ctx *ctx, const char
 
     /* prepare path for instertion of leaves later */
     asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
-            "client-authentication/ee-certs/local-definition/certificate[name='%s']", endpt_name, cert_name);
+            "client-authentication/ee-certs/inline-definition/certificate[name='%s']", endpt_name, cert_name);
     if (!tree_path) {
         ERRMEM;
         ret = 1;
@@ -354,7 +354,7 @@ nc_server_config_new_tls_client_ca(const struct ly_ctx *ctx, const char *endpt_n
 
     /* prepare path for instertion of leaves later */
     asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
-            "client-authentication/ca-certs/local-definition/certificate[name='%s']", endpt_name, cert_name);
+            "client-authentication/ca-certs/inline-definition/certificate[name='%s']", endpt_name, cert_name);
     if (!tree_path) {
         ERRMEM;
         ret = 1;
