@@ -323,7 +323,6 @@ equal_parent_name(const struct lyd_node *node, uint16_t parent_count, const char
     return 0;
 }
 
-
 int
 nc_server_config_realloc(const char *key_value, void **ptr, size_t size, uint16_t *count)
 {
@@ -3247,17 +3246,24 @@ nc_server_config_load_modules(struct ly_ctx **ctx)
     const char *ietf_nectonf_server[] = {"ssh-listen", "tls-listen", "ssh-call-home", "tls-call-home", "central-netconf-server-supported", NULL};
     /* all features */
     const char *ietf_x509_cert_to_name[] = {NULL};
-    /* no private-key-encryption and csr-generation */
+    /* no private-key-encryption, csr-generation, p10-csr-format, certificate-expiration-notification,
+     * encrypted-passwords, hidden-symmetric-keys, encrypted-symmetric-keys, hidden-private-keys, encrypted-private-keys
+     */
     const char *ietf_crypto_types[] = {
         "one-symmetric-key-format", "one-asymmetric-key-format", "symmetrically-encrypted-value-format",
         "asymmetrically-encrypted-value-format", "cms-enveloped-data-format", "cms-encrypted-data-format",
-        "p10-based-csrs", "certificate-expiration-notification", "hidden-keys", "password-encryption",
-        "symmetric-key-encryption", NULL
+        "cleartext-passwords", "cleartext-symmetric-keys", "cleartext-private-keys", NULL
     };
     /* all features */
     const char *ietf_tcp_common[] = {"keepalives-supported", NULL};
+    /* all features */
+    const char *ietf_tcp_server[] = {"tcp-server-keepalives", NULL};
+    /* all features */
+    const char *ietf_tcp_client[] = {"local-binding-supported", "tcp-client-keepalives", "proxy-connect", "socks5-gss-api", "socks5-username-password", NULL};
     /* no ssh-x509-certs */
     const char *ietf_ssh_common[] = {"transport-params", "public-key-generation", NULL};
+    /* no ssh-server-keepalives and local-user-auth-hostbased */
+    const char *ietf_ssh_server[] = {"local-users-supported", "local-user-auth-publickey", "local-user-auth-password", "local-user-auth-none", NULL};
     /* all features */
     const char *iana_ssh_encryption_algs[] = {NULL};
     /* all features */
@@ -3266,12 +3272,14 @@ nc_server_config_load_modules(struct ly_ctx **ctx)
     const char *iana_ssh_mac_algs[] = {NULL};
     /* all features */
     const char *iana_ssh_public_key_algs[] = {NULL};
-    /* no symmetric-keys */
-    const char *ietf_keystore[] = {"central-keystore-supported", "local-definitions-supported", "asymmetric-keys", NULL};
-    /* no ssh-server-keepalives and local-user-auth-hostbased */
-    const char *ietf_ssh_server[] = {"local-users-supported", "local-user-auth-publickey", "local-user-auth-password", "local-user-auth-none", NULL};
     /* all features */
-    const char *ietf_truststore[] = {"central-truststore-supported", "local-definitions-supported", "certificates", "public-keys", NULL};
+    const char *iana_crypt_hash[] = {"crypt-hash-md5", "crypt-hash-sha-256", "crypt-hash-sha-512", NULL};
+    /* no symmetric-keys */
+    const char *ietf_keystore[] = {"central-keystore-supported", "inline-definitions-supported", "asymmetric-keys", NULL};
+    /* all features */
+    const char *ietf_truststore[] = {"central-truststore-supported", "inline-definitions-supported", "certificates", "public-keys", NULL};
+    /* all features */
+    const char *ietf_tls_common[] = {"tls10", "tls11", "tls12", "tls13", "hello-params", "public-key-generation", NULL};
     /* all features */
     const char *ietf_tls_server[] = {
         "tls-server-keepalives", "server-ident-x509-cert", "server-ident-raw-public-key", "server-ident-tls12-psk",
@@ -3282,19 +3290,17 @@ nc_server_config_load_modules(struct ly_ctx **ctx)
     const char *libnetconf2_netconf_server[] = {NULL};
 
     const char *module_names[] = {
-        "ietf-netconf-server", "ietf-x509-cert-to-name", "ietf-crypto-types",
-        "ietf-tcp-common", "ietf-ssh-common", "iana-ssh-encryption-algs",
-        "iana-ssh-key-exchange-algs", "iana-ssh-mac-algs", "iana-ssh-public-key-algs",
-        "ietf-keystore", "ietf-ssh-server", "ietf-truststore",
-        "ietf-tls-server", "libnetconf2-netconf-server", NULL
+        "ietf-netconf-server", "ietf-x509-cert-to-name", "ietf-crypto-types", "ietf-tcp-common", "ietf-tcp-server",
+        "ietf-tcp-client", "ietf-ssh-common", "ietf-ssh-server", "iana-ssh-encryption-algs",
+        "iana-ssh-key-exchange-algs", "iana-ssh-mac-algs", "iana-ssh-public-key-algs", "iana-crypt-hash",
+        "ietf-keystore", "ietf-truststore", "ietf-tls-common", "ietf-tls-server", "libnetconf2-netconf-server", NULL
     };
 
     const char **module_features[] = {
-        ietf_nectonf_server, ietf_x509_cert_to_name, ietf_crypto_types,
-        ietf_tcp_common, ietf_ssh_common, iana_ssh_encryption_algs,
-        iana_ssh_key_exchange_algs, iana_ssh_mac_algs, iana_ssh_public_key_algs,
-        ietf_keystore, ietf_ssh_server, ietf_truststore,
-        ietf_tls_server, libnetconf2_netconf_server, NULL
+        ietf_nectonf_server, ietf_x509_cert_to_name, ietf_crypto_types, ietf_tcp_common,
+        ietf_tcp_server, ietf_tcp_client, ietf_ssh_common, ietf_ssh_server, iana_ssh_encryption_algs,
+        iana_ssh_key_exchange_algs, iana_ssh_mac_algs, iana_ssh_public_key_algs, iana_crypt_hash,
+        ietf_keystore, ietf_truststore, ietf_tls_common, ietf_tls_server, libnetconf2_netconf_server, NULL
     };
 
     for (i = 0; module_names[i] != NULL; i++) {

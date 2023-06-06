@@ -331,8 +331,7 @@ nc_server_config_new_get_pubkey(const char *pubkey_path, char **pubkey, NC_PUBKE
         /* it's ssh2 public key */
         ret = nc_server_config_new_read_ssh2_pubkey(f, pubkey);
         *pubkey_type = NC_PUBKEY_FORMAT_SSH2;
-    }
-    else {
+    } else {
         /* it's probably OpenSSH public key */
         ret = nc_server_config_new_read_pubkey_libssh(pubkey_path, pubkey);
         *pubkey_type = NC_PUBKEY_FORMAT_SSH2;

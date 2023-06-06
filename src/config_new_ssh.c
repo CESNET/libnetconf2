@@ -57,7 +57,7 @@ nc_server_config_new_ssh_hostkey(const struct ly_ctx *ctx,
 
     /* prepare path where leaves will get inserted */
     asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
-            "server-identity/host-key[name='%s']/public-key/local-definition", endpt_name, hostkey_name);
+            "server-identity/host-key[name='%s']/public-key/inline-definition", endpt_name, hostkey_name);
     if (!tree_path) {
         ERRMEM;
         ret = 1;
@@ -428,7 +428,7 @@ nc_server_config_new_ssh_client_auth_pubkey(const struct ly_ctx *ctx, const char
 
     /* prepare path where leaves will get inserted */
     asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
-            "users/user[name='%s']/public-keys/local-definition/public-key[name='%s']", endpt_name, user_name, pubkey_name);
+            "users/user[name='%s']/public-keys/inline-definition/public-key[name='%s']", endpt_name, user_name, pubkey_name);
     if (!tree_path) {
         ERRMEM;
         ret = 1;
