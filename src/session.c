@@ -33,18 +33,13 @@
 #include "netconf.h"
 #include "session_p.h"
 
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
 
-#   include <libssh/libssh.h>
+#include <libssh/libssh.h>
+#include <openssl/conf.h>
+#include <openssl/err.h>
 
-#endif /* NC_ENABLED_SSH */
-
-#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
-
-#   include <openssl/conf.h>
-#   include <openssl/err.h>
-
-#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
+#endif /* NC_ENABLED_SSH_TLS */
 
 /* in seconds */
 #define NC_CLIENT_HELLO_TIMEOUT 60
@@ -106,6 +101,8 @@ nc_realtime_get(struct timespec *ts)
     }
 }
 
+#ifdef NC_ENABLED_SSH_TLS
+
 const char *
 nc_privkey_format_to_str(NC_PRIVKEY_FORMAT format)
 {
@@ -122,6 +119,8 @@ nc_privkey_format_to_str(NC_PRIVKEY_FORMAT format)
         return NULL;
     }
 }
+
+#endif /* NC_ENABLED_SSH_TLS */
 
 int
 nc_sock_configure_keepalive(int sock, struct nc_keepalives *ka)
@@ -657,7 +656,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
         (void)siter;
         break;
 
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
     case NC_TI_LIBSSH: {
         int r;
 
@@ -723,9 +722,6 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
         }
         break;
     }
-#endif
-
-#ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
         /* remember sock so we can close it */
         sock = SSL_get_fd(session->ti.tls);
@@ -739,7 +735,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
             X509_free(session->opts.server.client_cert);
         }
         break;
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
     case NC_TI_NONE:
         break;
     }
@@ -839,7 +835,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         }
 
         /* LY ext data */
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
         struct nc_session *siter;
 
         if ((session->flags & NC_SESSION_SHAREDCTX) && session->ti.libssh.next) {
@@ -853,7 +849,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
                 }
             }
         } else
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
         {
             lyd_free_siblings(session->opts.client.ext_data);
         }
@@ -1456,245 +1452,4 @@ nc_handshake_io(struct nc_session *session)
     }
 
     return type;
-}
-
-#ifdef NC_ENABLED_SSH
-
-static void
-nc_ssh_init(void)
-{
-#if (LIBSSH_VERSION_INT < SSH_VERSION_INT(0, 8, 0))
-    ssh_threads_set_callbacks(ssh_threads_get_pthread());
-    ssh_init();
-#endif
-}
-
-static void
-nc_ssh_destroy(void)
-{
-#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
-    FIPS_mode_set(0);
-    CONF_modules_unload(1);
-    nc_thread_destroy();
-#endif
-
-#if (LIBSSH_VERSION_INT < SSH_VERSION_INT(0, 8, 0))
-    ssh_finalize();
-#endif
-}
-
-#endif /* NC_ENABLED_SSH */
-
-#ifdef NC_ENABLED_TLS
-
-#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
-
-struct CRYPTO_dynlock_value {
-    pthread_mutex_t lock;
-};
-
-static struct CRYPTO_dynlock_value *
-tls_dyn_create_func(const char *UNUSED(file), int UNUSED(line))
-{
-    struct CRYPTO_dynlock_value *value;
-
-    value = malloc(sizeof *value);
-    if (!value) {
-        ERRMEM;
-        return NULL;
-    }
-    pthread_mutex_init(&value->lock, NULL);
-
-    return value;
-}
-
-static void
-tls_dyn_lock_func(int mode, struct CRYPTO_dynlock_value *l, const char *UNUSED(file), int UNUSED(line))
-{
-    /* mode can also be CRYPTO_READ or CRYPTO_WRITE, but all the examples
-     * I found ignored this fact, what do I know... */
-    if (mode & CRYPTO_LOCK) {
-        pthread_mutex_lock(&l->lock);
-    } else {
-        pthread_mutex_unlock(&l->lock);
-    }
-}
-
-static void
-tls_dyn_destroy_func(struct CRYPTO_dynlock_value *l, const char *UNUSED(file), int UNUSED(line))
-{
-    pthread_mutex_destroy(&l->lock);
-    free(l);
-}
-
-#endif
-
-#endif /* NC_ENABLED_TLS */
-
-#if defined (NC_ENABLED_TLS) && !defined (NC_ENABLED_SSH)
-
-#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
-static pthread_mutex_t *tls_locks;
-
-static void
-tls_thread_locking_func(int mode, int n, const char *UNUSED(file), int UNUSED(line))
-{
-    if (mode & CRYPTO_LOCK) {
-        pthread_mutex_lock(tls_locks + n);
-    } else {
-        pthread_mutex_unlock(tls_locks + n);
-    }
-}
-
-static void
-tls_thread_id_func(CRYPTO_THREADID *tid)
-{
-    CRYPTO_THREADID_set_numeric(tid, (unsigned long)pthread_self());
-}
-
-#endif
-
-static void
-nc_tls_init(void)
-{
-#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
-    SSL_load_error_strings();
-    ERR_load_BIO_strings();
-    SSL_library_init();
-
-    int i;
-
-    tls_locks = malloc(CRYPTO_num_locks() * sizeof *tls_locks);
-    if (!tls_locks) {
-        ERRMEM;
-        return;
-    }
-    for (i = 0; i < CRYPTO_num_locks(); ++i) {
-        pthread_mutex_init(tls_locks + i, NULL);
-    }
-
-    CRYPTO_THREADID_set_callback(tls_thread_id_func);
-    CRYPTO_set_locking_callback(tls_thread_locking_func);
-
-    CRYPTO_set_dynlock_create_callback(tls_dyn_create_func);
-    CRYPTO_set_dynlock_lock_callback(tls_dyn_lock_func);
-    CRYPTO_set_dynlock_destroy_callback(tls_dyn_destroy_func);
-#endif
-}
-
-static void
-nc_tls_destroy(void)
-{
-#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
-    FIPS_mode_set(0);
-    CRYPTO_cleanup_all_ex_data();
-    nc_thread_destroy();
-    EVP_cleanup();
-    ERR_free_strings();
-#if OPENSSL_VERSION_NUMBER < 0x10002000L // < 1.0.2
-    sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
-#elif OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
-    SSL_COMP_free_compression_methods();
-#endif
-
-    int i;
-
-    CRYPTO_THREADID_set_callback(NULL);
-    CRYPTO_set_locking_callback(NULL);
-    for (i = 0; i < CRYPTO_num_locks(); ++i) {
-        pthread_mutex_destroy(tls_locks + i);
-    }
-    free(tls_locks);
-
-    CRYPTO_set_dynlock_create_callback(NULL);
-    CRYPTO_set_dynlock_lock_callback(NULL);
-    CRYPTO_set_dynlock_destroy_callback(NULL);
-#endif
-}
-
-#endif /* NC_ENABLED_TLS && !NC_ENABLED_SSH */
-
-#if defined (NC_ENABLED_SSH) && defined (NC_ENABLED_TLS)
-
-static void
-nc_ssh_tls_init(void)
-{
-#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
-    SSL_load_error_strings();
-    ERR_load_BIO_strings();
-    SSL_library_init();
-#endif
-
-    nc_ssh_init();
-
-#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
-    CRYPTO_set_dynlock_create_callback(tls_dyn_create_func);
-    CRYPTO_set_dynlock_lock_callback(tls_dyn_lock_func);
-    CRYPTO_set_dynlock_destroy_callback(tls_dyn_destroy_func);
-#endif
-}
-
-static void
-nc_ssh_tls_destroy(void)
-{
-#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
-    ERR_free_strings();
-# if OPENSSL_VERSION_NUMBER < 0x10002000L // < 1.0.2
-    sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
-# elif OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
-    SSL_COMP_free_compression_methods();
-# endif
-#endif
-
-    nc_ssh_destroy();
-
-#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
-    CRYPTO_set_dynlock_create_callback(NULL);
-    CRYPTO_set_dynlock_lock_callback(NULL);
-    CRYPTO_set_dynlock_destroy_callback(NULL);
-#endif
-}
-
-#endif /* NC_ENABLED_SSH && NC_ENABLED_TLS */
-
-#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
-
-API void
-nc_thread_destroy(void)
-{
-    /* caused data-races and seems not neccessary for avoiding valgrind reachable memory */
-    // CRYPTO_cleanup_all_ex_data();
-
-#if OPENSSL_VERSION_NUMBER < 0x10100000L // < 1.1.0
-    CRYPTO_THREADID crypto_tid;
-
-    CRYPTO_THREADID_current(&crypto_tid);
-    ERR_remove_thread_state(&crypto_tid);
-#endif
-}
-
-#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
-
-void
-nc_init(void)
-{
-#if defined (NC_ENABLED_SSH) && defined (NC_ENABLED_TLS)
-    nc_ssh_tls_init();
-#elif defined (NC_ENABLED_SSH)
-    nc_ssh_init();
-#elif defined (NC_ENABLED_TLS)
-    nc_tls_init();
-#endif
-}
-
-void
-nc_destroy(void)
-{
-#if defined (NC_ENABLED_SSH) && defined (NC_ENABLED_TLS)
-    nc_ssh_tls_destroy();
-#elif defined (NC_ENABLED_SSH)
-    nc_ssh_destroy();
-#elif defined (NC_ENABLED_TLS)
-    nc_tls_destroy();
-#endif
 }

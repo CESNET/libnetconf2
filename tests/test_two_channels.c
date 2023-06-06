@@ -148,7 +148,6 @@ server_thread(void *arg)
     }
 
     nc_ps_free(ps);
-    nc_thread_destroy();
     return NULL;
 }
 
@@ -158,9 +157,6 @@ client_thread(void *arg)
     (void) arg;
     int ret;
     struct nc_session *session_cl1, *session_cl2;
-
-    /* initialize client */
-    nc_client_init();
 
     /* skip all hostkey and known_hosts checks */
     nc_client_ssh_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_SKIP);
@@ -190,7 +186,6 @@ client_thread(void *arg)
     nc_client_destroy();
     nc_session_free(session_cl1, NULL);
     nc_session_free(session_cl2, NULL);
-    nc_thread_destroy();
     return NULL;
 }
 

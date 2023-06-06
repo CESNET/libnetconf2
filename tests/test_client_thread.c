@@ -53,8 +53,6 @@ main(void)
     pthread_t t;
     int r;
 
-    nc_client_init();
-
     /*
      * TEST sharing the thread context
      */

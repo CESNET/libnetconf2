@@ -284,12 +284,7 @@ nc_client_ssh_update_known_hosts(ssh_session session, const char *hostname)
 {
     int ret;
 
-#if (LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 9, 0))
     ret = ssh_session_update_known_hosts(session);
-#else
-    ret = ssh_write_knownhost(session);
-#endif
-
     if (ret != SSH_OK) {
         WRN(NULL, "Adding the known host \"%s\" failed (%s).", hostname, ssh_get_error(session));
     }
@@ -307,11 +302,7 @@ nc_client_ssh_get_srv_pubkey_data(ssh_session session, enum ssh_keytypes_e *srv_
     *hexa = NULL;
     *hash_sha1 = NULL;
 
-#if (LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 8, 0))
     ret = ssh_get_server_publickey(session, &srv_pubkey);
-#else
-    ret = ssh_get_publickey(session, &srv_pubkey);
-#endif
     if (ret < 0) {
         ERR(NULL, "Unable to get server's public key.");
         return -1;
@@ -338,7 +329,7 @@ nc_client_ssh_get_srv_pubkey_data(ssh_session session, enum ssh_keytypes_e *srv_
 static int
 nc_client_ssh_do_dnssec_sshfp_check(ssh_session session, enum ssh_keytypes_e srv_pubkey_type, const char *hostname, unsigned char *hash_sha1)
 {
-    int ret;
+    int ret = 0;
 
     if ((srv_pubkey_type != SSH_KEYTYPE_UNKNOWN) && (srv_pubkey_type != SSH_KEYTYPE_RSA1)) {
         if (srv_pubkey_type == SSH_KEYTYPE_DSS) {
@@ -353,11 +344,7 @@ nc_client_ssh_do_dnssec_sshfp_check(ssh_session session, enum ssh_keytypes_e srv
         /* DNSSEC SSHFP check successful, that's enough */
         if (!ret) {
             VRB(NULL, "DNSSEC SSHFP check successful.");
-#if (LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 9, 0))
             ssh_session_update_known_hosts(session);
-#else
-            ssh_write_knownhost(session);
-#endif
         }
 
         return ret;
@@ -392,25 +379,12 @@ nc_client_ssh_auth_hostkey_check(const char *hostname, uint16_t port, ssh_sessio
         goto error;
     }
 
-#if (LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 9, 0))
+
     state = ssh_session_is_known_server(session);
-#else
-    state = ssh_is_server_known(session);
-#endif
-
     switch (state) {
-#if (LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 9, 0))
     case SSH_KNOWN_HOSTS_OK:
-#else
-    case SSH_SERVER_KNOWN_OK:
-#endif
         break; /* ok */
-
-#if (LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 9, 0))
     case SSH_KNOWN_HOSTS_CHANGED:
-#else
-    case SSH_SERVER_KNOWN_CHANGED:
-#endif
         if (knownhosts_mode == NC_SSH_KNOWNHOSTS_ACCEPT) {
             /* is the mode is set to accept, then accept any connection even if the remote key changed */
             WRN(NULL, "Remote host key changed, but you have requested accept mode so the connection will not be terminated.");
@@ -419,28 +393,13 @@ nc_client_ssh_auth_hostkey_check(const char *hostname, uint16_t port, ssh_sessio
             ERR(NULL, "Remote host key changed, the connection will be terminated!");
             goto error;
         }
-
-#if (LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 9, 0))
     case SSH_KNOWN_HOSTS_OTHER:
-#else
-    case SSH_SERVER_FOUND_OTHER:
-#endif
         WRN(NULL, "Remote host key is not known, but a key of another type for this host is known. Continue with caution.");
         goto hostkey_not_known;
-
-#if (LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 9, 0))
     case SSH_KNOWN_HOSTS_NOT_FOUND:
-#else
-    case SSH_SERVER_FILE_NOT_FOUND:
-#endif
         WRN(NULL, "Could not find the known hosts file.");
         goto hostkey_not_known;
-
-#if (LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 9, 0))
     case SSH_KNOWN_HOSTS_UNKNOWN:
-#else
-    case SSH_SERVER_NOT_KNOWN:
-#endif
 hostkey_not_known:
 #ifdef ENABLE_DNSSEC
         /* do dnssec check, if it's ok then we're done otherwise continue */
@@ -529,12 +488,7 @@ hostkey_not_known:
         } while (strcmp(answer, "yes") && strcmp(answer, "no"));
 
         break;
-
-#if (LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 9, 0))
     case SSH_KNOWN_HOSTS_ERROR:
-#else
-    case SSH_SERVER_ERROR:
-#endif
         ERR(NULL, "SSH error: %s", ssh_get_error(session));
         goto error;
     }

@@ -618,7 +618,6 @@ client_fork(void)
     nc_assert(pipe(pipes + clients * 2) == 0);
 
     if (!(pids[clients] = fork())) {
-        nc_client_init();
 
         ret = nc_client_set_schema_searchpath(TESTS_DIR "/data/modules");
         nc_assert(!ret);
@@ -640,8 +639,6 @@ client_fork(void)
     nc_assert(pipe(pipes + clients * 2) == 0);
 
     if (!(pids[clients] = fork())) {
-        nc_client_init();
-
         ret = nc_client_set_schema_searchpath(TESTS_DIR "/data/modules");
         nc_assert(!ret);
 

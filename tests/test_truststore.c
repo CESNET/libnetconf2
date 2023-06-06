@@ -133,7 +133,6 @@ server_thread(void *arg)
 
     nc_ps_clear(ps, 1, NULL);
     nc_ps_free(ps);
-    nc_thread_destroy();
     return NULL;
 }
 
@@ -165,7 +164,6 @@ client_thread(void *arg)
     assert_non_null(session);
 
     nc_session_free(session, NULL);
-    nc_thread_destroy();
     return NULL;
 }
 
@@ -224,9 +222,6 @@ setup_f(void **state)
     /* configure the server based on the data */
     ret = nc_server_config_setup_diff(tree);
     assert_int_equal(ret, 0);
-
-    /* initialize client */
-    nc_client_init();
 
     /* initialize server */
     ret = nc_server_init();

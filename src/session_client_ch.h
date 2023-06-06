@@ -22,15 +22,15 @@ extern "C" {
 
 #include <libyang/libyang.h>
 
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
 # include <libssh/libssh.h>
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
 
 #include "messages_client.h"
 #include "netconf.h"
 #include "session.h"
 
-#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
+#ifdef NC_ENABLED_SSH_TLS
 
 /**
  * @defgroup client_ch Client-side Call Home
@@ -54,10 +54,6 @@ extern "C" {
 int nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session);
 
 /** @} Client-side Call Home */
-
-#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
-
-#ifdef NC_ENABLED_SSH
 
 /**
  * @defgroup client_ch_ssh Client-side Call Home on SSH
@@ -257,10 +253,6 @@ const char *nc_client_ssh_ch_get_username(void);
 
 /** @} Client-side Call Home on SSH */
 
-#endif /* NC_ENABLED_SSH */
-
-#ifdef NC_ENABLED_TLS
-
 /**
  * @defgroup client_ch_tls Client-side Call Home on TLS
  * @ingroup client_ch
@@ -353,7 +345,7 @@ void nc_client_tls_ch_get_crl_paths(const char **crl_file, const char **crl_dir)
 
 /** @} Client-side Call Home on TLS */
 
-#endif /* NC_ENABLED_TLS */
+#endif /* NC_ENABLED_SSH_TLS */
 
 #ifdef __cplusplus
 }

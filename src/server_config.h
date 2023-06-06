@@ -82,6 +82,8 @@ int nc_server_config_setup_path(const struct ly_ctx *ctx, const char *path);
  */
 int nc_server_config_load_modules(struct ly_ctx **ctx);
 
+#ifdef NC_ENABLED_SSH_TLS
+
 /**
  * @brief Creates new YANG configuration data nodes for a local-address and local-port.
  *
@@ -259,7 +261,6 @@ int nc_server_config_new_ssh_client_auth_none(const struct ly_ctx *ctx, const ch
 int nc_server_config_new_ssh_client_auth_interactive(const struct ly_ctx *ctx, const char *endpt_name,
         const char *user_name, const char *pam_config_name, const char *pam_config_dir, struct lyd_node **config);
 
-#ifdef NC_ENABLED_TLS
 /**
  * @brief Creates new YANG configuration data nodes for a server's certificate.
  *
@@ -327,7 +328,7 @@ int nc_server_config_new_tls_client_ca(const struct ly_ctx *ctx, const char *end
 int nc_server_config_new_tls_ctn(const struct ly_ctx *ctx, const char *endpt_name, uint32_t id, const char *fingerprint,
         NC_TLS_CTN_MAPTYPE map_type, const char *name, struct lyd_node **config);
 
-#endif /* NC_ENABLED_TLS */
+#endif /* NC_ENABLED_SSH_TLS */
 
 #ifdef __cplusplus
 }

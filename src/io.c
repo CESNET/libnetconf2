@@ -29,10 +29,10 @@
 #include <time.h>
 #include <unistd.h>
 
-#ifdef NC_ENABLED_TLS
+#ifdef NC_ENABLED_SSH_TLS
 #   include <openssl/err.h>
 #   include <openssl/ssl.h>
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
 
 #include <libyang/libyang.h>
 
@@ -58,7 +58,7 @@ const char *nc_msgtype2str[] = {
 
 #define BUFFERSIZE 512
 
-#ifdef NC_ENABLED_TLS
+#ifdef NC_ENABLED_SSH_TLS
 
 static char *
 nc_ssl_error_get_reasons(void)
@@ -92,7 +92,7 @@ nc_ssl_error_get_reasons(void)
     return reasons;
 }
 
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
 
 static ssize_t
 nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_timeout, struct timespec *ts_act_timeout)
@@ -147,7 +147,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
             }
             break;
 
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
         case NC_TI_LIBSSH:
             /* read via libssh */
             r = ssh_channel_read(session->ti.libssh.channel, buf + readd, count - readd, 0);
@@ -169,9 +169,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
                 break;
             }
             break;
-#endif
 
-#ifdef NC_ENABLED_TLS
         case NC_TI_OPENSSL:
             /* read via OpenSSL */
             ERR_clear_error();
@@ -210,7 +208,7 @@ nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_time
                 }
             }
             break;
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
         }
 
         if (r == 0) {
@@ -484,7 +482,7 @@ nc_read_poll(struct nc_session *session, int io_timeout)
     }
 
     switch (session->ti_type) {
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
     case NC_TI_LIBSSH:
         /* EINTR is handled, it resumes waiting */
         ret = ssh_channel_poll_timeout(session->ti.libssh.channel, io_timeout, 0);
@@ -506,8 +504,6 @@ nc_read_poll(struct nc_session *session, int io_timeout)
             fds.revents = 0;
         }
         break;
-#endif
-#ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
         ret = SSL_pending(session->ti.tls);
         if (ret) {
@@ -518,7 +514,7 @@ nc_read_poll(struct nc_session *session, int io_timeout)
         }
 
         fds.fd = SSL_get_fd(session->ti.tls);
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
     /* fallthrough */
     case NC_TI_FD:
     case NC_TI_UNIX:
@@ -617,15 +613,13 @@ nc_session_is_connected(struct nc_session *session)
     case NC_TI_UNIX:
         fds.fd = session->ti.unixsock.sock;
         break;
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
     case NC_TI_LIBSSH:
         return ssh_is_connected(session->ti.libssh.session);
-#endif
-#ifdef NC_ENABLED_TLS
     case NC_TI_OPENSSL:
         fds.fd = SSL_get_fd(session->ti.tls);
         break;
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
     default:
         return 0;
     }
@@ -663,9 +657,9 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
     int c, fd, interrupted;
     size_t written = 0;
 
-#ifdef NC_ENABLED_TLS
+#ifdef NC_ENABLED_SSH_TLS
     unsigned long e;
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
         return -1;
@@ -699,7 +693,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
             }
             break;
 
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
         case NC_TI_LIBSSH:
             if (ssh_channel_is_closed(session->ti.libssh.channel) || ssh_channel_is_eof(session->ti.libssh.channel)) {
                 if (ssh_channel_is_closed(session->ti.libssh.channel)) {
@@ -717,8 +711,6 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
                 return -1;
             }
             break;
-#endif
-#ifdef NC_ENABLED_TLS
         case NC_TI_OPENSSL:
             c = SSL_write(session->ti.tls, (char *)(buf + written), count - written);
             if (c < 1) {
@@ -746,7 +738,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
                 }
             }
             break;
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
         default:
             ERRINT;
             return -1;

@@ -21,9 +21,9 @@
 
 #include <libyang/libyang.h>
 
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
     #include <libssh/libssh.h>
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
 
 #include "compat.h"
 #include "config.h"
@@ -56,7 +56,7 @@ struct {
     {NC_VERB_DEBUG_LOWLVL, "[DBL]"}
 };
 
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
 
 API void
 nc_libssh_thread_verbosity(int level)
@@ -64,7 +64,7 @@ nc_libssh_thread_verbosity(int level)
     ssh_set_log_level(level);
 }
 
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
 
 static void
 prv_vprintf(const struct nc_session *session, NC_VERB_LEVEL level, const char *format, va_list args)

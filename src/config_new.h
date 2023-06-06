@@ -24,6 +24,8 @@
 extern "C" {
 #endif
 
+#ifdef NC_ENABLED_SSH_TLS
+
 /* private key's pkcs8 header */
 #define NC_PKCS8_PRIVKEY_HEADER "-----BEGIN PRIVATE KEY-----\n"
 
@@ -77,9 +79,11 @@ int nc_server_config_new_get_pubkey(const char *pubkey_path, char **pubkey, NC_P
 
 int nc_server_config_new_read_certificate(const char *cert_path, char **cert);
 
-int nc_config_new_check_add_operation(const struct ly_ctx *ctx, struct lyd_node *top);
-
 const char * nc_config_new_privkey_format_to_identityref(NC_PRIVKEY_FORMAT format);
+
+#endif /* NC_ENABLED_SSH_TLS */
+
+int nc_config_new_check_add_operation(const struct ly_ctx *ctx, struct lyd_node *top);
 
 #ifdef __cplusplus
 }

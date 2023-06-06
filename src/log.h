@@ -50,7 +50,7 @@ typedef enum NC_VERB_LEVEL {
  */
 void nc_verbosity(NC_VERB_LEVEL level);
 
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
 
 /**
  * @brief Set libssh verbosity level.
@@ -69,7 +69,7 @@ void nc_verbosity(NC_VERB_LEVEL level);
  */
 void nc_libssh_thread_verbosity(int level);
 
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
 
 /**
  * @brief Deprecated, use ::nc_set_print_clb_session() instead.
