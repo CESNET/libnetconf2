@@ -23,7 +23,7 @@ extern "C" {
 
 #include "netconf.h"
 
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
 
 /**
  * @brief Enumeration of NETCONF SSH authentication methods
@@ -45,10 +45,6 @@ typedef enum {
     NC_SSH_KNOWNHOSTS_SKIP          /**< do not add a known_hosts entry and skip all host key checks */
 } NC_SSH_KNOWNHOSTS_MODE;
 
-#endif /* NC_ENABLED_SSH */
-
-#ifdef NC_ENABLED_TLS
-
 /**
  * @brief Enumeration of cert-to-name mapping types
  */
@@ -62,7 +58,7 @@ typedef enum {
     NC_TLS_CTN_COMMON_NAME      /**< common name as username */
 } NC_TLS_CTN_MAPTYPE;
 
-#endif /* NC_ENABLED_TLS */
+#endif /* NC_ENABLED_SSH_TLS */
 
 /**
  * @brief Enumeration of possible session statuses
@@ -83,12 +79,11 @@ typedef enum {
     NC_TI_FD,         /**< file descriptors - use standard input/output, transport protocol is implemented
                            outside the current application */
     NC_TI_UNIX,       /**< unix socket */
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
     NC_TI_LIBSSH,     /**< libssh - use libssh library, only for NETCONF over SSH transport */
-#endif
-#ifdef NC_ENABLED_TLS
+
     NC_TI_OPENSSL     /**< OpenSSL - use OpenSSL library, only for NETCONF over TLS transport */
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
 } NC_TRANSPORT_IMPL;
 
 /**
@@ -233,20 +228,6 @@ int nc_session_is_callhome(const struct nc_session *session);
  * @param[in] data_free Session user data destructor.
  */
 void nc_session_free(struct nc_session *session, void (*data_free)(void *));
-
-#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
-
-/**
- * @brief Free all the dynamically allocated thread-specific libssl/libcrypto
- * resources.
- *
- * This function should be called only if init (nc_client_init(), respectively nc_server_init()) was called.
- * Call it in every thread your application creates just before the thread exits. In the last thread
- * (usually the main one) call nc_client_destroy(), respectively nc_server_destroy().
- */
-void nc_thread_destroy(void);
-
-#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
 
 #ifdef __cplusplus
 }

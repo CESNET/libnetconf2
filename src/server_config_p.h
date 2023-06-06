@@ -45,7 +45,7 @@ typedef enum {
  */
 int nc_server_config_get_endpt(const struct lyd_node *node, struct nc_endpt **endpt, struct nc_bind **bind);
 
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
 /**
  * @brief Get the pointer to a hostkey structure based on node's location in the YANG data.
  *
@@ -76,7 +76,15 @@ int nc_server_config_get_auth_client(const struct lyd_node *node, const struct n
  */
 int nc_server_config_get_pubkey(const struct lyd_node *node, const struct nc_client_auth *auth_client, struct nc_public_key **pubkey);
 
-#endif /* NC_ENABLED_SSH */
+/**
+ * @brief Get private key type from YANG identity stored in a string.
+ *
+ * @param[in] format Value of the YANG identityref.
+ * @return Private key format on success, NC_PRIVKEY_FORMAT_UNKNOWN otherwise.
+ */
+NC_PRIVKEY_FORMAT nc_server_config_get_private_key_type(const char *format);
+
+#endif /* NC_ENABLED_SSH_TLS */
 
 /**
  * @brief Compares the nth-parent name.
@@ -87,14 +95,6 @@ int nc_server_config_get_pubkey(const struct lyd_node *node, const struct nc_cli
  * @return 1 if the name matches, 0 otherwise.
  */
 int equal_parent_name(const struct lyd_node *node, uint16_t parent_count, const char *parent_name);
-
-/**
- * @brief Get private key type from YANG identity stored in a string.
- *
- * @param[in] format Value of the YANG identityref.
- * @return Private key format on success, NC_PRIVKEY_FORMAT_UNKNOWN otherwise.
- */
-NC_PRIVKEY_FORMAT nc_server_config_get_private_key_type(const char *format);
 
 /**
  * @brief Generic realloc function for arrays of structures representing YANG lists whose first member is the key (char *)
@@ -125,6 +125,8 @@ int nc_server_config_parse_tree(const struct lyd_node *node, NC_OPERATION parent
  * @return 0 on success, 1 on error.
  */
 int nc_server_config_listen(struct lyd_node *node, NC_OPERATION op);
+
+#ifdef NC_ENABLED_SSH_TLS
 
 /** KEYSTORE **/
 
@@ -183,6 +185,8 @@ int nc_server_config_parse_truststore(const struct lyd_node *node, NC_OPERATION 
  * @return 0.
  */
 int nc_server_config_ts_truststore(const struct lyd_node *node, NC_OPERATION op);
+
+#endif /* NC_ENABLED_SSH_TLS */
 
 #ifdef __cplusplus
 }

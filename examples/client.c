@@ -149,8 +149,6 @@ main(int argc, char **argv)
         goto cleanup;
     }
 
-    nc_client_init();
-
     /* set the path to search for schemas */
     nc_client_set_schema_searchpath(MODULES_DIR);
 

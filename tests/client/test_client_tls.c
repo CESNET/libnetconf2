@@ -87,8 +87,6 @@ test_nc_client_tls_setting_cert_key_paths(void **state)
     const char *cert, *key;
     int ret;
 
-    nc_client_init();
-
     /* no certificats are set, nc_client_tls_get_cert_key_paths should output NULL */
     nc_client_tls_get_cert_key_paths(&cert, &key);
     assert_null(cert);

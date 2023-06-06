@@ -27,7 +27,7 @@ extern "C" {
 #include "netconf.h"
 #include "session.h"
 
-#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
+#ifdef NC_ENABLED_SSH_TLS
 
 /**
  * @defgroup server_ch Server-side Call Home
@@ -234,10 +234,6 @@ int nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_
 
 /** @} Server-side Call Home */
 
-#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
-
-#ifdef NC_ENABLED_SSH
-
 /**
  * @defgroup server_ch_ssh Server-side Call Home on SSH
  * @ingroup server_ch
@@ -322,10 +318,6 @@ int nc_server_ssh_ch_client_endpt_set_auth_attempts(const char *client_name, con
 int nc_server_ssh_ch_client_endpt_set_auth_timeout(const char *client_name, const char *endpt_name, uint16_t auth_timeout);
 
 /** @} Server-side Call Home on SSH */
-
-#endif /* NC_ENABLED_SSH */
-
-#ifdef NC_ENABLED_TLS
 
 /**
  * @defgroup server_ch_tls Server-side Call Home on TLS
@@ -457,7 +449,7 @@ int nc_server_tls_ch_client_endpt_get_ctn(const char *client_name, const char *e
 
 /** @} Server-side Call Home on TLS */
 
-#endif /* NC_ENABLED_TLS */
+#endif /* NC_ENABLED_SSH_TLS */
 
 #ifdef __cplusplus
 }

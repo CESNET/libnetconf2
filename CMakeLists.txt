@@ -90,9 +90,7 @@ else()
 endif()
 option(ENABLE_EXAMPLES "Build examples" ON)
 option(ENABLE_COVERAGE "Build code coverage report from tests" OFF)
-option(ENABLE_SSH "Enable NETCONF over SSH support (via libssh)" ON)
-option(ENABLE_TLS "Enable NETCONF over TLS support (via OpenSSL)" ON)
-# option(ENABLE_SSH_TLS "Enable NETCONF over SSH and TLS support (via libssh and OpenSSL)" ON)
+option(ENABLE_SSH_TLS "Enable NETCONF over SSH and TLS support (via libssh and OpenSSL)" ON)
 option(ENABLE_DNSSEC "Enable support for SSHFP retrieval using DNSSEC for SSH (requires OpenSSL and libval)" OFF)
 set(READ_INACTIVE_TIMEOUT 20 CACHE STRING "Maximum number of seconds waiting for new data once some data have arrived")
 set(READ_ACTIVE_TIMEOUT 300 CACHE STRING "Maximum number of seconds for receiving a full message")
@@ -114,24 +112,19 @@ set(libsrc
     src/session_client.c
     src/session_server.c
     src/server_config.c
-    src/server_config_ks.c
-    src/server_config_ts.c
     src/config_new.c)
 
-if(ENABLE_SSH)
+if(ENABLE_SSH_TLS)
     list(APPEND libsrc
         src/session_client_ssh.c
         src/session_server_ssh.c
-        src/config_new_ssh.c)
-    set(SSH_MACRO "#ifndef NC_ENABLED_SSH\n#define NC_ENABLED_SSH\n#endif")
-endif()
-
-if(ENABLE_TLS)
-    list(APPEND libsrc
+        src/config_new_ssh.c
         src/session_client_tls.c
         src/session_server_tls.c
-        src/config_new_tls.c)
-    set(TLS_MACRO "#ifndef NC_ENABLED_TLS\n#define NC_ENABLED_TLS\n#endif")
+        src/config_new_tls.c
+        src/server_config_ks.c
+        src/server_config_ts.c)
+    set(SSH_TLS_MACRO "#ifndef NC_ENABLED_SSH_TLS\n#define NC_ENABLED_SSH_TLS\n#endif")
 endif()
 
 set(headers
@@ -175,7 +168,7 @@ set(format_sources
 #
 # checks
 #
-if(ENABLE_DNSSEC AND NOT ENABLE_SSH)
+if(ENABLE_DNSSEC AND NOT ENABLE_SSH_TLS)
     message(WARNING "DNSSEC SSHFP retrieval cannot be used without SSH support.")
     set(ENABLE_DNSSEC OFF)
 endif()
@@ -234,26 +227,17 @@ target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
 set(CMAKE_REQUIRED_LIBRARIES pthread)
 check_function_exists(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
 
-# dependencies - openssl
-if(ENABLE_TLS OR ENABLE_DNSSEC OR ENABLE_SSH)
+if(ENABLE_SSH_TLS)
+    # dependencies - openssl
     find_package(OpenSSL 3.0.0 REQUIRED)
-    if(ENABLE_TLS)
-        message(STATUS "OpenSSL found, required for TLS")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_TLS")
-    endif()
-
     target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
     include_directories(${OPENSSL_INCLUDE_DIR})
-endif()
 
-# dependencies - libssh
-if(ENABLE_SSH)
+    # dependencies - libssh
     find_package(LibSSH 0.9.5 REQUIRED)
-
     target_link_libraries(netconf2 ${LIBSSH_LIBRARIES})
     list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBSSH_LIBRARIES})
     include_directories(${LIBSSH_INCLUDE_DIRS})
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH")
 
     # crypt
     if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
@@ -282,6 +266,9 @@ if(ENABLE_SSH)
     else()
         message(WARNING "LibPAM not found, PAM-based keyboard-interactive SSH server authentication method is disabled")
     endif()
+
+    # set compiler flag
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH_TLS")
 endif()
 
 # dependencies - libval
@@ -347,8 +334,8 @@ endif()
 
 # examples
 if(ENABLE_EXAMPLES)
-    if(NOT ENABLE_SSH)
-        message(WARNING "Examples will not be compiled because SSH is disabled.")
+    if(NOT ENABLE_SSH_TLS)
+        message(WARNING "Examples will not be compiled because SSH and TLS are disabled.")
     else()
         add_subdirectory(examples)
     endif()

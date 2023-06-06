@@ -39,8 +39,6 @@ setup_client(void **state)
 {
     (void)state;
 
-    nc_client_init();
-
     return 0;
 }
 

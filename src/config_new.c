@@ -15,15 +15,17 @@
 
 #define _GNU_SOURCE
 
+#include <libyang/libyang.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef NC_ENABLED_SSH_TLS
 #include <libssh/libssh.h>
-#include <libyang/libyang.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
+#endif /* NC_ENABLED_SSH_TLS */
 
 #include "compat.h"
 #include "config_new.h"
@@ -46,6 +48,8 @@ nc_config_new_check_add_operation(const struct ly_ctx *ctx, struct lyd_node *top
 
     return 0;
 }
+
+#ifdef NC_ENABLED_SSH_TLS
 
 const char *
 nc_config_new_privkey_format_to_identityref(NC_PRIVKEY_FORMAT format)
@@ -272,8 +276,6 @@ cleanup:
     return ret;
 }
 
-#ifdef NC_ENABLED_SSH
-
 static int
 nc_server_config_new_read_pubkey_libssh(const char *pubkey_path, char **pubkey)
 {
@@ -294,8 +296,6 @@ nc_server_config_new_read_pubkey_libssh(const char *pubkey_path, char **pubkey)
     ssh_key_free(pub_sshkey);
     return ret;
 }
-
-#endif /* NC_ENABLED_SSH */
 
 int
 nc_server_config_new_get_pubkey(const char *pubkey_path, char **pubkey, NC_PUBKEY_FORMAT *pubkey_type)
@@ -332,13 +332,11 @@ nc_server_config_new_get_pubkey(const char *pubkey_path, char **pubkey, NC_PUBKE
         ret = nc_server_config_new_read_ssh2_pubkey(f, pubkey);
         *pubkey_type = NC_PUBKEY_FORMAT_SSH2;
     }
-#ifdef NC_ENABLED_SSH
     else {
         /* it's probably OpenSSH public key */
         ret = nc_server_config_new_read_pubkey_libssh(pubkey_path, pubkey);
         *pubkey_type = NC_PUBKEY_FORMAT_SSH2;
     }
-#endif /* NC_ENABLED_SSH */
 
     if (ret) {
         ERR(NULL, "Error getting public key from file \"%s\".", pubkey_path);
@@ -490,13 +488,11 @@ static int
 nc_server_config_new_privkey_to_pubkey(EVP_PKEY *priv_pkey, const ssh_key priv_sshkey, NC_PRIVKEY_FORMAT privkey_type, char **pubkey, NC_PUBKEY_FORMAT *pubkey_type)
 {
     switch (privkey_type) {
-#ifdef NC_ENABLED_SSH
     case NC_PRIVKEY_FORMAT_RSA:
     case NC_PRIVKEY_FORMAT_EC:
     case NC_PRIVKEY_FORMAT_OPENSSH:
         *pubkey_type = NC_PUBKEY_FORMAT_SSH2;
         return nc_server_config_new_privkey_to_pubkey_libssh(priv_sshkey, pubkey);
-#endif /* NC_ENABLED_SSH */
     case NC_PRIVKEY_FORMAT_X509:
         *pubkey_type = NC_PUBKEY_FORMAT_X509;
         return nc_server_config_new_privkey_to_pubkey_openssl(priv_pkey, pubkey);
@@ -506,8 +502,6 @@ nc_server_config_new_privkey_to_pubkey(EVP_PKEY *priv_pkey, const ssh_key priv_s
 
     return 1;
 }
-
-#ifdef NC_ENABLED_SSH
 
 static int
 nc_server_config_new_get_privkey_libssh(const char *privkey_path, char **privkey, ssh_key *priv_sshkey)
@@ -529,8 +523,6 @@ nc_server_config_new_get_privkey_libssh(const char *privkey_path, char **privkey
 
     return ret;
 }
-
-#endif /* NC_ENABLED_SSH */
 
 int
 nc_server_config_new_get_keys(const char *privkey_path, const char *pubkey_path,
@@ -567,9 +559,7 @@ nc_server_config_new_get_keys(const char *privkey_path, const char *pubkey_path,
         /* it's PKCS8 (X.509) private key */
         *privkey_type = NC_PRIVKEY_FORMAT_X509;
         ret = nc_server_config_new_get_privkey_openssl(f_privkey, privkey, &priv_pkey);
-    }
-#ifdef NC_ENABLED_SSH
-    else if (!strncmp(header, NC_OPENSSH_PRIVKEY_HEADER, strlen(NC_OPENSSH_PRIVKEY_HEADER))) {
+    } else if (!strncmp(header, NC_OPENSSH_PRIVKEY_HEADER, strlen(NC_OPENSSH_PRIVKEY_HEADER))) {
         /* it's OpenSSH private key */
         *privkey_type = NC_PRIVKEY_FORMAT_OPENSSH;
         ret = nc_server_config_new_get_privkey_libssh(privkey_path, privkey, &priv_sshkey);
@@ -581,9 +571,7 @@ nc_server_config_new_get_keys(const char *privkey_path, const char *pubkey_path,
         /* it's EC privkey in SEC1 format */
         *privkey_type = NC_PRIVKEY_FORMAT_EC;
         ret = nc_server_config_new_get_privkey_libssh(privkey_path, privkey, &priv_sshkey);
-    }
-#endif /* NC_ENABLED_SSH */
-    else {
+    } else {
         ERR(NULL, "Private key format not supported.");
         ret = 1;
         goto cleanup;
@@ -628,18 +616,17 @@ nc_server_config_new_address_port(const struct ly_ctx *ctx, const char *endpt_na
     NC_CHECK_ARG_RET(NULL, address, port, ctx, endpt_name, config, 1);
 
     /* prepare path for instertion of leaves later */
-#ifdef NC_ENABLED_SSH
     if (transport == NC_TI_LIBSSH) {
         asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/tcp-server-parameters", endpt_name);
-    }
-#endif
-#ifdef NC_ENABLED_TLS
-    if (transport == NC_TI_OPENSSL) {
+    } else if (transport == NC_TI_OPENSSL) {
         asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tcp-server-parameters", endpt_name);
+    } else {
+        ERR(NULL, "Transport not supported.");
+        ret = 1;
+        goto cleanup;
     }
-#endif
     if (!tree_path) {
-        ERR(NULL, "Transport not supported or memory allocation error.");
+        ERRMEM;
         ret = 1;
         goto cleanup;
     }
@@ -691,3 +678,5 @@ cleanup:
     free(tree_path);
     return ret;
 }
+
+#endif /* NC_ENABLED_SSH_TLS */

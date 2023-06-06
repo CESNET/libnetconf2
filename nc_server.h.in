@@ -16,12 +16,11 @@
 #ifndef NC_SERVER_H_
 #define NC_SERVER_H_
 
-@SSH_MACRO@
-@TLS_MACRO@
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#cmakedefine SSH_TLS_MACRO
 
 #include <libnetconf2/netconf.h>
 #include <libnetconf2/log.h>

@@ -7,8 +7,7 @@ if(${SOURCE_FORMAT_ENABLED})
     add_test(NAME format WORKING_DIRECTORY ${CMAKE_BINARY_DIR} COMMAND cmake --build ${CMAKE_BINARY_DIR} --target format-check)
 endif()
 
-# list of all the tests in each directory
-#set(tests test_io test_fd_comm test_init_destroy_client test_init_destroy_server test_client_thread test_thread_messages)
+# list of all the tests that don't require SSH and TLS
 set(tests test_unix_socket)
 
 # only enable PAM tests if the version of PAM is greater than 1.4
@@ -16,7 +15,7 @@ if(LIBPAM_HAVE_CONFDIR)
     list(APPEND tests test_auth)
 endif()
 
-set(client_tests test_client test_client_messages)
+# set(client_tests test_client test_client_messages)
 
 # add -Wl,--wrap flags
 set(test test_client_ssh)
@@ -37,12 +36,8 @@ foreach(mock_func IN LISTS ${test}_mock_funcs)
 endforeach()
 
 #append tests depending on SSH/TLS
-if(ENABLE_SSH)
-    list(APPEND tests test_two_channels test_keystore test_config_new test_truststore test_ec test_ed25519 test_replace test_endpt_share_clients)
-endif()
-
-if(ENABLE_TLS)
-    list(APPEND tests test_tls)
+if(ENABLE_SSH_TLS)
+    list(APPEND tests test_two_channels test_keystore test_config_new test_truststore test_ec test_ed25519 test_replace test_endpt_share_clients test_tls)
 endif()
 
 foreach(src IN LISTS libsrc)

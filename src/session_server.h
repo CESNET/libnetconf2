@@ -24,15 +24,13 @@ extern "C" {
 #include <stdint.h>
 #include <sys/types.h>
 
-#ifdef NC_ENABLED_TLS
+#ifdef NC_ENABLED_SSH_TLS
 # include <openssl/x509.h>
-#endif
 
-#ifdef NC_ENABLED_SSH
 # include <libssh/callbacks.h>
 # include <libssh/libssh.h>
 # include <libssh/server.h>
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
 
 #include "netconf.h"
 #include "session.h"
@@ -343,10 +341,10 @@ uint16_t nc_ps_session_count(struct nc_pollsession *ps);
 #define NC_PSPOLL_SESSION_ERROR 0x0040 /**< Some session was terminated incorrectly (not by a \<close-session\> or \<kill-session\> RPC). */
 #define NC_PSPOLL_ERROR 0x0080         /**< Other fatal errors (they are printed). */
 
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
 # define NC_PSPOLL_SSH_MSG 0x00100      /**< SSH message received (and processed, if relevant, only with SSH support). */
 # define NC_PSPOLL_SSH_CHANNEL 0x0200   /**< New SSH channel opened on an existing session (only with SSH support). */
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
 
 /**
  * @brief Poll sessions and process any received RPCs.
@@ -516,7 +514,7 @@ int nc_server_endpt_set_keepalives(const char *endpt_name, int idle_time, int ma
  */
 NC_MSG_TYPE nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session);
 
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
 
 /**
  * @brief Accept a new NETCONF session on an SSH session of a running NETCONF @p orig_session.
@@ -734,10 +732,6 @@ int nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_t
 
 /** @} Server SSH */
 
-#endif /* NC_ENABLED_SSH */
-
-#ifdef NC_ENABLED_TLS
-
 /**
  * @defgroup server_tls Server TLS
  * @ingroup server
@@ -926,7 +920,7 @@ void nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *ses
 
 /** @} Server TLS */
 
-#endif /* NC_ENABLED_TLS */
+#endif /* NC_ENABLED_SSH_TLS */
 
 /**
  * @addtogroup server_session

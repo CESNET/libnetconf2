@@ -54,11 +54,11 @@
 
 static const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "candidate"};
 
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
 char *sshauth_password(const char *username, const char *hostname, void *priv);
 char *sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo, void *priv);
 char *sshauth_privkey_passphrase(const char *privkey_path, void *priv);
-#endif /* NC_ENABLED_SSH */
+#endif /* NC_ENABLED_SSH_TLS */
 
 static pthread_once_t nc_client_context_once = PTHREAD_ONCE_INIT;
 static pthread_key_t nc_client_context_key;
@@ -70,7 +70,7 @@ static struct nc_client_context context_main = {
         .max_probes = 10,
         .probe_interval = 5
     },
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
     .ssh_opts = {
         .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}},
         .auth_password = sshauth_password,
@@ -83,7 +83,7 @@ static struct nc_client_context context_main = {
         .auth_interactive = sshauth_interactive,
         .auth_privkey_passphrase = sshauth_privkey_passphrase
     },
-#endif /* NC_ENABLED_SSH */
+#endif /* NC_ENABLED_SSH_TLS */
     /* .tls_ structures zeroed */
     .refcount = 0
 };
@@ -110,7 +110,7 @@ nc_client_context_free(void *ptr)
         /* for the main thread the same is done in nc_client_destroy() */
         free(c->opts.schema_searchpath);
 
-#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
+#ifdef NC_ENABLED_SSH_TLS
         int i;
 
         for (i = 0; i < c->opts.ch_bind_count; ++i) {
@@ -120,15 +120,13 @@ nc_client_context_free(void *ptr)
         free(c->opts.ch_binds);
         c->opts.ch_binds = NULL;
         c->opts.ch_bind_count = 0;
-#endif
-#ifdef NC_ENABLED_SSH
+
         _nc_client_ssh_destroy_opts(&c->ssh_opts);
         _nc_client_ssh_destroy_opts(&c->ssh_ch_opts);
-#endif
-#ifdef NC_ENABLED_TLS
+
         _nc_client_tls_destroy_opts(&c->tls_opts);
         _nc_client_tls_destroy_opts(&c->tls_ch_opts);
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
         free(c);
     }
 }
@@ -162,7 +160,7 @@ nc_client_context_location(void)
             e = calloc(1, sizeof *e);
             /* set default values */
             e->refcount = 1;
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
             e->ssh_opts.auth_pref[0].type = NC_SSH_AUTH_INTERACTIVE;
             e->ssh_opts.auth_pref[0].value = 1;
             e->ssh_opts.auth_pref[1].type = NC_SSH_AUTH_PASSWORD;
@@ -178,7 +176,7 @@ nc_client_context_location(void)
             e->ssh_ch_opts.auth_pref[0].value = 1;
             e->ssh_ch_opts.auth_pref[1].value = 2;
             e->ssh_ch_opts.auth_pref[2].value = 3;
-#endif /* NC_ENABLED_SSH */
+#endif /* NC_ENABLED_SSH_TLS */
         }
         pthread_setspecific(nc_client_context_key, e);
     }
@@ -1750,7 +1748,7 @@ error:
     return -1;
 }
 
-#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
+#ifdef NC_ENABLED_SSH_TLS
 
 int
 nc_client_ch_add_bind_listen(const char *address, uint16_t port, const char *hostname, NC_TRANSPORT_IMPL ti)
@@ -1862,18 +1860,12 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
         return sock;
     }
 
-#ifdef NC_ENABLED_SSH
     if (client_opts.ch_binds_aux[idx].ti == NC_TI_LIBSSH) {
         *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
-    } else
-#endif
-#ifdef NC_ENABLED_TLS
-    if (client_opts.ch_binds_aux[idx].ti == NC_TI_OPENSSL) {
+    } else if (client_opts.ch_binds_aux[idx].ti == NC_TI_OPENSSL) {
         *session = nc_accept_callhome_tls_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT,
                 client_opts.ch_binds_aux[idx].hostname);
-    } else
-#endif
-    {
+    } else {
         close(sock);
         *session = NULL;
     }
@@ -1887,7 +1879,7 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
     return 1;
 }
 
-#endif /* NC_ENABLED_SSH || NC_ENABLED_TLS */
+#endif /* NC_ENABLED_SSH_TLS */
 
 API const char * const *
 nc_session_get_cpblts(const struct nc_session *session)
@@ -1928,25 +1920,14 @@ nc_session_ntf_thread_running(const struct nc_session *session)
 }
 
 API void
-nc_client_init(void)
-{
-    nc_init();
-}
-
-API void
 nc_client_destroy(void)
 {
     nc_client_set_schema_searchpath(NULL);
-#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
+#ifdef NC_ENABLED_SSH_TLS
     nc_client_ch_del_bind(NULL, 0, 0);
-#endif
-#ifdef NC_ENABLED_SSH
     nc_client_ssh_destroy_opts();
-#endif
-#ifdef NC_ENABLED_TLS
     nc_client_tls_destroy_opts();
-#endif
-    nc_destroy();
+#endif /* NC_ENABLED_SSH_TLS */
 }
 
 static NC_MSG_TYPE

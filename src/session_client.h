@@ -22,13 +22,10 @@ extern "C" {
 
 #include <libyang/libyang.h>
 
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
 # include <libssh/libssh.h>
-#endif
-
-#ifdef NC_ENABLED_TLS
 # include <openssl/ssl.h>
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
 
 #include "messages_client.h"
 #include "netconf.h"
@@ -116,11 +113,6 @@ void nc_client_set_thread_context(void *context);
 void *nc_client_get_thread_context(void);
 
 /**
- * @brief Initialize libssh and/or libssl/libcrypto for use in the client.
- */
-void nc_client_init(void);
-
-/**
  * @brief Destroy all libssh and/or libssl/libcrypto dynamic memory and
  * the client options, for both SSH and TLS, and for Call Home too.
  */
@@ -169,7 +161,7 @@ struct nc_session *nc_connect_unix(const char *address, struct ly_ctx *ctx);
 
 /** @} Client Session */
 
-#ifdef NC_ENABLED_SSH
+#ifdef NC_ENABLED_SSH_TLS
 
 /**
  * @defgroup client_ssh Client SSH
@@ -392,10 +384,6 @@ struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_
 
 /** @} Client SSH */
 
-#endif /* NC_ENABLED_SSH */
-
-#ifdef NC_ENABLED_TLS
-
 /**
  * @defgroup client_tls Client TLS
  * @ingroup client
@@ -491,7 +479,7 @@ struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
 
 /** @} Client TLS */
 
-#endif /* NC_ENABLED_TLS */
+#endif /* NC_ENABLED_SSH_TLS */
 
 /**
  * @addtogroup client_session
