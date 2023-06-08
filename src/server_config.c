@@ -2153,7 +2153,8 @@ nc_server_config_transport_params(const char *algorithm, char **alg_store, NC_OP
                 ret = 1;
                 goto cleanup;
             }
-            sprintf(*alg_store, "%s,%s", *alg_store, alg);
+            strcat(*alg_store, ",");
+            strcat(*alg_store, alg);
         }
     } else {
         /* delete */
@@ -3094,7 +3095,8 @@ nc_server_config_create_cipher_suite(struct nc_server_tls_opts *opts, const char
             ret = 1;
             goto cleanup;
         }
-        sprintf(opts->ciphers, "%s:%s", opts->ciphers, ssl_cipher);
+        strcat(opts->ciphers, ":");
+        strcat(opts->ciphers, ssl_cipher);
     }
 
 cleanup:

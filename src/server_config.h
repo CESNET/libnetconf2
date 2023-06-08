@@ -361,7 +361,7 @@ int nc_server_config_new_tls_version(const struct ly_ctx *ctx, const char *endpt
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_new_tls_ciphers(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config,
-        uint16_t cipher_count, ...);
+        int cipher_count, ...);
 
 #endif /* NC_ENABLED_SSH_TLS */
 

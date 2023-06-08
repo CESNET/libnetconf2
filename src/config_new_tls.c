@@ -487,13 +487,13 @@ cleanup:
 
 API int
 nc_server_config_new_tls_ciphers(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config,
-        uint16_t cipher_count, ...)
+        int cipher_count, ...)
 {
     int ret = 0;
     struct lyd_node *new_tree = NULL, *old = NULL;
     va_list ap;
     char *tree_path = NULL, *cipher = NULL, *cipher_ident = NULL;
-    uint16_t i;
+    int i;
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, config, 1);
 
