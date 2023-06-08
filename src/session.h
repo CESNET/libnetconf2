@@ -58,6 +58,16 @@ typedef enum {
     NC_TLS_CTN_COMMON_NAME      /**< common name as username */
 } NC_TLS_CTN_MAPTYPE;
 
+/**
+ * @brief Enumeration of TLS versions.
+ */
+typedef enum {
+    NC_TLS_VERSION_10 = 1,  /**< TLS1.0 */
+    NC_TLS_VERSION_11 = 2,  /**< TLS1.1 */
+    NC_TLS_VERSION_12 = 4,  /**< TLS1.2 */
+    NC_TLS_VERSION_13 = 8   /**< TLS1.3 */
+} NC_TLS_VERSION;
+
 #endif /* NC_ENABLED_SSH_TLS */
 
 /**

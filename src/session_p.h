@@ -262,6 +262,9 @@ struct nc_server_tls_opts {
     struct nc_cert_grouping ca_certs;           /**< Client certificate authorities */
     struct nc_cert_grouping ee_certs;           /**< Client end-entity certificates */
 
+    unsigned int tls_versions;                  /**< TLS versions */
+    char *ciphers;                              /**< TLS ciphers */
+
     struct nc_ctn *ctn;                         /**< Cert-to-name entries */
 };
 

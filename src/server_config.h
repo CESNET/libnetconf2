@@ -328,6 +328,41 @@ int nc_server_config_new_tls_client_ca(const struct ly_ctx *ctx, const char *end
 int nc_server_config_new_tls_ctn(const struct ly_ctx *ctx, const char *endpt_name, uint32_t id, const char *fingerprint,
         NC_TLS_CTN_MAPTYPE map_type, const char *name, struct lyd_node **config);
 
+/**
+ * @brief Creates new YANG configuration data nodes for a TLS version.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's contents will be changed.
+ * @param[in] tls_version TLS version to be used. Call this multiple times to set
+ * the accepted versions of the TLS protocol and let the client and server negotiate
+ * the given version.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_tls_version(const struct ly_ctx *ctx, const char *endpt_name,
+        NC_TLS_VERSION tls_version, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a TLS cipher.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's contents will be changed.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @param[in] cipher_count Number of ciphers.
+ * @param[in] ... TLS ciphers. These ciphers MUST be in the format as listed in the
+ * iana-tls-cipher-suite-algs YANG model (lowercase and separated by dashes). Regardless
+ * of the TLS protocol version used, all of these ciphers will be tried and some of them
+ * might not be set (TLS handshake might fail then). For the list of supported ciphers see
+ * the OpenSSL documentation.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_tls_ciphers(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config,
+        uint16_t cipher_count, ...);
+
 #endif /* NC_ENABLED_SSH_TLS */
 
 #ifdef __cplusplus

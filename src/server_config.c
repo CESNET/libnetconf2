@@ -16,6 +16,7 @@
 #define _GNU_SOURCE
 
 #include <assert.h>
+#include <ctype.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -669,6 +670,13 @@ nc_server_config_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *b
 #ifdef NC_ENABLED_SSH_TLS
 
 static void
+nc_server_config_tls_del_ciphers(struct nc_server_tls_opts *opts)
+{
+    free(opts->ciphers);
+    opts->ciphers = NULL;
+}
+
+static void
 nc_server_config_tls_del_public_key(struct nc_server_tls_opts *opts)
 {
     free(opts->pubkey_data);
@@ -764,7 +772,7 @@ nc_server_config_del_ctn(struct nc_server_tls_opts *opts, struct nc_ctn *ctn)
 }
 
 static void
-nc_server_config_del_ctns(struct nc_server_tls_opts *opts)
+nc_server_config_tls_del_ctns(struct nc_server_tls_opts *opts)
 {
     struct nc_ctn *cur, *next;
 
@@ -796,7 +804,8 @@ nc_server_config_del_tls(struct nc_bind *bind, struct nc_server_tls_opts *opts)
     nc_server_config_tls_del_certs(&opts->ca_certs);
     nc_server_config_tls_del_certs(&opts->ee_certs);
 
-    nc_server_config_del_ctns(opts);
+    nc_server_config_tls_del_ctns(opts);
+    nc_server_config_tls_del_ciphers(opts);
 
     free(opts);
 }
@@ -2999,6 +3008,163 @@ cleanup:
     return ret;
 }
 
+static void
+nc_server_config_set_tls_version(struct nc_server_tls_opts *opts, NC_TLS_VERSION version, NC_OPERATION op)
+{
+    if (op == NC_OP_CREATE) {
+        /* add the version if it isn't there already */
+        opts->tls_versions |= version;
+    } else if ((op == NC_OP_DELETE) && (opts->tls_versions & version)) {
+        /* delete the version if it is there */
+        opts->tls_versions -= version;
+    }
+}
+
+static int
+nc_server_config_tls_version(const struct lyd_node *node, NC_OPERATION op)
+{
+    int ret = 0;
+    struct nc_endpt *endpt;
+    const char *version = NULL;
+
+    assert(!strcmp(LYD_NAME(node), "tls-version"));
+
+    if (nc_server_config_get_endpt(node, &endpt, NULL)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    version = ((struct lyd_node_term *)node)->value.ident->name;
+    if (!strcmp(version, "tls10")) {
+        nc_server_config_set_tls_version(endpt->opts.tls, NC_TLS_VERSION_10, op);
+    } else if (!strcmp(version, "tls11")) {
+        nc_server_config_set_tls_version(endpt->opts.tls, NC_TLS_VERSION_11, op);
+    } else if (!strcmp(version, "tls12")) {
+        nc_server_config_set_tls_version(endpt->opts.tls, NC_TLS_VERSION_12, op);
+    } else if (!strcmp(version, "tls13")) {
+        nc_server_config_set_tls_version(endpt->opts.tls, NC_TLS_VERSION_13, op);
+    } else {
+        ERR(NULL, "TLS version \"%s\" not supported.", version);
+        ret = 1;
+        goto cleanup;
+    }
+
+cleanup:
+    return ret;
+}
+
+static int
+nc_server_config_create_cipher_suite(struct nc_server_tls_opts *opts, const char *cipher)
+{
+    int ret = 0;
+    char *ssl_cipher = NULL;
+    uint16_t i;
+
+    ssl_cipher = malloc(strlen(cipher) + 1);
+    if (!ssl_cipher) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    for (i = 0; cipher[i]; i++) {
+        if (cipher[i] == '-') {
+            /* OpenSSL requires _ instead of - in cipher names */
+            ssl_cipher[i] = '_';
+        } else {
+            /* and requires uppercase unlike the identities */
+            ssl_cipher[i] = toupper(cipher[i]);
+        }
+    }
+    ssl_cipher[i] = '\0';
+
+    if (!opts->ciphers) {
+        /* first entry */
+        opts->ciphers = strdup(ssl_cipher);
+        if (!opts->ciphers) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+    } else {
+        /* + 1 because of : between entries */
+        opts->ciphers = nc_realloc(opts->ciphers, strlen(opts->ciphers) + strlen(ssl_cipher) + 1 + 1);
+        if (!opts->ciphers) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+        sprintf(opts->ciphers, "%s:%s", opts->ciphers, ssl_cipher);
+    }
+
+cleanup:
+    free(ssl_cipher);
+    return ret;
+}
+
+static int
+nc_server_config_del_concrete_cipher_suite(struct nc_server_tls_opts *opts, const char *cipher)
+{
+    int cipher_found = 0;
+    char *haystack, *substr;
+    size_t cipher_len = strlen(cipher);
+
+    /* delete */
+    haystack = opts->ciphers;
+    while ((substr = strstr(haystack, cipher))) {
+        /* iterate over all the substrings */
+        if (((substr == haystack) && (*(substr + cipher_len) == ':')) ||
+                ((substr != haystack) && (*(substr - 1) == ':') && (*(substr + cipher_len) == ':'))) {
+            /* either the first element of the string or somewhere in the middle */
+            memmove(substr, substr + cipher_len + 1, strlen(substr + cipher_len + 1));
+            cipher_found = 1;
+            break;
+        } else if ((*(substr - 1) == ':') && (*(substr + cipher_len) == '\0')) {
+            /* the last element of the string */
+            *(substr - 1) = '\0';
+            cipher_found = 1;
+            break;
+        }
+        haystack++;
+    }
+
+    if (!cipher_found) {
+        ERR(NULL, "Unable to delete a cipher (%s), which was not previously added.", cipher);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int
+nc_server_config_cipher_suite(const struct lyd_node *node, NC_OPERATION op)
+{
+    int ret = 0;
+    struct nc_endpt *endpt;
+    const char *cipher = NULL;
+
+    if (nc_server_config_get_endpt(node, &endpt, NULL)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    cipher = ((struct lyd_node_term *)node)->value.ident->name;
+    if (op == NC_OP_CREATE) {
+        ret = nc_server_config_create_cipher_suite(endpt->opts.tls, cipher);
+        if (ret) {
+            goto cleanup;
+        }
+    } else if (op == NC_OP_DELETE) {
+        ret = nc_server_config_del_concrete_cipher_suite(endpt->opts.tls, cipher);
+        if (ret) {
+            goto cleanup;
+        }
+    }
+
+cleanup:
+    return ret;
+}
+
 #endif /* NC_ENABLED_SSH_TLS */
 
 static int
@@ -3152,6 +3318,14 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
         if (nc_server_config_fingerprint(node, op)) {
             goto error;
         }
+    } else if (!strcmp(name, "tls-version")) {
+        if (nc_server_config_tls_version(node, op)) {
+            goto error;
+        }
+    } else if (!strcmp(name, "cipher-suite")) {
+        if (nc_server_config_cipher_suite(node, op)) {
+            goto error;
+        }
     }
 #endif /* NC_ENABLED_SSH_TLS */
 
@@ -3286,6 +3460,7 @@ nc_server_config_load_modules(struct ly_ctx **ctx)
         "server-ident-tls13-epsk", "client-auth-supported", "client-auth-x509-cert", "client-auth-raw-public-key",
         "client-auth-tls12-psk", "client-auth-tls13-epsk", NULL
     };
+    const char *iana_tls_cipher_suite_algs[] = {NULL};
     /* all features */
     const char *libnetconf2_netconf_server[] = {NULL};
 
@@ -3293,14 +3468,16 @@ nc_server_config_load_modules(struct ly_ctx **ctx)
         "ietf-netconf-server", "ietf-x509-cert-to-name", "ietf-crypto-types", "ietf-tcp-common", "ietf-tcp-server",
         "ietf-tcp-client", "ietf-ssh-common", "ietf-ssh-server", "iana-ssh-encryption-algs",
         "iana-ssh-key-exchange-algs", "iana-ssh-mac-algs", "iana-ssh-public-key-algs", "iana-crypt-hash",
-        "ietf-keystore", "ietf-truststore", "ietf-tls-common", "ietf-tls-server", "libnetconf2-netconf-server", NULL
+        "ietf-keystore", "ietf-truststore", "ietf-tls-common", "ietf-tls-server", "iana-tls-cipher-suite-algs",
+        "libnetconf2-netconf-server", NULL
     };
 
     const char **module_features[] = {
         ietf_nectonf_server, ietf_x509_cert_to_name, ietf_crypto_types, ietf_tcp_common,
         ietf_tcp_server, ietf_tcp_client, ietf_ssh_common, ietf_ssh_server, iana_ssh_encryption_algs,
         iana_ssh_key_exchange_algs, iana_ssh_mac_algs, iana_ssh_public_key_algs, iana_crypt_hash,
-        ietf_keystore, ietf_truststore, ietf_tls_common, ietf_tls_server, libnetconf2_netconf_server, NULL
+        ietf_keystore, ietf_truststore, ietf_tls_common, ietf_tls_server, iana_tls_cipher_suite_algs,
+        libnetconf2_netconf_server, NULL
     };
 
     for (i = 0; module_names[i] != NULL; i++) {
