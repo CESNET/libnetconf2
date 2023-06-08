@@ -153,9 +153,18 @@ setup_f(void **state)
     ret = nc_server_config_new_tls_client_ca(ctx, "endpt", "client_ca", TESTS_DIR "/data/serverca.pem", &tree);
     assert_int_equal(ret, 0);
 
+    /* create new cert-to-name */
     ret = nc_server_config_new_tls_ctn(ctx, "endpt", 1,
             "04:85:6B:75:D1:1A:86:E0:D8:FE:5B:BD:72:F5:73:1D:07:EA:32:BF:09:11:21:6A:6E:23:78:8E:B6:D5:73:C3:2D",
             NC_TLS_CTN_SPECIFIED, "client", &tree);
+    assert_int_equal(ret, 0);
+
+    /* limit TLS version to 1.3 */
+    ret = nc_server_config_new_tls_version(ctx, "endpt", NC_TLS_VERSION_13, &tree);
+    assert_int_equal(ret, 0);
+
+    /* set the TLS cipher */
+    ret = nc_server_config_new_tls_ciphers(ctx, "endpt", &tree, 3, "tls-aes-128-ccm-sha256", "tls-aes-128-gcm-sha256", "tls-chacha20-poly1305-sha256");
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
