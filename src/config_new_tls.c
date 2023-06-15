@@ -570,3 +570,231 @@ cleanup:
     free(tree_path);
     return ret;
 }
+
+API int
+nc_server_config_new_tls_crl_path(const struct ly_ctx *ctx, const char *endpt_name, const char *path, struct lyd_node **config)
+{
+    int ret = 0;
+    struct lyd_node *new_tree, *node = NULL;
+    char *tree_path = NULL;
+    struct lys_module *mod;
+
+    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, path, config, 1);
+
+    /* prepare path for instertion of leaves later */
+    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication", endpt_name);
+    if (!tree_path) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* create all the nodes in the path */
+    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
+    if (ret) {
+        goto cleanup;
+    }
+    if (!*config) {
+        *config = new_tree;
+    }
+
+    if (!new_tree) {
+        /* no new nodes were created */
+        ret = lyd_find_path(*config, tree_path, 0, &new_tree);
+    } else {
+        /* config was NULL */
+        ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
+    }
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* delete other choice nodes if they are present */
+    lyd_find_path(new_tree, "libnetconf2-netconf-server:crl-url", 0, &node);
+    lyd_free_tree(node);
+    lyd_find_path(new_tree, "libnetconf2-netconf-server:crl-cert-ext", 0, &node);
+    lyd_free_tree(node);
+
+    /* get the wanted module, because parent of the inserted node has a different one */
+    mod = ly_ctx_get_module_implemented(ctx, "libnetconf2-netconf-server");
+    if (!mod) {
+        ERR(NULL, "Error getting libnetconf2-netconf-server module.");
+        ret = 1;
+        goto cleanup;
+    }
+
+    ret = lyd_new_term(new_tree, mod, "crl-path", path, 0, NULL);
+    if (ret) {
+        ERR(NULL, "Creating new Certificate Revocation List node failed.");
+        goto cleanup;
+    }
+
+    /* check if top-level container has operation and if not, add it */
+    ret = nc_config_new_check_add_operation(ctx, *config);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* Add all default nodes */
+    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(tree_path);
+    return ret;
+}
+
+API int
+nc_server_config_new_tls_crl_url(const struct ly_ctx *ctx, const char *endpt_name, const char *url, struct lyd_node **config)
+{
+    int ret = 0;
+    struct lyd_node *new_tree, *node = NULL;
+    char *tree_path = NULL;
+    struct lys_module *mod;
+
+    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, url, config, 1);
+
+    /* prepare path for instertion of leaves later */
+    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication", endpt_name);
+    if (!tree_path) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* create all the nodes in the path */
+    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
+    if (ret) {
+        goto cleanup;
+    }
+    if (!*config) {
+        *config = new_tree;
+    }
+
+    if (!new_tree) {
+        /* no new nodes were created */
+        ret = lyd_find_path(*config, tree_path, 0, &new_tree);
+    } else {
+        /* config was NULL */
+        ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
+    }
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* delete other choice nodes if they are present */
+    lyd_find_path(new_tree, "libnetconf2-netconf-server:crl-path", 0, &node);
+    lyd_free_tree(node);
+    lyd_find_path(new_tree, "libnetconf2-netconf-server:crl-cert-ext", 0, &node);
+    lyd_free_tree(node);
+
+    /* get the wanted module, because parent of the inserted node has a different one */
+    mod = ly_ctx_get_module_implemented(ctx, "libnetconf2-netconf-server");
+    if (!mod) {
+        ERR(NULL, "Error getting libnetconf2-netconf-server module.");
+        ret = 1;
+        goto cleanup;
+    }
+
+    ret = lyd_new_term(new_tree, mod, "crl-url", url, 0, NULL);
+    if (ret) {
+        ERR(NULL, "Creating new Certificate Revocation List node failed.");
+        goto cleanup;
+    }
+
+    /* check if top-level container has operation and if not, add it */
+    ret = nc_config_new_check_add_operation(ctx, *config);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* Add all default nodes */
+    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(tree_path);
+    return ret;
+}
+
+API int
+nc_server_config_new_tls_crl_cert_ext(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config)
+{
+    int ret = 0;
+    struct lyd_node *new_tree, *node = NULL;
+    char *tree_path = NULL;
+    struct lys_module *mod;
+
+    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, config, 1);
+
+    /* prepare path for instertion of leaves later */
+    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication", endpt_name);
+    if (!tree_path) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* create all the nodes in the path */
+    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
+    if (ret) {
+        goto cleanup;
+    }
+    if (!*config) {
+        *config = new_tree;
+    }
+
+    if (!new_tree) {
+        /* no new nodes were created */
+        ret = lyd_find_path(*config, tree_path, 0, &new_tree);
+    } else {
+        /* config was NULL */
+        ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
+    }
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* delete other choice nodes if they are present */
+    lyd_find_path(new_tree, "libnetconf2-netconf-server:crl-path", 0, &node);
+    lyd_free_tree(node);
+    lyd_find_path(new_tree, "libnetconf2-netconf-server:crl-url", 0, &node);
+    lyd_free_tree(node);
+
+    /* get the wanted module, because parent of the inserted node has a different one */
+    mod = ly_ctx_get_module_implemented(ctx, "libnetconf2-netconf-server");
+    if (!mod) {
+        ERR(NULL, "Error getting libnetconf2-netconf-server module.");
+        ret = 1;
+        goto cleanup;
+    }
+
+    ret = lyd_new_term(new_tree, mod, "crl-cert-ext", NULL, 0, NULL);
+    if (ret) {
+        ERR(NULL, "Creating new Certificate Revocation List node failed.");
+        goto cleanup;
+    }
+
+    /* check if top-level container has operation and if not, add it */
+    ret = nc_config_new_check_add_operation(ctx, *config);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* Add all default nodes */
+    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(tree_path);
+    return ret;
+}

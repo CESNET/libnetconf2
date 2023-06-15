@@ -227,6 +227,14 @@ struct nc_cert_grouping {
 };
 
 /**
+ * @brief Storing downloaded data via CURL.
+ */
+struct nc_curl_data {
+    unsigned char *data;    /**< Downloaded data */
+    size_t size;            /**< Size of downloaded data */
+};
+
+/**
  * @brief Cert-to-name entries.
  */
 struct nc_ctn {
@@ -261,6 +269,10 @@ struct nc_server_tls_opts {
 
     struct nc_cert_grouping ca_certs;           /**< Client certificate authorities */
     struct nc_cert_grouping ee_certs;           /**< Client end-entity certificates */
+    char *crl_url;                              /**< URI to download the CRL from */
+    char *crl_path;                             /**< Path to a CRL file */
+    int crl_cert_ext;                           /**< Indicates to use CA's distribution points to obtain CRLs */
+    X509_STORE *crl_store;                      /**< Stores all the CRLs */
 
     unsigned int tls_versions;                  /**< TLS versions */
     char *ciphers;                              /**< TLS ciphers */
