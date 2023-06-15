@@ -363,6 +363,56 @@ int nc_server_config_new_tls_version(const struct ly_ctx *ctx, const char *endpt
 int nc_server_config_new_tls_ciphers(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config,
         int cipher_count, ...);
 
+/**
+ * @brief Creates new YANG configuration data nodes for a Certificate Revocation List via a local file.
+ *
+ * Beware that you can choose up to one function between the three CRL alternatives on a given endpoint and calling
+ * this function will remove any CRL YANG nodes created by the other two functions.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's contents will be changed.
+ * @param[in] path Path to a DER/PEM encoded CRL file.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_tls_crl_path(const struct ly_ctx *ctx, const char *endpt_name, const char *path, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a Certificate Revocation List via an URL.
+ *
+ * Beware that you can choose up to one function between the three CRL alternatives on a given endpoint and calling
+ * this function will remove any CRL YANG nodes created by the other two functions.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's contents will be changed.
+ * @param[in] url URL from which the CRL file will be downloaded. The file has to be in the DER or PEM format.
+ * The allowed protocols are all the protocols supported by CURL.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_tls_crl_url(const struct ly_ctx *ctx, const char *endpt_name, const char *url, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a Certificate Revocation List via certificate extensions.
+ *
+ * The chain of configured Certificate Authorities will be examined. For each certificate in this chain all the
+ * CRLs from the URLs specified in their extension fields CRL Distribution Points will be downloaded and used.
+ * Beware that you can choose up to one function between the three CRL alternatives on a given endpoint and calling
+ * this function will remove any CRL YANG nodes created by the other two functions.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's contents will be changed.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_tls_crl_cert_ext(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config);
+
 #endif /* NC_ENABLED_SSH_TLS */
 
 #ifdef __cplusplus

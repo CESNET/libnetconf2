@@ -27,6 +27,10 @@ module libnetconf2-netconf-server {
     prefix sshma;
   }
 
+  import ietf-tls-server {
+    prefix tlss;
+  }
+
   /*
   identity ed25519-private-key-format {
     base ct:private-key-format;
@@ -307,6 +311,48 @@ module libnetconf2-netconf-server {
       }
 
       must "deref(.)/../*[local-name() = 'tls']";
+    }
+  }
+
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:tls/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
+    description
+      "Indicates that the TLS server is using a Certificate Revocation List
+       to authenticate clients or to deny access for certain certificates.
+       The given Certificate Revocation List must be PEM or DER encoded.";
+
+    reference
+      "RFC 5280:
+         Internet X.509 Public Key Infrastructure Certificate
+         and Certificate Revocation List (CRL) Profile";
+
+    choice certificate-revocation-list {
+      leaf crl-url {
+        type string;
+        description
+          "An URL from which the Certificate Revocation List will be
+           downloaded and used. The HTTP protocol works, but other
+           protocols, such as FTP, may work as well.";
+      }
+
+      leaf crl-path {
+        type string;
+        description
+          "A path to a Certificate Revocation List file.";
+      }
+
+      leaf crl-cert-ext {
+        type empty;
+        description
+          "Indicates that the Certificate Revocation List
+           Distribution Points extension will be used to fetch
+           Certificate Revocation Lists from. This will be done
+           for all the configured Certificate Authority certificates.";
+
+        reference
+          "RFC 5280:
+             Internet X.509 Public Key Infrastructure Certificate
+             and Certificate Revocation List (CRL) Profile, Section 4.2.1.13";
+      }
     }
   }
 }

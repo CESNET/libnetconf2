@@ -25,6 +25,10 @@
 
 #include <libyang/libyang.h>
 
+#ifdef NC_ENABLED_SSH_TLS
+#include <openssl/x509_vfy.h> // X509_STORE_free
+#endif
+
 #include "compat.h"
 #include "config.h"
 #include "log_p.h"
@@ -670,6 +674,20 @@ nc_server_config_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *b
 #ifdef NC_ENABLED_SSH_TLS
 
 static void
+nc_server_config_del_url(struct nc_server_tls_opts *opts)
+{
+    free(opts->crl_url);
+    opts->crl_url = NULL;
+}
+
+static void
+nc_server_config_del_path(struct nc_server_tls_opts *opts)
+{
+    free(opts->crl_path);
+    opts->crl_path = NULL;
+}
+
+static void
 nc_server_config_tls_del_ciphers(struct nc_server_tls_opts *opts)
 {
     free(opts->ciphers);
@@ -803,6 +821,11 @@ nc_server_config_del_tls(struct nc_bind *bind, struct nc_server_tls_opts *opts)
 
     nc_server_config_tls_del_certs(&opts->ca_certs);
     nc_server_config_tls_del_certs(&opts->ee_certs);
+
+    nc_server_config_del_path(opts);
+    nc_server_config_del_url(opts);
+    X509_STORE_free(opts->crl_store);
+    opts->crl_store = NULL;
 
     nc_server_config_tls_del_ctns(opts);
     nc_server_config_tls_del_ciphers(opts);
@@ -3145,6 +3168,8 @@ nc_server_config_cipher_suite(const struct lyd_node *node, NC_OPERATION op)
     struct nc_endpt *endpt;
     const char *cipher = NULL;
 
+    assert(!strcmp(LYD_NAME(node), "cipher-suite"));
+
     if (nc_server_config_get_endpt(node, &endpt, NULL)) {
         ret = 1;
         goto cleanup;
@@ -3161,6 +3186,87 @@ nc_server_config_cipher_suite(const struct lyd_node *node, NC_OPERATION op)
         if (ret) {
             goto cleanup;
         }
+    }
+
+cleanup:
+    return ret;
+}
+
+static int
+nc_server_config_crl_url(const struct lyd_node *node, NC_OPERATION op)
+{
+    int ret = 0;
+    struct nc_endpt *endpt;
+
+    assert(!strcmp(LYD_NAME(node), "crl-url"));
+
+    if (nc_server_config_get_endpt(node, &endpt, NULL)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+        nc_server_config_del_url(endpt->opts.tls);
+        endpt->opts.tls->crl_url = strdup(lyd_get_value(node));
+        if (!endpt->opts.tls->crl_url) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+    } else if (op == NC_OP_DELETE) {
+        nc_server_config_del_url(endpt->opts.tls);
+    }
+
+cleanup:
+    return ret;
+}
+
+static int
+nc_server_config_crl_path(const struct lyd_node *node, NC_OPERATION op)
+{
+    int ret = 0;
+    struct nc_endpt *endpt;
+
+    assert(!strcmp(LYD_NAME(node), "crl-path"));
+
+    if (nc_server_config_get_endpt(node, &endpt, NULL)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+        nc_server_config_del_path(endpt->opts.tls);
+        endpt->opts.tls->crl_path = strdup(lyd_get_value(node));
+        if (!endpt->opts.tls->crl_path) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+    } else if (op == NC_OP_DELETE) {
+        nc_server_config_del_path(endpt->opts.tls);
+    }
+
+cleanup:
+    return ret;
+}
+
+static int
+nc_server_config_crl_cert_ext(const struct lyd_node *node, NC_OPERATION op)
+{
+    int ret = 0;
+    struct nc_endpt *endpt;
+
+    assert(!strcmp(LYD_NAME(node), "crl-cert-ext"));
+
+    if (nc_server_config_get_endpt(node, &endpt, NULL)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+        endpt->opts.tls->crl_cert_ext = 1;
+    } else if (op == NC_OP_DELETE) {
+        endpt->opts.tls->crl_cert_ext = 0;
     }
 
 cleanup:
@@ -3326,6 +3432,18 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
         }
     } else if (!strcmp(name, "cipher-suite")) {
         if (nc_server_config_cipher_suite(node, op)) {
+            goto error;
+        }
+    } else if (!strcmp(name, "crl-url")) {
+        if (nc_server_config_crl_url(node, op)) {
+            goto error;
+        }
+    } else if (!strcmp(name, "crl-path")) {
+        if (nc_server_config_crl_path(node, op)) {
+            goto error;
+        }
+    } else if (!strcmp(name, "crl-cert-ext")) {
+        if (nc_server_config_crl_cert_ext(node, op)) {
             goto error;
         }
     }
