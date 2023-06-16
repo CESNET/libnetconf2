@@ -16,6 +16,7 @@
 #ifndef NC_CONFIG_NEW_H_
 #define NC_CONFIG_NEW_H_
 
+#include <stdarg.h>
 #include <libyang/libyang.h>
 
 #include "session_p.h"
@@ -84,6 +85,19 @@ const char * nc_config_new_privkey_format_to_identityref(NC_PRIVKEY_FORMAT forma
 #endif /* NC_ENABLED_SSH_TLS */
 
 int nc_config_new_check_add_operation(const struct ly_ctx *ctx, struct lyd_node *top);
+
+/**
+ * @brief Creates YANG data nodes in a path and gives the final node a value.
+ *
+ * @param[in] ctx libyang context
+ * @param[in, out] tree The YANG data tree where the insertion will happen. On success
+ * the top level container is always returned.
+ * @param[in] value Value assigned to the final node in the path.
+ * @param[in] path_fmt Format of the path.
+ * @param[in] ... Parameters for the path format, essentially representing the lists' keys.
+ * @return 0 on success, 1 otherwise.
+ */
+int nc_config_new_insert(const struct ly_ctx *ctx, struct lyd_node **tree, const char *value, const char *path_fmt, ...);
 
 #ifdef __cplusplus
 }

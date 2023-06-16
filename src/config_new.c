@@ -16,6 +16,7 @@
 #define _GNU_SOURCE
 
 #include <libyang/libyang.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -533,6 +534,7 @@ nc_server_config_new_get_keys(const char *privkey_path, const char *pubkey_path,
     FILE *f_privkey = NULL;
     char *header = NULL;
     size_t len = 0;
+    char *priv = NULL, *pub = NULL;
 
     NC_CHECK_ARG_RET(NULL, privkey_path, privkey, pubkey, privkey_type, 1);
 
@@ -557,38 +559,77 @@ nc_server_config_new_get_keys(const char *privkey_path, const char *pubkey_path,
     if (!strncmp(header, NC_PKCS8_PRIVKEY_HEADER, strlen(NC_PKCS8_PRIVKEY_HEADER))) {
         /* it's PKCS8 (X.509) private key */
         *privkey_type = NC_PRIVKEY_FORMAT_X509;
-        ret = nc_server_config_new_get_privkey_openssl(f_privkey, privkey, &priv_pkey);
+        ret = nc_server_config_new_get_privkey_openssl(f_privkey, &priv, &priv_pkey);
     } else if (!strncmp(header, NC_OPENSSH_PRIVKEY_HEADER, strlen(NC_OPENSSH_PRIVKEY_HEADER))) {
         /* it's OpenSSH private key */
         *privkey_type = NC_PRIVKEY_FORMAT_OPENSSH;
-        ret = nc_server_config_new_get_privkey_libssh(privkey_path, privkey, &priv_sshkey);
+        ret = nc_server_config_new_get_privkey_libssh(privkey_path, &priv, &priv_sshkey);
     } else if (!strncmp(header, NC_PKCS1_RSA_PRIVKEY_HEADER, strlen(NC_PKCS1_RSA_PRIVKEY_HEADER))) {
         /* it's RSA privkey in PKCS1 format */
         *privkey_type = NC_PRIVKEY_FORMAT_RSA;
-        ret = nc_server_config_new_get_privkey_libssh(privkey_path, privkey, &priv_sshkey);
+        ret = nc_server_config_new_get_privkey_libssh(privkey_path, &priv, &priv_sshkey);
     } else if (!strncmp(header, NC_SEC1_EC_PRIVKEY_HEADER, strlen(NC_SEC1_EC_PRIVKEY_HEADER))) {
         /* it's EC privkey in SEC1 format */
         *privkey_type = NC_PRIVKEY_FORMAT_EC;
-        ret = nc_server_config_new_get_privkey_libssh(privkey_path, privkey, &priv_sshkey);
+        ret = nc_server_config_new_get_privkey_libssh(privkey_path, &priv, &priv_sshkey);
     } else {
         ERR(NULL, "Private key format not supported.");
         ret = 1;
         goto cleanup;
     }
-
     if (ret) {
         goto cleanup;
     }
 
     if (pubkey_path) {
-        ret = nc_server_config_new_get_pubkey(pubkey_path, pubkey, pubkey_type);
+        ret = nc_server_config_new_get_pubkey(pubkey_path, &pub, pubkey_type);
     } else {
-        ret = nc_server_config_new_privkey_to_pubkey(priv_pkey, priv_sshkey, *privkey_type, pubkey, pubkey_type);
+        ret = nc_server_config_new_privkey_to_pubkey(priv_pkey, priv_sshkey, *privkey_type, &pub, pubkey_type);
     }
-
     if (ret) {
         ERR(NULL, "Getting public key failed.");
         goto cleanup;
+    }
+
+    /* strip pubkey's header and footer only if it's generated from pkcs8 key (using OpenSSL),
+     * otherwise it's already stripped
+     */
+    if (!pubkey_path && (*privkey_type == NC_PRIVKEY_FORMAT_X509)) {
+        *pubkey = strdup(pub + strlen(NC_SUBJECT_PUBKEY_INFO_HEADER));
+        if (!*pubkey) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+        (*pubkey)[strlen(*pubkey) - strlen(NC_SUBJECT_PUBKEY_INFO_FOOTER)] = '\0';
+    } else {
+        *pubkey = strdup(pub);
+        if (!*pubkey) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+    }
+
+    /* strip private key's header and footer */
+    if (*privkey_type == NC_PRIVKEY_FORMAT_OPENSSH) {
+        /* only OpenSSH private keys have different header and footer after processing */
+        *privkey = strdup(priv + strlen(NC_OPENSSH_PRIVKEY_HEADER));
+        if (!*privkey) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+        (*privkey)[strlen(*privkey) - strlen(NC_OPENSSH_PRIVKEY_FOOTER)] = '\0';
+    } else {
+        /* the rest share the same header and footer */
+        *privkey = strdup(priv + strlen(NC_PKCS8_PRIVKEY_HEADER));
+        if (!*privkey) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+        (*privkey)[strlen(*privkey) - strlen(NC_PKCS8_PRIVKEY_FOOTER)] = '\0';
     }
 
 cleanup:
@@ -597,6 +638,8 @@ cleanup:
     }
 
     free(header);
+    free(pub);
+    free(priv);
 
     ssh_key_free(priv_sshkey);
     EVP_PKEY_free(priv_pkey);
@@ -609,72 +652,82 @@ nc_server_config_new_address_port(const struct ly_ctx *ctx, const char *endpt_na
         const char *address, const char *port, struct lyd_node **config)
 {
     int ret = 0;
-    char *tree_path = NULL;
-    struct lyd_node *new_tree, *port_node;
+    const char *address_fmt, *port_fmt;
 
     NC_CHECK_ARG_RET(NULL, address, port, ctx, endpt_name, config, 1);
 
-    /* prepare path for instertion of leaves later */
     if (transport == NC_TI_LIBSSH) {
-        asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/tcp-server-parameters", endpt_name);
+        /* SSH path */
+        address_fmt = "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/tcp-server-parameters/local-address";
+        port_fmt = "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/tcp-server-parameters/local-port";
     } else if (transport == NC_TI_OPENSSL) {
-        asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tcp-server-parameters", endpt_name);
+        /* TLS path */
+        address_fmt = "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tcp-server-parameters/local-address";
+        port_fmt = "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tcp-server-parameters/local-port";
     } else {
         ERR(NULL, "Transport not supported.");
         ret = 1;
         goto cleanup;
     }
-    if (!tree_path) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
 
-    /* create all the nodes in the path */
-    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-    if (!*config) {
-        *config = new_tree;
-    }
-
-    if (!new_tree) {
-        /* no new nodes were created */
-        ret = lyd_find_path(*config, tree_path, 0, &new_tree);
-    } else {
-        /* config was NULL */
-        ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
-    }
-    if (ret) {
-        ERR(NULL, "Unable to find tcp-server-parameters container.");
-        goto cleanup;
-    }
-
-    ret = lyd_new_term(new_tree, NULL, "local-address", address, 0, NULL);
+    ret = nc_config_new_insert(ctx, config, address, address_fmt, endpt_name);
     if (ret) {
         goto cleanup;
     }
 
-    ret = lyd_find_path(new_tree, "local-port", 0, &port_node);
-    if (!ret) {
-        ret = lyd_change_term(port_node, port);
-    } else if (ret == LY_ENOTFOUND) {
-        ret = lyd_new_term(new_tree, NULL, "local-port", port, 0, NULL);
-    }
-
-    if (ret && (ret != LY_EEXIST) && (ret != LY_ENOT)) {
-        /* only fail if there was actually an error */
-        goto cleanup;
-    }
-
-    /* Add all default nodes */
-    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    ret = nc_config_new_insert(ctx, config, port, port_fmt, endpt_name);
     if (ret) {
         goto cleanup;
     }
+
 cleanup:
-    free(tree_path);
+    return ret;
+}
+
+int
+nc_config_new_insert(const struct ly_ctx *ctx, struct lyd_node **tree, const char *value, const char *path_fmt, ...)
+{
+    int ret = 0;
+    va_list ap;
+    char *path = NULL;
+
+    va_start(ap, path_fmt);
+
+    /* create the path from the format */
+    ret = vasprintf(&path, path_fmt, ap);
+    if (ret == -1) {
+        ERRMEM;
+        path = NULL;
+        goto cleanup;
+    }
+
+    /* create the nodes in the path */
+    ret = lyd_new_path(*tree, ctx, path, value, LYD_NEW_PATH_UPDATE, tree);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* set out param to top level container */
+    ret = lyd_find_path(*tree, "/ietf-netconf-server:netconf-server", 0, tree);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* check if top-level container has operation and if not, add it */
+    ret = nc_config_new_check_add_operation(ctx, *tree);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* add all default nodes */
+    ret = lyd_new_implicit_tree(*tree, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(path);
+    va_end(ap);
     return ret;
 }
 
