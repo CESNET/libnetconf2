@@ -36,11 +36,10 @@ nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const char
         const char *privkey_path, const char *certificate_path, struct lyd_node **config)
 {
     int ret = 0;
-    char *tree_path = NULL, *privkey = NULL, *pubkey = NULL, *pubkey_stripped = NULL, *privkey_stripped, *cert = NULL;
-    struct lyd_node *new_tree;
+    char *privkey = NULL, *pubkey = NULL, *cert = NULL;
     NC_PRIVKEY_FORMAT privkey_type;
     NC_PUBKEY_FORMAT pubkey_type;
-    const char *privkey_identity;
+    const char *privkey_format, *pubkey_format;
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, privkey_path, certificate_path, 1);
     NC_CHECK_ARG_RET(NULL, config, 1);
@@ -52,108 +51,53 @@ nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const char
         goto cleanup;
     }
 
+    /* get cert data from file */
     ret = nc_server_config_new_read_certificate(certificate_path, &cert);
     if (ret) {
         ERR(NULL, "Getting certificate from file \"%s\" failed.", certificate_path);
         goto cleanup;
     }
 
-    /* prepare path for instertion of leaves later */
-    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/server-identity/certificate/inline-definition", endpt_name);
-    if (!tree_path) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* create all the nodes in the path */
-    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-    if (!*config) {
-        *config = new_tree;
-    }
-
-    if (!new_tree) {
-        /* no new nodes were created */
-        ret = lyd_find_path(*config, tree_path, 0, &new_tree);
-    } else {
-        /* config was NULL */
-        ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
-    }
-    if (ret) {
-        ERR(NULL, "Unable to find inline-definition container.");
-        goto cleanup;
-    }
-
-    /* insert pubkey format */
+    /* get pubkey format str */
     if (pubkey_type == NC_PUBKEY_FORMAT_X509) {
-        ret = lyd_new_term(new_tree, NULL, "public-key-format", "ietf-crypto-types:public-key-info-format", 0, NULL);
+        pubkey_format = "ietf-crypto-types:public-key-info-format";
     } else {
-        ret = lyd_new_term(new_tree, NULL, "public-key-format", "ietf-crypto-types:ssh-public-key-format", 0, NULL);
-    }
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* strip pubkey's header and footer only if it's generated from pkcs8 key (using OpenSSL),
-     * otherwise it's already stripped
-     */
-    if (!pubkey_path && (privkey_type == NC_PRIVKEY_FORMAT_X509)) {
-        pubkey_stripped = pubkey + strlen("-----BEGIN PUBLIC KEY-----") + 1;
-        pubkey_stripped[strlen(pubkey_stripped) - strlen("-----END PUBLIC KEY-----") - 2] = '\0';
-    } else {
-        pubkey_stripped = pubkey;
-    }
-
-    /* insert pubkey b64 */
-    ret = lyd_new_term(new_tree, NULL, "public-key", pubkey_stripped, 0, NULL);
-    if (ret) {
-        goto cleanup;
+        pubkey_format = "ietf-crypto-types:ssh-public-key-format";
     }
 
     /* get privkey identityref value */
-    privkey_identity = nc_config_new_privkey_format_to_identityref(privkey_type);
-    if (!privkey_identity) {
+    privkey_format = nc_config_new_privkey_format_to_identityref(privkey_type);
+    if (!privkey_format) {
         ret = 1;
         goto cleanup;
     }
 
-    /* insert private key format */
-    ret = lyd_new_term(new_tree, NULL, "private-key-format", privkey_identity, 0, NULL);
+    ret = nc_config_new_insert(ctx, config, pubkey_format, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+        "tls/tls-server-parameters/server-identity/certificate/inline-definition/public-key-format", endpt_name);
     if (ret) {
         goto cleanup;
     }
 
-    if (privkey_type == NC_PRIVKEY_FORMAT_OPENSSH) {
-        /* only OpenSSH private keys have different header and footer after processing */
-        privkey_stripped = privkey + strlen(NC_OPENSSH_PRIVKEY_HEADER);
-        privkey_stripped[strlen(privkey_stripped) - strlen(NC_OPENSSH_PRIVKEY_FOOTER)] = '\0';
-    } else {
-        /* the rest share the same header and footer */
-        privkey_stripped = privkey + strlen(NC_PKCS8_PRIVKEY_HEADER);
-        privkey_stripped[strlen(privkey_stripped) - strlen(NC_PKCS8_PRIVKEY_FOOTER)] = '\0';
-    }
-
-    ret = lyd_new_term(new_tree, NULL, "cleartext-private-key", privkey_stripped, 0, NULL);
+    ret = nc_config_new_insert(ctx, config, pubkey, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+        "tls/tls-server-parameters/server-identity/certificate/inline-definition/public-key", endpt_name);
     if (ret) {
         goto cleanup;
     }
 
-    ret = lyd_new_term(new_tree, NULL, "cert-data", cert, 0, NULL);
+    ret = nc_config_new_insert(ctx, config, privkey_format, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+        "tls/tls-server-parameters/server-identity/certificate/inline-definition/private-key-format", endpt_name);
     if (ret) {
         goto cleanup;
     }
 
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_check_add_operation(ctx, *config);
+    ret = nc_config_new_insert(ctx, config, privkey, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+        "tls/tls-server-parameters/server-identity/certificate/inline-definition/cleartext-private-key", endpt_name);
     if (ret) {
         goto cleanup;
     }
 
-    /* Add all default nodes */
-    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    ret = nc_config_new_insert(ctx, config, cert, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+        "tls/tls-server-parameters/server-identity/certificate/inline-definition/cert-data", endpt_name);
     if (ret) {
         goto cleanup;
     }
@@ -162,7 +106,6 @@ cleanup:
     free(privkey);
     free(pubkey);
     free(cert);
-    free(tree_path);
     return ret;
 }
 
@@ -171,8 +114,7 @@ nc_server_config_new_tls_client_certificate(const struct ly_ctx *ctx, const char
         const char *cert_path, struct lyd_node **config)
 {
     int ret = 0;
-    struct lyd_node *new_tree;
-    char *tree_path = NULL, *cert = NULL;
+    char *cert = NULL;
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, cert_name, cert_path, config, 1);
 
@@ -182,56 +124,14 @@ nc_server_config_new_tls_client_certificate(const struct ly_ctx *ctx, const char
         goto cleanup;
     }
 
-    /* prepare path for instertion of leaves later */
-    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
-            "client-authentication/ee-certs/inline-definition/certificate[name='%s']", endpt_name, cert_name);
-    if (!tree_path) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* create all the nodes in the path */
-    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-    if (!*config) {
-        *config = new_tree;
-    }
-
-    if (!new_tree) {
-        /* no new nodes were created */
-        ret = lyd_find_path(*config, tree_path, 0, &new_tree);
-    } else {
-        /* config was NULL */
-        ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
-    }
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* insert cert-data */
-    ret = lyd_new_term(new_tree, NULL, "cert-data", cert, 0, NULL);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_check_add_operation(ctx, *config);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* Add all default nodes */
-    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    ret = nc_config_new_insert(ctx, config, cert, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/ee-certs/inline-definition/certificate[name='%s']/cert-data", endpt_name, cert_name);
     if (ret) {
         goto cleanup;
     }
 
 cleanup:
     free(cert);
-    free(tree_path);
     return ret;
 }
 
@@ -240,8 +140,7 @@ nc_server_config_new_tls_client_ca(const struct ly_ctx *ctx, const char *endpt_n
         const char *cert_path, struct lyd_node **config)
 {
     int ret = 0;
-    struct lyd_node *new_tree;
-    char *tree_path = NULL, *cert = NULL;
+    char *cert = NULL;
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, cert_name, cert_path, config, 1);
 
@@ -251,57 +150,38 @@ nc_server_config_new_tls_client_ca(const struct ly_ctx *ctx, const char *endpt_n
         goto cleanup;
     }
 
-    /* prepare path for instertion of leaves later */
-    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
-            "client-authentication/ca-certs/inline-definition/certificate[name='%s']", endpt_name, cert_name);
-    if (!tree_path) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* create all the nodes in the path */
-    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-    if (!*config) {
-        *config = new_tree;
-    }
-
-    if (!new_tree) {
-        /* no new nodes were created */
-        ret = lyd_find_path(*config, tree_path, 0, &new_tree);
-    } else {
-        /* config was NULL */
-        ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
-    }
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* insert cert-data */
-    ret = lyd_new_term(new_tree, NULL, "cert-data", cert, 0, NULL);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_check_add_operation(ctx, *config);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* Add all default nodes */
-    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    ret = nc_config_new_insert(ctx, config, cert, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/ca-certs/inline-definition/certificate[name='%s']/cert-data", endpt_name, cert_name);
     if (ret) {
         goto cleanup;
     }
 
 cleanup:
     free(cert);
-    free(tree_path);
     return ret;
+}
+
+static const char *
+nc_config_new_tls_maptype2str(NC_TLS_CTN_MAPTYPE map_type)
+{
+    switch (map_type) {
+    case NC_TLS_CTN_SPECIFIED:
+        return "ietf-x509-cert-to-name:specified";
+    case NC_TLS_CTN_SAN_RFC822_NAME:
+        return "ietf-x509-cert-to-name:san-rfc822-name";
+    case NC_TLS_CTN_SAN_DNS_NAME:
+        return "ietf-x509-cert-to-name:san-dns-name";
+    case NC_TLS_CTN_SAN_IP_ADDRESS:
+        return "ietf-x509-cert-to-name:san-ip-address";
+    case NC_TLS_CTN_SAN_ANY:
+        return "ietf-x509-cert-to-name:san-any";
+    case NC_TLS_CTN_COMMON_NAME:
+        return "ietf-x509-cert-to-name:common-name";
+    case NC_TLS_CTN_UNKNOWN:
+    default:
+        ERR(NULL, "Unknown map_type.");
+        return NULL;
+    }
 }
 
 API int
@@ -309,101 +189,59 @@ nc_server_config_new_tls_ctn(const struct ly_ctx *ctx, const char *endpt_name, u
         NC_TLS_CTN_MAPTYPE map_type, const char *name, struct lyd_node **config)
 {
     int ret = 0;
-    char *tree_path = NULL;
-    struct lyd_node *new_tree;
+    const char *map;
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, id, map_type, name, 1);
     NC_CHECK_ARG_RET(NULL, config, 1);
 
-    /* prepare path for instertion of leaves later */
-    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
-            "netconf-server-parameters/client-identity-mappings/cert-to-name[id='%d']", endpt_name, id);
-    if (!tree_path) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* create all the nodes in the path */
-    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-    if (!*config) {
-        *config = new_tree;
-    }
-
-    if (!new_tree) {
-        /* no new nodes were created */
-        ret = lyd_find_path(*config, tree_path, 0, &new_tree);
-    } else {
-        /* config was NULL */
-        ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
-    }
-    if (ret) {
-        ERR(NULL, "Unable to find netconf-server-parameters container.");
-        goto cleanup;
-    }
-
-    /* not mandatory */
     if (fingerprint) {
-        ret = lyd_new_term(new_tree, NULL, "fingerprint", fingerprint, 0, NULL);
+        /* optional */
+        ret = nc_config_new_insert(ctx, config, fingerprint, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
+                "netconf-server-parameters/client-identity-mappings/cert-to-name[id='%d']/fingerprint", endpt_name, id);
         if (ret) {
             goto cleanup;
         }
     }
 
-    /* insert map-type */
-    switch (map_type) {
-    case NC_TLS_CTN_SPECIFIED:
-        ret = lyd_new_term(new_tree, NULL, "map-type", "ietf-x509-cert-to-name:specified", 0, NULL);
-        break;
-    case NC_TLS_CTN_SAN_RFC822_NAME:
-        ret = lyd_new_term(new_tree, NULL, "map-type", "ietf-x509-cert-to-name:san-rfc822-name", 0, NULL);
-        break;
-    case NC_TLS_CTN_SAN_DNS_NAME:
-        ret = lyd_new_term(new_tree, NULL, "map-type", "ietf-x509-cert-to-name:san-dns-name", 0, NULL);
-        break;
-    case NC_TLS_CTN_SAN_IP_ADDRESS:
-        ret = lyd_new_term(new_tree, NULL, "map-type", "ietf-x509-cert-to-name:san-ip-address", 0, NULL);
-        break;
-    case NC_TLS_CTN_SAN_ANY:
-        ret = lyd_new_term(new_tree, NULL, "map-type", "ietf-x509-cert-to-name:san-any", 0, NULL);
-        break;
-    case NC_TLS_CTN_COMMON_NAME:
-        ret = lyd_new_term(new_tree, NULL, "map-type", "ietf-x509-cert-to-name:common-name", 0, NULL);
-        break;
-    case NC_TLS_CTN_UNKNOWN:
-    default:
-        ERR(NULL, "Unknown map_type.");
+    /* get map str */
+    map = nc_config_new_tls_maptype2str(map_type);
+    if (!map) {
         ret = 1;
-        break;
+        goto cleanup;
     }
+
+    ret = nc_config_new_insert(ctx, config, map, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
+                "netconf-server-parameters/client-identity-mappings/cert-to-name[id='%d']/map-type", endpt_name, id);
     if (ret) {
         goto cleanup;
     }
 
-    /* insert name */
-    ret = lyd_new_term(new_tree, NULL, "name", name, 0, NULL);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_check_add_operation(ctx, *config);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* Add all default nodes */
-    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    ret = nc_config_new_insert(ctx, config, name, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
+                "netconf-server-parameters/client-identity-mappings/cert-to-name[id='%d']/name", endpt_name, id);
     if (ret) {
         goto cleanup;
     }
 
 cleanup:
-    free(tree_path);
     return ret;
+}
+
+static const char *
+nc_config_new_tls_tlsversion2str(NC_TLS_VERSION version)
+{
+    switch (version) {
+    case NC_TLS_VERSION_10:
+        return "ietf-tls-common:tls10";
+    case NC_TLS_VERSION_11:
+        return "ietf-tls-common:tls11";
+    case NC_TLS_VERSION_12:
+        return "ietf-tls-common:tls12";
+    case NC_TLS_VERSION_13:
+        return "ietf-tls-common:tls13";
+    default:
+        ERR(NULL, "Unknown TLS version.");
+        return NULL;
+    }
 }
 
 API int
@@ -411,77 +249,23 @@ nc_server_config_new_tls_version(const struct ly_ctx *ctx, const char *endpt_nam
         NC_TLS_VERSION tls_version, struct lyd_node **config)
 {
     int ret = 0;
-    struct lyd_node *new_tree;
-    char *tree_path = NULL;
+    const char *version;
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, config, 1);
 
-    /* prepare path for instertion of leaves later */
-    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
-            "hello-params/tls-versions", endpt_name);
-    if (!tree_path) {
-        ERRMEM;
+    version = nc_config_new_tls_tlsversion2str(tls_version);
+    if (!version) {
         ret = 1;
         goto cleanup;
     }
 
-    /* create all the nodes in the path */
-    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-    if (!*config) {
-        *config = new_tree;
-    }
-
-    if (!new_tree) {
-        /* no new nodes were created */
-        ret = lyd_find_path(*config, tree_path, 0, &new_tree);
-    } else {
-        /* config was NULL */
-        ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
-    }
-    if (ret) {
-        goto cleanup;
-    }
-
-    switch (tls_version) {
-    case NC_TLS_VERSION_10:
-        ret = lyd_new_term(new_tree, NULL, "tls-version", "ietf-tls-common:tls10", 0, NULL);
-        break;
-    case NC_TLS_VERSION_11:
-        ret = lyd_new_term(new_tree, NULL, "tls-version", "ietf-tls-common:tls11", 0, NULL);
-        break;
-    case NC_TLS_VERSION_12:
-        ret = lyd_new_term(new_tree, NULL, "tls-version", "ietf-tls-common:tls12", 0, NULL);
-        break;
-    case NC_TLS_VERSION_13:
-        ret = lyd_new_term(new_tree, NULL, "tls-version", "ietf-tls-common:tls13", 0, NULL);
-        break;
-    default:
-        ERR(NULL, "Unknown TLS version.");
-        ret = 1;
-        break;
-    }
-    if (ret) {
-        ERR(NULL, "Creating new tls-version node failed.");
-        goto cleanup;
-    }
-
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_check_add_operation(ctx, *config);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* Add all default nodes */
-    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    ret = nc_config_new_insert(ctx, config, version, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "hello-params/tls-versions/tls-version", endpt_name);
     if (ret) {
         goto cleanup;
     }
 
 cleanup:
-    free(tree_path);
     return ret;
 }
 
@@ -490,84 +274,52 @@ nc_server_config_new_tls_ciphers(const struct ly_ctx *ctx, const char *endpt_nam
         int cipher_count, ...)
 {
     int ret = 0;
-    struct lyd_node *new_tree = NULL, *old = NULL;
+    struct lyd_node *old = NULL;
     va_list ap;
-    char *tree_path = NULL, *cipher = NULL, *cipher_ident = NULL;
+    char *cipher = NULL, *cipher_ident = NULL, *old_path = NULL;
     int i;
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, config, 1);
 
-    /* prepare path */
-    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
-            "tls/tls-server-parameters/hello-params", endpt_name);
-    if (!tree_path) {
+    va_start(ap, cipher_count);
+
+    ret = asprintf(&old_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+            "tls/tls-server-parameters/hello-params/cipher-suites", endpt_name);
+    if (ret == -1) {
         ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* create all the nodes in the path */
-    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-    if (!*config) {
-        *config = new_tree;
-    }
-
-    if (!new_tree) {
-        /* no new nodes were created */
-        ret = lyd_find_path(*config, tree_path, 0, &new_tree);
-    } else {
-        /* config was NULL */
-        ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
-    }
-    if (ret) {
+        old_path = NULL;
         goto cleanup;
     }
 
     /* delete all older algorithms (if any) se they can be replaced by the new ones */
-    lyd_find_path(new_tree, "cipher-suites", 0, &old);
-    if (old) {
+    ret = lyd_find_path(*config, old_path, 0, &old);
+    if (!ret) {
         lyd_free_tree(old);
     }
 
-    va_start(ap, cipher_count);
     for (i = 0; i < cipher_count; i++) {
         cipher = va_arg(ap, char *);
 
-        asprintf(&cipher_ident, "iana-tls-cipher-suite-algs:%s", cipher);
-        if (!cipher_ident) {
+        ret = asprintf(&cipher_ident, "iana-tls-cipher-suite-algs:%s", cipher);
+        if (ret == -1) {
             ERRMEM;
             ret = 1;
             goto cleanup;
         }
 
-        /* create the leaf list */
-        ret = lyd_new_path(new_tree, ctx, "cipher-suites/cipher-suite", cipher_ident, 0, NULL);
-        free(cipher_ident);
-
+        ret = nc_config_new_insert(ctx, config, cipher_ident, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+            "tls/tls-server-parameters/hello-params/cipher-suites/cipher-suite", endpt_name);
         if (ret) {
-            ERR(NULL, "Creating new cipher-suites leaf-list failed.");
             goto cleanup;
         }
-    }
 
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_check_add_operation(ctx, *config);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* Add all default nodes */
-    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
-    if (ret) {
-        goto cleanup;
+        free(cipher_ident);
+        cipher_ident = NULL;
     }
 
 cleanup:
     va_end(ap);
-    free(tree_path);
+    free(old_path);
     return ret;
 }
 
@@ -575,75 +327,48 @@ API int
 nc_server_config_new_tls_crl_path(const struct ly_ctx *ctx, const char *endpt_name, const char *path, struct lyd_node **config)
 {
     int ret = 0;
-    struct lyd_node *new_tree, *node = NULL;
-    char *tree_path = NULL;
-    struct lys_module *mod;
+    struct lyd_node *node = NULL;
+    char *url_path = NULL, *ext_path = NULL;
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, path, config, 1);
 
-    /* prepare path for instertion of leaves later */
-    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
-            "client-authentication", endpt_name);
-    if (!tree_path) {
+    ret = nc_config_new_insert(ctx, config, path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:crl-path", endpt_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+    if (asprintf(&url_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:crl-url", endpt_name) == -1) {
         ERRMEM;
+        url_path = NULL;
         ret = 1;
         goto cleanup;
     }
 
-    /* create all the nodes in the path */
-    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-    if (!*config) {
-        *config = new_tree;
-    }
-
-    if (!new_tree) {
-        /* no new nodes were created */
-        ret = lyd_find_path(*config, tree_path, 0, &new_tree);
-    } else {
-        /* config was NULL */
-        ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
-    }
-    if (ret) {
+    if (asprintf(&ext_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:crl-cert-ext", endpt_name) == -1) {
+        ERRMEM;
+        ext_path = NULL;
+        ret = 1;
         goto cleanup;
     }
 
     /* delete other choice nodes if they are present */
-    lyd_find_path(new_tree, "libnetconf2-netconf-server:crl-url", 0, &node);
-    lyd_free_tree(node);
-    lyd_find_path(new_tree, "libnetconf2-netconf-server:crl-cert-ext", 0, &node);
-    lyd_free_tree(node);
-
-    /* get the wanted module, because parent of the inserted node has a different one */
-    mod = ly_ctx_get_module_implemented(ctx, "libnetconf2-netconf-server");
-    if (!mod) {
-        ERR(NULL, "Error getting libnetconf2-netconf-server module.");
-        ret = 1;
-        goto cleanup;
+    ret = lyd_find_path(*config, url_path, 0, &node);
+    if (!ret) {
+        lyd_free_tree(node);
     }
-
-    ret = lyd_new_term(new_tree, mod, "crl-path", path, 0, NULL);
-    if (ret) {
-        ERR(NULL, "Creating new Certificate Revocation List node failed.");
-        goto cleanup;
+    ret = lyd_find_path(*config, ext_path, 0, &node);
+    if (!ret) {
+        lyd_free_tree(node);
     }
-
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_check_add_operation(ctx, *config);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* Add all default nodes */
-    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
-    if (ret) {
-        goto cleanup;
-    }
+    /* don't care about the return values from lyd_find_path */
+    ret = 0;
 
 cleanup:
-    free(tree_path);
+    free(url_path);
+    free(ext_path);
     return ret;
 }
 
@@ -651,75 +376,48 @@ API int
 nc_server_config_new_tls_crl_url(const struct ly_ctx *ctx, const char *endpt_name, const char *url, struct lyd_node **config)
 {
     int ret = 0;
-    struct lyd_node *new_tree, *node = NULL;
-    char *tree_path = NULL;
-    struct lys_module *mod;
+    struct lyd_node *node = NULL;
+    char *crl_path = NULL, *ext_path = NULL;
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, url, config, 1);
 
-    /* prepare path for instertion of leaves later */
-    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
-            "client-authentication", endpt_name);
-    if (!tree_path) {
+    ret = nc_config_new_insert(ctx, config, url, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:crl-url", endpt_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+    if (asprintf(&crl_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:crl-path", endpt_name) == -1) {
         ERRMEM;
+        crl_path = NULL;
         ret = 1;
         goto cleanup;
     }
 
-    /* create all the nodes in the path */
-    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-    if (!*config) {
-        *config = new_tree;
-    }
-
-    if (!new_tree) {
-        /* no new nodes were created */
-        ret = lyd_find_path(*config, tree_path, 0, &new_tree);
-    } else {
-        /* config was NULL */
-        ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
-    }
-    if (ret) {
+    if (asprintf(&ext_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:crl-cert-ext", endpt_name) == -1) {
+        ERRMEM;
+        ext_path = NULL;
+        ret = 1;
         goto cleanup;
     }
 
     /* delete other choice nodes if they are present */
-    lyd_find_path(new_tree, "libnetconf2-netconf-server:crl-path", 0, &node);
-    lyd_free_tree(node);
-    lyd_find_path(new_tree, "libnetconf2-netconf-server:crl-cert-ext", 0, &node);
-    lyd_free_tree(node);
-
-    /* get the wanted module, because parent of the inserted node has a different one */
-    mod = ly_ctx_get_module_implemented(ctx, "libnetconf2-netconf-server");
-    if (!mod) {
-        ERR(NULL, "Error getting libnetconf2-netconf-server module.");
-        ret = 1;
-        goto cleanup;
+    ret = lyd_find_path(*config, crl_path, 0, &node);
+    if (!ret) {
+        lyd_free_tree(node);
     }
-
-    ret = lyd_new_term(new_tree, mod, "crl-url", url, 0, NULL);
-    if (ret) {
-        ERR(NULL, "Creating new Certificate Revocation List node failed.");
-        goto cleanup;
+    ret = lyd_find_path(*config, ext_path, 0, &node);
+    if (!ret) {
+        lyd_free_tree(node);
     }
-
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_check_add_operation(ctx, *config);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* Add all default nodes */
-    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
-    if (ret) {
-        goto cleanup;
-    }
+    /* don't care about the return values from lyd_find_path */
+    ret = 0;
 
 cleanup:
-    free(tree_path);
+    free(crl_path);
+    free(ext_path);
     return ret;
 }
 
@@ -727,74 +425,45 @@ API int
 nc_server_config_new_tls_crl_cert_ext(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config)
 {
     int ret = 0;
-    struct lyd_node *new_tree, *node = NULL;
-    char *tree_path = NULL;
-    struct lys_module *mod;
+    struct lyd_node *node = NULL;
+    char *crl_path = NULL, *url_path = NULL;
 
-    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, config, 1);
+    ret = nc_config_new_insert(ctx, config, NULL, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:crl-cert-ext", endpt_name);
+    if (ret) {
+        goto cleanup;
+    }
 
-    /* prepare path for instertion of leaves later */
-    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
-            "client-authentication", endpt_name);
-    if (!tree_path) {
+    if (asprintf(&crl_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:crl-path", endpt_name) == -1) {
         ERRMEM;
+        crl_path = NULL;
         ret = 1;
         goto cleanup;
     }
 
-    /* create all the nodes in the path */
-    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-    if (!*config) {
-        *config = new_tree;
-    }
-
-    if (!new_tree) {
-        /* no new nodes were created */
-        ret = lyd_find_path(*config, tree_path, 0, &new_tree);
-    } else {
-        /* config was NULL */
-        ret = lyd_find_path(new_tree, tree_path, 0, &new_tree);
-    }
-    if (ret) {
+    if (asprintf(&url_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:crl-url", endpt_name) == -1) {
+        ERRMEM;
+        url_path = NULL;
+        ret = 1;
         goto cleanup;
     }
 
     /* delete other choice nodes if they are present */
-    lyd_find_path(new_tree, "libnetconf2-netconf-server:crl-path", 0, &node);
-    lyd_free_tree(node);
-    lyd_find_path(new_tree, "libnetconf2-netconf-server:crl-url", 0, &node);
-    lyd_free_tree(node);
-
-    /* get the wanted module, because parent of the inserted node has a different one */
-    mod = ly_ctx_get_module_implemented(ctx, "libnetconf2-netconf-server");
-    if (!mod) {
-        ERR(NULL, "Error getting libnetconf2-netconf-server module.");
-        ret = 1;
-        goto cleanup;
+    ret = lyd_find_path(*config, crl_path, 0, &node);
+    if (!ret) {
+        lyd_free_tree(node);
     }
-
-    ret = lyd_new_term(new_tree, mod, "crl-cert-ext", NULL, 0, NULL);
-    if (ret) {
-        ERR(NULL, "Creating new Certificate Revocation List node failed.");
-        goto cleanup;
+    ret = lyd_find_path(*config, url_path, 0, &node);
+    if (!ret) {
+        lyd_free_tree(node);
     }
-
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_check_add_operation(ctx, *config);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* Add all default nodes */
-    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
-    if (ret) {
-        goto cleanup;
-    }
+    /* don't care about the return values from lyd_find_path */
+    ret = 0;
 
 cleanup:
-    free(tree_path);
+    free(crl_path);
+    free(url_path);
     return ret;
 }

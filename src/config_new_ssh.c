@@ -39,12 +39,10 @@ nc_server_config_new_ssh_hostkey(const struct ly_ctx *ctx,
         const char *endpt_name, const char *hostkey_name, const char *privkey_path, const char *pubkey_path, struct lyd_node **config)
 {
     int ret = 0;
-    char *pubkey = NULL, *privkey = NULL, *pubkey_stripped, *privkey_stripped;
-    struct lyd_node *new_tree;
-    char *tree_path = NULL;
+    char *pubkey = NULL, *privkey = NULL;
     NC_PRIVKEY_FORMAT privkey_type;
     NC_PUBKEY_FORMAT pubkey_type;
-    const char *privkey_identity;
+    const char *privkey_format, *pubkey_format;
 
     NC_CHECK_ARG_RET(NULL, privkey_path, config, ctx, endpt_name, hostkey_name, 1);
 
@@ -55,92 +53,40 @@ nc_server_config_new_ssh_hostkey(const struct ly_ctx *ctx,
         goto cleanup;
     }
 
-    /* prepare path where leaves will get inserted */
-    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
-            "server-identity/host-key[name='%s']/public-key/inline-definition", endpt_name, hostkey_name);
-    if (!tree_path) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* create all the nodes in the path if they weren't there */
-    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-    if (!*config) {
-        *config = new_tree;
-    }
-
-    /* find the node where leaves will get inserted */
-    ret = lyd_find_path(*config, tree_path, 0, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* insert pubkey format */
+    /* pubkey format to str */
     if (pubkey_type == NC_PUBKEY_FORMAT_SSH2) {
-        ret = lyd_new_term(new_tree, NULL, "public-key-format", "ietf-crypto-types:ssh-public-key-format", 0, NULL);
+        pubkey_format = "ietf-crypto-types:ssh-public-key-format";
     } else {
-        ret = lyd_new_term(new_tree, NULL, "public-key-format", "ietf-crypto-types:subject-public-key-info-format", 0, NULL);
-    }
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* strip pubkey's header and footer only if it's generated from pkcs8 key (using OpenSSL),
-     * otherwise it's already stripped
-     */
-    if (!pubkey_path && (privkey_type == NC_PRIVKEY_FORMAT_X509)) {
-        pubkey_stripped = pubkey + strlen(NC_SUBJECT_PUBKEY_INFO_HEADER);
-        pubkey_stripped[strlen(pubkey_stripped) - strlen(NC_SUBJECT_PUBKEY_INFO_FOOTER)] = '\0';
-    } else {
-        pubkey_stripped = pubkey;
-    }
-
-    /* insert pubkey b64 */
-    ret = lyd_new_term(new_tree, NULL, "public-key", pubkey_stripped, 0, NULL);
-    if (ret) {
-        goto cleanup;
+        pubkey_format = "ietf-crypto-types:subject-public-key-info-format";
     }
 
     /* get privkey identityref value */
-    privkey_identity = nc_config_new_privkey_format_to_identityref(privkey_type);
-    if (!privkey_identity) {
+    privkey_format = nc_config_new_privkey_format_to_identityref(privkey_type);
+    if (!privkey_format) {
         ret = 1;
         goto cleanup;
     }
 
-    /* insert private key format */
-    ret = lyd_new_term(new_tree, NULL, "private-key-format", privkey_identity, 0, NULL);
+    ret = nc_config_new_insert(ctx, config, pubkey_format, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
+            "server-identity/host-key[name='%s']/public-key/inline-definition/public-key-format", endpt_name, hostkey_name);
     if (ret) {
         goto cleanup;
     }
 
-    if (privkey_type == NC_PRIVKEY_FORMAT_OPENSSH) {
-        /* only OpenSSH private keys have different header and footer after processing */
-        privkey_stripped = privkey + strlen(NC_OPENSSH_PRIVKEY_HEADER);
-        privkey_stripped[strlen(privkey_stripped) - strlen(NC_OPENSSH_PRIVKEY_FOOTER)] = '\0';
-    } else {
-        /* the rest share the same header and footer */
-        privkey_stripped = privkey + strlen(NC_PKCS8_PRIVKEY_HEADER);
-        privkey_stripped[strlen(privkey_stripped) - strlen(NC_PKCS8_PRIVKEY_FOOTER)] = '\0';
-    }
-
-    ret = lyd_new_term(new_tree, NULL, "cleartext-private-key", privkey_stripped, 0, NULL);
+    ret = nc_config_new_insert(ctx, config, pubkey, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
+            "server-identity/host-key[name='%s']/public-key/inline-definition/public-key", endpt_name, hostkey_name);
     if (ret) {
         goto cleanup;
     }
 
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_check_add_operation(ctx, *config);
+    ret = nc_config_new_insert(ctx, config, privkey_format, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
+            "server-identity/host-key[name='%s']/public-key/inline-definition/private-key-format", endpt_name, hostkey_name);
     if (ret) {
         goto cleanup;
     }
 
-    /* Add all default nodes */
-    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    ret = nc_config_new_insert(ctx, config, privkey, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
+            "server-identity/host-key[name='%s']/public-key/inline-definition/cleartext-private-key", endpt_name, hostkey_name);
     if (ret) {
         goto cleanup;
     }
@@ -148,7 +94,6 @@ nc_server_config_new_ssh_hostkey(const struct ly_ctx *ctx,
 cleanup:
     free(privkey);
     free(pubkey);
-    free(tree_path);
     return ret;
 }
 
@@ -417,69 +362,36 @@ nc_server_config_new_ssh_client_auth_pubkey(const struct ly_ctx *ctx, const char
         const char *user_name, const char *pubkey_name, const char *pubkey_path, struct lyd_node **config)
 {
     int ret = 0;
-    char *pubkey = NULL, *tree_path = NULL;
-    struct lyd_node *new_tree;
+    char *pubkey = NULL;
     NC_PUBKEY_FORMAT pubkey_type;
+    const char *pubkey_format;
 
+    /* get pubkey data */
     ret = nc_server_config_new_get_pubkey(pubkey_path, &pubkey, &pubkey_type);
     if (ret) {
         goto cleanup;
     }
 
-    /* prepare path where leaves will get inserted */
-    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
-            "users/user[name='%s']/public-keys/inline-definition/public-key[name='%s']", endpt_name, user_name, pubkey_name);
-    if (!tree_path) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* create all the nodes in the path if they weren't there */
-    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-    if (!*config) {
-        *config = new_tree;
-    }
-
-    /* find the node where leaves will get inserted */
-    ret = lyd_find_path(*config, tree_path, 0, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* insert pubkey format */
+    /* get pubkey format */
     if (pubkey_type == NC_PUBKEY_FORMAT_SSH2) {
-        ret = lyd_new_term(new_tree, NULL, "public-key-format", "ietf-crypto-types:ssh-public-key-format", 0, NULL);
+        pubkey_format = "ietf-crypto-types:ssh-public-key-format";
     } else {
-        ret = lyd_new_term(new_tree, NULL, "public-key-format", "ietf-crypto-types:subject-public-key-info-format", 0, NULL);
+        pubkey_format = "ietf-crypto-types:subject-public-key-info-format";
     }
+
+    ret = nc_config_new_insert(ctx, config, pubkey_format, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
+            "users/user[name='%s']/public-keys/inline-definition/public-key[name='%s']/public-key-format", endpt_name, user_name, pubkey_name);
     if (ret) {
         goto cleanup;
     }
 
-    /* insert pubkey b64 */
-    ret = lyd_new_term(new_tree, NULL, "public-key", pubkey, 0, NULL);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_check_add_operation(ctx, *config);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* Add all default nodes */
-    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    ret = nc_config_new_insert(ctx, config, pubkey, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
+            "users/user[name='%s']/public-keys/inline-definition/public-key[name='%s']/public-key", endpt_name, user_name, pubkey_name);
     if (ret) {
         goto cleanup;
     }
 
 cleanup:
-    free(tree_path);
     free(pubkey);
     return ret;
 }
@@ -489,37 +401,12 @@ nc_server_config_new_ssh_client_auth_password(const struct ly_ctx *ctx, const ch
         const char *user_name, const char *password, struct lyd_node **config)
 {
     int ret = 0;
-    char *tree_path = NULL, *hashed_pw = NULL;
-    struct lyd_node *new_tree;
+    char *hashed_pw = NULL;
     const char *salt = "$6$idsizuippipk$";
 
 #ifdef HAVE_CRYPT_R
     struct crypt_data cdata;
 #endif
-
-    /* prepare path where the leaf will get inserted */
-    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
-            "users/user[name='%s']", endpt_name, user_name);
-    if (!tree_path) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* create all the nodes in the path if they weren't there */
-    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-    if (!*config) {
-        *config = new_tree;
-    }
-
-    /* find the node where the leaf will get inserted */
-    ret = lyd_find_path(*config, tree_path, 0, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
 
 #ifdef HAVE_CRYPT_R
     cdata.initialized = 0;
@@ -536,26 +423,13 @@ nc_server_config_new_ssh_client_auth_password(const struct ly_ctx *ctx, const ch
         goto cleanup;
     }
 
-    /* insert SHA-512 hashed password */
-    ret = lyd_new_term(new_tree, NULL, "password", hashed_pw, 0, NULL);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_check_add_operation(ctx, *config);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* Add all default nodes */
-    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    ret = nc_config_new_insert(ctx, config, hashed_pw, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
+            "users/user[name='%s']/password", endpt_name, user_name);
     if (ret) {
         goto cleanup;
     }
 
 cleanup:
-    free(tree_path);
     return ret;
 }
 
@@ -564,53 +438,14 @@ nc_server_config_new_ssh_client_auth_none(const struct ly_ctx *ctx, const char *
         const char *user_name, struct lyd_node **config)
 {
     int ret = 0;
-    char *tree_path = NULL;
-    struct lyd_node *new_tree;
 
-    /* prepare path where the leaf will get inserted */
-    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
-            "users/user[name='%s']", endpt_name, user_name);
-    if (!tree_path) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* create all the nodes in the path if they weren't there */
-    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-    if (!*config) {
-        *config = new_tree;
-    }
-
-    /* find the node where the leaf will get inserted */
-    ret = lyd_find_path(*config, tree_path, 0, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* insert none leaf */
-    ret = lyd_new_term(new_tree, NULL, "none", NULL, 0, NULL);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_check_add_operation(ctx, *config);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* Add all default nodes */
-    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    ret = nc_config_new_insert(ctx, config, NULL, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
+            "users/user[name='%s']/none", endpt_name, user_name);
     if (ret) {
         goto cleanup;
     }
 
 cleanup:
-    free(tree_path);
     return ret;
 }
 
@@ -619,60 +454,19 @@ nc_server_config_new_ssh_client_auth_interactive(const struct ly_ctx *ctx, const
         const char *user_name, const char *pam_config_name, const char *pam_config_dir, struct lyd_node **config)
 {
     int ret = 0;
-    char *tree_path = NULL;
-    struct lyd_node *new_tree;
 
-    /* prepare path where the leaf will get inserted */
-    asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
-            "users/user[name='%s']/libnetconf2-netconf-server:keyboard-interactive", endpt_name, user_name);
-    if (!tree_path) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* create all the nodes in the path if they weren't there */
-    ret = lyd_new_path(*config, ctx, tree_path, NULL, LYD_NEW_PATH_UPDATE, &new_tree);
-    if (ret) {
-        goto cleanup;
-    }
-    if (!*config) {
-        *config = new_tree;
-    }
-
-    /* find the node where the leaf will get inserted */
-    ret = lyd_find_path(*config, tree_path, 0, &new_tree);
+    ret = nc_config_new_insert(ctx, config, pam_config_name, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
+            "users/user[name='%s']/libnetconf2-netconf-server:keyboard-interactive/pam-config-file-name", endpt_name, user_name);
     if (ret) {
         goto cleanup;
     }
 
-    /* insert file-name leaf */
-    ret = lyd_new_term(new_tree, NULL, "pam-config-file-name", pam_config_name, 0, NULL);
-    if (ret) {
-        goto cleanup;
-    }
-
-    if (pam_config_dir) {
-        /* insert file-path leaf */
-        ret = lyd_new_term(new_tree, NULL, "pam-config-file-dir", pam_config_dir, 0, NULL);
-        if (ret) {
-            goto cleanup;
-        }
-    }
-
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_check_add_operation(ctx, *config);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* Add all default nodes */
-    ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
+    ret = nc_config_new_insert(ctx, config, pam_config_dir, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
+            "users/user[name='%s']/libnetconf2-netconf-server:keyboard-interactive/pam-config-file-dir", endpt_name, user_name);
     if (ret) {
         goto cleanup;
     }
 
 cleanup:
-    free(tree_path);
     return ret;
 }

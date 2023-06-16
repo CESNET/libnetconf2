@@ -173,9 +173,11 @@ setup_f(void **state)
     ret = nc_server_config_new_tls_ciphers(ctx, "endpt", &tree, 3, "tls-aes-128-ccm-sha256", "tls-aes-128-gcm-sha256", "tls-chacha20-poly1305-sha256");
     assert_int_equal(ret, 0);
 
+    /* set this node, but it should be deleted by the next call, bcs only one choice node can be present */
     ret = nc_server_config_new_tls_crl_url(ctx, "endpt", "abc", &tree);
     assert_int_equal(ret, 0);
 
+    /* set path to a CRL file */
     ret = nc_server_config_new_tls_crl_path(ctx, "endpt", TESTS_DIR "/data/crl.pem", &tree);
     assert_int_equal(ret, 0);
 
