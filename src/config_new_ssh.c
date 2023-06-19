@@ -470,3 +470,10 @@ nc_server_config_new_ssh_client_auth_interactive(const struct ly_ctx *ctx, const
 cleanup:
     return ret;
 }
+
+API int
+nc_config_new_ssh_endpoint_client_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *referenced_endpt, struct lyd_node **config)
+{
+    return nc_config_new_insert(ctx, config, referenced_endpt, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:endpoint-client-auth", endpt_name);
+}

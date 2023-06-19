@@ -16,8 +16,8 @@
 #ifndef NC_CONFIG_NEW_H_
 #define NC_CONFIG_NEW_H_
 
-#include <stdarg.h>
 #include <libyang/libyang.h>
+#include <stdarg.h>
 
 #include "session_p.h"
 

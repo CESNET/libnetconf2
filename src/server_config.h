@@ -262,6 +262,24 @@ int nc_server_config_new_ssh_client_auth_interactive(const struct ly_ctx *ctx, c
         const char *user_name, const char *pam_config_name, const char *pam_config_dir, struct lyd_node **config);
 
 /**
+ * @brief Creates new YANG configuration data nodes, which will be a reference to another SSH endpoint's clients.
+ *
+ * Whenever an user tries to connect to the referencing endpoint, all of its users will be tried first. If no match is
+ * found, the referenced endpoint's configured clients will be tried.
+ *
+ * @param[in] ctx libyang context
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's contents will be changed.
+ * @param[in] referenced_endpt Identifier of an endpoint, which has to exist whenever this data
+ * is applied. The referenced endpoint can reference another one and so on, but there mustn't be a cycle.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_config_new_ssh_endpoint_client_reference(const struct ly_ctx *ctx, const char *endpt_name,
+        const char *referenced_endpt, struct lyd_node **config);
+
+/**
  * @brief Creates new YANG configuration data nodes for a server's certificate.
  *
  * @param[in] ctx libyang context.
@@ -412,6 +430,24 @@ int nc_server_config_new_tls_crl_url(const struct ly_ctx *ctx, const char *endpt
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_new_tls_crl_cert_ext(const struct ly_ctx *ctx, const char *endpt_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes, which will be a reference to another TLS endpoint's certificates.
+ *
+ * Whenever an user tries to connect to the referencing endpoint, all of its certificates will be tried first. If no match is
+ * found, the referenced endpoint's configured certificates will be tried. The same applies to cert-to-name entries.
+ *
+ * @param[in] ctx libyang context
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, it's contents will be changed.
+ * @param[in] referenced_endpt Identifier of an endpoint, which has to exist whenever this data
+ * is applied. The referenced endpoint can reference another one and so on, but there mustn't be a cycle.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_config_new_tls_endpoint_client_reference(const struct ly_ctx *ctx, const char *endpt_name,
+        const char *referenced_endpt, struct lyd_node **config);
 
 #endif /* NC_ENABLED_SSH_TLS */
 

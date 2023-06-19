@@ -274,6 +274,8 @@ struct nc_server_tls_opts {
     int crl_cert_ext;                           /**< Indicates to use CA's distribution points to obtain CRLs */
     X509_STORE *crl_store;                      /**< Stores all the CRLs */
 
+    struct nc_endpt *endpt_client_ref;          /**< Reference to another endpoint (used for client authentication). */
+
     unsigned int tls_versions;                  /**< TLS versions */
     char *ciphers;                              /**< TLS ciphers */
 

@@ -73,31 +73,31 @@ nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const char
     }
 
     ret = nc_config_new_insert(ctx, config, pubkey_format, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
-        "tls/tls-server-parameters/server-identity/certificate/inline-definition/public-key-format", endpt_name);
+            "tls/tls-server-parameters/server-identity/certificate/inline-definition/public-key-format", endpt_name);
     if (ret) {
         goto cleanup;
     }
 
     ret = nc_config_new_insert(ctx, config, pubkey, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
-        "tls/tls-server-parameters/server-identity/certificate/inline-definition/public-key", endpt_name);
+            "tls/tls-server-parameters/server-identity/certificate/inline-definition/public-key", endpt_name);
     if (ret) {
         goto cleanup;
     }
 
     ret = nc_config_new_insert(ctx, config, privkey_format, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
-        "tls/tls-server-parameters/server-identity/certificate/inline-definition/private-key-format", endpt_name);
+            "tls/tls-server-parameters/server-identity/certificate/inline-definition/private-key-format", endpt_name);
     if (ret) {
         goto cleanup;
     }
 
     ret = nc_config_new_insert(ctx, config, privkey, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
-        "tls/tls-server-parameters/server-identity/certificate/inline-definition/cleartext-private-key", endpt_name);
+            "tls/tls-server-parameters/server-identity/certificate/inline-definition/cleartext-private-key", endpt_name);
     if (ret) {
         goto cleanup;
     }
 
     ret = nc_config_new_insert(ctx, config, cert, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
-        "tls/tls-server-parameters/server-identity/certificate/inline-definition/cert-data", endpt_name);
+            "tls/tls-server-parameters/server-identity/certificate/inline-definition/cert-data", endpt_name);
     if (ret) {
         goto cleanup;
     }
@@ -211,13 +211,13 @@ nc_server_config_new_tls_ctn(const struct ly_ctx *ctx, const char *endpt_name, u
     }
 
     ret = nc_config_new_insert(ctx, config, map, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
-                "netconf-server-parameters/client-identity-mappings/cert-to-name[id='%d']/map-type", endpt_name, id);
+            "netconf-server-parameters/client-identity-mappings/cert-to-name[id='%d']/map-type", endpt_name, id);
     if (ret) {
         goto cleanup;
     }
 
     ret = nc_config_new_insert(ctx, config, name, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
-                "netconf-server-parameters/client-identity-mappings/cert-to-name[id='%d']/name", endpt_name, id);
+            "netconf-server-parameters/client-identity-mappings/cert-to-name[id='%d']/name", endpt_name, id);
     if (ret) {
         goto cleanup;
     }
@@ -308,7 +308,7 @@ nc_server_config_new_tls_ciphers(const struct ly_ctx *ctx, const char *endpt_nam
         }
 
         ret = nc_config_new_insert(ctx, config, cipher_ident, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
-            "tls/tls-server-parameters/hello-params/cipher-suites/cipher-suite", endpt_name);
+                "tls/tls-server-parameters/hello-params/cipher-suites/cipher-suite", endpt_name);
         if (ret) {
             goto cleanup;
         }
@@ -466,4 +466,11 @@ cleanup:
     free(crl_path);
     free(url_path);
     return ret;
+}
+
+API int
+nc_config_new_tls_endpoint_client_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *referenced_endpt, struct lyd_node **config)
+{
+    return nc_config_new_insert(ctx, config, referenced_endpt, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:endpoint-client-auth", endpt_name);
 }
