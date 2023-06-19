@@ -1722,8 +1722,8 @@ nc_sock_connect(const char *host, uint16_t port, int timeout_ms, struct nc_keepa
         sock = sock_connect(timeout_ms, sock_pending, NULL, ka);
 
         if (sock > 0) {
-            if (getsockname(sock, (struct sockaddr *)&saddr, &addr_len)) {
-                ERR(NULL, "getsockname failed (%s).", strerror(errno));
+            if (getpeername(sock, (struct sockaddr *)&saddr, &addr_len)) {
+                ERR(NULL, "getpeername failed (%s).", strerror(errno));
                 goto error;
             }
 
