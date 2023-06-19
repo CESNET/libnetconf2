@@ -599,7 +599,6 @@ cleanup:
 }
 
 static int
-<<<<<<< HEAD
 nc_server_tls_ts_ref_get_certs(const char *referenced_name, struct nc_certificate **certs, uint16_t *cert_count)
 {
     uint16_t i;
@@ -682,29 +681,17 @@ nc_server_tls_do_preverify(struct nc_session *session, X509_STORE_CTX *x509_ctx,
 }
 
 static int
-=======
->>>>>>> d301c76 (config UPDATE implemented CRL for TLS)
 nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
 {
     X509_NAME *subject;
     X509_NAME *issuer;
     X509 *cert;
-<<<<<<< HEAD
-=======
-    struct nc_cert_grouping *ee_certs;
->>>>>>> d301c76 (config UPDATE implemented CRL for TLS)
     char *cp;
 
     STACK_OF(X509) * cert_stack;
     struct nc_session *session;
     struct nc_server_tls_opts *opts;
-<<<<<<< HEAD
     int rc, depth;
-=======
-    int i, rc, depth;
-    const char *username = NULL;
-    NC_TLS_CTN_MAPTYPE map_type = 0;
->>>>>>> d301c76 (config UPDATE implemented CRL for TLS)
 
     /* get the thread session */
     session = pthread_getspecific(verify_key);
@@ -725,23 +712,14 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
 
     /* standard certificate verification failed, so an end-entity client cert must match to continue */
     if (!preverify_ok) {
-<<<<<<< HEAD
         /* check current endpoint's end-entity certs */
         rc = nc_server_tls_do_preverify(session, x509_ctx, 1);
         if (rc == -1) {
-=======
-        /* get the store from the current context */
-        X509_STORE *store = X509_STORE_CTX_get0_store(x509_ctx);
-
-        if (!store) {
-            ERR(session, "Error getting store from context (%s).", ERR_reason_error_string(ERR_get_error()));
->>>>>>> d301c76 (config UPDATE implemented CRL for TLS)
             return 0;
         } else if (rc == 1) {
             return 1;
         }
 
-<<<<<<< HEAD
         /* no match, continue */
         if (opts->endpt_client_ref) {
             /* check referenced endpoint's end-entity certs */
@@ -749,33 +727,11 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
             if (rc == -1) {
                 return 0;
             } else if (rc == 1) {
-=======
-        /* get the data from the store */
-        ee_certs = X509_STORE_get_ex_data(store, 1);
-        if (!ee_certs) {
-            ERR(session, "Error getting data from store (%s).", ERR_reason_error_string(ERR_get_error()));
-            return 0;
-        }
-
-        for (i = 0; i < ee_certs->cert_count; i++) {
-            cert = base64der_to_cert(ee_certs->certs[i].data);
-            rc = cert_pubkey_match(session->opts.server.client_cert, cert);
-            X509_free(cert);
-            if (rc) {
-                /* we are just overriding the failed standard certificate verification (preverify_ok == 0),
-                 * this callback will be called again with the same current certificate and preverify_ok == 1 */
-                VRB(session, "Cert verify: fail (%s), but the end-entity certificate is trusted, continuing.",
-                        X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
-                X509_STORE_CTX_set_error(x509_ctx, X509_V_OK);
->>>>>>> d301c76 (config UPDATE implemented CRL for TLS)
                 return 1;
             }
         }
 
-<<<<<<< HEAD
         /* no match, fail */
-=======
->>>>>>> d301c76 (config UPDATE implemented CRL for TLS)
         ERR(session, "Cert verify: fail (%s).", X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
         return 0;
     }

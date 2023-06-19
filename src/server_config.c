@@ -837,6 +837,7 @@ static void
 nc_server_config_del_endpt_tls(struct nc_endpt *endpt, struct nc_bind *bind)
 {
     nc_server_config_del_endpt_name(endpt);
+    nc_server_config_del_endpt_reference(endpt);
     nc_server_config_del_tls(bind, endpt->opts.tls);
 
     server_opts.endpt_count--;
@@ -2495,6 +2496,9 @@ nc_server_config_fill_endpt_client_auth(void)
                     if (server_opts.endpts[i].ti == NC_TI_LIBSSH) {
                         server_opts.endpts[i].opts.ssh->endpt_client_ref = &server_opts.endpts[j];
                         break;
+                    } else if (server_opts.endpts[i].ti == NC_TI_OPENSSL) {
+                        server_opts.endpts[i].opts.tls->endpt_client_ref = &server_opts.endpts[j];
+                        break;
                     } else {
                         ERRINT;
                         return 1;
@@ -2515,17 +2519,33 @@ nc_server_config_fill_endpt_client_auth(void)
 }
 
 static int
-nc_server_config_endpoint_client_auth_has_cycle(struct nc_endpt *original, struct nc_endpt *next, NC_TRANSPORT_IMPL transport)
+nc_server_config_endpoint_client_auth_has_cycle(struct nc_endpt *original, struct nc_endpt *next)
 {
-    if (transport == NC_TI_LIBSSH) {
-        if (next->opts.ssh->endpt_client_ref) {
-            if (next->opts.ssh->endpt_client_ref == original) {
-                return 1;
-            } else {
-                return nc_server_config_endpoint_client_auth_has_cycle(original, next->opts.ssh->endpt_client_ref, NC_TI_LIBSSH);
-            }
-        } else {
+    if (original->ti == NC_TI_LIBSSH) {
+        if (!next->opts.ssh->endpt_client_ref) {
+            /* no further reference -> no cycle */
             return 0;
+        }
+
+        if (next->opts.ssh->endpt_client_ref == original) {
+            /* found cycle */
+            return 1;
+        } else {
+            /* continue further */
+            return nc_server_config_endpoint_client_auth_has_cycle(original, next->opts.ssh->endpt_client_ref);
+        }
+    } else if (original->ti == NC_TI_OPENSSL) {
+        if (!next->opts.tls->endpt_client_ref) {
+            /* no further reference -> no cycle */
+            return 0;
+        }
+
+        if (next->opts.tls->endpt_client_ref == original) {
+            /* found cycle */
+            return 1;
+        } else {
+            /* continue further */
+            return nc_server_config_endpoint_client_auth_has_cycle(original, next->opts.tls->endpt_client_ref);
         }
     } else {
         ERRINT;
@@ -2550,7 +2570,11 @@ nc_server_config_endpoint_client_auth(const struct lyd_node *node, NC_OPERATION 
     }
 
     if (op == NC_OP_DELETE) {
-        endpt->opts.ssh->endpt_client_ref = NULL;
+        if (is_ssh(node)) {
+            endpt->opts.ssh->endpt_client_ref = NULL;
+        } else {
+            endpt->opts.tls->endpt_client_ref = NULL;
+        }
         goto cleanup;
     }
 
@@ -2564,11 +2588,11 @@ nc_server_config_endpoint_client_auth(const struct lyd_node *node, NC_OPERATION 
 
     if (i == server_opts.endpt_count) {
         /* endpt not found, save the name and try to look it up later */
+        nc_server_config_del_endpt_reference(endpt);
         endpt->referenced_endpt_name = strdup(endpt_name);
         if (!endpt->referenced_endpt_name) {
             ERRMEM;
             ret = 1;
-            goto cleanup;
         }
         goto cleanup;
     }
@@ -2581,14 +2605,18 @@ nc_server_config_endpoint_client_auth(const struct lyd_node *node, NC_OPERATION 
     }
 
     /* check for cyclic references */
-    ret = nc_server_config_endpoint_client_auth_has_cycle(endpt, &server_opts.endpts[i], endpt->ti);
+    ret = nc_server_config_endpoint_client_auth_has_cycle(endpt, &server_opts.endpts[i]);
     if (ret) {
         ERR(NULL, "Cyclic client authentication reference detected.");
         goto cleanup;
     }
 
     /* assign the current endpt the referrenced endpt */
-    endpt->opts.ssh->endpt_client_ref = &server_opts.endpts[i];
+    if (is_ssh(node)) {
+        endpt->opts.ssh->endpt_client_ref = &server_opts.endpts[i];
+    } else {
+        endpt->opts.tls->endpt_client_ref = &server_opts.endpts[i];
+    }
 
 cleanup:
     return ret;
