@@ -240,6 +240,24 @@ module libnetconf2-netconf-server {
     leaf auth-attempts {
       type uint16;
       default 3;
+      description
+        "Represents the number of failed attempts before an authentication is deemed unsuccessful.";
+    }
+
+    leaf auth-timeout {
+      type uint16;
+      default 10;
+      units "seconds";
+      description
+        "Represents the maximum amount of seconds an authentication can go on for.";
+    }
+  }
+
+  // CH auth-attempts and auth-timeout
+  augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
+    leaf auth-attempts {
+      type uint16;
+      default 3;
     }
 
     leaf auth-timeout {

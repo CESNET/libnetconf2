@@ -35,15 +35,41 @@
 #include "session_p.h"
 
 int
-nc_config_new_check_add_operation(const struct ly_ctx *ctx, struct lyd_node *top)
+nc_config_new_add_operation(const struct ly_ctx *ctx, struct lyd_node *node, NC_OPERATION op)
 {
-    if (lyd_find_meta(top->meta, NULL, "yang:operation")) {
-        /* it already has operation attribute */
-        return 0;
+    struct lyd_meta *meta;
+    const char *op_str = NULL;
+
+    meta = lyd_find_meta(node->meta, NULL, "yang:operation");
+    if (meta) {
+        /* node already has operation attribute, delete it */
+        lyd_free_meta_single(meta);
     }
 
-    /* give the top level container create operation */
-    if (lyd_new_meta(ctx, top, NULL, "yang:operation", "create", 0, NULL)) {
+    /* get the operation as string */
+    switch (op) {
+    case NC_OP_CREATE:
+        op_str = "create";
+        break;
+    case NC_OP_REPLACE:
+        op_str = "replace";
+        break;
+    case NC_OP_DELETE:
+        op_str = "delete";
+        break;
+    case NC_OP_NONE:
+        op_str = "none";
+        break;
+    default:
+        break;
+    }
+    if (!op_str) {
+        ERR(NULL, "Invalid operation to add to the tree.");
+        return 1;
+    }
+
+    /* give the node the operation */
+    if (lyd_new_meta(ctx, node, NULL, "yang:operation", op_str, 0, NULL)) {
         return 1;
     }
 
@@ -670,12 +696,12 @@ nc_server_config_new_address_port(const struct ly_ctx *ctx, const char *endpt_na
         goto cleanup;
     }
 
-    ret = nc_config_new_insert(ctx, config, address, address_fmt, endpt_name);
+    ret = nc_config_new_create(ctx, config, address, address_fmt, endpt_name);
     if (ret) {
         goto cleanup;
     }
 
-    ret = nc_config_new_insert(ctx, config, port, port_fmt, endpt_name);
+    ret = nc_config_new_create(ctx, config, port, port_fmt, endpt_name);
     if (ret) {
         goto cleanup;
     }
@@ -684,8 +710,111 @@ cleanup:
     return ret;
 }
 
+API int
+nc_server_config_new_ch_address_port(const struct ly_ctx *ctx, const char *ch_client_name, const char *endpt_name,
+        NC_TRANSPORT_IMPL transport, const char *address, const char *port, struct lyd_node **config)
+{
+    int ret = 0;
+    const char *address_fmt, *port_fmt;
+
+    NC_CHECK_ARG_RET(NULL, address, port, ctx, endpt_name, config, 1);
+
+    if (transport == NC_TI_LIBSSH) {
+        /* SSH path */
+        address_fmt = "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/tcp-client-parameters/remote-address";
+        port_fmt = "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/tcp-client-parameters/remote-port";
+    } else if (transport == NC_TI_OPENSSL) {
+        /* TLS path */
+        address_fmt = "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tcp-client-parameters/remote-address";
+        port_fmt = "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tcp-client-parameters/remote-port";
+    } else {
+        ERR(NULL, "Transport not supported.");
+        ret = 1;
+        goto cleanup;
+    }
+
+    ret = nc_config_new_create(ctx, config, address, address_fmt, ch_client_name, endpt_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+    ret = nc_config_new_create(ctx, config, port, port_fmt, ch_client_name, endpt_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    return ret;
+}
+
+API int
+nc_server_config_new_del_ch_client(const struct ly_ctx *ctx, const char *ch_client_name, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, ctx, ch_client_name, config, 1);
+
+    return nc_config_new_delete(ctx, config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']", ch_client_name);
+}
+
 int
-nc_config_new_insert(const struct ly_ctx *ctx, struct lyd_node **tree, const char *value, const char *path_fmt, ...)
+nc_config_new_delete(const struct ly_ctx *ctx, struct lyd_node **tree, const char *path_fmt, ...)
+{
+    int ret = 0;
+    va_list ap;
+    char *path = NULL;
+
+    va_start(ap, path_fmt);
+
+    /* create the path from the format */
+    ret = vasprintf(&path, path_fmt, ap);
+    if (ret == -1) {
+        ERRMEM;
+        path = NULL;
+        goto cleanup;
+    }
+
+    /* create the nodes in the path */
+    ret = lyd_new_path(*tree, ctx, path, NULL, LYD_NEW_PATH_UPDATE, tree);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* set the node to the last node */
+    ret = lyd_find_path(*tree, path, 0, tree);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* add delete operation to the node */
+    ret = nc_config_new_add_operation(ctx, *tree, NC_OP_DELETE);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* set the node back to top level container */
+    ret = lyd_find_path(*tree, "/ietf-netconf-server:netconf-server", 0, tree);
+    if (ret) {
+        goto cleanup;
+    }
+
+    ret = nc_config_new_add_operation(ctx, *tree, NC_OP_NONE);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* add all default nodes */
+    ret = lyd_new_implicit_tree(*tree, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(path);
+    va_end(ap);
+    return ret;
+}
+
+int
+nc_config_new_create(const struct ly_ctx *ctx, struct lyd_node **tree, const char *value, const char *path_fmt, ...)
 {
     int ret = 0;
     va_list ap;
@@ -707,14 +836,14 @@ nc_config_new_insert(const struct ly_ctx *ctx, struct lyd_node **tree, const cha
         goto cleanup;
     }
 
-    /* set out param to top level container */
+    /* set the node to the top level node */
     ret = lyd_find_path(*tree, "/ietf-netconf-server:netconf-server", 0, tree);
     if (ret) {
         goto cleanup;
     }
 
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_check_add_operation(ctx, *tree);
+    /* add create operation to the top level node */
+    ret = nc_config_new_add_operation(ctx, *tree, NC_OP_CREATE);
     if (ret) {
         goto cleanup;
     }

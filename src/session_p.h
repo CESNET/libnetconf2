@@ -461,6 +461,9 @@ struct nc_server_opts {
      *                modify CH clients - READ lock ch_client_lock + ch_client_lock */
     struct nc_ch_client {
         char *name;
+
+        struct nc_session *session;
+        pthread_t tid;
         struct nc_ch_endpt {
             char *name;
             NC_TRANSPORT_IMPL ti;

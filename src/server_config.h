@@ -449,6 +449,17 @@ int nc_server_config_new_tls_crl_cert_ext(const struct ly_ctx *ctx, const char *
 int nc_config_new_tls_endpoint_client_reference(const struct ly_ctx *ctx, const char *endpt_name,
         const char *referenced_endpt, struct lyd_node **config);
 
+int nc_server_config_new_ch_address_port(const struct ly_ctx *ctx, const char *ch_client_name, const char *endpt_name,
+        NC_TRANSPORT_IMPL transport, const char *address, const char *port, struct lyd_node **config);
+
+int nc_server_config_new_ssh_ch_hostkey(const struct ly_ctx *ctx, const char *ch_client_name, const char *endpt_name,
+        const char *hostkey_name, const char *privkey_path, const char *pubkey_path, struct lyd_node **config);
+
+int nc_server_config_new_ssh_ch_client_auth_pubkey(const struct ly_ctx *ctx, const char *ch_client_name, const char *endpt_name,
+        const char *user_name, const char *pubkey_name, const char *pubkey_path, struct lyd_node **config);
+
+int nc_server_config_new_del_ch_client(const struct ly_ctx *ctx, const char *ch_client_name, struct lyd_node **config);
+
 #endif /* NC_ENABLED_SSH_TLS */
 
 #ifdef __cplusplus

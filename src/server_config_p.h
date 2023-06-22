@@ -126,6 +126,8 @@ int nc_server_config_parse_tree(const struct lyd_node *node, NC_OPERATION parent
  */
 int nc_server_config_listen(struct lyd_node *node, NC_OPERATION op);
 
+void nc_server_config_ch(const struct lyd_node *node, NC_OPERATION op);
+
 #ifdef NC_ENABLED_SSH_TLS
 
 /** KEYSTORE **/
