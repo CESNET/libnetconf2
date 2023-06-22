@@ -476,7 +476,7 @@ nc_server_config_fill_keystore(const struct lyd_node *data, NC_OPERATION op)
 
     ret = lyd_find_path(data, "/ietf-keystore:keystore", 0, &tree);
     if (ret || (tree->flags & LYD_DEFAULT)) {
-        VRB(NULL, "Keystore container not found in the YANG data.");
+        /* not found */
         ret = 0;
         goto cleanup;
     }

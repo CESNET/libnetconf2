@@ -72,31 +72,31 @@ nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const char
         goto cleanup;
     }
 
-    ret = nc_config_new_insert(ctx, config, pubkey_format, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+    ret = nc_config_new_create(ctx, config, pubkey_format, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
             "tls/tls-server-parameters/server-identity/certificate/inline-definition/public-key-format", endpt_name);
     if (ret) {
         goto cleanup;
     }
 
-    ret = nc_config_new_insert(ctx, config, pubkey, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+    ret = nc_config_new_create(ctx, config, pubkey, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
             "tls/tls-server-parameters/server-identity/certificate/inline-definition/public-key", endpt_name);
     if (ret) {
         goto cleanup;
     }
 
-    ret = nc_config_new_insert(ctx, config, privkey_format, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+    ret = nc_config_new_create(ctx, config, privkey_format, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
             "tls/tls-server-parameters/server-identity/certificate/inline-definition/private-key-format", endpt_name);
     if (ret) {
         goto cleanup;
     }
 
-    ret = nc_config_new_insert(ctx, config, privkey, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+    ret = nc_config_new_create(ctx, config, privkey, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
             "tls/tls-server-parameters/server-identity/certificate/inline-definition/cleartext-private-key", endpt_name);
     if (ret) {
         goto cleanup;
     }
 
-    ret = nc_config_new_insert(ctx, config, cert, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+    ret = nc_config_new_create(ctx, config, cert, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
             "tls/tls-server-parameters/server-identity/certificate/inline-definition/cert-data", endpt_name);
     if (ret) {
         goto cleanup;
@@ -124,7 +124,7 @@ nc_server_config_new_tls_client_certificate(const struct ly_ctx *ctx, const char
         goto cleanup;
     }
 
-    ret = nc_config_new_insert(ctx, config, cert, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+    ret = nc_config_new_create(ctx, config, cert, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
             "client-authentication/ee-certs/inline-definition/certificate[name='%s']/cert-data", endpt_name, cert_name);
     if (ret) {
         goto cleanup;
@@ -150,7 +150,7 @@ nc_server_config_new_tls_client_ca(const struct ly_ctx *ctx, const char *endpt_n
         goto cleanup;
     }
 
-    ret = nc_config_new_insert(ctx, config, cert, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+    ret = nc_config_new_create(ctx, config, cert, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
             "client-authentication/ca-certs/inline-definition/certificate[name='%s']/cert-data", endpt_name, cert_name);
     if (ret) {
         goto cleanup;
@@ -196,7 +196,7 @@ nc_server_config_new_tls_ctn(const struct ly_ctx *ctx, const char *endpt_name, u
 
     if (fingerprint) {
         /* optional */
-        ret = nc_config_new_insert(ctx, config, fingerprint, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
+        ret = nc_config_new_create(ctx, config, fingerprint, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
                 "netconf-server-parameters/client-identity-mappings/cert-to-name[id='%d']/fingerprint", endpt_name, id);
         if (ret) {
             goto cleanup;
@@ -210,13 +210,13 @@ nc_server_config_new_tls_ctn(const struct ly_ctx *ctx, const char *endpt_name, u
         goto cleanup;
     }
 
-    ret = nc_config_new_insert(ctx, config, map, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
+    ret = nc_config_new_create(ctx, config, map, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
             "netconf-server-parameters/client-identity-mappings/cert-to-name[id='%d']/map-type", endpt_name, id);
     if (ret) {
         goto cleanup;
     }
 
-    ret = nc_config_new_insert(ctx, config, name, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
+    ret = nc_config_new_create(ctx, config, name, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
             "netconf-server-parameters/client-identity-mappings/cert-to-name[id='%d']/name", endpt_name, id);
     if (ret) {
         goto cleanup;
@@ -259,7 +259,7 @@ nc_server_config_new_tls_version(const struct ly_ctx *ctx, const char *endpt_nam
         goto cleanup;
     }
 
-    ret = nc_config_new_insert(ctx, config, version, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+    ret = nc_config_new_create(ctx, config, version, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
             "hello-params/tls-versions/tls-version", endpt_name);
     if (ret) {
         goto cleanup;
@@ -307,7 +307,7 @@ nc_server_config_new_tls_ciphers(const struct ly_ctx *ctx, const char *endpt_nam
             goto cleanup;
         }
 
-        ret = nc_config_new_insert(ctx, config, cipher_ident, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+        ret = nc_config_new_create(ctx, config, cipher_ident, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
                 "tls/tls-server-parameters/hello-params/cipher-suites/cipher-suite", endpt_name);
         if (ret) {
             goto cleanup;
@@ -332,7 +332,7 @@ nc_server_config_new_tls_crl_path(const struct ly_ctx *ctx, const char *endpt_na
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, path, config, 1);
 
-    ret = nc_config_new_insert(ctx, config, path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+    ret = nc_config_new_create(ctx, config, path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
             "client-authentication/libnetconf2-netconf-server:crl-path", endpt_name);
     if (ret) {
         goto cleanup;
@@ -381,7 +381,7 @@ nc_server_config_new_tls_crl_url(const struct ly_ctx *ctx, const char *endpt_nam
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, url, config, 1);
 
-    ret = nc_config_new_insert(ctx, config, url, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+    ret = nc_config_new_create(ctx, config, url, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
             "client-authentication/libnetconf2-netconf-server:crl-url", endpt_name);
     if (ret) {
         goto cleanup;
@@ -428,7 +428,7 @@ nc_server_config_new_tls_crl_cert_ext(const struct ly_ctx *ctx, const char *endp
     struct lyd_node *node = NULL;
     char *crl_path = NULL, *url_path = NULL;
 
-    ret = nc_config_new_insert(ctx, config, NULL, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+    ret = nc_config_new_create(ctx, config, NULL, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
             "client-authentication/libnetconf2-netconf-server:crl-cert-ext", endpt_name);
     if (ret) {
         goto cleanup;
@@ -471,6 +471,6 @@ cleanup:
 API int
 nc_config_new_tls_endpoint_client_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *referenced_endpt, struct lyd_node **config)
 {
-    return nc_config_new_insert(ctx, config, referenced_endpt, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+    return nc_config_new_create(ctx, config, referenced_endpt, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
             "client-authentication/libnetconf2-netconf-server:endpoint-client-auth", endpt_name);
 }

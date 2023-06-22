@@ -84,7 +84,9 @@ const char * nc_config_new_privkey_format_to_identityref(NC_PRIVKEY_FORMAT forma
 
 #endif /* NC_ENABLED_SSH_TLS */
 
-int nc_config_new_check_add_operation(const struct ly_ctx *ctx, struct lyd_node *top);
+int nc_config_new_add_operation(const struct ly_ctx *ctx, struct lyd_node *node, NC_OPERATION op);
+
+int nc_config_new_delete(const struct ly_ctx *ctx, struct lyd_node **tree, const char *path_fmt, ...);
 
 /**
  * @brief Creates YANG data nodes in a path and gives the final node a value.
@@ -97,7 +99,7 @@ int nc_config_new_check_add_operation(const struct ly_ctx *ctx, struct lyd_node 
  * @param[in] ... Parameters for the path format, essentially representing the lists' keys.
  * @return 0 on success, 1 otherwise.
  */
-int nc_config_new_insert(const struct ly_ctx *ctx, struct lyd_node **tree, const char *value, const char *path_fmt, ...);
+int nc_config_new_create(const struct ly_ctx *ctx, struct lyd_node **tree, const char *value, const char *path_fmt, ...);
 
 #ifdef __cplusplus
 }
