@@ -34,48 +34,6 @@
 #include "session.h"
 #include "session_p.h"
 
-int
-nc_config_new_add_operation(const struct ly_ctx *ctx, struct lyd_node *node, NC_OPERATION op)
-{
-    struct lyd_meta *meta;
-    const char *op_str = NULL;
-
-    meta = lyd_find_meta(node->meta, NULL, "yang:operation");
-    if (meta) {
-        /* node already has operation attribute, delete it */
-        lyd_free_meta_single(meta);
-    }
-
-    /* get the operation as string */
-    switch (op) {
-    case NC_OP_CREATE:
-        op_str = "create";
-        break;
-    case NC_OP_REPLACE:
-        op_str = "replace";
-        break;
-    case NC_OP_DELETE:
-        op_str = "delete";
-        break;
-    case NC_OP_NONE:
-        op_str = "none";
-        break;
-    default:
-        break;
-    }
-    if (!op_str) {
-        ERR(NULL, "Invalid operation to add to the tree.");
-        return 1;
-    }
-
-    /* give the node the operation */
-    if (lyd_new_meta(ctx, node, NULL, "yang:operation", op_str, 0, NULL)) {
-        return 1;
-    }
-
-    return 0;
-}
-
 #ifdef NC_ENABLED_SSH_TLS
 
 const char *
@@ -675,12 +633,13 @@ cleanup:
 
 API int
 nc_server_config_new_address_port(const struct ly_ctx *ctx, const char *endpt_name, NC_TRANSPORT_IMPL transport,
-        const char *address, const char *port, struct lyd_node **config)
+        const char *address, uint16_t port, struct lyd_node **config)
 {
     int ret = 0;
     const char *address_fmt, *port_fmt;
+    char port_buf[6] = {0};
 
-    NC_CHECK_ARG_RET(NULL, address, port, ctx, endpt_name, config, 1);
+    NC_CHECK_ARG_RET(NULL, address, ctx, endpt_name, config, 1);
 
     if (transport == NC_TI_LIBSSH) {
         /* SSH path */
@@ -701,7 +660,8 @@ nc_server_config_new_address_port(const struct ly_ctx *ctx, const char *endpt_na
         goto cleanup;
     }
 
-    ret = nc_config_new_create(ctx, config, port, port_fmt, endpt_name);
+    sprintf(port_buf, "%d", port);
+    ret = nc_config_new_create(ctx, config, port_buf, port_fmt, endpt_name);
     if (ret) {
         goto cleanup;
     }
@@ -752,15 +712,16 @@ nc_server_config_new_del_ch_client(const struct ly_ctx *ctx, const char *ch_clie
 {
     NC_CHECK_ARG_RET(NULL, ctx, ch_client_name, config, 1);
 
-    return nc_config_new_delete(ctx, config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']", ch_client_name);
+    return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']", ch_client_name);
 }
 
 int
-nc_config_new_delete(const struct ly_ctx *ctx, struct lyd_node **tree, const char *path_fmt, ...)
+nc_config_new_delete(struct lyd_node **tree, const char *path_fmt, ...)
 {
     int ret = 0;
     va_list ap;
     char *path = NULL;
+    struct lyd_node *sub = NULL;
 
     va_start(ap, path_fmt);
 
@@ -772,31 +733,16 @@ nc_config_new_delete(const struct ly_ctx *ctx, struct lyd_node **tree, const cha
         goto cleanup;
     }
 
-    /* create the nodes in the path */
-    ret = lyd_new_path(*tree, ctx, path, NULL, LYD_NEW_PATH_UPDATE, tree);
+    /* find the node we want to delete */
+    ret = lyd_find_path(*tree, path, 0, &sub);
     if (ret) {
         goto cleanup;
     }
 
-    /* set the node to the last node */
-    ret = lyd_find_path(*tree, path, 0, tree);
-    if (ret) {
-        goto cleanup;
-    }
+    lyd_free_tree(sub);
 
-    /* add delete operation to the node */
-    ret = nc_config_new_add_operation(ctx, *tree, NC_OP_DELETE);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* set the node back to top level container */
+    /* set the node to top level container */
     ret = lyd_find_path(*tree, "/ietf-netconf-server:netconf-server", 0, tree);
-    if (ret) {
-        goto cleanup;
-    }
-
-    ret = nc_config_new_add_operation(ctx, *tree, NC_OP_NONE);
     if (ret) {
         goto cleanup;
     }
@@ -842,12 +788,6 @@ nc_config_new_create(const struct ly_ctx *ctx, struct lyd_node **tree, const cha
         goto cleanup;
     }
 
-    /* add create operation to the top level node */
-    ret = nc_config_new_add_operation(ctx, *tree, NC_OP_CREATE);
-    if (ret) {
-        goto cleanup;
-    }
-
     /* add all default nodes */
     ret = lyd_new_implicit_tree(*tree, LYD_IMPLICIT_NO_STATE, NULL);
     if (ret) {
@@ -857,6 +797,109 @@ nc_config_new_create(const struct ly_ctx *ctx, struct lyd_node **tree, const cha
 cleanup:
     free(path);
     va_end(ap);
+    return ret;
+}
+
+API int
+nc_server_config_new_keystore_asym_key(const struct ly_ctx *ctx, const char *name, const char *privkey_path,
+        const char *pubkey_path, struct lyd_node **config)
+{
+    int ret = 0;
+    char *privkey = NULL, *pubkey = NULL;
+    NC_PRIVKEY_FORMAT privkey_type;
+    NC_PUBKEY_FORMAT pubkey_type;
+    const char *privkey_format, *pubkey_format;
+
+    NC_CHECK_ARG_RET(NULL, ctx, name, privkey_path, config, 1);
+
+    /* get the keys as a string from the given files */
+    ret = nc_server_config_new_get_keys(privkey_path, pubkey_path, &privkey, &pubkey, &privkey_type, &pubkey_type);
+    if (ret) {
+        ERR(NULL, "Getting keys from file(s) failed.");
+        goto cleanup;
+    }
+
+    /* get pubkey format str */
+    if (pubkey_type == NC_PUBKEY_FORMAT_X509) {
+        pubkey_format = "ietf-crypto-types:public-key-info-format";
+    } else {
+        pubkey_format = "ietf-crypto-types:ssh-public-key-format";
+    }
+
+    /* get privkey identityref value */
+    privkey_format = nc_config_new_privkey_format_to_identityref(privkey_type);
+    if (!privkey_format) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    ret = nc_config_new_create(ctx, config, pubkey_format, "/ietf-keystore:keystore/asymmetric-keys/"
+        "asymmetric-key[name='%s']/public-key-format", name);
+    if (ret) {
+        goto cleanup;
+    }
+
+    ret = nc_config_new_create(ctx, config, pubkey, "/ietf-keystore:keystore/asymmetric-keys/"
+        "asymmetric-key[name='%s']/public-key", name);
+    if (ret) {
+        goto cleanup;
+    }
+
+    ret = nc_config_new_create(ctx, config, privkey_format, "/ietf-keystore:keystore/asymmetric-keys/"
+        "asymmetric-key[name='%s']/private-key-format", name);
+    if (ret) {
+        goto cleanup;
+    }
+
+    ret = nc_config_new_create(ctx, config, privkey, "/ietf-keystore:keystore/asymmetric-keys/"
+        "asymmetric-key[name='%s']/cleartext-private-key", name);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(privkey);
+    free(pubkey);
+    return ret;
+}
+
+API int
+nc_server_config_new_truststore_pubkey(const struct ly_ctx *ctx, const char *bag_name, const char *pubkey_name,
+        const char *pubkey_path, struct lyd_node **config)
+{
+    int ret = 0;
+    char *pubkey = NULL;
+    NC_PUBKEY_FORMAT pubkey_format;
+    const char *format;
+
+    NC_CHECK_ARG_RET(NULL, ctx, bag_name, pubkey_name, pubkey_path, config, 1);
+
+    ret = nc_server_config_new_get_pubkey(pubkey_path, &pubkey, &pubkey_format);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* pubkey format to str */
+    if (pubkey_format == NC_PUBKEY_FORMAT_SSH2) {
+        format = "ietf-crypto-types:ssh-public-key-format";
+    } else {
+        format = "ietf-crypto-types:subject-public-key-info-format";
+    }
+
+    ret = nc_config_new_create(ctx, config, format, "/ietf-truststore:truststore/public-key-bags/"
+        "public-key-bag[name='%s']/public-key[name='%s']/public-key-format", bag_name, pubkey_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+    ret = nc_config_new_create(ctx, config, pubkey, "/ietf-truststore:truststore/public-key-bags/"
+        "public-key-bag[name='%s']/public-key[name='%s']/public-key", bag_name, pubkey_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(pubkey);
     return ret;
 }
 

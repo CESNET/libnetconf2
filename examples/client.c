@@ -194,7 +194,7 @@ main(int argc, char **argv)
         break;
 
     case SSH:
-        session = nc_connect_ssh(SSH_ADDRESS, atoi(SSH_PORT), NULL);
+        session = nc_connect_ssh(SSH_ADDRESS, SSH_PORT, NULL);
         break;
 
     case NONE:

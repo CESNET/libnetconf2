@@ -31,7 +31,7 @@
 #define SSH_ADDRESS "127.0.0.1"
 
 /* SSH listening port */
-#define SSH_PORT "830"
+#define SSH_PORT 830
 
 /* SSH 'password' authentication exptected username and password */
 #define SSH_USERNAME "admin"

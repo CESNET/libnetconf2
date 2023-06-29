@@ -37,7 +37,7 @@ endforeach()
 
 #append tests depending on SSH/TLS
 if(ENABLE_SSH_TLS)
-    list(APPEND tests test_two_channels test_keystore test_config_new test_truststore test_ec
+    list(APPEND tests test_two_channels test_ks_ts test_config_new test_ec
         test_ed25519 test_replace test_endpt_share_clients test_tls test_crl test_ch)
 endif()
 
