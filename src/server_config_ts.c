@@ -43,7 +43,7 @@ nc_server_config_get_certificate_bag(const struct lyd_node *node, struct nc_cert
     const char *cbag_name;
     struct nc_truststore *ts;
 
-    assert(node);
+    assert(node && cbag);
 
     while (node) {
         if (!strcmp(LYD_NAME(node), "certificate-bag")) {
@@ -77,17 +77,21 @@ nc_server_config_get_certificate_bag(const struct lyd_node *node, struct nc_cert
  * @brief Get the pointer to a certificate structure based on node's location in the YANG data.
  *
  * @param[in] node Node from which the certificate containing this node is derived.
- * @param[in] cbag Certificate bag containing the certificate.
  * @param[out] cert Certificate containing the node.
  * @return 0 on success, 1 on error.
  */
 static int
-nc_server_config_get_certificate(const struct lyd_node *node, const struct nc_certificate_bag *cbag, struct nc_certificate **cert)
+nc_server_config_get_certificate(const struct lyd_node *node, struct nc_certificate **cert)
 {
     uint16_t i;
     const char *cert_name;
+    struct nc_certificate_bag *cbag;
 
-    assert(node);
+    assert(node && cert);
+
+    if (nc_server_config_get_certificate_bag(node, &cbag)) {
+        return 1;
+    }
 
     while (node) {
         if (!strcmp(LYD_NAME(node), "certificate")) {
@@ -130,7 +134,7 @@ nc_server_config_get_public_key_bag(const struct lyd_node *node, struct nc_publi
     const char *pbag_name;
     struct nc_truststore *ts;
 
-    assert(node);
+    assert(node && pbag);
 
     while (node) {
         if (!strcmp(LYD_NAME(node), "public-key-bag")) {
@@ -164,17 +168,21 @@ nc_server_config_get_public_key_bag(const struct lyd_node *node, struct nc_publi
  * @brief Get the pointer to a public key structure based on node's location in the YANG data.
  *
  * @param[in] node Node from which the public key containing this node is derived.
- * @param[in] pbag Public key bag containing the public key.
  * @param[out] pkey Public key containing the node.
  * @return 0 on success, 1 on error.
  */
 static int
-nc_server_config_get_public_key(const struct lyd_node *node, const struct nc_public_key_bag *pbag, struct nc_public_key **pkey)
+nc_server_config_get_public_key(const struct lyd_node *node, struct nc_public_key **pkey)
 {
     uint16_t i;
     const char *pkey_name;
+    struct nc_public_key_bag *pbag;
 
-    assert(node);
+    assert(node && pkey);
+
+    if (nc_server_config_get_public_key_bag(node, &pbag)) {
+        return 1;
+    }
 
     while (node) {
         if (!strcmp(LYD_NAME(node), "public-key")) {
@@ -401,7 +409,7 @@ nc_server_config_ts_certificate(const struct lyd_node *node, NC_OPERATION op)
             return 1;
         }
     } else {
-        if (nc_server_config_get_certificate(node, bag, &cert)) {
+        if (nc_server_config_get_certificate(node, &cert)) {
             return 1;
         }
 
@@ -414,14 +422,10 @@ nc_server_config_ts_certificate(const struct lyd_node *node, NC_OPERATION op)
 static int
 nc_server_config_ts_cert_data(const struct lyd_node *node, NC_OPERATION op)
 {
-    struct nc_certificate_bag *bag;
     struct nc_certificate *cert;
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        if (nc_server_config_get_certificate_bag(node, &bag)) {
-            return 1;
-        }
-        if (nc_server_config_get_certificate(node, bag, &cert)) {
+        if (nc_server_config_get_certificate(node, &cert)) {
             return 1;
         }
 
@@ -498,7 +502,7 @@ nc_server_config_ts_public_key(const struct lyd_node *node, NC_OPERATION op)
                 goto cleanup;
             }
         } else {
-            if (nc_server_config_get_public_key(node, bag, &pkey)) {
+            if (nc_server_config_get_public_key(node, &pkey)) {
                 ret = 1;
                 goto cleanup;
             }
@@ -507,7 +511,7 @@ nc_server_config_ts_public_key(const struct lyd_node *node, NC_OPERATION op)
         }
     } else {
         /* public-key leaf */
-        if (nc_server_config_get_public_key(node, bag, &pkey)) {
+        if (nc_server_config_get_public_key(node, &pkey)) {
             ret = 1;
             goto cleanup;
         }
@@ -530,16 +534,11 @@ static int
 nc_server_config_ts_public_key_format(const struct lyd_node *node, NC_OPERATION op)
 {
     const char *format;
-    struct nc_public_key_bag *bag;
     struct nc_public_key *pkey;
 
     (void) op;
 
-    if (nc_server_config_get_public_key_bag(node, &bag)) {
-        return 1;
-    }
-
-    if (nc_server_config_get_public_key(node, bag, &pkey)) {
+    if (nc_server_config_get_public_key(node, &pkey)) {
         return 1;
     }
 
