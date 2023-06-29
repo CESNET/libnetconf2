@@ -196,7 +196,7 @@ setup_ssh(void **state)
     ret = nc_server_config_new_ssh_hostkey(ctx, "SSH_endpt_1", "hostkey", TESTS_DIR "/data/key_rsa", NULL, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_address_port(ctx, "SSH_endpt_1", NC_TI_LIBSSH, "127.0.0.1", "10005", &tree);
+    ret = nc_server_config_new_address_port(ctx, "SSH_endpt_1", NC_TI_LIBSSH, "127.0.0.1", 10005, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_config_new_ssh_endpoint_client_reference(ctx, "SSH_endpt_1", "SSH_endpt_2", &tree);
@@ -206,14 +206,14 @@ setup_ssh(void **state)
     ret = nc_server_config_new_ssh_hostkey(ctx, "SSH_endpt_2", "hostkey", TESTS_DIR "/data/key_rsa", NULL, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_address_port(ctx, "SSH_endpt_2", NC_TI_LIBSSH, "127.0.0.1", "10006", &tree);
+    ret = nc_server_config_new_address_port(ctx, "SSH_endpt_2", NC_TI_LIBSSH, "127.0.0.1", 10006, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_new_ssh_client_auth_pubkey(ctx, "SSH_endpt_2", "client", "pubkey", TESTS_DIR "/data/key_rsa.pub", &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the yang data */
-    ret = nc_server_config_setup_diff(tree);
+    ret = nc_server_config_setup_data(tree);
     assert_int_equal(ret, 0);
 
     /* initialize the server */
@@ -260,7 +260,7 @@ setup_tls(void **state)
             TESTS_DIR "/data/server.key", TESTS_DIR "/data/server.crt", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_address_port(ctx, "TLS_endpt_1", NC_TI_OPENSSL, "127.0.0.1", "10007", &tree);
+    ret = nc_server_config_new_address_port(ctx, "TLS_endpt_1", NC_TI_OPENSSL, "127.0.0.1", 10007, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_new_tls_client_certificate(ctx, "TLS_endpt_1", "cert_client", TESTS_DIR "/data/client.crt", &tree);
@@ -279,14 +279,14 @@ setup_tls(void **state)
             TESTS_DIR "/data/server.key", TESTS_DIR "/data/server.crt", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_address_port(ctx, "TLS_endpt_2", NC_TI_OPENSSL, "127.0.0.1", "10008", &tree);
+    ret = nc_server_config_new_address_port(ctx, "TLS_endpt_2", NC_TI_OPENSSL, "127.0.0.1", 10008, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_config_new_tls_endpoint_client_reference(ctx, "TLS_endpt_2", "TLS_endpt_1", &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the yang data */
-    ret = nc_server_config_setup_diff(tree);
+    ret = nc_server_config_setup_data(tree);
     assert_int_equal(ret, 0);
 
     /* initialize the server */

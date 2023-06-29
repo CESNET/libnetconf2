@@ -84,10 +84,6 @@ const char * nc_config_new_privkey_format_to_identityref(NC_PRIVKEY_FORMAT forma
 
 #endif /* NC_ENABLED_SSH_TLS */
 
-int nc_config_new_add_operation(const struct ly_ctx *ctx, struct lyd_node *node, NC_OPERATION op);
-
-int nc_config_new_delete(const struct ly_ctx *ctx, struct lyd_node **tree, const char *path_fmt, ...);
-
 /**
  * @brief Creates YANG data nodes in a path and gives the final node a value.
  *
@@ -100,6 +96,16 @@ int nc_config_new_delete(const struct ly_ctx *ctx, struct lyd_node **tree, const
  * @return 0 on success, 1 otherwise.
  */
 int nc_config_new_create(const struct ly_ctx *ctx, struct lyd_node **tree, const char *value, const char *path_fmt, ...);
+
+/**
+ * @brief Deletes a subtree from the YANG data.
+ *
+ * @param tree YANG data from which the subtree will be deleted.
+ * @param[in] path_fmt Format of the path
+ * @param[in] ... Parameters for the path format, essentially representing the lists' keys.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_config_new_delete(struct lyd_node **tree, const char *path_fmt, ...);
 
 #ifdef __cplusplus
 }

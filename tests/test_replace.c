@@ -167,7 +167,7 @@ client_thread(void *arg)
     assert_int_equal(ret, 0);
 
     /* set ssh username */
-    ret = nc_client_ssh_set_username("new_user");
+    ret = nc_client_ssh_set_username("new_client");
     assert_int_equal(ret, 0);
 
     /* add client's key pair */
@@ -233,16 +233,26 @@ setup_f(void **state)
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
-    /* parse yang data */
-    ret = lyd_parse_data_mem(ctx, old_data, LYD_XML, LYD_PARSE_NO_STATE | LYD_PARSE_STRICT, LYD_VALIDATE_NO_STATE, &old_tree);
+    ret = nc_server_config_new_address_port(ctx, "old", NC_TI_LIBSSH, "127.0.0.1", 10005, &old_tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_new_ssh_hostkey(ctx, "old", "old_key", TESTS_DIR "/data/key_rsa", NULL, &old_tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_new_ssh_client_auth_password(ctx, "old", "old_client", "passwd", &old_tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the yang data, treat them as if every node had replace operation */
     ret = nc_server_config_setup_data(old_tree);
     assert_int_equal(ret, 0);
 
-    /* parse the new yang data */
-    ret = lyd_parse_data_mem(ctx, new_data, LYD_XML, LYD_PARSE_NO_STATE | LYD_PARSE_STRICT, LYD_VALIDATE_NO_STATE, &new_tree);
+    ret = nc_server_config_new_address_port(ctx, "new", NC_TI_LIBSSH, "127.0.0.1", 10005, &new_tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_new_ssh_hostkey(ctx, "new", "new_key", TESTS_DIR "/data/key_rsa", NULL, &new_tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_new_ssh_client_auth_pubkey(ctx, "new", "new_client", "pubkey", TESTS_DIR "/data/key_rsa.pub", &new_tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the yang data, meaning

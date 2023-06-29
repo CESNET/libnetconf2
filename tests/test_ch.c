@@ -35,6 +35,7 @@ struct ly_ctx *ctx;
 
 struct test_state {
     pthread_barrier_t barrier;
+    struct lyd_node *tree;
 };
 
 /* acquire ctx cb for dispatch */
@@ -73,12 +74,9 @@ server_thread(void *arg)
     int ret;
     struct test_state *state = arg;
     struct nc_pollsession *ps;
-    struct lyd_node *tree = NULL;
-
-    (void) arg;
 
     /* prepare data for deleting the call-home client */
-    ret = nc_server_config_new_del_ch_client(ctx, "ch", &tree);
+    ret = nc_server_config_new_del_ch_client(ctx, "ch", &state->tree);
     assert_int_equal(ret, 0);
 
     /* new poll session */
@@ -100,10 +98,9 @@ server_thread(void *arg)
     } while (!(ret & NC_PSPOLL_SESSION_TERM));
 
     /* delete the call-home client, the thread should end */
-    ret = nc_server_config_setup_diff(tree);
+    ret = nc_server_config_setup_data(state->tree);
     assert_int_equal(ret, 0);
 
-    lyd_free_tree(tree);
     nc_ps_clear(ps, 1, NULL);
     nc_ps_free(ps);
     nc_server_destroy();
@@ -173,7 +170,6 @@ static int
 setup_f(void **state)
 {
     int ret;
-    struct lyd_node *tree = NULL;
     struct test_state *test_state;
 
     nc_verbosity(NC_VERB_VERBOSE);
@@ -185,6 +181,7 @@ setup_f(void **state)
     ret = pthread_barrier_init(&test_state->barrier, NULL, 2);
     assert_int_equal(ret, 0);
 
+    test_state->tree = NULL;
     *state = test_state;
 
     /* create new context */
@@ -199,24 +196,22 @@ setup_f(void **state)
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ch_address_port(ctx, "ch", "endpt", NC_TI_LIBSSH, "127.0.0.1", "10009", &tree);
+    ret = nc_server_config_new_ch_address_port(ctx, "ch", "endpt", NC_TI_LIBSSH, "127.0.0.1", "10009", &test_state->tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_ch_hostkey(ctx, "ch", "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa", NULL, &tree);
+    ret = nc_server_config_new_ssh_ch_hostkey(ctx, "ch", "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa", NULL, &test_state->tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_ch_client_auth_pubkey(ctx, "ch", "endpt", "test_ch", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);
+    ret = nc_server_config_new_ssh_ch_client_auth_pubkey(ctx, "ch", "endpt", "test_ch", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &test_state->tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
-    ret = nc_server_config_setup_diff(tree);
+    ret = nc_server_config_setup_data(test_state->tree);
     assert_int_equal(ret, 0);
 
     /* initialize server */
     ret = nc_server_init();
     assert_int_equal(ret, 0);
-
-    lyd_free_all(tree);
 
     return 0;
 }
@@ -232,6 +227,8 @@ teardown_f(void **state)
 
     ret = pthread_barrier_destroy(&test_state->barrier);
     assert_int_equal(ret, 0);
+
+    lyd_free_tree(test_state->tree);
 
     free(*state);
     nc_client_destroy();

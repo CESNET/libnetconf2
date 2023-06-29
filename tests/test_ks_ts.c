@@ -1,10 +1,10 @@
 /**
- * @file test_keystore.c
+ * @file test_ks_ts.c
  * @author Roman Janota <xjanot04@fit.vutbr.cz>
- * @brief libnetconf2 Linux PAM keyboard-interactive authentication test
+ * @brief libnetconf2 Keystore and trustore usage test.
  *
  * @copyright
- * Copyright (c) 2022 CESNET, z.s.p.o.
+ * Copyright (c) 2023 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -136,7 +136,7 @@ server_thread(void *arg)
 }
 
 static void *
-client_thread_pubkey(void *arg)
+client_thread(void *arg)
 {
     int ret;
     struct nc_session *session = NULL;
@@ -148,14 +148,10 @@ client_thread_pubkey(void *arg)
     ret = nc_client_set_schema_searchpath(MODULES_DIR);
     assert_int_equal(ret, 0);
 
-    ret = nc_client_ssh_set_username("test_ts");
+    ret = nc_client_ssh_set_username("client");
     assert_int_equal(ret, 0);
 
-    nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PUBLICKEY, 1);
-    nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PASSWORD, -1);
-    nc_client_ssh_set_auth_pref(NC_SSH_AUTH_INTERACTIVE, -1);
-
-    ret = nc_client_ssh_add_keypair(TESTS_DIR "/data/key_rsa.pub", TESTS_DIR "/data/key_rsa");
+    ret = nc_client_ssh_add_keypair(TESTS_DIR "/data/id_ed25519.pub", TESTS_DIR "/data/id_ed25519");
     assert_int_equal(ret, 0);
 
     pthread_barrier_wait(&state->barrier);
@@ -167,14 +163,14 @@ client_thread_pubkey(void *arg)
 }
 
 static void
-test_nc_auth_pubkey(void **state)
+test_nc_ks_ts(void **state)
 {
     int ret, i;
     pthread_t tids[2];
 
     assert_non_null(state);
 
-    ret = pthread_create(&tids[0], NULL, client_thread_pubkey, *state);
+    ret = pthread_create(&tids[0], NULL, client_thread, *state);
     assert_int_equal(ret, 0);
     ret = pthread_create(&tids[1], NULL, server_thread, *state);
     assert_int_equal(ret, 0);
@@ -188,7 +184,7 @@ static int
 setup_f(void **state)
 {
     int ret;
-    struct lyd_node *tree;
+    struct lyd_node *tree = NULL;
     struct test_state *test_state;
 
     nc_verbosity(NC_VERB_VERBOSE);
@@ -211,12 +207,23 @@ setup_f(void **state)
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
-    /* parse yang data */
-    ret = lyd_parse_data_mem(ctx, data, LYD_XML, LYD_PARSE_NO_STATE | LYD_PARSE_STRICT, LYD_VALIDATE_NO_STATE, &tree);
+    ret = nc_server_config_new_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", 10005, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_new_ssh_keystore_reference(ctx, "endpt", "hostkey", "test_keystore", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_new_ssh_truststore_reference(ctx, "endpt", "client", "test_truststore", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_new_keystore_asym_key(ctx, "test_keystore", TESTS_DIR "/data/key_rsa", NULL, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_new_truststore_pubkey(ctx, "test_truststore", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
-    ret = nc_server_config_setup_diff(tree);
+    ret = nc_server_config_setup_data(tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_init();
@@ -251,7 +258,7 @@ int
 main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup_teardown(test_nc_auth_pubkey, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_ks_ts, setup_f, teardown_f),
     };
 
     setenv("CMOCKA_TEST_ABORT", "1", 1);

@@ -154,7 +154,7 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* create new address and port data */
-    ret = nc_server_config_new_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", "10005", &tree);
+    ret = nc_server_config_new_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", 10005, &tree);
     assert_int_equal(ret, 0);
 
     /* create the host-key algorithms data */
@@ -166,7 +166,7 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
-    ret = nc_server_config_setup_diff(tree);
+    ret = nc_server_config_setup_data(tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_init();

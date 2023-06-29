@@ -225,12 +225,6 @@ nc_server_config_new_ssh_host_key_algs(const struct ly_ctx *ctx, const char *end
         goto cleanup;
     }
 
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_add_operation(ctx, *config, NC_OP_CREATE);
-    if (ret) {
-        goto cleanup;
-    }
-
     /* Add all default nodes */
     ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
     if (ret) {
@@ -260,12 +254,6 @@ nc_server_config_ssh_new_key_exchange_algs(const struct ly_ctx *ctx, const char 
     va_start(ap, alg_count);
 
     ret = nc_server_config_new_ssh_transport_params(ctx, NC_ALG_KEY_EXCHANGE, alg_count, ap, alg_tree);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_add_operation(ctx, *config, NC_OP_CREATE);
     if (ret) {
         goto cleanup;
     }
@@ -303,12 +291,6 @@ nc_server_config_new_ssh_encryption_algs(const struct ly_ctx *ctx, const char *e
         goto cleanup;
     }
 
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_add_operation(ctx, *config, NC_OP_CREATE);
-    if (ret) {
-        goto cleanup;
-    }
-
     /* Add all default nodes */
     ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
     if (ret) {
@@ -338,12 +320,6 @@ nc_server_config_ssh_new_mac_algs(const struct ly_ctx *ctx, const char *endpt_na
     va_start(ap, alg_count);
 
     ret = nc_server_config_new_ssh_transport_params(ctx, NC_ALG_MAC, alg_count, ap, alg_tree);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* check if top-level container has operation and if not, add it */
-    ret = nc_config_new_add_operation(ctx, *config, NC_OP_CREATE);
     if (ret) {
         goto cleanup;
     }
@@ -586,4 +562,26 @@ nc_server_config_new_ssh_ch_client_auth_pubkey(const struct ly_ctx *ctx, const c
 cleanup:
     free(pubkey);
     return ret;
+}
+
+API int
+nc_server_config_new_ssh_keystore_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *hostkey_name,
+        const char *keystore_reference, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, hostkey_name, keystore_reference, config, 1);
+
+    return nc_config_new_create(ctx, config, keystore_reference, "/ietf-netconf-server:netconf-server/listen/"
+        "endpoint[name='%s']/ssh/ssh-server-parameters/server-identity/host-key[name='%s']/public-key/"
+        "keystore-reference", endpt_name, hostkey_name);
+}
+
+API int
+nc_server_config_new_ssh_truststore_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *user_name,
+        const char *truststore_reference, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, truststore_reference, config, 1);
+
+    return nc_config_new_create(ctx, config, truststore_reference, "/ietf-netconf-server:netconf-server/listen/"
+        "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/"
+        "truststore-reference", endpt_name, user_name);
 }

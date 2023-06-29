@@ -216,7 +216,7 @@ setup_f(void **state)
     ret = nc_server_config_new_ssh_hostkey(ctx, "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa", NULL, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", "10009", &tree);
+    ret = nc_server_config_new_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", 10009, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_new_ssh_client_auth_pubkey(ctx, "endpt", "test_ec256", "pubkey", TESTS_DIR "/data/id_ecdsa256.pub", &tree);
@@ -229,7 +229,7 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
-    ret = nc_server_config_setup_diff(tree);
+    ret = nc_server_config_setup_data(tree);
     assert_int_equal(ret, 0);
 
     /* initialize server */
