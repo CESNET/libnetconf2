@@ -571,8 +571,8 @@ nc_server_config_new_ssh_keystore_reference(const struct ly_ctx *ctx, const char
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, hostkey_name, keystore_reference, config, 1);
 
     return nc_config_new_create(ctx, config, keystore_reference, "/ietf-netconf-server:netconf-server/listen/"
-        "endpoint[name='%s']/ssh/ssh-server-parameters/server-identity/host-key[name='%s']/public-key/"
-        "keystore-reference", endpt_name, hostkey_name);
+            "endpoint[name='%s']/ssh/ssh-server-parameters/server-identity/host-key[name='%s']/public-key/"
+            "keystore-reference", endpt_name, hostkey_name);
 }
 
 API int
@@ -582,6 +582,6 @@ nc_server_config_new_ssh_truststore_reference(const struct ly_ctx *ctx, const ch
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, truststore_reference, config, 1);
 
     return nc_config_new_create(ctx, config, truststore_reference, "/ietf-netconf-server:netconf-server/listen/"
-        "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/"
-        "truststore-reference", endpt_name, user_name);
+            "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/"
+            "truststore-reference", endpt_name, user_name);
 }

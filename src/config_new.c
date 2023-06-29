@@ -834,25 +834,25 @@ nc_server_config_new_keystore_asym_key(const struct ly_ctx *ctx, const char *nam
     }
 
     ret = nc_config_new_create(ctx, config, pubkey_format, "/ietf-keystore:keystore/asymmetric-keys/"
-        "asymmetric-key[name='%s']/public-key-format", name);
+            "asymmetric-key[name='%s']/public-key-format", name);
     if (ret) {
         goto cleanup;
     }
 
     ret = nc_config_new_create(ctx, config, pubkey, "/ietf-keystore:keystore/asymmetric-keys/"
-        "asymmetric-key[name='%s']/public-key", name);
+            "asymmetric-key[name='%s']/public-key", name);
     if (ret) {
         goto cleanup;
     }
 
     ret = nc_config_new_create(ctx, config, privkey_format, "/ietf-keystore:keystore/asymmetric-keys/"
-        "asymmetric-key[name='%s']/private-key-format", name);
+            "asymmetric-key[name='%s']/private-key-format", name);
     if (ret) {
         goto cleanup;
     }
 
     ret = nc_config_new_create(ctx, config, privkey, "/ietf-keystore:keystore/asymmetric-keys/"
-        "asymmetric-key[name='%s']/cleartext-private-key", name);
+            "asymmetric-key[name='%s']/cleartext-private-key", name);
     if (ret) {
         goto cleanup;
     }
@@ -887,13 +887,13 @@ nc_server_config_new_truststore_pubkey(const struct ly_ctx *ctx, const char *bag
     }
 
     ret = nc_config_new_create(ctx, config, format, "/ietf-truststore:truststore/public-key-bags/"
-        "public-key-bag[name='%s']/public-key[name='%s']/public-key-format", bag_name, pubkey_name);
+            "public-key-bag[name='%s']/public-key[name='%s']/public-key-format", bag_name, pubkey_name);
     if (ret) {
         goto cleanup;
     }
 
     ret = nc_config_new_create(ctx, config, pubkey, "/ietf-truststore:truststore/public-key-bags/"
-        "public-key-bag[name='%s']/public-key[name='%s']/public-key", bag_name, pubkey_name);
+            "public-key-bag[name='%s']/public-key[name='%s']/public-key", bag_name, pubkey_name);
     if (ret) {
         goto cleanup;
     }

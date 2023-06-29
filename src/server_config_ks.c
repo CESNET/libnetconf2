@@ -43,7 +43,7 @@ nc_server_config_get_asymmetric_key(const struct lyd_node *node, struct nc_asymm
     const char *askey_name;
     struct nc_keystore *ks;
 
-    assert(node);
+    assert(node && askey);
 
     while (node) {
         if (!strcmp(LYD_NAME(node), "asymmetric-key")) {
@@ -81,12 +81,17 @@ nc_server_config_get_asymmetric_key(const struct lyd_node *node, struct nc_asymm
  * @return 0 on success, 1 on error.
  */
 static int
-nc_server_config_get_certificate(const struct lyd_node *node, const struct nc_asymmetric_key *askey, struct nc_certificate **cert)
+nc_server_config_get_certificate(const struct lyd_node *node, struct nc_certificate **cert)
 {
     uint16_t i;
     const char *cert_name;
+    struct nc_asymmetric_key *askey;
 
-    assert(node);
+    assert(node && cert);
+
+    if (nc_server_config_get_asymmetric_key(node, &askey)) {
+        return 1;
+    }
 
     while (node) {
         if (!strcmp(LYD_NAME(node), "certificate")) {
@@ -371,7 +376,7 @@ nc_server_config_ks_certificate(const struct lyd_node *node, NC_OPERATION op)
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
         ret = nc_server_config_ks_create_certificate(node, key);
     } else {
-        if (nc_server_config_get_certificate(node, key, &cert)) {
+        if (nc_server_config_get_certificate(node, &cert)) {
             ret = 1;
             goto cleanup;
         }
@@ -386,19 +391,12 @@ cleanup:
 static int
 nc_server_config_ks_cert_data(const struct lyd_node *node, NC_OPERATION op)
 {
-    struct nc_asymmetric_key *key;
     struct nc_certificate *cert;
-
-    (void) op;
 
     assert(!strcmp(LYD_NAME(node), "cert-data"));
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        if (nc_server_config_get_asymmetric_key(node, &key)) {
-            return 1;
-        }
-
-        if (nc_server_config_get_certificate(node, key, &cert)) {
+        if (nc_server_config_get_certificate(node, &cert)) {
             return 1;
         }
 

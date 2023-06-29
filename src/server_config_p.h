@@ -35,46 +35,7 @@ typedef enum {
     NC_MODULE_TRUSTSTORE
 } NC_MODULE;
 
-/**
- * @brief Get the pointer to an endpoint structure based on node's location in the YANG data.
- *
- * @param[in] node Node from which the endpoint containing this node is derived.
- * @param[out] endpt Endpoint containing the node.
- * @param[out] bind Bind corresponding to the endpoint. Optional.
- * @return 0 on success, 1 on error.
- */
-int nc_server_config_get_endpt(const struct lyd_node *node, struct nc_endpt **endpt, struct nc_bind **bind);
-
 #ifdef NC_ENABLED_SSH_TLS
-/**
- * @brief Get the pointer to a hostkey structure based on node's location in the YANG data.
- *
- * @param[in] node Node from which the hotkey containing this node is derived.
- * @param[in] opts Server SSH opts storing the array of the hostkey structures.
- * @param[out] hostkey Hostkey containing the node.
- * @return 0 on success, 1 on error.
- */
-int nc_server_config_get_hostkey(const struct lyd_node *node, const struct nc_server_ssh_opts *opts, struct nc_hostkey **hostkey);
-
-/**
- * @brief Get the pointer to a client authentication structure based on node's location in the YANG data.
- *
- * @param[in] node Node from which the client-authentication structure containing this node is derived.
- * @param[in] opts Server SSH opts storing the array of the client authentication structures.
- * @param[out] auth_client Client authentication structure containing the node.
- * @return 0 on success, 1 on error.
- */
-int nc_server_config_get_auth_client(const struct lyd_node *node, const struct nc_server_ssh_opts *opts, struct nc_client_auth **auth_client);
-
-/**
- * @brief Get the pointer to a client authentication public key structure based on node's location in the YANG data.
- *
- * @param[in] node Node from which the ca-public key structure containing this node is derived.
- * @param[in] auth_client Client authentication structure storing the array of the public key structures.
- * @param[out] pubkey Public key structure containing the node.
- * @return 0 on success, 1 on error.
- */
-int nc_server_config_get_pubkey(const struct lyd_node *node, const struct nc_client_auth *auth_client, struct nc_public_key **pubkey);
 
 /**
  * @brief Get private key type from YANG identity stored in a string.
