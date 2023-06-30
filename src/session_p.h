@@ -464,6 +464,7 @@ struct nc_server_opts {
 
         struct nc_session *session;
         pthread_t tid;
+        // data * - condition, mutex, thread_running
         struct nc_ch_endpt {
             char *name;
             NC_TRANSPORT_IMPL ti;
@@ -481,17 +482,17 @@ struct nc_server_opts {
             } opts;
         } *ch_endpts;
         uint16_t ch_endpt_count;
-        NC_CH_CONN_TYPE conn_type;
 
-        union {
-            struct {
-                uint16_t period;
-                time_t anchor_time;
-                uint16_t idle_timeout;
-            } period;
-        } conn;
+        NC_CH_CONN_TYPE conn_type;
+        struct {
+            uint16_t period;
+            time_t anchor_time;
+            uint16_t idle_timeout;
+        };
+
         NC_CH_START_WITH start_with;
         uint8_t max_attempts;
+        uint16_t max_wait;
         uint32_t id;
         pthread_mutex_t lock;
     } *ch_clients;

@@ -80,11 +80,6 @@
  */
 #define NC_TIMEOUT_STEP @TIMEOUT_STEP@
 
-/*
- * Time waited between Call Home endpoint session creation attempts (s).
- */
-#define NC_CH_ENDPT_BACKOFF_WAIT @CALL_HOME_BACKOFF_WAIT@
-
 /* Portability feature-check macros. */
 #cmakedefine HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP
 
