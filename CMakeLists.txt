@@ -98,7 +98,6 @@ set(MAX_PSPOLL_THREAD_COUNT 6 CACHE STRING "Maximum number of threads that could
 set(TIMEOUT_STEP 100 CACHE STRING "Number of microseconds tasks are repeated until timeout elapses")
 set(YANG_MODULE_DIR "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/yang/modules/libnetconf2" CACHE STRING "Directory where to copy the YANG modules to")
 set(CLIENT_SEARCH_DIR "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/yang/modules" CACHE STRING "Default NC client YANG module search directory")
-set(CALL_HOME_BACKOFF_WAIT 2 CACHE STRING "Number of seconds to wait between Call Home connection attempts")
 
 #
 # sources

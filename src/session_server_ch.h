@@ -140,42 +140,6 @@ int nc_server_ch_client_endpt_set_keepalives(const char *client_name, const char
         int max_probes, int probe_interval);
 
 /**
- * @brief Set Call Home client connection type.
- *
- * @param[in] client_name Existing Call Home client name.
- * @param[in] conn_type Call Home connection type.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ch_client_set_conn_type(const char *client_name, NC_CH_CONN_TYPE conn_type);
-
-/**
- * @brief Set Call Home client periodic connection period for reconnecting.
- *
- * @param[in] client_name Existing Call Home client name.
- * @param[in] period Call Home periodic connection period in minutes.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ch_client_periodic_set_period(const char *client_name, uint16_t period);
-
-/**
- * @brief Set Call Home client periodic connection period anchor time.
- *
- * @param[in] client_name Existing Call Home client name.
- * @param[in] anchor_time Call Home periodic connection anchor time for the period.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ch_client_periodic_set_anchor_time(const char *client_name, time_t anchor_time);
-
-/**
- * @brief Set Call Home client periodic connection idle timeout.
- *
- * @param[in] client_name Existing Call Home client name.
- * @param[in] idle_timeout Call Home periodic idle timeout.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ch_client_periodic_set_idle_timeout(const char *client_name, uint16_t idle_timeout);
-
-/**
  * @brief Set Call Home client start-with policy.
  *
  * @param[in] client_name Existing Call Home client name.

@@ -588,7 +588,152 @@ int nc_server_config_new_truststore_pubkey(const struct ly_ctx *ctx, const char 
 int nc_server_config_new_ssh_truststore_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *user_name,
         const char *truststore_reference, struct lyd_node **config);
 
+/**
+ * @brief Creates new YANG configuration data nodes for a call-home server's certificate.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] ch_client_name Arbitrary identifier of the call-home client.
+ * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
+ * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] pubkey_path Optional path to the server's public key file. If not provided,
+ * it will be generated from the private key.
+ * @param[in] privkey_path Path to the server's private key file.
+ * @param[in] certificate_path Path to the server's certificate file.
+ * @param config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_tls_server_certificate(const struct ly_ctx *ctx, const char *ch_client_name, const char *endpt_name,
+        const char *pubkey_path, const char *privkey_path, const char *certificate_path, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a call-home client's (end-entity) certificate.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] ch_client_name Arbitrary identifier of the call-home client.
+ * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
+ * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] cert_name Arbitrary identifier of the call-home endpoint's end-entity certificate.
+ * If an call-home endpoint's end-entity certificate with this identifier already exists, its contents will be changed.
+ * @param[in] cert_path Path to the certificate file.
+ * @param config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_tls_client_certificate(const struct ly_ctx *ctx, const char *ch_client_name, const char *endpt_name,
+        const char *cert_name, const char *cert_path, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a client certificate authority (trust-anchor) certificate.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] ch_client_name Arbitrary identifier of the call-home client.
+ * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
+ * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] cert_name Arbitrary identifier of the call-home endpoint's certificate authority certificate.
+ * If an call-home endpoint's CA certificate with this identifier already exists, its contents will be changed.
+ * @param[in] cert_path Path to the certificate file.
+ * @param config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_tls_client_ca(const struct ly_ctx *ctx, const char *ch_client_name, const char *endpt_name,
+        const char *cert_name, const char *cert_path, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a call-home cert-to-name entry.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] ch_client_name Arbitrary identifier of the call-home client.
+ * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
+ * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] id ID of the entry. The lower the ID, the higher the priority of the entry (it will be checked earlier).
+ * @param[in] fingerprint Optional fingerprint of the entry. The fingerprint should always be set, however if it is
+ * not set, it will match any certificate. Entry with no fingerprint should therefore be placed only as the last entry.
+ * @param[in] map_type Mapping username to the certificate option.
+ * @param[in] name Username for this cert-to-name entry.
+ * @param config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_tls_ctn(const struct ly_ctx *ctx, const char *ch_client_name, const char *endpt_name,
+        uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name, struct lyd_node **config);
+
 #endif /* NC_ENABLED_SSH_TLS */
+
+/**
+ * @brief Creates new YANG configuration data nodes for the call-home persistent connection type.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] ch_client_name Arbitrary identifier of the call-home client.
+ * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_persistent(const struct ly_ctx *ctx, const char *ch_client_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for the period parameter of the call-home periodic connection type.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] ch_client_name Arbitrary identifier of the call-home client.
+ * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] period Duration between periodic connections.
+ * @param config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_period(const struct ly_ctx *ctx, const char *ch_client_name, uint16_t period,
+        struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for the anchor time parameter of the call-home periodic connection type.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] ch_client_name Arbitrary identifier of the call-home client.
+ * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] anchor_time Timestamp before or after which a series of periodic connections are determined.
+ * @param config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_anchor_time(const struct ly_ctx *ctx, const char *ch_client_name,
+        const char *anchor_time, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for the idle timeout parameter of the call-home periodic connection type.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] ch_client_name Arbitrary identifier of the call-home client.
+ * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] idle_timeout Specifies the maximum number of seconds that a session may remain idle.
+ * @param config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_idle_timeout(const struct ly_ctx *ctx, const char *ch_client_name,
+        uint16_t idle_timeout, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for the call-home reconnect strategy.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] ch_client_name Arbitrary identifier of the call-home client.
+ * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] start_with Specifies which endpoint to try if a connection is unsuccessful. Default value is NC_CH_FIRST_LISTED.
+ * @param[in] max_attempts The number of unsuccessful connection attempts before moving to the next endpoint. Default value is 3.
+ * @param[in] max_wait The number of seconds after which a connection to an endpoint is deemed unsuccessful. Default value if 5.
+ * @param config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_reconnect_strategy(const struct ly_ctx *ctx, const char *ch_client_name,
+        NC_CH_START_WITH start_with, uint8_t max_attempts, uint16_t max_wait, struct lyd_node **config);
 
 #ifdef __cplusplus
 }
