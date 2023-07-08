@@ -721,6 +721,8 @@ nc_server_config_del_hostkey(struct nc_server_ssh_opts *opts, struct nc_hostkey 
     if (!opts->hostkey_count) {
         free(opts->hostkeys);
         opts->hostkeys = NULL;
+    } else if (hostkey == &opts->hostkeys[opts->hostkey_count + 1]) {
+        memcpy(hostkey, &opts->hostkeys[opts->hostkey_count], sizeof *opts->hostkeys);
     }
 }
 
@@ -734,6 +736,8 @@ nc_server_config_del_auth_client_pubkey(struct nc_client_auth *auth_client, stru
     if (!auth_client->pubkey_count) {
         free(auth_client->pubkeys);
         auth_client->pubkeys = NULL;
+    } else if (pubkey == &auth_client->pubkeys[auth_client->pubkey_count + 1]) {
+        memcpy(pubkey, &auth_client->pubkeys[auth_client->pubkey_count], sizeof *auth_client->pubkeys);
     }
 }
 
@@ -760,6 +764,8 @@ nc_server_config_del_auth_client(struct nc_server_ssh_opts *opts, struct nc_clie
     if (!opts->client_count) {
         free(opts->auth_clients);
         opts->auth_clients = NULL;
+    } else if (auth_client == &opts->auth_clients[opts->client_count + 1]) {
+        memcpy(auth_client, &opts->auth_clients[opts->client_count], sizeof *opts->auth_clients);
     }
 }
 
@@ -806,6 +812,9 @@ nc_server_config_del_endpt_ssh(struct nc_endpt *endpt, struct nc_bind *bind)
         free(server_opts.binds);
         server_opts.endpts = NULL;
         server_opts.binds = NULL;
+    } else if (endpt == &server_opts.endpts[server_opts.endpt_count + 1]) {
+        memcpy(endpt, &server_opts.endpts[server_opts.endpt_count], sizeof *server_opts.endpts);
+        memcpy(bind, &server_opts.binds[server_opts.endpt_count], sizeof *server_opts.binds);
     }
 }
 
@@ -836,6 +845,9 @@ nc_server_config_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *b
         free(server_opts.binds);
         server_opts.endpts = NULL;
         server_opts.binds = NULL;
+    } else if (endpt == &server_opts.endpts[server_opts.endpt_count + 1]) {
+        memcpy(endpt, &server_opts.endpts[server_opts.endpt_count], sizeof *server_opts.endpts);
+        memcpy(bind, &server_opts.binds[server_opts.endpt_count], sizeof *server_opts.binds);
     }
 }
 
@@ -910,6 +922,8 @@ nc_server_config_del_cert(struct nc_cert_grouping *certs, struct nc_certificate 
     if (!certs->cert_count) {
         free(certs->certs);
         certs->certs = NULL;
+    } else if (cert == &certs->certs[certs->cert_count + 1]) {
+        memcpy(cert, &certs->certs[certs->cert_count], sizeof *certs->certs);
     }
 }
 
@@ -1014,6 +1028,9 @@ nc_server_config_del_endpt_tls(struct nc_endpt *endpt, struct nc_bind *bind)
         free(server_opts.binds);
         server_opts.endpts = NULL;
         server_opts.binds = NULL;
+    } else if (endpt == &server_opts.endpts[server_opts.endpt_count + 1]) {
+        memcpy(endpt, &server_opts.endpts[server_opts.endpt_count], sizeof *server_opts.endpts);
+        memcpy(bind, &server_opts.binds[server_opts.endpt_count], sizeof *server_opts.binds);
     }
 }
 
