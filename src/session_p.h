@@ -145,6 +145,7 @@ struct nc_server_unix_opts {
 /* ACCESS unlocked */
 struct nc_client_opts {
     char *schema_searchpath;
+    int auto_context_fill_disabled;
     ly_module_imp_clb schema_clb;
     void *schema_clb_data;
     struct nc_keepalives ka;

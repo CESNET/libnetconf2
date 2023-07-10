@@ -84,6 +84,16 @@ int nc_client_set_schema_callback(ly_module_imp_clb clb, void *user_data);
 ly_module_imp_clb nc_client_get_schema_callback(void **user_data);
 
 /**
+ * @brief Enable/disable loading of all the YANG modules supported by
+ * the server when a new session is created. If disabled, it is expected
+ * that users update the context themselves and load the YANG modules
+ * that are planned to be used. Otherwise even basic RPCs may fail to be sent!
+ *
+ * @param[in] enabled Whether context autofill is enabled or disabled.
+ */
+void nc_client_set_new_session_context_autofill(int enabled);
+
+/**
  * @brief Use the provided thread-specific client's context in the current thread.
  *
  * Note that from this point the context is shared with the thread from which the context was taken and any
