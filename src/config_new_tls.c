@@ -131,6 +131,15 @@ cleanup:
 }
 
 API int
+nc_server_config_new_tls_del_server_certificate(const char *endpt_name, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
+
+    return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+            "tls/tls-server-parameters/server-identity/certificate/inline-definition", endpt_name);
+}
+
+API int
 nc_server_config_new_ch_tls_server_certificate(const struct ly_ctx *ctx, const char *ch_client_name, const char *endpt_name,
         const char *pubkey_path, const char *privkey_path, const char *certificate_path, struct lyd_node **config)
 {
@@ -159,6 +168,17 @@ nc_server_config_new_ch_tls_server_certificate(const struct ly_ctx *ctx, const c
 cleanup:
     free(path);
     return ret;
+}
+
+API int
+nc_server_config_new_ch_tls_del_server_certificate(const char *ch_client_name, const char *endpt_name,
+        struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, ch_client_name, endpt_name, config, 1);
+
+    return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/call-home/"
+            "netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tls-server-parameters/server-identity/"
+            "certificate/inline-definition", ch_client_name, endpt_name);
 }
 
 static int
@@ -213,6 +233,22 @@ cleanup:
 }
 
 API int
+nc_server_config_new_tls_del_client_certificate(const char *endpt_name, const char *cert_name, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
+
+    if (cert_name) {
+        return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
+                "tls-server-parameters/client-authentication/ee-certs/inline-definition/"
+                "certificate[name='%s']", endpt_name, cert_name);
+    } else {
+        return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
+                "tls-server-parameters/client-authentication/ee-certs/inline-definition/"
+                "certificate", endpt_name);
+    }
+}
+
+API int
 nc_server_config_new_ch_tls_client_certificate(const struct ly_ctx *ctx, const char *ch_client_name, const char *endpt_name,
         const char *cert_name, const char *cert_path, struct lyd_node **config)
 {
@@ -240,6 +276,23 @@ nc_server_config_new_ch_tls_client_certificate(const struct ly_ctx *ctx, const c
 cleanup:
     free(path);
     return ret;
+}
+
+API int
+nc_server_config_new_ch_tls_del_client_certificate(const char *ch_client_name, const char *endpt_name,
+        const char *cert_name, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, ch_client_name, endpt_name, config, 1);
+
+    if (cert_name) {
+        return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+                "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication/ee-certs/"
+                "inline-definition/certificate[name='%s']", ch_client_name, endpt_name, cert_name);
+    } else {
+        return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+                "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication/ee-certs/"
+                "inline-definition/certificate", ch_client_name, endpt_name);
+    }
 }
 
 API int
@@ -271,6 +324,22 @@ cleanup:
 }
 
 API int
+nc_server_config_new_tls_del_client_ca(const char *endpt_name, const char *cert_name, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
+
+    if (cert_name) {
+        return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
+                "tls-server-parameters/client-authentication/ca-certs/inline-definition/"
+                "certificate[name='%s']", endpt_name, cert_name);
+    } else {
+        return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
+                "tls-server-parameters/client-authentication/ca-certs/inline-definition/"
+                "certificate", endpt_name);
+    }
+}
+
+API int
 nc_server_config_new_ch_tls_client_ca(const struct ly_ctx *ctx, const char *ch_client_name, const char *endpt_name,
         const char *cert_name, const char *cert_path, struct lyd_node **config)
 {
@@ -298,6 +367,23 @@ nc_server_config_new_ch_tls_client_ca(const struct ly_ctx *ctx, const char *ch_c
 cleanup:
     free(path);
     return ret;
+}
+
+API int
+nc_server_config_new_ch_tls_del_client_ca(const char *ch_client_name, const char *endpt_name,
+        const char *cert_name, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, ch_client_name, endpt_name, config, 1);
+
+    if (cert_name) {
+        return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+                "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication/ca-certs/"
+                "inline-definition/certificate[name='%s']", ch_client_name, endpt_name, cert_name);
+    } else {
+        return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+                "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication/ca-certs/"
+                "inline-definition/certificate", ch_client_name, endpt_name);
+    }
 }
 
 static const char *
@@ -388,6 +474,20 @@ cleanup:
 }
 
 API int
+nc_server_config_new_tls_del_ctn(const char *endpt_name, uint32_t id, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
+
+    if (id) {
+        return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
+                "netconf-server-parameters/client-identity-mappings/cert-to-name[id='%u']", endpt_name, id);
+    } else {
+        return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
+                "netconf-server-parameters/client-identity-mappings/cert-to-name", endpt_name);
+    }
+}
+
+API int
 nc_server_config_new_ch_tls_ctn(const struct ly_ctx *ctx, const char *ch_client_name, const char *endpt_name,
         uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name, struct lyd_node **config)
 {
@@ -414,6 +514,23 @@ nc_server_config_new_ch_tls_ctn(const struct ly_ctx *ctx, const char *ch_client_
 cleanup:
     free(path);
     return ret;
+}
+
+API int
+nc_server_config_new_ch_tls_del_ctn(const char *ch_client_name, const char *endpt_name,
+        uint32_t id, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, ch_client_name, endpt_name, config, 1);
+
+    if (id) {
+        return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+                "endpoints/endpoint[name='%s']/tls/netconf-server-parameters/client-identity-mappings/"
+                "cert-to-name[id='%u']", ch_client_name, endpt_name, id);
+    } else {
+        return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+                "endpoints/endpoint[name='%s']/tls/netconf-server-parameters/client-identity-mappings/"
+                "cert-to-name", ch_client_name, endpt_name);
+    }
 }
 
 static const char *
@@ -451,9 +568,27 @@ nc_server_config_new_tls_version(const struct ly_ctx *ctx, const char *endpt_nam
 
     ret = nc_config_new_create(ctx, config, version, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
             "hello-params/tls-versions/tls-version", endpt_name);
-    if (ret) {
+
+cleanup:
+    return ret;
+}
+
+API int
+nc_server_config_new_tls_del_version(const char *endpt_name, NC_TLS_VERSION tls_version, struct lyd_node **config)
+{
+    int ret = 0;
+    const char *version;
+
+    NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
+
+    version = nc_config_new_tls_tlsversion2str(tls_version);
+    if (!version) {
+        ret = 1;
         goto cleanup;
     }
+
+    ret = nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
+            "tls-server-parameters/hello-params/tls-versions/tls-version[.='%s']", endpt_name, version);
 
 cleanup:
     return ret;
@@ -511,6 +646,16 @@ cleanup:
     va_end(ap);
     free(old_path);
     return ret;
+}
+
+API int
+nc_server_config_new_tls_del_cipher(const char *endpt_name, const char *cipher, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, endpt_name, cipher, config, 1);
+
+    return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+            "tls/tls-server-parameters/hello-params/cipher-suites/"
+            "cipher-suite[.='iana-tls-cipher-suite-algs:%s']", endpt_name, cipher);
 }
 
 API int
@@ -659,8 +804,48 @@ cleanup:
 }
 
 API int
+nc_server_config_new_tls_del_crl(const char *endpt_name, struct lyd_node **config)
+{
+    int ret = 0;
+
+    NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
+
+    ret = nc_config_new_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:crl-path", endpt_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+    ret = nc_config_new_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:crl-url", endpt_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+    ret = nc_config_new_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:crl-cert-ext", endpt_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    return ret;
+}
+
+API int
 nc_config_new_tls_endpoint_client_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *referenced_endpt, struct lyd_node **config)
 {
+    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, referenced_endpt, config, 1);
+
     return nc_config_new_create(ctx, config, referenced_endpt, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:endpoint-client-auth", endpt_name);
+}
+
+API int
+nc_config_new_tls_del_endpoint_client_reference(const char *endpt_name, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
+
+    return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
             "client-authentication/libnetconf2-netconf-server:endpoint-client-auth", endpt_name);
 }

@@ -162,7 +162,7 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* create the client authentication data, password only */
-    ret = nc_server_config_new_ssh_client_auth_password(ctx, "endpt", "client", "testpassword123", &tree);
+    ret = nc_server_config_new_ssh_user_password(ctx, "endpt", "client", "testpassword123", &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */

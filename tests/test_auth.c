@@ -321,16 +321,16 @@ setup_f(void **state)
     ret = nc_server_config_new_ssh_hostkey(ctx, "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa", NULL, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_client_auth_pubkey(ctx, "endpt", "test_pk", "pubkey", TESTS_DIR "/data/key_rsa.pub", &tree);
+    ret = nc_server_config_new_ssh_user_pubkey(ctx, "endpt", "test_pk", "pubkey", TESTS_DIR "/data/key_rsa.pub", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_client_auth_interactive(ctx, "endpt", "test_int", "netconf.conf", BUILD_DIR "/tests", &tree);
+    ret = nc_server_config_new_ssh_user_interactive(ctx, "endpt", "test_int", "netconf.conf", BUILD_DIR "/tests", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_client_auth_password(ctx, "endpt", "test_pw", "testpw", &tree);
+    ret = nc_server_config_new_ssh_user_password(ctx, "endpt", "test_pw", "testpw", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_client_auth_none(ctx, "endpt", "test_none", &tree);
+    ret = nc_server_config_new_ssh_user_none(ctx, "endpt", "test_none", &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
