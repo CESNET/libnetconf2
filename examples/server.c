@@ -250,7 +250,7 @@ init(struct ly_ctx **context, struct nc_pollsession **ps, const char *path, NC_T
     }
 
     /* create client authentication configuration data */
-    rc = nc_server_config_new_ssh_client_auth_password(*context, "endpt", SSH_USERNAME, SSH_PASSWORD, &config);
+    rc = nc_server_config_new_ssh_user_password(*context, "endpt", SSH_USERNAME, SSH_PASSWORD, &config);
     if (rc) {
         ERR_MSG_CLEANUP("Error creating client authentication configuration data.\n");
     }

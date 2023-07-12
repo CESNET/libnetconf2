@@ -121,6 +121,8 @@ int nc_config_new_create_append(const struct ly_ctx *ctx, const char *parent_pat
  */
 int nc_config_new_delete(struct lyd_node **tree, const char *path_fmt, ...);
 
+int nc_config_new_check_delete(struct lyd_node **tree, const char *path_fmt, ...);
+
 #ifdef __cplusplus
 }
 #endif

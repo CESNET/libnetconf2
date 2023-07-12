@@ -239,7 +239,7 @@ setup_f(void **state)
     ret = nc_server_config_new_ssh_hostkey(ctx, "old", "old_key", TESTS_DIR "/data/key_rsa", NULL, &old_tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_client_auth_password(ctx, "old", "old_client", "passwd", &old_tree);
+    ret = nc_server_config_new_ssh_user_password(ctx, "old", "old_client", "passwd", &old_tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the yang data, treat them as if every node had replace operation */
@@ -252,7 +252,7 @@ setup_f(void **state)
     ret = nc_server_config_new_ssh_hostkey(ctx, "new", "new_key", TESTS_DIR "/data/key_rsa", NULL, &new_tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_client_auth_pubkey(ctx, "new", "new_client", "pubkey", TESTS_DIR "/data/key_rsa.pub", &new_tree);
+    ret = nc_server_config_new_ssh_user_pubkey(ctx, "new", "new_client", "pubkey", TESTS_DIR "/data/key_rsa.pub", &new_tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the yang data, meaning
