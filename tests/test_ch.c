@@ -39,6 +39,22 @@ struct test_state {
     struct lyd_node *tls_tree;
 };
 
+char buffer[512];
+char expected[512];
+
+static void
+test_msg_callback(const struct nc_session *session, NC_VERB_LEVEL level, const char *msg)
+{
+    (void) level;
+    (void) session;
+
+    if (strstr(msg, expected)) {
+        strcpy(buffer, msg);
+    }
+
+    printf("%s\n", msg);
+}
+
 /* acquire ctx cb for dispatch */
 const struct ly_ctx *
 ch_session_acquire_ctx_cb(void *cb_data)
@@ -76,6 +92,11 @@ server_thread_ssh(void *arg)
     struct test_state *state = arg;
     struct nc_pollsession *ps;
 
+    /* set print clb so we get access to messages */
+    nc_set_print_clb_session(test_msg_callback);
+    buffer[0] = '\0';
+    strcpy(expected, "reconnecting in");
+
     /* prepare data for deleting the call-home client */
     ret = nc_server_config_new_del_ch_client("ch_ssh", &state->ssh_tree);
     assert_int_equal(ret, 0);
@@ -96,7 +117,7 @@ server_thread_ssh(void *arg)
         if (ret & (NC_PSPOLL_TIMEOUT | NC_PSPOLL_NOSESSIONS)) {
             usleep(500);
         }
-    } while (!(ret & NC_PSPOLL_SESSION_TERM));
+    } while (!strlen(buffer));
 
     /* delete the call-home client, the thread should end */
     ret = nc_server_config_setup_data(state->ssh_tree);
@@ -180,9 +201,11 @@ setup_ssh(void **state)
     ret = nc_server_config_new_ch_address_port(ctx, "ch_ssh", "endpt", NC_TI_LIBSSH, "127.0.0.1", "10009", &test_state->ssh_tree);
     assert_int_equal(ret, 0);
 
+    /* set connection type to persistent */
     ret = nc_server_config_new_ch_persistent(ctx, "ch_ssh", &test_state->ssh_tree);
     assert_int_equal(ret, 0);
 
+    /* set the period of the periodic connection type, this should remove the persistent connection type */
     ret = nc_server_config_new_ch_period(ctx, "ch_ssh", 3, &test_state->ssh_tree);
     assert_int_equal(ret, 0);
 
