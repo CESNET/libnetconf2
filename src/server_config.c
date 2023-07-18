@@ -537,6 +537,55 @@ nc_server_config_get_private_key_type(const char *format)
 
 #endif /* NC_ENABLED_SSH_TLS */
 
+static int
+nc_server_config_get_ch_client_with_lock(const struct lyd_node *node, struct nc_ch_client **ch_client)
+{
+    uint16_t i;
+    const char *name;
+
+    assert(node && ch_client);
+    name = LYD_NAME(node);
+
+    while (node) {
+        if (!strcmp(LYD_NAME(node), "netconf-client")) {
+            break;
+        }
+        node = lyd_parent(node);
+    }
+
+    if (!node) {
+        ERR(NULL, "Node \"%s\" is not contained in a netconf-client subtree.", name);
+        return 1;
+    }
+
+    node = lyd_child(node);
+    assert(!strcmp(LYD_NAME(node), "name"));
+    name = lyd_get_value(node);
+
+    /* LOCK */
+    pthread_rwlock_rdlock(&server_opts.ch_client_lock);
+    for (i = 0; i < server_opts.ch_client_count; i++) {
+        if (!strcmp(server_opts.ch_clients[i].name, name)) {
+            /* LOCK */
+            pthread_mutex_lock(&server_opts.ch_clients[i].lock);
+            *ch_client = &server_opts.ch_clients[i];
+            return 0;
+        }
+    }
+
+    ERR(NULL, "Call-home client \"%s\" was not found.", name);
+    return 1;
+}
+
+static void
+nc_ch_client_unlock(struct nc_ch_client *client)
+{
+    assert(client);
+
+    pthread_mutex_unlock(&client->lock);
+    pthread_rwlock_unlock(&server_opts.ch_client_lock);
+}
+
 int
 equal_parent_name(const struct lyd_node *node, uint16_t parent_count, const char *parent_name)
 {
@@ -1168,39 +1217,54 @@ static void
 nc_server_config_ch_del_client(struct nc_ch_client *ch_client)
 {
     uint16_t i, ch_endpt_count;
+    struct nc_ch_client client;
+    pthread_t tid;
 
+    /* WR LOCK */
     pthread_rwlock_wrlock(&server_opts.ch_client_lock);
 
-    free(ch_client->name);
-    ch_client->name = NULL;
+    /* copy the client we want to delete into a local variable */
+    memcpy(&client, ch_client, sizeof *ch_client);
+    /* get his tid */
+    tid = client.tid;
 
-    if (ch_client->session) {
-        pthread_mutex_lock(&ch_client->session->opts.server.ch_lock);
-        pthread_cond_signal(&ch_client->session->opts.server.ch_cond);
-        pthread_mutex_unlock(&ch_client->session->opts.server.ch_lock);
-        ch_client->session = NULL;
-    }
-
-    pthread_rwlock_unlock(&server_opts.ch_client_lock);
-
-    if (ch_client->tid) {
-        pthread_join(ch_client->tid, NULL);
-    }
-
-    pthread_rwlock_wrlock(&server_opts.ch_client_lock);
-
-    ch_endpt_count = ch_client->ch_endpt_count;
-    for (i = 0; i < ch_endpt_count; i++) {
-        nc_server_config_ch_del_endpt(ch_client, &ch_client->ch_endpts[i]);
-    }
-
+    /* delete the client */
     server_opts.ch_client_count--;
     if (!server_opts.ch_client_count) {
         free(server_opts.ch_clients);
         server_opts.ch_clients = NULL;
+    } else {
+        memcpy(ch_client, &server_opts.ch_clients[server_opts.ch_client_count], sizeof *server_opts.ch_clients);
     }
 
+    /* WR UNLOCK */
     pthread_rwlock_unlock(&server_opts.ch_client_lock);
+
+    /* RD LOCK */
+    pthread_rwlock_rdlock(&server_opts.ch_client_lock);
+
+    if (client.thread_data->thread_running) {
+        /* CH COND LOCK */
+        pthread_mutex_lock(&client.thread_data->cond_lock);
+        client.thread_data->thread_running = 0;
+        pthread_cond_signal(&client.thread_data->cond);
+        /* CH COND UNLOCK */
+        pthread_mutex_unlock(&client.thread_data->cond_lock);
+
+        /* RD UNLOCK */
+        pthread_rwlock_unlock(&server_opts.ch_client_lock);
+
+        /* wait for the thread to terminate */
+        pthread_join(tid, NULL);
+    }
+
+    /* free its members */
+    free(client.name);
+
+    ch_endpt_count = client.ch_endpt_count;
+    for (i = 0; i < ch_endpt_count; i++) {
+        nc_server_config_ch_del_endpt(&client, &client.ch_endpts[i]);
+    }
 }
 
 void
@@ -1337,8 +1401,8 @@ nc_server_config_endpoint(const struct lyd_node *node, NC_OPERATION op)
             }
         }
     } else if (is_ch(node)) {
-        /* ch */
-        if (nc_server_config_get_ch_client(node, &ch_client)) {
+        /* LOCK */
+        if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
             ret = 1;
             goto cleanup;
         }
@@ -1355,6 +1419,10 @@ nc_server_config_endpoint(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -1393,6 +1461,7 @@ nc_server_config_ssh(const struct lyd_node *node, NC_OPERATION op)
     struct nc_endpt *endpt;
     struct nc_bind *bind;
     struct nc_ch_endpt *ch_endpt;
+    struct nc_ch_client *ch_client;
     int ret = 0;
 
     assert(!strcmp(LYD_NAME(node), "ssh"));
@@ -1412,6 +1481,12 @@ nc_server_config_ssh(const struct lyd_node *node, NC_OPERATION op)
             nc_server_config_del_ssh(bind, endpt->opts.ssh);
         }
     } else {
+        /* LOCK */
+        if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+            ret = 1;
+            goto cleanup;
+        }
+
         if (nc_server_config_get_ch_endpt(node, &ch_endpt)) {
             ret = 1;
             goto cleanup;
@@ -1428,6 +1503,10 @@ nc_server_config_ssh(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -1463,6 +1542,7 @@ nc_server_config_tls(const struct lyd_node *node, NC_OPERATION op)
     struct nc_endpt *endpt;
     struct nc_bind *bind;
     struct nc_ch_endpt *ch_endpt;
+    struct nc_ch_client *ch_client;
     int ret = 0;
 
     assert(!strcmp(LYD_NAME(node), "tls"));
@@ -1482,6 +1562,12 @@ nc_server_config_tls(const struct lyd_node *node, NC_OPERATION op)
             nc_server_config_del_tls(bind, endpt->opts.tls);
         }
     } else {
+        /* LOCK */
+        if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+            ret = 1;
+            goto cleanup;
+        }
+
         if (nc_server_config_get_ch_endpt(node, &ch_endpt)) {
             ret = 1;
             goto cleanup;
@@ -1496,6 +1582,10 @@ nc_server_config_tls(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -1643,6 +1733,7 @@ nc_server_config_keepalives(const struct lyd_node *node, NC_OPERATION op)
     struct nc_endpt *endpt;
     struct nc_bind *bind;
     struct nc_ch_endpt *ch_endpt;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "keepalives"));
 
@@ -1662,6 +1753,11 @@ nc_server_config_keepalives(const struct lyd_node *node, NC_OPERATION op)
             goto cleanup;
         }
     } else if (is_ch(node) && equal_parent_name(node, 1, "tcp-client-parameters")) {
+        /* LOCK */
+        if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+            return 1;
+        }
+
         if (nc_server_config_get_ch_endpt(node, &ch_endpt)) {
             ret = 1;
             goto cleanup;
@@ -1675,6 +1771,10 @@ nc_server_config_keepalives(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node) && equal_parent_name(node, 1, "tcp-client-parameters")) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -1686,6 +1786,7 @@ nc_server_config_idle_time(const struct lyd_node *node, NC_OPERATION op)
     struct nc_endpt *endpt;
     struct nc_bind *bind;
     struct nc_ch_endpt *ch_endpt;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "idle-time"));
 
@@ -1705,6 +1806,11 @@ nc_server_config_idle_time(const struct lyd_node *node, NC_OPERATION op)
             goto cleanup;
         }
     } else if (is_ch(node) && equal_parent_name(node, 2, "tcp-client-parameters")) {
+        /* LOCK */
+        if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+            return 1;
+        }
+
         if (nc_server_config_get_ch_endpt(node, &ch_endpt)) {
             ret = 1;
             goto cleanup;
@@ -1718,6 +1824,10 @@ nc_server_config_idle_time(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node) && equal_parent_name(node, 1, "tcp-client-parameters")) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -1729,6 +1839,7 @@ nc_server_config_max_probes(const struct lyd_node *node, NC_OPERATION op)
     struct nc_endpt *endpt;
     struct nc_bind *bind;
     struct nc_ch_endpt *ch_endpt;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "max-probes"));
 
@@ -1748,6 +1859,11 @@ nc_server_config_max_probes(const struct lyd_node *node, NC_OPERATION op)
             goto cleanup;
         }
     } else if (is_ch(node) && equal_parent_name(node, 2, "tcp-client-parameters")) {
+        /* LOCK */
+        if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+            return 1;
+        }
+
         if (nc_server_config_get_ch_endpt(node, &ch_endpt)) {
             ret = 1;
             goto cleanup;
@@ -1761,6 +1877,10 @@ nc_server_config_max_probes(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node) && equal_parent_name(node, 1, "tcp-client-parameters")) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -1772,6 +1892,7 @@ nc_server_config_probe_interval(const struct lyd_node *node, NC_OPERATION op)
     struct nc_endpt *endpt;
     struct nc_bind *bind;
     struct nc_ch_endpt *ch_endpt;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "probe-interval"));
 
@@ -1791,6 +1912,11 @@ nc_server_config_probe_interval(const struct lyd_node *node, NC_OPERATION op)
             goto cleanup;
         }
     } else if (is_ch(node) && equal_parent_name(node, 2, "tcp-client-parameters")) {
+        /* LOCK */
+        if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+            return 1;
+        }
+
         if (nc_server_config_get_ch_endpt(node, &ch_endpt)) {
             ret = 1;
             goto cleanup;
@@ -1804,6 +1930,10 @@ nc_server_config_probe_interval(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node) && equal_parent_name(node, 1, "tcp-client-parameters")) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -1823,6 +1953,7 @@ nc_server_config_host_key(const struct lyd_node *node, NC_OPERATION op)
     int ret = 0;
     struct nc_hostkey *hostkey;
     struct nc_server_ssh_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "host-key"));
 
@@ -1832,6 +1963,11 @@ nc_server_config_host_key(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if (equal_parent_name(node, 1, "server-identity")) {
+        /* LOCK */
+        if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+            return 1;
+        }
+
         if (op == NC_OP_CREATE) {
             ret = nc_server_config_create_host_key(node, opts);
             if (ret) {
@@ -1847,6 +1983,10 @@ nc_server_config_host_key(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node) && equal_parent_name(node, 1, "server-identity")) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -1860,6 +2000,7 @@ nc_server_config_public_key_format(const struct lyd_node *node, NC_OPERATION op)
     struct nc_public_key *pubkey;
     struct nc_hostkey *hostkey;
     struct nc_server_tls_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "public-key-format"));
 
@@ -1872,6 +2013,11 @@ nc_server_config_public_key_format(const struct lyd_node *node, NC_OPERATION op)
         ERR(NULL, "Public key format (%s) not supported.", format);
         ret = 1;
         goto cleanup;
+    }
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
     }
 
     if (is_ssh(node) && equal_parent_name(node, 4, "server-identity")) {
@@ -1907,6 +2053,10 @@ nc_server_config_public_key_format(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -1971,8 +2121,14 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
     struct nc_client_auth *auth_client;
     struct nc_public_key *pubkey;
     struct nc_server_tls_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "public-key"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (is_ssh(node) && equal_parent_name(node, 3, "host-key")) {
         /* server's public-key, mandatory leaf */
@@ -2047,6 +2203,10 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -2059,6 +2219,7 @@ nc_server_config_private_key_format(const struct lyd_node *node, NC_OPERATION op
     NC_PRIVKEY_FORMAT privkey_type;
     struct nc_hostkey *hostkey;
     struct nc_server_tls_opts *opts;
+    struct nc_ch_client *ch_client;
 
     (void) op;
 
@@ -2075,6 +2236,11 @@ nc_server_config_private_key_format(const struct lyd_node *node, NC_OPERATION op
         ERR(NULL, "Unknown private key format.");
         ret = 1;
         goto cleanup;
+    }
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
     }
 
     if (is_ssh(node)) {
@@ -2096,6 +2262,10 @@ nc_server_config_private_key_format(const struct lyd_node *node, NC_OPERATION op
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -2131,8 +2301,14 @@ nc_server_config_cleartext_private_key(const struct lyd_node *node, NC_OPERATION
     int ret = 0;
     struct nc_hostkey *hostkey;
     struct nc_server_tls_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "cleartext-private-key"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (is_ssh(node)) {
         /* ssh */
@@ -2167,6 +2343,10 @@ nc_server_config_cleartext_private_key(const struct lyd_node *node, NC_OPERATION
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -2199,8 +2379,14 @@ nc_server_config_keystore_reference(const struct lyd_node *node, NC_OPERATION op
 {
     int ret = 0;
     struct nc_hostkey *hostkey;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "keystore-reference"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (is_ssh(node) && equal_parent_name(node, 3, "server-identity")) {
         if (nc_server_config_get_hostkey(node, &hostkey)) {
@@ -2222,6 +2408,10 @@ nc_server_config_keystore_reference(const struct lyd_node *node, NC_OPERATION op
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -2241,8 +2431,14 @@ nc_server_config_user(const struct lyd_node *node, NC_OPERATION op)
     int ret = 0;
     struct nc_client_auth *auth_client;
     struct nc_server_ssh_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "user"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_ssh_opts(node, &opts)) {
         ret = 1;
@@ -2264,6 +2460,10 @@ nc_server_config_user(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -2272,8 +2472,14 @@ nc_server_config_auth_attempts(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_server_ssh_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "auth-attempts"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_ssh_opts(node, &opts)) {
         ret = 1;
@@ -2285,6 +2491,10 @@ nc_server_config_auth_attempts(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -2293,8 +2503,14 @@ nc_server_config_auth_timeout(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_server_ssh_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "auth-timeout"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_ssh_opts(node, &opts)) {
         ret = 1;
@@ -2306,6 +2522,10 @@ nc_server_config_auth_timeout(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -2362,8 +2582,14 @@ nc_server_config_truststore_reference(const struct lyd_node *node, NC_OPERATION 
     int ret = 0;
     struct nc_endpt *endpt;
     struct nc_client_auth *auth_client;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "truststore-reference"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (is_ssh(node) && equal_parent_name(node, 1, "public-keys")) {
         if (nc_server_config_get_auth_client(node, &auth_client)) {
@@ -2382,7 +2608,7 @@ nc_server_config_truststore_reference(const struct lyd_node *node, NC_OPERATION 
         } else {
             auth_client->ts_ref = NULL;
         }
-    } else if (is_listen(node) && equal_parent_name(node, 1, "ca-certs")) {
+    } else if (is_tls(node) && equal_parent_name(node, 1, "ca-certs")) {
         if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
@@ -2399,7 +2625,7 @@ nc_server_config_truststore_reference(const struct lyd_node *node, NC_OPERATION 
         } else {
             endpt->opts.tls->ca_certs.ts_ref = NULL;
         }
-    } else if (is_listen(node) && equal_parent_name(node, 1, "ee-certs")) {
+    } else if (is_tls(node) && equal_parent_name(node, 1, "ee-certs")) {
         if (nc_server_config_get_endpt(node, &endpt, NULL)) {
             ret = 1;
             goto cleanup;
@@ -2419,6 +2645,10 @@ nc_server_config_truststore_reference(const struct lyd_node *node, NC_OPERATION 
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -2442,8 +2672,14 @@ nc_server_config_password(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_client_auth *auth_client;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "password"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_auth_client(node, &auth_client)) {
         ret = 1;
@@ -2460,6 +2696,10 @@ nc_server_config_password(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -2468,8 +2708,14 @@ nc_server_config_pam_name(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_client_auth *auth_client;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "pam-config-file-name"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_auth_client(node, &auth_client)) {
         ret = 1;
@@ -2490,6 +2736,10 @@ nc_server_config_pam_name(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -2498,8 +2748,14 @@ nc_server_config_pam_dir(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_client_auth *auth_client;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "pam-config-file-dir"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_auth_client(node, &auth_client)) {
         ret = 1;
@@ -2519,6 +2775,10 @@ nc_server_config_pam_dir(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -2528,8 +2788,14 @@ nc_server_config_none(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_client_auth *auth_client;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "none"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_auth_client(node, &auth_client)) {
         ret = 1;
@@ -2543,6 +2809,10 @@ nc_server_config_none(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -2638,8 +2908,14 @@ nc_server_config_host_key_alg(const struct lyd_node *node, NC_OPERATION op)
     const char *alg;
     uint8_t i;
     struct nc_server_ssh_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "host-key-alg"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_ssh_opts(node, &opts)) {
         ret = 1;
@@ -2666,6 +2942,10 @@ nc_server_config_host_key_alg(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -2677,8 +2957,14 @@ nc_server_config_kex_alg(const struct lyd_node *node, NC_OPERATION op)
     const char *alg;
     uint8_t i;
     struct nc_server_ssh_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "key-exchange-alg"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_ssh_opts(node, &opts)) {
         ret = 1;
@@ -2705,6 +2991,10 @@ nc_server_config_kex_alg(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -2716,8 +3006,14 @@ nc_server_config_encryption_alg(const struct lyd_node *node, NC_OPERATION op)
     const char *alg;
     uint8_t i;
     struct nc_server_ssh_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "encryption-alg"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_ssh_opts(node, &opts)) {
         ret = 1;
@@ -2744,6 +3040,10 @@ nc_server_config_encryption_alg(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -2755,8 +3055,14 @@ nc_server_config_mac_alg(const struct lyd_node *node, NC_OPERATION op)
     const char *alg;
     uint8_t i;
     struct nc_server_ssh_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "mac-alg"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_ssh_opts(node, &opts)) {
         ret = 1;
@@ -2783,6 +3089,10 @@ nc_server_config_mac_alg(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -3058,8 +3368,14 @@ nc_server_config_cert_data(const struct lyd_node *node, NC_OPERATION op)
     int ret = 0;
     struct nc_certificate *cert;
     struct nc_server_tls_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "cert-data"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (equal_parent_name(node, 3, "server-identity")) {
         if (nc_server_config_get_tls_opts(node, &opts)) {
@@ -3104,6 +3420,10 @@ nc_server_config_cert_data(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -3135,8 +3455,14 @@ nc_server_config_asymmetric_key(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_endpt *endpt;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "asymmetric-key"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_endpt(node, &endpt, NULL)) {
         ret = 1;
@@ -3156,6 +3482,10 @@ nc_server_config_asymmetric_key(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -3234,8 +3564,14 @@ nc_server_config_certificate(const struct lyd_node *node, NC_OPERATION op)
     int ret = 0;
     struct nc_asymmetric_key *key;
     struct nc_server_tls_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "certificate"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_tls_opts(node, &opts)) {
         ret = 1;
@@ -3291,6 +3627,10 @@ nc_server_config_certificate(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -3391,8 +3731,14 @@ nc_server_config_cert_to_name(const struct lyd_node *node, NC_OPERATION op)
     struct nc_server_tls_opts *opts;
     struct lyd_node *key;
     struct nc_ctn *ctn;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "cert-to-name"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_tls_opts(node, &opts)) {
         ret = 1;
@@ -3416,6 +3762,10 @@ nc_server_config_cert_to_name(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -3438,6 +3788,14 @@ nc_server_config_fingerprint(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_ctn *ctn;
+    struct nc_ch_client *ch_client;
+
+    assert(!strcmp(LYD_NAME(node), "fingerprint"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_ctn(node, &ctn)) {
         ret = 1;
@@ -3454,6 +3812,10 @@ nc_server_config_fingerprint(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -3475,8 +3837,14 @@ nc_server_config_tls_version(const struct lyd_node *node, NC_OPERATION op)
     int ret = 0;
     struct nc_server_tls_opts *opts;
     const char *version = NULL;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "tls-version"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_tls_opts(node, &opts)) {
         ret = 1;
@@ -3499,6 +3867,10 @@ nc_server_config_tls_version(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -3592,8 +3964,14 @@ nc_server_config_cipher_suite(const struct lyd_node *node, NC_OPERATION op)
     int ret = 0;
     struct nc_server_tls_opts *opts;
     const char *cipher = NULL;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "cipher-suite"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_tls_opts(node, &opts)) {
         ret = 1;
@@ -3614,6 +3992,10 @@ nc_server_config_cipher_suite(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -3622,8 +4004,14 @@ nc_server_config_crl_url(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_server_tls_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "crl-url"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_tls_opts(node, &opts)) {
         ret = 1;
@@ -3643,6 +4031,10 @@ nc_server_config_crl_url(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -3651,8 +4043,14 @@ nc_server_config_crl_path(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_server_tls_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "crl-path"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_tls_opts(node, &opts)) {
         ret = 1;
@@ -3672,6 +4070,10 @@ nc_server_config_crl_path(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -3680,8 +4082,14 @@ nc_server_config_crl_cert_ext(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_server_tls_opts *opts;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "crl-cert-ext"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_tls_opts(node, &opts)) {
         ret = 1;
@@ -3695,6 +4103,10 @@ nc_server_config_crl_cert_ext(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -3761,8 +4173,14 @@ nc_server_config_remote_address(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_ch_endpt *ch_endpt;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "remote-address"));
+
+    /* LOCK */
+    if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_ch_endpt(node, &ch_endpt)) {
         ret = 1;
@@ -3783,6 +4201,8 @@ nc_server_config_remote_address(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    /* UNLOCK */
+    nc_ch_client_unlock(ch_client);
     return ret;
 }
 
@@ -3791,8 +4211,14 @@ nc_server_config_remote_port(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_ch_endpt *ch_endpt;
+    struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "remote-port"));
+
+    /* LOCK */
+    if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
+    }
 
     if (nc_server_config_get_ch_endpt(node, &ch_endpt)) {
         ret = 1;
@@ -3806,6 +4232,8 @@ nc_server_config_remote_port(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    /* UNLOCK */
+    nc_ch_client_unlock(ch_client);
     return ret;
 }
 
@@ -3821,12 +4249,16 @@ nc_server_config_persistent(const struct lyd_node *node, NC_OPERATION op)
 
     (void) op;
 
-    if (nc_server_config_get_ch_client(node, &ch_client)) {
+    /* LOCK */
+    if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
         ret = 1;
         goto cleanup;
     }
 
     ch_client->conn_type = NC_CH_PERSIST;
+
+    /* UNLOCK */
+    nc_ch_client_unlock(ch_client);
 
 cleanup:
     return ret;
@@ -3842,7 +4274,8 @@ nc_server_config_periodic(const struct lyd_node *node, NC_OPERATION op)
 
     (void) op;
 
-    if (nc_server_config_get_ch_client(node, &ch_client)) {
+    /* LOCK */
+    if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
         ret = 1;
         goto cleanup;
     }
@@ -3852,6 +4285,9 @@ nc_server_config_periodic(const struct lyd_node *node, NC_OPERATION op)
     ch_client->period = 60;
     ch_client->anchor_time = 0;
     ch_client->idle_timeout = 180;
+
+    /* UNLOCK */
+    nc_ch_client_unlock(ch_client);
 
 cleanup:
     return ret;
@@ -3865,7 +4301,8 @@ nc_server_config_period(const struct lyd_node *node, NC_OPERATION op)
 
     assert(!strcmp(LYD_NAME(node), "period"));
 
-    if (nc_server_config_get_ch_client(node, &ch_client)) {
+    /* LOCK */
+    if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
         ret = 1;
         goto cleanup;
     }
@@ -3875,6 +4312,9 @@ nc_server_config_period(const struct lyd_node *node, NC_OPERATION op)
     } else if (op == NC_OP_DELETE) {
         ch_client->period = 60;
     }
+
+    /* UNLOCK */
+    nc_ch_client_unlock(ch_client);
 
 cleanup:
     return ret;
@@ -3889,9 +4329,9 @@ nc_server_config_anchor_time(const struct lyd_node *node, NC_OPERATION op)
 
     assert(!strcmp(LYD_NAME(node), "anchor-time"));
 
-    if (nc_server_config_get_ch_client(node, &ch_client)) {
-        ret = 1;
-        goto cleanup;
+    /* LOCK */
+    if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
     }
 
     ret = ly_time_str2time(lyd_get_value(node), &anchor_time, NULL);
@@ -3906,6 +4346,8 @@ nc_server_config_anchor_time(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    /* UNLOCK */
+    nc_ch_client_unlock(ch_client);
     return ret;
 }
 
@@ -3919,7 +4361,8 @@ nc_server_config_reconnect_strategy(const struct lyd_node *node, NC_OPERATION op
 
     (void) op;
 
-    if (nc_server_config_get_ch_client(node, &ch_client)) {
+    /* LOCK */
+    if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
         ret = 1;
         goto cleanup;
     }
@@ -3928,6 +4371,9 @@ nc_server_config_reconnect_strategy(const struct lyd_node *node, NC_OPERATION op
     ch_client->start_with = NC_CH_FIRST_LISTED;
     ch_client->max_wait = 5;
     ch_client->max_attempts = 3;
+
+    /* UNLOCK */
+    nc_ch_client_unlock(ch_client);
 
 cleanup:
     return ret;
@@ -3942,9 +4388,9 @@ nc_server_config_start_with(const struct lyd_node *node, NC_OPERATION op)
 
     assert(!strcmp(LYD_NAME(node), "start-with"));
 
-    if (nc_server_config_get_ch_client(node, &ch_client)) {
-        ret = 1;
-        goto cleanup;
+    /* LOCK */
+    if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        return 1;
     }
 
     if (op == NC_OP_DELETE) {
@@ -3966,6 +4412,8 @@ nc_server_config_start_with(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
+    /* UNLOCK */
+    nc_ch_client_unlock(ch_client);
     return ret;
 }
 
@@ -3977,7 +4425,8 @@ nc_server_config_max_wait(const struct lyd_node *node, NC_OPERATION op)
 
     assert(!strcmp(LYD_NAME(node), "max-wait"));
 
-    if (nc_server_config_get_ch_client(node, &ch_client)) {
+    /* LOCK */
+    if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
         ret = 1;
         goto cleanup;
     }
@@ -3987,6 +4436,9 @@ nc_server_config_max_wait(const struct lyd_node *node, NC_OPERATION op)
     } else {
         ch_client->max_wait = 5;
     }
+
+    /* UNLOCK */
+    nc_ch_client_unlock(ch_client);
 
 cleanup:
     return ret;
@@ -4000,7 +4452,8 @@ nc_server_config_max_attempts(const struct lyd_node *node, NC_OPERATION op)
 
     assert(!strcmp(LYD_NAME(node), "max-attempts"));
 
-    if (nc_server_config_get_ch_client(node, &ch_client)) {
+    /* LOCK */
+    if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
         ret = 1;
         goto cleanup;
     }
@@ -4010,6 +4463,9 @@ nc_server_config_max_attempts(const struct lyd_node *node, NC_OPERATION op)
     } else {
         ch_client->max_attempts = 3;
     }
+
+    /* UNLOCK */
+    nc_ch_client_unlock(ch_client);
 
 cleanup:
     return ret;

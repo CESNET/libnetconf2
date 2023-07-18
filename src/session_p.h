@@ -394,6 +394,23 @@ struct nc_client_context {
 #endif /* NC_ENABLED_SSH_TLS */
 };
 
+/**
+ * @brief Call Home client thread data.
+ */
+struct nc_ch_client_thread_arg {
+    char *client_name;
+
+    const struct ly_ctx *(*acquire_ctx_cb)(void *cb_data);  /**< acquiring libyang context cb */
+    void (*release_ctx_cb)(void *cb_data);                  /**< releasing libyang context cb */
+    void *ctx_cb_data;                                      /**< acq/rel cb data */
+    int (*new_session_cb)(const char *client_name, struct nc_session *new_session, void *user_data);    /**< creating new session cb */
+    void *new_session_cb_data;                              /**< new session cb data */
+
+    int thread_running;         /**< A boolean value that is truthy while the underlying Call Home thread is running */
+    pthread_mutex_t cond_lock;  /**< Condition's lock used for signalling the thread to terminate */
+    pthread_cond_t cond;        /**< Condition used for signalling the thread to terminate */
+};
+
 struct nc_server_opts {
     /* ACCESS unlocked */
     ATOMIC_T wd_basic_mode;
@@ -462,9 +479,9 @@ struct nc_server_opts {
     struct nc_ch_client {
         char *name;
 
-        struct nc_session *session;
-        pthread_t tid;
-        // data * - condition, mutex, thread_running
+        pthread_t tid;                                  /**< Call Home client's thread ID */
+        struct nc_ch_client_thread_arg *thread_data;    /**< Data of the Call Home client's thread */
+
         struct nc_ch_endpt {
             char *name;
             NC_TRANSPORT_IMPL ti;
@@ -535,6 +552,11 @@ struct nc_server_opts {
  * Time slept in msec if no endpoint was created for a running Call Home client.
  */
 #define NC_CH_NO_ENDPT_WAIT 1000
+
+/**
+ * Time slept in msec between Call Home thread session idle timeout checks.
+ */
+#define NC_CH_THREAD_IDLE_TIMEOUT_SLEEP 1000
 
 /**
  * Timeout in msec for a Call Home socket to establish its connection.
