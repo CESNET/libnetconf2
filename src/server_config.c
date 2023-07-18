@@ -138,9 +138,10 @@ static int
 nc_server_config_get_endpt(const struct lyd_node *node, struct nc_endpt **endpt, struct nc_bind **bind)
 {
     uint16_t i;
-    const char *endpt_name;
+    const char *name;
 
     assert(node && endpt);
+    name = LYD_NAME(node);
 
     while (node) {
         if (!strcmp(LYD_NAME(node), "endpoint")) {
@@ -150,16 +151,16 @@ nc_server_config_get_endpt(const struct lyd_node *node, struct nc_endpt **endpt,
     }
 
     if (!node) {
-        ERR(NULL, "Node \"%s\" is not contained in an endpoint subtree.", LYD_NAME(node));
+        ERR(NULL, "Node \"%s\" is not contained in an endpoint subtree.", name);
         return 1;
     }
 
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
-    endpt_name = lyd_get_value(node);
+    name = lyd_get_value(node);
 
     for (i = 0; i < server_opts.endpt_count; i++) {
-        if (!strcmp(server_opts.endpts[i].name, endpt_name)) {
+        if (!strcmp(server_opts.endpts[i].name, name)) {
             *endpt = &server_opts.endpts[i];
             if (bind) {
                 *bind = &server_opts.binds[i];
@@ -168,7 +169,7 @@ nc_server_config_get_endpt(const struct lyd_node *node, struct nc_endpt **endpt,
         }
     }
 
-    ERR(NULL, "Endpoint \"%s\" was not found.", endpt_name);
+    ERR(NULL, "Endpoint \"%s\" was not found.", name);
     return 1;
 }
 
@@ -176,9 +177,10 @@ static int
 nc_server_config_get_ch_client(const struct lyd_node *node, struct nc_ch_client **ch_client)
 {
     uint16_t i;
-    const char *ch_client_name;
+    const char *name;
 
     assert(node && ch_client);
+    name = LYD_NAME(node);
 
     while (node) {
         if (!strcmp(LYD_NAME(node), "netconf-client")) {
@@ -188,22 +190,28 @@ nc_server_config_get_ch_client(const struct lyd_node *node, struct nc_ch_client 
     }
 
     if (!node) {
-        ERR(NULL, "Node \"%s\" is not contained in a netconf-client subtree.", LYD_NAME(node));
+        ERR(NULL, "Node \"%s\" is not contained in a netconf-client subtree.", name);
         return 1;
     }
 
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
-    ch_client_name = lyd_get_value(node);
+    name = lyd_get_value(node);
 
+    /* LOCK */
+    pthread_rwlock_rdlock(&server_opts.ch_client_lock);
     for (i = 0; i < server_opts.ch_client_count; i++) {
-        if (!strcmp(server_opts.ch_clients[i].name, ch_client_name)) {
+        if (!strcmp(server_opts.ch_clients[i].name, name)) {
             *ch_client = &server_opts.ch_clients[i];
+            /* UNLOCK */
+            pthread_rwlock_unlock(&server_opts.ch_client_lock);
             return 0;
         }
     }
 
-    ERR(NULL, "Call-home client \"%s\" was not found.", ch_client_name);
+    /* UNLOCK */
+    pthread_rwlock_unlock(&server_opts.ch_client_lock);
+    ERR(NULL, "Call-home client \"%s\" was not found.", name);
     return 1;
 }
 
@@ -213,10 +221,11 @@ static int
 nc_server_config_get_ch_endpt(const struct lyd_node *node, struct nc_ch_endpt **ch_endpt)
 {
     uint16_t i;
-    const char *ch_endpt_name;
+    const char *name;
     struct nc_ch_client *ch_client;
 
     assert(node && ch_endpt);
+    name = LYD_NAME(node);
 
     if (nc_server_config_get_ch_client(node, &ch_client)) {
         return 1;
@@ -230,22 +239,22 @@ nc_server_config_get_ch_endpt(const struct lyd_node *node, struct nc_ch_endpt **
     }
 
     if (!node) {
-        ERR(NULL, "Node \"%s\" is not contained in a call-home endpoint subtree.", LYD_NAME(node));
+        ERR(NULL, "Node \"%s\" is not contained in a call-home endpoint subtree.", name);
         return 1;
     }
 
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
-    ch_endpt_name = lyd_get_value(node);
+    name = lyd_get_value(node);
 
     for (i = 0; i < ch_client->ch_endpt_count; i++) {
-        if (!strcmp(ch_client->ch_endpts[i].name, ch_endpt_name)) {
+        if (!strcmp(ch_client->ch_endpts[i].name, name)) {
             *ch_endpt = &ch_client->ch_endpts[i];
             return 0;
         }
     }
 
-    ERR(NULL, "Call-home client's \"%s\" endpoint \"%s\" was not found.", ch_client->name, ch_endpt_name);
+    ERR(NULL, "Call-home client's \"%s\" endpoint \"%s\" was not found.", ch_client->name, name);
     return 1;
 }
 
@@ -276,24 +285,11 @@ static int
 nc_server_config_get_hostkey(const struct lyd_node *node, struct nc_hostkey **hostkey)
 {
     uint16_t i;
-    const char *hostkey_name;
-    struct nc_endpt *endpt;
-    struct nc_ch_endpt *ch_endpt;
+    const char *name;
     struct nc_server_ssh_opts *opts;
 
     assert(node && hostkey);
-
-    if (is_listen(node)) {
-        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
-            return 1;
-        }
-        opts = endpt->opts.ssh;
-    } else {
-        if (nc_server_config_get_ch_endpt(node, &ch_endpt)) {
-            return 1;
-        }
-        opts = ch_endpt->opts.ssh;
-    }
+    name = LYD_NAME(node);
 
     while (node) {
         if (!strcmp(LYD_NAME(node), "host-key")) {
@@ -303,22 +299,25 @@ nc_server_config_get_hostkey(const struct lyd_node *node, struct nc_hostkey **ho
     }
 
     if (!node) {
-        ERR(NULL, "Node \"%s\" is not contained in a host-key subtree.", LYD_NAME(node));
+        ERR(NULL, "Node \"%s\" is not contained in a host-key subtree.", name);
         return 1;
     }
 
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
-    hostkey_name = lyd_get_value(node);
+    name = lyd_get_value(node);
 
+    if (nc_server_config_get_ssh_opts(node, &opts)) {
+        return 1;
+    }
     for (i = 0; i < opts->hostkey_count; i++) {
-        if (!strcmp(opts->hostkeys[i].name, hostkey_name)) {
+        if (!strcmp(opts->hostkeys[i].name, name)) {
             *hostkey = &opts->hostkeys[i];
             return 0;
         }
     }
 
-    ERR(NULL, "Host-key \"%s\" was not found.", hostkey_name);
+    ERR(NULL, "Host-key \"%s\" was not found.", name);
     return 1;
 }
 
@@ -326,24 +325,11 @@ static int
 nc_server_config_get_auth_client(const struct lyd_node *node, struct nc_client_auth **auth_client)
 {
     uint16_t i;
-    const char *authkey_name;
-    struct nc_endpt *endpt;
-    struct nc_ch_endpt *ch_endpt;
+    const char *name;
     struct nc_server_ssh_opts *opts;
 
     assert(node && auth_client);
-
-    if (is_listen(node)) {
-        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
-            return 1;
-        }
-        opts = endpt->opts.ssh;
-    } else {
-        if (nc_server_config_get_ch_endpt(node, &ch_endpt)) {
-            return 1;
-        }
-        opts = ch_endpt->opts.ssh;
-    }
+    name = LYD_NAME(node);
 
     while (node) {
         if (!strcmp(LYD_NAME(node), "user")) {
@@ -353,22 +339,25 @@ nc_server_config_get_auth_client(const struct lyd_node *node, struct nc_client_a
     }
 
     if (!node) {
-        ERR(NULL, "Node \"%s\" is not contained in a client-authentication subtree.", LYD_NAME(node));
+        ERR(NULL, "Node \"%s\" is not contained in a client-authentication subtree.", name);
         return 1;
     }
 
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
-    authkey_name = lyd_get_value(node);
+    name = lyd_get_value(node);
 
+    if (nc_server_config_get_ssh_opts(node, &opts)) {
+        return 1;
+    }
     for (i = 0; i < opts->client_count; i++) {
-        if (!strcmp(opts->auth_clients[i].username, authkey_name)) {
+        if (!strcmp(opts->auth_clients[i].username, name)) {
             *auth_client = &opts->auth_clients[i];
             return 0;
         }
     }
 
-    ERR(NULL, "Authorized key \"%s\" was not found.", authkey_name);
+    ERR(NULL, "Authorized key \"%s\" was not found.", name);
     return 1;
 }
 
@@ -376,14 +365,11 @@ static int
 nc_server_config_get_pubkey(const struct lyd_node *node, struct nc_public_key **pubkey)
 {
     uint16_t i;
-    const char *pubkey_name;
+    const char *name;
     struct nc_client_auth *auth_client;
 
     assert(node && pubkey);
-
-    if (nc_server_config_get_auth_client(node, &auth_client)) {
-        return 1;
-    }
+    name = LYD_NAME(node);
 
     node = lyd_parent(node);
     while (node) {
@@ -394,22 +380,25 @@ nc_server_config_get_pubkey(const struct lyd_node *node, struct nc_public_key **
     }
 
     if (!node) {
-        ERR(NULL, "Node \"%s\" is not contained in a public-key subtree.", LYD_NAME(node));
+        ERR(NULL, "Node \"%s\" is not contained in a public-key subtree.", name);
         return 1;
     }
 
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
-    pubkey_name = lyd_get_value(node);
+    name = lyd_get_value(node);
 
+    if (nc_server_config_get_auth_client(node, &auth_client)) {
+        return 1;
+    }
     for (i = 0; i < auth_client->pubkey_count; i++) {
-        if (!strcmp(auth_client->pubkeys[i].name, pubkey_name)) {
+        if (!strcmp(auth_client->pubkeys[i].name, name)) {
             *pubkey = &auth_client->pubkeys[i];
             return 0;
         }
     }
 
-    ERR(NULL, "Public key \"%s\" was not found.", pubkey_name);
+    ERR(NULL, "Public key \"%s\" was not found.", name);
     return 1;
 }
 
@@ -440,21 +429,12 @@ static int
 nc_server_config_get_cert(const struct lyd_node *node, int is_ee, struct nc_certificate **cert)
 {
     uint16_t i;
-    const char *cert_name;
+    const char *name;
     struct nc_cert_grouping *auth_client;
     struct nc_server_tls_opts *opts;
 
     assert(node && cert);
-
-    if (nc_server_config_get_tls_opts(node, &opts)) {
-        return 1;
-    }
-
-    if (is_ee) {
-        auth_client = &opts->ee_certs;
-    } else {
-        auth_client = &opts->ca_certs;
-    }
+    name = LYD_NAME(node);
 
     while (node) {
         if (!strcmp(LYD_NAME(node), "certificate")) {
@@ -464,22 +444,31 @@ nc_server_config_get_cert(const struct lyd_node *node, int is_ee, struct nc_cert
     }
 
     if (!node) {
-        ERR(NULL, "Node \"%s\" is not contained in a certificate subtree.", LYD_NAME(node));
+        ERR(NULL, "Node \"%s\" is not contained in a certificate subtree.", name);
         return 1;
     }
 
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
-    cert_name = lyd_get_value(node);
+    name = lyd_get_value(node);
+
+    if (nc_server_config_get_tls_opts(node, &opts)) {
+        return 1;
+    }
+    if (is_ee) {
+        auth_client = &opts->ee_certs;
+    } else {
+        auth_client = &opts->ca_certs;
+    }
 
     for (i = 0; i < auth_client->cert_count; i++) {
-        if (!strcmp(auth_client->certs[i].name, cert_name)) {
+        if (!strcmp(auth_client->certs[i].name, name)) {
             *cert = &auth_client->certs[i];
             return 0;
         }
     }
 
-    ERR(NULL, "Certificate \"%s\" was not found.", cert_name);
+    ERR(NULL, "Certificate \"%s\" was not found.", name);
     return 1;
 }
 
@@ -489,12 +478,10 @@ nc_server_config_get_ctn(const struct lyd_node *node, struct nc_ctn **ctn)
     uint32_t id;
     struct nc_ctn *iter;
     struct nc_server_tls_opts *opts;
+    const char *name;
 
     assert(node && ctn);
-
-    if (nc_server_config_get_tls_opts(node, &opts)) {
-        return 1;
-    }
+    name = LYD_NAME(node);
 
     node = lyd_parent(node);
     while (node) {
@@ -505,13 +492,17 @@ nc_server_config_get_ctn(const struct lyd_node *node, struct nc_ctn **ctn)
     }
 
     if (!node) {
-        ERR(NULL, "Node \"%s\" is not contained in a cert-to-name subtree.", LYD_NAME(node));
+        ERR(NULL, "Node \"%s\" is not contained in a cert-to-name subtree.", name);
         return 1;
     }
 
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "id"));
     id = strtoul(lyd_get_value(node), NULL, 10);
+
+    if (nc_server_config_get_tls_opts(node, &opts)) {
+        return 1;
+    }
 
     iter = opts->ctn;
     while (iter) {
