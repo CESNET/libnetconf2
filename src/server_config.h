@@ -250,6 +250,36 @@ int nc_server_config_new_ssh_del_keystore_reference(const char *endpt_name, cons
         struct lyd_node **config);
 
 /**
+ * @brief Creates new YANG configuration data nodes for the maximum amount of failed SSH authentication attempts.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, its contents might be changed.
+ * @param[in] auth_attempts Maximum amount of failed SSH authentication attempts after which a
+ * client is disconnected. The default value is 3.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ssh_auth_attempts(const struct ly_ctx *ctx, const char *endpt_name, uint16_t auth_attempts,
+        struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for an SSH authentication timeout.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, its contents might be changed.
+ * @param[in] auth_timeout Maximum amount of time in seconds after which the authentication is deemed
+ * unsuccessful. The default value is 10.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ssh_auth_timeout(const struct ly_ctx *ctx, const char *endpt_name, uint16_t auth_timeout,
+        struct lyd_node **config);
+
+/**
  * @brief Creates new YANG configuration data nodes for an SSH user's public key authentication method.
  *
  * @param[in] ctx libyang context.
@@ -1063,6 +1093,40 @@ int nc_server_config_new_ch_ssh_keystore_reference(const struct ly_ctx *ctx, con
  */
 int nc_server_config_new_ch_ssh_del_keystore_reference(const char *client_name, const char *endpt_name,
         const char *hostkey_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for the maximum amount of failed Call-Home SSH authentication attempts.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] client_name Arbitrary identifier of the call-home client.
+ * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
+ * If the client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] auth_attempts Maximum amount of failed SSH authentication attempts after which a
+ * client is disconnected. The default value is 3.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_ssh_auth_attempts(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
+        uint16_t auth_attempts, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a Call-Home SSH authentication timeout.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] client_name Arbitrary identifier of the call-home client.
+ * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
+ * If the client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] auth_timeout Maximum amount of time in seconds after which the authentication is deemed
+ * unsuccessful. The default value is 10.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_ssh_auth_timeout(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
+        uint16_t auth_timeout, struct lyd_node **config);
 
 /**
  * @brief Creates new YANG data nodes for a Call-Home SSH user's public key authentication method.
