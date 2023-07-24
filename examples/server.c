@@ -256,7 +256,7 @@ init(struct ly_ctx **context, struct nc_pollsession **ps, const char *path, NC_T
     }
 
     /* apply the created configuration data */
-    rc = nc_server_config_setup_diff(config);
+    rc = nc_server_config_setup_data(config);
     if (rc) {
         ERR_MSG_CLEANUP("Application of configuration data failed.\n");
     }
