@@ -126,8 +126,8 @@ int nc_server_config_new_del_endpt(const char *endpt_name, struct lyd_node **con
  * @brief Creates new YANG data nodes for an asymmetric key in the keystore.
  *
  * @param[in] ctx libyang context.
- * @param[in] name Name of the asymmetric key pair.
- * This name is used to reference the key pair.
+ * @param[in] asym_key_name Identifier of the asymmetric key pair.
+ * This identifier is used to reference the key pair.
  * @param[in] privkey_path Path to a private key file.
  * @param[in] pubkey_path Optional path a public key file.
  * If not supplied, it will be generated from the private key.
@@ -135,46 +135,109 @@ int nc_server_config_new_del_endpt(const char *endpt_name, struct lyd_node **con
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_keystore_asym_key(const struct ly_ctx *ctx, const char *name, const char *privkey_path,
+int nc_server_config_new_keystore_asym_key(const struct ly_ctx *ctx, const char *asym_key_name, const char *privkey_path,
         const char *pubkey_path, struct lyd_node **config);
 
 /**
  * @brief Deletes a keystore's asymmetric key from the YANG data.
  *
- * @param[in] name Optional identifier of the asymmetric key to be deleted.
+ * @param[in] asym_key_name Optional identifier of the asymmetric key to be deleted.
  * If NULL, all of the asymmetric keys in the keystore will be deleted.
  * @param[in,out] config Configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_del_keystore_asym_key(const char *name, struct lyd_node **config);
+int nc_server_config_new_del_keystore_asym_key(const char *asym_key_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG data nodes for a certificate in the keystore.
+ *
+ * A certificate can not exist without its asymmetric key, so you must call ::nc_server_config_new_keystore_asym_key()
+ * either before or after calling this with the same identifier for the asymmetric key.
+ *
+ * An asymmetric key pair can have zero or more certificates associated with this key pair, however a certificate must
+ * have exactly one key pair it belongs to.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] asym_key_name Arbitrary identifier of the asymmetric key.
+ * If an asymmetric key pair with this name already exists, its contents will be changed.
+ * @param[in] cert_name Arbitrary identifier of the key pair's certificate.
+ * If a certificate with this name already exists, its contents will be changed.
+ * @param[in] cert_path Path to the PEM encoded certificate file.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_keystore_cert(const struct ly_ctx *ctx, const char *asym_key_name, const char *cert_name,
+        const char *cert_path, struct lyd_node **config);
+
+/**
+ * @brief Deletes a keystore's certificate from the YANG data.
+ *
+ * @param[in] asym_key_name Identifier of an existing asymmetric key pair.
+ * @param[in] cert_name Optional identifier of a certificate to be deleted.
+ * If NULL, all of the certificates belonging to the asymmetric key pair will be deleted.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_del_keystore_cert(const char *asym_key_name, const char *cert_name, struct lyd_node **config);
 
 /**
  * @brief Creates new YANG data nodes for a public key in the truststore.
  *
  * @param[in] ctx libyang context.
- * @param[in] bag_name Arbitrary identifier of the public key bag.
+ * @param[in] pub_bag_name Arbitrary identifier of the public key bag.
  * This name is used to reference the public keys in the bag.
  * If a public key bag with this name already exists, its contents will be changed.
  * @param[in] pubkey_name Arbitrary identifier of the public key.
- * If a public key with this name already exists, its contents will be changed.
+ * If a public key with this name already exists in the given bag, its contents will be changed.
  * @param[in] pubkey_path Path to a file containing a public key.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_truststore_pubkey(const struct ly_ctx *ctx, const char *bag_name, const char *pubkey_name,
+int nc_server_config_new_truststore_pubkey(const struct ly_ctx *ctx, const char *pub_bag_name, const char *pubkey_name,
         const char *pubkey_path, struct lyd_node **config);
 
 /**
  * @brief Deletes a truststore's public key from the YANG data.
  *
- * @param[in] bag_name Identifier of an existing public key bag.
+ * @param[in] pub_bag_name Identifier of an existing public key bag.
  * @param[in] pubkey_name Optional identifier of a public key to be deleted.
  * If NULL, all of the public keys in the given bag will be deleted.
  * @param[in,out] config Configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_del_truststore_pubkey(const char *bag_name, const char *pubkey_name, struct lyd_node **config);
+int nc_server_config_new_del_truststore_pubkey(const char *pub_bag_name, const char *pubkey_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG data nodes for a certificate in the truststore.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] cert_bag_name Arbitrary identifier of the certificate bag.
+ * This name is used to reference the certificates in the bag.
+ * If a certificate bag with this name already exists, its contents will be changed.
+ * @param[in] cert_name Arbitrary identifier of the certificate.
+ * If a certificate with this name already exists in the given bag, its contents will be changed.
+ * @param[in] cert_path Path to a file containing a PEM encoded certificate.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_truststore_cert(const struct ly_ctx *ctx, const char *cert_bag_name, const char *cert_name,
+        const char *cert_path, struct lyd_node **config);
+
+/**
+ * @brief Deletes a truststore's certificate from the YANG data.
+ *
+ * @param[in] cert_bag_name Identifier of an existing certificate bag.
+ * @param[in] cert_name Optional identifier of a certificate to be deleted.
+ * If NULL, all of the certificates in the given bag will be deleted.
+ * @param[in,out] config Configuration YANG data tree.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_del_truststore_cert(const char *cert_bag_name,
+        const char *cert_name, struct lyd_node **config);
 
 /**
  * @}
@@ -616,6 +679,30 @@ int nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const 
 int nc_server_config_new_tls_del_server_certificate(const char *endpt_name, struct lyd_node **config);
 
 /**
+ * @brief Creates new YANG configuration data nodes for a keystore reference to the TLS server's certificate.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] asym_key_ref Name of the asymmetric key pair in the keystore to be referenced.
+ * @param[in] cert_ref Name of the certificate, which must belong to the given asymmetric key pair, to be referenced.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_tls_keystore_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *asym_key_ref,
+        const char *cert_ref, struct lyd_node **config);
+
+/**
+ * @brief Deletes a TLS server certificate keystore reference from the YANG data.
+ *
+ * @param[in] endpt_name Identifier of an existing endpoint.
+ * @param[in,out] config Modified configuration YANG data tree.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_tls_del_keystore_reference(const char *endpt_name, struct lyd_node **config);
+
+/**
  * @brief Creates new YANG configuration data nodes for a client's (end-entity) certificate.
  *
  * @param[in] ctx libyang context.
@@ -643,6 +730,29 @@ int nc_server_config_new_tls_client_certificate(const struct ly_ctx *ctx, const 
 int nc_server_config_new_tls_del_client_certificate(const char *endpt_name, const char *cert_name, struct lyd_node **config);
 
 /**
+ * @brief Creates new YANG configuration data nodes for a truststore reference to a set of client (end-entity) certificates.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] cert_bag_ref Identifier of the certificate bag in the truststore to be referenced.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_tls_client_cert_truststore_ref(const struct ly_ctx *ctx, const char *endpt_name,
+        const char *cert_bag_ref, struct lyd_node **config);
+
+/**
+ * @brief Deletes a client (end-entity) certificates truststore reference from the YANG data.
+ *
+ * @param[in] endpt_name Identifier of an existing endpoint.
+ * @param[in,out] config Modified configuration YANG data tree.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_tls_del_client_cert_truststore_ref(const char *endpt_name, struct lyd_node **config);
+
+/**
  * @brief Creates new YANG configuration data nodes for a client certificate authority (trust-anchor) certificate.
  *
  * @param[in] ctx libyang context.
@@ -668,6 +778,29 @@ int nc_server_config_new_tls_client_ca(const struct ly_ctx *ctx, const char *end
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_new_tls_del_client_ca(const char *endpt_name, const char *cert_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a truststore reference to a set of client certificate authority (trust-anchor) certificates.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] cert_bag_ref Identifier of the certificate bag in the truststore to be referenced.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_tls_client_ca_truststore_ref(const struct ly_ctx *ctx, const char *endpt_name,
+        const char *cert_bag_ref, struct lyd_node **config);
+
+/**
+ * @brief Deletes a client certificate authority (trust-anchor) certificates truststore reference from the YANG data.
+ *
+ * @param[in] endpt_name Identifier of an existing endpoint.
+ * @param[in,out] config Modified configuration YANG data tree.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_tls_del_client_ca_truststore_ref(const char *endpt_name, struct lyd_node **config);
 
 /**
  * @brief Creates new YANG configuration data nodes for a cert-to-name entry.

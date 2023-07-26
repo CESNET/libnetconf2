@@ -911,7 +911,7 @@ nc_server_config_new_ch_del_endpt(const char *client_name, const char *endpt_nam
 }
 
 API int
-nc_server_config_new_keystore_asym_key(const struct ly_ctx *ctx, const char *name, const char *privkey_path,
+nc_server_config_new_keystore_asym_key(const struct ly_ctx *ctx, const char *asym_key_name, const char *privkey_path,
         const char *pubkey_path, struct lyd_node **config)
 {
     int ret = 0;
@@ -920,7 +920,7 @@ nc_server_config_new_keystore_asym_key(const struct ly_ctx *ctx, const char *nam
     NC_PUBKEY_FORMAT pubkey_type;
     const char *privkey_format, *pubkey_format;
 
-    NC_CHECK_ARG_RET(NULL, ctx, name, privkey_path, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, asym_key_name, privkey_path, config, 1);
 
     /* get the keys as a string from the given files */
     ret = nc_server_config_new_get_keys(privkey_path, pubkey_path, &privkey, &pubkey, &privkey_type, &pubkey_type);
@@ -944,25 +944,25 @@ nc_server_config_new_keystore_asym_key(const struct ly_ctx *ctx, const char *nam
     }
 
     ret = nc_config_new_create(ctx, config, pubkey_format, "/ietf-keystore:keystore/asymmetric-keys/"
-            "asymmetric-key[name='%s']/public-key-format", name);
+            "asymmetric-key[name='%s']/public-key-format", asym_key_name);
     if (ret) {
         goto cleanup;
     }
 
     ret = nc_config_new_create(ctx, config, pubkey, "/ietf-keystore:keystore/asymmetric-keys/"
-            "asymmetric-key[name='%s']/public-key", name);
+            "asymmetric-key[name='%s']/public-key", asym_key_name);
     if (ret) {
         goto cleanup;
     }
 
     ret = nc_config_new_create(ctx, config, privkey_format, "/ietf-keystore:keystore/asymmetric-keys/"
-            "asymmetric-key[name='%s']/private-key-format", name);
+            "asymmetric-key[name='%s']/private-key-format", asym_key_name);
     if (ret) {
         goto cleanup;
     }
 
     ret = nc_config_new_create(ctx, config, privkey, "/ietf-keystore:keystore/asymmetric-keys/"
-            "asymmetric-key[name='%s']/cleartext-private-key", name);
+            "asymmetric-key[name='%s']/cleartext-private-key", asym_key_name);
     if (ret) {
         goto cleanup;
     }
@@ -974,19 +974,56 @@ cleanup:
 }
 
 API int
-nc_server_config_new_del_keystore_asym_key(const char *name, struct lyd_node **config)
+nc_server_config_new_del_keystore_asym_key(const char *asym_key_name, struct lyd_node **config)
 {
     NC_CHECK_ARG_RET(NULL, config, 1);
 
-    if (name) {
-        return nc_config_new_delete(config, "/ietf-keystore:keystore/asymmetric-keys/asymmetric-key[name='%s']", name);
+    if (asym_key_name) {
+        return nc_config_new_delete(config, "/ietf-keystore:keystore/asymmetric-keys/asymmetric-key[name='%s']", asym_key_name);
     } else {
         return nc_config_new_delete(config, "/ietf-keystore:keystore/asymmetric-keys/asymmetric-key");
     }
 }
 
 API int
-nc_server_config_new_truststore_pubkey(const struct ly_ctx *ctx, const char *bag_name, const char *pubkey_name,
+nc_server_config_new_keystore_cert(const struct ly_ctx *ctx, const char *asym_key_name, const char *cert_name,
+        const char *cert_path, struct lyd_node **config)
+{
+    int ret = 0;
+    char *cert = NULL;
+
+    NC_CHECK_ARG_RET(NULL, ctx, asym_key_name, cert_name, cert_path, config, 1);
+
+    /* get cert data */
+    ret = nc_server_config_new_read_certificate(cert_path, &cert);
+    if (ret) {
+        goto cleanup;
+    }
+
+    ret = nc_config_new_create(ctx, config, cert, "/ietf-keystore:keystore/asymmetric-keys/"
+            "asymmetric-key[name='%s']/certificates/certificate[name='%s']/cert-data", asym_key_name, cert_name);
+
+cleanup:
+    free(cert);
+    return ret;
+}
+
+API int
+nc_server_config_new_del_keystore_cert(const char *asym_key_name, const char *cert_name, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, asym_key_name, config, 1);
+
+    if (cert_name) {
+        return nc_config_new_delete(config, "/ietf-keystore:keystore/asymmetric-keys/asymmetric-key[name='%s']/"
+                "certificates/certificate[name='%s']", asym_key_name, cert_name);
+    } else {
+        return nc_config_new_delete(config, "/ietf-keystore:keystore/asymmetric-keys/asymmetric-key[name='%s']/"
+                "certificates/certificate", asym_key_name);
+    }
+}
+
+API int
+nc_server_config_new_truststore_pubkey(const struct ly_ctx *ctx, const char *pub_bag_name, const char *pubkey_name,
         const char *pubkey_path, struct lyd_node **config)
 {
     int ret = 0;
@@ -994,7 +1031,7 @@ nc_server_config_new_truststore_pubkey(const struct ly_ctx *ctx, const char *bag
     NC_PUBKEY_FORMAT pubkey_format;
     const char *format;
 
-    NC_CHECK_ARG_RET(NULL, ctx, bag_name, pubkey_name, pubkey_path, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, pub_bag_name, pubkey_name, pubkey_path, config, 1);
 
     ret = nc_server_config_new_get_pubkey(pubkey_path, &pubkey, &pubkey_format);
     if (ret) {
@@ -1009,13 +1046,13 @@ nc_server_config_new_truststore_pubkey(const struct ly_ctx *ctx, const char *bag
     }
 
     ret = nc_config_new_create(ctx, config, format, "/ietf-truststore:truststore/public-key-bags/"
-            "public-key-bag[name='%s']/public-key[name='%s']/public-key-format", bag_name, pubkey_name);
+            "public-key-bag[name='%s']/public-key[name='%s']/public-key-format", pub_bag_name, pubkey_name);
     if (ret) {
         goto cleanup;
     }
 
     ret = nc_config_new_create(ctx, config, pubkey, "/ietf-truststore:truststore/public-key-bags/"
-            "public-key-bag[name='%s']/public-key[name='%s']/public-key", bag_name, pubkey_name);
+            "public-key-bag[name='%s']/public-key[name='%s']/public-key", pub_bag_name, pubkey_name);
     if (ret) {
         goto cleanup;
     }
@@ -1026,17 +1063,57 @@ cleanup:
 }
 
 API int
-nc_server_config_new_del_truststore_pubkey(const char *bag_name,
+nc_server_config_new_del_truststore_pubkey(const char *pub_bag_name,
         const char *pubkey_name, struct lyd_node **config)
 {
-    NC_CHECK_ARG_RET(NULL, bag_name, config, 1);
+    NC_CHECK_ARG_RET(NULL, pub_bag_name, config, 1);
 
     if (pubkey_name) {
         return nc_config_new_delete(config, "/ietf-truststore:truststore/public-key-bags/"
-                "public-key-bag[name='%s']/public-key[name='%s']", bag_name, pubkey_name);
+                "public-key-bag[name='%s']/public-key[name='%s']", pub_bag_name, pubkey_name);
     } else {
         return nc_config_new_delete(config, "/ietf-truststore:truststore/public-key-bags/"
-                "public-key-bag[name='%s']/public-key", bag_name);
+                "public-key-bag[name='%s']/public-key", pub_bag_name);
+    }
+}
+
+API int
+nc_server_config_new_truststore_cert(const struct ly_ctx *ctx, const char *cert_bag_name, const char *cert_name,
+        const char *cert_path, struct lyd_node **config)
+{
+    int ret = 0;
+    char *cert = NULL;
+
+    NC_CHECK_ARG_RET(NULL, ctx, cert_bag_name, cert_name, cert_path, config, 1);
+
+    ret = nc_server_config_new_read_certificate(cert_path, &cert);
+    if (ret) {
+        goto cleanup;
+    }
+
+    ret = nc_config_new_create(ctx, config, cert, "/ietf-truststore:truststore/certificate-bags/"
+            "certificate-bag[name='%s']/certificate[name='%s']/cert-data", cert_bag_name, cert_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(cert);
+    return ret;
+}
+
+API int
+nc_server_config_new_del_truststore_cert(const char *cert_bag_name,
+        const char *cert_name, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, cert_bag_name, config, 1);
+
+    if (cert_name) {
+        return nc_config_new_delete(config, "/ietf-truststore:truststore/certificate-bags/"
+                "certificate-bag[name='%s']/certificate[name='%s']", cert_bag_name, cert_name);
+    } else {
+        return nc_config_new_delete(config, "/ietf-truststore:truststore/certificate-bags/"
+                "certificate-bag[name='%s']/certificate", cert_bag_name);
     }
 }
 
