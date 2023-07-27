@@ -1587,7 +1587,7 @@ int nc_server_config_new_ch_ssh_del_mac_alg(const char *client_name, const char 
  * it will be generated from the private key.
  * @param[in] privkey_path Path to the server's private key file.
  * @param[in] certificate_path Path to the server's certificate file.
- * @param config Configuration YANG data tree. If *config is NULL, it will be created.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
@@ -1606,6 +1606,34 @@ int nc_server_config_new_ch_tls_del_server_certificate(const char *client_name, 
         struct lyd_node **config);
 
 /**
+ * @brief Creates new YANG configuration data nodes for a keystore reference to the Call Home TLS server's certificate.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] client_name Arbitrary identifier of the call-home client.
+ * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
+ * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] asym_key_ref Name of the asymmetric key pair in the keystore to be referenced.
+ * @param[in] cert_ref Name of the certificate, which must belong to the given asymmetric key pair, to be referenced.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_tls_keystore_reference(const struct ly_ctx *ctx, const char *client_name,
+        const char *endpt_name, const char *asym_key_ref, const char *cert_ref, struct lyd_node **config);
+
+/**
+ * @brief Deletes a TLS server certificate keystore reference from the YANG data.
+ *
+ * @param[in] client_name Identifier of an existing Call-Home client.
+ * @param[in] endpt_name Identifier of an existing Call-Home endpoint that belongs to the given client.
+ * @param[in,out] config Modified configuration YANG data tree.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_tls_del_keystore_reference(const char *client_name, const char *endpt_name,
+        struct lyd_node **config);
+
+/**
  * @brief Creates new YANG configuration data nodes for a call-home client's (end-entity) certificate.
  *
  * @param[in] ctx libyang context.
@@ -1616,7 +1644,7 @@ int nc_server_config_new_ch_tls_del_server_certificate(const char *client_name, 
  * @param[in] cert_name Arbitrary identifier of the call-home endpoint's end-entity certificate.
  * If an call-home endpoint's end-entity certificate with this identifier already exists, its contents will be changed.
  * @param[in] cert_path Path to the certificate file.
- * @param config Configuration YANG data tree. If *config is NULL, it will be created.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
@@ -1635,6 +1663,33 @@ int nc_server_config_new_ch_tls_client_certificate(const struct ly_ctx *ctx, con
  */
 int nc_server_config_new_ch_tls_del_client_certificate(const char *client_name, const char *endpt_name,
         const char *cert_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a Call Home truststore reference to a set of client (end-entity) certificates.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] client_name Arbitrary identifier of the call-home client.
+ * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
+ * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] cert_bag_ref Identifier of the certificate bag in the truststore to be referenced.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_tls_client_cert_truststore_ref(const struct ly_ctx *ctx, const char *client_name,
+        const char *endpt_name, const char *cert_bag_ref, struct lyd_node **config);
+
+/**
+ * @brief Deletes a Call Home client (end-entity) certificates truststore reference from the YANG data.
+ *
+ * @param[in] client_name Identifier of an existing Call-Home client.
+ * @param[in] endpt_name Identifier of an existing Call-Home endpoint that belongs to the given client.
+ * @param[in,out] config Modified configuration YANG data tree.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_tls_del_client_cert_truststore_ref(const char *client_name, const char *endpt_name,
+        struct lyd_node **config);
 
 /**
  * @brief Creates new YANG configuration data nodes for a client certificate authority (trust-anchor) certificate.
@@ -1666,6 +1721,33 @@ int nc_server_config_new_ch_tls_client_ca(const struct ly_ctx *ctx, const char *
  */
 int nc_server_config_new_ch_tls_del_client_ca(const char *client_name, const char *endpt_name,
         const char *cert_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a Call Home truststore reference to a set of client certificate authority (trust-anchor) certificates.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] client_name Arbitrary identifier of the call-home client.
+ * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
+ * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] cert_bag_ref Identifier of the certificate bag in the truststore to be referenced.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_tls_client_ca_truststore_ref(const struct ly_ctx *ctx, const char *client_name,
+        const char *endpt_name, const char *cert_bag_ref, struct lyd_node **config);
+
+/**
+ * @brief Deletes a Call Home client certificate authority (trust-anchor) certificates truststore reference from the YANG data.
+ *
+ * @param[in] client_name Identifier of an existing Call-Home client.
+ * @param[in] endpt_name Identifier of an existing Call-Home endpoint that belongs to the given client.
+ * @param[in,out] config Modified configuration YANG data tree.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_ch_tls_del_client_ca_truststore_ref(const char *client_name, const char *endpt_name,
+        struct lyd_node **config);
 
 /**
  * @brief Creates new YANG configuration data nodes for a call-home cert-to-name entry.
