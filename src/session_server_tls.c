@@ -215,7 +215,7 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
         *username = strdup(common_name);
         if (!*username) {
             ERRMEM;
-            return 1;
+            return -1;
         }
         free(subject);
     } else {
@@ -240,7 +240,7 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
 #endif
                 if (!*username) {
                     ERRMEM;
-                    return 1;
+                    return -1;
                 }
                 break;
             }
@@ -255,7 +255,7 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
 #endif
                 if (!*username) {
                     ERRMEM;
-                    return 1;
+                    return -1;
                 }
                 break;
             }
@@ -314,7 +314,7 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
 
 /* return: 0 - OK, 1 - no match, -1 - error */
 static int
-nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *map_type, const char **name)
+nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *cert)
 {
     char *digest_md5 = NULL, *digest_sha1 = NULL, *digest_sha224 = NULL;
     char *digest_sha256 = NULL, *digest_sha384 = NULL, *digest_sha512 = NULL;
@@ -322,18 +322,23 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
     unsigned int buf_len = 64;
     int ret = 0;
     struct nc_ctn *ctn;
+    NC_TLS_CTN_MAPTYPE map_type;
+    char *username = NULL;
 
     if (!buf) {
         ERRMEM;
         return -1;
     }
 
-    if (!ctn_first || !cert || !map_type || !name) {
+    if (!session || !ctn_first || !cert) {
         free(buf);
         return -1;
     }
 
     for (ctn = ctn_first; ctn; ctn = ctn->next) {
+        /* reset map_type */
+        map_type = NC_TLS_CTN_UNKNOWN;
+
         /* first make sure the entry is valid */
         if (!ctn->fingerprint || !ctn->map_type || ((ctn->map_type == NC_TLS_CTN_SPECIFIED) && !ctn->name)) {
             VRB(NULL, "Cert verify CTN: entry with id %u not valid, skipping.", ctn->id);
@@ -352,13 +357,9 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
             }
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_md5)) {
-                /* we got ourselves a winner! */
+                /* we got ourselves a potential winner! */
                 VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
-                *map_type = ctn->map_type;
-                if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
-                    *name = ctn->name;
-                }
-                break;
+                map_type = ctn->map_type;
             }
 
             /* SHA-1 */
@@ -373,13 +374,9 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
             }
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha1)) {
-                /* we got ourselves a winner! */
+                /* we got ourselves a potential winner! */
                 VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
-                *map_type = ctn->map_type;
-                if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
-                    *name = ctn->name;
-                }
-                break;
+                map_type = ctn->map_type;
             }
 
             /* SHA-224 */
@@ -394,13 +391,9 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
             }
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha224)) {
-                /* we got ourselves a winner! */
+                /* we got ourselves a potential winner! */
                 VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
-                *map_type = ctn->map_type;
-                if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
-                    *name = ctn->name;
-                }
-                break;
+                map_type = ctn->map_type;
             }
 
             /* SHA-256 */
@@ -415,13 +408,9 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
             }
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha256)) {
-                /* we got ourselves a winner! */
+                /* we got ourselves a potential winner! */
                 VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
-                *map_type = ctn->map_type;
-                if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
-                    *name = ctn->name;
-                }
-                break;
+                map_type = ctn->map_type;
             }
 
             /* SHA-384 */
@@ -436,13 +425,9 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
             }
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha384)) {
-                /* we got ourselves a winner! */
+                /* we got ourselves a potential winner! */
                 VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
-                *map_type = ctn->map_type;
-                if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
-                    *name = ctn->name;
-                }
-                break;
+                map_type = ctn->map_type;
             }
 
             /* SHA-512 */
@@ -457,18 +442,45 @@ nc_tls_cert_to_name(struct nc_ctn *ctn_first, X509 *cert, NC_TLS_CTN_MAPTYPE *ma
             }
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha512)) {
-                /* we got ourselves a winner! */
+                /* we got ourselves a potential winner! */
                 VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
-                *map_type = ctn->map_type;
-                if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
-                    *name = ctn->name;
-                }
-                break;
+                map_type = ctn->map_type;
             }
 
             /* unknown */
         } else {
             WRN(NULL, "Unknown fingerprint algorithm used (%s), skipping.", ctn->fingerprint);
+            continue;
+        }
+
+        if (map_type != NC_TLS_CTN_UNKNOWN) {
+            /* found a fingerprint match */
+            if (map_type == NC_TLS_CTN_SPECIFIED) {
+                /* specified -> get username from the ctn entry */
+                session->username = strdup(ctn->name);
+                if (!session->username) {
+                    ERRMEM;
+                    ret = -1;
+                    goto cleanup;
+                }
+            } else {
+                /* try to get the username from the cert with this ctn's map type */
+                ret = nc_tls_ctn_get_username_from_cert(session->opts.server.client_cert, map_type, &username);
+                if (ret == -1) {
+                    /* fatal error */
+                    goto cleanup;
+                } else if (ret) {
+                    /* didn't get username, try next ctn entry */
+                    continue;
+                }
+
+                /* success */
+                session->username = username;
+            }
+
+            /* matching fingerprint found and username obtained, success */
+            ret = 0;
+            goto cleanup;
         }
     }
 
@@ -507,8 +519,6 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     const ASN1_INTEGER *serial;
     int i, n, rc, depth;
     char *cp;
-    const char *username = NULL;
-    NC_TLS_CTN_MAPTYPE map_type = 0;
     const ASN1_TIME *last_update = NULL, *next_update = NULL;
 
     /* get the thread session */
@@ -655,8 +665,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     }
 
     /* cert-to-name */
-    rc = nc_tls_cert_to_name(opts->ctn, cert, &map_type, &username);
-
+    rc = nc_tls_cert_to_name(session, opts->ctn, cert);
     if (rc) {
         if (rc == -1) {
             /* fatal error */
@@ -664,20 +673,6 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         }
         /* rc == 1 is a normal CTN fail (no match found) */
         goto fail;
-    }
-
-    /* cert-to-name match, now to extract the specific field from the peer cert */
-    if (map_type == NC_TLS_CTN_SPECIFIED) {
-        session->username = strdup(username);
-    } else {
-        rc = nc_tls_ctn_get_username_from_cert(session->opts.server.client_cert, map_type, &cp);
-        if (rc) {
-            if (rc == -1) {
-                depth = 0;
-            }
-            goto fail;
-        }
-        session->username = cp;
     }
 
     VRB(NULL, "Cert verify CTN: new client username recognized as \"%s\".", session->username);
@@ -721,8 +716,6 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     long serial;
     int i, n, rc, depth;
     char *cp;
-    const char *username = NULL;
-    NC_TLS_CTN_MAPTYPE map_type = 0;
     ASN1_TIME *last_update = NULL, *next_update = NULL;
 
     /* get the thread session */
@@ -869,8 +862,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     }
 
     /* cert-to-name */
-    rc = nc_tls_cert_to_name(opts->ctn, cert, &map_type, &username);
-
+    rc = nc_tls_cert_to_name(session, opts->ctn, cert);
     if (rc) {
         if (rc == -1) {
             /* fatal error */
@@ -878,20 +870,6 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         }
         /* rc == 1 is a normal CTN fail (no match found) */
         goto fail;
-    }
-
-    /* cert-to-name match, now to extract the specific field from the peer cert */
-    if (map_type == NC_TLS_CTN_SPECIFIED) {
-        session->username = strdup(username);
-    } else {
-        rc = nc_tls_ctn_get_username_from_cert(session->opts.server.client_cert, map_type, &cp);
-        if (rc) {
-            if (rc == -1) {
-                depth = 0;
-            }
-            goto fail;
-        }
-        session->username = cp;
     }
 
     VRB(session, "Cert verify CTN: new client username recognized as \"%s\".", session->username);
