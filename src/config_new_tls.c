@@ -181,26 +181,52 @@ nc_server_config_new_ch_tls_del_server_certificate(const char *client_name, cons
             "certificate/inline-definition", client_name, endpt_name);
 }
 
-API int
-nc_server_config_new_tls_keystore_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *asym_key_ref,
+static int
+_nc_server_config_new_tls_keystore_reference(const struct ly_ctx *ctx, const char *tree_path, const char *asym_key_ref,
         const char *cert_ref, struct lyd_node **config)
 {
     int ret = 0;
 
-    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, asym_key_ref, cert_ref, config, 1);
-
     /* create asymmetric key pair reference */
-    ret = nc_config_new_create(ctx, config, asym_key_ref, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
-            "tls/tls-server-parameters/server-identity/certificate/keystore-reference/asymmetric-key", endpt_name);
+    ret = nc_config_new_create_append(ctx, tree_path, "asymmetric-key", asym_key_ref, config);
     if (ret) {
         goto cleanup;
     }
 
     /* create cert reference, this cert has to belong to the asym key */
-    ret = nc_config_new_create(ctx, config, cert_ref, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
-            "tls/tls-server-parameters/server-identity/certificate/keystore-reference/certificate", endpt_name);
+    ret = nc_config_new_create_append(ctx, tree_path, "certificate", cert_ref, config);
+    if (ret) {
+        goto cleanup;
+    }
 
 cleanup:
+    return ret;
+}
+
+API int
+nc_server_config_new_tls_keystore_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *asym_key_ref,
+        const char *cert_ref, struct lyd_node **config)
+{
+    int ret = 0;
+    char *path = NULL;
+
+    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, asym_key_ref, cert_ref, config, 1);
+
+    if (asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+            "tls/tls-server-parameters/server-identity/certificate/keystore-reference", endpt_name) == -1) {
+        ERRMEM;
+        path = NULL;
+        ret = 1;
+        goto cleanup;
+    }
+
+    ret = _nc_server_config_new_tls_keystore_reference(ctx, path, asym_key_ref, cert_ref, config);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(path);
     return ret;
 }
 
@@ -211,6 +237,46 @@ nc_server_config_new_tls_del_keystore_reference(const char *endpt_name, struct l
 
     return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
             "tls/tls-server-parameters/server-identity/certificate/keystore-reference", endpt_name);
+}
+
+API int
+nc_server_config_new_ch_tls_keystore_reference(const struct ly_ctx *ctx, const char *client_name,
+        const char *endpt_name, const char *asym_key_ref, const char *cert_ref, struct lyd_node **config)
+{
+    int ret = 0;
+    char *path = NULL;
+
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, asym_key_ref, cert_ref, 1);
+    NC_CHECK_ARG_RET(NULL, config, 1);
+
+    if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
+            "endpoint[name='%s']/tls/tls-server-parameters/server-identity/certificate/"
+            "keystore-reference", client_name, endpt_name) == -1) {
+        ERRMEM;
+        path = NULL;
+        ret = 1;
+        goto cleanup;
+    }
+
+    ret = _nc_server_config_new_tls_keystore_reference(ctx, path, asym_key_ref, cert_ref, config);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(path);
+    return ret;
+}
+
+API int
+nc_server_config_new_ch_tls_del_keystore_reference(const char *client_name, const char *endpt_name,
+        struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, client_name, endpt_name, config, 1);
+
+    return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+            "endpoints/endpoint[name='%s']/tls/tls-server-parameters/server-identity/certificate/"
+            "keystore-reference", client_name, endpt_name);
 }
 
 static int
@@ -347,6 +413,28 @@ nc_server_config_new_tls_del_client_cert_truststore_ref(const char *endpt_name, 
 }
 
 API int
+nc_server_config_new_ch_tls_client_cert_truststore_ref(const struct ly_ctx *ctx, const char *client_name,
+        const char *endpt_name, const char *cert_bag_ref, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, cert_bag_ref, config, 1);
+
+    return nc_config_new_create(ctx, config, cert_bag_ref, "/ietf-netconf-server:netconf-server/call-home/"
+            "netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/ee-certs/truststore-reference", client_name, endpt_name);
+}
+
+API int
+nc_server_config_new_ch_tls_del_client_cert_truststore_ref(const char *client_name, const char *endpt_name,
+        struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, client_name, endpt_name, config, 1);
+
+    return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/call-home/"
+            "netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/ee-certs/truststore-reference", client_name, endpt_name);
+}
+
+API int
 nc_server_config_new_tls_client_ca(const struct ly_ctx *ctx, const char *endpt_name, const char *cert_name,
         const char *cert_path, struct lyd_node **config)
 {
@@ -454,6 +542,28 @@ nc_server_config_new_tls_del_client_ca_truststore_ref(const char *endpt_name, st
 
     return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/"
             "tls-server-parameters/client-authentication/ca-certs/truststore-reference", endpt_name);
+}
+
+API int
+nc_server_config_new_ch_tls_client_ca_truststore_ref(const struct ly_ctx *ctx, const char *client_name,
+        const char *endpt_name, const char *cert_bag_ref, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, cert_bag_ref, config, 1);
+
+    return nc_config_new_create(ctx, config, cert_bag_ref, "/ietf-netconf-server:netconf-server/call-home/"
+            "netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/ca-certs/truststore-reference", client_name, endpt_name);
+}
+
+API int
+nc_server_config_new_ch_tls_del_client_ca_truststore_ref(const char *client_name, const char *endpt_name,
+        struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, client_name, endpt_name, config, 1);
+
+    return nc_config_new_delete(config, "/ietf-netconf-server:netconf-server/call-home/"
+            "netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/ca-certs/truststore-reference", client_name, endpt_name);
 }
 
 static const char *
