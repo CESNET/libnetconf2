@@ -3691,14 +3691,14 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
     if (!opts->ctn) {
         /* inserting the first one */
         opts->ctn = new;
-    } else if (opts->ctn->id > new->id) {
+    } else if (opts->ctn->id > id) {
         /* insert at the beginning */
         new->next = opts->ctn;
         opts->ctn = new;
     } else {
         /* have to find the right place */
-        for (iter = opts->ctn; iter->next && iter->next->id <= new->id; iter = iter->next) {}
-        if (iter->id == new->id) {
+        for (iter = opts->ctn; iter->next && iter->next->id <= id; iter = iter->next) {}
+        if (iter->id == id) {
             /* collision */
             new = iter;
         } else {
