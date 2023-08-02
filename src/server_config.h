@@ -979,19 +979,19 @@ int nc_config_new_tls_del_endpoint_client_reference(const char *endpt_name, stru
  */
 
 /**
- * @defgroup server_config_ch Call-Home server Configuration
+ * @defgroup server_config_ch Call Home server Configuration
  * @ingroup server_config
  *
- * @brief Call-Home server configuration creation and deletion
+ * @brief Call Home server configuration creation and deletion
  * @{
  */
 
 /**
- * @brief Creates new YANG configuration data nodes for a call-home client's address and port.
+ * @brief Creates new YANG configuration data nodes for a Call Home client's address and port.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] transport Transport protocol to be used on this endpoint - either SSH or TLS.
@@ -1007,19 +1007,19 @@ int nc_server_config_new_ch_address_port(const struct ly_ctx *ctx, const char *c
 #endif /* NC_ENABLED_SSH_TLS */
 
 /**
- * @brief Deletes a Call-Home client from the YANG data.
+ * @brief Deletes a Call Home client from the YANG data.
  *
  * @param[in] client_name Optional identifier of a client to be deleted.
- * If NULL, all of the Call-Home clients will be deleted.
+ * If NULL, all of the Call Home clients will be deleted.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_new_del_ch_client(const char *client_name, struct lyd_node **config);
 
 /**
- * @brief Deletes a Call-Home endpoint from the YANG data.
+ * @brief Deletes a Call Home endpoint from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-Home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in] endpt_name Optional identifier of a CH endpoint to be deleted.
  * If NULL, all of the CH endpoints which belong to the given client will be deleted.
  * @param[in,out] config Modified configuration YANG data tree.
@@ -1028,13 +1028,13 @@ int nc_server_config_new_del_ch_client(const char *client_name, struct lyd_node 
 int nc_server_config_new_ch_del_endpt(const char *client_name, const char *endpt_name, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for the call-home persistent connection type.
+ * @brief Creates new YANG configuration data nodes for the Call Home persistent connection type.
  *
  * This is the default connection type. If periodic connection type was set before, it will be unset.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
@@ -1042,13 +1042,13 @@ int nc_server_config_new_ch_del_endpt(const char *client_name, const char *endpt
 int nc_server_config_new_ch_persistent(const struct ly_ctx *ctx, const char *client_name, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for the period parameter of the call-home periodic connection type.
+ * @brief Creates new YANG configuration data nodes for the period parameter of the Call Home periodic connection type.
  *
  * If called, the persistent connection type will be replaced by periodic.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] period Duration between periodic connections in minutes.
  * @param config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
@@ -1058,24 +1058,24 @@ int nc_server_config_new_ch_period(const struct ly_ctx *ctx, const char *client_
         struct lyd_node **config);
 
 /**
- * @brief Deletes the Call-Home period parameter of the periodic connection type from the YANG data.
+ * @brief Deletes the Call Home period parameter of the periodic connection type from the YANG data.
  *
  * This behaves the same as setting the period to 60 minutes, which is the default value of this node.
  *
- * @param[in] client_name Identifier of an existing Call-Home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_new_ch_del_period(const char *client_name, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for the anchor time parameter of the call-home periodic connection type.
+ * @brief Creates new YANG configuration data nodes for the anchor time parameter of the Call Home periodic connection type.
  *
  * If called, the persistent connection type will be replaced by periodic.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] anchor_time Timestamp before or after which a series of periodic connections are determined.
  * @param config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
@@ -1085,22 +1085,22 @@ int nc_server_config_new_ch_anchor_time(const struct ly_ctx *ctx, const char *cl
         const char *anchor_time, struct lyd_node **config);
 
 /**
- * @brief Deletes the Call-Home anchor time parameter of the periodic connection type from the YANG data.
+ * @brief Deletes the Call Home anchor time parameter of the periodic connection type from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-Home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_new_ch_del_anchor_time(const char *client_name, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for the idle timeout parameter of the call-home periodic connection type.
+ * @brief Creates new YANG configuration data nodes for the idle timeout parameter of the Call Home periodic connection type.
  *
  * If called, the persistent connection type will be replaced by periodic.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] idle_timeout Specifies the maximum number of seconds that a session may remain idle.
  * @param config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
@@ -1110,22 +1110,22 @@ int nc_server_config_new_ch_idle_timeout(const struct ly_ctx *ctx, const char *c
         uint16_t idle_timeout, struct lyd_node **config);
 
 /**
- * @brief Deletes the Call-Home idle timeout parameter of the periodic connection type from the YANG data.
+ * @brief Deletes the Call Home idle timeout parameter of the periodic connection type from the YANG data.
  *
  * This behaves the same as setting the timeout to 180 seconds, which is the default value of this node.
  *
- * @param[in] client_name Identifier of an existing Call-Home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_new_ch_del_idle_timeout(const char *client_name, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for the call-home reconnect strategy.
+ * @brief Creates new YANG configuration data nodes for the Call Home reconnect strategy.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] start_with Specifies which endpoint to try if a connection is unsuccessful. Default value is NC_CH_FIRST_LISTED.
  * @param[in] max_wait The number of seconds after which a connection to an endpoint is deemed unsuccessful. Default value if 5.
  * @param[in] max_attempts The number of unsuccessful connection attempts before moving to the next endpoint. Default value is 3.
@@ -1137,11 +1137,11 @@ int nc_server_config_new_ch_reconnect_strategy(const struct ly_ctx *ctx, const c
         NC_CH_START_WITH start_with, uint16_t max_wait, uint8_t max_attempts, struct lyd_node **config);
 
 /**
- * @brief Resets the values of the Call-Home reconnect strategy nodes to their defaults.
+ * @brief Resets the values of the Call Home reconnect strategy nodes to their defaults.
  *
  * The default values are: start-with = NC_CH_FIRST_LISTED, max-wait = 5 and max-attempts = 3.
  *
- * @param[in] client_name Identifier of an existing Call-Home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
@@ -1154,19 +1154,19 @@ int nc_server_config_new_ch_del_reconnect_strategy(const char *client_name, stru
 #ifdef NC_ENABLED_SSH_TLS
 
 /**
- * @defgroup server_config_ch_ssh SSH Call-Home Server Configuration
+ * @defgroup server_config_ch_ssh SSH Call Home Server Configuration
  * @ingroup server_config_ch
  *
- * @brief SSH Call-Home server configuration creation and deletion
+ * @brief SSH Call Home server configuration creation and deletion
  * @{
  */
 
 /**
- * @brief Creates new YANG data nodes for a call-home SSH hostkey.
+ * @brief Creates new YANG data nodes for a Call Home SSH hostkey.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] hostkey_name Arbitrary identifier of the endpoint's hostkey.
@@ -1183,9 +1183,9 @@ int nc_server_config_new_ch_ssh_hostkey(const struct ly_ctx *ctx, const char *cl
         const char *hostkey_name, const char *privkey_path, const char *pubkey_path, struct lyd_node **config);
 
 /**
- * @brief Deletes a Call-home hostkey from the YANG data.
+ * @brief Deletes a Call Home hostkey from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
  * @param[in] hostkey_name Optional identifier of a hostkey to be deleted.
  * If NULL, all of the hostkeys on the given endpoint will be deleted.
@@ -1198,11 +1198,11 @@ int nc_server_config_new_ch_ssh_del_hostkey(const char *client_name, const char 
 /**
  * @brief Creates new YANG data nodes for a reference to an asymmetric key located in the keystore.
  *
- * This asymmetric key pair will be used as the Call-Home SSH hostkey.
+ * This asymmetric key pair will be used as the Call Home SSH hostkey.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] hostkey_name Arbitrary identifier of the endpoint's hostkey.
@@ -1216,9 +1216,9 @@ int nc_server_config_new_ch_ssh_keystore_reference(const struct ly_ctx *ctx, con
         const char *endpt_name, const char *hostkey_name, const char *keystore_reference, struct lyd_node **config);
 
 /**
- * @brief Deletes a Call-Home keystore reference from the YANG data.
+ * @brief Deletes a Call Home keystore reference from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
  * @param[in] hostkey_name Identifier of an existing hostkey that belongs to the given CH endpoint.
  * @param config Modified configuration YANG data tree.
@@ -1228,11 +1228,11 @@ int nc_server_config_new_ch_ssh_del_keystore_reference(const char *client_name, 
         const char *hostkey_name, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for the maximum amount of failed Call-Home SSH authentication attempts.
+ * @brief Creates new YANG configuration data nodes for the maximum amount of failed Call Home SSH authentication attempts.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] auth_attempts Maximum amount of failed SSH authentication attempts after which a
@@ -1245,11 +1245,11 @@ int nc_server_config_new_ch_ssh_auth_attempts(const struct ly_ctx *ctx, const ch
         uint16_t auth_attempts, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for a Call-Home SSH authentication timeout.
+ * @brief Creates new YANG configuration data nodes for a Call Home SSH authentication timeout.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] auth_timeout Maximum amount of time in seconds after which the authentication is deemed
@@ -1262,11 +1262,11 @@ int nc_server_config_new_ch_ssh_auth_timeout(const struct ly_ctx *ctx, const cha
         uint16_t auth_timeout, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG data nodes for a Call-Home SSH user's public key authentication method.
+ * @brief Creates new YANG data nodes for a Call Home SSH user's public key authentication method.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] user_name Arbitrary identifier of the endpoint's user.
@@ -1282,9 +1282,9 @@ int nc_server_config_new_ch_ssh_user_pubkey(const struct ly_ctx *ctx, const char
         const char *user_name, const char *pubkey_name, const char *pubkey_path, struct lyd_node **config);
 
 /**
- * @brief Deletes a Call-Home SSH user's public key from the YANG data.
+ * @brief Deletes a Call Home SSH user's public key from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
  * @param[in] user_name Identifier of an existing SSH user that belongs to the given CH endpoint.
  * @param[in] pubkey_name Optional identifier of a public key to be deleted.
@@ -1296,11 +1296,11 @@ int nc_server_config_new_ch_ssh_del_user_pubkey(const char *client_name, const c
         const char *user_name, const char *pubkey_name, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG data nodes for a Call-Home SSH user's password authentication method.
+ * @brief Creates new YANG data nodes for a Call Home SSH user's password authentication method.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] user_name Arbitrary identifier of the endpoint's user.
@@ -1314,9 +1314,9 @@ int nc_server_config_new_ch_ssh_user_password(const struct ly_ctx *ctx, const ch
         const char *user_name, const char *password, struct lyd_node **config);
 
 /**
- * @brief Deletes a Call-Home SSH user's password from the YANG data.
+ * @brief Deletes a Call Home SSH user's password from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
  * @param[in] user_name Identifier of an existing SSH user that belongs to the given CH endpoint.
  * @param[in,out] config Modified configuration YANG data tree.
@@ -1326,11 +1326,11 @@ int nc_server_config_new_ch_ssh_del_user_password(const char *client_name, const
         const char *user_name, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for a Call-Home SSH user's none authentication method.
+ * @brief Creates new YANG configuration data nodes for a Call Home SSH user's none authentication method.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] user_name Arbitrary identifier of the endpoint's user.
@@ -1343,9 +1343,9 @@ int nc_server_config_new_ch_ssh_user_none(const struct ly_ctx *ctx, const char *
         const char *user_name, struct lyd_node **config);
 
 /**
- * @brief Deletes a Call-Home SSH user's none authentication method from the YANG data.
+ * @brief Deletes a Call Home SSH user's none authentication method from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
  * @param[in] user_name Identifier of an existing SSH user that belongs to the given CH endpoint.
  * @param[in,out] config Modified configuration YANG data tree.
@@ -1355,11 +1355,11 @@ int nc_server_config_new_ch_ssh_del_user_none(const char *client_name, const cha
         const char *user_name, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for a Call-Home SSH user's keyboard interactive authentication method.
+ * @brief Creates new YANG configuration data nodes for a Call Home SSH user's keyboard interactive authentication method.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] user_name Arbitrary identifier of the endpoint's user.
@@ -1376,9 +1376,9 @@ int nc_server_config_new_ch_ssh_user_interactive(const struct ly_ctx *ctx, const
         const char *user_name, const char *pam_config_name, const char *pam_config_dir, struct lyd_node **config);
 
 /**
- * @brief Deletes a Call-Home SSH user's keyboard interactive authentication from the YANG data.
+ * @brief Deletes a Call Home SSH user's keyboard interactive authentication from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
  * @param[in] user_name Identifier of an existing SSH user that belongs to the given CH endpoint.
  * @param[in,out] config Modified configuration YANG data tree.
@@ -1388,9 +1388,9 @@ int nc_server_config_new_ch_ssh_del_user_interactive(const char *client_name, co
         const char *user_name, struct lyd_node **config);
 
 /**
- * @brief Deletes a Call-Home SSH user from the YANG data.
+ * @brief Deletes a Call Home SSH user from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
  * @param[in] user_name Identifier of an existing SSH user that belongs to the given CH endpoint.
  * @param[in,out] config Modified configuration YANG data tree.
@@ -1402,11 +1402,11 @@ int nc_server_config_new_ch_ssh_del_user(const char *client_name, const char *en
 /**
  * @brief Creates new YANG data nodes for a reference to a public key bag located in the truststore.
  *
- * The public key's located in the bag will be used for Call-Home SSH client authentication.
+ * The public key's located in the bag will be used for Call Home SSH client authentication.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] user_name Arbitrary identifier of the endpoint's user.
@@ -1420,9 +1420,9 @@ int nc_server_config_new_ch_ssh_truststore_reference(const struct ly_ctx *ctx, c
         const char *endpt_name, const char *user_name, const char *truststore_reference, struct lyd_node **config);
 
 /**
- * @brief Deletes a Call-Home SSH truststore reference from the YANG data.
+ * @brief Deletes a Call Home SSH truststore reference from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
  * @param[in] user_name Identifier of an existing SSH user that belongs to the given CH endpoint.
  * @param[in,out] config Modified configuration YANG data tree.
@@ -1432,14 +1432,14 @@ int nc_server_config_new_ch_ssh_del_truststore_reference(const char *client_name
         const char *user_name, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for Call-Home host-key algorithms replacing any previous ones.
+ * @brief Creates new YANG configuration data nodes for Call Home host-key algorithms replacing any previous ones.
  *
  * Supported algorithms are: ssh-ed25519, ecdsa-sha2-nistp256, ecdsa-sha2-nistp384, ecdsa-sha2-nistp521,
  * rsa-sha2-512, rsa-sha2-256, ssh-rsa and ssh-dss.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param config Configuration YANG data tree. If *config is NULL, it will be created.
@@ -1452,9 +1452,9 @@ int nc_server_config_new_ch_ssh_host_key_algs(const struct ly_ctx *ctx, const ch
         struct lyd_node **config, int alg_count, ...);
 
 /**
- * @brief Deletes a Call-Home hostkey algorithm from the YANG data.
+ * @brief Deletes a Call Home hostkey algorithm from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
  * @param[in] alg Optional algorithm to be deleted.
  * If NULL, all of the hostkey algorithms on this endpoint will be deleted.
@@ -1465,15 +1465,15 @@ int nc_server_config_new_ch_ssh_del_host_key_alg(const char *client_name, const 
         const char *alg, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for Call-Home key exchange algorithms replacing any previous ones.
+ * @brief Creates new YANG configuration data nodes for Call Home key exchange algorithms replacing any previous ones.
  *
  * Supported algorithms are: diffie-hellman-group-exchange-sha1, curve25519-sha256, ecdh-sha2-nistp256,
  * ecdh-sha2-nistp384, ecdh-sha2-nistp521, diffie-hellman-group18-sha512, diffie-hellman-group16-sha512,
  * diffie-hellman-group-exchange-sha256 and diffie-hellman-group14-sha256.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param config Configuration YANG data tree. If *config is NULL, it will be created.
@@ -1486,9 +1486,9 @@ int nc_server_config_new_ch_ssh_key_exchange_algs(const struct ly_ctx *ctx, cons
         struct lyd_node **config, int alg_count, ...);
 
 /**
- * @brief Deletes a Call-Home key exchange algorithm from the YANG data.
+ * @brief Deletes a Call Home key exchange algorithm from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
  * @param[in] alg Optional algorithm to be deleted.
  * If NULL, all of the key exchange algorithms on this endpoint will be deleted.
@@ -1499,14 +1499,14 @@ int nc_server_config_new_ch_ssh_del_key_exchange_alg(const char *client_name, co
         const char *alg, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for Call-Home encryption algorithms replacing any previous ones.
+ * @brief Creates new YANG configuration data nodes for Call Home encryption algorithms replacing any previous ones.
  *
  * Supported algorithms are: aes256-ctr, aes192-ctr, aes128-ctr, aes256-cbc, aes192-cbc, aes128-cbc, blowfish-cbc
  * triple-des-cbc and none.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param config Configuration YANG data tree. If *config is NULL, it will be created.
@@ -1519,9 +1519,9 @@ int nc_server_config_new_ch_ssh_encryption_algs(const struct ly_ctx *ctx, const 
         struct lyd_node **config, int alg_count, ...);
 
 /**
- * @brief Deletes a Call-Home encryption algorithm from the YANG data.
+ * @brief Deletes a Call Home encryption algorithm from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
  * @param[in] alg Optional algorithm to be deleted.
  * If NULL, all of the encryption algorithms on this endpoint will be deleted.
@@ -1532,13 +1532,13 @@ int nc_server_config_new_ch_ssh_del_encryption_alg(const char *client_name, cons
         const char *alg, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for Call-Home mac algorithms replacing any previous ones.
+ * @brief Creates new YANG configuration data nodes for Call Home mac algorithms replacing any previous ones.
  *
  * Supported algorithms are: hmac-sha2-256, hmac-sha2-512 and hmac-sha1.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param config Configuration YANG data tree. If *config is NULL, it will be created.
@@ -1551,9 +1551,9 @@ int nc_server_config_new_ch_ssh_mac_algs(const struct ly_ctx *ctx, const char *c
         struct lyd_node **config, int alg_count, ...);
 
 /**
- * @brief Deletes a Call-Home mac algorithm from the YANG data.
+ * @brief Deletes a Call Home mac algorithm from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-home client.
+ * @param[in] client_name Identifier of an existing Call Home client.
  * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
  * @param[in] alg Optional algorithm to be deleted.
  * If NULL, all of the mac algorithms on this endpoint will be deleted.
@@ -1568,21 +1568,21 @@ int nc_server_config_new_ch_ssh_del_mac_alg(const char *client_name, const char 
  */
 
 /**
- * @defgroup server_config_ch_tls TLS Call-Home Server Configuration
+ * @defgroup server_config_ch_tls TLS Call Home Server Configuration
  * @ingroup server_config_ch
  *
- * @brief TLS Call-Home server configuration creation and deletion
+ * @brief TLS Call Home server configuration creation and deletion
  * @{
  */
 
 /**
- * @brief Creates new YANG configuration data nodes for a call-home server's certificate.
+ * @brief Creates new YANG configuration data nodes for a Call Home server's certificate.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
- * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
+ * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] pubkey_path Optional path to the server's public key file. If not provided,
  * it will be generated from the private key.
  * @param[in] privkey_path Path to the server's private key file.
@@ -1595,10 +1595,10 @@ int nc_server_config_new_ch_tls_server_certificate(const struct ly_ctx *ctx, con
         const char *pubkey_path, const char *privkey_path, const char *certificate_path, struct lyd_node **config);
 
 /**
- * @brief Deletes a Call-Home server certificate from the YANG data.
+ * @brief Deletes a Call Home server certificate from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-Home client.
- * @param[in] endpt_name Identifier of an existing Call-Home endpoint that belongs to the given client.
+ * @param[in] client_name Identifier of an existing Call Home client.
+ * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
@@ -1609,10 +1609,10 @@ int nc_server_config_new_ch_tls_del_server_certificate(const char *client_name, 
  * @brief Creates new YANG configuration data nodes for a keystore reference to the Call Home TLS server's certificate.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
- * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
+ * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] asym_key_ref Name of the asymmetric key pair in the keystore to be referenced.
  * @param[in] cert_ref Name of the certificate, which must belong to the given asymmetric key pair, to be referenced.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
@@ -1625,8 +1625,8 @@ int nc_server_config_new_ch_tls_keystore_reference(const struct ly_ctx *ctx, con
 /**
  * @brief Deletes a TLS server certificate keystore reference from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-Home client.
- * @param[in] endpt_name Identifier of an existing Call-Home endpoint that belongs to the given client.
+ * @param[in] client_name Identifier of an existing Call Home client.
+ * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
@@ -1634,15 +1634,15 @@ int nc_server_config_new_ch_tls_del_keystore_reference(const char *client_name, 
         struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for a call-home client's (end-entity) certificate.
+ * @brief Creates new YANG configuration data nodes for a Call Home client's (end-entity) certificate.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
- * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] cert_name Arbitrary identifier of the call-home endpoint's end-entity certificate.
- * If an call-home endpoint's end-entity certificate with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
+ * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] cert_name Arbitrary identifier of the Call Home endpoint's end-entity certificate.
+ * If an Call Home endpoint's end-entity certificate with this identifier already exists, its contents will be changed.
  * @param[in] cert_path Path to the certificate file.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
@@ -1652,10 +1652,10 @@ int nc_server_config_new_ch_tls_client_certificate(const struct ly_ctx *ctx, con
         const char *cert_name, const char *cert_path, struct lyd_node **config);
 
 /**
- * @brief Deletes a Call-Home client (end-entity) certificate from the YANG data.
+ * @brief Deletes a Call Home client (end-entity) certificate from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-Home client.
- * @param[in] endpt_name Identifier of an existing Call-Home endpoint that belongs to the given client.
+ * @param[in] client_name Identifier of an existing Call Home client.
+ * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
  * @param[in] cert_name Optional identifier of a client certificate to be deleted.
  * If NULL, all of the client certificates will be deleted.
  * @param[in,out] config Modified configuration YANG data tree.
@@ -1668,10 +1668,10 @@ int nc_server_config_new_ch_tls_del_client_certificate(const char *client_name, 
  * @brief Creates new YANG configuration data nodes for a Call Home truststore reference to a set of client (end-entity) certificates.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
- * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
+ * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] cert_bag_ref Identifier of the certificate bag in the truststore to be referenced.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
@@ -1683,8 +1683,8 @@ int nc_server_config_new_ch_tls_client_cert_truststore_ref(const struct ly_ctx *
 /**
  * @brief Deletes a Call Home client (end-entity) certificates truststore reference from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-Home client.
- * @param[in] endpt_name Identifier of an existing Call-Home endpoint that belongs to the given client.
+ * @param[in] client_name Identifier of an existing Call Home client.
+ * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
@@ -1695,12 +1695,12 @@ int nc_server_config_new_ch_tls_del_client_cert_truststore_ref(const char *clien
  * @brief Creates new YANG configuration data nodes for a client certificate authority (trust-anchor) certificate.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
- * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] cert_name Arbitrary identifier of the call-home endpoint's certificate authority certificate.
- * If an call-home endpoint's CA certificate with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
+ * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] cert_name Arbitrary identifier of the Call Home endpoint's certificate authority certificate.
+ * If an Call Home endpoint's CA certificate with this identifier already exists, its contents will be changed.
  * @param[in] cert_path Path to the certificate file.
  * @param config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
@@ -1710,10 +1710,10 @@ int nc_server_config_new_ch_tls_client_ca(const struct ly_ctx *ctx, const char *
         const char *cert_name, const char *cert_path, struct lyd_node **config);
 
 /**
- * @brief Deletes a Call-Home client certificate authority (trust-anchor) certificate from the YANG data.
+ * @brief Deletes a Call Home client certificate authority (trust-anchor) certificate from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-Home client.
- * @param[in] endpt_name Identifier of an existing Call-Home endpoint that belongs to the given client.
+ * @param[in] client_name Identifier of an existing Call Home client.
+ * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
  * @param[in] cert_name Optional identifier of a CA certificate to be deleted.
  * If NULL, all of the CA certificates will be deleted.
  * @param[in,out] config Modified configuration YANG data tree.
@@ -1726,10 +1726,10 @@ int nc_server_config_new_ch_tls_del_client_ca(const char *client_name, const cha
  * @brief Creates new YANG configuration data nodes for a Call Home truststore reference to a set of client certificate authority (trust-anchor) certificates.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
- * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
+ * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] cert_bag_ref Identifier of the certificate bag in the truststore to be referenced.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
@@ -1741,8 +1741,8 @@ int nc_server_config_new_ch_tls_client_ca_truststore_ref(const struct ly_ctx *ct
 /**
  * @brief Deletes a Call Home client certificate authority (trust-anchor) certificates truststore reference from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-Home client.
- * @param[in] endpt_name Identifier of an existing Call-Home endpoint that belongs to the given client.
+ * @param[in] client_name Identifier of an existing Call Home client.
+ * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
@@ -1750,13 +1750,13 @@ int nc_server_config_new_ch_tls_del_client_ca_truststore_ref(const char *client_
         struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for a call-home cert-to-name entry.
+ * @brief Creates new YANG configuration data nodes for a Call Home cert-to-name entry.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
- * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
+ * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] id ID of the entry. The lower the ID, the higher the priority of the entry (it will be checked earlier).
  * @param[in] fingerprint Optional fingerprint of the entry. The fingerprint should always be set, however if it is
  * not set, it will match any certificate. Entry with no fingerprint should therefore be placed only as the last entry.
@@ -1770,11 +1770,11 @@ int nc_server_config_new_ch_tls_ctn(const struct ly_ctx *ctx, const char *client
         uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name, struct lyd_node **config);
 
 /**
- * @brief Deletes a Call-Home cert-to-name entry from the YANG data.
+ * @brief Deletes a Call Home cert-to-name entry from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-Home client.
- * @param[in] endpt_name Identifier of an existing Call-Home endpoint that belongs to the given client.
- * @param[in] id Optional identifier of the Call-Home CTN entry to be deleted.
+ * @param[in] client_name Identifier of an existing Call Home client.
+ * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
+ * @param[in] id Optional identifier of the Call Home CTN entry to be deleted.
  * If 0, all of the CTN entries will be deleted.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
@@ -1783,13 +1783,13 @@ int nc_server_config_new_ch_tls_del_ctn(const char *client_name, const char *end
         uint32_t id, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for a Call-Home TLS version.
+ * @brief Creates new YANG configuration data nodes for a Call Home TLS version.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
- * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
+ * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] tls_version TLS version to be used. Call this multiple times to set the accepted versions
  * of the TLS protocol and let the client and server negotiate the given version.
  * @param config Configuration YANG data tree. If *config is NULL, it will be created.
@@ -1802,8 +1802,8 @@ int nc_server_config_new_ch_tls_version(const struct ly_ctx *ctx, const char *cl
 /**
  * @brief Deletes a TLS version from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-Home client.
- * @param[in] endpt_name Identifier of an existing Call-Home endpoint that belongs to the given client.
+ * @param[in] client_name Identifier of an existing Call Home client.
+ * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
  * @param[in] tls_version TLS version to be deleted.
  * @param config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
@@ -1812,13 +1812,13 @@ int nc_server_config_new_ch_tls_del_version(const char *client_name, const char 
         NC_TLS_VERSION tls_version, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for a Call-Home TLS cipher.
+ * @brief Creates new YANG configuration data nodes for a Call Home TLS cipher.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
- * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
+ * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
  * @param config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @param[in] cipher_count Number of following ciphers.
@@ -1833,10 +1833,10 @@ int nc_server_config_new_ch_tls_ciphers(const struct ly_ctx *ctx, const char *cl
         struct lyd_node **config, int cipher_count, ...);
 
 /**
- * @brief Deletes a Call-Home TLS cipher from the YANG data.
+ * @brief Deletes a Call Home TLS cipher from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-Home client.
- * @param[in] endpt_name Identifier of an existing Call-Home endpoint that belongs to the given client.
+ * @param[in] client_name Identifier of an existing Call Home client.
+ * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
  * @param[in] cipher TLS cipher to be deleted.
  * @param config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
@@ -1845,16 +1845,16 @@ int nc_server_config_new_ch_tls_del_cipher(const char *client_name, const char *
         const char *cipher, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for a Call-Home Certificate Revocation List via a local file.
+ * @brief Creates new YANG configuration data nodes for a Call Home Certificate Revocation List via a local file.
  *
  * Beware that you can choose up to one function between the three CRL alternatives on a given endpoint and calling
  * this function will remove any CRL YANG nodes created by the other two functions.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
- * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
+ * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] crl_path Path to a DER/PEM encoded CRL file.
  * @param config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
@@ -1864,16 +1864,16 @@ int nc_server_config_new_ch_tls_crl_path(const struct ly_ctx *ctx, const char *c
         const char *crl_path, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for a Call-Home Certificate Revocation List via an URL.
+ * @brief Creates new YANG configuration data nodes for a Call Home Certificate Revocation List via an URL.
  *
  * Beware that you can choose up to one function between the three CRL alternatives on a given endpoint and calling
  * this function will remove any CRL YANG nodes created by the other two functions.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
- * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
+ * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] crl_url URL from which the CRL file will be downloaded. The file has to be in the DER or PEM format.
  * The allowed protocols are all the protocols supported by CURL.
  * @param config Configuration YANG data tree. If *config is NULL, it will be created.
@@ -1884,7 +1884,7 @@ int nc_server_config_new_ch_tls_crl_url(const struct ly_ctx *ctx, const char *cl
         const char *crl_url, struct lyd_node **config);
 
 /**
- * @brief Creates new YANG configuration data nodes for a Call-Home Certificate Revocation List via certificate extensions.
+ * @brief Creates new YANG configuration data nodes for a Call Home Certificate Revocation List via certificate extensions.
  *
  * The chain of configured Certificate Authorities will be examined. For each certificate in this chain all the
  * CRLs from the URLs specified in their extension fields CRL Distribution Points will be downloaded and used.
@@ -1893,10 +1893,10 @@ int nc_server_config_new_ch_tls_crl_url(const struct ly_ctx *ctx, const char *cl
  * this function will remove any CRL YANG nodes created by the other two functions.
  *
  * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the call-home client.
- * If a call-home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the call-home client's endpoint.
- * If a call-home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
+ * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
  * @param config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
@@ -1907,8 +1907,8 @@ int nc_server_config_new_ch_tls_crl_cert_ext(const struct ly_ctx *ctx, const cha
 /**
  * @brief Deletes all the CRL nodes from the YANG data.
  *
- * @param[in] client_name Identifier of an existing Call-Home client.
- * @param[in] endpt_name Identifier of an existing Call-Home endpoint that belongs to the given client.
+ * @param[in] client_name Identifier of an existing Call Home client.
+ * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
  * @param config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
