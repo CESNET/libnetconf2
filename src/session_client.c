@@ -1860,9 +1860,10 @@ nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
 API int
 nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
 {
-    int sock;
+    int sock, i;
     char *host = NULL;
     uint16_t port, idx;
+    struct timespec ts = {0};
 
     if (!client_opts.ch_binds) {
         ERRINIT;
@@ -1872,31 +1873,49 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
         return -1;
     }
 
-    sock = nc_sock_accept_binds(client_opts.ch_binds, client_opts.ch_bind_count, timeout, &host, &port, &idx);
-    if (sock < 1) {
-        free(host);
-        return sock;
+    if (timeout > 0) {
+        /* store timeout in ts */
+        nc_timeouttime_get(&ts, timeout);
     }
+
+    for (i = 0; i < client_opts.ch_bind_count; i++) {
+        if ((timeout > 0) && ((timeout = nc_timeouttime_cur_diff(&ts)) <= 0)) {
+            /* timeout */
+            ERR(NULL, "Accepting Call Home session failed (timed out).");
+            return 0;
+        }
+
+        sock = nc_sock_accept_binds(client_opts.ch_binds, client_opts.ch_bind_count, timeout, &host, &port, &idx);
+        if (sock < 1) {
+            /* connection failed, give it another shot on any of the listening binds */
+            continue;
+        }
 
 #ifdef NC_ENABLED_SSH
-    if (client_opts.ch_binds_aux[idx].ti == NC_TI_LIBSSH) {
-        *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
-    } else
+        if (client_opts.ch_binds_aux[idx].ti == NC_TI_LIBSSH) {
+            *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
+        } else
 #endif
 #ifdef NC_ENABLED_TLS
-    if (client_opts.ch_binds_aux[idx].ti == NC_TI_OPENSSL) {
-        *session = nc_accept_callhome_tls_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT,
-                client_opts.ch_binds_aux[idx].hostname);
-    } else
+        if (client_opts.ch_binds_aux[idx].ti == NC_TI_OPENSSL) {
+            *session = nc_accept_callhome_tls_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT,
+                    client_opts.ch_binds_aux[idx].hostname);
+        } else
 #endif
-    {
-        close(sock);
-        *session = NULL;
+        {
+            WRN(NULL, "Call Home client bind (%s:%u) is neither SSH nor TLS, skipping.", host, port);
+            close(sock);
+        }
+
+        free(host);
+
+        if (*session) {
+            /* session established */
+            break;
+        }
     }
 
-    free(host);
-
-    if (!(*session)) {
+    if (i == client_opts.ch_bind_count) {
         return -1;
     }
 
