@@ -41,7 +41,7 @@ extern "C" {
  * Expected data are a validated instance of a ietf-netconf-server YANG data.
  * The data must be in the diff format and supported operations are: create, replace,
  * delete and none. Context must already have implemented the required modules, see
- * ::nc_config_load_modules().
+ * ::nc_server_config_load_modules().
  *
  * @param[in] diff ietf-netconf-server YANG diff data.
  * @return 0 on success, 1 on error.
@@ -54,8 +54,8 @@ int nc_server_config_setup_diff(const struct lyd_node *diff);
  * Expected data is a validated instance of a ietf-netconf-server YANG data.
  * Behaves as if all the nodes in data had the replace operation. That means that the current configuration will be deleted
  * and just the given data will all be applied.
- * The data must not contain any operation attribute, see ::nc_config_setup_diff() which works with diff.
- * Context must already have implemented the required modules, see * ::nc_config_load_modules().
+ * The data must not contain any operation attribute, see ::nc_server_config_setup_diff() which works with diff.
+ * Context must already have implemented the required modules, see ::nc_server_config_load_modules().
  *
  * @param[in] data ietf-netconf-server YANG data.
  * @return 0 on success, 1 on error.
@@ -64,7 +64,7 @@ int nc_server_config_setup_data(const struct lyd_node *data);
 
 /**
  * @brief Configure server based on the given ietf-netconf-server YANG data.
- * Wrapper around ::nc_config_setup_server_data() hiding work with parsing the data.
+ * Wrapper around ::nc_server_config_setup_data() hiding work with parsing the data.
  *
  * @param[in] ctx libyang context.
  * @param[in] path Path to the file with YANG data in XML format.
@@ -435,8 +435,8 @@ int nc_server_config_new_ssh_del_user_none(const char *endpt_name, const char *u
  * @param[in] user_name Arbitrary identifier of the user.
  * If an user with this identifier already exists, its contents will be changed.
  * @param[in] pam_config_name Name of the PAM configuration file.
- * @param[in] pam_config_name Optional. The absolute path to the directory in which the configuration file
- * with the name conf_name is located. A newer version (>= 1.4) of PAM library is required to be able to specify
+ * @param[in] pam_config_dir Optional. The absolute path to the directory in which the configuration file
+ * with the name pam_config_name is located. A newer version (>= 1.4) of PAM library is required to be able to specify
  * the path. If NULL is passed, then the PAM's system directories will be searched (usually /etc/pam.d/).
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
@@ -1365,8 +1365,8 @@ int nc_server_config_new_ch_ssh_del_user_none(const char *client_name, const cha
  * @param[in] user_name Arbitrary identifier of the endpoint's user.
  * If the endpoint's user with this identifier already exists, its contents will be changed.
  * @param[in] pam_config_name Name of the PAM configuration file.
- * @param[in] pam_config_name Optional. The absolute path to the directory in which the configuration file
- * with the name conf_name is located. A newer version (>= 1.4) of PAM library is required to be able to specify
+ * @param[in] pam_config_dir Optional. The absolute path to the directory in which the configuration file
+ * with the name pam_config_name is located. A newer version (>= 1.4) of PAM library is required to be able to specify
  * the path. If NULL is passed, then the PAM's system directories will be searched (usually /etc/pam.d/).
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.

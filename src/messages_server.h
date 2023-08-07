@@ -109,7 +109,7 @@ struct nc_server_reply *nc_server_reply_data(struct lyd_node *data, NC_WD_MODE w
 /**
  * @brief Create an ERROR rpc-reply object.
  *
- * @param[in] err Errors created by ::nc_err(). It will be freed with the returned object.
+ * @param[in] err Errors created by nc_err(). It will be freed with the returned object.
  * @return rpc-reply object, NULL on error.
  */
 struct nc_server_reply *nc_server_reply_err(struct lyd_node *err);
@@ -118,7 +118,7 @@ struct nc_server_reply *nc_server_reply_err(struct lyd_node *err);
  * @brief Add another error opaque data node tree to an ERROR rpc-reply object.
  *
  * @param[in] reply ERROR reply to add to.
- * @param[in] err Error created by ::nc_err(). It will be freed with the returned object.
+ * @param[in] err Error created by nc_err(). It will be freed with the returned object.
  * @return 0 on success, -1 on errror.
  */
 int nc_server_reply_add_err(struct nc_server_reply *reply, struct lyd_node *err);
