@@ -256,8 +256,7 @@ setup_tls(void **state)
     assert_int_equal(ret, 0);
 
     /* create the first TLS endpoint with a single end entity client cert and a CTN entry */
-    ret = nc_server_config_new_tls_server_certificate(ctx, "TLS_endpt_1", NULL,
-            TESTS_DIR "/data/server.key", TESTS_DIR "/data/server.crt", &tree);
+    ret = nc_server_config_new_tls_server_certificate(ctx, "TLS_endpt_1", TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_new_address_port(ctx, "TLS_endpt_1", NC_TI_OPENSSL, "127.0.0.1", 10007, &tree);
@@ -275,8 +274,8 @@ setup_tls(void **state)
     assert_int_equal(ret, 0);
 
     /* create the second TLS endpoint with a reference to the first endpoint */
-    ret = nc_server_config_new_tls_server_certificate(ctx, "TLS_endpt_2", NULL,
-            TESTS_DIR "/data/server.key", TESTS_DIR "/data/server.crt", &tree);
+    ret = nc_server_config_new_tls_server_certificate(ctx, "TLS_endpt_2",
+            TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_new_address_port(ctx, "TLS_endpt_2", NC_TI_OPENSSL, "127.0.0.1", 10008, &tree);

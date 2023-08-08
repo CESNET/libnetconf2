@@ -148,7 +148,7 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* create new server certificate data */
-    ret = nc_server_config_new_tls_server_certificate(ctx, "endpt", NULL, TESTS_DIR "/data/server.key", TESTS_DIR "/data/server.crt", &tree);
+    ret = nc_server_config_new_tls_server_certificate(ctx, "endpt", TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &tree);
     assert_int_equal(ret, 0);
 
     /* create new end entity client cert data */
