@@ -36,6 +36,36 @@ extern "C" {
  */
 
 /**
+ * @} Server Configuration
+ */
+
+/**
+ * @defgroup server_config_functions Server Configuration Functions
+ * @ingroup server_config
+ *
+ * @brief Server-side configuration functions
+ * @{
+ */
+
+/**
+ * @brief Implements all the required modules and their features in the context.
+ * Needs to be called before any other configuration functions.
+ *
+ * If ctx is :
+ *      - NULL: a new context will be created and if the call is successful you have to free it,
+ *      - non NULL: modules will simply be implemented.
+ *
+ * Implemented modules: ietf-netconf-server, ietf-x509-cert-to-name, ietf-crypto-types,
+ * ietf-tcp-common, ietf-ssh-common, iana-ssh-encryption-algs, iana-ssh-key-exchange-algs,
+ * iana-ssh-mac-algs, iana-ssh-public-key-algs, ietf-keystore, ietf-ssh-server, ietf-truststore,
+ * ietf-tls-server and libnetconf2-netconf-server.
+ *
+ * @param[in, out] ctx Optional context in which the modules will be implemented. Created if ctx is null.
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_config_load_modules(struct ly_ctx **ctx);
+
+/**
  * @brief Configure server based on the given diff data.
  *
  * Expected data are a validated instance of a ietf-netconf-server YANG data.
@@ -63,44 +93,26 @@ int nc_server_config_setup_diff(const struct lyd_node *diff);
 int nc_server_config_setup_data(const struct lyd_node *data);
 
 /**
- * @brief Configure server based on the given ietf-netconf-server YANG data.
+ * @brief Configure server based on the given ietf-netconf-server YANG data from a file.
  * Wrapper around ::nc_server_config_setup_data() hiding work with parsing the data.
  *
  * @param[in] ctx libyang context.
- * @param[in] path Path to the file with YANG data in XML format.
+ * @param[in] path Path to the file with ietf-netconf-server YANG data.
  * @return 0 on success, 1 on error.
  */
 int nc_server_config_setup_path(const struct ly_ctx *ctx, const char *path);
 
-/**
- * @brief Implements all the required modules and their features in the context.
- * Needs to be called before any other configuration functions.
- *
- * If ctx is :
- *      - NULL: a new context will be created and if the call is successful you have to free it,
- *      - non NULL: modules will simply be implemented.
- *
- * Implemented modules: ietf-netconf-server, ietf-x509-cert-to-name, ietf-crypto-types,
- * ietf-tcp-common, ietf-ssh-common, iana-ssh-encryption-algs, iana-ssh-key-exchange-algs,
- * iana-ssh-mac-algs, iana-ssh-public-key-algs, ietf-keystore, ietf-ssh-server, ietf-truststore,
- * ietf-tls-server and libnetconf2-netconf-server.
- *
- * @param[in, out] ctx Optional context in which the modules will be implemented. Created if ctx is null.
- * @return 0 on success, 1 on error.
- */
-int nc_server_config_load_modules(struct ly_ctx **ctx);
-
 #ifdef NC_ENABLED_SSH_TLS
 
 /**
- * @brief Creates new YANG configuration data nodes for a local-address and local-port.
+ * @brief Creates new YANG configuration data nodes for local-address and local-port.
  *
  * @param[in] ctx libyang context.
  * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, its contents might be changed.
  * @param[in] transport Either SSH or TLS transport for the given endpoint.
  * @param[in] address New listening address.
  * @param[in] port New listening port.
- * If an endpoint with this identifier already exists, its address and port will be overriden.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
@@ -115,7 +127,7 @@ int nc_server_config_new_address_port(const struct ly_ctx *ctx, const char *endp
  *
  * @param[in] endpt_name Optional identifier of an endpoint to be deleted.
  * If NULL, all of the endpoints will be deleted.
- * @param[in,out] config Configuration YANG data tree.
+ * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_new_del_endpt(const char *endpt_name, struct lyd_node **config);
@@ -240,7 +252,7 @@ int nc_server_config_new_del_truststore_cert(const char *cert_bag_name,
         const char *cert_name, struct lyd_node **config);
 
 /**
- * @}
+ * @} Server Configuration Functions
  */
 
 /**
@@ -261,7 +273,7 @@ int nc_server_config_new_del_truststore_cert(const char *cert_bag_name,
  * If a hostkey with this identifier already exists, its contents will be changed.
  * @param[in] privkey_path Path to a file containing a private key.
  * The private key has to be in a PEM format. Only RSA and ECDSA keys are supported.
- * @param[in] pubkey_path Path to a file containing a public key. If NULL, public key will be
+ * @param[in] pubkey_path Optional path to a file containing a public key. If NULL, public key will be
  * generated from the private key.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
@@ -381,7 +393,7 @@ int nc_server_config_new_ssh_del_user_pubkey(const char *endpt_name, const char 
  * If an endpoint with this identifier already exists, its user might be changed.
  * @param[in] user_name Arbitrary identifier of the user.
  * If an user with this identifier already exists, its contents will be changed.
- * @param[in] password Cleartext password to be set for the user.
+ * @param[in] password Clear-text password to be set for the user. It will be hashed.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
@@ -548,7 +560,7 @@ int nc_server_config_new_ssh_host_key_algs(const struct ly_ctx *ctx, const char 
  * @param[in] endpt_name Identifier of an existing endpoint.
  * @param[in] alg Optional algorithm to be deleted.
  * If NULL, all of the hostkey algorithms on this endpoint will be deleted.
- * @param[in,out] config Configuraiton YANG data.
+ * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_new_ssh_del_host_key_alg(const char *endpt_name, const char *alg, struct lyd_node **config);
@@ -578,7 +590,7 @@ int nc_server_config_new_ssh_key_exchange_algs(const struct ly_ctx *ctx, const c
  * @param[in] endpt_name Identifier of an existing endpoint.
  * @param[in] alg Optional algorithm to be deleted.
  * If NULL, all of the key exchange algorithms on this endpoint will be deleted.
- * @param[in,out] config Configuraiton YANG data.
+ * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_new_ssh_del_key_exchange_alg(const char *endpt_name, const char *alg, struct lyd_node **config);
@@ -607,7 +619,7 @@ int nc_server_config_new_ssh_encryption_algs(const struct ly_ctx *ctx, const cha
  * @param[in] endpt_name Identifier of an existing endpoint.
  * @param[in] alg Optional algorithm to be deleted.
  * If NULL, all of the encryption algorithms on this endpoint will be deleted.
- * @param[in,out] config Configuraiton YANG data.
+ * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_new_ssh_del_encryption_alg(const char *endpt_name, const char *alg, struct lyd_node **config);
@@ -635,13 +647,13 @@ int nc_server_config_new_ssh_mac_algs(const struct ly_ctx *ctx, const char *endp
  * @param[in] endpt_name Identifier of an existing endpoint.
  * @param[in] alg Optional algorithm to be deleted.
  * If NULL, all of the mac algorithms on this endpoint will be deleted.
- * @param[in,out] config Configuraiton YANG data.
+ * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_new_ssh_del_mac_alg(const char *endpt_name, const char *alg, struct lyd_node **config);
 
 /**
- * @}
+ * @} SSH Server Configuration
  */
 
 /**
@@ -709,7 +721,7 @@ int nc_server_config_new_tls_del_keystore_reference(const char *endpt_name, stru
  * @param[in] endpt_name Arbitrary identifier of the endpoint.
  * If an endpoint with this identifier already exists, its contents will be changed.
  * @param[in] cert_name Arbitrary identifier of the client's certificate.
- * If a client certificate with this indetifier already exists, it will be changed.
+ * If a client certificate with this identifier already exists, it will be changed.
  * @param[in] cert_path Path to the client's certificate file.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
@@ -759,7 +771,7 @@ int nc_server_config_new_tls_del_client_cert_truststore_ref(const char *endpt_na
  * @param[in] endpt_name Arbitrary identifier of the endpoint.
  * If an endpoint with this identifier already exists, its contents will be changed.
  * @param[in] cert_name Arbitrary identifier of the certificate authority certificate.
- * If a CA with this indetifier already exists, it will be changed.
+ * If a CA with this identifier already exists, it will be changed.
  * @param[in] cert_path Path to the CA certificate file.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
@@ -865,7 +877,7 @@ int nc_server_config_new_tls_del_version(const char *endpt_name, NC_TLS_VERSION 
  * If an endpoint with this identifier already exists, its contents will be changed.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
- * @param[in] cipher_count Number of ciphers.
+ * @param[in] cipher_count Number of following ciphers.
  * @param[in] ... TLS ciphers. These ciphers MUST be in the format as listed in the
  * iana-tls-cipher-suite-algs YANG model (lowercase and separated by dashes). Regardless
  * of the TLS protocol version used, all of these ciphers will be tried and some of them
@@ -975,14 +987,26 @@ int nc_config_new_tls_endpoint_client_reference(const struct ly_ctx *ctx, const 
 int nc_config_new_tls_del_endpoint_client_reference(const char *endpt_name, struct lyd_node **config);
 
 /**
- * @}
+ * @} TLS Server Configuration
  */
 
 /**
- * @defgroup server_config_ch Call Home server Configuration
+ * @defgroup server_config_ch Call Home Server Configuration
  * @ingroup server_config
  *
  * @brief Call Home server configuration creation and deletion
+ * @{
+ */
+
+/**
+ * @} Call Home Server Configuration
+ */
+
+/**
+ * @defgroup server_config_ch_functions Call Home Server Configuration Functions
+ * @ingroup server_config_ch
+ *
+ * @brief Call Home server configuration functions
  * @{
  */
 
@@ -1148,7 +1172,7 @@ int nc_server_config_new_ch_reconnect_strategy(const struct ly_ctx *ctx, const c
 int nc_server_config_new_ch_del_reconnect_strategy(const char *client_name, struct lyd_node **config);
 
 /**
- * @}
+ * @} Call Home Server Configuration Functions
  */
 
 #ifdef NC_ENABLED_SSH_TLS
@@ -1305,7 +1329,7 @@ int nc_server_config_new_ch_ssh_del_user_pubkey(const char *client_name, const c
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] user_name Arbitrary identifier of the endpoint's user.
  * If the endpoint's user with this identifier already exists, its contents will be changed.
- * @param[in] password Cleartext password to be set for the user.
+ * @param[in] password Clear-text password to be set for the user. It will be hashed.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
@@ -1564,7 +1588,7 @@ int nc_server_config_new_ch_ssh_del_mac_alg(const char *client_name, const char 
         const char *alg, struct lyd_node **config);
 
 /**
- * @}
+ * @} SSH Call Home Server Configuration
  */
 
 /**
@@ -1915,7 +1939,7 @@ int nc_server_config_new_ch_tls_crl_cert_ext(const struct ly_ctx *ctx, const cha
 int nc_server_config_new_ch_tls_del_crl(const char *client_name, const char *endpt_name, struct lyd_node **config);
 
 /**
- * @}
+ * @} TLS Call Home Server Configuration
  */
 
 #endif /* NC_ENABLED_SSH_TLS */

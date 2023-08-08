@@ -37,6 +37,16 @@ extern "C" {
  * @{
  */
 
+/** @} Server-side Call Home */
+
+/**
+ * @defgroup server_ch_functions Server-side Call Home Functions
+ * @ingroup server_ch
+ *
+ * @brief Server-side Call Home functions.
+ * @{
+ */
+
 /**
  * @brief Add a new Call Home client.
  *
@@ -198,7 +208,7 @@ int nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_
         nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
         void *new_session_cb_data);
 
-/** @} Server-side Call Home */
+/** @} Server-side Call Home Functions */
 
 /**
  * @defgroup server_ch_ssh Server-side Call Home on SSH
