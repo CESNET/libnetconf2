@@ -658,16 +658,16 @@ int nc_server_config_new_ssh_del_mac_alg(const char *endpt_name, const char *alg
  * @param[in] ctx libyang context.
  * @param[in] endpt_name Arbitrary identifier of the endpoint.
  * If an endpoint with this identifier already exists, its server certificate will be changed.
+ * @param[in] privkey_path Path to the server's PEM encoded private key file.
  * @param[in] pubkey_path Optional path to the server's public key file. If not provided,
  * it will be generated from the private key.
- * @param[in] privkey_path Path to the server's private key file.
  * @param[in] certificate_path Path to the server's certificate file.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const char *endpt_name, const char *pubkey_path,
-        const char *privkey_path, const char *certificate_path, struct lyd_node **config);
+int nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const char *endpt_name, const char *privkey_path,
+        const char *pubkey_path, const char *certificate_path, struct lyd_node **config);
 
 /**
  * @brief Deletes the server's certificate from the YANG data.
@@ -1583,16 +1583,16 @@ int nc_server_config_new_ch_ssh_del_mac_alg(const char *client_name, const char 
  * If a Call Home client with this identifier already exists, its contents will be changed.
  * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
  * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] privkey_path Path to the server's PEM encoded private key file.
  * @param[in] pubkey_path Optional path to the server's public key file. If not provided,
  * it will be generated from the private key.
- * @param[in] privkey_path Path to the server's private key file.
  * @param[in] certificate_path Path to the server's certificate file.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_new_ch_tls_server_certificate(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
-        const char *pubkey_path, const char *privkey_path, const char *certificate_path, struct lyd_node **config);
+        const char *privkey_path, const char *pubkey_path, const char *certificate_path, struct lyd_node **config);
 
 /**
  * @brief Deletes a Call Home server certificate from the YANG data.

@@ -108,8 +108,8 @@ cleanup:
 }
 
 API int
-nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const char *endpt_name, const char *pubkey_path,
-        const char *privkey_path, const char *certificate_path, struct lyd_node **config)
+nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const char *endpt_name, const char *privkey_path,
+        const char *pubkey_path, const char *certificate_path, struct lyd_node **config)
 {
     int ret = 0;
     char *path = NULL;
@@ -147,7 +147,7 @@ nc_server_config_new_tls_del_server_certificate(const char *endpt_name, struct l
 
 API int
 nc_server_config_new_ch_tls_server_certificate(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
-        const char *pubkey_path, const char *privkey_path, const char *certificate_path, struct lyd_node **config)
+        const char *privkey_path, const char *pubkey_path, const char *certificate_path, struct lyd_node **config)
 {
     int ret = 0;
     char *path = NULL;

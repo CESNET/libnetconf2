@@ -400,7 +400,7 @@ setup_tls(void **state)
     assert_int_equal(ret, 0);
 
     /* set call-home server certificate */
-    ret = nc_server_config_new_ch_tls_server_certificate(ctx, "ch_tls", "endpt", NULL, TESTS_DIR "/data/server.key", TESTS_DIR "/data/server.crt", &test_state->tls_tree);
+    ret = nc_server_config_new_ch_tls_server_certificate(ctx, "ch_tls", "endpt", TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &test_state->tls_tree);
     assert_int_equal(ret, 0);
 
     /* set call-home client end entity certificate */
