@@ -141,10 +141,10 @@ setup_ssh(void **state)
     ret = nc_server_config_new_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", 10005, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_keystore_reference(ctx, "endpt", "hostkey", "test_keystore", &tree);
+    ret = nc_server_config_new_ssh_keystore_ref(ctx, "endpt", "hostkey", "test_keystore", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_truststore_reference(ctx, "endpt", "client", "test_truststore", &tree);
+    ret = nc_server_config_new_ssh_truststore_ref(ctx, "endpt", "client", "test_truststore", &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_new_keystore_asym_key(ctx, "test_keystore", TESTS_DIR "/data/key_rsa", NULL, &tree);
@@ -260,7 +260,7 @@ setup_tls(void **state)
     assert_int_equal(ret, 0);
 
     /* new keystore ref for the TLS server cert */
-    ret = nc_server_config_new_tls_keystore_reference(ctx, "endpt", "server_key", "server_cert", &tree);
+    ret = nc_server_config_new_tls_keystore_ref(ctx, "endpt", "server_key", "server_cert", &tree);
     assert_int_equal(ret, 0);
 
     /* new truststore ref for the client cert */

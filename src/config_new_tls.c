@@ -188,7 +188,7 @@ nc_server_config_new_ch_tls_del_server_certificate(const char *client_name, cons
 }
 
 static int
-_nc_server_config_new_tls_keystore_reference(const struct ly_ctx *ctx, const char *tree_path, const char *asym_key_ref,
+_nc_server_config_new_tls_keystore_ref(const struct ly_ctx *ctx, const char *tree_path, const char *asym_key_ref,
         const char *cert_ref, struct lyd_node **config)
 {
     int ret = 0;
@@ -216,7 +216,7 @@ cleanup:
 }
 
 API int
-nc_server_config_new_tls_keystore_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *asym_key_ref,
+nc_server_config_new_tls_keystore_ref(const struct ly_ctx *ctx, const char *endpt_name, const char *asym_key_ref,
         const char *cert_ref, struct lyd_node **config)
 {
     int ret = 0;
@@ -232,7 +232,7 @@ nc_server_config_new_tls_keystore_reference(const struct ly_ctx *ctx, const char
         goto cleanup;
     }
 
-    ret = _nc_server_config_new_tls_keystore_reference(ctx, path, asym_key_ref, cert_ref, config);
+    ret = _nc_server_config_new_tls_keystore_ref(ctx, path, asym_key_ref, cert_ref, config);
     if (ret) {
         goto cleanup;
     }
@@ -243,7 +243,7 @@ cleanup:
 }
 
 API int
-nc_server_config_new_tls_del_keystore_reference(const char *endpt_name, struct lyd_node **config)
+nc_server_config_new_tls_del_keystore_ref(const char *endpt_name, struct lyd_node **config)
 {
     NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
 
@@ -252,7 +252,7 @@ nc_server_config_new_tls_del_keystore_reference(const char *endpt_name, struct l
 }
 
 API int
-nc_server_config_new_ch_tls_keystore_reference(const struct ly_ctx *ctx, const char *client_name,
+nc_server_config_new_ch_tls_keystore_ref(const struct ly_ctx *ctx, const char *client_name,
         const char *endpt_name, const char *asym_key_ref, const char *cert_ref, struct lyd_node **config)
 {
     int ret = 0;
@@ -269,7 +269,7 @@ nc_server_config_new_ch_tls_keystore_reference(const struct ly_ctx *ctx, const c
         goto cleanup;
     }
 
-    ret = _nc_server_config_new_tls_keystore_reference(ctx, path, asym_key_ref, cert_ref, config);
+    ret = _nc_server_config_new_tls_keystore_ref(ctx, path, asym_key_ref, cert_ref, config);
     if (ret) {
         goto cleanup;
     }
@@ -280,7 +280,7 @@ cleanup:
 }
 
 API int
-nc_server_config_new_ch_tls_del_keystore_reference(const char *client_name, const char *endpt_name,
+nc_server_config_new_ch_tls_del_keystore_ref(const char *client_name, const char *endpt_name,
         struct lyd_node **config)
 {
     NC_CHECK_ARG_RET(NULL, client_name, endpt_name, config, 1);
@@ -1413,7 +1413,7 @@ cleanup:
 }
 
 API int
-nc_config_new_tls_endpoint_client_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *referenced_endpt, struct lyd_node **config)
+nc_config_new_tls_endpoint_client_ref(const struct ly_ctx *ctx, const char *endpt_name, const char *referenced_endpt, struct lyd_node **config)
 {
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, referenced_endpt, config, 1);
 
@@ -1422,7 +1422,7 @@ nc_config_new_tls_endpoint_client_reference(const struct ly_ctx *ctx, const char
 }
 
 API int
-nc_config_new_tls_del_endpoint_client_reference(const char *endpt_name, struct lyd_node **config)
+nc_config_new_tls_del_endpoint_client_ref(const char *endpt_name, struct lyd_node **config)
 {
     NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
 

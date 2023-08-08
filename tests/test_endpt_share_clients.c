@@ -199,7 +199,7 @@ setup_ssh(void **state)
     ret = nc_server_config_new_address_port(ctx, "SSH_endpt_1", NC_TI_LIBSSH, "127.0.0.1", 10005, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_config_new_ssh_endpoint_user_reference(ctx, "SSH_endpt_1", "SSH_endpt_2", &tree);
+    ret = nc_config_new_ssh_endpoint_user_ref(ctx, "SSH_endpt_1", "SSH_endpt_2", &tree);
     assert_int_equal(ret, 0);
 
     /* create the second SSH endpoint with a single client */
@@ -281,7 +281,7 @@ setup_tls(void **state)
     ret = nc_server_config_new_address_port(ctx, "TLS_endpt_2", NC_TI_OPENSSL, "127.0.0.1", 10008, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_config_new_tls_endpoint_client_reference(ctx, "TLS_endpt_2", "TLS_endpt_1", &tree);
+    ret = nc_config_new_tls_endpoint_client_ref(ctx, "TLS_endpt_2", "TLS_endpt_1", &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the yang data */

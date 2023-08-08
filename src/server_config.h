@@ -310,7 +310,7 @@ int nc_server_config_new_ssh_del_hostkey(const struct ly_ctx *ctx, const char *e
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_ssh_keystore_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *hostkey_name,
+int nc_server_config_new_ssh_keystore_ref(const struct ly_ctx *ctx, const char *endpt_name, const char *hostkey_name,
         const char *keystore_reference, struct lyd_node **config);
 
 /**
@@ -321,7 +321,7 @@ int nc_server_config_new_ssh_keystore_reference(const struct ly_ctx *ctx, const 
  * @param[in,out] config Configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_ssh_del_keystore_reference(const char *endpt_name, const char *hostkey_name,
+int nc_server_config_new_ssh_del_keystore_ref(const char *endpt_name, const char *hostkey_name,
         struct lyd_node **config);
 
 /**
@@ -495,7 +495,7 @@ int nc_server_config_new_ssh_del_user(const char *endpt_name,
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_ssh_truststore_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *user_name,
+int nc_server_config_new_ssh_truststore_ref(const struct ly_ctx *ctx, const char *endpt_name, const char *user_name,
         const char *truststore_reference, struct lyd_node **config);
 
 /**
@@ -506,7 +506,7 @@ int nc_server_config_new_ssh_truststore_reference(const struct ly_ctx *ctx, cons
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_ssh_del_truststore_reference(const char *endpt_name, const char *user_name,
+int nc_server_config_new_ssh_del_truststore_ref(const char *endpt_name, const char *user_name,
         struct lyd_node **config);
 
 /**
@@ -524,7 +524,7 @@ int nc_server_config_new_ssh_del_truststore_reference(const char *endpt_name, co
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_config_new_ssh_endpoint_user_reference(const struct ly_ctx *ctx, const char *endpt_name,
+int nc_config_new_ssh_endpoint_user_ref(const struct ly_ctx *ctx, const char *endpt_name,
         const char *referenced_endpt, struct lyd_node **config);
 
 /**
@@ -534,7 +534,7 @@ int nc_config_new_ssh_endpoint_user_reference(const struct ly_ctx *ctx, const ch
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_config_new_ssh_del_endpoint_user_reference(const char *endpt_name, struct lyd_node **config);
+int nc_config_new_ssh_del_endpoint_user_ref(const char *endpt_name, struct lyd_node **config);
 
 /**
  * @brief Creates new YANG configuration data nodes for host-key algorithms replacing any previous ones.
@@ -702,7 +702,7 @@ int nc_server_config_new_tls_del_server_certificate(const char *endpt_name, stru
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_tls_keystore_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *asym_key_ref,
+int nc_server_config_new_tls_keystore_ref(const struct ly_ctx *ctx, const char *endpt_name, const char *asym_key_ref,
         const char *cert_ref, struct lyd_node **config);
 
 /**
@@ -712,7 +712,7 @@ int nc_server_config_new_tls_keystore_reference(const struct ly_ctx *ctx, const 
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_tls_del_keystore_reference(const char *endpt_name, struct lyd_node **config);
+int nc_server_config_new_tls_del_keystore_ref(const char *endpt_name, struct lyd_node **config);
 
 /**
  * @brief Creates new YANG configuration data nodes for a client's (end-entity) certificate.
@@ -974,7 +974,7 @@ int nc_server_config_new_tls_del_crl(const char *endpt_name, struct lyd_node **c
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_config_new_tls_endpoint_client_reference(const struct ly_ctx *ctx, const char *endpt_name,
+int nc_config_new_tls_endpoint_client_ref(const struct ly_ctx *ctx, const char *endpt_name,
         const char *referenced_endpt, struct lyd_node **config);
 
 /**
@@ -984,7 +984,7 @@ int nc_config_new_tls_endpoint_client_reference(const struct ly_ctx *ctx, const 
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_config_new_tls_del_endpoint_client_reference(const char *endpt_name, struct lyd_node **config);
+int nc_config_new_tls_del_endpoint_client_ref(const char *endpt_name, struct lyd_node **config);
 
 /**
  * @} TLS Server Configuration
@@ -1236,7 +1236,7 @@ int nc_server_config_new_ch_ssh_del_hostkey(const char *client_name, const char 
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_ch_ssh_keystore_reference(const struct ly_ctx *ctx, const char *client_name,
+int nc_server_config_new_ch_ssh_keystore_ref(const struct ly_ctx *ctx, const char *client_name,
         const char *endpt_name, const char *hostkey_name, const char *keystore_reference, struct lyd_node **config);
 
 /**
@@ -1248,7 +1248,7 @@ int nc_server_config_new_ch_ssh_keystore_reference(const struct ly_ctx *ctx, con
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_ch_ssh_del_keystore_reference(const char *client_name, const char *endpt_name,
+int nc_server_config_new_ch_ssh_del_keystore_ref(const char *client_name, const char *endpt_name,
         const char *hostkey_name, struct lyd_node **config);
 
 /**
@@ -1440,7 +1440,7 @@ int nc_server_config_new_ch_ssh_del_user(const char *client_name, const char *en
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_ch_ssh_truststore_reference(const struct ly_ctx *ctx, const char *client_name,
+int nc_server_config_new_ch_ssh_truststore_ref(const struct ly_ctx *ctx, const char *client_name,
         const char *endpt_name, const char *user_name, const char *truststore_reference, struct lyd_node **config);
 
 /**
@@ -1452,7 +1452,7 @@ int nc_server_config_new_ch_ssh_truststore_reference(const struct ly_ctx *ctx, c
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_ch_ssh_del_truststore_reference(const char *client_name, const char *endpt_name,
+int nc_server_config_new_ch_ssh_del_truststore_ref(const char *client_name, const char *endpt_name,
         const char *user_name, struct lyd_node **config);
 
 /**
@@ -1643,7 +1643,7 @@ int nc_server_config_new_ch_tls_del_server_certificate(const char *client_name, 
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_ch_tls_keystore_reference(const struct ly_ctx *ctx, const char *client_name,
+int nc_server_config_new_ch_tls_keystore_ref(const struct ly_ctx *ctx, const char *client_name,
         const char *endpt_name, const char *asym_key_ref, const char *cert_ref, struct lyd_node **config);
 
 /**
@@ -1654,7 +1654,7 @@ int nc_server_config_new_ch_tls_keystore_reference(const struct ly_ctx *ctx, con
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_ch_tls_del_keystore_reference(const char *client_name, const char *endpt_name,
+int nc_server_config_new_ch_tls_del_keystore_ref(const char *client_name, const char *endpt_name,
         struct lyd_node **config);
 
 /**
