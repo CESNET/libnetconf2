@@ -188,7 +188,7 @@ nc_server_config_new_ch_ssh_del_hostkey(const char *client_name, const char *end
 }
 
 API int
-nc_server_config_new_ssh_keystore_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *hostkey_name,
+nc_server_config_new_ssh_keystore_ref(const struct ly_ctx *ctx, const char *endpt_name, const char *hostkey_name,
         const char *keystore_reference, struct lyd_node **config)
 {
     int ret = 0;
@@ -215,7 +215,7 @@ cleanup:
 }
 
 API int
-nc_server_config_new_ch_ssh_keystore_reference(const struct ly_ctx *ctx, const char *client_name,
+nc_server_config_new_ch_ssh_keystore_ref(const struct ly_ctx *ctx, const char *client_name,
         const char *endpt_name, const char *hostkey_name, const char *keystore_reference, struct lyd_node **config)
 {
     int ret = 0;
@@ -243,7 +243,7 @@ cleanup:
 }
 
 API int
-nc_server_config_new_ssh_del_keystore_reference(const char *endpt_name, const char *hostkey_name,
+nc_server_config_new_ssh_del_keystore_ref(const char *endpt_name, const char *hostkey_name,
         struct lyd_node **config)
 {
     NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
@@ -254,7 +254,7 @@ nc_server_config_new_ssh_del_keystore_reference(const char *endpt_name, const ch
 }
 
 API int
-nc_server_config_new_ch_ssh_del_keystore_reference(const char *client_name, const char *endpt_name,
+nc_server_config_new_ch_ssh_del_keystore_ref(const char *client_name, const char *endpt_name,
         const char *hostkey_name, struct lyd_node **config)
 {
     NC_CHECK_ARG_RET(NULL, client_name, endpt_name, hostkey_name, config, 1);
@@ -805,7 +805,7 @@ nc_server_config_new_ch_ssh_del_user(const char *client_name, const char *endpt_
 }
 
 API int
-nc_config_new_ssh_endpoint_user_reference(const struct ly_ctx *ctx, const char *endpt_name,
+nc_config_new_ssh_endpoint_user_ref(const struct ly_ctx *ctx, const char *endpt_name,
         const char *referenced_endpt, struct lyd_node **config)
 {
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, referenced_endpt, config, 1);
@@ -815,7 +815,7 @@ nc_config_new_ssh_endpoint_user_reference(const struct ly_ctx *ctx, const char *
 }
 
 API int
-nc_config_new_ssh_del_endpoint_user_reference(const char *endpt_name, struct lyd_node **config)
+nc_config_new_ssh_del_endpoint_user_ref(const char *endpt_name, struct lyd_node **config)
 {
     NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
 
@@ -824,7 +824,7 @@ nc_config_new_ssh_del_endpoint_user_reference(const char *endpt_name, struct lyd
 }
 
 API int
-nc_server_config_new_ssh_truststore_reference(const struct ly_ctx *ctx, const char *endpt_name, const char *user_name,
+nc_server_config_new_ssh_truststore_ref(const struct ly_ctx *ctx, const char *endpt_name, const char *user_name,
         const char *truststore_reference, struct lyd_node **config)
 {
     int ret = 0;
@@ -851,7 +851,7 @@ cleanup:
 }
 
 API int
-nc_server_config_new_ch_ssh_truststore_reference(const struct ly_ctx *ctx, const char *client_name,
+nc_server_config_new_ch_ssh_truststore_ref(const struct ly_ctx *ctx, const char *client_name,
         const char *endpt_name, const char *user_name, const char *truststore_reference, struct lyd_node **config)
 {
     int ret = 0;
@@ -879,7 +879,7 @@ cleanup:
 }
 
 API int
-nc_server_config_new_ssh_del_truststore_reference(const char *endpt_name, const char *user_name,
+nc_server_config_new_ssh_del_truststore_ref(const char *endpt_name, const char *user_name,
         struct lyd_node **config)
 {
     NC_CHECK_ARG_RET(NULL, endpt_name, user_name, config, 1);
@@ -890,7 +890,7 @@ nc_server_config_new_ssh_del_truststore_reference(const char *endpt_name, const 
 }
 
 API int
-nc_server_config_new_ch_ssh_del_truststore_reference(const char *client_name, const char *endpt_name,
+nc_server_config_new_ch_ssh_del_truststore_ref(const char *client_name, const char *endpt_name,
         const char *user_name, struct lyd_node **config)
 {
     NC_CHECK_ARG_RET(NULL, client_name, endpt_name, user_name, config, 1);
