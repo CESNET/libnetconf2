@@ -147,7 +147,7 @@ setup_ssh(void **state)
     ret = nc_server_config_new_ssh_truststore_ref(ctx, "endpt", "client", "test_truststore", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_keystore_asym_key(ctx, "test_keystore", TESTS_DIR "/data/key_rsa", NULL, &tree);
+    ret = nc_server_config_new_keystore_asym_key(ctx, NC_TI_LIBSSH, "test_keystore", TESTS_DIR "/data/key_rsa", NULL, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_new_truststore_pubkey(ctx, "test_truststore", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);
@@ -244,7 +244,7 @@ setup_tls(void **state)
     assert_int_equal(ret, 0);
 
     /* new keystore asym key pair */
-    ret = nc_server_config_new_keystore_asym_key(ctx, "server_key", TESTS_DIR "/data/server.key", NULL, &tree);
+    ret = nc_server_config_new_keystore_asym_key(ctx, NC_TI_OPENSSL, "server_key", TESTS_DIR "/data/server.key", NULL, &tree);
     assert_int_equal(ret, 0);
 
     /* new keystore cert belonging to the key pair */

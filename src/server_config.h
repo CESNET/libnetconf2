@@ -138,6 +138,7 @@ int nc_server_config_new_del_endpt(const char *endpt_name, struct lyd_node **con
  * @brief Creates new YANG data nodes for an asymmetric key in the keystore.
  *
  * @param[in] ctx libyang context.
+ * @param[in] ti Transport in which the key pair will be used. Either SSH or TLS.
  * @param[in] asym_key_name Identifier of the asymmetric key pair.
  * This identifier is used to reference the key pair.
  * @param[in] privkey_path Path to a private key file.
@@ -147,8 +148,8 @@ int nc_server_config_new_del_endpt(const char *endpt_name, struct lyd_node **con
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_keystore_asym_key(const struct ly_ctx *ctx, const char *asym_key_name, const char *privkey_path,
-        const char *pubkey_path, struct lyd_node **config);
+int nc_server_config_new_keystore_asym_key(const struct ly_ctx *ctx, NC_TRANSPORT_IMPL ti, const char *asym_key_name,
+        const char *privkey_path, const char *pubkey_path, struct lyd_node **config);
 
 /**
  * @brief Deletes a keystore's asymmetric key from the YANG data.

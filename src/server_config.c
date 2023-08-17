@@ -26,6 +26,9 @@
 #include <libyang/libyang.h>
 
 #ifdef NC_ENABLED_SSH_TLS
+#include <openssl/err.h>
+#include <openssl/evp.h> // EVP_PKEY_free
+#include <openssl/x509.h> // d2i_PUBKEY
 #include <openssl/x509_vfy.h> // X509_STORE_free
 #endif
 
@@ -525,7 +528,7 @@ nc_server_config_get_private_key_type(const char *format)
         return NC_PRIVKEY_FORMAT_RSA;
     } else if (!strcmp(format, "ec-private-key-format")) {
         return NC_PRIVKEY_FORMAT_EC;
-    } else if (!strcmp(format, "subject-private-key-info-format")) {
+    } else if (!strcmp(format, "private-key-info-format")) {
         return NC_PRIVKEY_FORMAT_X509;
     } else if (!strcmp(format, "openssh-private-key-format")) {
         return NC_PRIVKEY_FORMAT_OPENSSH;
@@ -2006,7 +2009,7 @@ nc_server_config_public_key_format(const struct lyd_node *node, NC_OPERATION op)
 
     format = ((struct lyd_node_term *)node)->value.ident->name;
     if (!strcmp(format, "ssh-public-key-format")) {
-        pubkey_type = NC_PUBKEY_FORMAT_SSH2;
+        pubkey_type = NC_PUBKEY_FORMAT_SSH;
     } else if (!strcmp(format, "subject-public-key-info-format")) {
         pubkey_type = NC_PUBKEY_FORMAT_X509;
     } else {
@@ -2114,6 +2117,41 @@ nc_server_config_tls_replace_server_public_key(const struct lyd_node *node, stru
 }
 
 static int
+nc_server_config_is_pk_subject_public_key_info(const char *b64)
+{
+    int ret = 0;
+    long len;
+    char *bin = NULL, *tmp;
+    EVP_PKEY *pkey = NULL;
+
+    /* base64 2 binary */
+    len = nc_base64_to_bin(b64, &bin);
+    if (len == -1) {
+        ERR(NULL, "Decoding base64 public key to binary failed.");
+        ret = -1;
+        goto cleanup;
+    }
+
+    /* for deallocation later */
+    tmp = bin;
+
+    /* try to create EVP_PKEY from the supposed SubjectPublicKeyInfo binary data */
+    pkey = d2i_PUBKEY(NULL, (const unsigned char **)&tmp, len);
+    if (pkey) {
+        /* success, it's most likely SubjectPublicKeyInfo pubkey */
+        ret = 1;
+    } else {
+        /* fail, it's most likely not SubjectPublicKeyInfo pubkey */
+        ret = 0;
+    }
+
+cleanup:
+    EVP_PKEY_free(pkey);
+    free(bin);
+    return ret;
+}
+
+static int
 nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
@@ -2133,6 +2171,13 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
     if (is_ssh(node) && equal_parent_name(node, 3, "host-key")) {
         /* server's public-key, mandatory leaf */
         if (nc_server_config_get_hostkey(node, &hostkey)) {
+            ret = 1;
+            goto cleanup;
+        }
+
+        /* the public key must not be SubjectPublicKeyInfoFormat, as per the ietf-netconf-server model */
+        if (nc_server_config_is_pk_subject_public_key_info(lyd_get_value(node))) {
+            ERR(NULL, "Using Public Key in the SubjectPublicKeyInfo format as an SSH hostkey is forbidden!");
             ret = 1;
             goto cleanup;
         }
@@ -2176,6 +2221,13 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
             goto cleanup;
         }
 
+        /* the public key must not be SubjectPublicKeyInfoFormat, as per the ietf-netconf-server model */
+        if (nc_server_config_is_pk_subject_public_key_info(lyd_get_value(node))) {
+            ERR(NULL, "Using Public Key in the SubjectPublicKeyInfo format as an SSH user's key is forbidden!");
+            ret = 1;
+            goto cleanup;
+        }
+
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
             ret = nc_server_config_replace_auth_key_public_key_leaf(node, pubkey);
             if (ret) {
@@ -2187,6 +2239,13 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
     } else if (is_tls(node) && equal_parent_name(node, 3, "server-identity")) {
         /* TLS server-identity */
         if (nc_server_config_get_tls_opts(node, &opts)) {
+            ret = 1;
+            goto cleanup;
+        }
+
+        /* the public key must be SubjectPublicKeyInfoFormat, as per the ietf-netconf-server model */
+        if (!nc_server_config_is_pk_subject_public_key_info(lyd_get_value(node))) {
+            ERR(NULL, "TLS server certificate's Public Key must be in the SubjectPublicKeyInfo format!");
             ret = 1;
             goto cleanup;
         }
@@ -2364,11 +2423,17 @@ nc_server_config_create_keystore_reference(const struct lyd_node *node, struct n
     }
 
     if (i == ks->asym_key_count) {
-        ERR(NULL, "Keystore \"%s\" not found.", lyd_get_value(node));
+        ERR(NULL, "Keystore entry \"%s\" not found.", lyd_get_value(node));
         return 1;
     }
 
     hostkey->ks_ref = &ks->asym_keys[i];
+
+    /* check if the referenced public key is SubjectPublicKeyInfo */
+    if (nc_server_config_is_pk_subject_public_key_info(hostkey->ks_ref->pubkey_data)) {
+        ERR(NULL, "Using Public Key in the SubjectPublicKeyInfo format as an SSH hostkey is forbidden!");
+        return 1;
+    }
 
     return 0;
 }
@@ -2530,7 +2595,7 @@ cleanup:
 }
 
 static int
-nc_server_config_replace_truststore_reference(const struct lyd_node *node, struct nc_client_auth *client_auth)
+nc_server_config_ssh_replace_truststore_reference(const struct lyd_node *node, struct nc_client_auth *client_auth)
 {
     uint16_t i;
     struct nc_truststore *ts = &server_opts.truststore;
@@ -2548,6 +2613,14 @@ nc_server_config_replace_truststore_reference(const struct lyd_node *node, struc
     }
 
     client_auth->ts_ref = &ts->pub_bags[i];
+
+    /* check if any of the referenced public keys is SubjectPublicKeyInfo */
+    for (i = 0; i < client_auth->ts_ref->pubkey_count; i++) {
+        if (nc_server_config_is_pk_subject_public_key_info(client_auth->ts_ref->pubkeys[i].data)) {
+            ERR(NULL, "Using Public Key in the SubjectPublicKeyInfo format as an SSH user's key is forbidden!");
+            return 1;
+        }
+    }
 
     return 0;
 }
@@ -2601,7 +2674,7 @@ nc_server_config_truststore_reference(const struct lyd_node *node, NC_OPERATION 
             /* set to truststore */
             auth_client->store = NC_STORE_TRUSTSTORE;
 
-            ret = nc_server_config_replace_truststore_reference(node, auth_client);
+            ret = nc_server_config_ssh_replace_truststore_reference(node, auth_client);
             if (ret) {
                 goto cleanup;
             }

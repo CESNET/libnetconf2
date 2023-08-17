@@ -41,21 +41,13 @@ _nc_server_config_new_ssh_hostkey(const struct ly_ctx *ctx, const char *tree_pat
     int ret = 0;
     char *pubkey = NULL, *privkey = NULL;
     NC_PRIVKEY_FORMAT privkey_type;
-    NC_PUBKEY_FORMAT pubkey_type;
-    const char *privkey_format, *pubkey_format;
+    const char *privkey_format, *pubkey_format = "ietf-crypto-types:ssh-public-key-format";
 
     /* get the keys as a string from the given files */
-    ret = nc_server_config_new_get_keys(privkey_path, pubkey_path, &privkey, &pubkey, &privkey_type, &pubkey_type);
+    ret = nc_server_config_new_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_SSH, &privkey, &privkey_type, &pubkey);
     if (ret) {
         ERR(NULL, "Getting keys from file(s) failed.");
         goto cleanup;
-    }
-
-    /* pubkey format to str */
-    if (pubkey_type == NC_PUBKEY_FORMAT_SSH2) {
-        pubkey_format = "ietf-crypto-types:ssh-public-key-format";
-    } else {
-        pubkey_format = "ietf-crypto-types:subject-public-key-info-format";
     }
 
     /* get privkey identityref value */
@@ -372,20 +364,12 @@ _nc_server_config_new_ssh_user_pubkey(const struct ly_ctx *ctx, const char *tree
 {
     int ret = 0;
     char *pubkey = NULL;
-    NC_PUBKEY_FORMAT pubkey_type;
-    const char *pubkey_format;
+    const char *pubkey_format = "ietf-crypto-types:ssh-public-key-format";
 
     /* get pubkey data */
-    ret = nc_server_config_new_get_pubkey(pubkey_path, &pubkey, &pubkey_type);
+    ret = nc_server_config_new_get_ssh_pubkey_file(pubkey_path, &pubkey);
     if (ret) {
         goto cleanup;
-    }
-
-    /* get pubkey format */
-    if (pubkey_type == NC_PUBKEY_FORMAT_SSH2) {
-        pubkey_format = "ietf-crypto-types:ssh-public-key-format";
-    } else {
-        pubkey_format = "ietf-crypto-types:subject-public-key-info-format";
     }
 
     ret = nc_config_new_create_append(ctx, tree_path, "public-key-format", pubkey_format, config);
