@@ -261,7 +261,7 @@ nc_server_config_ks_public_key_format(const struct lyd_node *node, NC_OPERATION 
 
     format = ((struct lyd_node_term *)node)->value.ident->name;
     if (!strcmp(format, "ssh-public-key-format")) {
-        key->pubkey_type = NC_PUBKEY_FORMAT_SSH2;
+        key->pubkey_type = NC_PUBKEY_FORMAT_SSH;
     } else if (!strcmp(format, "subject-public-key-info-format")) {
         key->pubkey_type = NC_PUBKEY_FORMAT_X509;
     } else {

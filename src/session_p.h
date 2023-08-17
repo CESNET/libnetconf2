@@ -63,8 +63,8 @@ typedef enum {
  * Enumeration of SSH public key formats.
  */
 typedef enum {
-    NC_PUBKEY_FORMAT_SSH2, /**< begins with BEGIN SSH2 PUBLICKEY, see RFC 4716 */
-    NC_PUBKEY_FORMAT_X509 /**< begins with BEGIN PUBLICKEY, see RFC 5280 sec. 4.1.2.7 */
+    NC_PUBKEY_FORMAT_SSH, /**< see RFC 4253, section 6.6 */
+    NC_PUBKEY_FORMAT_X509 /**< see RFC 5280 sec. 4.1.2.7 */
 } NC_PUBKEY_FORMAT;
 
 /**
@@ -744,6 +744,15 @@ struct nc_pam_thread_arg {
  * @return String representing the private key or NULL.
  */
 const char *nc_privkey_format_to_str(NC_PRIVKEY_FORMAT format);
+
+/**
+ * @brief Decodes base64 to binary.
+ *
+ * @param[in] base64 Base64 string.
+ * @param[out] bin Binary result, memory managed by the caller.
+ * @return Length of the binary data on success, -1 on error.
+ */
+int nc_base64_to_bin(const char *base64, char **bin);
 
 #endif /* NC_ENABLED_SSH_TLS */
 

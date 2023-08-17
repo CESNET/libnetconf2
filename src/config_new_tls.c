@@ -38,11 +38,10 @@ _nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const cha
     int ret = 0;
     char *privkey = NULL, *pubkey = NULL, *cert = NULL;
     NC_PRIVKEY_FORMAT privkey_type;
-    NC_PUBKEY_FORMAT pubkey_type;
-    const char *privkey_format, *pubkey_format;
+    const char *privkey_format, *pubkey_format = "ietf-crypto-types:subject-public-key-info-format";
 
     /* get the keys as a string from the given files */
-    ret = nc_server_config_new_get_keys(privkey_path, pubkey_path, &privkey, &pubkey, &privkey_type, &pubkey_type);
+    ret = nc_server_config_new_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_X509, &privkey, &privkey_type, &pubkey);
     if (ret) {
         ERR(NULL, "Getting keys from file(s) failed.");
         goto cleanup;
@@ -53,13 +52,6 @@ _nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const cha
     if (ret) {
         ERR(NULL, "Getting certificate from file \"%s\" failed.", certificate_path);
         goto cleanup;
-    }
-
-    /* get pubkey format str */
-    if (pubkey_type == NC_PUBKEY_FORMAT_X509) {
-        pubkey_format = "ietf-crypto-types:public-key-info-format";
-    } else {
-        pubkey_format = "ietf-crypto-types:ssh-public-key-format";
     }
 
     /* get privkey identityref value */

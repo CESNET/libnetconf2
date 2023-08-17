@@ -73,10 +73,10 @@ typedef enum {
     NC_ALG_MAC
 } NC_ALG_TYPE;
 
-int nc_server_config_new_get_keys(const char *privkey_path, const char *pubkey_path,
-        char **privkey, char **pubkey, NC_PRIVKEY_FORMAT *privkey_type, NC_PUBKEY_FORMAT *pubkey_type);
+int nc_server_config_new_get_asym_key_pair(const char *privkey_path, const char *pubkey_path, NC_PUBKEY_FORMAT wanted_pubkey_type,
+        char **privkey, NC_PRIVKEY_FORMAT *privkey_type, char **pubkey);
 
-int nc_server_config_new_get_pubkey(const char *pubkey_path, char **pubkey, NC_PUBKEY_FORMAT *pubkey_type);
+int nc_server_config_new_get_ssh_pubkey_file(const char *pubkey_path, char **pubkey);
 
 int nc_server_config_new_read_certificate(const char *cert_path, char **cert);
 

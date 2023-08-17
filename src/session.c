@@ -36,6 +36,7 @@
 #ifdef NC_ENABLED_SSH_TLS
 
 #include <libssh/libssh.h>
+#include <openssl/bio.h>
 #include <openssl/conf.h>
 #include <openssl/err.h>
 
@@ -118,6 +119,68 @@ nc_privkey_format_to_str(NC_PRIVKEY_FORMAT format)
     default:
         return NULL;
     }
+}
+
+int
+nc_base64_to_bin(const char *base64, char **bin)
+{
+    BIO *bio, *bio64;
+    size_t used = 0, size = 0, r = 0;
+    void *tmp = NULL;
+    int nl_count, i, remainder;
+    char *b64;
+
+    /* insert new lines into the base64 string, so BIO_read works correctly */
+    nl_count = strlen(base64) / 64;
+    remainder = strlen(base64) - 64 * nl_count;
+    b64 = calloc(strlen(base64) + nl_count + 1, 1);
+    if (!b64) {
+        ERRMEM;
+        return -1;
+    }
+
+    for (i = 0; i < nl_count; i++) {
+        /* copy 64 bytes and add a NL */
+        strncpy(b64 + i * 65, base64 + i * 64, 64);
+        b64[i * 65 + 64] = '\n';
+    }
+
+    /* copy the rest */
+    strncpy(b64 + i * 65, base64 + i * 64, remainder);
+
+    bio64 = BIO_new(BIO_f_base64());
+    if (!bio64) {
+        ERR(NULL, "Error creating a bio (%s).", ERR_reason_error_string(ERR_get_error()));
+        return -1;
+    }
+
+    bio = BIO_new_mem_buf(b64, strlen(b64));
+    if (!bio) {
+        ERR(NULL, "Error creating a bio (%s).", ERR_reason_error_string(ERR_get_error()));
+        return -1;
+    }
+
+    BIO_push(bio64, bio);
+
+    /* store the decoded base64 in bin */
+    *bin = NULL;
+    do {
+        size += 64;
+
+        tmp = realloc(*bin, size);
+        if (!tmp) {
+            free(*bin);
+            return -1;
+        }
+        *bin = tmp;
+
+        r = BIO_read(bio64, *bin + used, 64);
+        used += r;
+    } while (r == 64);
+
+    free(b64);
+    BIO_free_all(bio64);
+    return size;
 }
 
 #endif /* NC_ENABLED_SSH_TLS */

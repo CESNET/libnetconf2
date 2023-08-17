@@ -210,13 +210,313 @@ nc_config_new_privkey_format_to_identityref(NC_PRIVKEY_FORMAT format)
     case NC_PRIVKEY_FORMAT_EC:
         return "ietf-crypto-types:ec-private-key-format";
     case NC_PRIVKEY_FORMAT_X509:
-        return "libnetconf2-netconf-server:subject-private-key-info-format";
+        return "libnetconf2-netconf-server:private-key-info-format";
     case NC_PRIVKEY_FORMAT_OPENSSH:
         return "libnetconf2-netconf-server:openssh-private-key-format";
     default:
         ERR(NULL, "Private key type not supported.");
         return NULL;
     }
+}
+
+static int
+nc_server_config_new_pubkey_bin_to_b64(const unsigned char *pub_bin, int bin_len, char **pubkey)
+{
+    int ret = 0, b64_len;
+    char *pub_b64 = NULL;
+
+    /* get b64 buffer len, for ever 3 bytes of bin 4 bytes of b64 + NULL terminator */
+    if (bin_len % 3 == 0) {
+        pub_b64 = malloc((bin_len / 3) * 4 + 1);
+    } else {
+        /* bin len not divisible by 3, need to add 4 bytes for some padding so that the len is divisible by 4 */
+        pub_b64 = malloc((bin_len / 3) * 4 + 4 + 1);
+    }
+    if (!pub_b64) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* bin to b64 */
+    b64_len = EVP_EncodeBlock((unsigned char *)pub_b64, pub_bin, bin_len);
+    *pubkey = strndup(pub_b64, b64_len);
+    if (!*pubkey) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+cleanup:
+    free(pub_b64);
+    return ret;
+}
+
+static int
+nc_server_config_new_bn_to_bin(const BIGNUM *bn, unsigned char **bin, int *bin_len)
+{
+    int ret = 0;
+    unsigned char *bin_tmp = NULL;
+
+    NC_CHECK_ARG_RET(NULL, bn, bin, bin_len, 1);
+
+    *bin = NULL;
+
+    /* prepare buffer for converting BN to binary */
+    bin_tmp = calloc(BN_num_bytes(bn), sizeof *bin_tmp);
+    if (!bin_tmp) {
+        ERRMEM;
+        return 1;
+    }
+
+    /* convert to binary */
+    *bin_len = BN_bn2bin(bn, bin_tmp);
+
+    /* if the highest bit in the MSB is set a byte with the value 0 has to be prepended */
+    if (bin_tmp[0] & 0x80) {
+        *bin = malloc(*bin_len + 1);
+        if (!*bin) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+
+        (*bin)[0] = 0;
+        memcpy(*bin + 1, bin_tmp, *bin_len);
+        (*bin_len)++;
+    } else {
+        *bin = malloc(*bin_len);
+        if (!*bin) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+
+        memcpy(*bin, bin_tmp, *bin_len);
+    }
+
+cleanup:
+    free(bin_tmp);
+    return ret;
+}
+
+/* ssh pubkey defined in RFC 4253 section 6.6 */
+static int
+nc_server_config_new_evp_pkey_to_ssh_pubkey(EVP_PKEY *pkey, char **pubkey)
+{
+    int ret = 0, e_len, n_len, p_len, bin_len;
+    BIGNUM *e = NULL, *n = NULL, *p = NULL;
+    unsigned char *e_bin = NULL, *n_bin = NULL, *p_bin = NULL, *bin = NULL, *bin_tmp;
+    const char *algorithm_name, *curve_name;
+    char *ec_group = NULL;
+    uint32_t alg_name_len, curve_name_len, alg_name_len_be, curve_name_len_be, p_len_be, e_len_be, n_len_be;
+    size_t ec_group_len;
+
+    if (EVP_PKEY_is_a(pkey, "RSA")) {
+        /* RSA key */
+        algorithm_name = "ssh-rsa";
+
+        /* get the public key params */
+        if (!EVP_PKEY_get_bn_param(pkey, "e", &e) || !EVP_PKEY_get_bn_param(pkey, "n", &n)) {
+            ERR(NULL, "Getting public key parameters from RSA private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = 1;
+            goto cleanup;
+        }
+
+        /* BIGNUM to bin */
+        if (nc_server_config_new_bn_to_bin(e, &e_bin, &e_len) || nc_server_config_new_bn_to_bin(n, &n_bin, &n_len)) {
+            ret = 1;
+            goto cleanup;
+        }
+
+        alg_name_len = strlen(algorithm_name);
+        /* buffer for public key in binary, which looks like this:
+         * alg_name len (4 bytes), alg_name, PK exponent len (4 bytes), PK exponent, modulus len (4 bytes), modulus
+         */
+        bin_len = 4 + alg_name_len + 4 + e_len + 4 + n_len;
+        bin = malloc(bin_len);
+        if (!bin) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+
+        /* to network byte order (big endian) */
+        alg_name_len_be = htonl(alg_name_len);
+        e_len_be = htonl(e_len);
+        n_len_be = htonl(n_len);
+
+        /* create the public key in binary */
+        bin_tmp = bin;
+        memcpy(bin_tmp, &alg_name_len_be, 4);
+        bin_tmp += 4;
+        memcpy(bin_tmp, algorithm_name, alg_name_len);
+        bin_tmp += alg_name_len;
+        memcpy(bin_tmp, &e_len_be, 4);
+        bin_tmp += 4;
+        memcpy(bin_tmp, e_bin, e_len);
+        bin_tmp += e_len;
+        memcpy(bin_tmp, &n_len_be, 4);
+        bin_tmp += 4;
+        memcpy(bin_tmp, n_bin, n_len);
+    } else if (EVP_PKEY_is_a(pkey, "EC")) {
+        /* EC Private key, get it's group first */
+        /* get group len */
+        ret = EVP_PKEY_get_utf8_string_param(pkey, "group", NULL, 0, &ec_group_len);
+        if (!ret) {
+            ret = 1;
+            goto cleanup;
+        }
+        /* alloc mem for group + 1 for \0 */
+        ec_group = malloc(ec_group_len + 1);
+        if (!ec_group) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+        /* get the group */
+        ret = EVP_PKEY_get_utf8_string_param(pkey, "group", ec_group, ec_group_len + 1, NULL);
+        if (!ret) {
+            ERR(NULL, "Getting public key parameter from EC private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = 1;
+            goto cleanup;
+        }
+
+        /* get alg and curve names */
+        if (!strcmp(ec_group, "P-256") || !strcmp(ec_group, "secp256r1") || !strcmp(ec_group, "prime256v1")) {
+            algorithm_name = "ecdsa-sha2-nistp256";
+            curve_name = "nistp256";
+        } else if (!strcmp(ec_group, "P-384") || !strcmp(ec_group, "secp384r1")) {
+            algorithm_name = "ecdsa-sha2-nistp384";
+            curve_name = "nistp384";
+        } else if (!strcmp(ec_group, "P-521") || !strcmp(ec_group, "secp521r1")) {
+            algorithm_name = "ecdsa-sha2-nistp521";
+            curve_name = "nistp521";
+        } else {
+            ERR(NULL, "EC group \"%s\" not supported.", ec_group);
+            ret = 1;
+            goto cleanup;
+        }
+
+        /* get the public key - p, which is a point on the elliptic curve */
+        ret = EVP_PKEY_get_bn_param(pkey, "p", &p);
+        if (!ret) {
+            ERR(NULL, "Getting public key point from the EC private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = 1;
+            goto cleanup;
+        }
+
+        /* prepare buffer for converting p to binary */
+        p_bin = malloc(BN_num_bytes(p));
+        if (!p_bin) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+        /* convert to binary */
+        p_len = BN_bn2bin(p, p_bin);
+
+        alg_name_len = strlen(algorithm_name);
+        curve_name_len = strlen(curve_name);
+        /* buffer for public key in binary, which looks like so:
+         * alg_name len (4 bytes), alg_name, curve_name len (4 bytes), curve_name, PK point p len (4 bytes), PK point p
+         */
+        bin_len = 4 + alg_name_len + 4 + curve_name_len + 4 + p_len;
+        bin = malloc(bin_len);
+        if (!bin) {
+            ERRMEM;
+            ret = 1;
+            goto cleanup;
+        }
+
+        /* to network byte order (big endian) */
+        alg_name_len_be = htonl(alg_name_len);
+        curve_name_len_be = htonl(curve_name_len);
+        p_len_be = htonl(p_len);
+
+        /* create the public key in binary */
+        bin_tmp = bin;
+        memcpy(bin_tmp, &alg_name_len_be, 4);
+        bin_tmp += 4;
+        memcpy(bin_tmp, algorithm_name, alg_name_len);
+        bin_tmp += alg_name_len;
+        memcpy(bin_tmp, &curve_name_len_be, 4);
+        bin_tmp += 4;
+        memcpy(bin_tmp, curve_name, curve_name_len);
+        bin_tmp += curve_name_len;
+        memcpy(bin_tmp, &p_len_be, 4);
+        bin_tmp += 4;
+        memcpy(bin_tmp, p_bin, p_len);
+    } else if (EVP_PKEY_is_a(pkey, "ED25519")) {
+        ERR(NULL, "Generating PEM ED25519 key from OpenSSH is not supported by libssh yet.");
+        ret = 1;
+        goto cleanup;
+    } else {
+        ERR(NULL, "Unable to generate public key from private key (Private key type not supported).");
+        ret = 1;
+        goto cleanup;
+    }
+
+    ret = nc_server_config_new_pubkey_bin_to_b64(bin, bin_len, pubkey);
+    if (ret) {
+        ERR(NULL, "Converting public key from binary to base64 failed.");
+        goto cleanup;
+    }
+
+cleanup:
+    free(bin);
+    free(e_bin);
+    free(n_bin);
+    free(ec_group);
+    free(p_bin);
+    BN_free(e);
+    BN_free(n);
+    BN_free(p);
+    return ret;
+}
+
+/* spki = subject public key info */
+static int
+nc_server_config_new_evp_pkey_to_spki_pubkey(EVP_PKEY *pkey, char **pubkey)
+{
+    int ret = 0, len;
+    BIO *bio = NULL;
+    char *pub_b64 = NULL;
+
+    bio = BIO_new(BIO_s_mem());
+    if (!bio) {
+        ERR(NULL, "Creating new BIO failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* write the evp_pkey contents to bio */
+    if (!PEM_write_bio_PUBKEY(bio, pkey)) {
+        ERR(NULL, "Writing public key to BIO failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* read the pubkey from bio */
+    len = BIO_get_mem_data(bio, &pub_b64);
+    if (len <= 0) {
+        ERR(NULL, "Reading base64 private key from BIO failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* copy the public key without the header and footer */
+    *pubkey = strndup(pub_b64 + strlen(NC_SUBJECT_PUBKEY_INFO_HEADER),
+            len - strlen(NC_SUBJECT_PUBKEY_INFO_HEADER) - strlen(NC_SUBJECT_PUBKEY_INFO_FOOTER));
+    if (!*pubkey) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
+cleanup:
+    BIO_free(bio);
+    return ret;
 }
 
 int
@@ -305,7 +605,7 @@ cleanup:
 }
 
 static int
-nc_server_config_new_read_ssh2_pubkey(FILE *f, char **pubkey)
+nc_server_config_new_read_pubkey_ssh2(FILE *f, char **pubkey)
 {
     char *buffer = NULL;
     size_t size = 0, pubkey_len = 0;
@@ -355,74 +655,20 @@ static int
 nc_server_config_new_read_pubkey_openssl(FILE *f, char **pubkey)
 {
     int ret = 0;
-    EVP_PKEY *pkey = NULL;
-    BIO *bio = NULL;
-    char *key = NULL;
-    int pub_len;
+    EVP_PKEY *pub_pkey = NULL;
+
+    NC_CHECK_ARG_RET(NULL, f, pubkey, 1);
 
     /* read the pubkey from file */
-    pkey = PEM_read_PUBKEY(f, NULL, NULL, NULL);
-    if (!pkey) {
-        ret = -1;
-        goto cleanup;
+    pub_pkey = PEM_read_PUBKEY(f, NULL, NULL, NULL);
+    if (!pub_pkey) {
+        ERR(NULL, "Reading public key from file failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        return 1;
     }
 
-    bio = BIO_new(BIO_s_mem());
-    if (!bio) {
-        ret = -1;
-        goto cleanup;
-    }
+    ret = nc_server_config_new_evp_pkey_to_ssh_pubkey(pub_pkey, pubkey);
 
-    /* write the pubkey into bio */
-    ret = PEM_write_bio_PUBKEY(bio, pkey);
-    if (!ret) {
-        ret = -1;
-        goto cleanup;
-    }
-
-    pub_len = BIO_pending(bio);
-    if (pub_len <= 0) {
-        ret = -1;
-        goto cleanup;
-    }
-
-    /* get pubkey's length */
-    key = malloc(pub_len + 1);
-    if (!key) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* read the public key from bio */
-    ret = BIO_read(bio, key, pub_len);
-    if (ret <= 0) {
-        ret = -1;
-        goto cleanup;
-    }
-    key[pub_len] = '\0';
-
-    /* strip the pubkey of the header and footer */
-    *pubkey = strdup(key + strlen(NC_SUBJECT_PUBKEY_INFO_HEADER));
-    if (!*pubkey) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    (*pubkey)[strlen(*pubkey) - strlen(NC_SUBJECT_PUBKEY_INFO_FOOTER)] = '\0';
-
-    ret = 0;
-cleanup:
-    if (ret == -1) {
-        ERR(NULL, "Error getting public key from file (OpenSSL Error): \"%s\".", ERR_reason_error_string(ERR_get_error()));
-        ret = 1;
-    }
-
-    BIO_free(bio);
-    EVP_PKEY_free(pkey);
-    free(key);
-
+    EVP_PKEY_free(pub_pkey);
     return ret;
 }
 
@@ -432,6 +678,8 @@ nc_server_config_new_read_pubkey_libssh(const char *pubkey_path, char **pubkey)
     int ret = 0;
     ssh_key pub_sshkey = NULL;
 
+    NC_CHECK_ARG_RET(NULL, pubkey_path, pubkey, 1);
+
     ret = ssh_pki_import_pubkey_file(pubkey_path, &pub_sshkey);
     if (ret) {
         ERR(NULL, "Importing public key from file \"%s\" failed.", pubkey_path);
@@ -440,22 +688,24 @@ nc_server_config_new_read_pubkey_libssh(const char *pubkey_path, char **pubkey)
 
     ret = ssh_pki_export_pubkey_base64(pub_sshkey, pubkey);
     if (ret) {
-        ERR(NULL, "Exporting public key to base64 failed.");
+        ERR(NULL, "Importing pubkey failed.");
+        goto cleanup;
     }
 
+cleanup:
     ssh_key_free(pub_sshkey);
-    return ret;
+    return 0;
 }
 
 int
-nc_server_config_new_get_pubkey(const char *pubkey_path, char **pubkey, NC_PUBKEY_FORMAT *pubkey_type)
+nc_server_config_new_get_ssh_pubkey_file(const char *pubkey_path, char **pubkey)
 {
     int ret = 0;
     FILE *f = NULL;
     char *header = NULL;
     size_t len = 0;
 
-    NC_CHECK_ARG_RET(NULL, pubkey, pubkey_type, 1);
+    NC_CHECK_ARG_RET(NULL, pubkey_path, pubkey, 1);
 
     *pubkey = NULL;
 
@@ -466,6 +716,7 @@ nc_server_config_new_get_pubkey(const char *pubkey_path, char **pubkey, NC_PUBKE
         goto cleanup;
     }
 
+    /* read the header */
     if (getline(&header, &len, f) < 0) {
         ERR(NULL, "Error reading header from file \"%s\".", pubkey_path);
         ret = 1;
@@ -476,17 +727,13 @@ nc_server_config_new_get_pubkey(const char *pubkey_path, char **pubkey, NC_PUBKE
     if (!strncmp(header, NC_SUBJECT_PUBKEY_INFO_HEADER, strlen(NC_SUBJECT_PUBKEY_INFO_HEADER))) {
         /* it's subject public key info public key */
         ret = nc_server_config_new_read_pubkey_openssl(f, pubkey);
-        *pubkey_type = NC_PUBKEY_FORMAT_X509;
     } else if (!strncmp(header, NC_SSH2_PUBKEY_HEADER, strlen(NC_SSH2_PUBKEY_HEADER))) {
         /* it's ssh2 public key */
-        ret = nc_server_config_new_read_ssh2_pubkey(f, pubkey);
-        *pubkey_type = NC_PUBKEY_FORMAT_SSH2;
+        ret = nc_server_config_new_read_pubkey_ssh2(f, pubkey);
     } else {
         /* it's probably OpenSSH public key */
         ret = nc_server_config_new_read_pubkey_libssh(pubkey_path, pubkey);
-        *pubkey_type = NC_PUBKEY_FORMAT_SSH2;
     }
-
     if (ret) {
         ERR(NULL, "Error getting public key from file \"%s\".", pubkey_path);
         goto cleanup;
@@ -498,199 +745,190 @@ cleanup:
     }
 
     free(header);
-
-    return ret;
-}
-
-static int
-nc_server_config_new_get_privkey_openssl(FILE *f, char **privkey, EVP_PKEY **priv_pkey)
-{
-    int ret = 0, priv_len;
-    BIO *bio = NULL;
-
-    NC_CHECK_ARG_RET(NULL, privkey, priv_pkey, 1);
-
-    /* read private key from file */
-    *priv_pkey = PEM_read_PrivateKey(f, NULL, NULL, NULL);
-    if (!*priv_pkey) {
-        ret = -1;
-        goto cleanup;
-    }
-
-    bio = BIO_new(BIO_s_mem());
-    if (!bio) {
-        ret = -1;
-        goto cleanup;
-    }
-
-    /* write the private key in to bio */
-    ret = PEM_write_bio_PrivateKey(bio, *priv_pkey, NULL, NULL, 0, NULL, NULL);
-    if (!ret) {
-        ret = -1;
-        goto cleanup;
-    }
-
-    priv_len = BIO_pending(bio);
-    if (priv_len <= 0) {
-        ret = -1;
-        goto cleanup;
-    }
-
-    /* get private key's length */
-    *privkey = malloc(priv_len + 1);
-    if (!*privkey) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* read the private key from bio */
-    ret = BIO_read(bio, *privkey, priv_len);
-    if (ret <= 0) {
-        ret = -1;
-        goto cleanup;
-    }
-    (*privkey)[priv_len] = '\0';
-
-    ret = 0;
-cleanup:
-    if (ret < 0) {
-        ERR(NULL, "Getting private key from file failed (%s).", ERR_reason_error_string(ERR_get_error()));
-    }
-    BIO_free(bio);
-    return ret;
-}
-
-static int
-nc_server_config_new_privkey_to_pubkey_openssl(EVP_PKEY *priv_pkey, char **pubkey)
-{
-    int ret = 0, pub_len;
-    BIO *bio = NULL;
-
-    bio = BIO_new(BIO_s_mem());
-    if (!bio) {
-        ret = -1;
-        goto cleanup;
-    }
-
-    /* write the pubkey into bio */
-    ret = PEM_write_bio_PUBKEY(bio, priv_pkey);
-    if (!ret) {
-        ret = -1;
-        goto cleanup;
-    }
-
-    /* get the length of the pubkey */
-    pub_len = BIO_pending(bio);
-    if (pub_len <= 0) {
-        ret = -1;
-        goto cleanup;
-    }
-
-    *pubkey = malloc(pub_len + 1);
-    if (!*pubkey) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* read the pubkey from the bio */
-    ret = BIO_read(bio, *pubkey, pub_len);
-    if (ret <= 0) {
-        ret = -1;
-        goto cleanup;
-    }
-    (*pubkey)[pub_len] = '\0';
-
-    ret = 0;
-
-cleanup:
-    if (ret < 0) {
-        ERR(NULL, "Converting private to public key failed (%s).", ERR_reason_error_string(ERR_get_error()));
-    }
-    BIO_free(bio);
-    return ret;
-}
-
-static int
-nc_server_config_new_privkey_to_pubkey_libssh(const ssh_key priv_sshkey, char **pubkey)
-{
-    int ret;
-    ssh_key pub_sshkey = NULL;
-
-    ret = ssh_pki_export_privkey_to_pubkey(priv_sshkey, &pub_sshkey);
-    if (ret) {
-        ERR(NULL, "Exporting privkey to pubkey failed.");
-        return ret;
-    }
-
-    ret = ssh_pki_export_pubkey_base64(pub_sshkey, pubkey);
-    if (ret) {
-        ERR(NULL, "Exporting pubkey to base64 failed.");
-    }
-
-    ssh_key_free(pub_sshkey);
-    return ret;
-}
-
-static int
-nc_server_config_new_privkey_to_pubkey(EVP_PKEY *priv_pkey, const ssh_key priv_sshkey, NC_PRIVKEY_FORMAT privkey_type, char **pubkey, NC_PUBKEY_FORMAT *pubkey_type)
-{
-    switch (privkey_type) {
-    case NC_PRIVKEY_FORMAT_RSA:
-    case NC_PRIVKEY_FORMAT_EC:
-    case NC_PRIVKEY_FORMAT_OPENSSH:
-        *pubkey_type = NC_PUBKEY_FORMAT_SSH2;
-        return nc_server_config_new_privkey_to_pubkey_libssh(priv_sshkey, pubkey);
-    case NC_PRIVKEY_FORMAT_X509:
-        *pubkey_type = NC_PUBKEY_FORMAT_X509;
-        return nc_server_config_new_privkey_to_pubkey_openssl(priv_pkey, pubkey);
-    default:
-        break;
-    }
-
-    return 1;
-}
-
-static int
-nc_server_config_new_get_privkey_libssh(const char *privkey_path, char **privkey, ssh_key *priv_sshkey)
-{
-    int ret;
-
-    *priv_sshkey = NULL;
-
-    ret = ssh_pki_import_privkey_file(privkey_path, NULL, NULL, NULL, priv_sshkey);
-    if (ret) {
-        ERR(NULL, "Importing privkey from file \"%s\" failed.", privkey_path);
-        return ret;
-    }
-
-    ret = ssh_pki_export_privkey_base64(*priv_sshkey, NULL, NULL, NULL, privkey);
-    if (ret) {
-        ERR(NULL, "Exporting privkey from file \"%s\" to base64 failed.", privkey_path);
-    }
-
     return ret;
 }
 
 int
-nc_server_config_new_get_keys(const char *privkey_path, const char *pubkey_path,
-        char **privkey, char **pubkey, NC_PRIVKEY_FORMAT *privkey_type, NC_PUBKEY_FORMAT *pubkey_type)
+nc_server_config_new_get_spki_pubkey_file(const char *pubkey_path, char **pubkey)
 {
     int ret = 0;
-    EVP_PKEY *priv_pkey = NULL;
-    ssh_key priv_sshkey = NULL;
-    FILE *f_privkey = NULL;
-    char *header = NULL;
-    size_t len = 0;
-    char *priv = NULL, *pub = NULL;
+    FILE *f = NULL;
+    EVP_PKEY *pub_pkey = NULL;
 
-    NC_CHECK_ARG_RET(NULL, privkey_path, privkey, pubkey, privkey_type, 1);
+    NC_CHECK_ARG_RET(NULL, pubkey_path, pubkey, 1);
 
-    *privkey = NULL;
     *pubkey = NULL;
 
-    /* get private key first */
+    f = fopen(pubkey_path, "r");
+    if (!f) {
+        ERR(NULL, "Unable to open file \"%s\".", pubkey_path);
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* read the pubkey from file */
+    pub_pkey = PEM_read_PUBKEY(f, NULL, NULL, NULL);
+    if (!pub_pkey) {
+        ERR(NULL, "Reading public key from file failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        return 1;
+    }
+
+    ret = nc_server_config_new_evp_pkey_to_spki_pubkey(pub_pkey, pubkey);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    if (f) {
+        fclose(f);
+    }
+
+    EVP_PKEY_free(pub_pkey);
+    return ret;
+}
+
+static int
+nc_server_config_new_privkey_header_to_format(FILE *f_privkey, const char *privkey_path, NC_PRIVKEY_FORMAT *privkey_format)
+{
+    char *privkey_header = NULL;
+    size_t len = 0;
+
+    /* read header */
+    if (getline(&privkey_header, &len, f_privkey) < 0) {
+        ERR(NULL, "Error reading header from file \"%s\".", privkey_path);
+        return 1;
+    }
+
+    if (!strncmp(privkey_header, NC_PKCS8_PRIVKEY_HEADER, strlen(NC_PKCS8_PRIVKEY_HEADER))) {
+        /* it's PKCS8 (X.509) private key */
+        *privkey_format = NC_PRIVKEY_FORMAT_X509;
+    } else if (!strncmp(privkey_header, NC_OPENSSH_PRIVKEY_HEADER, strlen(NC_OPENSSH_PRIVKEY_HEADER))) {
+        /* it's OpenSSH private key */
+        *privkey_format = NC_PRIVKEY_FORMAT_OPENSSH;
+    } else if (!strncmp(privkey_header, NC_PKCS1_RSA_PRIVKEY_HEADER, strlen(NC_PKCS1_RSA_PRIVKEY_HEADER))) {
+        /* it's RSA privkey in PKCS1 format */
+        *privkey_format = NC_PRIVKEY_FORMAT_RSA;
+    } else if (!strncmp(privkey_header, NC_SEC1_EC_PRIVKEY_HEADER, strlen(NC_SEC1_EC_PRIVKEY_HEADER))) {
+        /* it's EC privkey in SEC1 format */
+        *privkey_format = NC_PRIVKEY_FORMAT_EC;
+    } else {
+        ERR(NULL, "Private key format (%s) not supported.", privkey_header);
+        free(privkey_header);
+        return 1;
+    }
+
+    /* reset the reading head */
+    rewind(f_privkey);
+    free(privkey_header);
+    return 0;
+}
+
+static int
+nc_server_config_new_get_privkey_openssl(const char *privkey_path, FILE *f_privkey, char **privkey, EVP_PKEY **pkey)
+{
+    int ret = 0, len;
+    BIO *bio = NULL;
+    char *priv_b64 = NULL;
+
+    bio = BIO_new(BIO_s_mem());
+    if (!bio) {
+        ERR(NULL, "Creating new BIO failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* read the privkey file, create EVP_PKEY */
+    *pkey = PEM_read_PrivateKey(f_privkey, NULL, NULL, NULL);
+    if (!*pkey) {
+        ERR(NULL, "Getting private key from file \"%s\" failed (%s).", privkey_path, ERR_reason_error_string(ERR_get_error()));
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* write the privkey to bio */
+    if (!PEM_write_bio_PrivateKey(bio, *pkey, NULL, NULL, 0, NULL, NULL)) {
+        ERR(NULL, "Writing private key to BIO failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* read the privkey from bio */
+    len = BIO_get_mem_data(bio, &priv_b64);
+    if (len <= 0) {
+        ERR(NULL, "Reading base64 private key from BIO failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ret = 1;
+        goto cleanup;
+    }
+
+    *privkey = strndup(priv_b64, len);
+
+cleanup:
+    BIO_free(bio);
+    return ret;
+}
+
+static int
+nc_server_config_new_get_privkey_libssh(const char *privkey_path, char **privkey, EVP_PKEY **pkey)
+{
+    int ret = 0;
+    BIO *bio = NULL;
+    char *priv_b64 = NULL;
+    ssh_key key = NULL;
+
+    ret = ssh_pki_import_privkey_file(privkey_path, NULL, NULL, NULL, &key);
+    if (ret) {
+        ERR(NULL, "Importing privkey from file \"%s\" failed.", privkey_path);
+        goto cleanup;
+    }
+
+    /* exports the key in a format in which OpenSSL can read it */
+    ret = ssh_pki_export_privkey_base64(key, NULL, NULL, NULL, &priv_b64);
+    if (ret) {
+        ERR(NULL, "Exporting privkey to base64 failed.");
+        goto cleanup;
+    }
+
+    bio = BIO_new(BIO_s_mem());
+    if (!bio) {
+        ERR(NULL, "Creating new BIO failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ret = 1;
+        goto cleanup;
+    }
+
+    ret = BIO_write(bio, priv_b64, strlen(priv_b64));
+    if (ret <= 0) {
+        ERR(NULL, "Writing private key to BIO failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* create EVP_PKEY from the b64 */
+    *pkey = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
+    if (!*pkey) {
+        ERR(NULL, "Getting private key from file \"%s\" failed (%s).", privkey_path, ERR_reason_error_string(ERR_get_error()));
+        ret = 1;
+        goto cleanup;
+    }
+
+    *privkey = strndup(priv_b64, ret);
+
+    /* ok */
+    ret = 0;
+
+cleanup:
+    free(priv_b64);
+    BIO_free(bio);
+    ssh_key_free(key);
+    return ret;
+}
+
+static int
+nc_server_config_new_get_privkey(const char *privkey_path, NC_PRIVKEY_FORMAT *privkey_format, char **privkey, EVP_PKEY **pkey)
+{
+    int ret = 0;
+    FILE *f_privkey = NULL;
+    char *priv = NULL;
+
     f_privkey = fopen(privkey_path, "r");
     if (!f_privkey) {
         ERR(NULL, "Unable to open file \"%s\".", privkey_path);
@@ -698,101 +936,98 @@ nc_server_config_new_get_keys(const char *privkey_path, const char *pubkey_path,
         goto cleanup;
     }
 
-    if (getline(&header, &len, f_privkey) < 0) {
-        ERR(NULL, "Error reading header from file \"%s\".", privkey_path);
-        ret = 1;
+    /* read the first line from the privkey to determine it's type */
+    ret = nc_server_config_new_privkey_header_to_format(f_privkey, privkey_path, privkey_format);
+    if (ret) {
+        ERR(NULL, "Getting private key format from file \"%s\" failed.", privkey_path);
         goto cleanup;
     }
-    rewind(f_privkey);
 
-    if (!strncmp(header, NC_PKCS8_PRIVKEY_HEADER, strlen(NC_PKCS8_PRIVKEY_HEADER))) {
-        /* it's PKCS8 (X.509) private key */
-        *privkey_type = NC_PRIVKEY_FORMAT_X509;
-        ret = nc_server_config_new_get_privkey_openssl(f_privkey, &priv, &priv_pkey);
-    } else if (!strncmp(header, NC_OPENSSH_PRIVKEY_HEADER, strlen(NC_OPENSSH_PRIVKEY_HEADER))) {
-        /* it's OpenSSH private key */
-        *privkey_type = NC_PRIVKEY_FORMAT_OPENSSH;
-        ret = nc_server_config_new_get_privkey_libssh(privkey_path, &priv, &priv_sshkey);
-    } else if (!strncmp(header, NC_PKCS1_RSA_PRIVKEY_HEADER, strlen(NC_PKCS1_RSA_PRIVKEY_HEADER))) {
-        /* it's RSA privkey in PKCS1 format */
-        *privkey_type = NC_PRIVKEY_FORMAT_RSA;
-        ret = nc_server_config_new_get_privkey_libssh(privkey_path, &priv, &priv_sshkey);
-    } else if (!strncmp(header, NC_SEC1_EC_PRIVKEY_HEADER, strlen(NC_SEC1_EC_PRIVKEY_HEADER))) {
-        /* it's EC privkey in SEC1 format */
-        *privkey_type = NC_PRIVKEY_FORMAT_EC;
-        ret = nc_server_config_new_get_privkey_libssh(privkey_path, &priv, &priv_sshkey);
-    } else {
-        ERR(NULL, "Private key format not supported.");
+    switch (*privkey_format) {
+    /* fall-through */
+    case NC_PRIVKEY_FORMAT_RSA:
+    case NC_PRIVKEY_FORMAT_EC:
+    case NC_PRIVKEY_FORMAT_X509:
+        /* OpenSSL solely can do this */
+        ret = nc_server_config_new_get_privkey_openssl(privkey_path, f_privkey, &priv, pkey);
+        break;
+    case NC_PRIVKEY_FORMAT_OPENSSH:
+        /* need the help of libssh */
+        ret = nc_server_config_new_get_privkey_libssh(privkey_path, &priv, pkey);
+        /* if the function returned successfully, the key is no longer OpenSSH, it was converted to x509 */
+        *privkey_format = NC_PRIVKEY_FORMAT_X509;
+        break;
+    default:
+        ERR(NULL, "Private key format not recognized.");
         ret = 1;
-        goto cleanup;
+        break;
     }
     if (ret) {
         goto cleanup;
-    }
-
-    if (pubkey_path) {
-        ret = nc_server_config_new_get_pubkey(pubkey_path, &pub, pubkey_type);
-    } else {
-        ret = nc_server_config_new_privkey_to_pubkey(priv_pkey, priv_sshkey, *privkey_type, &pub, pubkey_type);
-    }
-    if (ret) {
-        ERR(NULL, "Getting public key failed.");
-        goto cleanup;
-    }
-
-    /* strip pubkey's header and footer only if it's generated from pkcs8 key (using OpenSSL),
-     * otherwise it's already stripped
-     */
-    if (!pubkey_path && (*privkey_type == NC_PRIVKEY_FORMAT_X509)) {
-        *pubkey = strdup(pub + strlen(NC_SUBJECT_PUBKEY_INFO_HEADER));
-        if (!*pubkey) {
-            ERRMEM;
-            ret = 1;
-            goto cleanup;
-        }
-        (*pubkey)[strlen(*pubkey) - strlen(NC_SUBJECT_PUBKEY_INFO_FOOTER)] = '\0';
-    } else {
-        *pubkey = strdup(pub);
-        if (!*pubkey) {
-            ERRMEM;
-            ret = 1;
-            goto cleanup;
-        }
     }
 
     /* strip private key's header and footer */
-    if (*privkey_type == NC_PRIVKEY_FORMAT_OPENSSH) {
-        /* only OpenSSH private keys have different header and footer after processing */
-        *privkey = strdup(priv + strlen(NC_OPENSSH_PRIVKEY_HEADER));
-        if (!*privkey) {
-            ERRMEM;
-            ret = 1;
-            goto cleanup;
-        }
-        (*privkey)[strlen(*privkey) - strlen(NC_OPENSSH_PRIVKEY_FOOTER)] = '\0';
-    } else {
-        /* the rest share the same header and footer */
-        *privkey = strdup(priv + strlen(NC_PKCS8_PRIVKEY_HEADER));
-        if (!*privkey) {
-            ERRMEM;
-            ret = 1;
-            goto cleanup;
-        }
-        (*privkey)[strlen(*privkey) - strlen(NC_PKCS8_PRIVKEY_FOOTER)] = '\0';
+    *privkey = strdup(priv + strlen(NC_PKCS8_PRIVKEY_HEADER));
+    if (!*privkey) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
     }
+    (*privkey)[strlen(*privkey) - strlen(NC_PKCS8_PRIVKEY_FOOTER)] = '\0';
 
 cleanup:
     if (f_privkey) {
         fclose(f_privkey);
     }
 
-    free(header);
-    free(pub);
     free(priv);
+    return ret;
+}
 
-    ssh_key_free(priv_sshkey);
+int
+nc_server_config_new_get_asym_key_pair(const char *privkey_path, const char *pubkey_path, NC_PUBKEY_FORMAT wanted_pubkey_format,
+        char **privkey, NC_PRIVKEY_FORMAT *privkey_type, char **pubkey)
+{
+    int ret = 0;
+    EVP_PKEY *priv_pkey = NULL;
+
+    NC_CHECK_ARG_RET(NULL, privkey_path, privkey, privkey_type, pubkey, 1);
+
+    *privkey = NULL;
+    *pubkey = NULL;
+
+    /* get private key base64 and EVP_PKEY */
+    ret = nc_server_config_new_get_privkey(privkey_path, privkey_type, privkey, &priv_pkey);
+    if (ret) {
+        ERR(NULL, "Getting private key from file \"%s\" failed.", privkey_path);
+        goto cleanup;
+    }
+
+    /* get public key, either from file or generate it from the EVP_PKEY */
+    if (!pubkey_path) {
+        if (wanted_pubkey_format == NC_PUBKEY_FORMAT_SSH) {
+            ret = nc_server_config_new_evp_pkey_to_ssh_pubkey(priv_pkey, pubkey);
+        } else {
+            ret = nc_server_config_new_evp_pkey_to_spki_pubkey(priv_pkey, pubkey);
+        }
+    } else {
+        if (wanted_pubkey_format == NC_PUBKEY_FORMAT_SSH) {
+            ret = nc_server_config_new_get_ssh_pubkey_file(pubkey_path, pubkey);
+        } else {
+            ret = nc_server_config_new_get_spki_pubkey_file(pubkey_path, pubkey);
+        }
+    }
+    if (ret) {
+        if (pubkey_path) {
+            ERR(NULL, "Getting public key from file \"%s\" failed.", pubkey_path);
+        } else {
+            ERR(NULL, "Generating public key from private key failed.");
+        }
+        goto cleanup;
+    }
+
+cleanup:
     EVP_PKEY_free(priv_pkey);
-
     return ret;
 }
 
@@ -911,29 +1146,36 @@ nc_server_config_new_ch_del_endpt(const char *client_name, const char *endpt_nam
 }
 
 API int
-nc_server_config_new_keystore_asym_key(const struct ly_ctx *ctx, const char *asym_key_name, const char *privkey_path,
-        const char *pubkey_path, struct lyd_node **config)
+nc_server_config_new_keystore_asym_key(const struct ly_ctx *ctx, NC_TRANSPORT_IMPL ti, const char *asym_key_name,
+        const char *privkey_path, const char *pubkey_path, struct lyd_node **config)
 {
     int ret = 0;
     char *privkey = NULL, *pubkey = NULL;
     NC_PRIVKEY_FORMAT privkey_type;
-    NC_PUBKEY_FORMAT pubkey_type;
     const char *privkey_format, *pubkey_format;
 
     NC_CHECK_ARG_RET(NULL, ctx, asym_key_name, privkey_path, config, 1);
 
     /* get the keys as a string from the given files */
-    ret = nc_server_config_new_get_keys(privkey_path, pubkey_path, &privkey, &pubkey, &privkey_type, &pubkey_type);
+    if (ti == NC_TI_LIBSSH) {
+        ret = nc_server_config_new_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_SSH, &privkey, &privkey_type, &pubkey);
+    } else if (ti == NC_TI_OPENSSL) {
+        ret = nc_server_config_new_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_X509, &privkey, &privkey_type, &pubkey);
+    } else {
+        ERR(NULL, "Only SSH and TLS transports can be used to create an asymmetric key pair in the keystore.");
+        ret = 1;
+        goto cleanup;
+    }
     if (ret) {
         ERR(NULL, "Getting keys from file(s) failed.");
         goto cleanup;
     }
 
     /* get pubkey format str */
-    if (pubkey_type == NC_PUBKEY_FORMAT_X509) {
-        pubkey_format = "ietf-crypto-types:public-key-info-format";
-    } else {
+    if (ti == NC_TI_LIBSSH) {
         pubkey_format = "ietf-crypto-types:ssh-public-key-format";
+    } else {
+        pubkey_format = "ietf-crypto-types:subject-public-key-info-format";
     }
 
     /* get privkey identityref value */
@@ -1028,24 +1270,16 @@ nc_server_config_new_truststore_pubkey(const struct ly_ctx *ctx, const char *pub
 {
     int ret = 0;
     char *pubkey = NULL;
-    NC_PUBKEY_FORMAT pubkey_format;
-    const char *format;
+    const char *pubkey_format = "ietf-crypto-types:ssh-public-key-format";
 
     NC_CHECK_ARG_RET(NULL, ctx, pub_bag_name, pubkey_name, pubkey_path, config, 1);
 
-    ret = nc_server_config_new_get_pubkey(pubkey_path, &pubkey, &pubkey_format);
+    ret = nc_server_config_new_get_ssh_pubkey_file(pubkey_path, &pubkey);
     if (ret) {
         goto cleanup;
     }
 
-    /* pubkey format to str */
-    if (pubkey_format == NC_PUBKEY_FORMAT_SSH2) {
-        format = "ietf-crypto-types:ssh-public-key-format";
-    } else {
-        format = "ietf-crypto-types:subject-public-key-info-format";
-    }
-
-    ret = nc_config_new_create(ctx, config, format, "/ietf-truststore:truststore/public-key-bags/"
+    ret = nc_config_new_create(ctx, config, pubkey_format, "/ietf-truststore:truststore/public-key-bags/"
             "public-key-bag[name='%s']/public-key[name='%s']/public-key-format", pub_bag_name, pubkey_name);
     if (ret) {
         goto cleanup;
