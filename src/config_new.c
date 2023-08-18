@@ -96,7 +96,12 @@ nc_config_new_create(const struct ly_ctx *ctx, struct lyd_node **tree, const cha
     }
 
     /* create the nodes in the path */
-    ret = lyd_new_path(*tree, ctx, path, value, LYD_NEW_PATH_UPDATE, tree);
+    if (!*tree) {
+        ret = lyd_new_path(*tree, ctx, path, value, LYD_NEW_PATH_UPDATE, tree);
+    } else {
+        /* this could output NULL if no new nodes, lyd_find_path would fail then */
+        ret = lyd_new_path(*tree, ctx, path, value, LYD_NEW_PATH_UPDATE, NULL);
+    }
     if (ret) {
         goto cleanup;
     }
@@ -135,7 +140,12 @@ nc_config_new_create_append(const struct ly_ctx *ctx, const char *parent_path, c
     }
 
     /* create the nodes in the path */
-    ret = lyd_new_path(*tree, ctx, path, value, LYD_NEW_PATH_UPDATE, tree);
+    if (!*tree) {
+        ret = lyd_new_path(*tree, ctx, path, value, LYD_NEW_PATH_UPDATE, tree);
+    } else {
+        /* this could output NULL if no new nodes, lyd_find_path would fail then */
+        ret = lyd_new_path(*tree, ctx, path, value, LYD_NEW_PATH_UPDATE, NULL);
+    }
     if (ret) {
         goto cleanup;
     }
