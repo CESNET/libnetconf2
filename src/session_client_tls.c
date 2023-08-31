@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
+#include <openssl/engine.h>
 
 #include <libyang/libyang.h>
 #include <openssl/err.h>
@@ -508,6 +509,10 @@ nc_client_tls_update_opts(struct nc_client_tls_opts *opts, const char *peername)
     char *key;
     X509_LOOKUP *lookup;
     X509_VERIFY_PARAM *vpm = NULL;
+    const int CMD_MANDATORY = 0;
+    EVP_PKEY *pkey = NULL;
+    ENGINE * pkcs11 = NULL;
+    const char* opensc_pkcs11_so = getenv("MODULE");
 
     if (!opts->tls_ctx || opts->tls_ctx_change) {
         SSL_CTX_free(opts->tls_ctx);
@@ -540,13 +545,57 @@ nc_client_tls_update_opts(struct nc_client_tls_opts *opts, const char *peername)
         } else {
             key = opts->key_path;
         }
-        if (SSL_CTX_use_PrivateKey_file(opts->tls_ctx, key, SSL_FILETYPE_PEM) != 1) {
-            ERR(NULL, "Loading the client private key from \'%s\' failed (%s).", key,
-                    ERR_reason_error_string(ERR_get_error()));
+
+        ENGINE_load_dynamic();
+        pkcs11 = ENGINE_by_id( "pkcs11" );
+        if ( pkcs11 == NULL )
+        {
+            ERR(NULL, "Error retrieving 'pkcs11' engine");
             rc = -1;
             goto cleanup;
         }
 
+        if ( 0 != access( opensc_pkcs11_so, R_OK ) )
+        {
+            ERR(NULL, "Error finding '/usr/local/lib/libpkcs11-proxy.so'");
+            rc = -1;
+            goto cleanup;
+        }
+
+        if ( 1 != ENGINE_ctrl_cmd_string( pkcs11, "MODULE_PATH", opensc_pkcs11_so, CMD_MANDATORY ) )
+        {
+            ERR(NULL, "Error setting module_path <= '/usr/local/lib/libpkcs11-proxy.so'");
+            rc = -1;
+            goto cleanup;
+        }
+
+        if ( 1 != ENGINE_init( pkcs11 ) )
+        {
+		    ERR(NULL, "Error pkcs11: unable to initialize engine");
+            rc = -1;
+            goto cleanup;
+        }
+
+        if ( 1 != ENGINE_ctrl_cmd_string( pkcs11, "PIN", "1234", CMD_MANDATORY ) )
+        {
+            ERR(NULL, "Error setting pin");
+            rc = -1;
+            goto cleanup;
+        }
+
+        pkey = ENGINE_load_private_key( pkcs11, key, NULL, NULL );
+        if (!key)
+        {
+            ERR(NULL, "Error reading private key");
+            rc = -1;
+            goto cleanup;
+        }
+        if ((SSL_CTX_use_PrivateKey(opts->tls_ctx, pkey) != 1))
+        {
+            ERR(NULL, "Loading the client private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            rc = -1;
+            goto cleanup;
+        }
         if (!SSL_CTX_load_verify_locations(opts->tls_ctx, opts->ca_file, opts->ca_dir)) {
             ERR(NULL, "Failed to load the locations of trusted CA certificates (%s).",
                     ERR_reason_error_string(ERR_get_error()));
@@ -617,6 +666,7 @@ nc_client_tls_update_opts(struct nc_client_tls_opts *opts, const char *peername)
 
 cleanup:
     X509_VERIFY_PARAM_free(vpm);
+    EVP_PKEY_free(pkey);
     return rc;
 }
 
