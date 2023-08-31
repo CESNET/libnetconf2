@@ -18,6 +18,7 @@
 #include <poll.h>
 #include <string.h>
 #include <unistd.h>
+#include <openssl/engine.h>
 
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -1748,7 +1749,12 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
     int ret = 0;
     NC_SSH_KEY_TYPE privkey_type;
     X509 *cert = NULL;
-    EVP_PKEY *pkey = NULL;
+    EVP_PKEY *key = NULL;
+    ENGINE * pkcs11 = NULL;
+    const int CMD_MANDATORY = 0;
+    const char* opensc_pkcs11_so = getenv("MODULE");
+    const char* uri = getenv("TOKEN_KEY_URI");
+    const char* pin = getenv("DEFAULT_USER_PIN");
 
     if (!cert_name) {
         ERR(NULL, "Server certificate not set.");
@@ -1781,26 +1787,70 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, const char *cert_name)
     }
 
     /* load the private key */
-    if (privkey_path) {
-        if (SSL_CTX_use_PrivateKey_file(tls_ctx, privkey_path, SSL_FILETYPE_PEM) != 1) {
-            ERR(NULL, "Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
-            ret = -1;
-            goto cleanup;
-        }
-    } else {
-        pkey = base64der_to_privatekey(privkey_data, nc_keytype2str(privkey_type));
-        if (!pkey || (SSL_CTX_use_PrivateKey(tls_ctx, pkey) != 1)) {
-            ERR(NULL, "Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
-            ret = -1;
-            goto cleanup;
-        }
-    }
+   if (privkey_path) {
+       if (SSL_CTX_use_PrivateKey_file(tls_ctx, privkey_path, SSL_FILETYPE_PEM) != 1) {
+           ERR(NULL, "1 Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+           ret = -1;
+           goto cleanup;
+       }
+	} else {
 
+        ENGINE_load_dynamic();
+        pkcs11 = ENGINE_by_id( "pkcs11" );
+        if ( pkcs11 == NULL )
+        {
+            ERR(NULL, "Error retrieving 'pkcs11' engine");
+            ret = -1;
+            goto cleanup;
+        }
+
+        if ( 0 != access( opensc_pkcs11_so, R_OK ) )
+        {
+            ERR(NULL, "Error finding pkcs module");
+            ret = -1;
+            goto cleanup;
+        }
+
+        if ( 1 != ENGINE_ctrl_cmd_string( pkcs11, "MODULE_PATH", opensc_pkcs11_so, CMD_MANDATORY ) )
+        {
+            ERR(NULL, "Error setting module_path");
+            ret = -1;
+            goto cleanup;
+        }
+
+        if ( 1 != ENGINE_init( pkcs11 ) )
+        {
+            ERR(NULL, "Error pkcs11: unable to initialize engine");
+            ret = -1;
+            goto cleanup;
+        }
+
+        if ( 1 != ENGINE_ctrl_cmd_string( pkcs11, "PIN", pin, CMD_MANDATORY ) )
+        {
+            ERR(NULL, "Error setting pin");
+            ret = -1;
+            goto cleanup;
+        }
+
+        key = ENGINE_load_private_key( pkcs11, uri, NULL, NULL );
+        if (!key)
+        {
+            ERR(NULL, "Error reading private key using uri");
+            ret = -1;
+            goto cleanup;
+        }
+
+        if ((SSL_CTX_use_PrivateKey(tls_ctx, key) != 1)) {
+            ERR(NULL, "Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = -1;
+            goto cleanup;
+        }
+	}
     ret = nc_tls_ctx_set_server_cert_chain(tls_ctx, cert_name);
 
 cleanup:
     X509_free(cert);
-    EVP_PKEY_free(pkey);
+    EVP_PKEY_free(key);
     free(cert_path);
     free(cert_data);
     free(privkey_path);
