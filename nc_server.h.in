@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-#cmakedefine SSH_TLS_MACRO
+@SSH_TLS_MACRO@
 
 #include <libnetconf2/netconf.h>
 #include <libnetconf2/log.h>
