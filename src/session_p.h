@@ -756,6 +756,15 @@ const char *nc_privkey_format_to_str(NC_PRIVKEY_FORMAT format);
  */
 int nc_base64_to_bin(const char *base64, char **bin);
 
+/**
+ * @brief Checks if the given base64 belongs to a public key in the SubjectPublicKeyInfo format.
+ *
+ * @param[in] b64 Base64 encoded data.
+ *
+ * @return -1 on error, 0 if it is not SPKI public key, 1 if it is a public key in the SPKI format.
+ */
+int nc_is_pk_subject_public_key_info(const char *b64);
+
 #endif /* NC_ENABLED_SSH_TLS */
 
 void *nc_realloc(void *ptr, size_t size);
