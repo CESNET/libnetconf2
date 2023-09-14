@@ -4885,11 +4885,16 @@ static int
 nc_server_config_fill_nectonf_server(const struct lyd_node *data, NC_OPERATION op)
 {
     int ret = 0;
+    uint32_t prev_lo;
     struct lyd_node *tree;
 
+    /* silently search for ietf-netconf-server, it may not be present */
+    prev_lo = ly_log_options(0);
+
     ret = lyd_find_path(data, "/ietf-netconf-server:netconf-server", 0, &tree);
-    if (ret) {
-        ERR(NULL, "Unable to find the netconf-server container in the YANG data.");
+    if (ret || (tree->flags & LYD_DEFAULT)) {
+        /* not found */
+        ret = 0;
         goto cleanup;
     }
 
@@ -4907,6 +4912,8 @@ nc_server_config_fill_nectonf_server(const struct lyd_node *data, NC_OPERATION o
 #endif /* NC_ENABLED_SSH_TLS */
 
 cleanup:
+    /* reset the logging options back to what they were */
+    ly_log_options(prev_lo);
     return ret;
 }
 
@@ -4914,6 +4921,8 @@ API int
 nc_server_config_setup_diff(const struct lyd_node *data)
 {
     int ret = 0;
+
+    NC_CHECK_ARG_RET(NULL, data, 1);
 
     /* LOCK */
     pthread_rwlock_wrlock(&server_opts.config_lock);
@@ -4952,6 +4961,8 @@ nc_server_config_setup_data(const struct lyd_node *data)
 {
     int ret = 0;
     struct lyd_node *tree, *iter, *root;
+
+    NC_CHECK_ARG_RET(NULL, data, 1);
 
     /* LOCK */
     pthread_rwlock_wrlock(&server_opts.config_lock);
