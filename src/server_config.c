@@ -4808,21 +4808,20 @@ nc_server_config_load_modules(struct ly_ctx **ctx)
     /* all features */
     const char *ietf_x509_cert_to_name[] = {NULL};
     /* no private-key-encryption, csr-generation, p10-csr-format, certificate-expiration-notification,
-     * encrypted-passwords, hidden-symmetric-keys, encrypted-symmetric-keys, hidden-private-keys, encrypted-private-keys
+     * encrypted-passwords, hidden-symmetric-keys, encrypted-symmetric-keys, hidden-private-keys, encrypted-private-keys,
+     * one-symmetric-key-format, one-asymmetric-key-format, symmetrically-encrypted-value-format,
+     * asymmetrically-encrypted-value-format, cms-enveloped-data-format, cms-encrypted-data-format,
+     * cleartext-symmetric-keys
      */
-    const char *ietf_crypto_types[] = {
-        "one-symmetric-key-format", "one-asymmetric-key-format", "symmetrically-encrypted-value-format",
-        "asymmetrically-encrypted-value-format", "cms-enveloped-data-format", "cms-encrypted-data-format",
-        "cleartext-passwords", "cleartext-symmetric-keys", "cleartext-private-keys", NULL
-    };
+    const char *ietf_crypto_types[] = {"cleartext-passwords", "cleartext-private-keys", NULL};
     /* all features */
     const char *ietf_tcp_common[] = {"keepalives-supported", NULL};
     /* all features */
     const char *ietf_tcp_server[] = {"tcp-server-keepalives", NULL};
-    /* all features */
-    const char *ietf_tcp_client[] = {"local-binding-supported", "tcp-client-keepalives", "proxy-connect", "socks5-gss-api", "socks5-username-password", NULL};
-    /* no ssh-x509-certs */
-    const char *ietf_ssh_common[] = {"transport-params", "public-key-generation", NULL};
+    /* no proxy-connect, socks5-gss-api, socks5-username-password */
+    const char *ietf_tcp_client[] = {"local-binding-supported", "tcp-client-keepalives", NULL};
+    /* no ssh-x509-certs, public-key-generation */
+    const char *ietf_ssh_common[] = {"transport-params", NULL};
     /* no ssh-server-keepalives and local-user-auth-hostbased */
     const char *ietf_ssh_server[] = {"local-users-supported", "local-user-auth-publickey", "local-user-auth-password", "local-user-auth-none", NULL};
     /* all features */
@@ -4839,14 +4838,12 @@ nc_server_config_load_modules(struct ly_ctx **ctx)
     const char *ietf_keystore[] = {"central-keystore-supported", "inline-definitions-supported", "asymmetric-keys", NULL};
     /* all features */
     const char *ietf_truststore[] = {"central-truststore-supported", "inline-definitions-supported", "certificates", "public-keys", NULL};
+    /* no public-key-generation */
+    const char *ietf_tls_common[] = {"tls10", "tls11", "tls12", "tls13", "hello-params", NULL};
+    /* no tls-server-keepalives, server-ident-raw-public-key, server-ident-tls12-psk, server-ident-tls13-epsk,
+     * client-auth-raw-public-key, client-auth-tls12-psk, client-auth-tls13-epsk */
+    const char *ietf_tls_server[] = {"server-ident-x509-cert", "client-auth-supported", "client-auth-x509-cert", NULL};
     /* all features */
-    const char *ietf_tls_common[] = {"tls10", "tls11", "tls12", "tls13", "hello-params", "public-key-generation", NULL};
-    /* all features */
-    const char *ietf_tls_server[] = {
-        "tls-server-keepalives", "server-ident-x509-cert", "server-ident-raw-public-key", "server-ident-tls12-psk",
-        "server-ident-tls13-epsk", "client-auth-supported", "client-auth-x509-cert", "client-auth-raw-public-key",
-        "client-auth-tls12-psk", "client-auth-tls13-epsk", NULL
-    };
     const char *iana_tls_cipher_suite_algs[] = {NULL};
     /* all features */
     const char *libnetconf2_netconf_server[] = {NULL};
