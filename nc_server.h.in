@@ -25,6 +25,7 @@ extern "C" {
 #include <libnetconf2/netconf.h>
 #include <libnetconf2/log.h>
 #include <libnetconf2/messages_server.h>
+#include <libnetconf2/server_config.h>
 #include <libnetconf2/session_server.h>
 #include <libnetconf2/session_server_ch.h>
 
