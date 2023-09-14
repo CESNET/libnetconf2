@@ -182,12 +182,12 @@ struct nc_client_auth {
  * @brief The server's hostkey.
  */
 struct nc_hostkey {
-    char *name;                             /**<  Arbitrary name of the host key. */
+    char *name;                         /**<  Arbitrary name of the host key. */
 
-    NC_STORE_TYPE store;                  /**< Specifies how/where the key is stored. */
+    NC_STORE_TYPE store;                /**< Specifies how/where the key is stored. */
     union {
-        struct nc_asymmetric_key key;       /**< The server's hostkey. */
-        struct nc_asymmetric_key *ks_ref;   /**< Reference to a key-store. */
+        struct nc_asymmetric_key key;   /**< The server's hostkey. */
+        char *ks_ref;                   /**< Name of the referenced key. */
     };
 };
 

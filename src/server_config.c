@@ -750,6 +750,13 @@ nc_server_config_del_mac_algs(struct nc_server_ssh_opts *opts)
 }
 
 static void
+nc_server_config_del_keystore_reference(struct nc_hostkey *hostkey)
+{
+    free(hostkey->ks_ref);
+    hostkey->ks_ref = NULL;
+}
+
+static void
 nc_server_config_del_hostkey(struct nc_server_ssh_opts *opts, struct nc_hostkey *hostkey)
 {
     assert(hostkey->store == NC_STORE_LOCAL || hostkey->store == NC_STORE_KEYSTORE);
@@ -757,6 +764,8 @@ nc_server_config_del_hostkey(struct nc_server_ssh_opts *opts, struct nc_hostkey 
     if (hostkey->store == NC_STORE_LOCAL) {
         nc_server_config_del_public_key(hostkey);
         nc_server_config_del_private_key(hostkey);
+    } else {
+        nc_server_config_del_keystore_reference(hostkey);
     }
 
     nc_server_config_del_hostkey_name(hostkey);
@@ -2375,35 +2384,6 @@ cleanup:
     return ret;
 }
 
-static int
-nc_server_config_create_keystore_reference(const struct lyd_node *node, struct nc_hostkey *hostkey)
-{
-    uint16_t i;
-    struct nc_keystore *ks = &server_opts.keystore;
-
-    /* lookup name */
-    for (i = 0; i < ks->asym_key_count; i++) {
-        if (!strcmp(lyd_get_value(node), ks->asym_keys[i].name)) {
-            break;
-        }
-    }
-
-    if (i == ks->asym_key_count) {
-        ERR(NULL, "Keystore entry \"%s\" not found.", lyd_get_value(node));
-        return 1;
-    }
-
-    hostkey->ks_ref = &ks->asym_keys[i];
-
-    /* check if the referenced public key is SubjectPublicKeyInfo */
-    if (nc_server_config_is_pk_subject_public_key_info(hostkey->ks_ref->pubkey_data)) {
-        ERR(NULL, "Using Public Key in the SubjectPublicKeyInfo format as an SSH hostkey is forbidden!");
-        return 1;
-    }
-
-    return 0;
-}
-
 /* leaf */
 static int
 nc_server_config_keystore_reference(const struct lyd_node *node, NC_OPERATION op)
@@ -2429,8 +2409,11 @@ nc_server_config_keystore_reference(const struct lyd_node *node, NC_OPERATION op
             /* set to keystore */
             hostkey->store = NC_STORE_KEYSTORE;
 
-            ret = nc_server_config_create_keystore_reference(node, hostkey);
-            if (ret) {
+            nc_server_config_del_keystore_reference(hostkey);
+            hostkey->ks_ref = strdup(lyd_get_value(node));
+            if (!hostkey->ks_ref) {
+                ERRMEM;
+                ret = 1;
                 goto cleanup;
             }
         } else {
