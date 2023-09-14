@@ -827,7 +827,6 @@ module ietf-crypto-types {
       type identityref {
         base public-key-format;
       }
-      mandatory true;
       description
         "Identifies the public key's format. Implementations SHOULD
          ensure that the incoming public key value is encoded in the
@@ -836,7 +835,6 @@ module ietf-crypto-types {
     leaf public-key {
       nacm:default-deny-write;
       type binary;
-      mandatory true;
       description
         "The binary value of the public key.  The interpretation
          of the value is defined by 'public-key-format' field.";
