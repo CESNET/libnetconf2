@@ -31,6 +31,10 @@ module libnetconf2-netconf-server {
     prefix tlss;
   }
 
+  revision "2023-09-07" {
+    description "Initial revision.";
+  }
+
   /*
   identity ed25519-private-key-format {
     base ct:private-key-format;
@@ -315,7 +319,9 @@ module libnetconf2-netconf-server {
           mandatory true;
         }
         leaf mode {
-          type uint16;
+          type string {
+            pattern '[0124567]{3}';
+          }
         }
         leaf uid {
           type uint16;
