@@ -870,6 +870,7 @@ nc_server_config_del_unix_socket(struct nc_bind *bind, struct nc_server_unix_opt
         close(bind->sock);
     }
 
+    unlink(bind->address);
     free(bind->address);
     free(opts->address);
 

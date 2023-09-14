@@ -1364,6 +1364,69 @@ nc_server_config_new_del_truststore_cert(const char *cert_bag_name,
 #endif /* NC_ENABLED_SSH_TLS */
 
 API int
+nc_server_config_new_unix_socket(const struct ly_ctx *ctx, const char *endpt_name, const char *path,
+        mode_t mode, uid_t uid, gid_t gid, struct lyd_node **config)
+{
+    int ret = 0;
+    char *tree_path = NULL;
+    char buf[12] = {0};
+
+    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, path, config, 1);
+
+    if (asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/libnetconf2-netconf-server:unix-socket", endpt_name) == -1) {
+        ERRMEM;
+        tree_path = NULL;
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* path to unix socket */
+    ret = nc_config_new_create_append(ctx, tree_path, "path", path, config);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* mode */
+    if (mode != (mode_t)-1) {
+        if (mode > 0777) {
+            ERR(NULL, "Invalid mode value (%o).", mode);
+            ret = 1;
+            goto cleanup;
+        }
+
+        sprintf(buf, "%o", mode);
+        ret = nc_config_new_create_append(ctx, tree_path, "mode", buf, config);
+        if (ret) {
+            goto cleanup;
+        }
+    }
+
+    /* uid */
+    if (uid != (uid_t)-1) {
+        memset(buf, 0, 12);
+        sprintf(buf, "%u", uid);
+        ret = nc_config_new_create_append(ctx, tree_path, "uid", buf, config);
+        if (ret) {
+            goto cleanup;
+        }
+    }
+
+    /* gid */
+    if (gid != (gid_t)-1) {
+        memset(buf, 0, 12);
+        sprintf(buf, "%u", gid);
+        ret = nc_config_new_create_append(ctx, tree_path, "gid", buf, config);
+        if (ret) {
+            goto cleanup;
+        }
+    }
+
+cleanup:
+    free(tree_path);
+    return ret;
+}
+
+API int
 nc_server_config_new_ch_persistent(const struct ly_ctx *ctx, const char *ch_client_name, struct lyd_node **config)
 {
     NC_CHECK_ARG_RET(NULL, ctx, ch_client_name, config, 1);
