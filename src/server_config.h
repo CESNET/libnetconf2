@@ -123,6 +123,23 @@ int nc_server_config_new_address_port(const struct ly_ctx *ctx, const char *endp
 #endif /* NC_ENABLED_SSH_TLS */
 
 /**
+ * @brief Creates new YANG data nodes for a UNIX socket.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, its contents might be changed.
+ * @param[in] path Path to the socket.
+ * @param[in] mode New mode, use -1 for default.
+ * @param[in] uid New uid, use -1 for default
+ * @param[in] gid New gid, use -1 for default
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_new_unix_socket(const struct ly_ctx *ctx, const char *endpt_name, const char *path,
+        mode_t mode, uid_t uid, gid_t gid, struct lyd_node **config);
+
+/**
  * @brief Deletes an endpoint from the YANG data.
  *
  * @param[in] endpt_name Optional identifier of an endpoint to be deleted.

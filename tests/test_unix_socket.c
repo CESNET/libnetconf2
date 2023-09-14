@@ -36,19 +36,6 @@ struct test_state {
     pthread_barrier_t barrier;
 };
 
-const char *data =
-        "<netconf-server xmlns=\"urn:ietf:params:xml:ns:yang:ietf-netconf-server\" xmlns:yang=\"urn:ietf:params:xml:ns:yang:1\" yang:operation=\"none\">\n"
-        "    <listen yang:operation=\"create\">\n"
-        "        <idle-timeout>10</idle-timeout>\n"
-        "        <endpoint>\n"
-        "            <name>default-unix-socket</name>\n"
-        "            <unix-socket xmlns=\"urn:cesnet:libnetconf2-netconf-server\">\n"
-        "                <path>/tmp/nc2_test_unix_sock</path>\n"
-        "            </unix-socket>\n"
-        "        </endpoint>\n"
-        "    </listen>\n"
-        "</netconf-server>\n";
-
 static void *
 server_thread(void *arg)
 {
@@ -119,7 +106,7 @@ static int
 setup_f(void **state)
 {
     int ret;
-    struct lyd_node *tree;
+    struct lyd_node *tree = NULL;
     struct test_state *test_state;
 
     nc_verbosity(NC_VERB_VERBOSE);
@@ -144,20 +131,23 @@ setup_f(void **state)
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
-    /* parse yang data */
-    ret = lyd_parse_data_mem(ctx, data, LYD_XML, LYD_PARSE_NO_STATE | LYD_PARSE_STRICT, LYD_VALIDATE_NO_STATE, &tree);
+    /* create the UNIX socket */
+    ret = nc_server_config_new_unix_socket(ctx, "unix", "/tmp/nc2_test_unix_sock", 0700, -1, -1, &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
-    ret = nc_server_config_setup_diff(tree);
+    ret = nc_server_config_setup_data(tree);
     assert_int_equal(ret, 0);
 
     /* initialize server */
     ret = nc_server_init();
     assert_int_equal(ret, 0);
 
-    lyd_free_all(tree);
+    /* initialize client */
+    ret = nc_client_init();
+    assert_int_equal(ret, 0);
 
+    lyd_free_all(tree);
     return 0;
 }
 
