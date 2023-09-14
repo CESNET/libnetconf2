@@ -372,6 +372,7 @@ struct nc_client_opts {
     struct nc_keepalives ka;
 
     struct nc_bind *ch_binds;
+    pthread_mutex_t ch_bind_lock;   /**< To avoid concurrent calls of poll and accept on the bound sockets **/
 
     struct {
         NC_TRANSPORT_IMPL ti;
@@ -455,6 +456,7 @@ struct nc_server_opts {
 #endif /* NC_ENABLED_SSH_TLS */
 
     struct nc_bind *binds;
+    pthread_mutex_t bind_lock;          /**< To avoid concurrent calls of poll and accept on the bound sockets **/
     struct nc_endpt {
         char *name;
 #ifdef NC_ENABLED_SSH_TLS
@@ -911,13 +913,14 @@ int nc_sock_listen_unix(const struct nc_server_unix_opts *opts);
  *
  * @param[in] binds Structure with the listening sockets.
  * @param[in] bind_count Number of @p binds.
+ * @param[in] bind_lock Lock for avoiding concurrent poll/accept on a single bind.
  * @param[in] timeout Timeout for accepting.
  * @param[out] host Host of the remote peer. Can be NULL.
  * @param[out] port Port of the new connection. Can be NULL.
  * @param[out] idx Index of the bind that was accepted. Can be NULL.
  * @return Accepted socket of the new connection, -1 on error.
  */
-int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host, uint16_t *port, uint16_t *idx);
+int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t *bind_lock, int timeout, char **host, uint16_t *port, uint16_t *idx);
 
 /**
  * @brief Lock endpoint structures for reading and the specific endpoint.

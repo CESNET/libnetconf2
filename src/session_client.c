@@ -1854,7 +1854,7 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
         return -1;
     }
 
-    sock = nc_sock_accept_binds(client_opts.ch_binds, client_opts.ch_bind_count, timeout, &host, &port, &idx);
+    sock = nc_sock_accept_binds(client_opts.ch_binds, client_opts.ch_bind_count, &client_opts.ch_bind_lock, timeout, &host, &port, &idx);
     if (sock < 1) {
         free(host);
         return sock;
@@ -1919,9 +1919,23 @@ nc_session_ntf_thread_running(const struct nc_session *session)
     return ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread_running);
 }
 
+API int
+nc_client_init(void)
+{
+    int r;
+
+    if ((r = pthread_mutex_init(&client_opts.ch_bind_lock, NULL))) {
+        ERR(NULL, "%s: failed to init bind lock(%s).", __func__, strerror(r));
+        return -1;
+    }
+
+    return 0;
+}
+
 API void
 nc_client_destroy(void)
 {
+    pthread_mutex_destroy(&client_opts.ch_bind_lock);
     nc_client_set_schema_searchpath(NULL);
 #ifdef NC_ENABLED_SSH_TLS
     nc_client_ch_del_bind(NULL, 0, 0);

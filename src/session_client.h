@@ -113,6 +113,13 @@ void nc_client_set_thread_context(void *context);
 void *nc_client_get_thread_context(void);
 
 /**
+ * @brief Initialize client for establishing connections.
+ *
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_init(void);
+
+/**
  * @brief Destroy all libssh and/or libssl/libcrypto dynamic memory and
  * the client options, for both SSH and TLS, and for Call Home too.
  */
