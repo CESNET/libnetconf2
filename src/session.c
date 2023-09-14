@@ -39,6 +39,8 @@
 #include <openssl/bio.h>
 #include <openssl/conf.h>
 #include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/x509.h>
 
 #endif /* NC_ENABLED_SSH_TLS */
 
@@ -181,6 +183,41 @@ nc_base64_to_bin(const char *base64, char **bin)
     free(b64);
     BIO_free_all(bio64);
     return size;
+}
+
+int
+nc_is_pk_subject_public_key_info(const char *b64)
+{
+    int ret = 0;
+    long len;
+    char *bin = NULL, *tmp;
+    EVP_PKEY *pkey = NULL;
+
+    /* base64 2 binary */
+    len = nc_base64_to_bin(b64, &bin);
+    if (len == -1) {
+        ERR(NULL, "Decoding base64 public key to binary failed.");
+        ret = -1;
+        goto cleanup;
+    }
+
+    /* for deallocation later */
+    tmp = bin;
+
+    /* try to create EVP_PKEY from the supposed SubjectPublicKeyInfo binary data */
+    pkey = d2i_PUBKEY(NULL, (const unsigned char **)&tmp, len);
+    if (pkey) {
+        /* success, it's most likely SubjectPublicKeyInfo pubkey */
+        ret = 1;
+    } else {
+        /* fail, it's most likely not SubjectPublicKeyInfo pubkey */
+        ret = 0;
+    }
+
+cleanup:
+    EVP_PKEY_free(pkey);
+    free(bin);
+    return ret;
 }
 
 #endif /* NC_ENABLED_SSH_TLS */

@@ -2118,41 +2118,6 @@ nc_server_config_tls_replace_server_public_key(const struct lyd_node *node, stru
 }
 
 static int
-nc_server_config_is_pk_subject_public_key_info(const char *b64)
-{
-    int ret = 0;
-    long len;
-    char *bin = NULL, *tmp;
-    EVP_PKEY *pkey = NULL;
-
-    /* base64 2 binary */
-    len = nc_base64_to_bin(b64, &bin);
-    if (len == -1) {
-        ERR(NULL, "Decoding base64 public key to binary failed.");
-        ret = -1;
-        goto cleanup;
-    }
-
-    /* for deallocation later */
-    tmp = bin;
-
-    /* try to create EVP_PKEY from the supposed SubjectPublicKeyInfo binary data */
-    pkey = d2i_PUBKEY(NULL, (const unsigned char **)&tmp, len);
-    if (pkey) {
-        /* success, it's most likely SubjectPublicKeyInfo pubkey */
-        ret = 1;
-    } else {
-        /* fail, it's most likely not SubjectPublicKeyInfo pubkey */
-        ret = 0;
-    }
-
-cleanup:
-    EVP_PKEY_free(pkey);
-    free(bin);
-    return ret;
-}
-
-static int
 nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
@@ -2177,7 +2142,7 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
         }
 
         /* the public key must not be SubjectPublicKeyInfoFormat, as per the ietf-netconf-server model */
-        if (nc_server_config_is_pk_subject_public_key_info(lyd_get_value(node))) {
+        if (nc_is_pk_subject_public_key_info(lyd_get_value(node))) {
             ERR(NULL, "Using Public Key in the SubjectPublicKeyInfo format as an SSH hostkey is forbidden!");
             ret = 1;
             goto cleanup;
@@ -2223,7 +2188,7 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
         }
 
         /* the public key must not be SubjectPublicKeyInfoFormat, as per the ietf-netconf-server model */
-        if (nc_server_config_is_pk_subject_public_key_info(lyd_get_value(node))) {
+        if (nc_is_pk_subject_public_key_info(lyd_get_value(node))) {
             ERR(NULL, "Using Public Key in the SubjectPublicKeyInfo format as an SSH user's key is forbidden!");
             ret = 1;
             goto cleanup;
@@ -2245,7 +2210,7 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
         }
 
         /* the public key must be SubjectPublicKeyInfoFormat, as per the ietf-netconf-server model */
-        if (!nc_server_config_is_pk_subject_public_key_info(lyd_get_value(node))) {
+        if (!nc_is_pk_subject_public_key_info(lyd_get_value(node))) {
             ERR(NULL, "TLS server certificate's Public Key must be in the SubjectPublicKeyInfo format!");
             ret = 1;
             goto cleanup;
@@ -2617,7 +2582,7 @@ nc_server_config_ssh_replace_truststore_reference(const struct lyd_node *node, s
 
     /* check if any of the referenced public keys is SubjectPublicKeyInfo */
     for (i = 0; i < client_auth->ts_ref->pubkey_count; i++) {
-        if (nc_server_config_is_pk_subject_public_key_info(client_auth->ts_ref->pubkeys[i].data)) {
+        if (nc_is_pk_subject_public_key_info(client_auth->ts_ref->pubkeys[i].data)) {
             ERR(NULL, "Using Public Key in the SubjectPublicKeyInfo format as an SSH user's key is forbidden!");
             return 1;
         }
