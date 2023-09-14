@@ -489,6 +489,10 @@ setup_f(void **state)
     ret = nc_server_init();
     assert_int_equal(ret, 0);
 
+    /* initialize client */
+    ret = nc_client_init();
+    assert_int_equal(ret, 0);
+
     return 0;
 }
 

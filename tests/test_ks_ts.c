@@ -160,6 +160,10 @@ setup_ssh(void **state)
     ret = nc_server_init();
     assert_int_equal(ret, 0);
 
+    /* initialize client */
+    ret = nc_client_init();
+    assert_int_equal(ret, 0);
+
     lyd_free_all(tree);
 
     return 0;
@@ -282,6 +286,10 @@ setup_tls(void **state)
     assert_int_equal(ret, 0);
 
     ret = nc_server_init();
+    assert_int_equal(ret, 0);
+
+    /* initialize client */
+    ret = nc_client_init();
     assert_int_equal(ret, 0);
 
     lyd_free_all(tree);
