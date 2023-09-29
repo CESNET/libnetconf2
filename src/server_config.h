@@ -833,6 +833,33 @@ int nc_server_config_new_tls_client_ca_truststore_ref(const struct ly_ctx *ctx, 
 int nc_server_config_new_tls_del_client_ca_truststore_ref(const char *endpt_name, struct lyd_node **config);
 
 /**
+ * @brief Creates new YANG configuration data nodes, which will be a reference to another TLS endpoint's certificates.
+ *
+ * Whenever an user tries to connect to the referencing endpoint, all of its certificates will be tried first. If no match is
+ * found, the referenced endpoint's configured certificates will be tried. The same applies to cert-to-name entries.
+ *
+ * @param[in] ctx libyang context
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] referenced_endpt Identifier of an endpoint, which has to exist whenever this data
+ * is applied. The referenced endpoint can reference another one and so on, but there mustn't be a cycle.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_config_new_tls_endpoint_client_ref(const struct ly_ctx *ctx, const char *endpt_name,
+        const char *referenced_endpt, struct lyd_node **config);
+
+/**
+ * @brief Deletes reference to another TLS endpoint's users from the YANG data.
+ *
+ * @param[in] endpt_name Identifier of an existing endpoint.
+ * @param[in,out] config Modified configuration YANG data tree.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_config_new_tls_del_endpoint_client_ref(const char *endpt_name, struct lyd_node **config);
+
+/**
  * @brief Creates new YANG configuration data nodes for a cert-to-name entry.
  *
  * @param[in] ctx libyang context.
@@ -976,33 +1003,6 @@ int nc_server_config_new_tls_crl_cert_ext(const struct ly_ctx *ctx, const char *
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_new_tls_del_crl(const char *endpt_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes, which will be a reference to another TLS endpoint's certificates.
- *
- * Whenever an user tries to connect to the referencing endpoint, all of its certificates will be tried first. If no match is
- * found, the referenced endpoint's configured certificates will be tried. The same applies to cert-to-name entries.
- *
- * @param[in] ctx libyang context
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its contents will be changed.
- * @param[in] referenced_endpt Identifier of an endpoint, which has to exist whenever this data
- * is applied. The referenced endpoint can reference another one and so on, but there mustn't be a cycle.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_config_new_tls_endpoint_client_ref(const struct ly_ctx *ctx, const char *endpt_name,
-        const char *referenced_endpt, struct lyd_node **config);
-
-/**
- * @brief Deletes reference to another TLS endpoint's users from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_config_new_tls_del_endpoint_client_ref(const char *endpt_name, struct lyd_node **config);
 
 /**
  * @} TLS Server Configuration
