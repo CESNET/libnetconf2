@@ -59,14 +59,28 @@ extern ATOMIC_T verbose_level;
 #define GETMACRO4(_1, _2, _3, _4, NAME, ...) NAME
 #define GETMACRO5(_1, _2, _3, _4, _5, NAME, ...) NAME
 #define GETMACRO6(_1, _2, _3, _4, _5, _6, NAME, ...) NAME
+#define GETMACRO7(_1, _2, _3, _4, _5, _6, _7, NAME, ...) NAME
+#define GETMACRO8(_1, _2, _3, _4, _5, _6, _7, _8, NAME, ...) NAME
 
 #define NC_CHECK_ARG_RET1(session, ARG, RETVAL) if (!(ARG)) {ERRARG(session, ARG);return RETVAL;}
-#define NC_CHECK_ARG_RET2(session, ARG1, ARG2, RETVAL) NC_CHECK_ARG_RET1(session, ARG1, RETVAL);NC_CHECK_ARG_RET1(session, ARG2, RETVAL)
-#define NC_CHECK_ARG_RET3(session, ARG1, ARG2, ARG3, RETVAL) NC_CHECK_ARG_RET2(session, ARG1, ARG2, RETVAL);NC_CHECK_ARG_RET1(session, ARG3, RETVAL)
-#define NC_CHECK_ARG_RET4(session, ARG1, ARG2, ARG3, ARG4, RETVAL) NC_CHECK_ARG_RET3(session, ARG1, ARG2, ARG3, RETVAL);\
+#define NC_CHECK_ARG_RET2(session, ARG1, ARG2, RETVAL)\
+    NC_CHECK_ARG_RET1(session, ARG1, RETVAL);\
+    NC_CHECK_ARG_RET1(session, ARG2, RETVAL)
+#define NC_CHECK_ARG_RET3(session, ARG1, ARG2, ARG3, RETVAL)\
+    NC_CHECK_ARG_RET2(session, ARG1, ARG2, RETVAL);\
+    NC_CHECK_ARG_RET1(session, ARG3, RETVAL)
+#define NC_CHECK_ARG_RET4(session, ARG1, ARG2, ARG3, ARG4, RETVAL)\
+    NC_CHECK_ARG_RET3(session, ARG1, ARG2, ARG3, RETVAL);\
     NC_CHECK_ARG_RET1(session, ARG4, RETVAL)
-#define NC_CHECK_ARG_RET5(session, ARG1, ARG2, ARG3, ARG4, ARG5, RETVAL) NC_CHECK_ARG_RET4(session, ARG1, ARG2, ARG3, ARG4, RETVAL);\
+#define NC_CHECK_ARG_RET5(session, ARG1, ARG2, ARG3, ARG4, ARG5, RETVAL)\
+    NC_CHECK_ARG_RET4(session, ARG1, ARG2, ARG3, ARG4, RETVAL);\
     NC_CHECK_ARG_RET1(session, ARG5, RETVAL)
+#define NC_CHECK_ARG_RET6(session, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, RETVAL)\
+    NC_CHECK_ARG_RET5(session, ARG1, ARG2, ARG3, ARG4, ARG5, RETVAL);\
+    NC_CHECK_ARG_RET1(session, ARG6, RETVAL)
+#define NC_CHECK_ARG_RET7(session, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, ARG7, RETVAL)\
+    NC_CHECK_ARG_RET6(session, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, RETVAL);\
+    NC_CHECK_ARG_RET1(session, ARG7, RETVAL)
 
 /**
  * @brief Function's parameters checking macro
@@ -74,7 +88,7 @@ extern ATOMIC_T verbose_level;
  * @param session Session that is logged.
  * @param ... Parameters of the function to check. The last parameter is the value that is returned on error.
  */
-#define NC_CHECK_ARG_RET(session, ...) GETMACRO6(__VA_ARGS__, NC_CHECK_ARG_RET5, NC_CHECK_ARG_RET4, NC_CHECK_ARG_RET3, \
-    NC_CHECK_ARG_RET2, NC_CHECK_ARG_RET1, DUMMY) (session, __VA_ARGS__)
+#define NC_CHECK_ARG_RET(session, ...) GETMACRO8(__VA_ARGS__, NC_CHECK_ARG_RET7, NC_CHECK_ARG_RET6, NC_CHECK_ARG_RET5,\
+    NC_CHECK_ARG_RET4, NC_CHECK_ARG_RET3, NC_CHECK_ARG_RET2, NC_CHECK_ARG_RET1, DUMMY) (session, __VA_ARGS__)
 
 #endif /* NC_LOG_PRIVATE_H_ */
