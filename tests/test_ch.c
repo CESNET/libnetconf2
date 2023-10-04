@@ -98,7 +98,7 @@ server_thread_ssh(void *arg)
     strcpy(expected, "reconnecting in");
 
     /* prepare data for deleting the call-home client */
-    ret = nc_server_config_new_del_ch_client("ch_ssh", &state->ssh_tree);
+    ret = nc_server_config_new_ch_del_ch_client("ch_ssh", &state->ssh_tree);
     assert_int_equal(ret, 0);
 
     /* new poll session */
@@ -282,7 +282,7 @@ server_thread_tls(void *arg)
     struct nc_pollsession *ps;
 
     /* prepare data for deleting the call-home client */
-    ret = nc_server_config_new_del_ch_client("ch_tls", &state->tls_tree);
+    ret = nc_server_config_new_ch_del_ch_client("ch_tls", &state->tls_tree);
     assert_int_equal(ret, 0);
 
     /* new poll session */

@@ -35,55 +35,13 @@
 #include "session_p.h"
 
 int
-nc_config_new_delete(struct lyd_node **tree, const char *path_fmt, ...)
-{
-    int ret = 0;
-    va_list ap;
-    char *path = NULL;
-    struct lyd_node *sub = NULL;
-
-    va_start(ap, path_fmt);
-
-    /* create the path from the format */
-    ret = vasprintf(&path, path_fmt, ap);
-    if (ret == -1) {
-        ERRMEM;
-        path = NULL;
-        goto cleanup;
-    }
-
-    /* find the node we want to delete */
-    ret = lyd_find_path(*tree, path, 0, &sub);
-    if (ret) {
-        goto cleanup;
-    }
-
-    lyd_free_tree(sub);
-
-    /* set the node to top level container */
-    ret = lyd_find_path(*tree, "/ietf-netconf-server:netconf-server", 0, tree);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* add all default nodes */
-    ret = lyd_new_implicit_tree(*tree, LYD_IMPLICIT_NO_STATE, NULL);
-    if (ret) {
-        goto cleanup;
-    }
-
-cleanup:
-    free(path);
-    va_end(ap);
-    return ret;
-}
-
-int
 nc_config_new_create(const struct ly_ctx *ctx, struct lyd_node **tree, const char *value, const char *path_fmt, ...)
 {
     int ret = 0;
     va_list ap;
     char *path = NULL;
+
+    NC_CHECK_ARG_RET(NULL, ctx, tree, path_fmt, 1);
 
     va_start(ap, path_fmt);
 
@@ -131,6 +89,8 @@ nc_config_new_create_append(const struct ly_ctx *ctx, const char *parent_path, c
     int ret = 0;
     char *path = NULL;
 
+    NC_CHECK_ARG_RET(NULL, ctx, parent_path, child_name, tree, 1);
+
     /* create the path by appending child to the parent path */
     ret = asprintf(&path, "%s/%s", parent_path, child_name);
     if (ret == -1) {
@@ -168,12 +128,60 @@ cleanup:
 }
 
 int
+nc_config_new_delete(struct lyd_node **tree, const char *path_fmt, ...)
+{
+    int ret = 0;
+    va_list ap;
+    char *path = NULL;
+    struct lyd_node *sub = NULL;
+
+    NC_CHECK_ARG_RET(NULL, tree, path_fmt, 1);
+
+    va_start(ap, path_fmt);
+
+    /* create the path from the format */
+    ret = vasprintf(&path, path_fmt, ap);
+    if (ret == -1) {
+        ERRMEM;
+        path = NULL;
+        goto cleanup;
+    }
+
+    /* find the node we want to delete */
+    ret = lyd_find_path(*tree, path, 0, &sub);
+    if (ret) {
+        goto cleanup;
+    }
+
+    lyd_free_tree(sub);
+
+    /* set the node to top level container */
+    ret = lyd_find_path(*tree, "/ietf-netconf-server:netconf-server", 0, tree);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* add all default nodes */
+    ret = lyd_new_implicit_tree(*tree, LYD_IMPLICIT_NO_STATE, NULL);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(path);
+    va_end(ap);
+    return ret;
+}
+
+int
 nc_config_new_check_delete(struct lyd_node **tree, const char *path_fmt, ...)
 {
     int ret = 0;
     va_list ap;
     char *path = NULL;
     struct lyd_node *sub = NULL;
+
+    NC_CHECK_ARG_RET(NULL, tree, path_fmt, 1);
 
     va_start(ap, path_fmt);
 
@@ -234,6 +242,8 @@ nc_server_config_new_pubkey_bin_to_b64(const unsigned char *pub_bin, int bin_len
 {
     int ret = 0, b64_len;
     char *pub_b64 = NULL;
+
+    NC_CHECK_ARG_RET(NULL, pub_bin, bin_len, pubkey, 1);
 
     /* get b64 buffer len, for ever 3 bytes of bin 4 bytes of b64 + NULL terminator */
     if (bin_len % 3 == 0) {
@@ -321,6 +331,8 @@ nc_server_config_new_evp_pkey_to_ssh_pubkey(EVP_PKEY *pkey, char **pubkey)
     char *ec_group = NULL;
     uint32_t alg_name_len, curve_name_len, alg_name_len_be, curve_name_len_be, p_len_be, e_len_be, n_len_be;
     size_t ec_group_len;
+
+    NC_CHECK_ARG_RET(NULL, pkey, pubkey, 1);
 
     if (EVP_PKEY_is_a(pkey, "RSA")) {
         /* RSA key */
@@ -467,6 +479,7 @@ nc_server_config_new_evp_pkey_to_ssh_pubkey(EVP_PKEY *pkey, char **pubkey)
         goto cleanup;
     }
 
+    /* convert created bin to b64 */
     ret = nc_server_config_new_pubkey_bin_to_b64(bin, bin_len, pubkey);
     if (ret) {
         ERR(NULL, "Converting public key from binary to base64 failed.");
@@ -492,6 +505,8 @@ nc_server_config_new_evp_pkey_to_spki_pubkey(EVP_PKEY *pkey, char **pubkey)
     int ret = 0, len;
     BIO *bio = NULL;
     char *pub_b64 = NULL;
+
+    NC_CHECK_ARG_RET(NULL, pkey, pubkey, 1);
 
     bio = BIO_new(BIO_s_mem());
     if (!bio) {
@@ -538,7 +553,7 @@ nc_server_config_new_read_certificate(const char *cert_path, char **cert)
     BIO *bio = NULL;
     char *c = NULL;
 
-    *cert = NULL;
+    NC_CHECK_ARG_RET(NULL, cert_path, cert, 1);
 
     f = fopen(cert_path, "r");
     if (!f) {
@@ -623,16 +638,22 @@ nc_server_config_new_read_pubkey_ssh2(FILE *f, char **pubkey)
     ssize_t read;
     int ret = 0;
 
+    NC_CHECK_ARG_RET(NULL, f, pubkey, 1);
+
+    /* read lines from the file and create the public key without NL from it */
     while ((read = getline(&buffer, &size, f)) > 0) {
         if (!strncmp(buffer, "----", 4)) {
+            /* skip header and footer */
             continue;
         }
 
         if (!strncmp(buffer, "Comment:", 8)) {
+            /* skip a comment */
             continue;
         }
 
         if (buffer[read - 1] == '\n') {
+            /* avoid NL */
             read--;
         }
 
@@ -803,6 +824,8 @@ nc_server_config_new_privkey_header_to_format(FILE *f_privkey, const char *privk
     char *privkey_header = NULL;
     size_t len = 0;
 
+    NC_CHECK_ARG_RET(NULL, f_privkey, privkey_path, privkey_format, 1);
+
     /* read header */
     if (getline(&privkey_header, &len, f_privkey) < 0) {
         ERR(NULL, "Error reading header from file \"%s\".", privkey_path);
@@ -840,6 +863,8 @@ nc_server_config_new_get_privkey_openssl(const char *privkey_path, FILE *f_privk
     BIO *bio = NULL;
     char *priv_b64 = NULL;
 
+    NC_CHECK_ARG_RET(NULL, privkey_path, f_privkey, privkey, pkey, 1);
+
     bio = BIO_new(BIO_s_mem());
     if (!bio) {
         ERR(NULL, "Creating new BIO failed (%s).", ERR_reason_error_string(ERR_get_error()));
@@ -871,8 +896,14 @@ nc_server_config_new_get_privkey_openssl(const char *privkey_path, FILE *f_privk
     }
 
     *privkey = strndup(priv_b64, len);
+    if (!*privkey) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
 
 cleanup:
+    /* priv_b64 is freed with BIO */
     BIO_free(bio);
     return ret;
 }
@@ -884,6 +915,8 @@ nc_server_config_new_get_privkey_libssh(const char *privkey_path, char **privkey
     BIO *bio = NULL;
     char *priv_b64 = NULL;
     ssh_key key = NULL;
+
+    NC_CHECK_ARG_RET(NULL, privkey_path, privkey, pkey, 1);
 
     ret = ssh_pki_import_privkey_file(privkey_path, NULL, NULL, NULL, &key);
     if (ret) {
@@ -921,6 +954,11 @@ nc_server_config_new_get_privkey_libssh(const char *privkey_path, char **privkey
     }
 
     *privkey = strndup(priv_b64, ret);
+    if (!*privkey) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
 
     /* ok */
     ret = 0;
@@ -938,6 +976,8 @@ nc_server_config_new_get_privkey(const char *privkey_path, NC_PRIVKEY_FORMAT *pr
     int ret = 0;
     FILE *f_privkey = NULL;
     char *priv = NULL;
+
+    NC_CHECK_ARG_RET(NULL, privkey_path, privkey_format, privkey, pkey, 1);
 
     f_privkey = fopen(privkey_path, "r");
     if (!f_privkey) {
@@ -1049,7 +1089,7 @@ nc_server_config_new_address_port(const struct ly_ctx *ctx, const char *endpt_na
     const char *address_fmt, *port_fmt;
     char port_buf[6] = {0};
 
-    NC_CHECK_ARG_RET(NULL, address, ctx, endpt_name, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, address, config, 1);
 
     if (transport == NC_TI_LIBSSH) {
         /* SSH path */
@@ -1060,7 +1100,7 @@ nc_server_config_new_address_port(const struct ly_ctx *ctx, const char *endpt_na
         address_fmt = "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tcp-server-parameters/local-address";
         port_fmt = "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tcp-server-parameters/local-port";
     } else {
-        ERR(NULL, "Transport not supported.");
+        ERR(NULL, "Can not set address and port of a non SSH/TLS endpoint.");
         ret = 1;
         goto cleanup;
     }
@@ -1087,7 +1127,7 @@ nc_server_config_new_ch_address_port(const struct ly_ctx *ctx, const char *clien
     int ret = 0;
     const char *address_fmt, *port_fmt;
 
-    NC_CHECK_ARG_RET(NULL, address, port, ctx, endpt_name, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, address, port, config, 1);
 
     if (transport == NC_TI_LIBSSH) {
         /* SSH path */
@@ -1130,7 +1170,7 @@ nc_server_config_new_del_endpt(const char *endpt_name, struct lyd_node **config)
 }
 
 API int
-nc_server_config_new_del_ch_client(const char *ch_client_name, struct lyd_node **config)
+nc_server_config_new_ch_del_ch_client(const char *ch_client_name, struct lyd_node **config)
 {
     NC_CHECK_ARG_RET(NULL, config, 1);
 
@@ -1447,7 +1487,7 @@ nc_server_config_new_ch_period(const struct ly_ctx *ctx, const char *ch_client_n
 {
     char buf[6] = {0};
 
-    NC_CHECK_ARG_RET(NULL, ctx, ch_client_name, period, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, ch_client_name, config, 1);
 
     /* delete persistent tree if exists */
     if (nc_config_new_check_delete(config, "/ietf-netconf-server:netconf-server/call-home/"
@@ -1473,7 +1513,7 @@ API int
 nc_server_config_new_ch_anchor_time(const struct ly_ctx *ctx, const char *ch_client_name,
         const char *anchor_time, struct lyd_node **config)
 {
-    NC_CHECK_ARG_RET(NULL, ctx, ch_client_name, anchor_time, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, ch_client_name, anchor_time, config, 1);
 
     /* delete persistent tree if exists */
     if (nc_config_new_check_delete(config, "/ietf-netconf-server:netconf-server/call-home/"
@@ -1500,7 +1540,7 @@ nc_server_config_new_ch_idle_timeout(const struct ly_ctx *ctx, const char *ch_cl
 {
     char buf[6] = {0};
 
-    NC_CHECK_ARG_RET(NULL, ctx, ch_client_name, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, ch_client_name, config, 1);
 
     /* delete persistent tree if exists */
     if (nc_config_new_check_delete(config, "/ietf-netconf-server:netconf-server/call-home/"

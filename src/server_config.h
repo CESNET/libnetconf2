@@ -1056,7 +1056,7 @@ int nc_server_config_new_ch_address_port(const struct ly_ctx *ctx, const char *c
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_new_del_ch_client(const char *client_name, struct lyd_node **config);
+int nc_server_config_new_ch_del_ch_client(const char *client_name, struct lyd_node **config);
 
 /**
  * @brief Deletes a Call Home endpoint from the YANG data.
