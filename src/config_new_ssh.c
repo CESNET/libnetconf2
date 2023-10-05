@@ -16,6 +16,7 @@
 #define _GNU_SOURCE
 
 #include <crypt.h>
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,6 +43,8 @@ _nc_server_config_new_ssh_hostkey(const struct ly_ctx *ctx, const char *tree_pat
     char *pubkey = NULL, *privkey = NULL;
     NC_PRIVKEY_FORMAT privkey_type;
     const char *privkey_format, *pubkey_format = "ietf-crypto-types:ssh-public-key-format";
+
+    NC_CHECK_ARG_RET(NULL, ctx, tree_path, privkey_path, config, 1);
 
     /* get the keys as a string from the given files */
     ret = nc_server_config_new_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_SSH, &privkey, &privkey_type, &pubkey);
@@ -124,8 +127,7 @@ nc_server_config_new_ch_ssh_hostkey(const struct ly_ctx *ctx, const char *client
     int ret = 0;
     char *path = NULL;
 
-    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, hostkey_name, privkey_path, 1);
-    NC_CHECK_ARG_RET(NULL, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, hostkey_name, privkey_path, config, 1);
 
     if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/"
             "netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/server-identity/"
@@ -212,8 +214,7 @@ nc_server_config_new_ch_ssh_keystore_ref(const struct ly_ctx *ctx, const char *c
 {
     int ret = 0;
 
-    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, hostkey_name, keystore_reference, 1);
-    NC_CHECK_ARG_RET(NULL, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, hostkey_name, keystore_reference, config, 1);
 
     ret = nc_config_new_create(ctx, config, keystore_reference, "/ietf-netconf-server:netconf-server/call-home/"
             "netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/server-identity/"
@@ -394,8 +395,7 @@ nc_server_config_new_ssh_user_pubkey(const struct ly_ctx *ctx, const char *endpt
     int ret = 0;
     char *path = NULL;
 
-    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, pubkey_name, pubkey_path, 1);
-    NC_CHECK_ARG_RET(NULL, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, pubkey_name, pubkey_path, config, 1);
 
     if (asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
             "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/inline-definition/"
@@ -408,7 +408,7 @@ nc_server_config_new_ssh_user_pubkey(const struct ly_ctx *ctx, const char *endpt
 
     ret = _nc_server_config_new_ssh_user_pubkey(ctx, path, pubkey_path, config);
     if (ret) {
-        ERR(NULL, "Creating new user's public key failed.");
+        ERR(NULL, "Creating new SSH user's public key failed.");
         goto cleanup;
     }
 
@@ -432,8 +432,7 @@ nc_server_config_new_ch_ssh_user_pubkey(const struct ly_ctx *ctx, const char *cl
     int ret = 0;
     char *path = NULL;
 
-    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, user_name, pubkey_name, 1);
-    NC_CHECK_ARG_RET(NULL, pubkey_path, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, user_name, pubkey_name, pubkey_path, config, 1);
 
     if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
             "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
@@ -447,7 +446,7 @@ nc_server_config_new_ch_ssh_user_pubkey(const struct ly_ctx *ctx, const char *cl
 
     ret = _nc_server_config_new_ssh_user_pubkey(ctx, path, pubkey_path, config);
     if (ret) {
-        ERR(NULL, "Creating new user's public key failed.");
+        ERR(NULL, "Creating new CH SSH user's public key failed.");
         goto cleanup;
     }
 
@@ -508,6 +507,8 @@ _nc_server_config_new_ssh_user_password(const struct ly_ctx *ctx, const char *tr
     char *hashed_pw = NULL;
     const char *salt = "$6$idsizuippipk$";
 
+    NC_CHECK_ARG_RET(NULL, ctx, tree_path, password, config, 1);
+
 #ifdef HAVE_CRYPT_R
     struct crypt_data cdata;
 #endif
@@ -522,7 +523,7 @@ _nc_server_config_new_ssh_user_password(const struct ly_ctx *ctx, const char *tr
 #endif
 
     if (!hashed_pw) {
-        ERR(NULL, "Hashing password failed.");
+        ERR(NULL, "Hashing password failed (%s).", strerror(errno));
         ret = 1;
         goto cleanup;
     }
@@ -555,7 +556,7 @@ nc_server_config_new_ssh_user_password(const struct ly_ctx *ctx, const char *end
 
     ret = _nc_server_config_new_ssh_user_password(ctx, path, password, config);
     if (ret) {
-        ERR(NULL, "Creating new user's public key failed.");
+        ERR(NULL, "Creating new SSH user's password failed.");
         goto cleanup;
     }
 
@@ -571,8 +572,7 @@ nc_server_config_new_ch_ssh_user_password(const struct ly_ctx *ctx, const char *
     int ret = 0;
     char *path = NULL;
 
-    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, user_name, password, 1);
-    NC_CHECK_ARG_RET(NULL, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, user_name, password, config, 1);
 
     if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
             "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
@@ -585,7 +585,7 @@ nc_server_config_new_ch_ssh_user_password(const struct ly_ctx *ctx, const char *
 
     ret = _nc_server_config_new_ssh_user_password(ctx, path, password, config);
     if (ret) {
-        ERR(NULL, "Creating new user's password failed.");
+        ERR(NULL, "Creating new CH SSH user's password failed.");
         goto cleanup;
     }
 
@@ -697,7 +697,7 @@ nc_server_config_new_ssh_user_interactive(const struct ly_ctx *ctx, const char *
 
     ret = _nc_server_config_new_ssh_user_interactive(ctx, path, pam_config_name, pam_config_dir, config);
     if (ret) {
-        ERR(NULL, "Creating new user's keyboard interactive nodes failed.");
+        ERR(NULL, "Creating new SSH user's keyboard interactive nodes failed.");
         goto cleanup;
     }
 
@@ -713,8 +713,7 @@ nc_server_config_new_ch_ssh_user_interactive(const struct ly_ctx *ctx, const cha
     int ret = 0;
     char *path = NULL;
 
-    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, user_name, pam_config_name, 1);
-    NC_CHECK_ARG_RET(NULL, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, user_name, pam_config_name, config, 1);
 
     if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
             "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/"
@@ -727,7 +726,7 @@ nc_server_config_new_ch_ssh_user_interactive(const struct ly_ctx *ctx, const cha
 
     ret = _nc_server_config_new_ssh_user_interactive(ctx, path, pam_config_name, pam_config_dir, config);
     if (ret) {
-        ERR(NULL, "Creating new user's keyboard interactive nodes failed.");
+        ERR(NULL, "Creating new CH SSH user's keyboard interactive nodes failed.");
         goto cleanup;
     }
 
@@ -840,8 +839,7 @@ nc_server_config_new_ch_ssh_truststore_ref(const struct ly_ctx *ctx, const char 
 {
     int ret = 0;
 
-    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, user_name, truststore_reference, 1);
-    NC_CHECK_ARG_RET(NULL, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, user_name, truststore_reference, config, 1);
 
     ret = nc_config_new_create(ctx, config, truststore_reference, "/ietf-netconf-server:netconf-server/call-home/"
             "netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
@@ -891,18 +889,21 @@ nc_server_config_new_ssh_transport_params_prep(const struct ly_ctx *ctx, const c
     int ret = 0;
     char *tree_path = NULL;
 
+    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, config, new_tree, alg_tree, 1);
+
     /* prepare path */
     if (client_name) {
         /* ch */
-        asprintf(&tree_path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
+        ret = asprintf(&tree_path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
                 "endpoint[name='%s']/ssh/ssh-server-parameters/transport-params", client_name, endpt_name);
     } else {
         /* listen */
-        asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+        ret = asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
                 "ssh/ssh-server-parameters/transport-params", endpt_name);
     }
-    if (!tree_path) {
+    if (ret == -1) {
         ERRMEM;
+        tree_path = NULL;
         ret = 1;
         goto cleanup;
     }
@@ -915,7 +916,7 @@ nc_server_config_new_ssh_transport_params_prep(const struct ly_ctx *ctx, const c
     }
 
     if (!*alg_tree) {
-        /* no new nodes added */
+        /* no new nodes added, set the path correctly for adding child nodes later */
         ret = lyd_find_path(config, tree_path, 0, alg_tree);
         if (ret) {
             goto cleanup;
@@ -935,6 +936,8 @@ nc_server_config_new_ssh_transport_params_create(const struct ly_ctx *ctx, NC_AL
     char *alg, *alg_ident;
     const char *module, *alg_path, *old_path;
     struct lyd_node *old = NULL;
+
+    NC_CHECK_ARG_RET(NULL, ctx, tree, 1);
 
     /* get the correct module with the indentity base and the path in the ietf-netconf-server module */
     switch (alg_type) {
@@ -973,8 +976,7 @@ nc_server_config_new_ssh_transport_params_create(const struct ly_ctx *ctx, NC_AL
     for (i = 0; i < alg_count; i++) {
         alg = va_arg(ap, char *);
 
-        asprintf(&alg_ident, "%s:%s", module, alg);
-        if (!alg_ident) {
+        if (asprintf(&alg_ident, "%s:%s", module, alg) == -1) {
             ERRMEM;
             ret = 1;
             goto cleanup;
@@ -984,10 +986,12 @@ nc_server_config_new_ssh_transport_params_create(const struct ly_ctx *ctx, NC_AL
         ret = lyd_new_path(tree, ctx, alg_path, alg_ident, 0, NULL);
         if (ret) {
             ERR(NULL, "Creating new algorithm leaf-list failed.");
+            free(alg_ident);
             goto cleanup;
         }
 
         free(alg_ident);
+        alg_ident = NULL;
     }
 
 cleanup:
@@ -1001,6 +1005,9 @@ nc_server_config_new_ssh_transport_params(const struct ly_ctx *ctx, const char *
     int ret = 0;
     struct lyd_node *new_tree, *alg_tree;
 
+    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, config, 1);
+
+    /* prepare the tree for appending child nodes (the params) */
     ret = nc_server_config_new_ssh_transport_params_prep(ctx, client_name, endpt_name, *config, &new_tree, &alg_tree);
     if (ret) {
         goto cleanup;
@@ -1010,16 +1017,18 @@ nc_server_config_new_ssh_transport_params(const struct ly_ctx *ctx, const char *
         *config = new_tree;
     }
 
+    /* create the child nodes */
     ret = nc_server_config_new_ssh_transport_params_create(ctx, alg_type, alg_count, ap, alg_tree);
     if (ret) {
         goto cleanup;
     }
 
-    /* Add all default nodes */
+    /* add all default nodes */
     ret = lyd_new_implicit_tree(*config, LYD_IMPLICIT_NO_STATE, NULL);
     if (ret) {
         goto cleanup;
     }
+
 cleanup:
     return ret;
 }
