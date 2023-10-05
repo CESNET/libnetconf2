@@ -181,6 +181,11 @@ setup_f(void **state)
     ret = nc_server_config_new_tls_crl_path(ctx, "endpt", TESTS_DIR "/data/crl.pem", &tree);
     assert_int_equal(ret, 0);
 
+    /* check if the choice node was removed */
+    ret = lyd_find_path(tree, "/ietf-netconf-server:netconf-server/listen/endpoint[name='endpt']/tls/tls-server-parameters/"
+            "client-authentication/libnetconf2-netconf-server:crl-url", 0, NULL);
+    assert_int_not_equal(ret, 0);
+
     /* configure the server based on the data */
     ret = nc_server_config_setup_data(tree);
     assert_int_equal(ret, 0);

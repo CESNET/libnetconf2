@@ -32,13 +32,15 @@
 #include "session_p.h"
 
 static int
-_nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const char *tree_path, const char *pubkey_path,
-        const char *privkey_path, const char *certificate_path, struct lyd_node **config)
+_nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const char *tree_path, const char *privkey_path,
+        const char *pubkey_path, const char *certificate_path, struct lyd_node **config)
 {
     int ret = 0;
     char *privkey = NULL, *pubkey = NULL, *cert = NULL;
     NC_PRIVKEY_FORMAT privkey_type;
     const char *privkey_format, *pubkey_format = "ietf-crypto-types:subject-public-key-info-format";
+
+    NC_CHECK_ARG_RET(NULL, ctx, tree_path, privkey_path, certificate_path, config, 1);
 
     /* get the keys as a string from the given files */
     ret = nc_server_config_new_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_X509, &privkey, &privkey_type, &pubkey);
@@ -116,7 +118,7 @@ nc_server_config_new_tls_server_certificate(const struct ly_ctx *ctx, const char
         goto cleanup;
     }
 
-    ret = _nc_server_config_new_tls_server_certificate(ctx, path, pubkey_path, privkey_path,
+    ret = _nc_server_config_new_tls_server_certificate(ctx, path, privkey_path, pubkey_path,
             certificate_path, config);
     if (ret) {
         ERR(NULL, "Creating new TLS server certificate YANG data failed.");
@@ -144,8 +146,7 @@ nc_server_config_new_ch_tls_server_certificate(const struct ly_ctx *ctx, const c
     int ret = 0;
     char *path = NULL;
 
-    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, privkey_path, certificate_path, 1);
-    NC_CHECK_ARG_RET(NULL, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, privkey_path, certificate_path, config, 1);
 
     if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/"
             "netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tls-server-parameters/server-identity/"
@@ -156,7 +157,7 @@ nc_server_config_new_ch_tls_server_certificate(const struct ly_ctx *ctx, const c
         goto cleanup;
     }
 
-    ret = _nc_server_config_new_tls_server_certificate(ctx, path, pubkey_path, privkey_path,
+    ret = _nc_server_config_new_tls_server_certificate(ctx, path, privkey_path, pubkey_path,
             certificate_path, config);
     if (ret) {
         ERR(NULL, "Creating new CH TLS server certificate YANG data failed.");
@@ -250,8 +251,7 @@ nc_server_config_new_ch_tls_keystore_ref(const struct ly_ctx *ctx, const char *c
     int ret = 0;
     char *path = NULL;
 
-    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, asym_key_ref, cert_ref, 1);
-    NC_CHECK_ARG_RET(NULL, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, asym_key_ref, cert_ref, config, 1);
 
     if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
             "endpoint[name='%s']/tls/tls-server-parameters/server-identity/certificate", client_name, endpt_name) == -1) {
@@ -288,6 +288,8 @@ _nc_server_config_new_tls_client_certificate(const struct ly_ctx *ctx, const cha
 {
     int ret = 0;
     char *cert = NULL;
+
+    NC_CHECK_ARG_RET(NULL, ctx, tree_path, cert_path, config, 1);
 
     ret = nc_server_config_new_read_certificate(cert_path, &cert);
     if (ret) {
@@ -363,8 +365,7 @@ nc_server_config_new_ch_tls_client_certificate(const struct ly_ctx *ctx, const c
     int ret = 0;
     char *path = NULL;
 
-    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, cert_name, cert_path, 1);
-    NC_CHECK_ARG_RET(NULL, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, cert_name, cert_path, config, 1);
 
     if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
             "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication/ee-certs/"
@@ -541,8 +542,7 @@ nc_server_config_new_ch_tls_client_ca(const struct ly_ctx *ctx, const char *clie
     int ret = 0;
     char *path = NULL;
 
-    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, cert_name, cert_path, 1);
-    NC_CHECK_ARG_RET(NULL, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, cert_name, cert_path, config, 1);
 
     if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
             "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication/ca-certs/"
@@ -679,7 +679,7 @@ nc_config_new_tls_maptype2str(NC_TLS_CTN_MAPTYPE map_type)
         return "ietf-x509-cert-to-name:common-name";
     case NC_TLS_CTN_UNKNOWN:
     default:
-        ERR(NULL, "Unknown map_type.");
+        ERR(NULL, "Unknown CTN mapping type.");
         return NULL;
     }
 }
@@ -690,6 +690,8 @@ _nc_server_config_new_tls_ctn(const struct ly_ctx *ctx, const char *tree_path, c
 {
     int ret = 0;
     const char *map;
+
+    NC_CHECK_ARG_RET(NULL, ctx, tree_path, name, config, 1);
 
     if (fingerprint) {
         /* optional */
@@ -769,7 +771,7 @@ nc_server_config_new_ch_tls_ctn(const struct ly_ctx *ctx, const char *client_nam
     int ret = 0;
     char *path = NULL;
 
-    NC_CHECK_ARG_RET(NULL, client_name, endpt_name, id, name, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, id, name, config, 1);
 
     if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
             "endpoints/endpoint[name='%s']/tls/netconf-server-parameters/client-identity-mappings/"
@@ -782,7 +784,7 @@ nc_server_config_new_ch_tls_ctn(const struct ly_ctx *ctx, const char *client_nam
 
     ret = _nc_server_config_new_tls_ctn(ctx, path, fingerprint, map_type, name, config);
     if (ret) {
-        ERR(NULL, "Creating new TLS cert-to-name YANG data failed.");
+        ERR(NULL, "Creating new CH TLS cert-to-name YANG data failed.");
         goto cleanup;
     }
 
@@ -835,6 +837,7 @@ nc_server_config_new_tls_version(const struct ly_ctx *ctx, const char *endpt_nam
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, config, 1);
 
+    /* version to str */
     version = nc_config_new_tls_tlsversion2str(tls_version);
     if (!version) {
         ret = 1;
@@ -861,6 +864,7 @@ nc_server_config_new_ch_tls_version(const struct ly_ctx *ctx, const char *client
 
     NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, config, 1);
 
+    /* version to str */
     version = nc_config_new_tls_tlsversion2str(tls_version);
     if (!version) {
         ret = 1;
@@ -871,7 +875,7 @@ nc_server_config_new_ch_tls_version(const struct ly_ctx *ctx, const char *client
             "netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tls-server-parameters/"
             "hello-params/tls-versions/tls-version", client_name, endpt_name);
     if (ret) {
-        ERR(NULL, "Creating new YANG data nodes for Call-Home TLS version failed.");
+        ERR(NULL, "Creating new YANG data nodes for CH TLS version failed.");
         goto cleanup;
     }
 
@@ -887,6 +891,7 @@ nc_server_config_new_tls_del_version(const char *endpt_name, NC_TLS_VERSION tls_
 
     NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
 
+    /* version to str */
     version = nc_config_new_tls_tlsversion2str(tls_version);
     if (!version) {
         ret = 1;
@@ -909,6 +914,7 @@ nc_server_config_new_ch_tls_del_version(const char *client_name, const char *end
 
     NC_CHECK_ARG_RET(NULL, client_name, endpt_name, config, 1);
 
+    /* version to str */
     version = nc_config_new_tls_tlsversion2str(tls_version);
     if (!version) {
         ret = 1;
@@ -931,6 +937,8 @@ _nc_server_config_new_tls_ciphers(const struct ly_ctx *ctx, const char *tree_pat
     struct lyd_node *old = NULL;
     char *cipher = NULL, *cipher_ident = NULL;
 
+    NC_CHECK_ARG_RET(NULL, ctx, tree_path, config, 1);
+
     /* delete all older algorithms (if any) se they can be replaced by the new ones */
     lyd_find_path(*config, tree_path, 0, &old);
     if (old) {
@@ -940,8 +948,7 @@ _nc_server_config_new_tls_ciphers(const struct ly_ctx *ctx, const char *tree_pat
     for (i = 0; i < cipher_count; i++) {
         cipher = va_arg(ap, char *);
 
-        ret = asprintf(&cipher_ident, "iana-tls-cipher-suite-algs:%s", cipher);
-        if (ret == -1) {
+        if (asprintf(&cipher_ident, "iana-tls-cipher-suite-algs:%s", cipher) == -1) {
             ERRMEM;
             ret = 1;
             goto cleanup;
@@ -949,6 +956,7 @@ _nc_server_config_new_tls_ciphers(const struct ly_ctx *ctx, const char *tree_pat
 
         ret = nc_config_new_create_append(ctx, tree_path, "cipher-suite", cipher_ident, config);
         if (ret) {
+            free(cipher_ident);
             goto cleanup;
         }
 
@@ -983,6 +991,7 @@ nc_server_config_new_tls_ciphers(const struct ly_ctx *ctx, const char *endpt_nam
     ret = _nc_server_config_new_tls_ciphers(ctx, path, cipher_count, ap, config);
     if (ret) {
         ERR(NULL, "Creating new TLS cipher YANG data nodes failed.");
+        goto cleanup;
     }
 
 cleanup:
@@ -1014,6 +1023,7 @@ nc_server_config_new_ch_tls_ciphers(const struct ly_ctx *ctx, const char *client
     ret = _nc_server_config_new_tls_ciphers(ctx, path, cipher_count, ap, config);
     if (ret) {
         ERR(NULL, "Creating new Call-Home TLS cipher YANG data nodes failed.");
+        goto cleanup;
     }
 
 cleanup:
@@ -1048,32 +1058,8 @@ _nc_server_config_new_tls_crl_path(const struct ly_ctx *ctx, const char *tree_pa
         const char *crl_path, struct lyd_node **config)
 {
     int ret = 0;
-    struct lyd_node *node = NULL;
-    char *url_path = NULL, *ext_path = NULL;
 
-    if (asprintf(&url_path, "%s/libnetconf2-netconf-server:crl-url", tree_path) == -1) {
-        ERRMEM;
-        url_path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
-
-    if (asprintf(&ext_path, "%s/libnetconf2-netconf-server:crl-cert-ext", tree_path) == -1) {
-        ERRMEM;
-        ext_path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* delete other choice nodes if they are present */
-    ret = lyd_find_path(*config, url_path, 0, &node);
-    if (!ret) {
-        lyd_free_tree(node);
-    }
-    ret = lyd_find_path(*config, ext_path, 0, &node);
-    if (!ret) {
-        lyd_free_tree(node);
-    }
+    NC_CHECK_ARG_RET(NULL, ctx, tree_path, crl_path, config, 1);
 
     /* create the crl path node */
     ret = nc_config_new_create_append(ctx, tree_path, "libnetconf2-netconf-server:crl-path", crl_path, config);
@@ -1081,9 +1067,17 @@ _nc_server_config_new_tls_crl_path(const struct ly_ctx *ctx, const char *tree_pa
         goto cleanup;
     }
 
+    /* delete other choice nodes if they are present */
+    ret = nc_config_new_check_delete(config, "%s/libnetconf2-netconf-server:crl-url", tree_path);
+    if (ret) {
+        goto cleanup;
+    }
+    ret = nc_config_new_check_delete(config, "%s/libnetconf2-netconf-server:crl-cert-ext", tree_path);
+    if (ret) {
+        goto cleanup;
+    }
+
 cleanup:
-    free(url_path);
-    free(ext_path);
     return ret;
 }
 
@@ -1135,7 +1129,7 @@ nc_server_config_new_ch_tls_crl_path(const struct ly_ctx *ctx, const char *clien
 
     ret = _nc_server_config_new_tls_crl_path(ctx, path, crl_path, config);
     if (ret) {
-        ERR(NULL, "Creating new Call-Home CRL YANG data nodes failed.");
+        ERR(NULL, "Creating new CH CRL YANG data nodes failed.");
         goto cleanup;
     }
 
@@ -1149,32 +1143,8 @@ _nc_server_config_new_tls_crl_url(const struct ly_ctx *ctx, const char *tree_pat
         const char *crl_url, struct lyd_node **config)
 {
     int ret = 0;
-    struct lyd_node *node = NULL;
-    char *crl_path = NULL, *ext_path = NULL;
 
-    if (asprintf(&crl_path, "%s/libnetconf2-netconf-server:crl-path", tree_path) == -1) {
-        ERRMEM;
-        crl_path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
-
-    if (asprintf(&ext_path, "%s/libnetconf2-netconf-server:crl-cert-ext", tree_path) == -1) {
-        ERRMEM;
-        ext_path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* delete other choice nodes if they are present */
-    ret = lyd_find_path(*config, crl_path, 0, &node);
-    if (!ret) {
-        lyd_free_tree(node);
-    }
-    ret = lyd_find_path(*config, ext_path, 0, &node);
-    if (!ret) {
-        lyd_free_tree(node);
-    }
+    NC_CHECK_ARG_RET(NULL, ctx, tree_path, crl_url, config, 1);
 
     /* create the crl path node */
     ret = nc_config_new_create_append(ctx, tree_path, "libnetconf2-netconf-server:crl-url", crl_url, config);
@@ -1182,9 +1152,17 @@ _nc_server_config_new_tls_crl_url(const struct ly_ctx *ctx, const char *tree_pat
         goto cleanup;
     }
 
+    /* delete other choice nodes if they are present */
+    ret = nc_config_new_check_delete(config, "%s/libnetconf2-netconf-server:crl-path", tree_path);
+    if (ret) {
+        goto cleanup;
+    }
+    ret = nc_config_new_check_delete(config, "%s/libnetconf2-netconf-server:crl-cert-ext", tree_path);
+    if (ret) {
+        goto cleanup;
+    }
+
 cleanup:
-    free(crl_path);
-    free(ext_path);
     return ret;
 }
 
@@ -1235,7 +1213,7 @@ nc_server_config_new_ch_tls_crl_url(const struct ly_ctx *ctx, const char *client
 
     ret = _nc_server_config_new_tls_crl_url(ctx, path, crl_url, config);
     if (ret) {
-        ERR(NULL, "Creating new Call-Home CRL YANG data nodes failed.");
+        ERR(NULL, "Creating new CH CRL YANG data nodes failed.");
         goto cleanup;
     }
 
@@ -1248,32 +1226,8 @@ static int
 _nc_server_config_new_tls_crl_cert_ext(const struct ly_ctx *ctx, const char *tree_path, struct lyd_node **config)
 {
     int ret = 0;
-    struct lyd_node *node = NULL;
-    char *crl_path = NULL, *url_path = NULL;
 
-    if (asprintf(&crl_path, "%s/libnetconf2-netconf-server:crl-path", tree_path) == -1) {
-        ERRMEM;
-        crl_path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
-
-    if (asprintf(&url_path, "%s/libnetconf2-netconf-server:crl-url", tree_path) == -1) {
-        ERRMEM;
-        url_path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* delete other choice nodes if they are present */
-    ret = lyd_find_path(*config, crl_path, 0, &node);
-    if (!ret) {
-        lyd_free_tree(node);
-    }
-    ret = lyd_find_path(*config, url_path, 0, &node);
-    if (!ret) {
-        lyd_free_tree(node);
-    }
+    NC_CHECK_ARG_RET(NULL, ctx, tree_path, config, 1);
 
     /* create the crl path node */
     ret = nc_config_new_create_append(ctx, tree_path, "libnetconf2-netconf-server:crl-cert-ext", NULL, config);
@@ -1281,9 +1235,17 @@ _nc_server_config_new_tls_crl_cert_ext(const struct ly_ctx *ctx, const char *tre
         goto cleanup;
     }
 
+    /* delete other choice nodes if they are present */
+    ret = nc_config_new_check_delete(config, "%s/libnetconf2-netconf-server:crl-path", tree_path);
+    if (ret) {
+        goto cleanup;
+    }
+    ret = nc_config_new_check_delete(config, "%s/libnetconf2-netconf-server:crl-url", tree_path);
+    if (ret) {
+        goto cleanup;
+    }
+
 cleanup:
-    free(crl_path);
-    free(url_path);
     return ret;
 }
 
@@ -1334,7 +1296,7 @@ nc_server_config_new_ch_tls_crl_cert_ext(const struct ly_ctx *ctx, const char *c
 
     ret = _nc_server_config_new_tls_crl_cert_ext(ctx, path, config);
     if (ret) {
-        ERR(NULL, "Creating new Call-Home CRL YANG data nodes failed.");
+        ERR(NULL, "Creating new CH CRL YANG data nodes failed.");
         goto cleanup;
     }
 
