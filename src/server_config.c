@@ -659,14 +659,14 @@ nc_server_config_del_local_address(struct nc_bind *bind)
 }
 
 static void
-nc_server_config_del_auth_client_pam_name(struct nc_client_auth *auth_client)
+nc_server_config_del_auth_client_pam_name(struct nc_auth_client *auth_client)
 {
     free(auth_client->pam_config_name);
     auth_client->pam_config_name = NULL;
 }
 
 static void
-nc_server_config_del_auth_client_pam_dir(struct nc_client_auth *auth_client)
+nc_server_config_del_auth_client_pam_dir(struct nc_auth_client *auth_client)
 {
     free(auth_client->pam_config_dir);
     auth_client->pam_config_dir = NULL;
@@ -715,7 +715,7 @@ nc_server_config_del_auth_client_pubkey_pub_base64(struct nc_public_key *pubkey)
 }
 
 static void
-nc_server_config_del_auth_client_password(struct nc_client_auth *auth_client)
+nc_server_config_del_auth_client_password(struct nc_auth_client *auth_client)
 {
     free(auth_client->password);
     auth_client->password = NULL;
@@ -779,7 +779,7 @@ nc_server_config_del_hostkey(struct nc_server_ssh_opts *opts, struct nc_hostkey 
 }
 
 static void
-nc_server_config_del_auth_client_pubkey(struct nc_client_auth *auth_client, struct nc_public_key *pubkey)
+nc_server_config_del_auth_client_pubkey(struct nc_auth_client *auth_client, struct nc_public_key *pubkey)
 {
     nc_server_config_del_auth_client_pubkey_name(pubkey);
     nc_server_config_del_auth_client_pubkey_pub_base64(pubkey);
@@ -794,7 +794,7 @@ nc_server_config_del_auth_client_pubkey(struct nc_client_auth *auth_client, stru
 }
 
 static void
-nc_server_config_del_auth_client(struct nc_server_ssh_opts *opts, struct nc_client_auth *auth_client)
+nc_server_config_del_auth_client(struct nc_server_ssh_opts *opts, struct nc_auth_client *auth_client)
 {
     uint16_t i, pubkey_count;
 
@@ -2074,7 +2074,7 @@ cleanup:
 }
 
 static int
-nc_server_config_create_auth_key_public_key_list(const struct lyd_node *node, struct nc_client_auth *auth_client)
+nc_server_config_create_auth_key_public_key_list(const struct lyd_node *node, struct nc_auth_client *auth_client)
 {
     assert(!strcmp(LYD_NAME(node), "public-key"));
 
@@ -2131,7 +2131,7 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_hostkey *hostkey;
-    struct nc_client_auth *auth_client;
+    struct nc_auth_client *auth_client;
     struct nc_public_key *pubkey;
     struct nc_server_tls_opts *opts;
     struct nc_ch_client *ch_client;
@@ -2140,6 +2140,7 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -2443,7 +2444,7 @@ static int
 nc_server_config_user(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
-    struct nc_client_auth *auth_client;
+    struct nc_auth_client *auth_client;
     struct nc_server_ssh_opts *opts;
     struct nc_ch_client *ch_client;
 
@@ -2451,6 +2452,7 @@ nc_server_config_user(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -2544,7 +2546,7 @@ cleanup:
 }
 
 static int
-nc_server_config_ssh_replace_truststore_reference(const struct lyd_node *node, struct nc_client_auth *client_auth)
+nc_server_config_ssh_replace_truststore_reference(const struct lyd_node *node, struct nc_auth_client *client_auth)
 {
     uint16_t i;
     struct nc_truststore *ts = &server_opts.truststore;
@@ -2603,13 +2605,14 @@ nc_server_config_truststore_reference(const struct lyd_node *node, NC_OPERATION 
 {
     int ret = 0;
     struct nc_endpt *endpt;
-    struct nc_client_auth *auth_client;
+    struct nc_auth_client *auth_client;
     struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "truststore-reference"));
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -2675,7 +2678,7 @@ cleanup:
 }
 
 static int
-nc_server_config_replace_password(const struct lyd_node *node, struct nc_client_auth *auth_client)
+nc_server_config_replace_password(const struct lyd_node *node, struct nc_auth_client *auth_client)
 {
     nc_server_config_del_auth_client_password(auth_client);
 
@@ -2693,13 +2696,14 @@ static int
 nc_server_config_password(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
-    struct nc_client_auth *auth_client;
+    struct nc_auth_client *auth_client;
     struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "password"));
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -2729,13 +2733,14 @@ static int
 nc_server_config_pam_name(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
-    struct nc_client_auth *auth_client;
+    struct nc_auth_client *auth_client;
     struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "pam-config-file-name"));
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -2769,13 +2774,14 @@ static int
 nc_server_config_pam_dir(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
-    struct nc_client_auth *auth_client;
+    struct nc_auth_client *auth_client;
     struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "pam-config-file-dir"));
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -2809,13 +2815,14 @@ static int
 nc_server_config_none(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
-    struct nc_client_auth *auth_client;
+    struct nc_auth_client *auth_client;
     struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "none"));
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 

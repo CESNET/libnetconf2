@@ -160,10 +160,10 @@ struct nc_auth_state {
 /**
  * @brief A server's authorized client.
  */
-struct nc_client_auth {
+struct nc_auth_client {
     char *username;                         /**< Arbitrary username. */
 
-    NC_STORE_TYPE store;                  /**< Specifies how/where the client's public key is stored. */
+    NC_STORE_TYPE store;                    /**< Specifies how/where the client's public key is stored. */
     union {
         struct {
             struct nc_public_key *pubkeys;  /**< The client's public keys. */
@@ -198,7 +198,7 @@ struct nc_server_ssh_opts {
     struct nc_hostkey *hostkeys;            /**< Server's hostkeys. */
     uint16_t hostkey_count;                 /**< Number of server's hostkeys. */
 
-    struct nc_client_auth *auth_clients;    /**< Server's authorized clients. */
+    struct nc_auth_client *auth_clients;    /**< Server's authorized clients. */
     uint16_t client_count;                  /**< Number of server's authorized clients. */
 
     struct nc_endpt *endpt_client_ref;      /**< Reference to another endpoint (used for client authentication). */
