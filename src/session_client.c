@@ -1578,8 +1578,7 @@ sock_connect(int timeout_ms, int *sock_pending, struct addrinfo *res, struct nc_
 {
     int flags, ret, error;
     int sock = -1;
-    fd_set wset;
-    struct timeval ts;
+    struct pollfd fds = {0};
     socklen_t len = sizeof(int);
     uint16_t port;
     char *str;
@@ -1616,20 +1615,16 @@ sock_connect(int timeout_ms, int *sock_pending, struct addrinfo *res, struct nc_
         }
     }
 
-    FD_ZERO(&wset);
-    FD_SET(sock, &wset);
+    fds.fd = sock;
+    fds.events = POLLOUT;
 
-    /* wait for some data on the socket */
-    if (timeout_ms != -1) {
-        ts.tv_sec = timeout_ms / 1000;
-        ts.tv_usec = (timeout_ms % 1000) * 1000;
-    }
-    if ((ret = select(sock + 1, NULL, &wset, NULL, (timeout_ms != -1) ? &ts : NULL)) < 0) {
-        ERR(NULL, "select() failed (%s).", strerror(errno));
+    /* wait until we can write data to the socket */
+    ret = poll(&fds, 1, timeout_ms);
+    if (ret == -1) {
+        /* error */
+        ERR(NULL, "poll() failed (%s).", strerror(errno));
         goto cleanup;
-    }
-
-    if (ret == 0) {
+    } else if (ret == 0) {
         /* there was a timeout */
         VRB(NULL, "Timed out after %d ms (%s).", timeout_ms, strerror(errno));
         if (sock_pending) {
