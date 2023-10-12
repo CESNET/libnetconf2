@@ -312,7 +312,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
         return -1;
     }
 
-    if (!session || !ctn_first || !cert) {
+    if (!session || !cert) {
         free(buf);
         return -1;
     }
