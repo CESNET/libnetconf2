@@ -73,6 +73,7 @@ static const char *supported_mac_algs[] = {
 
 extern struct nc_server_opts server_opts;
 
+/* returns true if a node is a part of the listen subtree */
 static int
 is_listen(const struct lyd_node *node)
 {
@@ -88,6 +89,7 @@ is_listen(const struct lyd_node *node)
     return node != NULL;
 }
 
+/* returns true if a node is a part of the Call Home subtree */
 static int
 is_ch(const struct lyd_node *node)
 {
@@ -105,6 +107,7 @@ is_ch(const struct lyd_node *node)
 
 #ifdef NC_ENABLED_SSH_TLS
 
+/* returns true if a node is a part of the ssh subtree */
 static int
 is_ssh(const struct lyd_node *node)
 {
@@ -120,6 +123,7 @@ is_ssh(const struct lyd_node *node)
     return node != NULL;
 }
 
+/* returns true if a node is a part of the tls subtree */
 static int
 is_tls(const struct lyd_node *node)
 {
@@ -137,6 +141,7 @@ is_tls(const struct lyd_node *node)
 
 #endif /* NC_ENABLED_SSH_TLS */
 
+/* gets the endpoint struct (and optionally bind) based on node's location in the YANG data tree */
 static int
 nc_server_config_get_endpt(const struct lyd_node *node, struct nc_endpt **endpt, struct nc_bind **bind)
 {
@@ -176,6 +181,7 @@ nc_server_config_get_endpt(const struct lyd_node *node, struct nc_endpt **endpt,
     return 1;
 }
 
+/* gets the ch_client struct based on node's location in the YANG data tree */
 static int
 nc_server_config_get_ch_client(const struct lyd_node *node, struct nc_ch_client **ch_client)
 {
@@ -218,8 +224,8 @@ nc_server_config_get_ch_client(const struct lyd_node *node, struct nc_ch_client 
     return 1;
 }
 
-#ifdef NC_ENABLED_SSH_TLS
 
+/* gets the ch_endpt struct based on node's location in the YANG data tree */
 static int
 nc_server_config_get_ch_endpt(const struct lyd_node *node, struct nc_ch_endpt **ch_endpt)
 {
@@ -250,17 +256,26 @@ nc_server_config_get_ch_endpt(const struct lyd_node *node, struct nc_ch_endpt **
     assert(!strcmp(LYD_NAME(node), "name"));
     name = lyd_get_value(node);
 
+    /* LOCK */
+    pthread_rwlock_rdlock(&server_opts.ch_client_lock);
     for (i = 0; i < ch_client->ch_endpt_count; i++) {
         if (!strcmp(ch_client->ch_endpts[i].name, name)) {
             *ch_endpt = &ch_client->ch_endpts[i];
+            /* UNLOCK */
+            pthread_rwlock_unlock(&server_opts.ch_client_lock);
             return 0;
         }
     }
 
+    /* UNLOCK */
+    pthread_rwlock_unlock(&server_opts.ch_client_lock);
     ERR(NULL, "Call-home client's \"%s\" endpoint \"%s\" was not found.", ch_client->name, name);
     return 1;
 }
 
+#ifdef NC_ENABLED_SSH_TLS
+
+/* gets the ssh_opts struct based on node's location in the YANG data tree */
 static int
 nc_server_config_get_ssh_opts(const struct lyd_node *node, struct nc_server_ssh_opts **opts)
 {
@@ -284,6 +299,7 @@ nc_server_config_get_ssh_opts(const struct lyd_node *node, struct nc_server_ssh_
     return 0;
 }
 
+/* gets the hostkey struct based on node's location in the YANG data tree */
 static int
 nc_server_config_get_hostkey(const struct lyd_node *node, struct nc_hostkey **hostkey)
 {
@@ -324,8 +340,9 @@ nc_server_config_get_hostkey(const struct lyd_node *node, struct nc_hostkey **ho
     return 1;
 }
 
+/* gets the client_auth struct based on node's location in the YANG data tree */
 static int
-nc_server_config_get_auth_client(const struct lyd_node *node, struct nc_client_auth **auth_client)
+nc_server_config_get_auth_client(const struct lyd_node *node, struct nc_auth_client **auth_client)
 {
     uint16_t i;
     const char *name;
@@ -364,12 +381,13 @@ nc_server_config_get_auth_client(const struct lyd_node *node, struct nc_client_a
     return 1;
 }
 
+/* gets the pubkey struct based on node's location in the YANG data tree */
 static int
 nc_server_config_get_pubkey(const struct lyd_node *node, struct nc_public_key **pubkey)
 {
     uint16_t i;
     const char *name;
-    struct nc_client_auth *auth_client;
+    struct nc_auth_client *auth_client;
 
     assert(node && pubkey);
     name = LYD_NAME(node);
@@ -405,6 +423,7 @@ nc_server_config_get_pubkey(const struct lyd_node *node, struct nc_public_key **
     return 1;
 }
 
+/* gets the tls_opts struct based on node's location in the YANG data tree */
 static int
 nc_server_config_get_tls_opts(const struct lyd_node *node, struct nc_server_tls_opts **opts)
 {
@@ -428,37 +447,58 @@ nc_server_config_get_tls_opts(const struct lyd_node *node, struct nc_server_tls_
     return 0;
 }
 
+/* gets the cert struct based on node's location in the YANG data tree */
 static int
-nc_server_config_get_cert(const struct lyd_node *node, int is_ee, struct nc_certificate **cert)
+nc_server_config_get_cert(const struct lyd_node *node, struct nc_certificate **cert)
 {
     uint16_t i;
     const char *name;
     struct nc_cert_grouping *auth_client;
     struct nc_server_tls_opts *opts;
+    int is_cert_end_entity;
+    struct lyd_node *name_node;
 
     assert(node && cert);
     name = LYD_NAME(node);
 
+    /* check if node is in certificate subtree */
     while (node) {
         if (!strcmp(LYD_NAME(node), "certificate")) {
             break;
         }
         node = lyd_parent(node);
     }
-
     if (!node) {
         ERR(NULL, "Node \"%s\" is not contained in a certificate subtree.", name);
         return 1;
     }
 
-    node = lyd_child(node);
-    assert(!strcmp(LYD_NAME(node), "name"));
-    name = lyd_get_value(node);
+    /* it's child should be the list's key, check later */
+    name_node = lyd_child(node);
+
+    /* it's in certificate node, now check if it's end entity or certificate authority */
+    while (node) {
+        if (!strcmp(LYD_NAME(node), "ee-certs")) {
+            is_cert_end_entity = 1;
+            break;
+        } else if (!strcmp(LYD_NAME(node), "ca-certs")) {
+            is_cert_end_entity = 0;
+            break;
+        }
+        node = lyd_parent(node);
+    }
+    if (!node) {
+        ERR(NULL, "Node \"%s\" is not contained in ee-certs nor ca-certs subtree.", name);
+        return 1;
+    }
+
+    assert(!strcmp(LYD_NAME(name_node), "name"));
+    name = lyd_get_value(name_node);
 
     if (nc_server_config_get_tls_opts(node, &opts)) {
         return 1;
     }
-    if (is_ee) {
+    if (is_cert_end_entity) {
         auth_client = &opts->ee_certs;
     } else {
         auth_client = &opts->ca_certs;
@@ -475,6 +515,7 @@ nc_server_config_get_cert(const struct lyd_node *node, int is_ee, struct nc_cert
     return 1;
 }
 
+/* gets the ctn struct based on node's location in the YANG data tree */
 static int
 nc_server_config_get_ctn(const struct lyd_node *node, struct nc_ctn **ctn)
 {
@@ -540,6 +581,7 @@ nc_server_config_get_private_key_type(const char *format)
 
 #endif /* NC_ENABLED_SSH_TLS */
 
+/* gets the ch_client struct based on node's location in the YANG data tree and locks it for reading */
 static int
 nc_server_config_get_ch_client_with_lock(const struct lyd_node *node, struct nc_ch_client **ch_client)
 {
@@ -576,6 +618,8 @@ nc_server_config_get_ch_client_with_lock(const struct lyd_node *node, struct nc_
         }
     }
 
+    /* UNLOCK */
+    pthread_rwlock_unlock(&server_opts.ch_client_lock);
     ERR(NULL, "Call-home client \"%s\" was not found.", name);
     return 1;
 }
@@ -594,7 +638,7 @@ equal_parent_name(const struct lyd_node *node, uint16_t parent_count, const char
 {
     uint16_t i;
 
-    assert(node && parent_count > 0 && parent_name);
+    assert(node && parent_count && parent_name);
 
     node = lyd_parent(node);
     for (i = 1; i < parent_count; i++) {
@@ -642,138 +686,27 @@ cleanup:
     return ret;
 }
 
-static void
-nc_server_config_del_endpt_name(struct nc_endpt *endpt)
-{
-    free(endpt->name);
-    endpt->name = NULL;
-}
-
 #ifdef NC_ENABLED_SSH_TLS
-
-static void
-nc_server_config_del_local_address(struct nc_bind *bind)
-{
-    free(bind->address);
-    bind->address = NULL;
-}
-
-static void
-nc_server_config_del_auth_client_pam_name(struct nc_auth_client *auth_client)
-{
-    free(auth_client->pam_config_name);
-    auth_client->pam_config_name = NULL;
-}
-
-static void
-nc_server_config_del_auth_client_pam_dir(struct nc_auth_client *auth_client)
-{
-    free(auth_client->pam_config_dir);
-    auth_client->pam_config_dir = NULL;
-}
-
-static void
-nc_server_config_del_endpt_reference(struct nc_endpt *endpt)
-{
-    free(endpt->referenced_endpt_name);
-    endpt->referenced_endpt_name = NULL;
-}
-
-static void
-nc_server_config_del_hostkey_name(struct nc_hostkey *hostkey)
-{
-    free(hostkey->name);
-    hostkey->name = NULL;
-}
-
-static void
-nc_server_config_del_public_key(struct nc_hostkey *hostkey)
-{
-    free(hostkey->key.pubkey_data);
-    hostkey->key.pubkey_data = NULL;
-}
-
-static void
-nc_server_config_del_private_key(struct nc_hostkey *hostkey)
-{
-    free(hostkey->key.privkey_data);
-    hostkey->key.privkey_data = NULL;
-}
-
-static void
-nc_server_config_del_auth_client_pubkey_name(struct nc_public_key *pubkey)
-{
-    free(pubkey->name);
-    pubkey->name = NULL;
-}
-
-static void
-nc_server_config_del_auth_client_pubkey_pub_base64(struct nc_public_key *pubkey)
-{
-    free(pubkey->data);
-    pubkey->data = NULL;
-}
-
-static void
-nc_server_config_del_auth_client_password(struct nc_auth_client *auth_client)
-{
-    free(auth_client->password);
-    auth_client->password = NULL;
-}
-
-static void
-nc_server_config_del_hostkey_algs(struct nc_server_ssh_opts *opts)
-{
-    free(opts->hostkey_algs);
-    opts->hostkey_algs = NULL;
-}
-
-static void
-nc_server_config_del_kex_algs(struct nc_server_ssh_opts *opts)
-{
-    free(opts->kex_algs);
-    opts->kex_algs = NULL;
-}
-
-static void
-nc_server_config_del_encryption_algs(struct nc_server_ssh_opts *opts)
-{
-    free(opts->encryption_algs);
-    opts->encryption_algs = NULL;
-}
-
-static void
-nc_server_config_del_mac_algs(struct nc_server_ssh_opts *opts)
-{
-    free(opts->mac_algs);
-    opts->mac_algs = NULL;
-}
-
-static void
-nc_server_config_del_keystore_reference(struct nc_hostkey *hostkey)
-{
-    free(hostkey->ks_ref);
-    hostkey->ks_ref = NULL;
-}
 
 static void
 nc_server_config_del_hostkey(struct nc_server_ssh_opts *opts, struct nc_hostkey *hostkey)
 {
     assert(hostkey->store == NC_STORE_LOCAL || hostkey->store == NC_STORE_KEYSTORE);
 
+    free(hostkey->name);
+
     if (hostkey->store == NC_STORE_LOCAL) {
-        nc_server_config_del_public_key(hostkey);
-        nc_server_config_del_private_key(hostkey);
+        free(hostkey->key.pubkey_data);
+        free(hostkey->key.privkey_data);
     } else {
-        nc_server_config_del_keystore_reference(hostkey);
+        free(hostkey->ks_ref);
     }
 
-    nc_server_config_del_hostkey_name(hostkey);
     opts->hostkey_count--;
     if (!opts->hostkey_count) {
         free(opts->hostkeys);
         opts->hostkeys = NULL;
-    } else if (hostkey == &opts->hostkeys[opts->hostkey_count + 1]) {
+    } else if (hostkey != &opts->hostkeys[opts->hostkey_count]) {
         memcpy(hostkey, &opts->hostkeys[opts->hostkey_count], sizeof *opts->hostkeys);
     }
 }
@@ -781,14 +714,14 @@ nc_server_config_del_hostkey(struct nc_server_ssh_opts *opts, struct nc_hostkey 
 static void
 nc_server_config_del_auth_client_pubkey(struct nc_auth_client *auth_client, struct nc_public_key *pubkey)
 {
-    nc_server_config_del_auth_client_pubkey_name(pubkey);
-    nc_server_config_del_auth_client_pubkey_pub_base64(pubkey);
+    free(pubkey->name);
+    free(pubkey->data);
 
     auth_client->pubkey_count--;
     if (!auth_client->pubkey_count) {
         free(auth_client->pubkeys);
         auth_client->pubkeys = NULL;
-    } else if (pubkey == &auth_client->pubkeys[auth_client->pubkey_count + 1]) {
+    } else if (pubkey != &auth_client->pubkeys[auth_client->pubkey_count]) {
         memcpy(pubkey, &auth_client->pubkeys[auth_client->pubkey_count], sizeof *auth_client->pubkeys);
     }
 }
@@ -799,34 +732,35 @@ nc_server_config_del_auth_client(struct nc_server_ssh_opts *opts, struct nc_auth
     uint16_t i, pubkey_count;
 
     free(auth_client->username);
-    auth_client->username = NULL;
 
     if (auth_client->store == NC_STORE_LOCAL) {
         pubkey_count = auth_client->pubkey_count;
         for (i = 0; i < pubkey_count; i++) {
             nc_server_config_del_auth_client_pubkey(auth_client, &auth_client->pubkeys[i]);
         }
+    } else {
+        free(auth_client->ts_ref);
     }
 
-    nc_server_config_del_auth_client_password(auth_client);
-    nc_server_config_del_auth_client_pam_name(auth_client);
-    nc_server_config_del_auth_client_pam_dir(auth_client);
+    free(auth_client->password);
+    free(auth_client->pam_config_name);
+    free(auth_client->pam_config_dir);
 
     opts->client_count--;
     if (!opts->client_count) {
         free(opts->auth_clients);
         opts->auth_clients = NULL;
-    } else if (auth_client == &opts->auth_clients[opts->client_count + 1]) {
+    } else if (auth_client != &opts->auth_clients[opts->client_count]) {
         memcpy(auth_client, &opts->auth_clients[opts->client_count], sizeof *opts->auth_clients);
     }
 }
 
 static void
-nc_server_config_del_ssh(struct nc_bind *bind, struct nc_server_ssh_opts *opts)
+nc_server_config_del_ssh_opts(struct nc_bind *bind, struct nc_server_ssh_opts *opts)
 {
     uint16_t i, hostkey_count, client_count;
 
-    nc_server_config_del_local_address(bind);
+    free(bind->address);
     if (bind->sock > -1) {
         close(bind->sock);
     }
@@ -842,21 +776,20 @@ nc_server_config_del_ssh(struct nc_bind *bind, struct nc_server_ssh_opts *opts)
         nc_server_config_del_auth_client(opts, &opts->auth_clients[i]);
     }
 
-    nc_server_config_del_hostkey_algs(opts);
-    nc_server_config_del_kex_algs(opts);
-    nc_server_config_del_encryption_algs(opts);
-    nc_server_config_del_mac_algs(opts);
+    free(opts->hostkey_algs);
+    free(opts->kex_algs);
+    free(opts->encryption_algs);
+    free(opts->mac_algs);
 
     free(opts);
-    opts = NULL;
 }
 
 void
 nc_server_config_del_endpt_ssh(struct nc_endpt *endpt, struct nc_bind *bind)
 {
-    nc_server_config_del_endpt_name(endpt);
-    nc_server_config_del_endpt_reference(endpt);
-    nc_server_config_del_ssh(bind, endpt->opts.ssh);
+    free(endpt->name);
+    free(endpt->referenced_endpt_name);
+    nc_server_config_del_ssh_opts(bind, endpt->opts.ssh);
 
     server_opts.endpt_count--;
     if (!server_opts.endpt_count) {
@@ -864,7 +797,7 @@ nc_server_config_del_endpt_ssh(struct nc_endpt *endpt, struct nc_bind *bind)
         free(server_opts.binds);
         server_opts.endpts = NULL;
         server_opts.binds = NULL;
-    } else if (endpt == &server_opts.endpts[server_opts.endpt_count + 1]) {
+    } else if (endpt != &server_opts.endpts[server_opts.endpt_count]) {
         memcpy(endpt, &server_opts.endpts[server_opts.endpt_count], sizeof *server_opts.endpts);
         memcpy(bind, &server_opts.binds[server_opts.endpt_count], sizeof *server_opts.binds);
     }
@@ -873,7 +806,7 @@ nc_server_config_del_endpt_ssh(struct nc_endpt *endpt, struct nc_bind *bind)
 #endif /* NC_ENABLED_SSH_TLS */
 
 void
-nc_server_config_del_unix_socket(struct nc_bind *bind, struct nc_server_unix_opts *opts)
+nc_server_config_del_unix_socket_opts(struct nc_bind *bind, struct nc_server_unix_opts *opts)
 {
     if (bind->sock > -1) {
         close(bind->sock);
@@ -889,8 +822,8 @@ nc_server_config_del_unix_socket(struct nc_bind *bind, struct nc_server_unix_opt
 void
 nc_server_config_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *bind)
 {
-    nc_server_config_del_endpt_name(endpt);
-    nc_server_config_del_unix_socket(bind, endpt->opts.unixsock);
+    free(endpt->name);
+    nc_server_config_del_unix_socket_opts(bind, endpt->opts.unixsock);
 
     server_opts.endpt_count--;
     if (!server_opts.endpt_count) {
@@ -898,7 +831,7 @@ nc_server_config_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *b
         free(server_opts.binds);
         server_opts.endpts = NULL;
         server_opts.binds = NULL;
-    } else if (endpt == &server_opts.endpts[server_opts.endpt_count + 1]) {
+    } else if (endpt != &server_opts.endpts[server_opts.endpt_count]) {
         memcpy(endpt, &server_opts.endpts[server_opts.endpt_count], sizeof *server_opts.endpts);
         memcpy(bind, &server_opts.binds[server_opts.endpt_count], sizeof *server_opts.binds);
     }
@@ -907,89 +840,34 @@ nc_server_config_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *b
 #ifdef NC_ENABLED_SSH_TLS
 
 static void
-nc_server_config_del_url(struct nc_server_tls_opts *opts)
-{
-    free(opts->crl_url);
-    opts->crl_url = NULL;
-}
-
-static void
-nc_server_config_del_path(struct nc_server_tls_opts *opts)
-{
-    free(opts->crl_path);
-    opts->crl_path = NULL;
-}
-
-static void
-nc_server_config_tls_del_ciphers(struct nc_server_tls_opts *opts)
-{
-    free(opts->ciphers);
-    opts->ciphers = NULL;
-}
-
-static void
-nc_server_config_tls_del_public_key(struct nc_server_tls_opts *opts)
-{
-    free(opts->pubkey_data);
-    opts->pubkey_data = NULL;
-}
-
-static void
-nc_server_config_tls_del_cleartext_private_key(struct nc_server_tls_opts *opts)
-{
-    free(opts->privkey_data);
-    opts->privkey_data = NULL;
-}
-
-static void
-nc_server_config_tls_del_cert_data(struct nc_server_tls_opts *opts)
-{
-    free(opts->cert_data);
-    opts->cert_data = NULL;
-}
-
-static void
-nc_server_config_tls_del_cert_data_certificate(struct nc_certificate *cert)
-{
-    free(cert->data);
-    cert->data = NULL;
-}
-
-static void
-nc_server_config_del_fingerprint(struct nc_ctn *ctn)
-{
-    free(ctn->fingerprint);
-    ctn->fingerprint = NULL;
-}
-
-static void
 nc_server_config_del_cert(struct nc_cert_grouping *certs, struct nc_certificate *cert)
 {
     free(cert->name);
-    cert->name = NULL;
-
     free(cert->data);
-    cert->data = NULL;
 
     certs->cert_count--;
     if (!certs->cert_count) {
         free(certs->certs);
         certs->certs = NULL;
-    } else if (cert == &certs->certs[certs->cert_count + 1]) {
+    } else if (cert != &certs->certs[certs->cert_count]) {
         memcpy(cert, &certs->certs[certs->cert_count], sizeof *certs->certs);
     }
 }
 
 static void
-nc_server_config_tls_del_certs(struct nc_cert_grouping *ca)
+nc_server_config_del_certs(struct nc_cert_grouping *certs_grp)
 {
-    uint16_t i, cert_count;
+    uint16_t i;
 
-    if (ca->store == NC_STORE_LOCAL) {
-        cert_count = ca->cert_count;
-        for (i = 0; i < cert_count; i++) {
-            nc_server_config_del_cert(ca, &ca->certs[i]);
+    if (certs_grp->store == NC_STORE_LOCAL) {
+        for (i = 0; i < certs_grp->cert_count; i++) {
+            free(certs_grp->certs[i].name);
+            free(certs_grp->certs[i].data);
         }
+        free(certs_grp->certs);
+        certs_grp->certs = NULL;
+    } else {
+        free(certs_grp->ts_ref);
     }
 }
 
@@ -998,11 +876,8 @@ nc_server_config_del_ctn(struct nc_server_tls_opts *opts, struct nc_ctn *ctn)
 {
     struct nc_ctn *iter;
 
-    free(ctn->fingerprint);
-    ctn->fingerprint = NULL;
-
     free(ctn->name);
-    ctn->name = NULL;
+    free(ctn->fingerprint);
 
     if (opts->ctn == ctn) {
         /* it's the first in the list */
@@ -1025,15 +900,15 @@ nc_server_config_del_ctn(struct nc_server_tls_opts *opts, struct nc_ctn *ctn)
 }
 
 static void
-nc_server_config_tls_del_ctns(struct nc_server_tls_opts *opts)
+nc_server_config_del_ctns(struct nc_server_tls_opts *opts)
 {
     struct nc_ctn *cur, *next;
 
     cur = opts->ctn;
     while (cur) {
         next = cur->next;
-        free(cur->fingerprint);
         free(cur->name);
+        free(cur->fingerprint);
         free(cur);
         cur = next;
     }
@@ -1041,39 +916,41 @@ nc_server_config_tls_del_ctns(struct nc_server_tls_opts *opts)
 }
 
 static void
-nc_server_config_del_tls(struct nc_bind *bind, struct nc_server_tls_opts *opts)
+nc_server_config_del_tls_opts(struct nc_bind *bind, struct nc_server_tls_opts *opts)
 {
-    nc_server_config_del_local_address(bind);
+    free(bind->address);
     if (bind->sock > -1) {
         close(bind->sock);
     }
 
     if (opts->store == NC_STORE_LOCAL) {
-        nc_server_config_tls_del_public_key(opts);
-        nc_server_config_tls_del_cleartext_private_key(opts);
-        nc_server_config_tls_del_cert_data(opts);
+        free(opts->pubkey_data);
+        free(opts->privkey_data);
+        free(opts->cert_data);
+    } else {
+        free(opts->key_ref);
+        free(opts->cert_ref);
     }
 
-    nc_server_config_tls_del_certs(&opts->ca_certs);
-    nc_server_config_tls_del_certs(&opts->ee_certs);
+    nc_server_config_del_certs(&opts->ca_certs);
+    nc_server_config_del_certs(&opts->ee_certs);
 
-    nc_server_config_del_path(opts);
-    nc_server_config_del_url(opts);
+    free(opts->crl_path);
+    free(opts->crl_url);
     X509_STORE_free(opts->crl_store);
-    opts->crl_store = NULL;
 
-    nc_server_config_tls_del_ctns(opts);
-    nc_server_config_tls_del_ciphers(opts);
-
+    nc_server_config_del_ctns(opts);
+    free(opts->ciphers);
     free(opts);
 }
 
 static void
 nc_server_config_del_endpt_tls(struct nc_endpt *endpt, struct nc_bind *bind)
 {
-    nc_server_config_del_endpt_name(endpt);
-    nc_server_config_del_endpt_reference(endpt);
-    nc_server_config_del_tls(bind, endpt->opts.tls);
+    free(endpt->name);
+    free(endpt->referenced_endpt_name);
+
+    nc_server_config_del_tls_opts(bind, endpt->opts.tls);
 
     server_opts.endpt_count--;
     if (!server_opts.endpt_count) {
@@ -1081,24 +958,17 @@ nc_server_config_del_endpt_tls(struct nc_endpt *endpt, struct nc_bind *bind)
         free(server_opts.binds);
         server_opts.endpts = NULL;
         server_opts.binds = NULL;
-    } else if (endpt == &server_opts.endpts[server_opts.endpt_count + 1]) {
+    } else if (endpt != &server_opts.endpts[server_opts.endpt_count]) {
         memcpy(endpt, &server_opts.endpts[server_opts.endpt_count], sizeof *server_opts.endpts);
         memcpy(bind, &server_opts.binds[server_opts.endpt_count], sizeof *server_opts.binds);
     }
-}
-
-static void
-nc_server_config_del_remote_address(struct nc_ch_endpt *ch_endpt)
-{
-    free(ch_endpt->address);
-    ch_endpt->address = NULL;
 }
 
 #endif /* NC_ENABLED_SSH_TLS */
 
 /* presence container */
 int
-nc_server_config_listen(struct lyd_node *node, NC_OPERATION op)
+nc_server_config_listen(const struct lyd_node *node, NC_OPERATION op)
 {
     uint16_t i, endpt_count;
 
@@ -1135,7 +1005,7 @@ nc_server_config_listen(struct lyd_node *node, NC_OPERATION op)
 #ifdef NC_ENABLED_SSH_TLS
 
 static void
-nc_server_config_ch_del_ssh(struct nc_server_ssh_opts *opts)
+nc_server_config_ch_del_ssh_opts(struct nc_server_ssh_opts *opts)
 {
     uint16_t i, hostkey_count, client_count;
 
@@ -1150,43 +1020,33 @@ nc_server_config_ch_del_ssh(struct nc_server_ssh_opts *opts)
         nc_server_config_del_auth_client(opts, &opts->auth_clients[i]);
     }
 
-    nc_server_config_del_hostkey_algs(opts);
-    nc_server_config_del_kex_algs(opts);
-    nc_server_config_del_encryption_algs(opts);
-    nc_server_config_del_mac_algs(opts);
+    free(opts->hostkey_algs);
+    free(opts->kex_algs);
+    free(opts->encryption_algs);
+    free(opts->mac_algs);
 
     free(opts);
-    opts = NULL;
 }
 
 static void
-nc_server_config_ch_del_tls(struct nc_server_tls_opts *opts)
+nc_server_config_ch_del_tls_opts(struct nc_server_tls_opts *opts)
 {
     if (opts->store == NC_STORE_LOCAL) {
-        nc_server_config_tls_del_public_key(opts);
-        nc_server_config_tls_del_cleartext_private_key(opts);
-        nc_server_config_tls_del_cert_data(opts);
+        free(opts->pubkey_data);
+        free(opts->privkey_data);
+        free(opts->cert_data);
     }
 
-    nc_server_config_tls_del_certs(&opts->ca_certs);
-    nc_server_config_tls_del_certs(&opts->ee_certs);
+    nc_server_config_del_certs(&opts->ca_certs);
+    nc_server_config_del_certs(&opts->ee_certs);
 
-    nc_server_config_del_path(opts);
-    nc_server_config_del_url(opts);
+    free(opts->crl_path);
+    free(opts->crl_url);
     X509_STORE_free(opts->crl_store);
-    opts->crl_store = NULL;
-
-    nc_server_config_tls_del_ctns(opts);
-    nc_server_config_tls_del_ciphers(opts);
+    nc_server_config_del_ctns(opts);
+    free(opts->ciphers);
 
     free(opts);
-}
-
-static void
-nc_server_config_ch_del_endpt_address(struct nc_ch_endpt *ch_endpt)
-{
-    free(ch_endpt->address);
-    ch_endpt->address = NULL;
 }
 
 #endif /* NC_ENABLED_SSH_TLS */
@@ -1195,10 +1055,9 @@ static void
 nc_server_config_ch_del_endpt(struct nc_ch_client *ch_client, struct nc_ch_endpt *ch_endpt)
 {
     free(ch_endpt->name);
-    ch_endpt->name = NULL;
 
 #ifdef NC_ENABLED_SSH_TLS
-    nc_server_config_ch_del_endpt_address(ch_endpt);
+    free(ch_endpt->address);
     if (ch_endpt->sock_pending > -1) {
         close(ch_endpt->sock_pending);
         ch_endpt->sock_pending = -1;
@@ -1208,10 +1067,10 @@ nc_server_config_ch_del_endpt(struct nc_ch_client *ch_client, struct nc_ch_endpt
     switch (ch_endpt->ti) {
 #ifdef NC_ENABLED_SSH_TLS
     case NC_TI_LIBSSH:
-        nc_server_config_ch_del_ssh(ch_endpt->opts.ssh);
+        nc_server_config_ch_del_ssh_opts(ch_endpt->opts.ssh);
         break;
     case NC_TI_OPENSSL:
-        nc_server_config_ch_del_tls(ch_endpt->opts.tls);
+        nc_server_config_ch_del_tls_opts(ch_endpt->opts.tls);
         break;
 #endif /* NC_ENABLED_SSH_TLS */
     default:
@@ -1280,7 +1139,7 @@ nc_server_config_ch_del_client(struct nc_ch_client *ch_client)
     }
 }
 
-void
+int
 nc_server_config_ch(const struct lyd_node *node, NC_OPERATION op)
 {
     uint16_t i, ch_client_count;
@@ -1293,6 +1152,8 @@ nc_server_config_ch(const struct lyd_node *node, NC_OPERATION op)
             nc_server_config_ch_del_client(&server_opts.ch_clients[i]);
         }
     }
+
+    return 0;
 }
 
 /* default leaf */
@@ -1308,11 +1169,12 @@ nc_server_config_idle_timeout(const struct lyd_node *node, NC_OPERATION op)
             server_opts.idle_timeout = strtoul(lyd_get_value(node), NULL, 10);
         } else {
             /* default value */
-            server_opts.idle_timeout = 3600;
+            server_opts.idle_timeout = 180;
         }
     } else {
         /* call-home idle timeout */
-        if (nc_server_config_get_ch_client(node, &ch_client)) {
+        if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+            /* to avoid unlock on fail */
             return 1;
         }
 
@@ -1321,6 +1183,8 @@ nc_server_config_idle_timeout(const struct lyd_node *node, NC_OPERATION op)
         } else if (op == NC_OP_DELETE) {
             ch_client->idle_timeout = 180;
         }
+
+        nc_ch_client_unlock(ch_client);
     }
 
     return 0;
@@ -1376,6 +1240,7 @@ nc_server_config_endpoint(const struct lyd_node *node, NC_OPERATION op)
     int ret = 0;
     struct nc_endpt *endpt;
     struct nc_bind *bind;
+    struct nc_ch_endpt *ch_endpt;
     struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "endpoint"));
@@ -1416,8 +1281,8 @@ nc_server_config_endpoint(const struct lyd_node *node, NC_OPERATION op)
     } else if (is_ch(node)) {
         /* LOCK */
         if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
-            ret = 1;
-            goto cleanup;
+            /* to avoid unlock on fail */
+            return 1;
         }
 
         if (op == NC_OP_CREATE) {
@@ -1428,6 +1293,13 @@ nc_server_config_endpoint(const struct lyd_node *node, NC_OPERATION op)
 
             /* init ch sock */
             ch_client->ch_endpts[ch_client->ch_endpt_count - 1].sock_pending = -1;
+        } else if (op == NC_OP_DELETE) {
+            if (nc_server_config_get_ch_endpt(node, &ch_endpt)) {
+                ret = 1;
+                goto cleanup;
+            }
+
+            nc_server_config_ch_del_endpt(ch_client, ch_endpt);
         }
     }
 
@@ -1491,13 +1363,13 @@ nc_server_config_ssh(const struct lyd_node *node, NC_OPERATION op)
                 goto cleanup;
             }
         } else if (op == NC_OP_DELETE) {
-            nc_server_config_del_ssh(bind, endpt->opts.ssh);
+            nc_server_config_del_ssh_opts(bind, endpt->opts.ssh);
         }
     } else {
         /* LOCK */
         if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
-            ret = 1;
-            goto cleanup;
+            /* to avoid unlock on fail */
+            return 1;
         }
 
         if (nc_server_config_get_ch_endpt(node, &ch_endpt)) {
@@ -1511,7 +1383,7 @@ nc_server_config_ssh(const struct lyd_node *node, NC_OPERATION op)
                 goto cleanup;
             }
         } else if (op == NC_OP_DELETE) {
-            nc_server_config_ch_del_ssh(ch_endpt->opts.ssh);
+            nc_server_config_ch_del_ssh_opts(ch_endpt->opts.ssh);
         }
     }
 
@@ -1572,13 +1444,13 @@ nc_server_config_tls(const struct lyd_node *node, NC_OPERATION op)
                 goto cleanup;
             }
         } else if (op == NC_OP_DELETE) {
-            nc_server_config_del_tls(bind, endpt->opts.tls);
+            nc_server_config_del_tls_opts(bind, endpt->opts.tls);
         }
     } else {
         /* LOCK */
         if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
-            ret = 1;
-            goto cleanup;
+            /* to avoid unlock on fail */
+            return 1;
         }
 
         if (nc_server_config_get_ch_endpt(node, &ch_endpt)) {
@@ -1591,6 +1463,8 @@ nc_server_config_tls(const struct lyd_node *node, NC_OPERATION op)
             if (ret) {
                 goto cleanup;
             }
+        } else if (op == NC_OP_DELETE) {
+            nc_server_config_ch_del_tls_opts(ch_endpt->opts.tls);
         }
     }
 
@@ -1687,7 +1561,7 @@ nc_server_config_local_address(const struct lyd_node *node, NC_OPERATION op)
             goto cleanup;
         }
 
-        nc_server_config_del_local_address(bind);
+        free(bind->address);
         bind->address = strdup(lyd_get_value(node));
         if (!bind->address) {
             ERRMEM;
@@ -1768,6 +1642,7 @@ nc_server_config_keepalives(const struct lyd_node *node, NC_OPERATION op)
     } else if (is_ch(node) && equal_parent_name(node, 1, "tcp-client-parameters")) {
         /* LOCK */
         if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+            /* to avoid unlock on fail */
             return 1;
         }
 
@@ -1821,6 +1696,7 @@ nc_server_config_idle_time(const struct lyd_node *node, NC_OPERATION op)
     } else if (is_ch(node) && equal_parent_name(node, 2, "tcp-client-parameters")) {
         /* LOCK */
         if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+            /* to avoid unlock on fail */
             return 1;
         }
 
@@ -1837,7 +1713,7 @@ nc_server_config_idle_time(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
-    if (is_ch(node) && equal_parent_name(node, 1, "tcp-client-parameters")) {
+    if (is_ch(node) && equal_parent_name(node, 2, "tcp-client-parameters")) {
         /* UNLOCK */
         nc_ch_client_unlock(ch_client);
     }
@@ -1874,6 +1750,7 @@ nc_server_config_max_probes(const struct lyd_node *node, NC_OPERATION op)
     } else if (is_ch(node) && equal_parent_name(node, 2, "tcp-client-parameters")) {
         /* LOCK */
         if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+            /* to avoid unlock on fail */
             return 1;
         }
 
@@ -1890,7 +1767,7 @@ nc_server_config_max_probes(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
-    if (is_ch(node) && equal_parent_name(node, 1, "tcp-client-parameters")) {
+    if (is_ch(node) && equal_parent_name(node, 2, "tcp-client-parameters")) {
         /* UNLOCK */
         nc_ch_client_unlock(ch_client);
     }
@@ -1927,6 +1804,7 @@ nc_server_config_probe_interval(const struct lyd_node *node, NC_OPERATION op)
     } else if (is_ch(node) && equal_parent_name(node, 2, "tcp-client-parameters")) {
         /* LOCK */
         if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+            /* to avoid unlock on fail */
             return 1;
         }
 
@@ -1943,7 +1821,7 @@ nc_server_config_probe_interval(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
-    if (is_ch(node) && equal_parent_name(node, 1, "tcp-client-parameters")) {
+    if (is_ch(node) && equal_parent_name(node, 2, "tcp-client-parameters")) {
         /* UNLOCK */
         nc_ch_client_unlock(ch_client);
     }
@@ -1978,6 +1856,7 @@ nc_server_config_host_key(const struct lyd_node *node, NC_OPERATION op)
     if (equal_parent_name(node, 1, "server-identity")) {
         /* LOCK */
         if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+            /* to avoid unlock on fail */
             return 1;
         }
 
@@ -2030,6 +1909,7 @@ nc_server_config_public_key_format(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -2087,8 +1967,7 @@ nc_server_config_create_auth_key_public_key_list(const struct lyd_node *node, st
 static int
 nc_server_config_replace_auth_key_public_key_leaf(const struct lyd_node *node, struct nc_public_key *pubkey)
 {
-    nc_server_config_del_auth_client_pubkey_pub_base64(pubkey);
-
+    free(pubkey->data);
     pubkey->data = strdup(lyd_get_value(node));
     if (!pubkey->data) {
         ERRMEM;
@@ -2101,8 +1980,7 @@ nc_server_config_replace_auth_key_public_key_leaf(const struct lyd_node *node, s
 static int
 nc_server_config_replace_host_key_public_key(const struct lyd_node *node, struct nc_hostkey *hostkey)
 {
-    nc_server_config_del_public_key(hostkey);
-
+    free(hostkey->key.pubkey_data);
     hostkey->key.pubkey_data = strdup(lyd_get_value(node));
     if (!hostkey->key.pubkey_data) {
         ERRMEM;
@@ -2115,8 +1993,7 @@ nc_server_config_replace_host_key_public_key(const struct lyd_node *node, struct
 static int
 nc_server_config_tls_replace_server_public_key(const struct lyd_node *node, struct nc_server_tls_opts *opts)
 {
-    nc_server_config_tls_del_public_key(opts);
-
+    free(opts->pubkey_data);
     opts->pubkey_data = strdup(lyd_get_value(node));
     if (!opts->pubkey_data) {
         ERRMEM;
@@ -2209,8 +2086,9 @@ nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
             if (ret) {
                 goto cleanup;
             }
-        } else {
-            nc_server_config_del_auth_client_pubkey_pub_base64(pubkey);
+        } else if (op == NC_OP_DELETE) {
+            free(pubkey->data);
+            pubkey->data = NULL;
         }
     } else if (is_tls(node) && equal_parent_name(node, 3, "server-identity")) {
         /* TLS server-identity */
@@ -2275,6 +2153,7 @@ nc_server_config_private_key_format(const struct lyd_node *node, NC_OPERATION op
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -2305,32 +2184,6 @@ cleanup:
 }
 
 static int
-nc_server_config_replace_cleartext_private_key(const struct lyd_node *node, struct nc_hostkey *hostkey)
-{
-    nc_server_config_del_private_key(hostkey);
-    hostkey->key.privkey_data = strdup(lyd_get_value(node));
-    if (!hostkey->key.privkey_data) {
-        ERRMEM;
-        return 1;
-    }
-
-    return 0;
-}
-
-static int
-nc_server_config_tls_replace_cleartext_private_key(const struct lyd_node *node, struct nc_server_tls_opts *opts)
-{
-    nc_server_config_tls_del_cleartext_private_key(opts);
-    opts->privkey_data = strdup(lyd_get_value(node));
-    if (!opts->privkey_data) {
-        ERRMEM;
-        return 1;
-    }
-
-    return 0;
-}
-
-static int
 nc_server_config_cleartext_private_key(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
@@ -2342,6 +2195,7 @@ nc_server_config_cleartext_private_key(const struct lyd_node *node, NC_OPERATION
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -2353,12 +2207,16 @@ nc_server_config_cleartext_private_key(const struct lyd_node *node, NC_OPERATION
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            ret = nc_server_config_replace_cleartext_private_key(node, hostkey);
-            if (ret) {
+            free(hostkey->key.privkey_data);
+            hostkey->key.privkey_data = strdup(lyd_get_value(node));
+            if (!hostkey->key.privkey_data) {
+                ERRMEM;
+                ret = 1;
                 goto cleanup;
             }
         } else {
-            nc_server_config_del_private_key(hostkey);
+            free(hostkey->key.privkey_data);
+            hostkey->key.privkey_data = NULL;
         }
     } else if (is_tls(node)) {
         /* tls */
@@ -2368,12 +2226,16 @@ nc_server_config_cleartext_private_key(const struct lyd_node *node, NC_OPERATION
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            ret = nc_server_config_tls_replace_cleartext_private_key(node, opts);
-            if (ret) {
+            free(opts->privkey_data);
+            opts->privkey_data = strdup(lyd_get_value(node));
+            if (!opts->privkey_data) {
+                ERRMEM;
+                ret = 1;
                 goto cleanup;
             }
         } else {
-            nc_server_config_tls_del_cleartext_private_key(opts);
+            free(opts->privkey_data);
+            opts->privkey_data = NULL;
         }
     }
 
@@ -2397,6 +2259,7 @@ nc_server_config_keystore_reference(const struct lyd_node *node, NC_OPERATION op
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -2410,14 +2273,15 @@ nc_server_config_keystore_reference(const struct lyd_node *node, NC_OPERATION op
             /* set to keystore */
             hostkey->store = NC_STORE_KEYSTORE;
 
-            nc_server_config_del_keystore_reference(hostkey);
+            free(hostkey->ks_ref);
             hostkey->ks_ref = strdup(lyd_get_value(node));
             if (!hostkey->ks_ref) {
                 ERRMEM;
                 ret = 1;
                 goto cleanup;
             }
-        } else {
+        } else if (op == NC_OP_DELETE) {
+            free(hostkey->ks_ref);
             hostkey->ks_ref = NULL;
         }
     }
@@ -2431,7 +2295,7 @@ cleanup:
 }
 
 static int
-nc_server_config_create_user(const struct lyd_node *node, struct nc_server_ssh_opts *opts)
+nc_server_config_create_auth_client(const struct lyd_node *node, struct nc_server_ssh_opts *opts)
 {
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
@@ -2462,7 +2326,7 @@ nc_server_config_user(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if (op == NC_OP_CREATE) {
-        ret = nc_server_config_create_user(node, opts);
+        ret = nc_server_config_create_auth_client(node, opts);
         if (ret) {
             goto cleanup;
         }
@@ -2494,6 +2358,7 @@ nc_server_config_auth_attempts(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -2525,6 +2390,7 @@ nc_server_config_auth_timeout(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -2545,68 +2411,15 @@ cleanup:
     return ret;
 }
 
-static int
-nc_server_config_ssh_replace_truststore_reference(const struct lyd_node *node, struct nc_auth_client *client_auth)
-{
-    uint16_t i;
-    struct nc_truststore *ts = &server_opts.truststore;
-
-    /* lookup name */
-    for (i = 0; i < ts->pub_bag_count; i++) {
-        if (!strcmp(lyd_get_value(node), ts->pub_bags[i].name)) {
-            break;
-        }
-    }
-
-    if (i == ts->pub_bag_count) {
-        ERR(NULL, "Public-key bag \"%s\" not found in truststore.", lyd_get_value(node));
-        return 1;
-    }
-
-    client_auth->ts_ref = &ts->pub_bags[i];
-
-    /* check if any of the referenced public keys is SubjectPublicKeyInfo */
-    for (i = 0; i < client_auth->ts_ref->pubkey_count; i++) {
-        if (nc_is_pk_subject_public_key_info(client_auth->ts_ref->pubkeys[i].data)) {
-            ERR(NULL, "Using Public Key in the SubjectPublicKeyInfo format as an SSH user's key is forbidden!");
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
-static int
-nc_server_config_tls_replace_truststore_reference(const struct lyd_node *node, struct nc_cert_grouping *auth_client)
-{
-    uint16_t i;
-    struct nc_truststore *ts = &server_opts.truststore;
-
-    /* lookup name */
-    for (i = 0; i < ts->cert_bag_count; i++) {
-        if (!strcmp(lyd_get_value(node), ts->cert_bags[i].name)) {
-            break;
-        }
-    }
-
-    if (i == ts->cert_bag_count) {
-        ERR(NULL, "Certificate bag \"%s\" not found in truststore.", lyd_get_value(node));
-        return 1;
-    }
-
-    auth_client->ts_ref = &ts->cert_bags[i];
-
-    return 0;
-}
-
 /* leaf */
 static int
 nc_server_config_truststore_reference(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
-    struct nc_endpt *endpt;
     struct nc_auth_client *auth_client;
     struct nc_ch_client *ch_client;
+    struct nc_server_tls_opts *opts;
+    struct nc_cert_grouping *certs_grp;
 
     assert(!strcmp(LYD_NAME(node), "truststore-reference"));
 
@@ -2626,46 +2439,44 @@ nc_server_config_truststore_reference(const struct lyd_node *node, NC_OPERATION 
             /* set to truststore */
             auth_client->store = NC_STORE_TRUSTSTORE;
 
-            ret = nc_server_config_ssh_replace_truststore_reference(node, auth_client);
-            if (ret) {
+            free(auth_client->ts_ref);
+            auth_client->ts_ref = strdup(lyd_get_value(node));
+            if (!auth_client->ts_ref) {
+                ERRMEM;
+                ret = 1;
                 goto cleanup;
             }
-        } else {
+        } else if (op == NC_OP_DELETE) {
+            free(auth_client->ts_ref);
             auth_client->ts_ref = NULL;
         }
-    } else if (is_tls(node) && equal_parent_name(node, 1, "ca-certs")) {
-        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
+    } else if (is_tls(node) && (equal_parent_name(node, 1, "ca-certs") || equal_parent_name(node, 1, "ee-certs"))) {
+        /* ee-certs or ca-certs */
+        if (nc_server_config_get_tls_opts(node, &opts)) {
             ret = 1;
             goto cleanup;
         }
 
-        if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            /* set to truststore */
-            endpt->opts.tls->ca_certs.store = NC_STORE_TRUSTSTORE;
-
-            ret = nc_server_config_tls_replace_truststore_reference(node, &endpt->opts.tls->ca_certs);
-            if (ret) {
-                goto cleanup;
-            }
+        if (equal_parent_name(node, 1, "ca-certs")) {
+            certs_grp = &opts->ca_certs;
         } else {
-            endpt->opts.tls->ca_certs.ts_ref = NULL;
-        }
-    } else if (is_tls(node) && equal_parent_name(node, 1, "ee-certs")) {
-        if (nc_server_config_get_endpt(node, &endpt, NULL)) {
-            ret = 1;
-            goto cleanup;
+            certs_grp = &opts->ee_certs;
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
             /* set to truststore */
-            endpt->opts.tls->ee_certs.store = NC_STORE_TRUSTSTORE;
+            certs_grp->store = NC_STORE_TRUSTSTORE;
 
-            ret = nc_server_config_tls_replace_truststore_reference(node, &endpt->opts.tls->ee_certs);
-            if (ret) {
+            free(certs_grp->ts_ref);
+            certs_grp->ts_ref = strdup(lyd_get_value(node));
+            if (!certs_grp->ts_ref) {
+                ERRMEM;
+                ret = 1;
                 goto cleanup;
             }
-        } else {
-            endpt->opts.tls->ee_certs.ts_ref = NULL;
+        } else if (op == NC_OP_DELETE) {
+            free(certs_grp->ts_ref);
+            certs_grp->ts_ref = NULL;
         }
     }
 
@@ -2675,20 +2486,6 @@ cleanup:
         nc_ch_client_unlock(ch_client);
     }
     return ret;
-}
-
-static int
-nc_server_config_replace_password(const struct lyd_node *node, struct nc_auth_client *auth_client)
-{
-    nc_server_config_del_auth_client_password(auth_client);
-
-    auth_client->password = strdup(lyd_get_value(node));
-    if (!auth_client->password) {
-        ERRMEM;
-        return 1;
-    }
-
-    return 0;
 }
 
 /* leaf */
@@ -2713,12 +2510,16 @@ nc_server_config_password(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        ret = nc_server_config_replace_password(node, auth_client);
-        if (ret) {
+        free(auth_client->password);
+        auth_client->password = strdup(lyd_get_value(node));
+        if (!auth_client->password) {
+            ERRMEM;
+            ret = 1;
             goto cleanup;
         }
     } else {
-        nc_server_config_del_auth_client_password(auth_client);
+        free(auth_client->password);
+        auth_client->password = NULL;
     }
 
 cleanup:
@@ -2750,8 +2551,7 @@ nc_server_config_pam_name(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        nc_server_config_del_auth_client_pam_name(auth_client);
-
+        free(auth_client->pam_config_name);
         auth_client->pam_config_name = strdup(lyd_get_value(node));
         if (!auth_client->pam_config_name) {
             ERRMEM;
@@ -2759,7 +2559,8 @@ nc_server_config_pam_name(const struct lyd_node *node, NC_OPERATION op)
             goto cleanup;
         }
     } else {
-        nc_server_config_del_auth_client_pam_name(auth_client);
+        free(auth_client->pam_config_name);
+        auth_client->pam_config_name = NULL;
     }
 
 cleanup:
@@ -2791,7 +2592,7 @@ nc_server_config_pam_dir(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        nc_server_config_del_auth_client_pam_dir(auth_client);
+        free(auth_client->pam_config_dir);
         auth_client->pam_config_dir = strdup(lyd_get_value(node));
         if (!auth_client->pam_config_dir) {
             ERRMEM;
@@ -2799,7 +2600,8 @@ nc_server_config_pam_dir(const struct lyd_node *node, NC_OPERATION op)
             goto cleanup;
         }
     } else {
-        nc_server_config_del_auth_client_pam_dir(auth_client);
+        free(auth_client->pam_config_dir);
+        auth_client->pam_config_dir = NULL;
     }
 
 cleanup:
@@ -2854,17 +2656,17 @@ nc_server_config_transport_params(const char *algorithm, char **alg_store, NC_OP
 
     if (!strncmp(algorithm, "openssh-", 8)) {
         /* if the name starts with openssh, convert it to it's original libssh accepted form */
-        asprintf(&alg, "%s@openssh.com", algorithm + 8);
-        if (!alg) {
+        if (asprintf(&alg, "%s@openssh.com", algorithm + 8) == -1) {
             ERRMEM;
+            alg = NULL;
             ret = 1;
             goto cleanup;
         }
     } else if (!strncmp(algorithm, "libssh-", 7)) {
         /* if the name starts with libssh, convert it to it's original libssh accepted form */
-        asprintf(&alg, "%s@libssh.org", algorithm + 7);
-        if (!alg) {
+        if (asprintf(&alg, "%s@libssh.org", algorithm + 7) == -1) {
             ERRMEM;
+            alg = NULL;
             ret = 1;
             goto cleanup;
         }
@@ -2916,7 +2718,7 @@ nc_server_config_transport_params(const char *algorithm, char **alg_store, NC_OP
                 alg_found = 1;
                 break;
             }
-            haystack++;
+            haystack = substr + 1;
         }
         if (!alg_found) {
             ERR(NULL, "Unable to delete an algorithm (%s), which was not previously added.", alg);
@@ -2943,6 +2745,7 @@ nc_server_config_host_key_alg(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -2992,6 +2795,7 @@ nc_server_config_kex_alg(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -3041,6 +2845,7 @@ nc_server_config_encryption_alg(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -3090,6 +2895,7 @@ nc_server_config_mac_alg(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -3206,7 +3012,7 @@ nc_server_config_unix_socket(const struct lyd_node *node, NC_OPERATION op)
             goto cleanup;
         }
     } else if (op == NC_OP_DELETE) {
-        nc_server_config_del_unix_socket(bind, endpt->opts.unixsock);
+        nc_server_config_del_unix_socket_opts(bind, endpt->opts.unixsock);
     }
 
 cleanup:
@@ -3216,10 +3022,7 @@ cleanup:
 #ifdef NC_ENABLED_SSH_TLS
 
 /**
- * @brief Set all endpoint client auth references, which couldn't be set beforehand.
- *
- * The references that could not be set are those, which reference endpoints, which
- * lie below the given endpoint in the YANG data (because of DFS tree parsing).
+ * @brief Set all endpoint client auth references, which couldn't be set while parsing data.
  *
  * @return 0 on success, 1 on error.
  */
@@ -3229,13 +3032,14 @@ nc_server_config_fill_endpt_client_auth(void)
     uint16_t i, j;
 
     for (i = 0; i < server_opts.endpt_count; i++) {
-        /* go through all the endpoint */
+        /* go through all the endpoints */
         if (server_opts.endpts[i].referenced_endpt_name) {
             /* endpt has a reference, that hasn't been set yet */
-            for (j = i + 1; j < server_opts.endpt_count; j++) {
-                /* go through all the remaining endpts */
+            for (j = 0; j < server_opts.endpt_count; j++) {
+                /* go through all the endpts */
                 if (!strcmp(server_opts.endpts[i].referenced_endpt_name, server_opts.endpts[j].name)) {
-                    /* found the endpoint we were looking for */
+                    /* found the endpoint we were looking for,
+                     * assign the server opts from the referenced endpt */
                     if (server_opts.endpts[i].ti == NC_TI_LIBSSH) {
                         server_opts.endpts[i].opts.ssh->endpt_client_ref = &server_opts.endpts[j];
                         break;
@@ -3331,7 +3135,7 @@ nc_server_config_endpoint_client_auth(const struct lyd_node *node, NC_OPERATION 
 
     if (i == server_opts.endpt_count) {
         /* endpt not found, save the name and try to look it up later */
-        nc_server_config_del_endpt_reference(endpt);
+        free(endpt->referenced_endpt_name);
         endpt->referenced_endpt_name = strdup(endpt_name);
         if (!endpt->referenced_endpt_name) {
             ERRMEM;
@@ -3342,7 +3146,7 @@ nc_server_config_endpoint_client_auth(const struct lyd_node *node, NC_OPERATION 
 
     /* check for self reference */
     if (endpt == &server_opts.endpts[i]) {
-        ERR(NULL, "Self client authentication reference detected.");
+        ERR(NULL, "Self endpoint reference detected for endpoint \"%s\".", endpt->name);
         ret = 1;
         goto cleanup;
     }
@@ -3350,7 +3154,7 @@ nc_server_config_endpoint_client_auth(const struct lyd_node *node, NC_OPERATION 
     /* check for cyclic references */
     ret = nc_server_config_endpoint_client_auth_has_cycle(endpt, &server_opts.endpts[i]);
     if (ret) {
-        ERR(NULL, "Cyclic client authentication reference detected.");
+        ERR(NULL, "Cyclic endpoint reference detected for endpoint \"%s\".", endpt->name);
         goto cleanup;
     }
 
@@ -3366,32 +3170,6 @@ cleanup:
 }
 
 static int
-nc_server_config_tls_replace_cert_data(const struct lyd_node *node, struct nc_server_tls_opts *opts)
-{
-    nc_server_config_tls_del_cert_data(opts);
-    opts->cert_data = strdup(lyd_get_value(node));
-    if (!opts->cert_data) {
-        ERRMEM;
-        return 1;
-    }
-
-    return 0;
-}
-
-static int
-nc_server_config_tls_replace_cert_data_client_auth(const struct lyd_node *node, struct nc_certificate *cert)
-{
-    nc_server_config_tls_del_cert_data_certificate(cert);
-    cert->data = strdup(lyd_get_value(node));
-    if (!cert->data) {
-        ERRMEM;
-        return 1;
-    }
-
-    return 0;
-}
-
-static int
 nc_server_config_cert_data(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
@@ -3403,6 +3181,7 @@ nc_server_config_cert_data(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -3413,38 +3192,31 @@ nc_server_config_cert_data(const struct lyd_node *node, NC_OPERATION op)
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            ret = nc_server_config_tls_replace_cert_data(node, opts);
-            if (ret) {
+            free(opts->cert_data);
+            opts->cert_data = strdup(lyd_get_value(node));
+            if (!opts->cert_data) {
+                ERRMEM;
+                ret = 1;
                 goto cleanup;
             }
         }
-    } else if (equal_parent_name(node, 3, "ca-certs")) {
-        if (nc_server_config_get_cert(node, 0, &cert)) {
+    } else if (equal_parent_name(node, 3, "ca-certs") || equal_parent_name(node, 3, "ee-certs")) {
+        if (nc_server_config_get_cert(node, &cert)) {
             ret = 1;
             goto cleanup;
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            ret = nc_server_config_tls_replace_cert_data_client_auth(node, cert);
-            if (ret) {
+            free(cert->data);
+            cert->data = strdup(lyd_get_value(node));
+            if (!cert->data) {
+                ERRMEM;
+                ret = 1;
                 goto cleanup;
             }
         } else {
-            nc_server_config_tls_del_cert_data_certificate(cert);
-        }
-    } else if (equal_parent_name(node, 3, "ee-certs")) {
-        if (nc_server_config_get_cert(node, 1, &cert)) {
-            ret = 1;
-            goto cleanup;
-        }
-
-        if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            ret = nc_server_config_tls_replace_cert_data_client_auth(node, cert);
-            if (ret) {
-                goto cleanup;
-            }
-        } else {
-            nc_server_config_tls_del_cert_data_certificate(cert);
+            free(cert->data);
+            cert->data = NULL;
         }
     }
 
@@ -3454,29 +3226,6 @@ cleanup:
         nc_ch_client_unlock(ch_client);
     }
     return ret;
-}
-
-static int
-nc_server_config_tls_create_asymmetric_key_ref(const struct lyd_node *node, struct nc_endpt *endpt)
-{
-    uint16_t i;
-    struct nc_keystore *ks = &server_opts.keystore;
-
-    /* lookup name */
-    for (i = 0; i < ks->asym_key_count; i++) {
-        if (!strcmp(lyd_get_value(node), ks->asym_keys[i].name)) {
-            break;
-        }
-    }
-
-    if (i == ks->asym_key_count) {
-        ERR(NULL, "Asymmetric key \"%s\" not found in the keystore.", lyd_get_value(node));
-        return 1;
-    }
-
-    endpt->opts.tls->key_ref = &ks->asym_keys[i];
-
-    return 0;
 }
 
 static int
@@ -3490,6 +3239,7 @@ nc_server_config_asymmetric_key(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -3502,11 +3252,15 @@ nc_server_config_asymmetric_key(const struct lyd_node *node, NC_OPERATION op)
         /* set to keystore */
         endpt->opts.tls->store = NC_STORE_KEYSTORE;
 
-        ret = nc_server_config_tls_create_asymmetric_key_ref(node, endpt);
-        if (ret) {
+        free(endpt->opts.tls->key_ref);
+        endpt->opts.tls->key_ref = strdup(lyd_get_value(node));
+        if (!endpt->opts.tls->key_ref) {
+            ERRMEM;
+            ret = 1;
             goto cleanup;
         }
     } else {
+        free(endpt->opts.tls->key_ref);
         endpt->opts.tls->key_ref = NULL;
     }
 
@@ -3516,53 +3270,6 @@ cleanup:
         nc_ch_client_unlock(ch_client);
     }
     return ret;
-}
-
-static int
-nc_server_config_tls_create_certificate_ref(const struct lyd_node *node, struct nc_server_tls_opts *opts, struct nc_asymmetric_key *key)
-{
-    uint16_t i;
-
-    /* lookup name */
-    for (i = 0; i < key->cert_count; i++) {
-        if (!strcmp(lyd_get_value(node), key->certs[i].name)) {
-            break;
-        }
-    }
-
-    if (i == key->cert_count) {
-        ERR(NULL, "Certificate \"%s\" not found in the asymmetric key \"%s\".", lyd_get_value(node), key->name);
-        return 1;
-    }
-
-    opts->cert_ref = &key->certs[i];
-
-    return 0;
-}
-
-static struct nc_asymmetric_key *
-nc_server_config_cert_get_asymmetric_key(const struct lyd_node *node)
-{
-    uint16_t i;
-    struct nc_keystore *ks = &server_opts.keystore;
-
-    /* starting with certificate node */
-    assert(!strcmp(LYD_NAME(node), "certificate"));
-
-    /* switch to it's only sibling, must be asymmetric-key */
-    node = node->prev;
-    assert(!strcmp(LYD_NAME(node), "asymmetric-key"));
-
-    /* find the given asymmetric key */
-    for (i = 0; i < ks->asym_key_count; i++) {
-        if (!strcmp(lyd_get_value(node), ks->asym_keys[i].name)) {
-            return &ks->asym_keys[i];
-        }
-    }
-
-    /* didn't find it */
-    ERR(NULL, "Asymmetric key \"%s\" not found in the keystore.", lyd_get_value(node));
-    return NULL;
 }
 
 static int
@@ -3591,14 +3298,15 @@ static int
 nc_server_config_certificate(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
-    struct nc_asymmetric_key *key;
     struct nc_server_tls_opts *opts;
     struct nc_ch_client *ch_client;
+    struct nc_certificate *cert;
 
     assert(!strcmp(LYD_NAME(node), "certificate"));
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -3613,24 +3321,15 @@ nc_server_config_certificate(const struct lyd_node *node, NC_OPERATION op)
             /* set to keystore */
             opts->store = NC_STORE_KEYSTORE;
 
-            if (!opts->key_ref) {
-                /* we don't have a key from which we need the cert yet */
-                key = nc_server_config_cert_get_asymmetric_key(node);
-                if (!key) {
-                    ret = 1;
-                    goto cleanup;
-                }
-            } else {
-                /* we have the key */
-                key = opts->key_ref;
-            }
-
-            /* find the given cert in the key and set it */
-            ret = nc_server_config_tls_create_certificate_ref(node, opts, key);
-            if (ret) {
+            free(opts->cert_ref);
+            opts->cert_ref = strdup(lyd_get_value(node));
+            if (!opts->cert_ref) {
+                ERRMEM;
+                ret = 1;
                 goto cleanup;
             }
         } else {
+            free(opts->cert_ref);
             opts->cert_ref = NULL;
         }
     } else if (equal_parent_name(node, 2, "ca-certs")) {
@@ -3641,7 +3340,11 @@ nc_server_config_certificate(const struct lyd_node *node, NC_OPERATION op)
                 goto cleanup;
             }
         } else {
-            nc_server_config_tls_del_certs(&opts->ca_certs);
+            if (nc_server_config_get_cert(node, &cert)) {
+                ret = 1;
+                goto cleanup;
+            }
+            nc_server_config_del_cert(&opts->ca_certs, cert);
         }
     } else if (equal_parent_name(node, 2, "ee-certs")) {
         /* TLS client auth end entity */
@@ -3651,7 +3354,11 @@ nc_server_config_certificate(const struct lyd_node *node, NC_OPERATION op)
                 goto cleanup;
             }
         } else {
-            nc_server_config_tls_del_certs(&opts->ee_certs);
+            if (nc_server_config_get_cert(node, &cert)) {
+                ret = 1;
+                goto cleanup;
+            }
+            nc_server_config_del_cert(&opts->ee_certs, cert);
         }
     }
 
@@ -3674,14 +3381,6 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
     NC_TLS_CTN_MAPTYPE m_type;
 
     assert(!strcmp(LYD_NAME(node), "cert-to-name"));
-
-    /* create new ctn */
-    new = calloc(1, sizeof *new);
-    if (!new) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
 
     /* get all the data */
     /* find the list's key */
@@ -3716,6 +3415,14 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
         goto cleanup;
     }
 
+    /* create new ctn */
+    new = calloc(1, sizeof *new);
+    if (!new) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+
     /* find the right place for insertion */
     if (!opts->ctn) {
         /* inserting the first one */
@@ -3738,9 +3445,7 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
 
     /* insert the right data */
     new->id = id;
-    if (new->name) {
-        free(new->name);
-    }
+    free(new->name);
     new->name = strdup(name);
     if (!new->name) {
         ERRMEM;
@@ -3758,7 +3463,6 @@ nc_server_config_cert_to_name(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_server_tls_opts *opts;
-    struct lyd_node *key;
     struct nc_ctn *ctn;
     struct nc_ch_client *ch_client;
 
@@ -3766,6 +3470,7 @@ nc_server_config_cert_to_name(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -3781,8 +3486,6 @@ nc_server_config_cert_to_name(const struct lyd_node *node, NC_OPERATION op)
         }
     } else {
         /* find the given ctn entry */
-        lyd_find_path(node, "id", 0, &key);
-        assert(key);
         if (nc_server_config_get_ctn(node, &ctn)) {
             ret = 1;
             goto cleanup;
@@ -3799,20 +3502,6 @@ cleanup:
 }
 
 static int
-nc_server_config_replace_fingerprint(const struct lyd_node *node, struct nc_ctn *ctn)
-{
-    nc_server_config_del_fingerprint(ctn);
-
-    ctn->fingerprint = strdup(lyd_get_value(node));
-    if (!ctn->fingerprint) {
-        ERRMEM;
-        return 1;
-    }
-
-    return 0;
-}
-
-static int
 nc_server_config_fingerprint(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
@@ -3823,6 +3512,7 @@ nc_server_config_fingerprint(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -3832,12 +3522,16 @@ nc_server_config_fingerprint(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        ret = nc_server_config_replace_fingerprint(node, ctn);
-        if (ret) {
+        free(ctn->fingerprint);
+        ctn->fingerprint = strdup(lyd_get_value(node));
+        if (!ctn->fingerprint) {
+            ERRMEM;
+            ret = 1;
             goto cleanup;
         }
     } else {
-        nc_server_config_del_fingerprint(ctn);
+        free(ctn->fingerprint);
+        ctn->fingerprint = NULL;
     }
 
 cleanup:
@@ -3848,18 +3542,6 @@ cleanup:
     return ret;
 }
 
-static void
-nc_server_config_set_tls_version(struct nc_server_tls_opts *opts, NC_TLS_VERSION version, NC_OPERATION op)
-{
-    if (op == NC_OP_CREATE) {
-        /* add the version if it isn't there already */
-        opts->tls_versions |= version;
-    } else if ((op == NC_OP_DELETE) && (opts->tls_versions & version)) {
-        /* delete the version if it is there */
-        opts->tls_versions -= version;
-    }
-}
-
 static int
 nc_server_config_tls_version(const struct lyd_node *node, NC_OPERATION op)
 {
@@ -3867,11 +3549,13 @@ nc_server_config_tls_version(const struct lyd_node *node, NC_OPERATION op)
     struct nc_server_tls_opts *opts;
     const char *version = NULL;
     struct nc_ch_client *ch_client;
+    NC_TLS_VERSION tls_version;
 
     assert(!strcmp(LYD_NAME(node), "tls-version"));
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -3880,19 +3564,28 @@ nc_server_config_tls_version(const struct lyd_node *node, NC_OPERATION op)
         goto cleanup;
     }
 
+    /* str to tls_version */
     version = ((struct lyd_node_term *)node)->value.ident->name;
     if (!strcmp(version, "tls10")) {
-        nc_server_config_set_tls_version(opts, NC_TLS_VERSION_10, op);
+        tls_version = NC_TLS_VERSION_10;
     } else if (!strcmp(version, "tls11")) {
-        nc_server_config_set_tls_version(opts, NC_TLS_VERSION_11, op);
+        tls_version = NC_TLS_VERSION_11;
     } else if (!strcmp(version, "tls12")) {
-        nc_server_config_set_tls_version(opts, NC_TLS_VERSION_12, op);
+        tls_version = NC_TLS_VERSION_12;
     } else if (!strcmp(version, "tls13")) {
-        nc_server_config_set_tls_version(opts, NC_TLS_VERSION_13, op);
+        tls_version = NC_TLS_VERSION_13;
     } else {
         ERR(NULL, "TLS version \"%s\" not supported.", version);
         ret = 1;
         goto cleanup;
+    }
+
+    if (op == NC_OP_CREATE) {
+        /* add the version if it isn't there already */
+        opts->tls_versions |= tls_version;
+    } else if ((op == NC_OP_DELETE) && (opts->tls_versions & tls_version)) {
+        /* delete the version if it is there */
+        opts->tls_versions -= tls_version;
     }
 
 cleanup:
@@ -3909,6 +3602,7 @@ nc_server_config_create_cipher_suite(struct nc_server_tls_opts *opts, const char
     int ret = 0;
     char *ssl_cipher = NULL;
     uint16_t i;
+    void *tmp;
 
     ssl_cipher = malloc(strlen(cipher) + 1);
     if (!ssl_cipher) {
@@ -3938,12 +3632,13 @@ nc_server_config_create_cipher_suite(struct nc_server_tls_opts *opts, const char
         }
     } else {
         /* + 1 because of : between entries */
-        opts->ciphers = nc_realloc(opts->ciphers, strlen(opts->ciphers) + strlen(ssl_cipher) + 1 + 1);
-        if (!opts->ciphers) {
+        tmp = nc_realloc(opts->ciphers, strlen(opts->ciphers) + strlen(ssl_cipher) + 1 + 1);
+        if (!tmp) {
             ERRMEM;
             ret = 1;
             goto cleanup;
         }
+        opts->ciphers = tmp;
         strcat(opts->ciphers, ":");
         strcat(opts->ciphers, ssl_cipher);
     }
@@ -3960,10 +3655,9 @@ nc_server_config_del_cipher_suite(struct nc_server_tls_opts *opts, const char *c
     char *haystack, *substr;
     size_t cipher_len = strlen(cipher);
 
-    /* delete */
+    /* iterate over all the substrings */
     haystack = opts->ciphers;
     while ((substr = strstr(haystack, cipher))) {
-        /* iterate over all the substrings */
         if (((substr == haystack) && (*(substr + cipher_len) == ':')) ||
                 ((substr != haystack) && (*(substr - 1) == ':') && (*(substr + cipher_len) == ':'))) {
             /* either the first element of the string or somewhere in the middle */
@@ -3976,7 +3670,7 @@ nc_server_config_del_cipher_suite(struct nc_server_tls_opts *opts, const char *c
             cipher_found = 1;
             break;
         }
-        haystack++;
+        haystack = substr + 1;
     }
 
     if (!cipher_found) {
@@ -3999,6 +3693,7 @@ nc_server_config_cipher_suite(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -4039,6 +3734,7 @@ nc_server_config_crl_url(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -4048,7 +3744,7 @@ nc_server_config_crl_url(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        nc_server_config_del_url(opts);
+        free(opts->crl_url);
         opts->crl_url = strdup(lyd_get_value(node));
         if (!opts->crl_url) {
             ERRMEM;
@@ -4056,7 +3752,8 @@ nc_server_config_crl_url(const struct lyd_node *node, NC_OPERATION op)
             goto cleanup;
         }
     } else if (op == NC_OP_DELETE) {
-        nc_server_config_del_url(opts);
+        free(opts->crl_url);
+        opts->crl_url = NULL;
     }
 
 cleanup:
@@ -4078,6 +3775,7 @@ nc_server_config_crl_path(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -4087,7 +3785,7 @@ nc_server_config_crl_path(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        nc_server_config_del_path(opts);
+        free(opts->crl_path);
         opts->crl_path = strdup(lyd_get_value(node));
         if (!opts->crl_path) {
             ERRMEM;
@@ -4095,7 +3793,8 @@ nc_server_config_crl_path(const struct lyd_node *node, NC_OPERATION op)
             goto cleanup;
         }
     } else if (op == NC_OP_DELETE) {
-        nc_server_config_del_path(opts);
+        free(opts->crl_path);
+        opts->crl_path = NULL;
     }
 
 cleanup:
@@ -4117,6 +3816,7 @@ nc_server_config_crl_cert_ext(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -4159,7 +3859,7 @@ nc_server_config_create_netconf_client(const struct lyd_node *node)
 
     server_opts.ch_clients[server_opts.ch_client_count - 1].id = ATOMIC_INC_RELAXED(server_opts.new_client_id);
     server_opts.ch_clients[server_opts.ch_client_count - 1].start_with = NC_CH_FIRST_LISTED;
-    server_opts.ch_clients[server_opts.ch_client_count - 1].max_attempts = 3; // TODO
+    server_opts.ch_clients[server_opts.ch_client_count - 1].max_attempts = 3;
 
     pthread_mutex_init(&server_opts.ch_clients[server_opts.ch_client_count - 1].lock, NULL);
 
@@ -4208,6 +3908,7 @@ nc_server_config_remote_address(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -4217,8 +3918,7 @@ nc_server_config_remote_address(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        nc_server_config_del_remote_address(ch_endpt);
-
+        free(ch_endpt->address);
         ch_endpt->address = strdup(lyd_get_value(node));
         if (!ch_endpt->address) {
             ERRMEM;
@@ -4226,7 +3926,8 @@ nc_server_config_remote_address(const struct lyd_node *node, NC_OPERATION op)
             goto cleanup;
         }
     } else {
-        nc_server_config_del_remote_address(ch_endpt);
+        free(ch_endpt->address);
+        ch_endpt->address = NULL;
     }
 
 cleanup:
@@ -4246,6 +3947,7 @@ nc_server_config_remote_port(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -4280,8 +3982,8 @@ nc_server_config_persistent(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
-        ret = 1;
-        goto cleanup;
+        /* to avoid unlock on fail */
+        return 1;
     }
 
     ch_client->conn_type = NC_CH_PERSIST;
@@ -4289,7 +3991,6 @@ nc_server_config_persistent(const struct lyd_node *node, NC_OPERATION op)
     /* UNLOCK */
     nc_ch_client_unlock(ch_client);
 
-cleanup:
     return ret;
 }
 
@@ -4305,8 +4006,8 @@ nc_server_config_periodic(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
-        ret = 1;
-        goto cleanup;
+        /* to avoid unlock on fail */
+        return 1;
     }
 
     ch_client->conn_type = NC_CH_PERIOD;
@@ -4318,7 +4019,6 @@ nc_server_config_periodic(const struct lyd_node *node, NC_OPERATION op)
     /* UNLOCK */
     nc_ch_client_unlock(ch_client);
 
-cleanup:
     return ret;
 }
 
@@ -4332,8 +4032,8 @@ nc_server_config_period(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
-        ret = 1;
-        goto cleanup;
+        /* to avoid unlock on fail */
+        return 1;
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
@@ -4345,7 +4045,6 @@ nc_server_config_period(const struct lyd_node *node, NC_OPERATION op)
     /* UNLOCK */
     nc_ch_client_unlock(ch_client);
 
-cleanup:
     return ret;
 }
 
@@ -4360,6 +4059,7 @@ nc_server_config_anchor_time(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -4392,8 +4092,8 @@ nc_server_config_reconnect_strategy(const struct lyd_node *node, NC_OPERATION op
 
     /* LOCK */
     if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
-        ret = 1;
-        goto cleanup;
+        /* to avoid unlock on fail */
+        return 1;
     }
 
     /* set to default values */
@@ -4404,7 +4104,6 @@ nc_server_config_reconnect_strategy(const struct lyd_node *node, NC_OPERATION op
     /* UNLOCK */
     nc_ch_client_unlock(ch_client);
 
-cleanup:
     return ret;
 }
 
@@ -4419,6 +4118,7 @@ nc_server_config_start_with(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
         return 1;
     }
 
@@ -4456,8 +4156,8 @@ nc_server_config_max_wait(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
-        ret = 1;
-        goto cleanup;
+        /* to avoid unlock on fail */
+        return 1;
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
@@ -4469,7 +4169,6 @@ nc_server_config_max_wait(const struct lyd_node *node, NC_OPERATION op)
     /* UNLOCK */
     nc_ch_client_unlock(ch_client);
 
-cleanup:
     return ret;
 }
 
@@ -4483,8 +4182,8 @@ nc_server_config_max_attempts(const struct lyd_node *node, NC_OPERATION op)
 
     /* LOCK */
     if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
-        ret = 1;
-        goto cleanup;
+        /* to avoid unlock on fail */
+        return 1;
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
@@ -4496,7 +4195,6 @@ nc_server_config_max_attempts(const struct lyd_node *node, NC_OPERATION op)
     /* UNLOCK */
     nc_ch_client_unlock(ch_client);
 
-cleanup:
     return ret;
 }
 
@@ -4504,230 +4202,130 @@ static int
 nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION op)
 {
     const char *name = LYD_NAME(node);
+    int ret = 0;
 
     if (!strcmp(name, "listen")) {
-        if (nc_server_config_listen(NULL, op)) {
-            goto error;
-        }
+        ret = nc_server_config_listen(node, op);
+    } else if (!strcmp(name, "call-home")) {
+        ret = nc_server_config_ch(node, op);
     } else if (!strcmp(name, "idle-timeout")) {
-        if (nc_server_config_idle_timeout(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_idle_timeout(node, op);
     } else if (!strcmp(name, "endpoint")) {
-        if (nc_server_config_endpoint(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_endpoint(node, op);
     } else if (!strcmp(name, "unix-socket")) {
-        if (nc_server_config_unix_socket(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_unix_socket(node, op);
     }
 #ifdef NC_ENABLED_SSH_TLS
     else if (!strcmp(name, "ssh")) {
-        if (nc_server_config_ssh(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ssh(node, op);
     } else if (!strcmp(name, "local-address")) {
-        if (nc_server_config_local_address(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_local_address(node, op);
     } else if (!strcmp(name, "local-port")) {
-        if (nc_server_config_local_port(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_local_port(node, op);
     } else if (!strcmp(name, "keepalives")) {
-        if (nc_server_config_keepalives(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_keepalives(node, op);
     } else if (!strcmp(name, "idle-time")) {
-        if (nc_server_config_idle_time(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_idle_time(node, op);
     } else if (!strcmp(name, "max-probes")) {
-        if (nc_server_config_max_probes(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_max_probes(node, op);
     } else if (!strcmp(name, "probe-interval")) {
-        if (nc_server_config_probe_interval(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_probe_interval(node, op);
     } else if (!strcmp(name, "host-key")) {
-        if (nc_server_config_host_key(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_host_key(node, op);
     } else if (!strcmp(name, "public-key-format")) {
-        if (nc_server_config_public_key_format(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_public_key_format(node, op);
     } else if (!strcmp(name, "public-key")) {
-        if (nc_server_config_public_key(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_public_key(node, op);
     } else if (!strcmp(name, "private-key-format")) {
-        if (nc_server_config_private_key_format(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_private_key_format(node, op);
     } else if (!strcmp(name, "cleartext-private-key")) {
-        if (nc_server_config_cleartext_private_key(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_cleartext_private_key(node, op);
     } else if (!strcmp(name, "keystore-reference")) {
-        if (nc_server_config_keystore_reference(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_keystore_reference(node, op);
     } else if (!strcmp(name, "user")) {
-        if (nc_server_config_user(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_user(node, op);
     } else if (!strcmp(name, "auth-attempts")) {
-        if (nc_server_config_auth_attempts(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_auth_attempts(node, op);
     } else if (!strcmp(name, "auth-timeout")) {
-        if (nc_server_config_auth_timeout(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_auth_timeout(node, op);
     } else if (!strcmp(name, "truststore-reference")) {
-        if (nc_server_config_truststore_reference(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_truststore_reference(node, op);
     } else if (!strcmp(name, "password")) {
-        if (nc_server_config_password(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_password(node, op);
     } else if (!strcmp(name, "pam-config-file-name")) {
-        if (nc_server_config_pam_name(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_pam_name(node, op);
     } else if (!strcmp(name, "pam-config-file-dir")) {
-        if (nc_server_config_pam_dir(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_pam_dir(node, op);
     } else if (!strcmp(name, "none")) {
-        if (nc_server_config_none(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_none(node, op);
     } else if (!strcmp(name, "host-key-alg")) {
-        if (nc_server_config_host_key_alg(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_host_key_alg(node, op);
     } else if (!strcmp(name, "key-exchange-alg")) {
-        if (nc_server_config_kex_alg(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_kex_alg(node, op);
     } else if (!strcmp(name, "encryption-alg")) {
-        if (nc_server_config_encryption_alg(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_encryption_alg(node, op);
     } else if (!strcmp(name, "mac-alg")) {
-        if (nc_server_config_mac_alg(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_mac_alg(node, op);
     } else if (!strcmp(name, "endpoint-client-auth")) {
-        if (nc_server_config_endpoint_client_auth(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_endpoint_client_auth(node, op);
     } else if (!strcmp(name, "tls")) {
-        if (nc_server_config_tls(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_tls(node, op);
     } else if (!strcmp(name, "cert-data")) {
-        if (nc_server_config_cert_data(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_cert_data(node, op);
     } else if (!strcmp(name, "asymmetric-key")) {
-        if (nc_server_config_asymmetric_key(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_asymmetric_key(node, op);
     } else if (!strcmp(name, "certificate")) {
-        if (nc_server_config_certificate(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_certificate(node, op);
     } else if (!strcmp(name, "cert-to-name")) {
-        if (nc_server_config_cert_to_name(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_cert_to_name(node, op);
     } else if (!strcmp(name, "fingerprint")) {
-        if (nc_server_config_fingerprint(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_fingerprint(node, op);
     } else if (!strcmp(name, "tls-version")) {
-        if (nc_server_config_tls_version(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_tls_version(node, op);
     } else if (!strcmp(name, "cipher-suite")) {
-        if (nc_server_config_cipher_suite(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_cipher_suite(node, op);
     } else if (!strcmp(name, "crl-url")) {
-        if (nc_server_config_crl_url(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_crl_url(node, op);
     } else if (!strcmp(name, "crl-path")) {
-        if (nc_server_config_crl_path(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_crl_path(node, op);
     } else if (!strcmp(name, "crl-cert-ext")) {
-        if (nc_server_config_crl_cert_ext(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_crl_cert_ext(node, op);
     }
 #endif /* NC_ENABLED_SSH_TLS */
     else if (!strcmp(name, "netconf-client")) {
-        if (nc_server_config_netconf_client(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_netconf_client(node, op);
     }
 #ifdef NC_ENABLED_SSH_TLS
     else if (!strcmp(name, "remote-address")) {
-        if (nc_server_config_remote_address(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_remote_address(node, op);
     } else if (!strcmp(name, "remote-port")) {
-        if (nc_server_config_remote_port(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_remote_port(node, op);
     }
 #endif /* NC_ENABLED_SSH_TLS */
     else if (!strcmp(name, "persistent")) {
-        if (nc_server_config_persistent(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_persistent(node, op);
     } else if (!strcmp(name, "periodic")) {
-        if (nc_server_config_periodic(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_periodic(node, op);
     } else if (!strcmp(name, "period")) {
-        if (nc_server_config_period(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_period(node, op);
     } else if (!strcmp(name, "anchor-time")) {
-        if (nc_server_config_anchor_time(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_anchor_time(node, op);
     } else if (!strcmp(name, "reconnect-strategy")) {
-        if (nc_server_config_reconnect_strategy(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_reconnect_strategy(node, op);
     } else if (!strcmp(name, "start-with")) {
-        if (nc_server_config_start_with(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_start_with(node, op);
     } else if (!strcmp(name, "max-wait")) {
-        if (nc_server_config_max_wait(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_max_wait(node, op);
     } else if (!strcmp(name, "max-attempts")) {
-        if (nc_server_config_max_attempts(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_max_attempts(node, op);
+    }
+
+    if (ret) {
+        ERR(NULL, "Configuring node \"%s\" failed.", LYD_NAME(node));
+        return 1;
     }
 
     return 0;
-
-error:
-    ERR(NULL, "Configuring node \"%s\" failed.", LYD_NAME(node));
-    return 1;
 }
 
 int

@@ -60,20 +60,18 @@ extern "C" {
  * iana-ssh-mac-algs, iana-ssh-public-key-algs, ietf-keystore, ietf-ssh-server, ietf-truststore,
  * ietf-tls-server and libnetconf2-netconf-server.
  *
- * @param[in, out] ctx Optional context in which the modules will be implemented. Created if ctx is null.
+ * @param[in, out] ctx Optional context in which the modules will be implemented. Created if *ctx is null.
  * @return 0 on success, 1 on error.
  */
 int nc_server_config_load_modules(struct ly_ctx **ctx);
 
 /**
- * @brief Configure server based on the given diff data.
+ * @brief Configure server based on the given diff.
  *
- * Expected data are a validated instance of a ietf-netconf-server YANG data.
- * The data must be in the diff format and supported operations are: create, replace,
- * delete and none. Context must already have implemented the required modules, see
- * ::nc_server_config_load_modules().
+ * Context must already have implemented the required modules, see ::nc_server_config_load_modules().
  *
- * @param[in] diff ietf-netconf-server YANG diff data.
+ * @param[in] diff YANG diff belonging to either ietf-netconf-server, ietf-keystore or ietf-truststore modules.
+ * This diff should be validated. The top level node HAS to have an operation (create, replace, delete or none).
  * @return 0 on success, 1 on error.
  */
 int nc_server_config_setup_diff(const struct lyd_node *diff);
@@ -81,23 +79,24 @@ int nc_server_config_setup_diff(const struct lyd_node *diff);
 /**
  * @brief Configure server based on the given data.
  *
- * Expected data is a validated instance of a ietf-netconf-server YANG data.
  * Behaves as if all the nodes in data had the replace operation. That means that the current configuration will be deleted
- * and just the given data will all be applied.
- * The data must not contain any operation attribute, see ::nc_server_config_setup_diff() which works with diff.
+ * and just the given data will be applied.
  * Context must already have implemented the required modules, see ::nc_server_config_load_modules().
  *
- * @param[in] data ietf-netconf-server YANG data.
+ * @param[in] data YANG data belonging to either ietf-netconf-server, ietf-keystore or ietf-truststore modules.
+ * This data should be validated. No node can have an operation attribute.
  * @return 0 on success, 1 on error.
  */
 int nc_server_config_setup_data(const struct lyd_node *data);
 
 /**
- * @brief Configure server based on the given ietf-netconf-server YANG data from a file.
+ * @brief Configure server based on the given data stored in a file.
+ *
  * Wrapper around ::nc_server_config_setup_data() hiding work with parsing the data.
+ * Context must already have implemented the required modules, see ::nc_server_config_load_modules().
  *
  * @param[in] ctx libyang context.
- * @param[in] path Path to the file with ietf-netconf-server YANG data.
+ * @param[in] path Path to a file with ietf-netconf-server, ietf-keystore or ietf-truststore YANG data.
  * @return 0 on success, 1 on error.
  */
 int nc_server_config_setup_path(const struct ly_ctx *ctx, const char *path);
@@ -105,7 +104,7 @@ int nc_server_config_setup_path(const struct ly_ctx *ctx, const char *path);
 #ifdef NC_ENABLED_SSH_TLS
 
 /**
- * @brief Creates new YANG configuration data nodes for local-address and local-port.
+ * @brief Creates new YANG configuration data nodes for address and port.
  *
  * @param[in] ctx libyang context.
  * @param[in] endpt_name Arbitrary identifier of the endpoint.
@@ -181,11 +180,8 @@ int nc_server_config_new_del_keystore_asym_key(const char *asym_key_name, struct
 /**
  * @brief Creates new YANG data nodes for a certificate in the keystore.
  *
- * A certificate can not exist without its asymmetric key, so you must call ::nc_server_config_new_keystore_asym_key()
- * either before or after calling this with the same identifier for the asymmetric key.
- *
- * An asymmetric key pair can have zero or more certificates associated with this key pair, however a certificate must
- * have exactly one key pair it belongs to.
+ * A certificate can not exist without its asymmetric key, so you must create an asymmetric key
+ * with the same identifier you pass to this function.
  *
  * @param[in] ctx libyang context.
  * @param[in] asym_key_name Arbitrary identifier of the asymmetric key.
