@@ -169,7 +169,7 @@ struct nc_auth_client {
             struct nc_public_key *pubkeys;  /**< The client's public keys. */
             uint16_t pubkey_count;          /**< The number of client's public keys. */
         };
-        struct nc_public_key_bag *ts_ref;                 /**< Reference to a truststore. */
+        char *ts_ref;                       /**< Name of the referenced truststore key. */
     };
 
     char *password;                         /**< Client's password */
@@ -219,10 +219,10 @@ struct nc_cert_grouping {
     NC_STORE_TYPE store;                    /**< Specifies how/where the certificates are stored. */
     union {
         struct {
-            struct nc_certificate *certs;   /**< Local-defined certificates */
-            uint16_t cert_count;            /**< Certificate count */
+            struct nc_certificate *certs;   /**< Local-defined certificates. */
+            uint16_t cert_count;            /**< Certificate count. */
         };
-        struct nc_certificate_bag *ts_ref;  /**< Referenced trustore certificate bag */
+        char *ts_ref;                       /**< Name of the referenced truststore certificate bag. */
     };
 };
 
@@ -262,8 +262,8 @@ struct nc_server_tls_opts {
         };
 
         struct {
-            struct nc_asymmetric_key *key_ref;  /**< Reference to the server's key */
-            struct nc_certificate *cert_ref;    /**< Reference to the concrete server's certificate */
+            char *key_ref;                      /**< Reference to the server's key */
+            char *cert_ref;                     /**< Reference to the concrete server's certificate */
         };
     };
 
