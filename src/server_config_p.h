@@ -85,9 +85,16 @@ int nc_server_config_parse_tree(const struct lyd_node *node, NC_OPERATION parent
  * @param[in] op Operation to be done on the subtree. Only does something if the operation is NC_OP_DELETE.
  * @return 0 on success, 1 on error.
  */
-int nc_server_config_listen(struct lyd_node *node, NC_OPERATION op);
+int nc_server_config_listen(const struct lyd_node *node, NC_OPERATION op);
 
-void nc_server_config_ch(const struct lyd_node *node, NC_OPERATION op);
+/**
+ * @brief Configures the Call Home subtree in the ietf-netconf-server module.
+ *
+ * @param[in] node call-home YANG data node.
+ * @param[in] op Operation to be done on the subtree. Only does something if the operation is NC_OP_DELETE.
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_config_ch(const struct lyd_node *node, NC_OPERATION op);
 
 #ifdef NC_ENABLED_SSH_TLS
 
