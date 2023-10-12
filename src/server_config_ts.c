@@ -42,6 +42,7 @@ nc_server_config_get_certificate_bag(const struct lyd_node *node, struct nc_cert
     uint16_t i;
     const char *cbag_name;
     struct nc_truststore *ts;
+    const char *node_name = LYD_NAME(node);
 
     assert(node && cbag);
 
@@ -53,7 +54,7 @@ nc_server_config_get_certificate_bag(const struct lyd_node *node, struct nc_cert
     }
 
     if (!node) {
-        ERR(NULL, "Node \"%s\" is not contained in a certificate-bag subtree.", LYD_NAME(node));
+        ERR(NULL, "Node \"%s\" is not contained in a certificate-bag subtree.", node_name);
         return 1;
     }
 
@@ -86,6 +87,7 @@ nc_server_config_get_certificate(const struct lyd_node *node, struct nc_certific
     uint16_t i;
     const char *cert_name;
     struct nc_certificate_bag *cbag;
+    const char *node_name = LYD_NAME(node);
 
     assert(node && cert);
 
@@ -101,7 +103,7 @@ nc_server_config_get_certificate(const struct lyd_node *node, struct nc_certific
     }
 
     if (!node) {
-        ERR(NULL, "Node \"%s\" is not contained in a certificate subtree.", LYD_NAME(node));
+        ERR(NULL, "Node \"%s\" is not contained in a certificate subtree.", node_name);
         return 1;
     }
 
@@ -133,6 +135,7 @@ nc_server_config_get_public_key_bag(const struct lyd_node *node, struct nc_publi
     uint16_t i;
     const char *pbag_name;
     struct nc_truststore *ts;
+    const char *node_name = LYD_NAME(node);
 
     assert(node && pbag);
 
@@ -144,7 +147,7 @@ nc_server_config_get_public_key_bag(const struct lyd_node *node, struct nc_publi
     }
 
     if (!node) {
-        ERR(NULL, "Node \"%s\" is not contained in a public-key-bag subtree.", LYD_NAME(node));
+        ERR(NULL, "Node \"%s\" is not contained in a public-key-bag subtree.", node_name);
         return 1;
     }
 
@@ -177,6 +180,7 @@ nc_server_config_get_public_key(const struct lyd_node *node, struct nc_public_ke
     uint16_t i;
     const char *pkey_name;
     struct nc_public_key_bag *pbag;
+    const char *node_name = LYD_NAME(node);
 
     assert(node && pkey);
 
@@ -196,7 +200,7 @@ nc_server_config_get_public_key(const struct lyd_node *node, struct nc_public_ke
     }
 
     if (!node) {
-        ERR(NULL, "Node \"%s\" is not contained in a public-key subtree.", LYD_NAME(node));
+        ERR(NULL, "Node \"%s\" is not contained in a public-key subtree.", node_name);
         return 1;
     }
 
@@ -216,31 +220,17 @@ nc_server_config_get_public_key(const struct lyd_node *node, struct nc_public_ke
 }
 
 static void
-nc_server_config_ts_del_cert_data(struct nc_certificate *cert)
-{
-    free(cert->data);
-    cert->data = NULL;
-}
-
-static void
-nc_server_config_ts_del_public_key_base64(struct nc_public_key *pkey)
-{
-    free(pkey->data);
-    pkey->data = NULL;
-}
-
-static void
 nc_server_config_ts_del_certificate(struct nc_certificate_bag *cbag, struct nc_certificate *cert)
 {
     free(cert->name);
-    cert->name = NULL;
-
-    nc_server_config_ts_del_cert_data(cert);
+    free(cert->data);
 
     cbag->cert_count--;
-    if (cbag->cert_count == 0) {
+    if (!cbag->cert_count) {
         free(cbag->certs);
         cbag->certs = NULL;
+    } else if (cert != &cbag->certs[cbag->cert_count]) {
+        memcpy(cert, &cbag->certs[cbag->cert_count], sizeof *cbag->certs);
     }
 }
 
@@ -248,14 +238,14 @@ static void
 nc_server_config_ts_del_public_key(struct nc_public_key_bag *pbag, struct nc_public_key *pkey)
 {
     free(pkey->name);
-    pkey->name = NULL;
-
-    nc_server_config_ts_del_public_key_base64(pkey);
+    free(pkey->data);
 
     pbag->pubkey_count--;
-    if (pbag->pubkey_count == 0) {
+    if (!pbag->pubkey_count) {
         free(pbag->pubkeys);
         pbag->pubkeys = NULL;
+    } else if (pkey != &pbag->pubkeys[pbag->pubkey_count]) {
+        memcpy(pkey, &pbag->pubkeys[pbag->pubkey_count], sizeof *pbag->pubkeys);
     }
 }
 
@@ -266,7 +256,6 @@ nc_server_config_ts_del_certificate_bag(struct nc_certificate_bag *cbag)
     struct nc_truststore *ts = &server_opts.truststore;
 
     free(cbag->name);
-    cbag->name = NULL;
 
     cert_count = cbag->cert_count;
     for (i = 0; i < cert_count; i++) {
@@ -274,9 +263,11 @@ nc_server_config_ts_del_certificate_bag(struct nc_certificate_bag *cbag)
     }
 
     ts->cert_bag_count--;
-    if (ts->cert_bag_count == 0) {
+    if (!ts->cert_bag_count) {
         free(ts->cert_bags);
         ts->cert_bags = NULL;
+    } else if (cbag != &ts->cert_bags[ts->cert_bag_count]) {
+        memcpy(cbag, &ts->cert_bags[ts->cert_bag_count], sizeof *ts->cert_bags);
     }
 }
 
@@ -287,7 +278,6 @@ nc_server_config_ts_del_public_key_bag(struct nc_public_key_bag *pbag)
     struct nc_truststore *ts = &server_opts.truststore;
 
     free(pbag->name);
-    pbag->name = NULL;
 
     pubkey_count = pbag->pubkey_count;
     for (i = 0; i < pubkey_count; i++) {
@@ -295,9 +285,11 @@ nc_server_config_ts_del_public_key_bag(struct nc_public_key_bag *pbag)
     }
 
     ts->pub_bag_count--;
-    if (ts->pub_bag_count == 0) {
+    if (!ts->pub_bag_count) {
         free(ts->pub_bags);
         ts->pub_bags = NULL;
+    } else if (pbag != &ts->pub_bags[ts->pub_bag_count]) {
+        memcpy(pbag, &ts->pub_bags[ts->pub_bag_count], sizeof *ts->pub_bags);
     }
 }
 
@@ -429,7 +421,7 @@ nc_server_config_ts_cert_data(const struct lyd_node *node, NC_OPERATION op)
             return 1;
         }
 
-        nc_server_config_ts_del_cert_data(cert);
+        free(cert->data);
         cert->data = strdup(lyd_get_value(node));
         if (!cert->data) {
             ERRMEM;
@@ -517,7 +509,7 @@ nc_server_config_ts_public_key(const struct lyd_node *node, NC_OPERATION op)
         }
 
         /* replace the public key */
-        nc_server_config_ts_del_public_key_base64(pkey);
+        free(pkey->data);
         pkey->data = strdup(lyd_get_value(node));
         if (!pkey->data) {
             ERRMEM;
@@ -558,50 +550,34 @@ int
 nc_server_config_parse_truststore(const struct lyd_node *node, NC_OPERATION op)
 {
     const char *name = LYD_NAME(node);
+    int ret = 0;
 
     if (!strcmp(name, "truststore")) {
-        if (nc_server_config_ts_truststore(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ts_truststore(node, op);
     } else if (!strcmp(name, "certificate-bags")) {
-        if (nc_server_config_ts_certificate_bags(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ts_certificate_bags(node, op);
     } else if (!strcmp(name, "certificate-bag")) {
-        if (nc_server_config_ts_certificate_bag(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ts_certificate_bag(node, op);
     } else if (!strcmp(name, "certificate")) {
-        if (nc_server_config_ts_certificate(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ts_certificate(node, op);
     } else if (!strcmp(name, "cert-data")) {
-        if (nc_server_config_ts_cert_data(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ts_cert_data(node, op);
     } else if (!strcmp(name, "public-key-bags")) {
-        if (nc_server_config_ts_public_key_bags(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ts_public_key_bags(node, op);
     } else if (!strcmp(name, "public-key-bag")) {
-        if (nc_server_config_ts_public_key_bag(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ts_public_key_bag(node, op);
     } else if (!strcmp(name, "public-key")) {
-        if (nc_server_config_ts_public_key(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ts_public_key(node, op);
     } else if (!strcmp(name, "public-key-format")) {
-        if (nc_server_config_ts_public_key_format(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ts_public_key_format(node, op);
+    }
+
+    if (ret) {
+        ERR(NULL, "Configuring (%s) failed.", name);
+        return 1;
     }
 
     return 0;
-
-error:
-    ERR(NULL, "Configuring (%s) failed.", name);
-    return 1;
 }
 
 int
