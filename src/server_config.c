@@ -224,7 +224,6 @@ nc_server_config_get_ch_client(const struct lyd_node *node, struct nc_ch_client 
     return 1;
 }
 
-
 /* gets the ch_endpt struct based on node's location in the YANG data tree */
 static int
 nc_server_config_get_ch_endpt(const struct lyd_node *node, struct nc_ch_endpt **ch_endpt)
