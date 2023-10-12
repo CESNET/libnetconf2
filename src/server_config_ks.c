@@ -42,6 +42,7 @@ nc_server_config_get_asymmetric_key(const struct lyd_node *node, struct nc_asymm
     uint16_t i;
     const char *askey_name;
     struct nc_keystore *ks;
+    const char *node_name = LYD_NAME(node);
 
     assert(node && askey);
 
@@ -53,7 +54,7 @@ nc_server_config_get_asymmetric_key(const struct lyd_node *node, struct nc_asymm
     }
 
     if (!node) {
-        ERR(NULL, "Node \"%s\" is not contained in an asymmetric-key subtree.", LYD_NAME(node));
+        ERR(NULL, "Node \"%s\" is not contained in an asymmetric-key subtree.", node_name);
         return 1;
     }
 
@@ -86,6 +87,7 @@ nc_server_config_get_certificate(const struct lyd_node *node, struct nc_certific
     uint16_t i;
     const char *cert_name;
     struct nc_asymmetric_key *askey;
+    const char *node_name = LYD_NAME(node);
 
     assert(node && cert);
 
@@ -101,7 +103,7 @@ nc_server_config_get_certificate(const struct lyd_node *node, struct nc_certific
     }
 
     if (!node) {
-        ERR(NULL, "Node \"%s\" is not contained in a certificate subtree.", LYD_NAME(node));
+        ERR(NULL, "Node \"%s\" is not contained in a certificate subtree.", node_name);
         return 1;
     }
 
@@ -124,37 +126,15 @@ static void
 nc_server_config_ks_del_asymmetric_key_cert(struct nc_asymmetric_key *key, struct nc_certificate *cert)
 {
     free(cert->name);
-    cert->name = NULL;
-
     free(cert->data);
-    cert->data = NULL;
 
     key->cert_count--;
-    if (key->cert_count == 0) {
+    if (!key->cert_count) {
         free(key->certs);
         key->certs = NULL;
+    } else if (cert != &key->certs[key->cert_count]) {
+        memcpy(cert, &key->certs[key->cert_count], sizeof *key->certs);
     }
-}
-
-static void
-nc_server_config_ks_del_public_key(struct nc_asymmetric_key *key)
-{
-    free(key->pubkey_data);
-    key->pubkey_data = NULL;
-}
-
-static void
-nc_server_config_ks_del_private_key(struct nc_asymmetric_key *key)
-{
-    free(key->privkey_data);
-    key->privkey_data = NULL;
-}
-
-static void
-nc_server_config_ks_del_cert_data(struct nc_certificate *cert)
-{
-    free(cert->data);
-    cert->data = NULL;
 }
 
 static void
@@ -164,10 +144,8 @@ nc_server_config_ks_del_asymmetric_key(struct nc_asymmetric_key *key)
     struct nc_keystore *ks = &server_opts.keystore;
 
     free(key->name);
-    key->name = NULL;
-
-    nc_server_config_ks_del_public_key(key);
-    nc_server_config_ks_del_private_key(key);
+    free(key->pubkey_data);
+    free(key->privkey_data);
 
     cert_count = key->cert_count;
     for (i = 0; i < cert_count; i++) {
@@ -178,6 +156,8 @@ nc_server_config_ks_del_asymmetric_key(struct nc_asymmetric_key *key)
     if (!ks->asym_key_count) {
         free(ks->asym_keys);
         ks->asym_keys = NULL;
+    } else if (key != &ks->asym_keys[ks->asym_key_count]) {
+        memcpy(key, &ks->asym_keys[ks->asym_key_count], sizeof *ks->asym_keys);
     }
 }
 
@@ -285,7 +265,7 @@ nc_server_config_ks_public_key(const struct lyd_node *node, NC_OPERATION op)
     }
 
     /* replace the pubkey */
-    nc_server_config_ks_del_public_key(key);
+    free(key->pubkey_data);
     key->pubkey_data = strdup(lyd_get_value(node));
     if (!key->pubkey_data) {
         ERRMEM;
@@ -337,14 +317,15 @@ nc_server_config_ks_cleartext_private_key(const struct lyd_node *node, NC_OPERAT
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
         /* replace the privkey */
-        nc_server_config_ks_del_private_key(key);
+        free(key->privkey_data);
         key->privkey_data = strdup(lyd_get_value(node));
         if (!key->privkey_data) {
             ERRMEM;
             return 1;
         }
     } else if (op == NC_OP_DELETE) {
-        nc_server_config_ks_del_private_key(key);
+        free(key->privkey_data);
+        key->privkey_data = NULL;
     }
 
     return 0;
@@ -401,7 +382,7 @@ nc_server_config_ks_cert_data(const struct lyd_node *node, NC_OPERATION op)
         }
 
         /* replace the cert data */
-        nc_server_config_ks_del_cert_data(cert);
+        free(cert->data);
         cert->data = strdup(lyd_get_value(node));
         if (!cert->data) {
             ERRMEM;
@@ -416,50 +397,34 @@ int
 nc_server_config_parse_keystore(const struct lyd_node *node, NC_OPERATION op)
 {
     const char *name = LYD_NAME(node);
+    int ret = 0;
 
     if (!strcmp(name, "keystore")) {
-        if (nc_server_config_ks_keystore(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ks_keystore(node, op);
     } else if (!strcmp(name, "asymmetric-keys")) {
-        if (nc_server_config_ks_asymmetric_keys(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ks_asymmetric_keys(node, op);
     } else if (!strcmp(name, "asymmetric-key")) {
-        if (nc_server_config_ks_asymmetric_key(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ks_asymmetric_key(node, op);
     } else if (!strcmp(name, "public-key-format")) {
-        if (nc_server_config_ks_public_key_format(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ks_public_key_format(node, op);
     } else if (!strcmp(name, "public-key")) {
-        if (nc_server_config_ks_public_key(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ks_public_key(node, op);
     } else if (!strcmp(name, "private-key-format")) {
-        if (nc_server_config_ks_private_key_format(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ks_private_key_format(node, op);
     } else if (!strcmp(name, "cleartext-private-key")) {
-        if (nc_server_config_ks_cleartext_private_key(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ks_cleartext_private_key(node, op);
     } else if (!strcmp(name, "certificate")) {
-        if (nc_server_config_ks_certificate(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ks_certificate(node, op);
     } else if (!strcmp(name, "cert-data")) {
-        if (nc_server_config_ks_cert_data(node, op)) {
-            goto error;
-        }
+        ret = nc_server_config_ks_cert_data(node, op);
+    }
+
+    if (ret) {
+        ERR(NULL, "Configuring (%s) failed.", name);
+        return 1;
     }
 
     return 0;
-
-error:
-    ERR(NULL, "Configuring (%s) failed.", name);
-    return 1;
 }
 
 int
