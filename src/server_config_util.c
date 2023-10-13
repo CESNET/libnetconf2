@@ -32,7 +32,6 @@
 
 #include "compat.h"
 #include "log_p.h"
-#include "server_config.h"
 #include "session.h"
 #include "session_p.h"
 
@@ -1317,8 +1316,8 @@ nc_server_config_del_keystore_cert(const char *asym_key_name, const char *cert_n
 }
 
 API int
-nc_server_config_add_truststore_pubkey(const struct ly_ctx *ctx, NC_TRANSPORT_IMPL ti, const char *pub_bag_name,
-        const char *pubkey_name, const char *pubkey_path, struct lyd_node **config)
+nc_server_config_add_truststore_pubkey(const struct ly_ctx *ctx, const char *pub_bag_name, const char *pubkey_name,
+        const char *pubkey_path, struct lyd_node **config)
 {
     int ret = 0;
     char *pubkey = NULL;
@@ -1326,15 +1325,7 @@ nc_server_config_add_truststore_pubkey(const struct ly_ctx *ctx, NC_TRANSPORT_IM
 
     NC_CHECK_ARG_RET(NULL, ctx, pub_bag_name, pubkey_name, pubkey_path, config, 1);
 
-    if (ti == NC_TI_LIBSSH) {
-        ret = nc_server_config_util_get_ssh_pubkey_file(pubkey_path, &pubkey);
-    } else if (ti == NC_TI_OPENSSL) {
-        ret = nc_server_config_util_get_spki_pubkey_file(pubkey_path, &pubkey);
-    } else {
-        ERR(NULL, "Public key in the truststore can only be created for SSH or TLS transports.");
-        ret = 1;
-        goto cleanup;
-    }
+    ret = nc_server_config_util_get_ssh_pubkey_file(pubkey_path, &pubkey);
     if (ret) {
         goto cleanup;
     }

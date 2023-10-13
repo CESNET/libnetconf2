@@ -1,10 +1,10 @@
 /**
- * @file test_tls.c
- * @author Roman Janota <janota@cesnet.cz>
- * @brief libnetconf2 TLS authentication test
+ * @file test_keystore.c
+ * @author Roman Janota <xjanot04@fit.vutbr.cz>
+ * @brief libnetconf2 Linux PAM keyboard-interactive authentication test
  *
  * @copyright
- * Copyright (c) 2023 CESNET, z.s.p.o.
+ * Copyright (c) 2022 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -43,8 +43,6 @@ server_thread(void *arg)
     struct nc_pollsession *ps;
     struct test_state *state = arg;
 
-    (void) arg;
-
     ps = nc_ps_new();
     assert_non_null(ps);
 
@@ -66,6 +64,17 @@ server_thread(void *arg)
     return NULL;
 }
 
+static char *
+auth_password(const char *username, const char *hostname, void *priv)
+{
+    (void) username;
+    (void) hostname;
+    (void) priv;
+
+    /* set the reply to password authentication */
+    return strdup("testpassword123");
+}
+
 static void *
 client_thread(void *arg)
 {
@@ -73,19 +82,19 @@ client_thread(void *arg)
     struct nc_session *session = NULL;
     struct test_state *state = arg;
 
+    /* skip all hostkey and known_hosts checks */
+    nc_client_ssh_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_SKIP);
+
     ret = nc_client_set_schema_searchpath(MODULES_DIR);
     assert_int_equal(ret, 0);
 
-    /* set client cert */
-    ret = nc_client_tls_set_cert_key_paths(TESTS_DIR "/data/client.crt", TESTS_DIR "/data/client.key");
+    ret = nc_client_ssh_set_username("client");
     assert_int_equal(ret, 0);
 
-    /* set client ca */
-    ret = nc_client_tls_set_trusted_ca_paths(NULL, TESTS_DIR "/data");
-    assert_int_equal(ret, 0);
+    nc_client_ssh_set_auth_password_clb(auth_password, NULL);
 
     pthread_barrier_wait(&state->barrier);
-    session = nc_connect_tls("127.0.0.1", 10005, NULL);
+    session = nc_connect_ssh("127.0.0.1", 10005, NULL);
     assert_non_null(session);
 
     nc_session_free(session, NULL);
@@ -93,7 +102,7 @@ client_thread(void *arg)
 }
 
 static void
-test_nc_tls(void **state)
+test_nc_config_new(void **state)
 {
     int ret, i;
     pthread_t tids[2];
@@ -128,43 +137,32 @@ setup_f(void **state)
 
     *state = test_state;
 
+    /* new context */
     ret = ly_ctx_new(MODULES_DIR, 0, &ctx);
     assert_int_equal(ret, 0);
 
+    /* initialize the context by loading default modules */
     ret = nc_server_init_ctx(&ctx);
     assert_int_equal(ret, 0);
 
+    /* load ietf-netconf-server module and it's imports */
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
+    /* create new hostkey data */
+    ret = nc_server_config_add_ssh_hostkey(ctx, "endpt", "hostkey", TESTS_DIR "/data/server.key", NULL, &tree);
+    assert_int_equal(ret, 0);
+
     /* create new address and port data */
-    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_OPENSSL, "127.0.0.1", 10005, &tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", 10005, &tree);
     assert_int_equal(ret, 0);
 
-    /* create new server certificate data */
-    ret = nc_server_config_add_tls_server_certificate(ctx, "endpt", TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &tree);
+    /* create the host-key algorithms data */
+    ret = nc_server_config_add_ssh_host_key_algs(ctx, "endpt", &tree, 1, "rsa-sha2-512");
     assert_int_equal(ret, 0);
 
-    /* create new end entity client cert data */
-    ret = nc_server_config_add_tls_client_certificate(ctx, "endpt", "client_cert", TESTS_DIR "/data/client.crt", &tree);
-    assert_int_equal(ret, 0);
-
-    /* create new client ca data */
-    ret = nc_server_config_add_tls_client_ca(ctx, "endpt", "client_ca", TESTS_DIR "/data/serverca.pem", &tree);
-    assert_int_equal(ret, 0);
-
-    /* create new cert-to-name */
-    ret = nc_server_config_add_tls_ctn(ctx, "endpt", 1,
-            "04:85:6B:75:D1:1A:86:E0:D8:FE:5B:BD:72:F5:73:1D:07:EA:32:BF:09:11:21:6A:6E:23:78:8E:B6:D5:73:C3:2D",
-            NC_TLS_CTN_SPECIFIED, "client", &tree);
-    assert_int_equal(ret, 0);
-
-    /* limit TLS version to 1.3 */
-    ret = nc_server_config_add_tls_version(ctx, "endpt", NC_TLS_VERSION_13, &tree);
-    assert_int_equal(ret, 0);
-
-    /* set the TLS cipher */
-    ret = nc_server_config_add_tls_ciphers(ctx, "endpt", &tree, 3, "tls-aes-128-ccm-sha256", "tls-aes-128-gcm-sha256", "tls-chacha20-poly1305-sha256");
+    /* create the client authentication data, password only */
+    ret = nc_server_config_add_ssh_user_password(ctx, "endpt", "client", "testpassword123", &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
@@ -207,7 +205,7 @@ int
 main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup_teardown(test_nc_tls, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_config_new, setup_f, teardown_f),
     };
 
     setenv("CMOCKA_TEST_ABORT", "1", 1);

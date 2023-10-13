@@ -404,15 +404,15 @@ setup_tls(void **state)
     assert_int_equal(ret, 0);
 
     /* set call-home server certificate */
-    ret = nc_server_config_add_ch_tls_server_cert(ctx, "ch_tls", "endpt", TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &test_state->tls_tree);
+    ret = nc_server_config_add_ch_tls_server_certificate(ctx, "ch_tls", "endpt", TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &test_state->tls_tree);
     assert_int_equal(ret, 0);
 
     /* set call-home client end entity certificate */
-    ret = nc_server_config_add_ch_tls_client_cert(ctx, "ch_tls", "endpt", "ee-cert", TESTS_DIR "/data/client.crt", &test_state->tls_tree);
+    ret = nc_server_config_add_ch_tls_client_certificate(ctx, "ch_tls", "endpt", "ee-cert", TESTS_DIR "/data/client.crt", &test_state->tls_tree);
     assert_int_equal(ret, 0);
 
     /* set call-home client certificate authority certificate */
-    ret = nc_server_config_add_ch_tls_ca_cert(ctx, "ch_tls", "endpt", "ca-cert", TESTS_DIR "/data/serverca.pem", &test_state->tls_tree);
+    ret = nc_server_config_add_ch_tls_client_ca(ctx, "ch_tls", "endpt", "ca-cert", TESTS_DIR "/data/serverca.pem", &test_state->tls_tree);
     assert_int_equal(ret, 0);
 
     /* set call-home CTN */
