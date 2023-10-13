@@ -1,7 +1,7 @@
 /**
  * @file test_auth.c
  * @author Roman Janota <xjanot04@fit.vutbr.cz>
- * @brief libnetconf2 SSH authentication methods test
+ * @brief libnetconf2 Linux PAM keyboard-interactive authentication test
  *
  * @copyright
  * Copyright (c) 2022 CESNET, z.s.p.o.
@@ -330,8 +330,7 @@ setup_f(void **state)
     ret = nc_server_config_add_ssh_user_password(ctx, "endpt", "test_pw", "testpw", &tree);
     assert_int_equal(ret, 0);
 
-    ret = lyd_new_path(tree, ctx, "/ietf-netconf-server:netconf-server/listen/endpoint[name='endpt']/ssh/ssh-server-parameters/"
-            "client-authentication/users/user[name='test_none']/none", NULL, 0, NULL);
+    ret = nc_server_config_add_ssh_user_none(ctx, "endpt", "test_none", &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */

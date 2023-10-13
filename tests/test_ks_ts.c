@@ -141,20 +141,16 @@ setup_ssh(void **state)
     ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", 10005, &tree);
     assert_int_equal(ret, 0);
 
-    ret = lyd_new_path(tree, ctx, "/ietf-netconf-server:netconf-server/listen/"
-            "endpoint[name='endpt']/ssh/ssh-server-parameters/server-identity/host-key[name='hostkey']/public-key/"
-            "keystore-reference", "test_keystore", 0, NULL);
+    ret = nc_server_config_add_ssh_keystore_ref(ctx, "endpt", "hostkey", "test_keystore", &tree);
     assert_int_equal(ret, 0);
 
-    ret = lyd_new_path(tree, ctx, "/ietf-netconf-server:netconf-server/listen/"
-            "endpoint[name='endpt']/ssh/ssh-server-parameters/client-authentication/users/user[name='client']/public-keys/"
-            "truststore-reference", "test_truststore", 0, NULL);
+    ret = nc_server_config_add_ssh_truststore_ref(ctx, "endpt", "client", "test_truststore", &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_add_keystore_asym_key(ctx, NC_TI_LIBSSH, "test_keystore", TESTS_DIR "/data/key_rsa", NULL, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_truststore_pubkey(ctx, NC_TI_LIBSSH, "test_truststore", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);
+    ret = nc_server_config_add_truststore_pubkey(ctx, "test_truststore", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
@@ -268,21 +264,15 @@ setup_tls(void **state)
     assert_int_equal(ret, 0);
 
     /* new keystore ref for the TLS server cert */
-    ret = lyd_new_path(tree, ctx, "/ietf-netconf-server:netconf-server/listen/endpoint[name='endpt']/"
-            "tls/tls-server-parameters/server-identity/certificate/keystore-reference/asymmetric-key", "server_key", 0, NULL);
-    assert_int_equal(ret, 0);
-    ret = lyd_new_path(tree, ctx, "/ietf-netconf-server:netconf-server/listen/endpoint[name='endpt']/"
-            "tls/tls-server-parameters/server-identity/certificate/keystore-reference/certificate", "server_cert", 0, NULL);
+    ret = nc_server_config_add_tls_keystore_ref(ctx, "endpt", "server_key", "server_cert", &tree);
     assert_int_equal(ret, 0);
 
     /* new truststore ref for the client cert */
-    ret = lyd_new_path(tree, ctx, "/ietf-netconf-server:netconf-server/listen/endpoint[name='endpt']/tls/"
-            "tls-server-parameters/client-authentication/ee-certs/truststore-reference", "ee_cert_bag", 0, NULL);
+    ret = nc_server_config_add_tls_client_cert_truststore_ref(ctx, "endpt", "ee_cert_bag", &tree);
     assert_int_equal(ret, 0);
 
     /* new truststore ref for the client CA cert */
-    ret = lyd_new_path(tree, ctx, "/ietf-netconf-server:netconf-server/listen/endpoint[name='endpt']/tls/"
-            "tls-server-parameters/client-authentication/ca-certs/truststore-reference", "ca_cert_bag", 0, NULL);
+    ret = nc_server_config_add_tls_client_ca_truststore_ref(ctx, "endpt", "ca_cert_bag", &tree);
     assert_int_equal(ret, 0);
 
     /* new cert-to-name */
