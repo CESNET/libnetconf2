@@ -596,12 +596,18 @@ void nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_se
         void *user_data), void *user_data, void (*free_user_data)(void *user_data));
 
 /**
- * @brief Set the callback for SSH interactive authentication. If none is set, local system users are used.
+ * @brief Set the callback for SSH interactive authentication. If none is set, local PAM-based authentication is used.
  *
- * @param[in] interactive_auth_clb Callback that should authenticate the user.
+ * @param[in] interactive_auth_sess_clb Callback that should authenticate the user.
  * Zero return indicates success, non-zero an error.
- * @param[in] user_data Optional arbitrary user data that will be passed to @p interactive_auth_clb.
+ * @param[in] user_data Optional arbitrary user data that will be passed to @p interactive_auth_sess_clb.
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
+ */
+void nc_server_ssh_set_interactive_auth_sess_clb(int (*interactive_auth_sess_clb)(const struct nc_session *session,
+        ssh_session ssh_sess, ssh_message msg, void *user_data), void *user_data, void (*free_user_data)(void *user_data));
+
+/**
+ * @brief Deprecated, use ::nc_server_ssh_set_interactive_auth_sess_clb() instead.
  */
 void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session,
         const ssh_message msg, void *user_data), void *user_data, void (*free_user_data)(void *user_data));
@@ -609,7 +615,7 @@ void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const st
 /**
  * @brief Set the name and a path to a PAM configuration file.
  *
- * @p conf_name has to be set via this function prior to using keyboard-interactive authentication method.
+ * @p conf_name has to be set via this function prior to using PAM keyboard-interactive authentication method.
  *
  * @param[in] conf_name Name of the configuration file.
  * @param[in] conf_dir Optional. The absolute path to the directory in which the configuration file

@@ -171,6 +171,15 @@ nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_session
 }
 
 API void
+nc_server_ssh_set_interactive_auth_sess_clb(int (*interactive_auth_sess_clb)(const struct nc_session *session,
+        ssh_session ssh_sess, ssh_message msg, void *user_data), void *user_data, void (*free_user_data)(void *user_data))
+{
+    server_opts.interactive_auth_sess_clb = interactive_auth_sess_clb;
+    server_opts.interactive_auth_sess_data = user_data;
+    server_opts.interactive_auth_sess_data_free = free_user_data;
+}
+
+API void
 nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session, ssh_message msg, void *user_data),
         void *user_data, void (*free_user_data)(void *user_data))
 {
@@ -447,9 +456,10 @@ nc_server_ssh_ch_client_endpt_mov_hostkey(const char *client_name, const char *e
 static int
 nc_server_ssh_set_auth_methods(int auth_methods, struct nc_server_ssh_opts *opts)
 {
-    if ((auth_methods & NC_SSH_AUTH_INTERACTIVE) && !server_opts.conf_name) {
+    if ((auth_methods & NC_SSH_AUTH_INTERACTIVE) && !server_opts.conf_name && !server_opts.interactive_auth_clb &&
+            !server_opts.interactive_auth_sess_clb) {
         /* path to a configuration file not set */
-        ERR(NULL, "Unable to use Keyboard-Interactive authentication method without setting the name of the PAM configuration file first.");
+        ERR(NULL, "To use Keyboard-Interactive authentication method, set the PAM configuration file or a callback.");
         return 1;
     }
     opts->auth_methods = auth_methods;
@@ -1238,7 +1248,10 @@ nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
 {
     int auth_ret = 1;
 
-    if (server_opts.interactive_auth_clb) {
+    if (server_opts.interactive_auth_sess_clb) {
+        auth_ret = server_opts.interactive_auth_sess_clb(session, session->ti.libssh.session, msg,
+                server_opts.interactive_auth_data);
+    } else if (server_opts.interactive_auth_clb) {
         auth_ret = server_opts.interactive_auth_clb(session, msg, server_opts.interactive_auth_data);
     } else {
 #ifdef HAVE_LIBPAM

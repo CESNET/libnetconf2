@@ -204,6 +204,10 @@ struct nc_server_opts {
     void *pubkey_auth_data;
     void (*pubkey_auth_data_free)(void *data);
 
+    int (*interactive_auth_sess_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg, void *user_data);
+    void *interactive_auth_sess_data;
+    void (*interactive_auth_sess_data_free)(void *data);
+
     int (*interactive_auth_clb)(const struct nc_session *session, ssh_message msg, void *user_data);
     void *interactive_auth_data;
     void (*interactive_auth_data_free)(void *data);

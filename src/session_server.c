@@ -770,6 +770,24 @@ nc_server_destroy(void)
     server_opts.passwd_auth_data = NULL;
     server_opts.passwd_auth_data_free = NULL;
 
+    if (server_opts.pubkey_auth_data && server_opts.pubkey_auth_data_free) {
+        server_opts.pubkey_auth_data_free(server_opts.pubkey_auth_data);
+    }
+    server_opts.pubkey_auth_data = NULL;
+    server_opts.pubkey_auth_data_free = NULL;
+
+    if (server_opts.interactive_auth_sess_data && server_opts.interactive_auth_sess_data_free) {
+        server_opts.interactive_auth_sess_data_free(server_opts.interactive_auth_sess_data);
+    }
+    server_opts.interactive_auth_sess_data = NULL;
+    server_opts.interactive_auth_sess_data_free = NULL;
+
+    if (server_opts.interactive_auth_data && server_opts.interactive_auth_data_free) {
+        server_opts.interactive_auth_data_free(server_opts.interactive_auth_data);
+    }
+    server_opts.interactive_auth_data = NULL;
+    server_opts.interactive_auth_data_free = NULL;
+
     nc_server_ssh_del_authkey(NULL, NULL, 0, NULL);
 
     if (server_opts.hostkey_data && server_opts.hostkey_data_free) {
