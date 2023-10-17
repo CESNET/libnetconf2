@@ -82,6 +82,46 @@ pthread_mutex_clocklock(pthread_mutex_t *mutex, clockid_t clockid, const struct 
 
 #endif
 
+#ifndef HAVE_PTHREAD_RWLOCK_TIMEDRDLOCK
+int
+pthread_rwlock_timedrdlock(pthread_rwlock_t *rwlock, const struct timespec *abstime)
+{
+    int64_t nsec_diff;
+    struct timespec cur, dur;
+    int rc;
+
+    /* try to acquire the lock and, if we fail, sleep for 5ms. */
+    while ((rc = pthread_rwlock_tryrdlock(rwlock)) == EBUSY) {
+        /* get time */
+        clock_gettime(COMPAT_CLOCK_ID, &cur);
+
+        /* get time diff */
+        nsec_diff = 0;
+        nsec_diff += (((int64_t)abstime->tv_sec) - ((int64_t)cur.tv_sec)) * 1000000000L;
+        nsec_diff += ((int64_t)abstime->tv_nsec) - ((int64_t)cur.tv_nsec);
+
+        if (nsec_diff <= 0) {
+            /* timeout */
+            rc = ETIMEDOUT;
+            break;
+        } else if (nsec_diff < 5000000) {
+            /* sleep until timeout */
+            dur.tv_sec = 0;
+            dur.tv_nsec = nsec_diff;
+        } else {
+            /* sleep 5 ms */
+            dur.tv_sec = 0;
+            dur.tv_nsec = 5000000;
+        }
+
+        nanosleep(&dur, NULL);
+    }
+
+    return rc;
+}
+
+#endif
+
 #ifndef HAVE_PTHREAD_RWLOCK_CLOCKRDLOCK
 int
 pthread_rwlock_clockrdlock(pthread_rwlock_t *rwlock, clockid_t clockid, const struct timespec *abstime)
@@ -92,6 +132,46 @@ pthread_rwlock_clockrdlock(pthread_rwlock_t *rwlock, clockid_t clockid, const st
     }
 
     return pthread_rwlock_timedrdlock(rwlock, abstime);
+}
+
+#endif
+
+#ifndef HAVE_PTHREAD_RWLOCK_TIMEDWRLOCK
+int
+pthread_rwlock_timedwrlock(pthread_rwlock_t *rwlock, const struct timespec *abstime)
+{
+    int64_t nsec_diff;
+    struct timespec cur, dur;
+    int rc;
+
+    /* try to acquire the lock and, if we fail, sleep for 5ms. */
+    while ((rc = pthread_rwlock_trywrlock(rwlock)) == EBUSY) {
+        /* get time */
+        clock_gettime(COMPAT_CLOCK_ID, &cur);
+
+        /* get time diff */
+        nsec_diff = 0;
+        nsec_diff += (((int64_t)abstime->tv_sec) - ((int64_t)cur.tv_sec)) * 1000000000L;
+        nsec_diff += ((int64_t)abstime->tv_nsec) - ((int64_t)cur.tv_nsec);
+
+        if (nsec_diff <= 0) {
+            /* timeout */
+            rc = ETIMEDOUT;
+            break;
+        } else if (nsec_diff < 5000000) {
+            /* sleep until timeout */
+            dur.tv_sec = 0;
+            dur.tv_nsec = nsec_diff;
+        } else {
+            /* sleep 5 ms */
+            dur.tv_sec = 0;
+            dur.tv_nsec = 5000000;
+        }
+
+        nanosleep(&dur, NULL);
+    }
+
+    return rc;
 }
 
 #endif
