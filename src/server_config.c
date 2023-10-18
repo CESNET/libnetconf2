@@ -4415,15 +4415,14 @@ nc_server_config_load_modules(struct ly_ctx **ctx)
      * encrypted-passwords, hidden-symmetric-keys, encrypted-symmetric-keys, hidden-private-keys, encrypted-private-keys,
      * one-symmetric-key-format, one-asymmetric-key-format, symmetrically-encrypted-value-format,
      * asymmetrically-encrypted-value-format, cms-enveloped-data-format, cms-encrypted-data-format,
-     * cleartext-symmetric-keys
-     */
+     * cleartext-symmetric-keys */
     const char *ietf_crypto_types[] = {"cleartext-passwords", "cleartext-private-keys", NULL};
     /* all features */
     const char *ietf_tcp_common[] = {"keepalives-supported", NULL};
     /* all features */
     const char *ietf_tcp_server[] = {"tcp-server-keepalives", NULL};
-    /* no proxy-connect, socks5-gss-api, socks5-username-password */
-    const char *ietf_tcp_client[] = {"local-binding-supported", "tcp-client-keepalives", NULL};
+    /* no proxy-connect, socks5-gss-api, socks5-username-password, local-binding-supported ? */
+    const char *ietf_tcp_client[] = {"tcp-client-keepalives", NULL};
     /* no ssh-x509-certs, public-key-generation */
     const char *ietf_ssh_common[] = {"transport-params", NULL};
     /* no ssh-server-keepalives and local-user-auth-hostbased */

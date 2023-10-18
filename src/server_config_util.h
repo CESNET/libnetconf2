@@ -1,7 +1,7 @@
 /**
- * @file config_new.h
+ * @file server_config_util.h
  * @author Roman Janota <janota@cesnet.cz>
- * @brief libnetconf2 server new configuration creation header
+ * @brief libnetconf2 server configuration utlities header
  *
  * @copyright
  * Copyright (c) 2023 CESNET, z.s.p.o.
@@ -13,17 +13,12 @@
  *     https://opensource.org/licenses/BSD-3-Clause
  */
 
-#ifndef NC_CONFIG_NEW_H_
-#define NC_CONFIG_NEW_H_
+#ifndef NC_SERVER_CONFIG_UTIL_H_
+#define NC_SERVER_CONFIG_UTIL_H_
 
 #include <libyang/libyang.h>
-#include <stdarg.h>
 
 #include "session_p.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #ifdef NC_ENABLED_SSH_TLS
 
@@ -73,14 +68,48 @@ typedef enum {
     NC_ALG_MAC
 } NC_ALG_TYPE;
 
-int nc_server_config_new_get_asym_key_pair(const char *privkey_path, const char *pubkey_path, NC_PUBKEY_FORMAT wanted_pubkey_type,
+/**
+ * @brief Gets asymmetric key pair from private key (and optionally public key) file(s).
+ *
+ * @param[in] privkey_path Path to private key.
+ * @param[in] pubkey_path Optional path to public key. If not set, PK will be generated from private key.
+ * @param[in] wanted_pubkey_type Wanted public key format to be generated (SPKI/SSH)
+ * @param[out] privkey Base64 encoded private key.
+ * @param[out] privkey_type Type of the private key. (RSA, EC, etc)
+ * @param[out] pubkey Base64 encoded public key.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_util_get_asym_key_pair(const char *privkey_path, const char *pubkey_path, NC_PUBKEY_FORMAT wanted_pubkey_type,
         char **privkey, NC_PRIVKEY_FORMAT *privkey_type, char **pubkey);
 
-int nc_server_config_new_get_ssh_pubkey_file(const char *pubkey_path, char **pubkey);
+/**
+ * @brief Gets public key from a file and converts it to the SSH format if need be.
+ *
+ * @param[in] pubkey_path Path to the public key.
+ * @param[out] pubkey Base64 encoded public key.
+ *
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_util_get_ssh_pubkey_file(const char *pubkey_path, char **pubkey);
 
-int nc_server_config_new_read_certificate(const char *cert_path, char **cert);
+/**
+ * @brief Gets a certificate from a file.
+ *
+ * @param[in] cert_path Path to the certificate.
+ * @param[out] cert Base64 PEM encoded certificate data.
+ *
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_util_read_certificate(const char *cert_path, char **cert);
 
-const char * nc_config_new_privkey_format_to_identityref(NC_PRIVKEY_FORMAT format);
+/**
+ * @brief Converts private key format to its associated identityref value.
+ *
+ * @param[in] format Private key format.
+ *
+ * @return Identityref on success, NULL on failure.
+ */
+const char *nc_server_config_util_privkey_format_to_identityref(NC_PRIVKEY_FORMAT format);
 
 #endif /* NC_ENABLED_SSH_TLS */
 
@@ -95,7 +124,7 @@ const char * nc_config_new_privkey_format_to_identityref(NC_PRIVKEY_FORMAT forma
  * @param[in] ... Parameters for the path format, essentially representing the lists' keys.
  * @return 0 on success, 1 otherwise.
  */
-int nc_config_new_create(const struct ly_ctx *ctx, struct lyd_node **tree, const char *value, const char *path_fmt, ...);
+int nc_server_config_create(const struct ly_ctx *ctx, struct lyd_node **tree, const char *value, const char *path_fmt, ...);
 
 /**
  * @brief Creates a YANG data node by appending it to a specified parent node.
@@ -108,7 +137,7 @@ int nc_config_new_create(const struct ly_ctx *ctx, struct lyd_node **tree, const
  * this is set to the top level container.
  * @return 0 on success, 1 otherwise.
  */
-int nc_config_new_create_append(const struct ly_ctx *ctx, const char *parent_path, const char *child_name,
+int nc_server_config_append(const struct ly_ctx *ctx, const char *parent_path, const char *child_name,
         const char *value, struct lyd_node **tree);
 
 /**
@@ -119,7 +148,7 @@ int nc_config_new_create_append(const struct ly_ctx *ctx, const char *parent_pat
  * @param[in] ... Parameters for the path format, essentially representing the lists' keys.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_config_new_delete(struct lyd_node **tree, const char *path_fmt, ...);
+int nc_server_config_delete(struct lyd_node **tree, const char *path_fmt, ...);
 
 /**
  * @brief Deletes a subtree from the YANG data, but doesn't return an error if the node doesn't exist.
@@ -129,10 +158,6 @@ int nc_config_new_delete(struct lyd_node **tree, const char *path_fmt, ...);
  * @param[in] ... Parameters for the path format, essentially representing the lists' keys.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_config_new_check_delete(struct lyd_node **tree, const char *path_fmt, ...);
-
-#ifdef __cplusplus
-}
-#endif
+int nc_server_config_check_delete(struct lyd_node **tree, const char *path_fmt, ...);
 
 #endif /* NC_CONFIG_NEW_H_ */

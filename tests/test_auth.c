@@ -1,7 +1,7 @@
 /**
  * @file test_auth.c
  * @author Roman Janota <xjanot04@fit.vutbr.cz>
- * @brief libnetconf2 Linux PAM keyboard-interactive authentication test
+ * @brief libnetconf2 SSH authentication methods test
  *
  * @copyright
  * Copyright (c) 2022 CESNET, z.s.p.o.
@@ -315,22 +315,23 @@ setup_f(void **state)
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", 10005, &tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", 10005, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_hostkey(ctx, "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa", NULL, &tree);
+    ret = nc_server_config_add_ssh_hostkey(ctx, "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa", NULL, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_user_pubkey(ctx, "endpt", "test_pk", "pubkey", TESTS_DIR "/data/key_rsa.pub", &tree);
+    ret = nc_server_config_add_ssh_user_pubkey(ctx, "endpt", "test_pk", "pubkey", TESTS_DIR "/data/key_rsa.pub", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_user_interactive(ctx, "endpt", "test_int", "netconf.conf", BUILD_DIR "/tests", &tree);
+    ret = nc_server_config_add_ssh_user_interactive(ctx, "endpt", "test_int", "netconf.conf", BUILD_DIR "/tests", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_user_password(ctx, "endpt", "test_pw", "testpw", &tree);
+    ret = nc_server_config_add_ssh_user_password(ctx, "endpt", "test_pw", "testpw", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_user_none(ctx, "endpt", "test_none", &tree);
+    ret = lyd_new_path(tree, ctx, "/ietf-netconf-server:netconf-server/listen/endpoint[name='endpt']/ssh/ssh-server-parameters/"
+            "client-authentication/users/user[name='test_none']/none", NULL, 0, NULL);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
