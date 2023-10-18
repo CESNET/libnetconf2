@@ -1,7 +1,7 @@
 /**
- * @file test_keystore.c
+ * @file test_unix_socket.c
  * @author Roman Janota <xjanot04@fit.vutbr.cz>
- * @brief libnetconf2 Linux PAM keyboard-interactive authentication test
+ * @brief libnetconf2 UNIX socket test
  *
  * @copyright
  * Copyright (c) 2022 CESNET, z.s.p.o.
@@ -132,7 +132,7 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* create the UNIX socket */
-    ret = nc_server_config_new_unix_socket(ctx, "unix", "/tmp/nc2_test_unix_sock", 0700, -1, -1, &tree);
+    ret = nc_server_config_add_unix_socket(ctx, "unix", "/tmp/nc2_test_unix_sock", 0700, -1, -1, &tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */

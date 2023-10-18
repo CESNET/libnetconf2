@@ -18,7 +18,7 @@
  * - Creating, sending, receiving, and replying to RPCs ([RFC 4741](https://tools.ietf.org/html/rfc4741),
  *   [RFC 6241](https://tools.ietf.org/html/rfc6241)).
  * - Creating, sending and receiving NETCONF Event Notifications ([RFC 5277](https://tools.ietf.org/html/rfc5277)).
- * - Configuring the NETCONF server based on the [ietf-netconf-server](https://datatracker.ietf.org/doc/html/draft-ietf-netconf-netconf-client-server-29) YANG module
+ * - Configuring the NETCONF server based on the [ietf-netconf-server](https://datatracker.ietf.org/doc/html/draft-ietf-netconf-netconf-client-server-29) YANG module.
  *
  * @section about-license License
  *
@@ -219,7 +219,7 @@
  * If you authenticated the connection using some tunneling software, you
  * can pass its file descriptors to _libnetconf2_ using ::nc_connect_inout(),
  * which will continue to establish a full NETCONF session. To connect locally
- * on a UNIX socket avoiding  all cryptography use ::nc_connect_unix().
+ * on a UNIX socket avoiding all cryptography use ::nc_connect_unix().
  *
  * Funtions List
  * -------------
@@ -301,8 +301,6 @@
  * establish SSH or TLS transport or do it yourself and only provide the file
  * descriptors of the connection.
  *
- * Server options can be only set, there are no getters.
- *
  * To be able to accept any connections, the server must first be configured.
  *
  * Functions List
@@ -318,17 +316,51 @@
  * ===
  *
  * To successfully accept connections on a server, you first need to configure it.
- * There are two main ways to do this. The first is using __YANG data__ (see ::nc_server_config_setup_data).
- * The second way is using __YANG diff__ (see ::nc_server_config_setup_diff). Optionally, you may do this
- * by using __YANG data__ stored in a file (see ::nc_server_config_setup_path).
- * However, to be able to configure the server, the required models first need to be implemented in the
- * given libyang context using ::nc_server_config_load_modules().
+ * The *libnetconf2* server natively supports the *ietf-netconf-server YANG* module.
+ * This allows for a bigger scaling and flexibility of the *NETCONF* server.
+ * By using *ietf-netconf-server YANG* data you can express network configurations
+ * in a standardized and hierarchical format, enabling you to define complex network
+ * structures with greater ease.
  *
- * If you wish not to create the __YANG data/diff__ yourself, you may use the library's functions to do this for you.
- * For example ::nc_server_config_new_address_port() creates __YANG data__ corresponding to an SSH/TLS endpoint.
- * The variant for UNIX socket is ::nc_server_config_new_unix_socket().
+ * The process of configuring a server is comprised of two steps. The first step is creating the
+ * configuration data and the second is applying it. The server supports two forms of the configuration
+ * data - *YANG data* and *YANG diff*.
  *
- * You may also create entries in the keystore or trustore. For example the asymmetric key and certificate entries
+ * YANG data
+ * ---------
+ *
+ * Configuring the server using YANG data simplifies the management of network services.
+ * With YANG data, you build a structured configuration tree and apply it as a whole.
+ * This approach is user-friendly, allowing you to modify the configuration by adding or deleting nodes,
+ * and then deploying the updated configuration tree in its entirety, providing a way to manage your server's settings.
+ * The *libnetconf2* library exports API functions that can help you with creation or deletion of the *YANG* data.
+ * Using this approach requires you to have access to the current configuration whenever you want to make any changes.
+ *
+ * YANG diff
+ * ---------
+ *
+ * YANG diff, enriched with operation attributes, offers advanced configuration control.
+ * It empowers the user to make precise changes within the configuration tree,
+ * enabling operations like specific node deletions, additions, and modifications.
+ * On the other hand, unlike YANG data, YANG diff represents only a subtree of the
+ * changes expecting the whole configuration to be managed externally.
+ * For example this approach is used by the tool [sysrepo](https://www.sysrepo.org/).
+ *
+ * Usage
+ * -----
+ *
+ * To be able to configure the server, the required models first need to be implemented.
+ * To do this, see ::nc_server_config_load_modules().
+ * Not all of the *ietf-netconf-server* (and all of its associated modules) features are enabled.
+ * If you wish to see which features are enabled, extract them from the context after calling the mentioned function.
+ *
+ * If you wish not to create the __YANG data__ yourself, you may use the library's functions to do this for you.
+ * For example ::nc_server_config_add_address_port() creates __YANG data__ corresponding to an SSH/TLS endpoint.
+ * The variant for UNIX socket is ::nc_server_config_add_unix_socket(). You can then apply this data
+ * by calling ::nc_server_config_setup_data() (or ::nc_server_config_setup_diff() for diff).
+ * See *examples/server.c* for a simple example.
+ *
+ * You may also create entries in the keystore or truststore. For example the asymmetric key and certificate entries
  * in the keystore can be then referenced as the SSH hostkeys or TLS server certificates, respectively.
  * As for the truststore, you may create public key and certificate entries, which can then be used
  * as SSH user's public keys or TLS server's end-entity/trust-anchor certificates, respectively.
@@ -343,66 +375,52 @@
  * - ::nc_server_config_setup_data()
  * - ::nc_server_config_setup_path()
  *
- * - ::nc_server_config_new_address_port()
- * - ::nc_server_config_new_unix_socket()
- * - ::nc_server_config_new_del_endpt()
- * - ::nc_server_config_new_keystore_asym_key()
- * - ::nc_server_config_new_del_keystore_asym_key()
- * - ::nc_server_config_new_keystore_cert()
- * - ::nc_server_config_new_del_keystore_cert()
- * - ::nc_server_config_new_truststore_pubkey()
- * - ::nc_server_config_new_del_truststore_pubkey()
- * - ::nc_server_config_new_truststore_cert()
- * - ::nc_server_config_new_del_truststore_cert()
+ * - ::nc_server_config_add_address_port()
+ * - ::nc_server_config_add_unix_socket()
+ * - ::nc_server_config_del_endpt()
+ *
+ * - ::nc_server_config_add_keystore_asym_key()
+ * - ::nc_server_config_del_keystore_asym_key()
+ * - ::nc_server_config_add_keystore_cert()
+ * - ::nc_server_config_del_keystore_cert()
+ * - ::nc_server_config_add_truststore_pubkey()
+ * - ::nc_server_config_del_truststore_pubkey()
+ * - ::nc_server_config_add_truststore_cert()
+ * - ::nc_server_config_del_truststore_cert()
  *
  * SSH
  * ===
  *
  * To successfully accept an SSH session you must configure at least one host key.
- * You may create this data yourself or by using ::nc_server_config_new_ssh_hostkey().
+ * You may create this data yourself or by using ::nc_server_config_add_ssh_hostkey().
  *
  * On top of that, each SSH endpoint can define it's own authorized clients and their authentication methods.
- * For example if you wish to create an SSH user that can authenticate using a password, use ::nc_server_config_new_ssh_user_password().
+ * For example if you wish to create an SSH user that can authenticate using a password, use ::nc_server_config_add_ssh_user_password().
  * Another option for authorized clients is to reference another endpoint's clients, however be careful not to create a cyclic reference
- * (see ::nc_config_new_ssh_endpoint_user_ref()). An authorized client MUST authenticate to all of it's configured authentication methods.
+ * (see ::nc_server_config_add_ssh_endpoint_client_ref()). An authorized client MUST authenticate to all of it's configured authentication methods.
  *
- * There are also some other optional settings.
+ * There are also some other optional settings. Like setting the authentication attempts and timeout of an authorized client, or
+ * setting the encryption/key exchange/mac/public key algorithms, etc.
  *
  * Functions List
  * --------------
  *
  * Available in __nc_server.h__.
  *
- * - ::nc_server_config_new_ssh_hostkey()
- * - ::nc_server_config_new_ssh_del_hostkey()
- * - ::nc_server_config_new_ssh_keystore_ref()
- * - ::nc_server_config_new_ssh_del_keystore_ref()
- * - ::nc_server_config_new_ssh_auth_attempts()
- * - ::nc_server_config_new_ssh_auth_timeout()
+ * - ::nc_server_config_add_ssh_hostkey()
+ * - ::nc_server_config_del_ssh_hostkey()
+ * - ::nc_server_config_add_ssh_auth_attempts()
+ * - ::nc_server_config_add_ssh_auth_timeout()
  *
- * - ::nc_server_config_new_ssh_user_pubkey()
- * - ::nc_server_config_new_ssh_del_user_pubkey()
- * - ::nc_server_config_new_ssh_user_password()
- * - ::nc_server_config_new_ssh_del_user_password()
- * - ::nc_server_config_new_ssh_user_none()
- * - ::nc_server_config_new_ssh_del_user_none()
- * - ::nc_server_config_new_ssh_user_interactive()
- * - ::nc_server_config_new_ssh_del_user_interactive()
- * - ::nc_server_config_new_ssh_del_user()
- * - ::nc_server_config_new_ssh_truststore_ref()
- * - ::nc_server_config_new_ssh_del_truststore_ref()
- * - ::nc_config_new_ssh_endpoint_user_ref()
- * - ::nc_config_new_ssh_del_endpoint_user_ref()
- *
- * - ::nc_server_config_new_ssh_host_key_algs()
- * - ::nc_server_config_new_ssh_del_host_key_alg()
- * - ::nc_server_config_new_ssh_key_exchange_algs()
- * - ::nc_server_config_new_ssh_del_key_exchange_alg()
- * - ::nc_server_config_new_ssh_encryption_algs()
- * - ::nc_server_config_new_ssh_del_encryption_alg()
- * - ::nc_server_config_new_ssh_mac_algs()
- * - ::nc_server_config_new_ssh_del_mac_alg()
- *
+ * - ::nc_server_config_add_ssh_user_pubkey()
+ * - ::nc_server_config_del_ssh_user_pubkey()
+ * - ::nc_server_config_add_ssh_user_password()
+ * - ::nc_server_config_del_ssh_user_password()
+ * - ::nc_server_config_add_ssh_user_interactive()
+ * - ::nc_server_config_del_ssh_user_interactive()
+ * - ::nc_server_config_del_ssh_user()
+ * - ::nc_server_config_add_ssh_endpoint_client_ref()
+ * - ::nc_server_config_del_ssh_endpoint_client_ref()
  *
  * TLS
  * ===
@@ -412,7 +430,7 @@
  * options that TLS uses to derive usernames from client certificates.
  *
  * If you wish to listen on a TLS endpoint, you need to configure the endpoint's
- * server certificate (see ::nc_server_config_new_tls_server_certificate()).
+ * server certificate (see ::nc_server_config_add_tls_server_cert()).
  *
  * To accept client certificates, they must first be considered trusted.
  * For each TLS endpoint you may configure two types of client certificates.
@@ -421,50 +439,31 @@
  * The second type are trust-anchor (certificate authority) certificates,
  * which carry over the trust (a chain of trust).
  * Another option is to reference another TLS endpoint's end-entity certificates, however be careful not to create a cyclic reference
- * (see ::nc_config_new_tls_endpoint_client_ref()).
+ * (see ::nc_server_config_add_tls_endpoint_client_ref()).
  *
  * Then, from each trusted client certificate a username must be derived
  * for the NETCONF session. This is accomplished by finding a matching
  * _cert-to-name_ entry.
  *
  * There are some further options. For example you can configure the TLS
- * version and ciphers to be used. You may also choose to use a Certificate
- * Revoke List. There are three options, ::nc_server_config_new_tls_crl_path()
- * attempts to get the list of revoked certificates from a file. ::nc_server_config_new_tls_crl_url()
- * attempts to download the list from the given URL. Lastly, ::nc_server_config_new_tls_crl_cert_ext()
- * attempts to download the CRLs from URLs specified in the extension fields of the configured certificates.
+ * version and ciphers to be used or you can even use a Certificate Revocation List.
  *
  * Functions List
  * --------------
  *
  * Available in __nc_server.h__.
  *
- * - ::nc_server_config_new_tls_server_certificate()
- * - ::nc_server_config_new_tls_del_server_certificate()
- * - ::nc_server_config_new_tls_keystore_ref()
- * - ::nc_server_config_new_tls_del_keystore_ref()
+ * - ::nc_server_config_add_tls_server_cert()
+ * - ::nc_server_config_del_tls_server_cert()
  *
- * - ::nc_server_config_new_tls_client_certificate()
- * - ::nc_server_config_new_tls_del_client_certificate()
- * - ::nc_server_config_new_tls_client_cert_truststore_ref()
- * - ::nc_server_config_new_tls_del_client_cert_truststore_ref()
- * - ::nc_server_config_new_tls_client_ca()
- * - ::nc_server_config_new_tls_del_client_ca()
- * - ::nc_server_config_new_tls_client_ca_truststore_ref()
- * - ::nc_server_config_new_tls_del_client_ca_truststore_ref()
- * - ::nc_config_new_tls_endpoint_client_ref()
- * - ::nc_config_new_tls_del_endpoint_client_ref()
- * - ::nc_server_config_new_tls_ctn()
- * - ::nc_server_config_new_tls_del_ctn()
- *
- * - ::nc_server_config_new_tls_version()
- * - ::nc_server_config_new_tls_del_version()
- * - ::nc_server_config_new_tls_ciphers()
- * - ::nc_server_config_new_tls_del_cipher()
- * - ::nc_server_config_new_tls_crl_path()
- * - ::nc_server_config_new_tls_crl_url()
- * - ::nc_server_config_new_tls_crl_cert_ext()
- * - ::nc_server_config_new_tls_del_crl()
+ * - ::nc_server_config_add_tls_client_cert()
+ * - ::nc_server_config_del_tls_client_cert()
+ * - ::nc_server_config_add_tls_ca_cert()
+ * - ::nc_server_config_del_tls_ca_cert()
+ * - ::nc_server_config_add_tls_endpoint_client_ref()
+ * - ::nc_server_config_del_tls_endpoint_client_ref()
+ * - ::nc_server_config_add_tls_ctn()
+ * - ::nc_server_config_del_tls_ctn()
  *
  * FD
  * ==
@@ -499,68 +498,39 @@
  *
  * Available in __nc_server.h__.
  *
- * - ::nc_server_config_new_ch_address_port()
- * - ::nc_server_config_new_del_ch_client()
- * - ::nc_server_config_new_ch_del_endpt()
- * - ::nc_server_config_new_ch_persistent()
- * - ::nc_server_config_new_ch_period()
- * - ::nc_server_config_new_ch_del_period()
- * - ::nc_server_config_new_ch_anchor_time()
- * - ::nc_server_config_new_ch_del_anchor_time()
- * - ::nc_server_config_new_ch_idle_timeout()
- * - ::nc_server_config_new_ch_del_idle_timeout()
- * - ::nc_server_config_new_ch_reconnect_strategy()
- * - ::nc_server_config_new_ch_del_reconnect_strategy()
+ * - ::nc_server_config_add_ch_address_port()
+ * - ::nc_server_config_del_ch_client()
+ * - ::nc_server_config_del_ch_endpt()
+ * - ::nc_server_config_add_ch_persistent()
+ * - ::nc_server_config_add_ch_period()
+ * - ::nc_server_config_del_ch_period()
+ * - ::nc_server_config_add_ch_anchor_time()
+ * - ::nc_server_config_del_ch_anchor_time()
+ * - ::nc_server_config_add_ch_idle_timeout()
+ * - ::nc_server_config_del_ch_idle_timeout()
+ * - ::nc_server_config_add_ch_reconnect_strategy()
+ * - ::nc_server_config_del_ch_reconnect_strategy()
  *
- * - ::nc_server_config_new_ch_ssh_hostkey()
- * - ::nc_server_config_new_ch_ssh_del_hostkey()
- * - ::nc_server_config_new_ch_ssh_keystore_ref()
- * - ::nc_server_config_new_ch_ssh_del_keystore_ref()
- * - ::nc_server_config_new_ch_ssh_auth_attempts()
- * - ::nc_server_config_new_ch_ssh_auth_timeout()
- * - ::nc_server_config_new_ch_ssh_user_pubkey()
- * - ::nc_server_config_new_ch_ssh_del_user_pubkey()
- * - ::nc_server_config_new_ch_ssh_user_password()
- * - ::nc_server_config_new_ch_ssh_del_user_password()
- * - ::nc_server_config_new_ch_ssh_user_none()
- * - ::nc_server_config_new_ch_ssh_del_user_none()
- * - ::nc_server_config_new_ch_ssh_user_interactive()
- * - ::nc_server_config_new_ch_ssh_del_user_interactive()
- * - ::nc_server_config_new_ch_ssh_del_user()
- * - ::nc_server_config_new_ch_ssh_truststore_ref()
- * - ::nc_server_config_new_ch_ssh_del_truststore_ref()
- * - ::nc_server_config_new_ch_ssh_host_key_algs()
- * - ::nc_server_config_new_ch_ssh_del_host_key_alg()
- * - ::nc_server_config_new_ch_ssh_key_exchange_algs()
- * - ::nc_server_config_new_ch_ssh_del_key_exchange_alg()
- * - ::nc_server_config_new_ch_ssh_encryption_algs()
- * - ::nc_server_config_new_ch_ssh_del_encryption_alg()
- * - ::nc_server_config_new_ch_ssh_mac_algs()
- * - ::nc_server_config_new_ch_ssh_del_mac_alg()
+ * - ::nc_server_config_add_ch_ssh_hostkey()
+ * - ::nc_server_config_del_ch_ssh_hostkey()
+ * - ::nc_server_config_add_ch_ssh_auth_attempts()
+ * - ::nc_server_config_add_ch_ssh_auth_timeout()
+ * - ::nc_server_config_add_ch_ssh_user_pubkey()
+ * - ::nc_server_config_del_ch_ssh_user_pubkey()
+ * - ::nc_server_config_add_ch_ssh_user_password()
+ * - ::nc_server_config_del_ch_ssh_user_password()
+ * - ::nc_server_config_add_ch_ssh_user_interactive()
+ * - ::nc_server_config_del_ch_ssh_user_interactive()
+ * - ::nc_server_config_del_ch_ssh_user()
  *
- * - ::nc_server_config_new_ch_tls_server_certificate()
- * - ::nc_server_config_new_ch_tls_del_server_certificate()
- * - ::nc_server_config_new_ch_tls_keystore_ref()
- * - ::nc_server_config_new_ch_tls_del_keystore_ref()
- * - ::nc_server_config_new_ch_tls_client_certificate()
- * - ::nc_server_config_new_ch_tls_del_client_certificate()
- * - ::nc_server_config_new_ch_tls_client_cert_truststore_ref()
- * - ::nc_server_config_new_ch_tls_del_client_cert_truststore_ref()
- * - ::nc_server_config_new_ch_tls_client_ca()
- * - ::nc_server_config_new_ch_tls_del_client_ca()
- * - ::nc_server_config_new_ch_tls_client_ca_truststore_ref()
- * - ::nc_server_config_new_ch_tls_del_client_ca_truststore_ref()
- * - ::nc_server_config_new_ch_tls_ctn()
- * - ::nc_server_config_new_ch_tls_del_ctn()
- * - ::nc_server_config_new_ch_tls_version()
- * - ::nc_server_config_new_ch_tls_del_version()
- * - ::nc_server_config_new_ch_tls_ciphers()
- * - ::nc_server_config_new_ch_tls_del_cipher()
- * - ::nc_server_config_new_ch_tls_crl_path()
- * - ::nc_server_config_new_ch_tls_crl_url()
- * - ::nc_server_config_new_ch_tls_crl_cert_ext()
- * - ::nc_server_config_new_ch_tls_del_crl()
- *
+ * - ::nc_server_config_add_ch_tls_server_cert()
+ * - ::nc_server_config_del_ch_tls_server_cert()
+ * - ::nc_server_config_add_ch_tls_client_cert()
+ * - ::nc_server_config_del_ch_tls_client_cert()
+ * - ::nc_server_config_add_ch_tls_ca_cert()
+ * - ::nc_server_config_del_ch_tls_ca_cert()
+ * - ::nc_server_config_add_ch_tls_ctn()
+ * - ::nc_server_config_del_ch_tls_ctn()
  *
  * Connecting And Cleanup
  * ======================
@@ -684,7 +654,7 @@
  * To free up some resources, it is possible to adjust the maximum idle period
  * of a session before it is disconnected. In _Call Home_, for both a persistent
  * and periodic connection can this idle timeout be specified separately for each
- * client using corresponding functions. Unlike other timeouts, the idle timeout
+ * client by configuring the server. Unlike other timeouts, the idle timeout
  * can only be set via applying configuration data.
  *
  * Lastly, SSH user authentication timeout can be also modified. It is the time

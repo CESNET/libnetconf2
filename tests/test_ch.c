@@ -98,7 +98,7 @@ server_thread_ssh(void *arg)
     strcpy(expected, "reconnecting in");
 
     /* prepare data for deleting the call-home client */
-    ret = nc_server_config_new_ch_del_ch_client("ch_ssh", &state->ssh_tree);
+    ret = nc_server_config_del_ch_client("ch_ssh", &state->ssh_tree);
     assert_int_equal(ret, 0);
 
     /* new poll session */
@@ -198,23 +198,23 @@ setup_ssh(void **state)
     assert_int_equal(ret, 0);
 
     /* set call-home address and port */
-    ret = nc_server_config_new_ch_address_port(ctx, "ch_ssh", "endpt", NC_TI_LIBSSH, "127.0.0.1", "10009", &test_state->ssh_tree);
+    ret = nc_server_config_add_ch_address_port(ctx, "ch_ssh", "endpt", NC_TI_LIBSSH, "127.0.0.1", "10009", &test_state->ssh_tree);
     assert_int_equal(ret, 0);
 
     /* set connection type to persistent */
-    ret = nc_server_config_new_ch_persistent(ctx, "ch_ssh", &test_state->ssh_tree);
+    ret = nc_server_config_add_ch_persistent(ctx, "ch_ssh", &test_state->ssh_tree);
     assert_int_equal(ret, 0);
 
     /* set the period of the periodic connection type, this should remove the persistent connection type */
-    ret = nc_server_config_new_ch_period(ctx, "ch_ssh", 3, &test_state->ssh_tree);
+    ret = nc_server_config_add_ch_period(ctx, "ch_ssh", 3, &test_state->ssh_tree);
     assert_int_equal(ret, 0);
 
     /* set call-home server hostkey */
-    ret = nc_server_config_new_ch_ssh_hostkey(ctx, "ch_ssh", "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa", NULL, &test_state->ssh_tree);
+    ret = nc_server_config_add_ch_ssh_hostkey(ctx, "ch_ssh", "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa", NULL, &test_state->ssh_tree);
     assert_int_equal(ret, 0);
 
     /* set call-home client's pubkey */
-    ret = nc_server_config_new_ch_ssh_user_pubkey(ctx, "ch_ssh", "endpt", "test_ch_ssh", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &test_state->ssh_tree);
+    ret = nc_server_config_add_ch_ssh_user_pubkey(ctx, "ch_ssh", "endpt", "test_ch_ssh", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &test_state->ssh_tree);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */
@@ -282,7 +282,7 @@ server_thread_tls(void *arg)
     struct nc_pollsession *ps;
 
     /* prepare data for deleting the call-home client */
-    ret = nc_server_config_new_ch_del_ch_client("ch_tls", &state->tls_tree);
+    ret = nc_server_config_del_ch_client("ch_tls", &state->tls_tree);
     assert_int_equal(ret, 0);
 
     /* new poll session */
@@ -400,23 +400,23 @@ setup_tls(void **state)
     assert_int_equal(ret, 0);
 
     /* set call-home address and port */
-    ret = nc_server_config_new_ch_address_port(ctx, "ch_tls", "endpt", NC_TI_OPENSSL, "127.0.0.1", "10010", &test_state->tls_tree);
+    ret = nc_server_config_add_ch_address_port(ctx, "ch_tls", "endpt", NC_TI_OPENSSL, "127.0.0.1", "10010", &test_state->tls_tree);
     assert_int_equal(ret, 0);
 
     /* set call-home server certificate */
-    ret = nc_server_config_new_ch_tls_server_certificate(ctx, "ch_tls", "endpt", TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &test_state->tls_tree);
+    ret = nc_server_config_add_ch_tls_server_cert(ctx, "ch_tls", "endpt", TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &test_state->tls_tree);
     assert_int_equal(ret, 0);
 
     /* set call-home client end entity certificate */
-    ret = nc_server_config_new_ch_tls_client_certificate(ctx, "ch_tls", "endpt", "ee-cert", TESTS_DIR "/data/client.crt", &test_state->tls_tree);
+    ret = nc_server_config_add_ch_tls_client_cert(ctx, "ch_tls", "endpt", "ee-cert", TESTS_DIR "/data/client.crt", &test_state->tls_tree);
     assert_int_equal(ret, 0);
 
     /* set call-home client certificate authority certificate */
-    ret = nc_server_config_new_ch_tls_client_ca(ctx, "ch_tls", "endpt", "ca-cert", TESTS_DIR "/data/serverca.pem", &test_state->tls_tree);
+    ret = nc_server_config_add_ch_tls_ca_cert(ctx, "ch_tls", "endpt", "ca-cert", TESTS_DIR "/data/serverca.pem", &test_state->tls_tree);
     assert_int_equal(ret, 0);
 
     /* set call-home CTN */
-    ret = nc_server_config_new_ch_tls_ctn(ctx, "ch_tls", "endpt", 1,
+    ret = nc_server_config_add_ch_tls_ctn(ctx, "ch_tls", "endpt", 1,
             "04:85:6B:75:D1:1A:86:E0:D8:FE:5B:BD:72:F5:73:1D:07:EA:32:BF:09:11:21:6A:6E:23:78:8E:B6:D5:73:C3:2D",
             NC_TLS_CTN_SPECIFIED, "ch_client_tls", &test_state->tls_tree);
     assert_int_equal(ret, 0);

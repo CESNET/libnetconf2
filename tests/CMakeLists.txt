@@ -8,7 +8,7 @@ if(${SOURCE_FORMAT_ENABLED})
 endif()
 
 # list of all the tests that don't require SSH and TLS
-set(tests test_unix_socket)
+set(tests test_unix_socket test_client_thread test_fd_comm test_init_destroy_client test_init_destroy_server test_io test_thread_messages)
 
 # only enable PAM tests if the version of PAM is greater than 1.4
 if(LIBPAM_HAVE_CONFDIR)
@@ -37,7 +37,7 @@ endforeach()
 
 #append tests depending on SSH/TLS
 if(ENABLE_SSH_TLS)
-    list(APPEND tests test_two_channels test_ks_ts test_config_new test_ec
+    list(APPEND tests test_two_channels test_ks_ts test_ec
         test_ed25519 test_replace test_endpt_share_clients test_tls test_crl test_ch
         test_runtime_changes)
 endif()

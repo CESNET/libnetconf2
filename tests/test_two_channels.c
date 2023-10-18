@@ -154,16 +154,16 @@ setup_f(void **state)
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", 10005, &tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", 10005, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_hostkey(ctx, "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa", NULL, &tree);
+    ret = nc_server_config_add_ssh_hostkey(ctx, "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa", NULL, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_user_pubkey(ctx, "endpt", "client_1", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);
+    ret = nc_server_config_add_ssh_user_pubkey(ctx, "endpt", "client_1", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_new_ssh_user_pubkey(ctx, "endpt", "client_2", "pubkey", TESTS_DIR "/data/id_ecdsa521.pub", &tree);
+    ret = nc_server_config_add_ssh_user_pubkey(ctx, "endpt", "client_2", "pubkey", TESTS_DIR "/data/id_ecdsa521.pub", &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_setup_data(tree);

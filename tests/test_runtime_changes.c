@@ -240,11 +240,11 @@ test_nc_change_tls_srv_crt(void **state)
     test_state = *state;
     init_test_create_threads_tls(tids, state);
 
-    ret = nc_server_config_new_tls_server_certificate(ctx, "endpt_tls", TESTS_DIR "/data/client.key", NULL, TESTS_DIR "/data/client.crt", &test_state->tree);
+    ret = nc_server_config_add_tls_server_cert(ctx, "endpt_tls", TESTS_DIR "/data/client.key", NULL, TESTS_DIR "/data/client.crt", &test_state->tree);
     assert_int_equal(ret, 0);
     configure(test_state, NC_TEST_EXPECT_FAIL, NC_TEST_STATE_RUN);
 
-    ret = nc_server_config_new_tls_server_certificate(ctx, "endpt_tls", TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &test_state->tree);
+    ret = nc_server_config_add_tls_server_cert(ctx, "endpt_tls", TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &test_state->tree);
     assert_int_equal(ret, 0);
     configure(test_state, NC_TEST_EXPECT_OK, NC_TEST_STATE_END);
 
@@ -264,11 +264,11 @@ test_nc_change_tls_client_crt(void **state)
     test_state = *state;
     init_test_create_threads_tls(tids, state);
 
-    ret = nc_server_config_new_tls_client_certificate(ctx, "endpt_tls", "client_cert", TESTS_DIR "/data/server.crt", &test_state->tree);
+    ret = nc_server_config_add_tls_client_cert(ctx, "endpt_tls", "client_cert", TESTS_DIR "/data/server.crt", &test_state->tree);
     assert_int_equal(ret, 0);
     configure(test_state, NC_TEST_EXPECT_FAIL, NC_TEST_STATE_RUN);
 
-    ret = nc_server_config_new_tls_client_certificate(ctx, "endpt_tls", "client_cert", TESTS_DIR "/data/client.crt", &test_state->tree);
+    ret = nc_server_config_add_tls_client_cert(ctx, "endpt_tls", "client_cert", TESTS_DIR "/data/client.crt", &test_state->tree);
     assert_int_equal(ret, 0);
     configure(test_state, NC_TEST_EXPECT_OK, NC_TEST_STATE_END);
 
@@ -288,63 +288,15 @@ test_nc_change_tls_ctn(void **state)
     test_state = *state;
     init_test_create_threads_tls(tids, state);
 
-    ret = nc_server_config_new_tls_ctn(ctx, "endpt_tls", 1,
+    ret = nc_server_config_add_tls_ctn(ctx, "endpt_tls", 1,
             "FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF",
             NC_TLS_CTN_SPECIFIED, "invalid-fingerprint", &test_state->tree);
     assert_int_equal(ret, 0);
     configure(test_state, NC_TEST_EXPECT_FAIL, NC_TEST_STATE_RUN);
 
-    ret = nc_server_config_new_tls_ctn(ctx, "endpt_tls", 1,
+    ret = nc_server_config_add_tls_ctn(ctx, "endpt_tls", 1,
             "04:85:6B:75:D1:1A:86:E0:D8:FE:5B:BD:72:F5:73:1D:07:EA:32:BF:09:11:21:6A:6E:23:78:8E:B6:D5:73:C3:2D",
             NC_TLS_CTN_SPECIFIED, "client", &test_state->tree);
-    assert_int_equal(ret, 0);
-    configure(test_state, NC_TEST_EXPECT_OK, NC_TEST_STATE_END);
-
-    for (i = 0; i < 2; i++) {
-        pthread_join(tids[i], NULL);
-    }
-}
-
-static void
-test_nc_change_tls_version(void **state)
-{
-    int ret, i;
-    pthread_t tids[2];
-    struct test_state *test_state;
-
-    assert_non_null(state);
-    test_state = *state;
-    init_test_create_threads_tls(tids, state);
-
-    ret = nc_server_config_new_tls_version(ctx, "endpt_tls", NC_TLS_VERSION_11, &test_state->tree);
-    assert_int_equal(ret, 0);
-    configure(test_state, NC_TEST_EXPECT_FAIL, NC_TEST_STATE_RUN);
-
-    ret = nc_server_config_new_tls_version(ctx, "endpt_tls", NC_TLS_VERSION_13, &test_state->tree);
-    assert_int_equal(ret, 0);
-    configure(test_state, NC_TEST_EXPECT_OK, NC_TEST_STATE_END);
-
-    for (i = 0; i < 2; i++) {
-        pthread_join(tids[i], NULL);
-    }
-}
-
-static void
-test_nc_change_tls_ciphers(void **state)
-{
-    int ret, i;
-    pthread_t tids[2];
-    struct test_state *test_state;
-
-    assert_non_null(state);
-    test_state = *state;
-    init_test_create_threads_tls(tids, state);
-
-    ret = nc_server_config_new_tls_ciphers(ctx, "endpt_tls", &test_state->tree, 1, "tls-rsa-with-null-sha");
-    assert_int_equal(ret, 0);
-    configure(test_state, NC_TEST_EXPECT_FAIL, NC_TEST_STATE_RUN);
-
-    ret = nc_server_config_new_tls_ciphers(ctx, "endpt_tls", &test_state->tree, 3, "tls-aes-128-ccm-sha256", "tls-aes-128-gcm-sha256", "tls-chacha20-poly1305-sha256");
     assert_int_equal(ret, 0);
     configure(test_state, NC_TEST_EXPECT_OK, NC_TEST_STATE_END);
 
@@ -359,18 +311,28 @@ test_nc_change_ssh_hostkey(void **state)
     int ret, i;
     pthread_t tids[2];
     struct test_state *test_state;
+    struct lyd_node *hostkey = NULL;
 
     assert_non_null(state);
     test_state = *state;
     init_test_create_threads_ssh(tids, state);
 
-    ret = nc_server_config_new_ssh_hostkey(ctx, "endpt_ssh", "hostkey", TESTS_DIR "/data/server.key", NULL, &test_state->tree);
+    ret = nc_server_config_add_ssh_hostkey(ctx, "endpt_ssh", "hostkey", TESTS_DIR "/data/server.key", NULL, &test_state->tree);
     assert_int_equal(ret, 0);
     configure(test_state, NC_TEST_EXPECT_OK, NC_TEST_STATE_RUN);
 
-    ret = nc_server_config_new_keystore_asym_key(ctx, NC_TI_LIBSSH, "keystore_hostkey", TESTS_DIR "/data/key_rsa", TESTS_DIR "/data/key_rsa.pub", &test_state->tree);
+    /* delete the locally defined hostkey */
+    ret = lyd_find_path(test_state->tree, "/ietf-netconf-server:netconf-server/listen/"
+            "endpoint[name='endpt_ssh']/ssh/ssh-server-parameters/server-identity/host-key[name='hostkey']/public-key", 0, &hostkey);
+    assert_non_null(hostkey);
+    lyd_free_tree(hostkey);
+
+    /* add the keystore entry and set it as hostkey */
+    ret = nc_server_config_add_keystore_asym_key(ctx, NC_TI_LIBSSH, "keystore_hostkey", TESTS_DIR "/data/key_rsa", TESTS_DIR "/data/key_rsa.pub", &test_state->tree);
     assert_int_equal(ret, 0);
-    ret = nc_server_config_new_ssh_keystore_ref(ctx, "endpt_ssh", "hostkey", "keystore_hostkey", &test_state->tree);
+    ret = lyd_new_path(test_state->tree, ctx, "/ietf-netconf-server:netconf-server/listen/"
+            "endpoint[name='endpt_ssh']/ssh/ssh-server-parameters/server-identity/host-key[name='hostkey']/public-key/"
+            "keystore-reference", "keystore_hostkey", 0, NULL);
     assert_int_equal(ret, 0);
     configure(test_state, NC_TEST_EXPECT_OK, NC_TEST_STATE_END);
 
@@ -390,35 +352,11 @@ test_nc_change_ssh_usr_pubkey(void **state)
     test_state = *state;
     init_test_create_threads_ssh(tids, state);
 
-    ret = nc_server_config_new_ssh_user_pubkey(ctx, "endpt_ssh", "client", "pubkey", TESTS_DIR "/data/id_ecdsa521.pub", &test_state->tree);
+    ret = nc_server_config_add_ssh_user_pubkey(ctx, "endpt_ssh", "client", "pubkey", TESTS_DIR "/data/id_ecdsa521.pub", &test_state->tree);
     assert_int_equal(ret, 0);
     configure(test_state, NC_TEST_EXPECT_FAIL, NC_TEST_STATE_RUN);
 
-    ret = nc_server_config_new_ssh_user_pubkey(ctx, "endpt_ssh", "client", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &test_state->tree);
-    assert_int_equal(ret, 0);
-    configure(test_state, NC_TEST_EXPECT_OK, NC_TEST_STATE_END);
-
-    for (i = 0; i < 2; i++) {
-        pthread_join(tids[i], NULL);
-    }
-}
-
-static void
-test_nc_change_ssh_hostkey_algs(void **state)
-{
-    int ret, i;
-    pthread_t tids[2];
-    struct test_state *test_state;
-
-    assert_non_null(state);
-    test_state = *state;
-    init_test_create_threads_ssh(tids, state);
-
-    ret = nc_server_config_new_ssh_host_key_algs(ctx, "endpt_ssh", &test_state->tree, 1, "ssh-dss");
-    assert_int_equal(ret, 0);
-    configure(test_state, NC_TEST_EXPECT_FAIL, NC_TEST_STATE_RUN);
-
-    ret = nc_server_config_new_ssh_host_key_algs(ctx, "endpt_ssh", &test_state->tree, 1, "rsa-sha2-256");
+    ret = nc_server_config_add_ssh_user_pubkey(ctx, "endpt_ssh", "client", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &test_state->tree);
     assert_int_equal(ret, 0);
     configure(test_state, NC_TEST_EXPECT_OK, NC_TEST_STATE_END);
 
@@ -457,33 +395,33 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* create new address and port data */
-    ret = nc_server_config_new_address_port(ctx, "endpt_tls", NC_TI_OPENSSL, "127.0.0.1", 10005, &test_state->tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt_tls", NC_TI_OPENSSL, "127.0.0.1", 10005, &test_state->tree);
     assert_int_equal(ret, 0);
 
     /* create new server certificate data */
-    ret = nc_server_config_new_tls_server_certificate(ctx, "endpt_tls", TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &test_state->tree);
+    ret = nc_server_config_add_tls_server_cert(ctx, "endpt_tls", TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &test_state->tree);
     assert_int_equal(ret, 0);
 
     /* create new end entity client cert data */
-    ret = nc_server_config_new_tls_client_certificate(ctx, "endpt_tls", "client_cert", TESTS_DIR "/data/client.crt", &test_state->tree);
+    ret = nc_server_config_add_tls_client_cert(ctx, "endpt_tls", "client_cert", TESTS_DIR "/data/client.crt", &test_state->tree);
     assert_int_equal(ret, 0);
 
     /* create new cert-to-name */
-    ret = nc_server_config_new_tls_ctn(ctx, "endpt_tls", 1,
+    ret = nc_server_config_add_tls_ctn(ctx, "endpt_tls", 1,
             "04:85:6B:75:D1:1A:86:E0:D8:FE:5B:BD:72:F5:73:1D:07:EA:32:BF:09:11:21:6A:6E:23:78:8E:B6:D5:73:C3:2D",
             NC_TLS_CTN_SPECIFIED, "client", &test_state->tree);
     assert_int_equal(ret, 0);
 
     /* create new address and port data */
-    ret = nc_server_config_new_address_port(ctx, "endpt_ssh", NC_TI_LIBSSH, "127.0.0.1", 10006, &test_state->tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt_ssh", NC_TI_LIBSSH, "127.0.0.1", 10006, &test_state->tree);
     assert_int_equal(ret, 0);
 
     /* create new hostkey data */
-    ret = nc_server_config_new_ssh_hostkey(ctx, "endpt_ssh", "hostkey", TESTS_DIR "/data/server.key", NULL, &test_state->tree);
+    ret = nc_server_config_add_ssh_hostkey(ctx, "endpt_ssh", "hostkey", TESTS_DIR "/data/server.key", NULL, &test_state->tree);
     assert_int_equal(ret, 0);
 
     /* create new ssh user pubkey data */
-    ret = nc_server_config_new_ssh_user_pubkey(ctx, "endpt_ssh", "client", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &test_state->tree);
+    ret = nc_server_config_add_ssh_user_pubkey(ctx, "endpt_ssh", "client", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &test_state->tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_init();
@@ -526,11 +464,8 @@ main(void)
         cmocka_unit_test_setup_teardown(test_nc_change_tls_srv_crt, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_change_tls_client_crt, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_change_tls_ctn, setup_f, teardown_f),
-        cmocka_unit_test_setup_teardown(test_nc_change_tls_version, setup_f, teardown_f),
-        cmocka_unit_test_setup_teardown(test_nc_change_tls_ciphers, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_change_ssh_hostkey, setup_f, teardown_f),
-        cmocka_unit_test_setup_teardown(test_nc_change_ssh_usr_pubkey, setup_f, teardown_f),
-        cmocka_unit_test_setup_teardown(test_nc_change_ssh_hostkey_algs, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_change_ssh_usr_pubkey, setup_f, teardown_f)
     };
 
     setenv("CMOCKA_TEST_ABORT", "1", 1);

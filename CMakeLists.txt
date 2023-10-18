@@ -111,16 +111,16 @@ set(libsrc
     src/session_client.c
     src/session_server.c
     src/server_config.c
-    src/config_new.c)
+    src/server_config_util.c)
 
 if(ENABLE_SSH_TLS)
     list(APPEND libsrc
         src/session_client_ssh.c
         src/session_server_ssh.c
-        src/config_new_ssh.c
+        src/server_config_util_ssh.c
         src/session_client_tls.c
         src/session_server_tls.c
-        src/config_new_tls.c
+        src/server_config_util_tls.c
         src/server_config_ks.c
         src/server_config_ts.c)
     set(SSH_TLS_MACRO "#ifndef NC_ENABLED_SSH_TLS\n#define NC_ENABLED_SSH_TLS\n#endif")
