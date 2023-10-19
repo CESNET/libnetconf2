@@ -289,8 +289,6 @@
  * determined by the context used when accepting new NETCONF sessions. Few capabilities that
  * cannot be learnt from the context are set with separate functions
  * ::nc_server_set_capab_withdefaults() and generally ::nc_server_set_capability().
- * Timeout for receiving the _hello_ message on a new session can be set
- * by ::nc_server_set_hello_timeout().
  *
  * Context does not only determine server modules, but its overall
  * functionality as well. For every RPC the server should support,
@@ -310,7 +308,6 @@
  *
  * - ::nc_server_set_capab_withdefaults()
  * - ::nc_server_set_capability()
- * - ::nc_server_set_hello_timeout()
  *
  * Server Configuration
  * ===
@@ -701,8 +698,8 @@
  * You can adjust active and inactive read timeout using `cmake` variables.
  * For details look into `README.md`.
  *
- * API Functions
- * -------------
+ * Configurable timeouts
+ * ---------------------
  *
  * Once a new connection is established including transport protocol negotiations,
  * _hello_ message is exchanged. You can set how long will the server wait for
@@ -712,19 +709,10 @@
  * To free up some resources, it is possible to adjust the maximum idle period
  * of a session before it is disconnected. In _Call Home_, for both a persistent
  * and periodic connection can this idle timeout be specified separately for each
- * client using corresponding functions. Unlike other timeouts, the idle timeout
- * can only be set via applying configuration data.
- *
- * Lastly, SSH user authentication timeout can be also modified. It is the time
+ * client. Lastly, SSH user authentication timeout can be also modified. It is the time
  * a client has to successfully authenticate after connecting before it is disconnected.
  *
- * Functions List
- * --------------
- *
- * Available in __nc_server.h__.
- *
- * - ::nc_server_set_hello_timeout()
- * - ::nc_server_get_hello_timeout()
+ * These timeouts can be toggled by applying corresponding configuration data.
  */
 
 /**

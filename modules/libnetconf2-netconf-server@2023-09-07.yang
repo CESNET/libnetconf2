@@ -240,6 +240,24 @@ module libnetconf2-netconf-server {
         https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL?annotate=HEAD";
   }
 
+  augment "/ncs:netconf-server" {
+    leaf hello-timeout {
+      type uint16;
+      default 60;
+      description
+        "Represents the maximum number of seconds the server will wait for receiving a hello message.";
+    }
+  }
+
+  augment "/ncs:netconf-server" {
+    leaf idle-timeout {
+      type uint16;
+      default 0;
+      description
+        "Represents the maximum number of seconds a NETCONF session may remain idle. The value of 0 represents indefinitely.";
+    }
+  }
+
   augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
     leaf auth-attempts {
       type uint16;

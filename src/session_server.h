@@ -200,20 +200,6 @@ void nc_server_set_content_id_clb(char *(*content_id_clb)(void *user_data), void
         void (*free_user_data)(void *user_data));
 
 /**
- * @brief Set server timeout for receiving a hello message.
- *
- * @param[in] hello_timeout Hello message timeout. 0 for infinite waiting.
- */
-void nc_server_set_hello_timeout(uint16_t hello_timeout);
-
-/**
- * @brief get server timeout for receiving a hello message.
- *
- * @return Hello message timeout, 0 is infinite.
- */
-uint16_t nc_server_get_hello_timeout(void);
-
-/**
  * @brief Get all the server capabilities including all the schemas.
  *
  * A few capabilities (with-defaults, interleave) depend on the current
