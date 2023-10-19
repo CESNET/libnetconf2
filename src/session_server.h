@@ -114,7 +114,8 @@ struct nc_server_reply *nc_clb_default_close_session(struct lyd_node *rpc, struc
 /** @} Server Session */
 
 /**
- * @addtogroup server
+ * @defgroup server_functions Server Functions
+ * @ingroup server
  * @{
  */
 
@@ -132,6 +133,23 @@ int nc_server_init(void);
  *        server resources.
  */
 void nc_server_destroy(void);
+
+/**
+ * @brief Initialize a context which can serve as a default server context.
+ *
+ * Loads the default modules ietf-netconf and ietf-netconf-monitoring and their enabled features - ietf-netconf
+ * enabled features are : writable-running, candidate, rollback-on-error, validate, startup, url, xpath, confirmed-commit and
+ * ietf-netconf-monitoring has no features.
+ *
+ * If ctx is :
+ *      - NULL: a new context will be created and if the call is successful you have to free it,
+ *      - non NULL: context will be searched for the two modules and their features
+ *                  and if anything is missing, it will be implemented.
+ *
+ * @param[in,out] ctx Optional context in which the modules will be loaded. Created if ctx is null.
+ * @return 0 on success, -1 on error.
+ */
+int nc_server_init_ctx(struct ly_ctx **ctx);
 
 /**
  * @brief Set the with-defaults capability extra parameters.
@@ -154,8 +172,8 @@ int nc_server_set_capab_withdefaults(NC_WD_MODE basic_mode, int also_supported);
  *
  * At least one argument must be non-NULL.
  *
- * @param[in,out] basic_mode basic-mode parameter.
- * @param[in,out] also_supported also-supported parameter.
+ * @param[out] basic_mode basic-mode parameter.
+ * @param[out] also_supported also-supported parameter.
  */
 void nc_server_get_capab_withdefaults(NC_WD_MODE *basic_mode, int *also_supported);
 
@@ -196,22 +214,6 @@ void nc_server_set_hello_timeout(uint16_t hello_timeout);
 uint16_t nc_server_get_hello_timeout(void);
 
 /**
- * @brief Set server timeout for dropping an idle session.
- *
- * @param[in] idle_timeout Idle session timeout. 0 to never drop a session
- *                         because of inactivity.
- */
-void nc_server_set_idle_timeout(uint16_t idle_timeout);
-
-/**
- * @brief Get server timeout for dropping an idle session.
- *
- * @return Idle session timeout, 0 for for never dropping
- *         a session because of inactivity.
- */
-uint16_t nc_server_get_idle_timeout(void);
-
-/**
  * @brief Get all the server capabilities including all the schemas.
  *
  * A few capabilities (with-defaults, interleave) depend on the current
@@ -235,7 +237,7 @@ char **nc_server_get_cpblts(const struct ly_ctx *ctx);
  */
 char **nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version);
 
-/** @} Server */
+/** @} Server Functions */
 
 /**
  * @addtogroup server_session
@@ -377,32 +379,9 @@ void nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *));
 /** @} Server Session */
 
 /**
- * @addtogroup server
+ * @addtogroup server_functions
  * @{
  */
-
-/**
- * @brief Add a new endpoint.
- *
- * Before the endpoint can accept any connections, its address and port must
- * be set via nc_server_endpt_set_address() and nc_server_endpt_set_port().
- *
- * @param[in] name Arbitrary unique endpoint name.
- * @param[in] ti Transport protocol to use.
- * @return 0 on success, -1 on error.
- */
-int nc_server_add_endpt(const char *name, NC_TRANSPORT_IMPL ti);
-
-/**
- * @brief Stop listening on and remove an endpoint.
- *
- * @param[in] name Endpoint name. NULL matches all endpoints.
- * @param[in] ti Endpoint transport protocol. NULL matches any protocol.
- *               Redundant to set if @p name is set, endpoint names are
- *               unique disregarding their protocol.
- * @return 0 on success, -1 on not finding any match.
- */
-int nc_server_del_endpt(const char *name, NC_TRANSPORT_IMPL ti);
 
 /**
  * @brief Get the number of currently configured listening endpoints.
@@ -421,68 +400,7 @@ int nc_server_endpt_count(void);
  */
 int nc_server_is_endpt(const char *name);
 
-/**
- * @brief Change endpoint listening address.
- *
- * On error the previous listening socket (if any) is left untouched.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] address New listening address.
- * @return 0 on success, -1 on error.
- */
-int nc_server_endpt_set_address(const char *endpt_name, const char *address);
-
-#if defined (NC_ENABLED_SSH) || defined (NC_ENABLED_TLS)
-
-/**
- * @brief Change endpoint listening port.
- *
- * This is only valid on SSH/TLS transport endpoint.
- * On error the previous listening socket (if any) is left untouched.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] port New listening port.
- * @return 0 on success, -1 on error.
- */
-int nc_server_endpt_set_port(const char *endpt_name, uint16_t port);
-
-#endif
-
-/**
- * @brief Change endpoint permissions.
- *
- * This is only valid on UNIX transport endpoint.
- * On error the previous listening socket (if any) is left untouched.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] mode New mode, -1 to use default.
- * @param[in] uid New uid, -1 to use default.
- * @param[in] gid New gid, -1 to use default.
- * @return 0 on success, -1 on error.
- */
-int nc_server_endpt_set_perms(const char *endpt_name, mode_t mode, uid_t uid, gid_t gid);
-
-/**
- * @brief Change endpoint keepalives state. Affects only new connections.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] enable Whether to enable or disable keepalives.
- * @return 0 on success, -1 on error.
- */
-int nc_server_endpt_enable_keepalives(const char *endpt_name, int enable);
-
-/**
- * @brief Change endpoint keepalives parameters. Affects only new connections.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] idle_time Keepalive idle time in seconds, 1 by default, -1 to keep previous value.
- * @param[in] max_probes Keepalive max probes sent, 10 by default, -1 to keep previous value.
- * @param[in] probe_interval Keepalive probe interval in seconds, 5 by default, -1 to keep previous value.
- * @return 0 on success, -1 on error.
- */
-int nc_server_endpt_set_keepalives(const char *endpt_name, int idle_time, int max_probes, int probe_interval);
-
-/** @} Server */
+/** @} */
 
 /**
  * @addtogroup server_session
@@ -497,7 +415,8 @@ int nc_server_endpt_set_keepalives(const char *endpt_name, int idle_time, int ma
  * for much longer that @p timeout, but only with slow/faulty/malicious clients.
  *
  * Server capabilities are generated based on the content of @p ctx. The context must
- * not be destroyed before the accepted NETCONF session is freed.
+ * not be destroyed before the accepted NETCONF session is freed. Basic usable context may
+ * be created by calling ::nc_server_init_ctx().
  *
  * Supported RPCs of models in the context are expected to have their callback
  * in the corresponding RPC schema node set to a nc_rpc_clb function callback using ::nc_set_rpc_callback().
@@ -550,39 +469,6 @@ NC_MSG_TYPE nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_sessio
  */
 
 /**
- * @brief Add an authorized client SSH public key. This public key can be used for
- * publickey authentication (for any SSH connection, even Call Home) afterwards.
- *
- * @param[in] pubkey_base64 Authorized public key binary content encoded in base64.
- * @param[in] type Authorized public key SSH type.
- * @param[in] username Username that the client with the public key must use.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_add_authkey(const char *pubkey_base64, NC_SSH_KEY_TYPE type, const char *username);
-
-/**
- * @brief Add an authorized client SSH public key. This public key can be used for
- *        publickey authentication (for any SSH connection, even Call Home) afterwards.
- *
- * @param[in] pubkey_path Path to the public key.
- * @param[in] username Username that the client with the public key must use.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_add_authkey_path(const char *pubkey_path, const char *username);
-
-/**
- * @brief Remove an authorized client SSH public key.
- *
- * @param[in] pubkey_path Path to an authorized public key. NULL matches all the keys.
- * @param[in] pubkey_base64 Authorized public key content. NULL matches any key.
- * @param[in] type Authorized public key type. 0 matches all types.
- * @param[in] username Username for an authorized public key. NULL matches all the usernames.
- * @return 0 on success, -1 on not finding any match.
- */
-int nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64, NC_SSH_KEY_TYPE type,
-        const char *username);
-
-/**
  * @brief Set the callback for SSH password authentication. If none is set, local system users are used.
  *
  * @param[in] passwd_auth_clb Callback that should authenticate the user. Username can be directly obtained from @p session.
@@ -594,35 +480,15 @@ void nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_se
         void *user_data), void *user_data, void (*free_user_data)(void *user_data));
 
 /**
- * @brief Set the callback for SSH interactive authentication. If none is set, local PAM-based authentication is used.
+ * @brief Set the callback for SSH interactive authentication. If not set, local PAM-based authentication is used.
  *
- * @param[in] interactive_auth_sess_clb Callback that should authenticate the user.
+ * @param[in] interactive_auth_clb Callback that should authenticate the user.
  * Zero return indicates success, non-zero an error.
- * @param[in] user_data Optional arbitrary user data that will be passed to @p interactive_auth_sess_clb.
+ * @param[in] user_data Optional arbitrary user data that will be passed to @p interactive_auth_clb.
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
  */
-void nc_server_ssh_set_interactive_auth_sess_clb(int (*interactive_auth_sess_clb)(const struct nc_session *session,
-        ssh_session ssh_sess, ssh_message msg, void *user_data), void *user_data, void (*free_user_data)(void *user_data));
-
-/**
- * @brief Deprecated, use ::nc_server_ssh_set_interactive_auth_sess_clb() instead.
- */
 void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session,
-        const ssh_message msg, void *user_data), void *user_data, void (*free_user_data)(void *user_data));
-
-/**
- * @brief Set the name and a path to a PAM configuration file.
- *
- * @p conf_name has to be set via this function prior to using PAM keyboard-interactive authentication method.
- *
- * @param[in] conf_name Name of the configuration file.
- * @param[in] conf_dir Optional. The absolute path to the directory in which the configuration file
- * with the name @p conf_name is located. A newer version (>= 1.4) of PAM library is required to be
- * able to specify the path. If NULL is passed,
- * then the PAM's system directories will be searched (usually /etc/pam.d/).
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_set_pam_conf_path(const char *conf_name, const char *conf_dir);
+        ssh_session ssh_sess, ssh_message msg, void *user_data), void *user_data, void (*free_user_data)(void *user_data));
 
 /**
  * @brief Set the callback for SSH public key authentication. If none is set, local system users are used.
@@ -635,101 +501,6 @@ int nc_server_ssh_set_pam_conf_path(const char *conf_name, const char *conf_dir)
 void nc_server_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session *session, ssh_key key,
         void *user_data), void *user_data, void (*free_user_data)(void *user_data));
 
-/**
- * @brief Set the callback for retrieving host keys. Any RSA, DSA, and ECDSA keys can be added. However,
- *        a maximum of one key of each type will be used during SSH authentication, later keys replacing
- *        the earlier ones.
- *
- * @param[in] hostkey_clb Callback that should return the key itself. Zero return indicates success, non-zero
- *                        an error. On success exactly ONE of @p privkey_path or @p privkey_data is expected
- *                        to be set. The one set will be freed.
- *                        - @p privkey_path expects a PEM file,
- *                        - @p privkey_data expects a base-64 encoded ANS.1 DER data,
- *                        - @p privkey_type type of the key in @p privkey_data. Use ::NC_SSH_KEY_UNKNOWN for
- *                          PKCS#8 key that includes the information about the key in its data.
- * @param[in] user_data Optional arbitrary user data that will be passed to @p hostkey_clb.
- * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
- */
-void nc_server_ssh_set_hostkey_clb(int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path,
-        char **privkey_data, NC_SSH_KEY_TYPE *privkey_type), void *user_data, void (*free_user_data)(void *user_data));
-
-/**
- * @brief Add endpoint SSH host keys the server will identify itself with. Only the name is set, the key itself
- *        wil be retrieved using a callback.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] name Arbitrary name of the host key.
- * @param[in] idx Optional index where to add the key. -1 adds at the end.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name, int16_t idx);
-
-/**
- * @brief Delete endpoint SSH host key. Their order is preserved.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] name Name of the host key. NULL matches all the keys, but if @p idx != -1 then this must be NULL.
- * @param[in] idx Index of the hostkey. -1 matches all indices, but if @p name != NULL then this must be -1.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *name, int16_t idx);
-
-/**
- * @brief Move endpoint SSH host key.
- *
- * @param[in] endpt_name Exisitng endpoint name.
- * @param[in] key_mov Name of the host key that will be moved.
- * @param[in] key_after Name of the key that will preceed @p key_mov. NULL if @p key_mov is to be moved at the beginning.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_endpt_mov_hostkey(const char *endpt_name, const char *key_mov, const char *key_after);
-
-/**
- * @brief Modify endpoint SSH host key.
- *
- * @param[in] endpt_name Exisitng endpoint name.
- * @param[in] name Name of an existing host key.
- * @param[in] new_name New name of the host key @p name.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_endpt_mod_hostkey(const char *endpt_name, const char *name, const char *new_name);
-
-/**
- * @brief Set endpoint accepted SSH authentication methods. All (publickey, password, interactive)
- *        are supported by default.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] auth_methods Accepted authentication methods bit field of NC_SSH_AUTH_TYPE.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_endpt_set_auth_methods(const char *endpt_name, int auth_methods);
-
-/**
- * @brief Get endpoint accepted SSH authentication methods.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @return Accepted authentication methods bit field of NC_SSH_AUTH_TYPE.
- */
-int nc_server_ssh_endpt_get_auth_methods(const char *endpt_name);
-
-/**
- * @brief Set endpoint SSH authentication attempts of every client. 3 by default.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] auth_attempts Failed authentication attempts before a client is dropped.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_endpt_set_auth_attempts(const char *endpt_name, uint16_t auth_attempts);
-
-/**
- * @brief Set endpoint SSH authentication timeout. 30 seconds by default.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] auth_timeout Number of seconds before an unauthenticated client is dropped.
- * @return 0 on success, -1 on error.
- */
-int nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_timeout);
-
 /** @} Server SSH */
 
 /**
@@ -739,148 +510,6 @@ int nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_t
  * @brief Server-side settings for TLS connections.
  * @{
  */
-
-/**
- * @brief Set the server TLS certificate. Only the name is set, the certificate itself
- *        wil be retrieved using a callback.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] name Arbitrary certificate name.
- * @return 0 on success, -1 on error.
- */
-int nc_server_tls_endpt_set_server_cert(const char *endpt_name, const char *name);
-
-/**
- * @brief Set the callback for retrieving server certificate and matching private key.
- *
- * @param[in] cert_clb Callback that should return the certificate and the key itself. Zero return indicates success,
- *                     non-zero an error. On success exactly ONE of @p cert_path or @p cert_data and ONE of
- *                     @p privkey_path and @p privkey_data is expected to be set. Those set will be freed.
- *                     - @p cert_path expects a PEM file,
- *                     - @p cert_data expects a base-64 encoded ASN.1 DER data,
- *                     - @p privkey_path expects a PEM file,
- *                     - @p privkey_data expects a base-64 encoded ANS.1 DER data,
- *                     - @p privkey_type type of the key in @p privkey_data.
- * @param[in] user_data Optional arbitrary user data that will be passed to @p cert_clb.
- * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
- */
-void nc_server_tls_set_server_cert_clb(int (*cert_clb)(const char *name, void *user_data, char **cert_path, char **cert_data,
-        char **privkey_path, char **privkey_data, NC_SSH_KEY_TYPE *privkey_type), void *user_data,
-        void (*free_user_data)(void *user_data));
-
-/**
- * @brief Set the callback for retrieving server certificate chain
- *
- * @param[in] cert_chain_clb Callback that should return all the certificates of the chain. Zero return indicates success,
- *                           non-zero an error. On success, @p cert_paths and @p cert_data are expected to be set or left
- *                           NULL. Both will be (deeply) freed.
- *                           - @p cert_paths expect an array of PEM files,
- *                           - @p cert_path_count number of @p cert_paths array members,
- *                           - @p cert_data expect an array of base-64 encoded ASN.1 DER cert data,
- *                           - @p cert_data_count number of @p cert_data array members.
- * @param[in] user_data Optional arbitrary user data that will be passed to @p cert_clb.
- * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
- */
-void nc_server_tls_set_server_cert_chain_clb(int (*cert_chain_clb)(const char *name, void *user_data, char ***cert_paths,
-        int *cert_path_count, char ***cert_data, int *cert_data_count), void *user_data, void (*free_user_data)(void *user_data));
-
-/**
- * @brief Add a trusted certificate list. Can be both a CA or a client one. Can be
- *        safely used together with nc_server_tls_endpt_set_trusted_ca_paths().
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] name Arbitary name identifying this certificate list.
- * @return 0 on success, -1 on error.
- */
-int nc_server_tls_endpt_add_trusted_cert_list(const char *endpt_name, const char *name);
-
-/**
- * @brief Set the callback for retrieving trusted certificates.
- *
- * @param[in] cert_list_clb Callback that should return all the certificates of a list. Zero return indicates success,
- *                          non-zero an error. On success, @p cert_paths and @p cert_data are expected to be set or left
- *                          NULL. Both will be (deeply) freed.
- *                          - @p cert_paths expect an array of PEM files,
- *                          - @p cert_path_count number of @p cert_paths array members,
- *                          - @p cert_data expect an array of base-64 encoded ASN.1 DER cert data,
- *                          - @p cert_data_count number of @p cert_data array members.
- * @param[in] user_data Optional arbitrary user data that will be passed to @p cert_clb.
- * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
- */
-void nc_server_tls_set_trusted_cert_list_clb(int (*cert_list_clb)(const char *name, void *user_data, char ***cert_paths,
-        int *cert_path_count, char ***cert_data, int *cert_data_count), void *user_data, void (*free_user_data)(void *user_data));
-
-/**
- * @brief Remove a trusted certificate.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] name Name of the certificate list to delete. NULL deletes all the lists.
- * @return 0 on success, -1 on not found.
- */
-int nc_server_tls_endpt_del_trusted_cert_list(const char *endpt_name, const char *name);
-
-/**
- * @brief Set trusted Certificate Authority certificate locations. There can only be
- *        one file and one directory, they are replaced if already set. Can be safely
- *        used with nc_server_tls_endpt_add_trusted_cert() or its _path variant.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] ca_file Path to a trusted CA cert store file in PEM format. Can be NULL.
- * @param[in] ca_dir Path to a trusted CA cert store hashed directory (c_rehash utility
- *                   can be used to create hashes) with PEM files. Can be NULL.
- * @return 0 on success, -1 on error.
- */
-int nc_server_tls_endpt_set_trusted_ca_paths(const char *endpt_name, const char *ca_file, const char *ca_dir);
-
-/**
- * @brief Set Certificate Revocation List locations. There can only be one file
- *        and one directory, they are replaced if already set.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] crl_file Path to a CRL store file in PEM format. Can be NULL.
- * @param[in] crl_dir Path to a CRL store hashed directory (c_rehash utility
- *                    can be used to create hashes) with PEM files. Can be NULL.
- * @return 0 on success, -1 on error.
- */
-int nc_server_tls_endpt_set_crl_paths(const char *endpt_name, const char *crl_file, const char *crl_dir);
-
-/**
- * @brief Destroy and clean CRLs. Certificates, private keys, and CTN entries are
- *        not affected.
- *
- * @param[in] endpt_name Existing endpoint name.
- */
-void nc_server_tls_endpt_clear_crls(const char *endpt_name);
-
-/**
- * @brief Add a cert-to-name entry.
- *
- * It is possible to add an entry step-by-step, specifying first only @p ip and in later calls
- * @p fingerprint, @p map_type, and optionally @p name spearately.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] id Priority of the entry. It must be unique. If already exists, the entry with this id
- *               is modified.
- * @param[in] fingerprint Matching certificate fingerprint. If NULL, kept temporarily unset.
- * @param[in] map_type Type of username-certificate mapping. If 0, kept temporarily unset.
- * @param[in] name Specific username used only if @p map_type == NC_TLS_CTN_SPECIFED.
- * @return 0 on success, -1 on error.
- */
-int nc_server_tls_endpt_add_ctn(const char *endpt_name, uint32_t id, const char *fingerprint,
-        NC_TLS_CTN_MAPTYPE map_type, const char *name);
-
-/**
- * @brief Remove a cert-to-name entry.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in] id Priority of the entry. -1 matches all the priorities.
- * @param[in] fingerprint Fingerprint fo the entry. NULL matches all the fingerprints.
- * @param[in] map_type Mapping type of the entry. 0 matches all the mapping types.
- * @param[in] name Specific username for the entry. NULL matches all the usernames.
- * @return 0 on success, -1 on not finding any match.
- */
-int nc_server_tls_endpt_del_ctn(const char *endpt_name, int64_t id, const char *fingerprint,
-        NC_TLS_CTN_MAPTYPE map_type, const char *name);
 
 /**
  * @brief Get a cert-to-name entry.
