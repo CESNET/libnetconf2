@@ -60,12 +60,11 @@ the `distro` directory.
 ## Requirements
 
 * C compiler (gcc >= 4.8.4, clang >= 3.0, ...)
-* cmake >= 2.8.12
+* cmake >= 3.5.0
 * [libyang](https://github.com/CESNET/libyang)
-* libssh >= 0.7.1 (for SSH support)
-  * recommended >= 0.9.0
-* OpenSSL (for TLS support)
-* curl
+* libssh >= 0.9.5 (for SSH support)
+* OpenSSL >= 3.0.0 (for TLS support)
+* curl >= 7.30.0
 
 #### Optional
 
