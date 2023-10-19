@@ -221,16 +221,16 @@ nc_server_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session
  * @return non-zero if not a match.
  */
 static int
-auth_password_compare_pwd(const char *pass_hash, const char *pass_clear)
+auth_password_compare_pwd(const char *stored_pw, const char *received_pw)
 {
-    char *new_pass_hash;
+    char *received_pw_hash = NULL;
 
 #ifdef HAVE_CRYPT_R
     struct crypt_data cdata;
 #endif
 
-    if (!pass_hash[0]) {
-        if (!pass_clear[0]) {
+    if (!stored_pw[0]) {
+        if (!received_pw[0]) {
             WRN(NULL, "User authentication successful with an empty password!");
             return 0;
         } else {
@@ -240,20 +240,24 @@ auth_password_compare_pwd(const char *pass_hash, const char *pass_clear)
         }
     }
 
+    if (!strncmp(stored_pw, "$0$", 3)) {
+        /* cleartext password, simply compare the values */
+        return strcmp(stored_pw + 3, received_pw);
+    }
+
 #ifdef HAVE_CRYPT_R
     cdata.initialized = 0;
-    new_pass_hash = crypt_r(pass_clear, pass_hash, &cdata);
+    received_pw_hash = crypt_r(received_pw, stored_pw, &cdata);
 #else
     pthread_mutex_lock(&crypt_lock);
-    new_pass_hash = crypt(pass_clear, pass_hash);
+    received_pw_hash = crypt(received_pw, stored_pw);
     pthread_mutex_unlock(&crypt_lock);
 #endif
-
-    if (!new_pass_hash) {
+    if (!received_pw_hash) {
         return 1;
     }
 
-    return strcmp(new_pass_hash, pass_hash);
+    return strcmp(received_pw_hash, stored_pw);
 }
 
 static int
