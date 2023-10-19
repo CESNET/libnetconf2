@@ -22,7 +22,8 @@ NETCONF 1.0 ([RFC 4741](https://tools.ietf.org/html/rfc4741)) as well as NETCONF
 * NETCONF over pre-established transport sessions (using this mechanism the communication can be tunneled through
   sshd(8), for instance).
 * NETCONF Call Home ([RFC 8071](https://tools.ietf.org/html/rfc8071)).
-* NETCONF Event Notifications ([RFC 5277](https://tools.ietf.org/html/rfc5277)),
+* NETCONF Event Notifications ([RFC 5277](https://tools.ietf.org/html/rfc5277)).
+* Compatibility with the [ietf-netconf-server](https://datatracker.ietf.org/doc/html/draft-ietf-netconf-netconf-client-server-29#name-the-ietf-netconf-server-mod) YANG module.
 
 **libnetconf2** is maintained and further developed by the [Tools for
 Monitoring and Configuration](https://www.liberouter.org/) department of
@@ -64,6 +65,7 @@ the `distro` directory.
 * libssh >= 0.7.1 (for SSH support)
   * recommended >= 0.9.0
 * OpenSSL (for TLS support)
+* curl
 
 #### Optional
 
@@ -122,7 +124,7 @@ and enabling both the transport protocols can be made
 in the same way. The following command has actually the same effect as
 specifying no option since it specifies the default settings.
 ```
-$ cmake -DENABLE_TLS=ON -DENABLE_SSH=ON ..
+$ cmake -DENABLE_SSH_TLS=ON ..
 ```
 
 ### DNSSEC SSHFP Retrieval
