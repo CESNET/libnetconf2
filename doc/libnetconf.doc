@@ -402,15 +402,11 @@
  * - ::nc_server_config_del_ssh_hostkey()
  * - ::nc_server_config_add_ssh_keystore_ref()
  * - ::nc_server_config_del_ssh_keystore_ref()
- * - ::nc_server_config_add_ssh_auth_attempts()
- * - ::nc_server_config_add_ssh_auth_timeout()
  *
  * - ::nc_server_config_add_ssh_user_pubkey()
  * - ::nc_server_config_del_ssh_user_pubkey()
  * - ::nc_server_config_add_ssh_user_password()
  * - ::nc_server_config_del_ssh_user_password()
- * - ::nc_server_config_add_ssh_user_none()
- * - ::nc_server_config_del_ssh_user_none()
  * - ::nc_server_config_add_ssh_user_interactive()
  * - ::nc_server_config_del_ssh_user_interactive()
  * - ::nc_server_config_del_ssh_user()
@@ -418,16 +414,6 @@
  * - ::nc_server_config_del_ssh_truststore_ref()
  * - ::nc_server_config_add_ssh_endpoint_client_ref()
  * - ::nc_server_config_del_ssh_endpoint_client_ref()
- *
- * - ::nc_server_config_add_ssh_host_key_algs()
- * - ::nc_server_config_del_ssh_host_key_alg()
- * - ::nc_server_config_add_ssh_key_exchange_algs()
- * - ::nc_server_config_del_ssh_key_exchange_alg()
- * - ::nc_server_config_add_ssh_encryption_algs()
- * - ::nc_server_config_del_ssh_encryption_alg()
- * - ::nc_server_config_add_ssh_mac_algs()
- * - ::nc_server_config_del_ssh_mac_alg()
- *
  *
  * TLS
  * ===
@@ -437,7 +423,7 @@
  * options that TLS uses to derive usernames from client certificates.
  *
  * If you wish to listen on a TLS endpoint, you need to configure the endpoint's
- * server certificate (see ::nc_server_config_add_tls_server_certificate()).
+ * server certificate (see ::nc_server_config_add_tls_server_cert()).
  *
  * To accept client certificates, they must first be considered trusted.
  * For each TLS endpoint you may configure two types of client certificates.
@@ -454,42 +440,30 @@
  *
  * There are some further options. For example you can configure the TLS
  * version and ciphers to be used. You may also choose to use a Certificate
- * Revoke List. There are three options, ::nc_server_config_add_tls_crl_path()
- * attempts to get the list of revoked certificates from a file. ::nc_server_config_add_tls_crl_url()
- * attempts to download the list from the given URL. Lastly, ::nc_server_config_add_tls_crl_cert_ext()
- * attempts to download the CRLs from URLs specified in the extension fields of the configured certificates.
+ * Revocation List.
  *
  * Functions List
  * --------------
  *
  * Available in __nc_server.h__.
  *
- * - ::nc_server_config_add_tls_server_certificate()
- * - ::nc_server_config_del_tls_server_certificate()
+ * - ::nc_server_config_add_tls_server_cert()
+ * - ::nc_server_config_del_tls_server_cert()
  * - ::nc_server_config_add_tls_keystore_ref()
  * - ::nc_server_config_del_tls_keystore_ref()
  *
- * - ::nc_server_config_add_tls_client_certificate()
- * - ::nc_server_config_del_tls_client_certificate()
+ * - ::nc_server_config_add_tls_client_cert()
+ * - ::nc_server_config_del_tls_client_cert()
  * - ::nc_server_config_add_tls_client_cert_truststore_ref()
  * - ::nc_server_config_del_tls_client_cert_truststore_ref()
- * - ::nc_server_config_add_tls_client_ca()
- * - ::nc_server_config_del_tls_client_ca()
- * - ::nc_server_config_add_tls_client_ca_truststore_ref()
- * - ::nc_server_config_del_tls_client_ca_truststore_ref()
+ * - ::nc_server_config_add_tls_ca_cert()
+ * - ::nc_server_config_del_tls_ca_cert()
+ * - ::nc_server_config_add_tls_ca_cert_truststore_ref()
+ * - ::nc_server_config_del_tls_ca_cert_truststore_ref()
  * - ::nc_server_config_add_tls_endpoint_client_ref()
  * - ::nc_server_config_del_tls_endpoint_client_ref()
  * - ::nc_server_config_add_tls_ctn()
  * - ::nc_server_config_del_tls_ctn()
- *
- * - ::nc_server_config_add_tls_version()
- * - ::nc_server_config_del_tls_version()
- * - ::nc_server_config_add_tls_ciphers()
- * - ::nc_server_config_del_tls_cipher()
- * - ::nc_server_config_add_tls_crl_path()
- * - ::nc_server_config_add_tls_crl_url()
- * - ::nc_server_config_add_tls_crl_cert_ext()
- * - ::nc_server_config_del_tls_crl()
  *
  * FD
  * ==
@@ -541,51 +515,30 @@
  * - ::nc_server_config_del_ch_ssh_hostkey()
  * - ::nc_server_config_add_ch_ssh_keystore_ref()
  * - ::nc_server_config_del_ch_ssh_keystore_ref()
- * - ::nc_server_config_add_ch_ssh_auth_attempts()
- * - ::nc_server_config_add_ch_ssh_auth_timeout()
  * - ::nc_server_config_add_ch_ssh_user_pubkey()
  * - ::nc_server_config_del_ch_ssh_user_pubkey()
  * - ::nc_server_config_add_ch_ssh_user_password()
  * - ::nc_server_config_del_ch_ssh_user_password()
- * - ::nc_server_config_add_ch_ssh_user_none()
- * - ::nc_server_config_del_ch_ssh_user_none()
  * - ::nc_server_config_add_ch_ssh_user_interactive()
  * - ::nc_server_config_del_ch_ssh_user_interactive()
  * - ::nc_server_config_del_ch_ssh_user()
  * - ::nc_server_config_add_ch_ssh_truststore_ref()
  * - ::nc_server_config_del_ch_ssh_truststore_ref()
- * - ::nc_server_config_add_ch_ssh_host_key_algs()
- * - ::nc_server_config_del_ch_ssh_host_key_alg()
- * - ::nc_server_config_add_ch_ssh_key_exchange_algs()
- * - ::nc_server_config_del_ch_ssh_key_exchange_alg()
- * - ::nc_server_config_add_ch_ssh_encryption_algs()
- * - ::nc_server_config_del_ch_ssh_encryption_alg()
- * - ::nc_server_config_add_ch_ssh_mac_algs()
- * - ::nc_server_config_del_ch_ssh_mac_alg()
  *
- * - ::nc_server_config_add_ch_tls_server_certificate()
- * - ::nc_server_config_del_ch_tls_server_certificate()
+ * - ::nc_server_config_add_ch_tls_server_cert()
+ * - ::nc_server_config_del_ch_tls_server_cert()
  * - ::nc_server_config_add_ch_tls_keystore_ref()
  * - ::nc_server_config_del_ch_tls_keystore_ref()
- * - ::nc_server_config_add_ch_tls_client_certificate()
- * - ::nc_server_config_del_ch_tls_client_certificate()
+ * - ::nc_server_config_add_ch_tls_client_cert()
+ * - ::nc_server_config_del_ch_tls_client_cert()
  * - ::nc_server_config_add_ch_tls_client_cert_truststore_ref()
  * - ::nc_server_config_del_ch_tls_client_cert_truststore_ref()
- * - ::nc_server_config_add_ch_tls_client_ca()
- * - ::nc_server_config_del_ch_tls_client_ca()
- * - ::nc_server_config_add_ch_tls_client_ca_truststore_ref()
- * - ::nc_server_config_del_ch_tls_client_ca_truststore_ref()
+ * - ::nc_server_config_add_ch_tls_ca_cert()
+ * - ::nc_server_config_del_ch_tls_ca_cert()
+ * - ::nc_server_config_add_ch_tls_ca_cert_truststore_ref()
+ * - ::nc_server_config_del_ch_tls_ca_cert_truststore_ref()
  * - ::nc_server_config_add_ch_tls_ctn()
  * - ::nc_server_config_del_ch_tls_ctn()
- * - ::nc_server_config_add_ch_tls_version()
- * - ::nc_server_config_del_ch_tls_version()
- * - ::nc_server_config_add_ch_tls_ciphers()
- * - ::nc_server_config_del_ch_tls_cipher()
- * - ::nc_server_config_add_ch_tls_crl_path()
- * - ::nc_server_config_add_ch_tls_crl_url()
- * - ::nc_server_config_add_ch_tls_crl_cert_ext()
- * - ::nc_server_config_del_ch_tls_crl()
- *
  *
  * Connecting And Cleanup
  * ======================

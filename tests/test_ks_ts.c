@@ -272,7 +272,7 @@ setup_tls(void **state)
     assert_int_equal(ret, 0);
 
     /* new truststore ref for the client CA cert */
-    ret = nc_server_config_add_tls_client_ca_truststore_ref(ctx, "endpt", "ca_cert_bag", &tree);
+    ret = nc_server_config_add_tls_ca_cert_truststore_ref(ctx, "endpt", "ca_cert_bag", &tree);
     assert_int_equal(ret, 0);
 
     /* new cert-to-name */
