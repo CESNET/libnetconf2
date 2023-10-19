@@ -959,24 +959,6 @@ nc_server_set_content_id_clb(char *(*content_id_clb)(void *user_data), void *use
     server_opts.content_id_data_free = free_user_data;
 }
 
-API void
-nc_server_set_hello_timeout(uint16_t hello_timeout)
-{
-    server_opts.hello_timeout = hello_timeout;
-}
-
-API uint16_t
-nc_server_get_hello_timeout(void)
-{
-    return server_opts.hello_timeout;
-}
-
-API uint16_t
-nc_server_get_idle_timeout(void)
-{
-    return server_opts.idle_timeout;
-}
-
 API NC_MSG_TYPE
 nc_accept_inout(int fdin, int fdout, const char *username, const struct ly_ctx *ctx, struct nc_session **session)
 {

@@ -1157,20 +1157,29 @@ nc_server_config_ch(const struct lyd_node *node, NC_OPERATION op)
 
 /* default leaf */
 static int
+nc_server_config_hello_timeout(const struct lyd_node *node, NC_OPERATION op)
+{
+    assert(!strcmp(LYD_NAME(node), "hello-timeout"));
+
+    if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+        server_opts.hello_timeout = strtoul(lyd_get_value(node), NULL, 10);
+    } else {
+        /* default value */
+        server_opts.hello_timeout = 60;
+    }
+
+    return 0;
+}
+
+/* default leaf */
+static int
 nc_server_config_idle_timeout(const struct lyd_node *node, NC_OPERATION op)
 {
     struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "idle-timeout"));
 
-    if (is_listen(node)) {
-        if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            server_opts.idle_timeout = strtoul(lyd_get_value(node), NULL, 10);
-        } else {
-            /* default value */
-            server_opts.idle_timeout = 180;
-        }
-    } else {
+    if (is_ch(node)) {
         /* call-home idle timeout */
         if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
             /* to avoid unlock on fail */
@@ -1184,6 +1193,14 @@ nc_server_config_idle_timeout(const struct lyd_node *node, NC_OPERATION op)
         }
 
         nc_ch_client_unlock(ch_client);
+    } else {
+        /* whole server idle timeout */
+        if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+            server_opts.idle_timeout = strtoul(lyd_get_value(node), NULL, 10);
+        } else {
+            /* default value */
+            server_opts.idle_timeout = 0;
+        }
     }
 
     return 0;
@@ -4207,8 +4224,8 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
         ret = nc_server_config_listen(node, op);
     } else if (!strcmp(name, "call-home")) {
         ret = nc_server_config_ch(node, op);
-    } else if (!strcmp(name, "idle-timeout")) {
-        ret = nc_server_config_idle_timeout(node, op);
+    } else if (!strcmp(name, "hello-timeout")) {
+        ret = nc_server_config_hello_timeout(node, op);
     } else if (!strcmp(name, "endpoint")) {
         ret = nc_server_config_endpoint(node, op);
     } else if (!strcmp(name, "unix-socket")) {
@@ -4309,6 +4326,8 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
         ret = nc_server_config_period(node, op);
     } else if (!strcmp(name, "anchor-time")) {
         ret = nc_server_config_anchor_time(node, op);
+    } else if (!strcmp(name, "idle-timeout")) {
+        ret = nc_server_config_idle_timeout(node, op);
     } else if (!strcmp(name, "reconnect-strategy")) {
         ret = nc_server_config_reconnect_strategy(node, op);
     } else if (!strcmp(name, "start-with")) {
