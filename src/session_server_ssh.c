@@ -15,7 +15,7 @@
 
 #define _GNU_SOURCE
 
-#include "config.h" /* Expose HAVE_SHADOW and HAVE_CRYPT */
+#include "config.h" /* Expose HAVE_SHADOW, HAVE_CRYPT and HAVE_LIBPAM */
 
 #ifdef HAVE_SHADOW
     #include <shadow.h>
@@ -27,9 +27,17 @@
     #include <security/pam_appl.h>
 #endif
 
+#include <arpa/inet.h>
+#include <assert.h>
 #include <errno.h>
-#include <fcntl.h>
+#include <libssh/libssh.h>
+#include <libssh/server.h>
+#include <libyang/libyang.h>
+#include <openssl/bio.h>
+#include <openssl/err.h>
+#include <openssl/evp.h>
 #include <pwd.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -38,9 +46,9 @@
 #include <unistd.h>
 
 #include "compat.h"
-#include "libnetconf.h"
-#include "session_server.h"
-#include "session_server_ch.h"
+#include "log_p.h"
+#include "session.h"
+#include "session_p.h"
 
 #if !defined (HAVE_CRYPT_R)
 pthread_mutex_t crypt_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -49,16 +57,15 @@ pthread_mutex_t crypt_lock = PTHREAD_MUTEX_INITIALIZER;
 extern struct nc_server_opts server_opts;
 
 static char *
-base64der_key_to_tmp_file(const char *in, const char *key_str)
+base64der_privkey_to_tmp_file(const char *in, const char *privkey_format)
 {
     char path[12] = "/tmp/XXXXXX";
     int fd, written;
+    unsigned len;
     mode_t umode;
     FILE *file;
 
-    if (in == NULL) {
-        return NULL;
-    }
+    NC_CHECK_ARG_RET(NULL, in, NULL);
 
     umode = umask(0177);
     fd = mkstemp(path);
@@ -73,92 +80,109 @@ base64der_key_to_tmp_file(const char *in, const char *key_str)
         return NULL;
     }
 
-    /* write the key into the file */
-    if (key_str) {
-        written = fwrite("-----BEGIN ", 1, 11, file);
-        written += fwrite(key_str, 1, strlen(key_str), file);
+    /* write header */
+    written = fwrite("-----BEGIN ", 1, 11, file);
+    if (privkey_format) {
+        written += fwrite(privkey_format, 1, strlen(privkey_format), file);
         written += fwrite(" PRIVATE KEY-----\n", 1, 18, file);
-        written += fwrite(in, 1, strlen(in), file);
-        written += fwrite("\n-----END ", 1, 10, file);
-        written += fwrite(key_str, 1, strlen(key_str), file);
-        written += fwrite(" PRIVATE KEY-----", 1, 17, file);
-
-        fclose(file);
-        if ((unsigned)written != 11 + strlen(key_str) + 18 + strlen(in) + 10 + strlen(key_str) + 17) {
-            unlink(path);
-            return NULL;
-        }
     } else {
-        written = fwrite("-----BEGIN PRIVATE KEY-----\n", 1, 28, file);
-        written += fwrite(in, 1, strlen(in), file);
-        written += fwrite("\n-----END PRIVATE KEY-----", 1, 26, file);
+        written += fwrite("PRIVATE KEY-----\n", 1, 17, file);
+    }
 
-        fclose(file);
-        if ((unsigned)written != 28 + strlen(in) + 26) {
-            unlink(path);
-            return NULL;
-        }
+    /* write data */
+    written += fwrite(in, 1, strlen(in), file);
+
+    /* write footer */
+    written += fwrite("\n-----END ", 1, 10, file);
+    if (privkey_format) {
+        written += fwrite(privkey_format, 1, strlen(privkey_format), file);
+        written += fwrite(" PRIVATE KEY-----", 1, 17, file);
+    } else {
+        written += fwrite("PRIVATE KEY-----", 1, 16, file);
+    }
+
+    fclose(file);
+
+    /* checksum */
+    if (privkey_format) {
+        len = 11 + strlen(privkey_format) + 18 + strlen(in) + 10 + strlen(privkey_format) + 17;
+    } else {
+        len = 11 + 17 + strlen(in) + 10 + 16;
+    }
+
+    if ((unsigned)written != len) {
+        unlink(path);
+        return NULL;
     }
 
     return strdup(path);
 }
 
 static int
-nc_server_ssh_add_hostkey(const char *name, int16_t idx, struct nc_server_ssh_opts *opts)
+nc_server_ssh_ks_ref_get_key(const char *referenced_name, struct nc_asymmetric_key **askey)
 {
-    uint8_t i;
+    uint16_t i;
+    struct nc_keystore *ks = &server_opts.keystore;
 
-    if (!name) {
-        ERRARG("name");
-        return -1;
-    } else if (idx > opts->hostkey_count) {
-        ERRARG("idx");
-        return -1;
-    }
+    *askey = NULL;
 
-    for (i = 0; i < opts->hostkey_count; ++i) {
-        if (!strcmp(opts->hostkeys[i], name)) {
-            ERRARG("name");
-            return -1;
+    /* lookup name */
+    for (i = 0; i < ks->asym_key_count; i++) {
+        if (!strcmp(referenced_name, ks->asym_keys[i].name)) {
+            break;
         }
     }
 
-    ++opts->hostkey_count;
-    opts->hostkeys = nc_realloc(opts->hostkeys, opts->hostkey_count * sizeof *opts->hostkeys);
-    if (!opts->hostkeys) {
-        ERRMEM;
-        return -1;
+    if (i == ks->asym_key_count) {
+        ERR(NULL, "Keystore entry \"%s\" not found.", referenced_name);
+        return 1;
     }
 
-    if (idx < 0) {
-        idx = opts->hostkey_count - 1;
+    *askey = &ks->asym_keys[i];
+
+    /* check if the referenced public key is SubjectPublicKeyInfo */
+    if ((*askey)->pubkey_data && nc_is_pk_subject_public_key_info((*askey)->pubkey_data)) {
+        ERR(NULL, "The public key of the referenced hostkey \"%s\" is in the SubjectPublicKeyInfo format, "
+                "which is not allowed in the SSH!", referenced_name);
+        return 1;
     }
-    if (idx != opts->hostkey_count - 1) {
-        memmove(opts->hostkeys + idx + 1, opts->hostkeys + idx, opts->hostkey_count - idx);
-    }
-    opts->hostkeys[idx] = strdup(name);
 
     return 0;
 }
 
-API int
-nc_server_ssh_endpt_add_hostkey(const char *endpt_name, const char *name, int16_t idx)
+static int
+nc_server_ssh_ts_ref_get_keys(const char *referenced_name, struct nc_public_key **pubkeys, uint16_t *pubkey_count)
 {
-    int ret;
-    struct nc_endpt *endpt;
+    uint16_t i, j;
+    struct nc_truststore *ts = &server_opts.truststore;
 
-    /* LOCK */
-    endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_LIBSSH, NULL);
-    if (!endpt) {
-        return -1;
+    *pubkeys = NULL;
+    *pubkey_count = 0;
+
+    /* lookup name */
+    for (i = 0; i < ts->pub_bag_count; i++) {
+        if (!strcmp(referenced_name, ts->pub_bags[i].name)) {
+            break;
+        }
     }
 
-    ret = nc_server_ssh_add_hostkey(name, idx, endpt->opts.ssh);
+    if (i == ts->pub_bag_count) {
+        ERR(NULL, "Truststore entry \"%s\" not found.", referenced_name);
+        return 1;
+    }
 
-    /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
+    /* check if any of the referenced public keys is SubjectPublicKeyInfo */
+    for (j = 0; j < ts->pub_bags[i].pubkey_count; j++) {
+        if (nc_is_pk_subject_public_key_info(ts->pub_bags[i].pubkeys[j].data)) {
+            ERR(NULL, "A public key of the referenced public key bag \"%s\" is in the SubjectPublicKeyInfo format, "
+                    "which is not allowed in the SSH!", referenced_name);
+            return 1;
+        }
+    }
 
-    return ret;
+    *pubkeys = ts->pub_bags[i].pubkeys;
+    *pubkey_count = ts->pub_bags[i].pubkey_count;
+    return 0;
 }
 
 API void
@@ -171,62 +195,12 @@ nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_session
 }
 
 API void
-nc_server_ssh_set_interactive_auth_sess_clb(int (*interactive_auth_sess_clb)(const struct nc_session *session,
-        ssh_session ssh_sess, ssh_message msg, void *user_data), void *user_data, void (*free_user_data)(void *user_data))
-{
-    server_opts.interactive_auth_sess_clb = interactive_auth_sess_clb;
-    server_opts.interactive_auth_sess_data = user_data;
-    server_opts.interactive_auth_sess_data_free = free_user_data;
-}
-
-API void
-nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session, ssh_message msg, void *user_data),
-        void *user_data, void (*free_user_data)(void *user_data))
+nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess,
+        ssh_message msg, void *user_data), void *user_data, void (*free_user_data)(void *user_data))
 {
     server_opts.interactive_auth_clb = interactive_auth_clb;
     server_opts.interactive_auth_data = user_data;
     server_opts.interactive_auth_data_free = free_user_data;
-}
-
-API int
-nc_server_ssh_set_pam_conf_path(const char *conf_name, const char *conf_dir)
-{
-#ifdef HAVE_LIBPAM
-    free(server_opts.conf_name);
-    free(server_opts.conf_dir);
-    server_opts.conf_name = NULL;
-    server_opts.conf_dir = NULL;
-
-    if (conf_dir) {
-# ifdef LIBPAM_HAVE_CONFDIR
-        server_opts.conf_dir = strdup(conf_dir);
-        if (!(server_opts.conf_dir)) {
-            ERRMEM;
-            return -1;
-        }
-# else
-        ERR(NULL, "Failed to set PAM config directory because of old version of PAM. "
-                "Put the config file in the system directory (usually /etc/pam.d/).");
-        return -1;
-# endif
-    }
-
-    if (conf_name) {
-        server_opts.conf_name = strdup(conf_name);
-        if (!(server_opts.conf_name)) {
-            ERRMEM;
-            return -1;
-        }
-    }
-
-    return 0;
-#else
-    (void)conf_name;
-    (void)conf_dir;
-
-    ERR(NULL, "PAM-based SSH authentication is not supported.");
-    return -1;
-#endif
 }
 
 API void
@@ -237,694 +211,6 @@ nc_server_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session
     server_opts.pubkey_auth_data = user_data;
     server_opts.pubkey_auth_data_free = free_user_data;
 }
-
-API int
-nc_server_ssh_ch_client_endpt_add_hostkey(const char *client_name, const char *endpt_name, const char *name, int16_t idx)
-{
-    int ret;
-    struct nc_ch_client *client;
-    struct nc_ch_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_ch_client_lock(client_name, endpt_name, NC_TI_LIBSSH, &client);
-    if (!endpt) {
-        return -1;
-    }
-
-    ret = nc_server_ssh_add_hostkey(name, idx, endpt->opts.ssh);
-
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return ret;
-}
-
-API void
-nc_server_ssh_set_hostkey_clb(int (*hostkey_clb)(const char *name, void *user_data, char **privkey_path,
-        char **privkey_data, NC_SSH_KEY_TYPE *privkey_type), void *user_data, void (*free_user_data)(void *user_data))
-{
-    if (!hostkey_clb) {
-        ERRARG("hostkey_clb");
-        return;
-    }
-
-    server_opts.hostkey_clb = hostkey_clb;
-    server_opts.hostkey_data = user_data;
-    server_opts.hostkey_data_free = free_user_data;
-}
-
-static int
-nc_server_ssh_del_hostkey(const char *name, int16_t idx, struct nc_server_ssh_opts *opts)
-{
-    uint8_t i;
-
-    if (name && (idx > -1)) {
-        ERRARG("name and idx");
-        return -1;
-    } else if (idx >= opts->hostkey_count) {
-        ERRARG("idx");
-    }
-
-    if (!name && (idx < 0)) {
-        for (i = 0; i < opts->hostkey_count; ++i) {
-            free(opts->hostkeys[i]);
-        }
-        free(opts->hostkeys);
-        opts->hostkeys = NULL;
-        opts->hostkey_count = 0;
-    } else if (name) {
-        for (i = 0; i < opts->hostkey_count; ++i) {
-            if (!strcmp(opts->hostkeys[i], name)) {
-                idx = i;
-                goto remove_idx;
-            }
-        }
-
-        ERRARG("name");
-        return -1;
-    } else {
-remove_idx:
-        --opts->hostkey_count;
-        free(opts->hostkeys[idx]);
-        if (idx < opts->hostkey_count - 1) {
-            memmove(opts->hostkeys + idx, opts->hostkeys + idx + 1, (opts->hostkey_count - idx) * sizeof *opts->hostkeys);
-        }
-        if (!opts->hostkey_count) {
-            free(opts->hostkeys);
-            opts->hostkeys = NULL;
-        }
-    }
-
-    return 0;
-}
-
-API int
-nc_server_ssh_endpt_del_hostkey(const char *endpt_name, const char *name, int16_t idx)
-{
-    int ret;
-    struct nc_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_LIBSSH, NULL);
-    if (!endpt) {
-        return -1;
-    }
-
-    ret = nc_server_ssh_del_hostkey(name, idx, endpt->opts.ssh);
-
-    /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
-
-    return ret;
-}
-
-API int
-nc_server_ssh_ch_client_endpt_del_hostkey(const char *client_name, const char *endpt_name, const char *name, int16_t idx)
-{
-    int ret;
-    struct nc_ch_client *client;
-    struct nc_ch_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_ch_client_lock(client_name, endpt_name, NC_TI_LIBSSH, &client);
-    if (!endpt) {
-        return -1;
-    }
-
-    ret = nc_server_ssh_del_hostkey(name, idx, endpt->opts.ssh);
-
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return ret;
-}
-
-static int
-nc_server_ssh_mov_hostkey(const char *key_mov, const char *key_after, struct nc_server_ssh_opts *opts)
-{
-    uint8_t i;
-    int16_t mov_idx = -1, after_idx = -1;
-    char *bckup;
-
-    if (!key_mov) {
-        ERRARG("key_mov");
-        return -1;
-    }
-
-    for (i = 0; i < opts->hostkey_count; ++i) {
-        if (key_after && (after_idx == -1) && !strcmp(opts->hostkeys[i], key_after)) {
-            after_idx = i;
-        }
-        if ((mov_idx == -1) && !strcmp(opts->hostkeys[i], key_mov)) {
-            mov_idx = i;
-        }
-
-        if ((!key_after || (after_idx > -1)) && (mov_idx > -1)) {
-            break;
-        }
-    }
-
-    if (key_after && (after_idx == -1)) {
-        ERRARG("key_after");
-        return -1;
-    }
-    if (mov_idx == -1) {
-        ERRARG("key_mov");
-        return -1;
-    }
-    if ((mov_idx == after_idx) || (mov_idx == after_idx + 1)) {
-        /* nothing to do */
-        return 0;
-    }
-
-    /* finally move the key */
-    bckup = opts->hostkeys[mov_idx];
-    if (mov_idx > after_idx) {
-        memmove(opts->hostkeys + after_idx + 2, opts->hostkeys + after_idx + 1,
-                ((mov_idx - after_idx) - 1) * sizeof *opts->hostkeys);
-        opts->hostkeys[after_idx + 1] = bckup;
-    } else {
-        memmove(opts->hostkeys + mov_idx, opts->hostkeys + mov_idx + 1, (after_idx - mov_idx) * sizeof *opts->hostkeys);
-        opts->hostkeys[after_idx] = bckup;
-    }
-
-    return 0;
-}
-
-API int
-nc_server_ssh_endpt_mov_hostkey(const char *endpt_name, const char *key_mov, const char *key_after)
-{
-    int ret;
-    struct nc_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_LIBSSH, NULL);
-    if (!endpt) {
-        return -1;
-    }
-
-    ret = nc_server_ssh_mov_hostkey(key_mov, key_after, endpt->opts.ssh);
-
-    /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
-
-    return ret;
-}
-
-API int
-nc_server_ssh_ch_client_endpt_mov_hostkey(const char *client_name, const char *endpt_name, const char *key_mov,
-        const char *key_after)
-{
-    int ret;
-    struct nc_ch_client *client;
-    struct nc_ch_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_ch_client_lock(client_name, endpt_name, NC_TI_LIBSSH, &client);
-    if (!endpt) {
-        return -1;
-    }
-
-    ret = nc_server_ssh_mov_hostkey(key_mov, key_after, endpt->opts.ssh);
-
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return ret;
-}
-
-static int
-nc_server_ssh_set_auth_methods(int auth_methods, struct nc_server_ssh_opts *opts)
-{
-    if ((auth_methods & NC_SSH_AUTH_INTERACTIVE) && !server_opts.conf_name && !server_opts.interactive_auth_clb &&
-            !server_opts.interactive_auth_sess_clb) {
-        /* path to a configuration file not set */
-        ERR(NULL, "To use Keyboard-Interactive authentication method, set the PAM configuration file or a callback.");
-        return 1;
-    }
-    opts->auth_methods = auth_methods;
-    return 0;
-}
-
-API int
-nc_server_ssh_endpt_set_auth_methods(const char *endpt_name, int auth_methods)
-{
-    int ret;
-    struct nc_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_LIBSSH, NULL);
-    if (!endpt) {
-        return -1;
-    }
-
-    ret = nc_server_ssh_set_auth_methods(auth_methods, endpt->opts.ssh);
-
-    /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
-
-    return ret;
-}
-
-API int
-nc_server_ssh_ch_client_endpt_set_auth_methods(const char *client_name, const char *endpt_name, int auth_methods)
-{
-    int ret;
-    struct nc_ch_client *client;
-    struct nc_ch_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_ch_client_lock(client_name, endpt_name, NC_TI_LIBSSH, &client);
-    if (!endpt) {
-        return -1;
-    }
-
-    ret = nc_server_ssh_set_auth_methods(auth_methods, endpt->opts.ssh);
-
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return ret;
-}
-
-API int
-nc_server_ssh_endpt_get_auth_methods(const char *endpt_name)
-{
-    int ret;
-    struct nc_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_LIBSSH, NULL);
-    if (!endpt) {
-        return -1;
-    }
-
-    ret = endpt->opts.ssh->auth_methods;
-
-    /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
-
-    return ret;
-}
-
-API int
-nc_server_ssh_ch_client_endpt_get_auth_methods(const char *client_name, const char *endpt_name)
-{
-    int ret;
-    struct nc_ch_client *client;
-    struct nc_ch_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_ch_client_lock(client_name, endpt_name, NC_TI_LIBSSH, &client);
-    if (!endpt) {
-        return -1;
-    }
-
-    ret = endpt->opts.ssh->auth_methods;
-
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return ret;
-}
-
-static int
-nc_server_ssh_set_auth_attempts(uint16_t auth_attempts, struct nc_server_ssh_opts *opts)
-{
-    NC_CHECK_ARG_RET(NULL, auth_attempts, -1);
-
-    opts->auth_attempts = auth_attempts;
-    return 0;
-}
-
-API int
-nc_server_ssh_endpt_set_auth_attempts(const char *endpt_name, uint16_t auth_attempts)
-{
-    int ret;
-    struct nc_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_LIBSSH, NULL);
-    if (!endpt) {
-        return -1;
-    }
-
-    ret = nc_server_ssh_set_auth_attempts(auth_attempts, endpt->opts.ssh);
-
-    /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
-
-    return ret;
-}
-
-API int
-nc_server_ssh_ch_client_endpt_set_auth_attempts(const char *client_name, const char *endpt_name, uint16_t auth_attempts)
-{
-    int ret;
-    struct nc_ch_client *client;
-    struct nc_ch_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_ch_client_lock(client_name, endpt_name, NC_TI_LIBSSH, &client);
-    if (!endpt) {
-        return -1;
-    }
-
-    ret = nc_server_ssh_set_auth_attempts(auth_attempts, endpt->opts.ssh);
-
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return ret;
-}
-
-static int
-nc_server_ssh_set_auth_timeout(uint16_t auth_timeout, struct nc_server_ssh_opts *opts)
-{
-    NC_CHECK_ARG_RET(NULL, auth_timeout, -1);
-
-    opts->auth_timeout = auth_timeout;
-    return 0;
-}
-
-API int
-nc_server_ssh_endpt_set_auth_timeout(const char *endpt_name, uint16_t auth_timeout)
-{
-    int ret;
-    struct nc_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_endpt_lock_get(endpt_name, NC_TI_LIBSSH, NULL);
-    if (!endpt) {
-        return -1;
-    }
-
-    ret = nc_server_ssh_set_auth_timeout(auth_timeout, endpt->opts.ssh);
-
-    /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.endpt_lock);
-
-    return ret;
-}
-
-API int
-nc_server_ssh_ch_client_endpt_set_auth_timeout(const char *client_name, const char *endpt_name, uint16_t auth_timeout)
-{
-    int ret;
-    struct nc_ch_client *client;
-    struct nc_ch_endpt *endpt;
-
-    /* LOCK */
-    endpt = nc_server_ch_client_lock(client_name, endpt_name, NC_TI_LIBSSH, &client);
-    if (!endpt) {
-        return -1;
-    }
-
-    ret = nc_server_ssh_set_auth_timeout(auth_timeout, endpt->opts.ssh);
-
-    /* UNLOCK */
-    nc_server_ch_client_unlock(client);
-
-    return ret;
-}
-
-static int
-_nc_server_ssh_add_authkey(const char *pubkey_path, const char *pubkey_base64, NC_SSH_KEY_TYPE type, const char *username)
-{
-    int ret = 0;
-
-    /* LOCK */
-    pthread_mutex_lock(&server_opts.authkey_lock);
-
-    ++server_opts.authkey_count;
-    server_opts.authkeys = nc_realloc(server_opts.authkeys, server_opts.authkey_count * sizeof *server_opts.authkeys);
-    if (!server_opts.authkeys) {
-        ERRMEM;
-        ret = -1;
-        goto cleanup;
-    }
-    server_opts.authkeys[server_opts.authkey_count - 1].path = pubkey_path ? strdup(pubkey_path) : NULL;
-    server_opts.authkeys[server_opts.authkey_count - 1].base64 = pubkey_base64 ? strdup(pubkey_base64) : NULL;
-    server_opts.authkeys[server_opts.authkey_count - 1].type = type;
-    server_opts.authkeys[server_opts.authkey_count - 1].username = strdup(username);
-
-cleanup:
-    /* UNLOCK */
-    pthread_mutex_unlock(&server_opts.authkey_lock);
-    return ret;
-}
-
-API int
-nc_server_ssh_add_authkey_path(const char *pubkey_path, const char *username)
-{
-    if (!pubkey_path) {
-        ERRARG("pubkey_path");
-        return -1;
-    } else if (!username) {
-        ERRARG("username");
-        return -1;
-    }
-
-    return _nc_server_ssh_add_authkey(pubkey_path, NULL, 0, username);
-}
-
-API int
-nc_server_ssh_add_authkey(const char *pubkey_base64, NC_SSH_KEY_TYPE type, const char *username)
-{
-    if (!pubkey_base64) {
-        ERRARG("pubkey_base64");
-        return -1;
-    } else if (!type) {
-        ERRARG("type");
-        return -1;
-    } else if (!username) {
-        ERRARG("username");
-        return -1;
-    }
-
-    return _nc_server_ssh_add_authkey(NULL, pubkey_base64, type, username);
-}
-
-API int
-nc_server_ssh_del_authkey(const char *pubkey_path, const char *pubkey_base64, NC_SSH_KEY_TYPE type,
-        const char *username)
-{
-    uint32_t i;
-    int ret = -1;
-
-    /* LOCK */
-    pthread_mutex_lock(&server_opts.authkey_lock);
-
-    if (!pubkey_path && !pubkey_base64 && !type && !username) {
-        for (i = 0; i < server_opts.authkey_count; ++i) {
-            free(server_opts.authkeys[i].path);
-            free(server_opts.authkeys[i].base64);
-            free(server_opts.authkeys[i].username);
-
-            ret = 0;
-        }
-        free(server_opts.authkeys);
-        server_opts.authkeys = NULL;
-        server_opts.authkey_count = 0;
-    } else {
-        for (i = 0; i < server_opts.authkey_count; ++i) {
-            if ((!pubkey_path || !strcmp(server_opts.authkeys[i].path, pubkey_path)) &&
-                    (!pubkey_base64 || !strcmp(server_opts.authkeys[i].base64, pubkey_base64)) &&
-                    (!type || (server_opts.authkeys[i].type == type)) &&
-                    (!username || !strcmp(server_opts.authkeys[i].username, username))) {
-                free(server_opts.authkeys[i].path);
-                free(server_opts.authkeys[i].base64);
-                free(server_opts.authkeys[i].username);
-
-                --server_opts.authkey_count;
-                if (i < server_opts.authkey_count) {
-                    memcpy(&server_opts.authkeys[i], &server_opts.authkeys[server_opts.authkey_count],
-                            sizeof *server_opts.authkeys);
-                } else if (!server_opts.authkey_count) {
-                    free(server_opts.authkeys);
-                    server_opts.authkeys = NULL;
-                }
-
-                ret = 0;
-            }
-        }
-    }
-
-    /* UNLOCK */
-    pthread_mutex_unlock(&server_opts.authkey_lock);
-
-    return ret;
-}
-
-void
-nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts)
-{
-    nc_server_ssh_del_hostkey(NULL, -1, opts);
-}
-
-#ifdef HAVE_SHADOW
-
-/**
- * @brief Get passwd entry for a user.
- *
- * @param[in] username Name of the user.
- * @param[in] pwd_buf Passwd entry buffer.
- * @param[in,out] buf Passwd entry string buffer.
- * @param[in,out] buf_size Current @p buf size.
- * @return Found passwd entry for the user, NULL if none found.
- */
-static struct passwd *
-auth_password_getpwnam(const char *username, struct passwd *pwd_buf, char **buf, size_t *buf_size)
-{
-    struct passwd *pwd = NULL;
-    char *mem;
-    int r = 0;
-
-    do {
-        r = getpwnam_r(username, pwd_buf, *buf, *buf_size, &pwd);
-        if (pwd) {
-            /* entry found */
-            break;
-        }
-
-        if (r == ERANGE) {
-            /* small buffer, enlarge */
-            *buf_size <<= 2;
-            mem = realloc(*buf, *buf_size);
-            if (!mem) {
-                ERRMEM;
-                return NULL;
-            }
-            *buf = mem;
-        }
-    } while (r == ERANGE);
-
-    return pwd;
-}
-
-/**
- * @brief Get shadow entry for a user.
- *
- * @param[in] username Name of the user.
- * @param[in] spwd_buf Shadow entry buffer.
- * @param[in,out] buf Shadow entry string buffer.
- * @param[in,out] buf_size Current @p buf size.
- * @return Found shadow entry for the user, NULL if none found.
- */
-static struct spwd *
-auth_password_getspnam(const char *username, struct spwd *spwd_buf, char **buf, size_t *buf_size)
-{
-    struct spwd *spwd = NULL;
-    char *mem;
-    int r = 0;
-
-    do {
-# ifndef __QNXNTO__
-        r = getspnam_r(username, spwd_buf, *buf, *buf_size, &spwd);
-# else
-        spwd = getspnam_r(username, spwd_buf, *buf, *buf_size);
-# endif
-        if (spwd) {
-            /* entry found */
-            break;
-        }
-
-        if (r == ERANGE) {
-            /* small buffer, enlarge */
-            *buf_size <<= 2;
-            mem = realloc(*buf, *buf_size);
-            if (!mem) {
-                ERRMEM;
-                return NULL;
-            }
-            *buf = mem;
-        }
-    } while (r == ERANGE);
-
-    return spwd;
-}
-
-/**
- * @brief Get hashed system apssword for a user.
- *
- * @param[in] username Name of the user.
- * @return Hashed password of @p username.
- */
-static char *
-auth_password_get_pwd_hash(const char *username)
-{
-    struct passwd *pwd, pwd_buf;
-    struct spwd *spwd, spwd_buf;
-    char *pass_hash = NULL, *buf = NULL;
-    size_t buf_size = 256;
-
-    buf = malloc(buf_size);
-    if (!buf) {
-        ERRMEM;
-        goto error;
-    }
-
-    pwd = auth_password_getpwnam(username, &pwd_buf, &buf, &buf_size);
-    if (!pwd) {
-        VRB(NULL, "User \"%s\" not found locally.", username);
-        goto error;
-    }
-
-    if (!strcmp(pwd->pw_passwd, "x")) {
-        spwd = auth_password_getspnam(username, &spwd_buf, &buf, &buf_size);
-        if (!spwd) {
-            VRB(NULL, "Failed to retrieve the shadow entry for \"%s\".", username);
-            goto error;
-        } else if ((spwd->sp_expire > -1) && (spwd->sp_expire <= (time(NULL) / (60 * 60 * 24)))) {
-            WRN(NULL, "User \"%s\" account has expired.", username);
-            goto error;
-        }
-
-        pass_hash = spwd->sp_pwdp;
-    } else {
-        pass_hash = pwd->pw_passwd;
-    }
-
-    if (!pass_hash) {
-        ERR(NULL, "No password could be retrieved for \"%s\".", username);
-        goto error;
-    }
-
-    /* check the hash structure for special meaning */
-    if (!strcmp(pass_hash, "*") || !strcmp(pass_hash, "!")) {
-        VRB(NULL, "User \"%s\" is not allowed to authenticate using a password.", username);
-        goto error;
-    }
-    if (!strcmp(pass_hash, "*NP*")) {
-        VRB(NULL, "Retrieving password for \"%s\" from a NIS+ server not supported.", username);
-        goto error;
-    }
-
-    pass_hash = strdup(pass_hash);
-    free(buf);
-    return pass_hash;
-
-error:
-    free(buf);
-    return NULL;
-}
-
-#else
-
-/**
- * @brief Get hashed system password for a user.
- *
- * @param[in] username Name of the user.
- * @return Hashed password of @p username.
- */
-static char *
-auth_password_get_pwd_hash(const char *username)
-{
-    (void)username;
-    return strdup("");
-}
-
-#endif
 
 /**
  * @brief Compare hashed password with a cleartext password for a match.
@@ -970,32 +256,25 @@ auth_password_compare_pwd(const char *pass_hash, const char *pass_clear)
     return strcmp(new_pass_hash, pass_hash);
 }
 
-static void
-nc_sshcb_auth_password(struct nc_session *session, ssh_message msg)
+static int
+nc_sshcb_auth_password(struct nc_session *session, struct nc_auth_client *auth_client, ssh_message msg)
 {
-    char *pass_hash;
     int auth_ret = 1;
 
     if (server_opts.passwd_auth_clb) {
         auth_ret = server_opts.passwd_auth_clb(session, ssh_message_auth_password(msg), server_opts.passwd_auth_data);
     } else {
-        pass_hash = auth_password_get_pwd_hash(session->username);
-        if (pass_hash) {
-            auth_ret = auth_password_compare_pwd(pass_hash, ssh_message_auth_password(msg));
-            free(pass_hash);
-        }
+        auth_ret = auth_password_compare_pwd(auth_client->password, ssh_message_auth_password(msg));
     }
 
-    if (!auth_ret) {
-        session->flags |= NC_SESSION_SSH_AUTHENTICATED;
-        VRB(session, "User \"%s\" authenticated.", session->username);
-        ssh_message_auth_reply_success(msg, 0);
-    } else {
+    if (auth_ret) {
         ++session->opts.server.ssh_auth_attempts;
         VRB(session, "Failed user \"%s\" authentication attempt (#%d).", session->username,
                 session->opts.server.ssh_auth_attempts);
         ssh_message_reply_default(msg);
     }
+
+    return auth_ret;
 }
 
 #ifdef HAVE_LIBPAM
@@ -1026,7 +305,7 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
     struct nc_server_ssh_opts *opts;
 
     libssh_session = clb_data->session->ti.libssh.session;
-    opts = clb_data->session->data;
+    opts = clb_data->opts;
 
     /* PAM_MAX_NUM_MSG == 32 by default */
     if ((n_messages <= 0) || (n_messages >= PAM_MAX_NUM_MSG)) {
@@ -1168,28 +447,49 @@ cleanup:
  * @return PAM error otherwise.
  */
 static int
-nc_pam_auth(struct nc_session *session, ssh_message ssh_msg)
+nc_pam_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message ssh_msg)
 {
     pam_handle_t *pam_h = NULL;
     int ret;
     struct nc_pam_thread_arg clb_data;
     struct pam_conv conv;
+    uint16_t i;
 
     /* structure holding callback's data */
     clb_data.msg = ssh_msg;
     clb_data.session = session;
+    clb_data.opts = opts;
 
     /* PAM conversation structure holding the callback and it's data */
     conv.conv = nc_pam_conv_clb;
     conv.appdata_ptr = &clb_data;
 
+    /* get the current client's configuration file */
+    for (i = 0; i < opts->client_count; i++) {
+        if (!strcmp(opts->auth_clients[i].username, session->username)) {
+            break;
+        }
+    }
+
+    if (i == opts->client_count) {
+        ERR(NULL, "User \"%s\" not found.", session->username);
+        ret = 1;
+        goto cleanup;
+    }
+
+    if (!opts->auth_clients[i].pam_config_name) {
+        ERR(NULL, "User's \"%s\" PAM configuration filename not set.");
+        ret = 1;
+        goto cleanup;
+    }
+
     /* initialize PAM and see if the given configuration file exists */
 # ifdef LIBPAM_HAVE_CONFDIR
     /* PAM version >= 1.4 */
-    ret = pam_start_confdir(server_opts.conf_name, session->username, &conv, server_opts.conf_dir, &pam_h);
+    ret = pam_start_confdir(opts->auth_clients[i].pam_config_name, session->username, &conv, opts->auth_clients[i].pam_config_dir, &pam_h);
 # else
     /* PAM version < 1.4 */
-    ret = pam_start(server_opts.conf_name, session->username, &conv, &pam_h);
+    ret = pam_start(opts->auth_clients[i].pam_config_name, session->username, &conv, &pam_h);
 # endif
     if (ret != PAM_SUCCESS) {
         ERR(NULL, "PAM error occurred (%s).\n", pam_strerror(pam_h, ret));
@@ -1237,19 +537,16 @@ cleanup:
 
 #endif
 
-static void
-nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
+static int
+nc_sshcb_auth_kbdint(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg)
 {
     int auth_ret = 1;
 
-    if (server_opts.interactive_auth_sess_clb) {
-        auth_ret = server_opts.interactive_auth_sess_clb(session, session->ti.libssh.session, msg,
-                server_opts.interactive_auth_data);
-    } else if (server_opts.interactive_auth_clb) {
-        auth_ret = server_opts.interactive_auth_clb(session, msg, server_opts.interactive_auth_data);
+    if (server_opts.interactive_auth_clb) {
+        auth_ret = server_opts.interactive_auth_clb(session, session->ti.libssh.session, msg, server_opts.interactive_auth_data);
     } else {
 #ifdef HAVE_LIBPAM
-        if (nc_pam_auth(session, msg) == PAM_SUCCESS) {
+        if (nc_pam_auth(session, opts, msg) == PAM_SUCCESS) {
             auth_ret = 0;
         }
 #else
@@ -1257,22 +554,99 @@ nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
 #endif
     }
 
-    /* We have already sent a reply */
-    if (auth_ret == -1) {
-        return;
-    }
-
     /* Authenticate message based on outcome */
-    if (!auth_ret) {
-        session->flags |= NC_SESSION_SSH_AUTHENTICATED;
-        VRB(session, "User \"%s\" authenticated.", session->username);
-        ssh_message_auth_reply_success(msg, 0);
-    } else {
+    if (auth_ret) {
         ++session->opts.server.ssh_auth_attempts;
         VRB(session, "Failed user \"%s\" authentication attempt (#%d).", session->username,
                 session->opts.server.ssh_auth_attempts);
         ssh_message_reply_default(msg);
     }
+
+    return auth_ret;
+}
+
+/*
+ *  Get the public key type from binary data stored in buffer.
+ *  The data is in the form of: 4 bytes = data length, then data of data length
+ *  and the data is in network byte order. The key has to be in the SSH2 format.
+ */
+static const char *
+nc_server_ssh_get_pubkey_type(const char *buffer, uint32_t *len)
+{
+    uint32_t type_len;
+
+    /* copy the 4 bytes */
+    memcpy(&type_len, buffer, sizeof type_len);
+    /* type_len now stores the length of the key type */
+    type_len = ntohl(type_len);
+    *len = type_len;
+
+    /* move 4 bytes in the buffer, this is where the type should be */
+    buffer += sizeof type_len;
+    return buffer;
+}
+
+/**
+ * @brief Create ssh key from base64 pubkey data.
+ *
+ * @param[in] base64 base64 encoded public key.
+ * @param[out] key created ssh key.
+ * @return 0 on success, 1 otherwise.
+ */
+static int
+nc_server_ssh_create_ssh_pubkey(const char *base64, ssh_key *key)
+{
+    int ret = 0;
+    char *bin = NULL;
+    const char *pub_type = NULL;
+    uint32_t pub_type_len = 0;
+
+    if (!key && !base64) {
+        ERRINT;
+        ret = 1;
+        goto cleanup;
+    }
+
+    *key = NULL;
+
+    /* convert base64 to binary */
+    if (nc_base64_to_bin(base64, &bin) == -1) {
+        ERR(NULL, "Unable to decode base64.");
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* get the key type and try to import it if possible */
+    pub_type = nc_server_ssh_get_pubkey_type(bin, &pub_type_len);
+    if (!pub_type) {
+        ret = 1;
+        goto cleanup;
+    } else if (!strncmp(pub_type, "ssh-dss", pub_type_len)) {
+        ERR(NULL, "DSA keys are not supported.");
+        ret = 1;
+        goto cleanup;
+    } else if (!strncmp(pub_type, "ssh-rsa", pub_type_len)) {
+        ret = ssh_pki_import_pubkey_base64(base64, SSH_KEYTYPE_RSA, key);
+    } else if (!strncmp(pub_type, "ecdsa-sha2-nistp256", pub_type_len)) {
+        ret = ssh_pki_import_pubkey_base64(base64, SSH_KEYTYPE_ECDSA_P256, key);
+    } else if (!strncmp(pub_type, "ecdsa-sha2-nistp384", pub_type_len)) {
+        ret = ssh_pki_import_pubkey_base64(base64, SSH_KEYTYPE_ECDSA_P384, key);
+    } else if (!strncmp(pub_type, "ecdsa-sha2-nistp521", pub_type_len)) {
+        ret = ssh_pki_import_pubkey_base64(base64, SSH_KEYTYPE_ECDSA_P521, key);
+    } else if (!strncmp(pub_type, "ssh-ed25519", pub_type_len)) {
+        ret = ssh_pki_import_pubkey_base64(base64, SSH_KEYTYPE_ED25519, key);
+    } else {
+        ERR(NULL, "Public key type not recognised.");
+        ret = 1;
+        goto cleanup;
+    }
+
+cleanup:
+    if (ret != SSH_OK) {
+        ERR(NULL, "Error importing public key.");
+    }
+    free(bin);
+    return ret;
 }
 
 /**
@@ -1281,96 +655,103 @@ nc_sshcb_auth_kbdint(struct nc_session *session, ssh_message msg)
  * @param[in] key Presented SSH key to compare.
  * @return Authorized key username, NULL if no match was found.
  */
-static const char *
-auth_pubkey_compare_key(ssh_key key)
+static int
+auth_pubkey_compare_key(ssh_key key, struct nc_auth_client *auth_client)
 {
-    uint32_t i;
-    ssh_key pub_key;
-    const char *username = NULL;
+    uint16_t i, pubkey_count;
     int ret = 0;
+    ssh_key new_key = NULL;
+    struct nc_public_key *pubkeys;
 
-    /* LOCK */
-    pthread_mutex_lock(&server_opts.authkey_lock);
-
-    for (i = 0; i < server_opts.authkey_count; ++i) {
-        switch (server_opts.authkeys[i].type) {
-        case NC_SSH_KEY_UNKNOWN:
-            ret = ssh_pki_import_pubkey_file(server_opts.authkeys[i].path, &pub_key);
-            break;
-        case NC_SSH_KEY_DSA:
-            ret = ssh_pki_import_pubkey_base64(server_opts.authkeys[i].base64, SSH_KEYTYPE_DSS, &pub_key);
-            break;
-        case NC_SSH_KEY_RSA:
-            ret = ssh_pki_import_pubkey_base64(server_opts.authkeys[i].base64, SSH_KEYTYPE_RSA, &pub_key);
-            break;
-        case NC_SSH_KEY_ECDSA:
-            ret = ssh_pki_import_pubkey_base64(server_opts.authkeys[i].base64, SSH_KEYTYPE_ECDSA, &pub_key);
-            break;
+    /* get the correct public key storage */
+    if (auth_client->store == NC_STORE_LOCAL) {
+        pubkeys = auth_client->pubkeys;
+        pubkey_count = auth_client->pubkey_count;
+    } else {
+        ret = nc_server_ssh_ts_ref_get_keys(auth_client->ts_ref, &pubkeys, &pubkey_count);
+        if (ret) {
+            ERR(NULL, "Error getting \"%s\"'s public keys from the truststore.", auth_client->username);
+            return ret;
         }
+    }
 
-        if (ret == SSH_EOF) {
-            WRN(NULL, "Failed to import a public key of \"%s\" (File access problem).", server_opts.authkeys[i].username);
-            continue;
-        } else if (ret == SSH_ERROR) {
-            WRN(NULL, "Failed to import a public key of \"%s\" (SSH error).", server_opts.authkeys[i].username);
+    /* try to compare all of the client's keys with the key received in the SSH message */
+    for (i = 0; i < pubkey_count; i++) {
+        /* create the SSH key from the data */
+        if (nc_server_ssh_create_ssh_pubkey(pubkeys[i].data, &new_key)) {
+            ssh_key_free(new_key);
             continue;
         }
 
-        if (!ssh_key_cmp(key, pub_key, SSH_KEY_CMP_PUBLIC)) {
-            ssh_key_free(pub_key);
+        /* compare the keys */
+        ret = ssh_key_cmp(key, new_key, SSH_KEY_CMP_PUBLIC);
+        if (!ret) {
             break;
+        } else {
+            WRN(NULL, "User's \"%s\" public key doesn't match, trying another.", auth_client->username);
+            ssh_key_free(new_key);
         }
-
-        ssh_key_free(pub_key);
     }
 
-    if (i < server_opts.authkey_count) {
-        username = server_opts.authkeys[i].username;
+    if (i == pubkey_count) {
+        ret = 1;
     }
 
-    /* UNLOCK */
-    pthread_mutex_unlock(&server_opts.authkey_lock);
+    if (!ret) {
+        /* only free a key if everything was ok, it would have already been freed otherwise */
+        ssh_key_free(new_key);
+    }
 
-    return username;
+    return ret;
 }
 
 static void
-nc_sshcb_auth_pubkey(struct nc_session *session, ssh_message msg)
+nc_sshcb_auth_none(struct nc_session *session, struct nc_auth_client *auth_client, ssh_message msg)
 {
-    const char *username;
-    int signature_state;
+    if (auth_client->supports_none && !auth_client->password && !auth_client->pubkey_count && !auth_client->pam_config_name) {
+        /* only authenticate the client if he supports none and no other method */
+        session->flags |= NC_SESSION_SSH_AUTHENTICATED;
+        VRB(session, "User \"%s\" authenticated.", session->username);
+        ssh_message_auth_reply_success(msg, 0);
+    }
+
+    ssh_message_reply_default(msg);
+}
+
+static int
+nc_sshcb_auth_pubkey(struct nc_session *session, struct nc_auth_client *auth_client, ssh_message msg)
+{
+    int signature_state, ret = 0;
 
     if (server_opts.pubkey_auth_clb) {
         if (server_opts.pubkey_auth_clb(session, ssh_message_auth_pubkey(msg), server_opts.pubkey_auth_data)) {
+            ret = 1;
             goto fail;
         }
     } else {
-        if ((username = auth_pubkey_compare_key(ssh_message_auth_pubkey(msg))) == NULL) {
+        if (auth_pubkey_compare_key(ssh_message_auth_pubkey(msg), auth_client)) {
             VRB(session, "User \"%s\" tried to use an unknown (unauthorized) public key.", session->username);
-            goto fail;
-        } else if (strcmp(session->username, username)) {
-            VRB(session, "User \"%s\" is not the username identified with the presented public key.", session->username);
+            ret = 1;
             goto fail;
         }
     }
 
     signature_state = ssh_message_auth_publickey_state(msg);
-    if (signature_state == SSH_PUBLICKEY_STATE_VALID) {
-        VRB(session, "User \"%s\" authenticated.", session->username);
-        session->flags |= NC_SESSION_SSH_AUTHENTICATED;
-        ssh_message_auth_reply_success(msg, 0);
-    } else if (signature_state == SSH_PUBLICKEY_STATE_NONE) {
+    if (signature_state == SSH_PUBLICKEY_STATE_NONE) {
         /* accepting only the use of a public key */
         ssh_message_auth_reply_pk_ok_simple(msg);
+        ret = 1;
     }
 
-    return;
+    return ret;
 
 fail:
     ++session->opts.server.ssh_auth_attempts;
     VRB(session, "Failed user \"%s\" authentication attempt (#%d).", session->username,
             session->opts.server.ssh_auth_attempts);
     ssh_message_reply_default(msg);
+
+    return ret;
 }
 
 static int
@@ -1458,11 +839,12 @@ nc_sshcb_channel_subsystem(struct nc_session *session, ssh_channel channel, cons
 }
 
 int
-nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
+nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg, struct nc_auth_state *state)
 {
     const char *str_type, *str_subtype = NULL, *username;
-    int subtype, type;
-    struct nc_session *session = (struct nc_session *)data;
+    int subtype, type, libssh_auth_methods = 0, ret = 0;
+    uint16_t i;
+    struct nc_auth_client *auth_client = NULL;
 
     type = ssh_message_type(msg);
     subtype = ssh_message_subtype(msg);
@@ -1584,7 +966,6 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
         ssh_message_reply_default(msg);
         return 0;
     }
-    session->flags |= NC_SESSION_SSH_NEW_MSG;
 
     /*
      * process known messages
@@ -1594,19 +975,67 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
             ERR(session, "User \"%s\" authenticated, but requested another authentication.", session->username);
             ssh_message_reply_default(msg);
             return 0;
+        } else if (!state || !opts) {
+            /* these two parameters should always be set during an authentication,
+             * however do a check just in case something goes really wrong, since they
+             * are not needed for other types of messages
+             */
+            ERRINT;
+            return 1;
         }
 
         /* save the username, do not let the client change it */
         username = ssh_message_auth_user(msg);
-        if (!session->username) {
-            if (!username) {
-                ERR(session, "Denying an auth request without a username.");
-                return 1;
+        assert(username);
+
+        for (i = 0; i < opts->client_count; i++) {
+            if (!strcmp(opts->auth_clients[i].username, username)) {
+                auth_client = &opts->auth_clients[i];
+                break;
+            }
+        }
+
+        if (!auth_client) {
+            if (opts->endpt_client_ref) {
+                return nc_session_ssh_msg(session, opts->endpt_client_ref->opts.ssh, msg, state);
             }
 
+            ERR(NULL, "User \"%s\" not known by the server.", username);
+            ssh_message_reply_default(msg);
+            return 0;
+        }
+
+        if (!session->username) {
             session->username = strdup(username);
-        } else if (username) {
+
+            /* configure and count accepted auth methods */
+            if (auth_client->store == NC_STORE_LOCAL) {
+                if (auth_client->pubkey_count) {
+                    libssh_auth_methods |= SSH_AUTH_METHOD_PUBLICKEY;
+                }
+            } else if (auth_client->ts_ref) {
+                libssh_auth_methods |= SSH_AUTH_METHOD_PUBLICKEY;
+            }
+            if (auth_client->password) {
+                state->auth_method_count++;
+                libssh_auth_methods |= SSH_AUTH_METHOD_PASSWORD;
+            }
+            if (auth_client->pam_config_name) {
+                state->auth_method_count++;
+                libssh_auth_methods |= SSH_AUTH_METHOD_INTERACTIVE;
+            }
+            if (auth_client->supports_none) {
+                libssh_auth_methods |= SSH_AUTH_METHOD_NONE;
+            }
+
+            if (libssh_auth_methods & SSH_AUTH_METHOD_PUBLICKEY) {
+                state->auth_method_count++;
+            }
+
+            ssh_set_auth_methods(session->ti.libssh.session, libssh_auth_methods);
+        } else {
             if (strcmp(username, session->username)) {
+                /* changing username not allowed */
                 ERR(session, "User \"%s\" changed its username to \"%s\".", session->username, username);
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_OTHER;
@@ -1614,19 +1043,34 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
             }
         }
 
+        /* try authenticating, the user must authenticate via all of his configured auth methods */
         if (subtype == SSH_AUTH_METHOD_NONE) {
-            /* libssh will return the supported auth methods */
-            return 1;
+            nc_sshcb_auth_none(session, auth_client, msg);
+            ret = 1;
         } else if (subtype == SSH_AUTH_METHOD_PASSWORD) {
-            nc_sshcb_auth_password(session, msg);
-            return 0;
+            ret = nc_sshcb_auth_password(session, auth_client, msg);
         } else if (subtype == SSH_AUTH_METHOD_PUBLICKEY) {
-            nc_sshcb_auth_pubkey(session, msg);
-            return 0;
+            ret = nc_sshcb_auth_pubkey(session, auth_client, msg);
         } else if (subtype == SSH_AUTH_METHOD_INTERACTIVE) {
-            nc_sshcb_auth_kbdint(session, msg);
-            return 0;
+            ret = nc_sshcb_auth_kbdint(session, opts, msg);
         }
+
+        if (!ret) {
+            state->auth_success_count++;
+        }
+
+        if (!ret && (state->auth_success_count < state->auth_method_count)) {
+            /* success, but he needs to do another method */
+            VRB(session, "User \"%s\" partially authenticated, but still needs to authenticate via the rest of his configured methods.", username);
+            ssh_message_auth_reply_success(msg, 1);
+        } else if (!ret && (state->auth_success_count == state->auth_method_count)) {
+            /* authenticated */
+            ssh_message_auth_reply_success(msg, 0);
+            session->flags |= NC_SESSION_SSH_AUTHENTICATED;
+            VRB(session, "User \"%s\" authenticated.", username);
+        }
+
+        return 0;
     } else if (session->flags & NC_SESSION_SSH_AUTHENTICATED) {
         if ((type == SSH_REQUEST_CHANNEL_OPEN) && ((enum ssh_channel_type_e)subtype == SSH_CHANNEL_SESSION)) {
             if (nc_sshcb_channel_open(session, msg)) {
@@ -1651,67 +1095,34 @@ nc_sshcb_msg(ssh_session UNUSED(sshsession), ssh_message msg, void *data)
 
 /* ret 1 on success, 0 on timeout, -1 on error */
 static int
-nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, int timeout)
+nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, struct nc_server_ssh_opts *opts, int timeout)
 {
-    int ret;
     struct timespec ts_timeout;
+    ssh_message msg;
 
-    /* message callback is executed twice to give chance for the channel to be
-     * created if timeout == 0 (it takes 2 messages, channel-open, subsystem-request) */
-    if (!timeout) {
-        if (!nc_session_is_connected(session)) {
-            ERR(session, "Communication socket unexpectedly closed (libssh).");
-            return -1;
-        }
-
-        ret = ssh_execute_message_callbacks(session->ti.libssh.session);
-        if (ret != SSH_OK) {
-            ERR(session, "Failed to receive SSH messages on a session (%s).",
-                    ssh_get_error(session->ti.libssh.session));
-            return -1;
-        }
-
-        if (!session->ti.libssh.channel) {
-            return 0;
-        }
-
-        ret = ssh_execute_message_callbacks(session->ti.libssh.session);
-        if (ret != SSH_OK) {
-            ERR(session, "Failed to receive SSH messages on a session (%s).",
-                    ssh_get_error(session->ti.libssh.session));
-            return -1;
-        }
-
-        if (!(session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
-            /* we did not receive subsystem-request, timeout */
-            return 0;
-        }
-
-        return 1;
-    }
-
-    if (timeout > -1) {
-        nc_timeouttime_get(&ts_timeout, timeout);
+    if (timeout) {
+        nc_timeouttime_get(&ts_timeout, timeout * 1000);
     }
     while (1) {
         if (!nc_session_is_connected(session)) {
-            ERR(session, "Communication socket unexpectedly closed (libssh).");
+            ERR(session, "Communication SSH socket unexpectedly closed.");
             return -1;
         }
 
-        ret = ssh_execute_message_callbacks(session->ti.libssh.session);
-        if (ret != SSH_OK) {
-            ERR(session, "Failed to receive SSH messages on a session (%s).",
-                    ssh_get_error(session->ti.libssh.session));
-            return -1;
+        msg = ssh_message_get(session->ti.libssh.session);
+        if (msg) {
+            if (nc_session_ssh_msg(session, opts, msg, NULL)) {
+                ssh_message_reply_default(msg);
+            }
+            ssh_message_free(msg);
         }
 
-        if (session->ti.libssh.channel && (session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
+        if (session->ti.libssh.channel && session->flags & NC_SESSION_SSH_SUBSYS_NETCONF) {
             return 1;
         }
 
         usleep(NC_TIMEOUT_STEP);
-        if ((timeout > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
+        if ((opts->auth_timeout) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
             /* timeout */
             ERR(session, "Failed to start \"netconf\" SSH subsystem for too long, disconnecting.");
             break;
@@ -1731,32 +1142,31 @@ nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, int timeo
  * @return -1 on error.
  */
 static int
-nc_ssh_bind_add_hostkeys(ssh_bind sbind, char **hostkeys, uint8_t hostkey_count)
+nc_ssh_bind_add_hostkeys(ssh_bind sbind, struct nc_server_ssh_opts *opts, uint16_t hostkey_count)
 {
-    uint8_t i;
+    uint16_t i;
     char *privkey_path, *privkey_data;
     int ret;
-    NC_SSH_KEY_TYPE privkey_type;
-
-    if (!server_opts.hostkey_clb) {
-        ERR(NULL, "Callback for retrieving SSH host keys not set.");
-        return -1;
-    }
+    struct nc_asymmetric_key *key = NULL;
 
     for (i = 0; i < hostkey_count; ++i) {
         privkey_path = privkey_data = NULL;
-        if (server_opts.hostkey_clb(hostkeys[i], server_opts.hostkey_data, &privkey_path, &privkey_data, &privkey_type)) {
-            ERR(NULL, "Host key callback failed.");
-            return -1;
-        }
 
-        if (privkey_data) {
-            privkey_path = base64der_key_to_tmp_file(privkey_data, nc_keytype2str(privkey_type));
-            if (!privkey_path) {
-                ERR(NULL, "Temporarily storing a host key into a file failed (%s).", strerror(errno));
-                free(privkey_data);
+        /* get the asymmetric key */
+        if (opts->hostkeys[i].store == NC_STORE_LOCAL) {
+            /* stored locally */
+            key = &opts->hostkeys[i].key;
+        } else {
+            /* keystore reference, need to get it */
+            if (nc_server_ssh_ks_ref_get_key(opts->hostkeys[i].ks_ref, &key)) {
                 return -1;
             }
+        }
+
+        privkey_path = base64der_privkey_to_tmp_file(key->privkey_data, nc_privkey_format_to_str(key->privkey_type));
+        if (!privkey_path) {
+            ERR(NULL, "Temporarily storing a host key into a file failed (%s).", strerror(errno));
+            return -1;
         }
 
         ret = ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HOSTKEY, privkey_path);
@@ -1765,10 +1175,9 @@ nc_ssh_bind_add_hostkeys(ssh_bind sbind, char **hostkeys, uint8_t hostkey_count)
         if (privkey_data && unlink(privkey_path)) {
             WRN(NULL, "Removing a temporary host key file \"%s\" failed (%s).", privkey_path, strerror(errno));
         }
-        free(privkey_data);
 
         if (ret != SSH_OK) {
-            ERR(NULL, "Failed to set hostkey \"%s\" (%s).", hostkeys[i], privkey_path);
+            ERR(NULL, "Failed to set hostkey \"%s\" (%s).", opts->hostkeys[i].name, privkey_path);
         }
         free(privkey_path);
 
@@ -1781,23 +1190,11 @@ nc_ssh_bind_add_hostkeys(ssh_bind sbind, char **hostkeys, uint8_t hostkey_count)
 }
 
 static int
-nc_accept_ssh_session_auth(struct nc_session *session, const struct nc_server_ssh_opts *opts)
+nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts *opts)
 {
     struct timespec ts_timeout;
     ssh_message msg;
-    int libssh_auth_methods = 0;
-
-    /* configure accepted auth methods */
-    if (opts->auth_methods & NC_SSH_AUTH_PUBLICKEY) {
-        libssh_auth_methods |= SSH_AUTH_METHOD_PUBLICKEY;
-    }
-    if (opts->auth_methods & NC_SSH_AUTH_PASSWORD) {
-        libssh_auth_methods |= SSH_AUTH_METHOD_PASSWORD;
-    }
-    if (opts->auth_methods & NC_SSH_AUTH_INTERACTIVE) {
-        libssh_auth_methods |= SSH_AUTH_METHOD_INTERACTIVE;
-    }
-    ssh_set_auth_methods(session->ti.libssh.session, libssh_auth_methods);
+    struct nc_auth_state state = {0};
 
     /* authenticate */
     if (opts->auth_timeout) {
@@ -1811,7 +1208,7 @@ nc_accept_ssh_session_auth(struct nc_session *session, const struct nc_server_ss
 
         msg = ssh_message_get(session->ti.libssh.session);
         if (msg) {
-            if (nc_sshcb_msg(session->ti.libssh.session, msg, (void *) session)) {
+            if (nc_session_ssh_msg(session, opts, msg, &state)) {
                 ssh_message_reply_default(msg);
             }
             ssh_message_free(msg);
@@ -1847,15 +1244,12 @@ nc_accept_ssh_session_auth(struct nc_session *session, const struct nc_server_ss
 }
 
 int
-nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
+nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opts, int sock, int timeout)
 {
     ssh_bind sbind = NULL;
-    struct nc_server_ssh_opts *opts;
     int rc = 1, r;
     struct timespec ts_timeout;
     const char *err_msg;
-
-    opts = session->data;
 
     /* other transport-specific data */
     session->ti_type = NC_TI_LIBSSH;
@@ -1874,7 +1268,25 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     }
 
     /* configure host keys */
-    if (nc_ssh_bind_add_hostkeys(sbind, opts->hostkeys, opts->hostkey_count)) {
+    if (nc_ssh_bind_add_hostkeys(sbind, opts, opts->hostkey_count)) {
+        rc = -1;
+        goto cleanup;
+    }
+
+    /* configure supported algorithms */
+    if (opts->hostkey_algs && ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HOSTKEY_ALGORITHMS, opts->hostkey_algs)) {
+        rc = -1;
+        goto cleanup;
+    }
+    if (opts->encryption_algs && ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_CIPHERS_S_C, opts->encryption_algs)) {
+        rc = -1;
+        goto cleanup;
+    }
+    if (opts->kex_algs && ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_KEY_EXCHANGE, opts->kex_algs)) {
+        rc = -1;
+        goto cleanup;
+    }
+    if (opts->mac_algs && ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HMAC_S_C, opts->mac_algs)) {
         rc = -1;
         goto cleanup;
     }
@@ -1887,6 +1299,7 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
     }
     sock = -1;
 
+    /* set to non-blocking */
     ssh_set_blocking(session->ti.libssh.session, 0);
 
     if (timeout > -1) {
@@ -1918,19 +1331,10 @@ nc_accept_ssh_session(struct nc_session *session, int sock, int timeout)
         goto cleanup;
     }
 
-    /* set the message callback after a successful authentication */
-    ssh_set_message_callback(session->ti.libssh.session, nc_sshcb_msg, session);
-
-    /* remember that this session was just set as nc_sshcb_msg() parameter */
-    session->flags |= NC_SESSION_SSH_MSG_CB;
-
     /* open channel and request 'netconf' subsystem */
-    if ((rc = nc_accept_ssh_session_open_netconf_channel(session, timeout)) != 1) {
+    if ((rc = nc_accept_ssh_session_open_netconf_channel(session, opts, timeout)) != 1) {
         goto cleanup;
     }
-
-    /* all SSH messages were processed */
-    session->flags &= ~NC_SESSION_SSH_NEW_MSG;
 
 cleanup:
     if (sock > -1) {
