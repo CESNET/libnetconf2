@@ -528,7 +528,7 @@ test_send_recv_malformed_10(void **state)
     nc_ps_add_session(ps, server_session);
 
     ret = nc_ps_poll(ps, 0, NULL);
-    assert_int_equal(ret, NC_PSPOLL_BAD_RPC);
+    assert_int_equal(ret, NC_PSPOLL_BAD_RPC | NC_PSPOLL_REPLY_ERROR);
 
     /* server finished */
     nc_ps_free(ps);

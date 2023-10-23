@@ -1367,7 +1367,7 @@ recv_rpc_check_msgid(struct nc_session *session, const struct lyd_node *envp)
 /* should be called holding the session RPC lock! IO lock will be acquired as needed
  * returns: NC_PSPOLL_ERROR,
  *          NC_PSPOLL_TIMEOUT,
- *          NC_PSPOLL_BAD_RPC,
+ *          NC_PSPOLL_BAD_RPC (| NC_PSPOLL_REPLY_ERROR),
  *          NC_PSPOLL_RPC
  */
 static int
@@ -1376,7 +1376,7 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
     struct ly_in *msg;
     struct nc_server_reply *reply = NULL;
     struct lyd_node *e;
-    int r, ret;
+    int r, ret = 0;
 
     if (!session) {
         ERRARG("session");
@@ -1395,7 +1395,6 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
     r = nc_read_msg_io(session, io_timeout, &msg, 0);
     if (r == -2) {
         /* malformed message */
-        ret = NC_PSPOLL_BAD_RPC;
         reply = nc_server_reply_err(nc_err(session->ctx, NC_ERR_MALFORMED_MSG));
         goto cleanup;
     }
@@ -1408,7 +1407,7 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
     *rpc = calloc(1, sizeof **rpc);
     if (!*rpc) {
         ERRMEM;
-        ret = NC_PSPOLL_BAD_RPC;
+        ret = NC_PSPOLL_ERROR;
         goto cleanup;
     }
 
@@ -1420,13 +1419,10 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
             ret = NC_PSPOLL_RPC;
         } else {
             /* no message-id */
-            ret = NC_PSPOLL_BAD_RPC;
             reply = nc_server_reply_err(nc_err(session->ctx, NC_ERR_MISSING_ATTR, NC_ERR_TYPE_RPC, "message-id", "rpc"));
         }
     } else {
         /* bad RPC received */
-        ret = NC_PSPOLL_BAD_RPC;
-
         if ((*rpc)->envp) {
             /* at least the envelopes were parsed */
             e = nc_err(session->ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
@@ -1436,6 +1432,9 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
             /* completely malformed message, NETCONF version 1.1 defines sending error reply from
              * the server (RFC 6241 sec. 3) */
             reply = nc_server_reply_err(nc_err(session->ctx, NC_ERR_MALFORMED_MSG));
+        } else {
+            /* at least set the return value */
+            ret = NC_PSPOLL_BAD_RPC;
         }
     }
 
@@ -1451,6 +1450,9 @@ cleanup:
                 session->term_reason = NC_SESSION_TERM_OTHER;
             }
         }
+
+        /* bad RPC and an error reply sent */
+        ret = NC_PSPOLL_BAD_RPC | NC_PSPOLL_REPLY_ERROR;
     }
 
     ly_in_free(msg, 1);
