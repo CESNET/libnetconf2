@@ -203,20 +203,10 @@ help_print()
 }
 
 static int
-init(struct ly_ctx **context, struct nc_pollsession **ps, const char *path, NC_TRANSPORT_IMPL server_type)
+init(struct ly_ctx **context, struct nc_pollsession **ps)
 {
     int rc = 0;
-    const char *hostkey_path = TESTS_DIR "/data/server.key";
     struct lyd_node *config = NULL;
-
-    if (path) {
-        /* if a path is supplied, then use it */
-        hostkey_path = path;
-    }
-
-    if (server_type == NC_TI_UNIX) {
-        ERR_MSG_CLEANUP("Only support SSH for now.\n");
-    }
 
     /* create a libyang context that will determine which YANG modules will be supported by the server */
     rc = ly_ctx_new(MODULES_DIR, 0, context);
@@ -236,27 +226,8 @@ init(struct ly_ctx **context, struct nc_pollsession **ps, const char *path, NC_T
         ERR_MSG_CLEANUP("Error loading modules required for configuration of the server.\n");
     }
 
-    /* this is where the YANG configuration data gets generated,
-     * start by creating hostkey configuration data */
-    rc = nc_server_config_add_ssh_hostkey(*context, "endpt", "hostkey", hostkey_path, NULL, &config);
-    if (rc) {
-        ERR_MSG_CLEANUP("Error creating new hostkey configuration data.\n");
-    }
-
-    /* create address and port configuration data */
-    rc = nc_server_config_add_address_port(*context, "endpt", NC_TI_LIBSSH, SSH_ADDRESS, SSH_PORT, &config);
-    if (rc) {
-        ERR_MSG_CLEANUP("Error creating new address and port configuration data.\n");
-    }
-
-    /* create client authentication configuration data */
-    rc = nc_server_config_add_ssh_user_password(*context, "endpt", SSH_USERNAME, SSH_PASSWORD, &config);
-    if (rc) {
-        ERR_MSG_CLEANUP("Error creating client authentication configuration data.\n");
-    }
-
-    /* apply the created configuration data */
-    rc = nc_server_config_setup_data(config);
+    /* apply the YANG data stored in config.json */
+    rc = nc_server_config_setup_path(*context, EXAMPLES_DIR "/config.json");
     if (rc) {
         ERR_MSG_CLEANUP("Application of configuration data failed.\n");
     }
@@ -290,66 +261,37 @@ main(int argc, char **argv)
     struct ly_ctx *context = NULL;
     struct nc_session *session, *new_session;
     struct nc_pollsession *ps = NULL;
-    const char *unix_socket_path = NULL, *hostkey_path = NULL;
 
     struct option options[] = {
         {"help",    no_argument,        NULL, 'h'},
-        {"unix",    required_argument,  NULL, 'u'},
-        {"ssh",     required_argument,  NULL, 's'},
         {"debug",   no_argument,        NULL, 'd'},
         {NULL,      0,                  NULL,  0}
     };
 
-    if (argc == 1) {
-        help_print();
-        goto cleanup;
-    }
-
     opterr = 0;
 
-    while ((opt = getopt_long(argc, argv, ":s:hu:d", options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hd", options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             help_print();
             goto cleanup;
 
-        case 'u':
-            unix_socket_path = optarg;
-            if (init(&context, &ps, unix_socket_path, NC_TI_UNIX)) {
-                ERR_MSG_CLEANUP("Failed to initialize a UNIX socket\n");
-            }
-            printf("Using UNIX socket!\n");
-            break;
-
-        case 's':
-            hostkey_path = optarg;
-            if (init(&context, &ps, hostkey_path, NC_TI_LIBSSH)) {
-                ERR_MSG_CLEANUP("Failed to initialize a SSH server\n");
-                goto cleanup;
-            }
-            printf("Using SSH!\n");
-            break;
-
         case 'd':
             nc_verbosity(NC_VERB_DEBUG);
             break;
-
-        case ':':
-            if (optopt == 's') {
-                if (init(&context, &ps, NULL, NC_TI_LIBSSH)) {
-                    ERR_MSG_CLEANUP("Failed to initialize a SSH server\n");
-                    goto cleanup;
-                }
-                printf("Using SSH!\n");
-                break;
-            } else {
-                ERR_MSG_CLEANUP("Invalid option or missing argument\n");
-            }
 
         default:
             ERR_MSG_CLEANUP("Invalid option or missing argument\n");
         }
     }
+
+    /* initialize the server */
+    r = init(&context, &ps);
+    if (r) {
+        ERR_MSG_CLEANUP("Initializing the server failed.");
+    }
+
+    printf("Listening for new connections!\n");
 
     while (!exit_application) {
         no_new_sessions = 0;

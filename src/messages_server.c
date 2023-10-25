@@ -109,7 +109,7 @@ nc_server_reply_add_err(struct nc_server_reply *reply, struct lyd_node *err)
     NC_CHECK_ARG_RET(NULL, reply, err, -1);
 
     if (reply->type != NC_RPL_ERROR) {
-        ERR(NULL, "nc_server_reply_add_err: bad reply type");
+        ERR(NULL, "nc_server_reply_add_err() bad reply type");
         return -1;
     }
 
@@ -126,7 +126,7 @@ nc_server_reply_get_last_err(const struct nc_server_reply *reply)
     NC_CHECK_ARG_RET(NULL, reply, NULL);
 
     if (reply->type != NC_RPL_ERROR) {
-        ERR(NULL, "nc_server_reply_get_last_err: bad reply type");
+        ERR(NULL, "nc_server_reply_get_last_err() bad reply type");
         return NULL;
     }
 
