@@ -885,13 +885,11 @@ nc_server_config_del_ctn(struct nc_server_tls_opts *opts, struct nc_ctn *ctn)
         return;
     }
 
-    iter = opts->ctn;
-    while (iter) {
+    for (iter = opts->ctn; iter; iter = iter->next) {
         if (iter->next == ctn) {
             /* found the ctn */
             break;
         }
-        iter = iter->next;
     }
 
     iter->next = ctn->next;
@@ -903,14 +901,13 @@ nc_server_config_del_ctns(struct nc_server_tls_opts *opts)
 {
     struct nc_ctn *cur, *next;
 
-    cur = opts->ctn;
-    while (cur) {
+    for (cur = opts->ctn; cur; cur = next) {
         next = cur->next;
         free(cur->name);
         free(cur->fingerprint);
         free(cur);
-        cur = next;
     }
+    
     opts->ctn = NULL;
 }
 
@@ -1113,6 +1110,8 @@ nc_server_config_ch_del_client(struct nc_ch_client *ch_client)
 
     /* RD LOCK */
     pthread_rwlock_rdlock(&server_opts.ch_client_lock);
+    /* MUTEX LOCK */
+    pthread_mutex_lock(&client.lock);
 
     if (client.thread_data->thread_running) {
         /* CH COND LOCK */
@@ -1122,6 +1121,8 @@ nc_server_config_ch_del_client(struct nc_ch_client *ch_client)
         /* CH COND UNLOCK */
         pthread_mutex_unlock(&client.thread_data->cond_lock);
 
+        /* MUTEX UNLOCK */
+        pthread_mutex_unlock(&client.lock);
         /* RD UNLOCK */
         pthread_rwlock_unlock(&server_opts.ch_client_lock);
 
@@ -2971,7 +2972,7 @@ static int
 nc_server_config_unix_socket(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
-    uint32_t prev_lo;
+    uint32_t log_options = 0;
     struct nc_endpt *endpt;
     struct nc_bind *bind;
     struct nc_server_unix_opts *opts;
@@ -3004,7 +3005,7 @@ nc_server_config_unix_socket(const struct lyd_node *node, NC_OPERATION op)
         }
 
         /* silently search for non-mandatory parameters */
-        prev_lo = ly_log_options(0);
+        ly_temp_log_options(&log_options);
         ret = lyd_find_path(node, "mode", 0, &data);
         if (!ret) {
             opts->mode = strtol(lyd_get_value(data), NULL, 8);
@@ -3021,7 +3022,7 @@ nc_server_config_unix_socket(const struct lyd_node *node, NC_OPERATION op)
         }
 
         /* reset the logging options */
-        ly_log_options(prev_lo);
+        ly_temp_log_options(NULL);
 
         ret = nc_server_config_set_address_port(endpt, bind, NULL, 0);
         if (ret) {
@@ -3601,7 +3602,7 @@ nc_server_config_tls_version(const struct lyd_node *node, NC_OPERATION op)
         opts->tls_versions |= tls_version;
     } else if ((op == NC_OP_DELETE) && (opts->tls_versions & tls_version)) {
         /* delete the version if it is there */
-        opts->tls_versions -= tls_version;
+        opts->tls_versions &= ~tls_version;
     }
 
 cleanup:
@@ -4507,11 +4508,11 @@ static int
 nc_server_config_fill_nectonf_server(const struct lyd_node *data, NC_OPERATION op)
 {
     int ret = 0;
-    uint32_t prev_lo;
+    uint32_t log_options = 0;
     struct lyd_node *tree;
 
     /* silently search for ietf-netconf-server, it may not be present */
-    prev_lo = ly_log_options(0);
+    ly_temp_log_options(&log_options);
 
     ret = lyd_find_path(data, "/ietf-netconf-server:netconf-server", 0, &tree);
     if (ret || (tree->flags & LYD_DEFAULT)) {
@@ -4535,7 +4536,7 @@ nc_server_config_fill_nectonf_server(const struct lyd_node *data, NC_OPERATION o
 
 cleanup:
     /* reset the logging options back to what they were */
-    ly_log_options(prev_lo);
+    ly_temp_log_options(NULL);
     return ret;
 }
 
