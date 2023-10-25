@@ -424,9 +424,8 @@ struct nc_server_opts {
 
     void (*content_id_data_free)(void *data);
 
-    /* ACCESS unlocked */
-    ATOMIC_T hello_timeout;
-    ATOMIC_T idle_timeout;
+    uint16_t hello_timeout;
+    uint16_t idle_timeout;
 
 #ifdef NC_ENABLED_SSH_TLS
     int (*passwd_auth_clb)(const struct nc_session *session, const char *password, void *user_data);
