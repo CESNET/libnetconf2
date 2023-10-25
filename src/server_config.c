@@ -2665,11 +2665,40 @@ cleanup:
 }
 
 static int
+nc_server_config_delete_substring(const char *haystack, const char *needle, const char delim)
+{
+    size_t needle_len = strlen(needle);
+    char *substr;
+    int substr_found = 0, ret = 0;
+
+    while ((substr = strstr(haystack, needle))) {
+        /* iterate over all the substrings */
+        if (((substr == haystack) && (*(substr + needle_len) == delim)) ||
+                ((substr != haystack) && (*(substr - 1) == delim) && (*(substr + needle_len) == delim))) {
+            /* either the first element of the string or somewhere in the middle */
+            memmove(substr, substr + needle_len + 1, strlen(substr + needle_len + 1));
+            substr_found = 1;
+            break;
+        } else if ((*(substr - 1) == delim) && (*(substr + needle_len) == '\0')) {
+            /* the last element of the string */
+            *(substr - 1) = '\0';
+            substr_found = 1;
+            break;
+        }
+        haystack = substr + 1;
+    }
+    if (!substr_found) {
+        ret = 1;
+    }
+
+    return ret;
+}
+
+static int
 nc_server_config_transport_params(const char *algorithm, char **alg_store, NC_OPERATION op)
 {
-    int ret = 0, alg_found = 0;
-    char *substr, *haystack, *alg = NULL;
-    size_t alg_len;
+    int ret = 0;
+    char *alg = NULL;
 
     if (!strncmp(algorithm, "openssh-", 8)) {
         /* if the name starts with openssh, convert it to it's original libssh accepted form */
@@ -2696,8 +2725,6 @@ nc_server_config_transport_params(const char *algorithm, char **alg_store, NC_OP
         }
     }
 
-    alg_len = strlen(alg);
-
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
         if (!*alg_store) {
             /* first call */
@@ -2709,7 +2736,7 @@ nc_server_config_transport_params(const char *algorithm, char **alg_store, NC_OP
             }
         } else {
             /* +1 because of ',' between algorithms */
-            *alg_store = nc_realloc(*alg_store, strlen(*alg_store) + alg_len + 1 + 1);
+            *alg_store = nc_realloc(*alg_store, strlen(*alg_store) +strlen(alg) + 1 + 1);
             if (!*alg_store) {
                 ERRMEM;
                 ret = 1;
@@ -2720,26 +2747,10 @@ nc_server_config_transport_params(const char *algorithm, char **alg_store, NC_OP
         }
     } else {
         /* delete */
-        haystack = *alg_store;
-        while ((substr = strstr(haystack, alg))) {
-            /* iterate over all the substrings */
-            if (((substr == haystack) && (*(substr + alg_len) == ',')) ||
-                    ((substr != haystack) && (*(substr - 1) == ',') && (*(substr + alg_len) == ','))) {
-                /* either the first element of the string or somewhere in the middle */
-                memmove(substr, substr + alg_len + 1, strlen(substr + alg_len + 1));
-                alg_found = 1;
-                break;
-            } else if ((*(substr - 1) == ',') && (*(substr + alg_len) == '\0')) {
-                /* the last element of the string */
-                *(substr - 1) = '\0';
-                alg_found = 1;
-                break;
-            }
-            haystack = substr + 1;
-        }
-        if (!alg_found) {
+        ret = nc_server_config_delete_substring(*alg_store, alg, ',');
+        if (ret) {
             ERR(NULL, "Unable to delete an algorithm (%s), which was not previously added.", alg);
-            ret = 1;
+            goto cleanup;
         }
     }
 
@@ -3668,29 +3679,10 @@ cleanup:
 static int
 nc_server_config_del_cipher_suite(struct nc_server_tls_opts *opts, const char *cipher)
 {
-    int cipher_found = 0;
-    char *haystack, *substr;
-    size_t cipher_len = strlen(cipher);
+    int ret = 0;
 
-    /* iterate over all the substrings */
-    haystack = opts->ciphers;
-    while ((substr = strstr(haystack, cipher))) {
-        if (((substr == haystack) && (*(substr + cipher_len) == ':')) ||
-                ((substr != haystack) && (*(substr - 1) == ':') && (*(substr + cipher_len) == ':'))) {
-            /* either the first element of the string or somewhere in the middle */
-            memmove(substr, substr + cipher_len + 1, strlen(substr + cipher_len + 1));
-            cipher_found = 1;
-            break;
-        } else if ((*(substr - 1) == ':') && (*(substr + cipher_len) == '\0')) {
-            /* the last element of the string */
-            *(substr - 1) = '\0';
-            cipher_found = 1;
-            break;
-        }
-        haystack = substr + 1;
-    }
-
-    if (!cipher_found) {
+    ret = nc_server_config_delete_substring(opts->ciphers, cipher, ':');
+    if (ret) {
         ERR(NULL, "Unable to delete a cipher (%s), which was not previously added.", cipher);
         return 1;
     }
