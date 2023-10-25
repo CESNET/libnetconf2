@@ -541,7 +541,7 @@ nc_server_config_get_ctn(const struct lyd_node *node, struct nc_ctn **ctn)
 
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "id"));
-    id = strtoul(lyd_get_value(node), NULL, 10);
+    id = ((struct lyd_node_term *)node)->value.uint32;
 
     if (nc_server_config_get_tls_opts(node, &opts)) {
         return 1;
@@ -1163,7 +1163,7 @@ nc_server_config_hello_timeout(const struct lyd_node *node, NC_OPERATION op)
     assert(!strcmp(LYD_NAME(node), "hello-timeout"));
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        server_opts.hello_timeout = strtoul(lyd_get_value(node), NULL, 10);
+        server_opts.hello_timeout = ((struct lyd_node_term *)node)->value.uint16;
     } else {
         /* default value */
         server_opts.hello_timeout = 60;
@@ -1188,7 +1188,7 @@ nc_server_config_idle_timeout(const struct lyd_node *node, NC_OPERATION op)
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            ch_client->idle_timeout = strtoul(lyd_get_value(node), NULL, 10);
+            ch_client->idle_timeout = ((struct lyd_node_term *)node)->value.uint16;
         } else if (op == NC_OP_DELETE) {
             ch_client->idle_timeout = 180;
         }
@@ -1197,7 +1197,7 @@ nc_server_config_idle_timeout(const struct lyd_node *node, NC_OPERATION op)
     } else {
         /* whole server idle timeout */
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            server_opts.idle_timeout = strtoul(lyd_get_value(node), NULL, 10);
+            server_opts.idle_timeout = ((struct lyd_node_term *)node)->value.uint16;
         } else {
             /* default value */
             server_opts.idle_timeout = 0;
@@ -1613,7 +1613,7 @@ nc_server_config_local_port(const struct lyd_node *node, NC_OPERATION op)
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            bind->port = strtoul(lyd_get_value(node), NULL, 10);
+            bind->port = ((struct lyd_node_term *)node)->value.uint16;
         } else {
             /* delete -> set to default */
             bind->port = 0;
@@ -1702,7 +1702,7 @@ nc_server_config_idle_time(const struct lyd_node *node, NC_OPERATION op)
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            endpt->ka.idle_time = strtoul(lyd_get_value(node), NULL, 10);
+            endpt->ka.idle_time = ((struct lyd_node_term *)node)->value.uint16;
         } else {
             endpt->ka.idle_time = 0;
         }
@@ -1723,7 +1723,7 @@ nc_server_config_idle_time(const struct lyd_node *node, NC_OPERATION op)
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            ch_endpt->ka.idle_time = strtoul(lyd_get_value(node), NULL, 10);
+            ch_endpt->ka.idle_time = ((struct lyd_node_term *)node)->value.uint16;
         } else {
             ch_endpt->ka.idle_time = 0;
         }
@@ -1756,7 +1756,7 @@ nc_server_config_max_probes(const struct lyd_node *node, NC_OPERATION op)
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            endpt->ka.max_probes = strtoul(lyd_get_value(node), NULL, 10);
+            endpt->ka.max_probes = ((struct lyd_node_term *)node)->value.uint16;
         } else {
             endpt->ka.max_probes = 0;
         }
@@ -1777,7 +1777,7 @@ nc_server_config_max_probes(const struct lyd_node *node, NC_OPERATION op)
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            ch_endpt->ka.max_probes = strtoul(lyd_get_value(node), NULL, 10);
+            ch_endpt->ka.max_probes = ((struct lyd_node_term *)node)->value.uint16;
         } else {
             ch_endpt->ka.max_probes = 0;
         }
@@ -1810,7 +1810,7 @@ nc_server_config_probe_interval(const struct lyd_node *node, NC_OPERATION op)
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            endpt->ka.probe_interval = strtoul(lyd_get_value(node), NULL, 10);
+            endpt->ka.probe_interval = ((struct lyd_node_term *)node)->value.uint16;
         } else {
             endpt->ka.probe_interval = 0;
         }
@@ -1831,7 +1831,7 @@ nc_server_config_probe_interval(const struct lyd_node *node, NC_OPERATION op)
         }
 
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-            ch_endpt->ka.probe_interval = strtoul(lyd_get_value(node), NULL, 10);
+            ch_endpt->ka.probe_interval = ((struct lyd_node_term *)node)->value.uint16;
         } else {
             ch_endpt->ka.max_probes = 0;
         }
@@ -2385,7 +2385,7 @@ nc_server_config_auth_attempts(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        opts->auth_attempts = strtoul(lyd_get_value(node), NULL, 10);
+        opts->auth_attempts = ((struct lyd_node_term *)node)->value.uint16;
     }
 
 cleanup:
@@ -2417,7 +2417,7 @@ nc_server_config_auth_timeout(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        opts->auth_timeout = strtoul(lyd_get_value(node), NULL, 10);
+        opts->auth_timeout = ((struct lyd_node_term *)node)->value.uint16;
     }
 
 cleanup:
@@ -3403,7 +3403,7 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
     /* find the list's key */
     lyd_find_path(node, "id", 0, &n);
     assert(n);
-    id = strtoul(lyd_get_value(n), NULL, 10);
+    id = ((struct lyd_node_term *)node)->value.uint32;
 
     /* find the ctn's name */
     lyd_find_path(node, "name", 0, &n);
@@ -3974,7 +3974,7 @@ nc_server_config_remote_port(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        ch_endpt->port = strtoul(lyd_get_value(node), NULL, 10);
+        ch_endpt->port = ((struct lyd_node_term *)node)->value.uint16;
     } else {
         ch_endpt->port = 0;
     }
@@ -4054,7 +4054,7 @@ nc_server_config_period(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        ch_client->period = strtoul(lyd_get_value(node), NULL, 10);
+        ch_client->period = ((struct lyd_node_term *)node)->value.uint16;
     } else if (op == NC_OP_DELETE) {
         ch_client->period = 60;
     }
@@ -4178,7 +4178,7 @@ nc_server_config_max_wait(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        ch_client->max_wait = strtoul(lyd_get_value(node), NULL, 10);
+        ch_client->max_wait = ((struct lyd_node_term *)node)->value.uint16;
     } else {
         ch_client->max_wait = 5;
     }
@@ -4204,7 +4204,7 @@ nc_server_config_max_attempts(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        ch_client->max_attempts = strtoul(lyd_get_value(node), NULL, 10);
+        ch_client->max_attempts = ((struct lyd_node_term *)node)->value.uint8;
     } else {
         ch_client->max_attempts = 3;
     }
