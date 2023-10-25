@@ -3414,7 +3414,7 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
     /* find the list's key */
     lyd_find_path(node, "id", 0, &n);
     assert(n);
-    id = ((struct lyd_node_term *)node)->value.uint32;
+    id = ((struct lyd_node_term *)n)->value.uint32;
 
     /* find the ctn's name */
     lyd_find_path(node, "name", 0, &n);
