@@ -1,0 +1,97 @@
+{
+  "ietf-netconf-server:netconf-server": {
+    "listen": {
+      "idle-timeout": 10,
+      "endpoint": [
+        {
+          "name": "ssh-password-auth-endpt",
+          "ssh": {
+            "tcp-server-parameters": {
+              "local-address": "127.0.0.1",
+              "local-port": 10000
+            },
+            "ssh-server-parameters": {
+              "server-identity": {
+                "host-key": [
+                  {
+                    "name": "key",
+                    "public-key": {
+                      "inline-definition": {
+                        "public-key-format": "ietf-crypto-types:ssh-public-key-format",
+                        "public-key": "AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBDRIB2eNSRWU+HNWRUGKr76ghCLg8RaMlUCps9lBjnc6ggaJl2Q+TOLn8se2wAdK3lYBMz3dcqR+SlU7eB8wJAc=",
+                        "private-key-format": "ietf-crypto-types:ec-private-key-format",
+                        "cleartext-private-key": "MHcCAQEEICQ2fr9Jt2xluom0YQQ7HseE8YTo5reZRVcQENKUWOrooAoGCCqGSM49AwEHoUQDQgAENEgHZ41JFZT4c1ZFQYqvvqCEIuDxFoyVQKmz2UGOdzqCBomXZD5M4ufyx7bAB0reVgEzPd1ypH5KVTt4HzAkBw=="
+                      }
+                    }
+                  }
+                ]
+              },
+              "client-authentication": {
+                "users": {
+                  "user": [
+                    {
+                      "name": "admin",
+                      "password": "$0$admin"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "ssh-pubkey-auth-endpt",
+          "ssh": {
+            "tcp-server-parameters": {
+              "local-address": "127.0.0.1",
+              "local-port": 10001
+            },
+            "ssh-server-parameters": {
+              "server-identity": {
+                "host-key": [
+                  {
+                    "name": "key",
+                    "public-key": {
+                      "inline-definition": {
+                        "public-key-format": "ietf-crypto-types:ssh-public-key-format",
+                        "public-key": "AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBDRIB2eNSRWU+HNWRUGKr76ghCLg8RaMlUCps9lBjnc6ggaJl2Q+TOLn8se2wAdK3lYBMz3dcqR+SlU7eB8wJAc=",
+                        "private-key-format": "ietf-crypto-types:ec-private-key-format",
+                        "cleartext-private-key": "MHcCAQEEICQ2fr9Jt2xluom0YQQ7HseE8YTo5reZRVcQENKUWOrooAoGCCqGSM49AwEHoUQDQgAENEgHZ41JFZT4c1ZFQYqvvqCEIuDxFoyVQKmz2UGOdzqCBomXZD5M4ufyx7bAB0reVgEzPd1ypH5KVTt4HzAkBw=="
+                      }
+                    }
+                  }
+                ]
+              },
+              "client-authentication": {
+                "users": {
+                  "user": [
+                    {
+                      "name": "admin",
+                      "public-keys": {
+                        "inline-definition": {
+                          "public-key": [
+                            {
+                              "name": "admin_key.pub",
+                              "public-key-format": "ietf-crypto-types:ssh-public-key-format",
+                              "public-key": "AAAAC3NzaC1lZDI1NTE5AAAAIOr46rptg6BsWhO1JMomuh3cuCYmeuO6JfOUPs/YO35w"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "unix-socket-endpt",
+          "libnetconf2-netconf-server:unix-socket": {
+            "path": "/tmp/.ln2-unix-socket"
+          }
+        }
+      ]
+    }
+  }
+}

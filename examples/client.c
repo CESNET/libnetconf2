@@ -34,12 +34,14 @@ static void
 help_print()
 {
     printf("Example usage:\n"
-            "    client -u ./unix_socket get\n"
+            "    client get\n"
             "\n"
             "    Available options:\n"
             "    -h, --help\t     \tPrint usage help.\n"
-            "    -u, --unix\t<path>\tConnect to a UNIX socket at the place specified by <path>.\n"
-            "    -s, --ssh\t\tConnect to a SSH server.\n\n"
+            "    -p, --port\t\t<port>\tSpecify the port to connect to.\n"
+            "    -u, --unix-path\t<path>\tConnect to a UNIX socket located at <path>.\n"
+            "    -P, --ssh-pubkey\t<path>\tSet the path to an SSH Public key.\n"
+            "    -i, --ssh-privkey\t<path>\tSet the path to an SSH Private key.\n\n"
             "    Available RPCs:\n"
             "    get [xpath-filter]\t\t\t\t\t send a <get> RPC with optional XPath filter\n"
             "    get-config [datastore] [xpath-filter]\t\t send a <get-config> RPC with optional XPath filter and datastore, the default datastore is \"running\" \n\n");
@@ -132,16 +134,19 @@ cleanup:
 int
 main(int argc, char **argv)
 {
-    int rc = 0, opt, connection_type = NONE;
+    int rc = 0, opt, port = 0;
     struct nc_session *session = NULL;
     const char *unix_socket_path = NULL, *rpc_parameter_1 = NULL, *rpc_parameter_2 = NULL;
+    const char *ssh_pubkey_path = NULL, *ssh_privkey_path = NULL;
 
     struct option options[] = {
-        {"help",    no_argument,        NULL, 'h'},
-        {"unix",    required_argument,  NULL, 'u'},
-        {"ssh",     no_argument,                NULL, 's'},
-        {"debug",   no_argument,        NULL, 'd'},
-        {NULL,      0,                  NULL,  0}
+        {"help",        no_argument,        NULL, 'h'},
+        {"port",        required_argument,  NULL, 'p'},
+        {"unix-path",   required_argument,  NULL, 'u'},
+        {"ssh-pubkey",  required_argument,  NULL, 'P'},
+        {"ssh-privkey", required_argument,  NULL, 'i'},
+        {"debug",       no_argument,        NULL, 'd'},
+        {NULL,          0,                  NULL,  0}
     };
 
     if (argc == 1) {
@@ -154,23 +159,26 @@ main(int argc, char **argv)
 
     opterr = 0;
 
-    while ((opt = getopt_long(argc, argv, "hu:sd", options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hp:u:P:i:d", options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             help_print();
             goto cleanup;
 
-        case 'u':
-            unix_socket_path = optarg;
-            connection_type = UNIX;
+        case 'p':
+            port = strtoul(optarg, NULL, 10);
             break;
 
-        case 's':
-            connection_type = SSH;
-            /* set the client SSH username to always be used when connecting to the server */
-            if (nc_client_ssh_set_username(SSH_USERNAME)) {
-                ERR_MSG_CLEANUP("Couldn't set the SSH username\n");
-            }
+        case 'u':
+            unix_socket_path = optarg;
+            break;
+
+        case 'P':
+            ssh_pubkey_path = optarg;
+            break;
+
+        case 'i':
+            ssh_privkey_path = optarg;
             break;
 
         case 'd':
@@ -187,18 +195,38 @@ main(int argc, char **argv)
         ERR_MSG_CLEANUP("Expected the name of RPC after options\n");
     }
 
+    /* check invalid args combinations */
+    if (unix_socket_path && port) {
+        ERR_MSG_CLEANUP("Both UNIX socket path and port specified. Please choose either SSH or UNIX.\n");
+    } else if (unix_socket_path && (ssh_pubkey_path || ssh_privkey_path)) {
+        ERR_MSG_CLEANUP("Both UNIX socket path and a path to key(s) specified. Please choose either SSH or UNIX.\n");
+    } else if ((port == 10001) && (!ssh_pubkey_path || !ssh_privkey_path)) {
+        ERR_MSG_CLEANUP("You need to specify both paths to private and public keys, if you want to connect to a publickey endpoint.\n");
+    } else if ((port == 10000) && (ssh_pubkey_path || ssh_privkey_path)) {
+        ERR_MSG_CLEANUP("Public or private key specified, when connecting to the password endpoint.\n");
+    } else if (!unix_socket_path && !port) {
+        ERR_MSG_CLEANUP("Neither UNIX socket or SSH specified.\n");
+    }
+
     /* connect to the server using the specified transport protocol */
-    switch (connection_type) {
-    case UNIX:
+    if (unix_socket_path) {
+        /* it's UNIX socket */
         session = nc_connect_unix(unix_socket_path, NULL);
-        break;
+    } else {
+        /* it must be SSH, so set the client SSH username to always be used when connecting to the server */
+        if (nc_client_ssh_set_username(SSH_USERNAME)) {
+            ERR_MSG_CLEANUP("Couldn't set the SSH username\n");
+        }
 
-    case SSH:
-        session = nc_connect_ssh(SSH_ADDRESS, SSH_PORT, NULL);
-        break;
+        if (ssh_pubkey_path && ssh_privkey_path) {
+            /* set the client's SSH keypair to be used for authentication if necessary */
+            if (nc_client_ssh_add_keypair(ssh_pubkey_path, ssh_privkey_path)) {
+                ERR_MSG_CLEANUP("Couldn't set client's SSH keypair.\n");
+            }
+        }
 
-    case NONE:
-        ERR_MSG_CLEANUP("Expected connection type (either SSH or UNIX)!\n");
+        /* try to connect via SSH */
+        session = nc_connect_ssh(SSH_ADDRESS, port, NULL);
     }
     if (!session) {
         ERR_MSG_CLEANUP("Couldn't connect to the server\n");
