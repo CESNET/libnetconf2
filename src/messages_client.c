@@ -47,7 +47,7 @@ nc_rpc_act_generic(const struct lyd_node *data, NC_PARAMTYPE paramtype)
     struct nc_rpc_act_generic *rpc;
 
     NC_CHECK_ARG_RET(NULL, data, NULL);
-    if (data->next || data->prev != data) {
+    if (data->next || (data->prev != data)) {
         ERR(NULL, "nc_rpc_act_generic missing data");
         return NULL;
     }
