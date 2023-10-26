@@ -161,7 +161,6 @@ set(format_sources
     src/*.c
     src/*.h
     tests/*.c
-    tests/client/*.c
     tests/pam/*.c)
 
 #
