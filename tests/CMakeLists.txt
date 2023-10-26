@@ -9,12 +9,24 @@ endif()
 
 # list of all the tests that don't require SSH and TLS
 set(tests test_unix_socket test_client_thread test_fd_comm test_init_destroy_client test_init_destroy_server
-        test_io test_thread_messages test_client_messages test_client_ssh test_client_tls)
+        test_io test_thread_messages test_client_messages)
 
 # only enable PAM tests if the version of PAM is greater than 1.4
 if(LIBPAM_HAVE_CONFDIR)
     list(APPEND tests test_auth)
 endif()
+
+#append tests depending on SSH/TLS
+if(ENABLE_SSH_TLS)
+    list(APPEND tests test_two_channels test_ks_ts test_ec
+        test_ed25519 test_replace test_endpt_share_clients test_tls test_crl test_ch
+        test_runtime_changes test_client_ssh test_client_tls)
+endif()
+
+foreach(src IN LISTS libsrc)
+    list(APPEND test_srcs "../${src}")
+endforeach()
+add_library(testobj OBJECT ${test_srcs} ${compatsrc})
 
 # add -Wl,--wrap flags
 set(test test_client_ssh)
@@ -33,18 +45,6 @@ set(${test}_wrap_link_flags "-Wl")
 foreach(mock_func IN LISTS ${test}_mock_funcs)
     set(${test}_wrap_link_flags "${${test}_wrap_link_flags},--wrap=${mock_func}")
 endforeach()
-
-#append tests depending on SSH/TLS
-if(ENABLE_SSH_TLS)
-    list(APPEND tests test_two_channels test_ks_ts test_ec
-        test_ed25519 test_replace test_endpt_share_clients test_tls test_crl test_ch
-        test_runtime_changes)
-endif()
-
-foreach(src IN LISTS libsrc)
-    list(APPEND test_srcs "../${src}")
-endforeach()
-add_library(testobj OBJECT ${test_srcs} ${compatsrc})
 
 foreach(test_name IN LISTS tests)
     add_executable(${test_name} $<TARGET_OBJECTS:testobj> ${test_name}.c)
