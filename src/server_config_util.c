@@ -18,6 +18,8 @@
 #include "server_config_util.h"
 
 #include <libyang/libyang.h>
+
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1411,7 +1413,7 @@ nc_server_config_add_ch_period(const struct ly_ctx *ctx, const char *ch_client_n
         return 1;
     }
 
-    sprintf(buf, "%u", period);
+    sprintf(buf, "%" PRIu16, period);
     return nc_server_config_create(ctx, config, buf, "/ietf-netconf-server:netconf-server/call-home/"
             "netconf-client[name='%s']/connection-type/periodic/period", ch_client_name);
 }
@@ -1464,7 +1466,7 @@ nc_server_config_add_ch_idle_timeout(const struct ly_ctx *ctx, const char *ch_cl
         return 1;
     }
 
-    sprintf(buf, "%u", idle_timeout);
+    sprintf(buf, "%" PRIu16, idle_timeout);
     return nc_server_config_create(ctx, config, buf, "/ietf-netconf-server:netconf-server/call-home/"
             "netconf-client[name='%s']/connection-type/periodic/idle-timeout", ch_client_name);
 }
@@ -1510,7 +1512,7 @@ nc_server_config_add_ch_reconnect_strategy(const struct ly_ctx *ctx, const char 
     }
 
     if (max_attempts) {
-        sprintf(buf, "%u", max_attempts);
+        sprintf(buf, "%" PRIu8, max_attempts);
         ret = nc_server_config_append(ctx, path, "max-attempts", buf, config);
         if (ret) {
             goto cleanup;
@@ -1519,7 +1521,7 @@ nc_server_config_add_ch_reconnect_strategy(const struct ly_ctx *ctx, const char 
     }
 
     if (max_wait) {
-        sprintf(buf, "%u", max_wait);
+        sprintf(buf, "%" PRIu16, max_wait);
         ret = nc_server_config_append(ctx, path, "max-wait", buf, config);
         if (ret) {
             goto cleanup;
