@@ -16,6 +16,7 @@
 
 #include "compat.h"
 
+#include <crypt.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <limits.h>
@@ -369,6 +370,24 @@ get_current_dir_name(void)
     }
 
     return retval;
+}
+
+#endif
+
+#ifndef HAVE_CRYPT_R
+char *
+crypt_r(const char *phrase, const char *setting, struct crypt_data *data)
+{
+    static pthread_mutex_t crypt_lock = PTHREAD_MUTEX_INITIALIZER;
+    char *hash;
+
+    (void) data;
+
+    pthread_mutex_lock(&crypt_lock);
+    hash = crypt(phrase, setting);
+    pthread_mutex_unlock(&crypt_lock);
+
+    return hash;
 }
 
 #endif

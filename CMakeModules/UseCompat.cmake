@@ -62,6 +62,14 @@ macro(USE_COMPAT)
 
     check_symbol_exists(get_current_dir_name "unistd.h" HAVE_GET_CURRENT_DIR_NAME)
 
+    # crypt
+    if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
+        list(APPEND CMAKE_REQUIRED_LIBRARIES -llogin)
+    elseif(NOT APPLE)
+        list(APPEND CMAKE_REQUIRED_LIBRARIES -lcrypt)
+    endif()
+    check_symbol_exists(crypt_r "crypt.h" HAVE_CRYPT_R)
+
     TEST_BIG_ENDIAN(IS_BIG_ENDIAN)
 
     check_include_file("stdatomic.h" HAVE_STDATOMIC)

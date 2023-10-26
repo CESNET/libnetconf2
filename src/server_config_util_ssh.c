@@ -32,10 +32,6 @@
 #include "server_config.h"
 #include "session_p.h"
 
-#if !defined (HAVE_CRYPT_R)
-extern pthread_mutex_t crypt_lock;
-#endif
-
 static int
 _nc_server_config_add_ssh_hostkey(const struct ly_ctx *ctx, const char *tree_path,
         const char *privkey_path, const char *pubkey_path, struct lyd_node **config)
@@ -389,22 +385,11 @@ _nc_server_config_add_ssh_user_password(const struct ly_ctx *ctx, const char *tr
     int ret = 0;
     char *hashed_pw = NULL;
     const char *salt = "$6$idsizuippipk$";
+    struct crypt_data cdata = {0};
 
     NC_CHECK_ARG_RET(NULL, ctx, tree_path, password, config, 1);
 
-#ifdef HAVE_CRYPT_R
-    struct crypt_data cdata;
-#endif
-
-#ifdef HAVE_CRYPT_R
-    cdata.initialized = 0;
-    hashed_pw = crypt_r(password, salt, &data);
-#else
-    pthread_mutex_lock(&crypt_lock);
-    hashed_pw = crypt(password, salt);
-    pthread_mutex_unlock(&crypt_lock);
-#endif
-
+    hashed_pw = crypt_r(password, salt, &cdata);
     if (!hashed_pw) {
         ERR(NULL, "Hashing password failed (%s).", strerror(errno));
         ret = 1;
