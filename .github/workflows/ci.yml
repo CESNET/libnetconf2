@@ -91,7 +91,7 @@ jobs:
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "gcc",
-            options: "-DENABLE_SSH_TLS=OFF,
+            options: "-DENABLE_SSH_TLS=OFF",
             packages: "valgrind",
             snaps: "",
             make-prepend: "",
