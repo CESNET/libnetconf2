@@ -16,10 +16,6 @@
 #ifndef NC_CONFIG_SERVER_P_H_
 #define NC_CONFIG_SERVER_P_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <libyang/libyang.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -157,9 +153,5 @@ int nc_server_config_parse_truststore(const struct lyd_node *node, NC_OPERATION 
 int nc_server_config_ts_truststore(const struct lyd_node *node, NC_OPERATION op);
 
 #endif /* NC_ENABLED_SSH_TLS */
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* NC_CONFIG_SERVER_P_H_ */
