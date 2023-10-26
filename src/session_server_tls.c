@@ -1339,7 +1339,7 @@ nc_tls_store_set_crl(struct nc_session *session, struct nc_server_tls_opts *opts
     if (!opts->crl_store) {
         /* first call on this endpoint */
         opts->crl_store = X509_STORE_new();
-        NC_CHECK_ERRMEM_GOTO(!opts->crl_store,; , fail);
+        NC_CHECK_ERRMEM_GOTO(!opts->crl_store, , fail);
     }
 
     if (opts->crl_path) {

@@ -1436,7 +1436,7 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
 
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
-    NC_CHECK_ERRMEM_GOTO(!session,; , fail);
+    NC_CHECK_ERRMEM_GOTO(!session, , fail);
     session->status = NC_STATUS_STARTING;
 
     /* transport specific data */
@@ -1458,7 +1458,7 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
     }
     username = strdup(pw->pw_name);
     free(buf);
-    NC_CHECK_ERRMEM_GOTO(!username,; , fail);
+    NC_CHECK_ERRMEM_GOTO(!username, , fail);
     session->username = username;
 
     /* NETCONF handshake */
