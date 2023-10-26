@@ -50,10 +50,6 @@
 #include "session.h"
 #include "session_p.h"
 
-#if !defined (HAVE_CRYPT_R)
-pthread_mutex_t crypt_lock = PTHREAD_MUTEX_INITIALIZER;
-#endif
-
 extern struct nc_server_opts server_opts;
 
 static char *
@@ -224,10 +220,7 @@ static int
 auth_password_compare_pwd(const char *stored_pw, const char *received_pw)
 {
     char *received_pw_hash = NULL;
-
-#ifdef HAVE_CRYPT_R
-    struct crypt_data cdata;
-#endif
+    struct crypt_data cdata = {0};
 
     if (!stored_pw[0]) {
         if (!received_pw[0]) {
@@ -245,15 +238,9 @@ auth_password_compare_pwd(const char *stored_pw, const char *received_pw)
         return strcmp(stored_pw + 3, received_pw);
     }
 
-#ifdef HAVE_CRYPT_R
-    cdata.initialized = 0;
     received_pw_hash = crypt_r(received_pw, stored_pw, &cdata);
-#else
-    pthread_mutex_lock(&crypt_lock);
-    received_pw_hash = crypt(received_pw, stored_pw);
-    pthread_mutex_unlock(&crypt_lock);
-#endif
     if (!received_pw_hash) {
+        ERR(NULL, "Hashing the password failed (%s).", strerror(errno));
         return 1;
     }
 
