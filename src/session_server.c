@@ -447,10 +447,7 @@ sock_host_unix(int acc_sock_fd, char **host)
         return 0;
     }
 
-    if (!(*host = strdup(sun_path))) {
-        ERRMEM;
-        return -1;
-    }
+    NC_CHECK_ERRMEM_RET(!(*host = strdup(sun_path)), -1);
 
     return 0;
 }
@@ -467,10 +464,7 @@ static int
 sock_host_inet(const struct sockaddr_in *addr, char **host, uint16_t *port)
 {
     *host = malloc(INET_ADDRSTRLEN);
-    if (!(*host)) {
-        ERRMEM;
-        return -1;
-    }
+    NC_CHECK_ERRMEM_RET(!(*host), -1);
 
     if (!inet_ntop(AF_INET, &addr->sin_addr, *host, INET_ADDRSTRLEN)) {
         ERR(NULL, "inet_ntop failed (%s).", strerror(errno));
@@ -496,10 +490,7 @@ static int
 sock_host_inet6(const struct sockaddr_in6 *addr, char **host, uint16_t *port)
 {
     *host = malloc(INET6_ADDRSTRLEN);
-    if (!(*host)) {
-        ERRMEM;
-        return -1;
-    }
+    NC_CHECK_ERRMEM_RET(!(*host), -1);
 
     if (!inet_ntop(AF_INET6, &addr->sin6_addr, *host, INET6_ADDRSTRLEN)) {
         ERR(NULL, "inet_ntop failed (%s).", strerror(errno));
@@ -525,10 +516,7 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t
     int ret, client_sock, sock = -1, flags;
 
     pfd = malloc(bind_count * sizeof *pfd);
-    if (!pfd) {
-        ERRMEM;
-        return -1;
-    }
+    NC_CHECK_ERRMEM_RET(!pfd, -1);
 
     /* LOCK */
     pthread_mutex_lock(bind_lock);
@@ -938,10 +926,7 @@ nc_server_set_capability(const char *value)
     }
 
     mem = realloc(server_opts.capabilities, (server_opts.capabilities_count + 1) * sizeof *server_opts.capabilities);
-    if (!mem) {
-        ERRMEM;
-        return EXIT_FAILURE;
-    }
+    NC_CHECK_ERRMEM_RET(!mem, EXIT_FAILURE);
     server_opts.capabilities = mem;
 
     server_opts.capabilities[server_opts.capabilities_count] = strdup(value);
@@ -980,10 +965,7 @@ nc_accept_inout(int fdin, int fdout, const char *username, const struct ly_ctx *
 
     /* prepare session structure */
     *session = nc_new_session(NC_SERVER, 0);
-    if (!(*session)) {
-        ERRMEM;
-        return NC_MSG_ERROR;
-    }
+    NC_CHECK_ERRMEM_RET(!(*session), NC_MSG_ERROR);
     (*session)->status = NC_STATUS_STARTING;
 
     /* transport specific data */
@@ -1178,10 +1160,7 @@ nc_ps_new(void)
     struct nc_pollsession *ps;
 
     ps = calloc(1, sizeof(struct nc_pollsession));
-    if (!ps) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!ps, NULL);
     pthread_cond_init(&ps->cond, NULL);
     pthread_mutex_init(&ps->lock, NULL);
 
@@ -1427,11 +1406,7 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
     }
 
     *rpc = calloc(1, sizeof **rpc);
-    if (!*rpc) {
-        ERRMEM;
-        ret = NC_PSPOLL_ERROR;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(!*rpc, ret = NC_PSPOLL_ERROR, cleanup);
 
     /* parse the RPC */
     if (!lyd_parse_op(session->ctx, NULL, msg, LYD_XML, LYD_TYPE_RPC_NETCONF, &(*rpc)->envp, &(*rpc)->rpc)) {
@@ -2128,13 +2103,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
     sock = ret;
 
     *session = nc_new_session(NC_SERVER, 0);
-    if (!(*session)) {
-        ERRMEM;
-        close(sock);
-        free(host);
-        msgtype = NC_MSG_ERROR;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(!(*session), close(sock); free(host); msgtype = NC_MSG_ERROR, cleanup);
     (*session)->status = NC_STATUS_STARTING;
     (*session)->ctx = (struct ly_ctx *)ctx;
     (*session)->flags = NC_SESSION_SHAREDCTX;
@@ -2319,13 +2288,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
 
     /* create session */
     *session = nc_new_session(NC_SERVER, 0);
-    if (!(*session)) {
-        ERRMEM;
-        close(sock);
-        free(ip_host);
-        msgtype = NC_MSG_ERROR;
-        goto fail;
-    }
+    NC_CHECK_ERRMEM_GOTO(!(*session), close(sock); free(ip_host); msgtype = NC_MSG_ERROR, fail);
     (*session)->status = NC_STATUS_STARTING;
     (*session)->ctx = (struct ly_ctx *)ctx;
     (*session)->flags = NC_SESSION_SHAREDCTX | NC_SESSION_CALLHOME;
@@ -2763,10 +2726,7 @@ nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acqu
     }
 
     arg = malloc(sizeof *arg);
-    if (!arg) {
-        ERRMEM;
-        return -1;
-    }
+    NC_CHECK_ERRMEM_RET(!arg, -1);
     arg->client_name = strdup(client_name);
     if (!arg->client_name) {
         ERRMEM;

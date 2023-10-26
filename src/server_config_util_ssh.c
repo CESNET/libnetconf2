@@ -102,13 +102,9 @@ nc_server_config_add_ssh_hostkey(const struct ly_ctx *ctx, const char *endpt_nam
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, hostkey_name, privkey_path, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
-            "server-identity/host-key[name='%s']/public-key", endpt_name, hostkey_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
+            "server-identity/host-key[name='%s']/public-key", endpt_name, hostkey_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_ssh_hostkey(ctx, path, privkey_path, pubkey_path, config);
     if (ret) {
@@ -130,14 +126,10 @@ nc_server_config_add_ch_ssh_hostkey(const struct ly_ctx *ctx, const char *client
 
     NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, hostkey_name, privkey_path, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/"
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/"
             "netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/server-identity/"
-            "host-key[name='%s']/public-key", client_name, endpt_name, hostkey_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+            "host-key[name='%s']/public-key", client_name, endpt_name, hostkey_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_ssh_hostkey(ctx, path, privkey_path, pubkey_path, config);
     if (ret) {
@@ -296,14 +288,10 @@ nc_server_config_add_ssh_user_pubkey(const struct ly_ctx *ctx, const char *endpt
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, pubkey_name, pubkey_path, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
             "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/inline-definition/"
-            "public-key[name='%s']", endpt_name, user_name, pubkey_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+            "public-key[name='%s']", endpt_name, user_name, pubkey_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_ssh_user_pubkey(ctx, path, pubkey_path, config);
     if (ret) {
@@ -333,15 +321,11 @@ nc_server_config_add_ch_ssh_user_pubkey(const struct ly_ctx *ctx, const char *cl
 
     NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, user_name, pubkey_name, pubkey_path, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
             "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
             "users/user[name='%s']/public-keys/inline-definition/public-key[name='%s']", client_name,
-            endpt_name, user_name, pubkey_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+            endpt_name, user_name, pubkey_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_ssh_user_pubkey(ctx, path, pubkey_path, config);
     if (ret) {
@@ -445,13 +429,9 @@ nc_server_config_add_ssh_user_password(const struct ly_ctx *ctx, const char *end
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, password, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
-            "client-authentication/users/user[name='%s']", endpt_name, user_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
+            "client-authentication/users/user[name='%s']", endpt_name, user_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_ssh_user_password(ctx, path, password, config);
     if (ret) {
@@ -473,14 +453,10 @@ nc_server_config_add_ch_ssh_user_password(const struct ly_ctx *ctx, const char *
 
     NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, user_name, password, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
             "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
-            "users/user[name='%s']", client_name, endpt_name, user_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+            "users/user[name='%s']", client_name, endpt_name, user_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_ssh_user_password(ctx, path, password, config);
     if (ret) {
@@ -544,14 +520,10 @@ nc_server_config_add_ssh_user_interactive(const struct ly_ctx *ctx, const char *
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, pam_config_name, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
             "client-authentication/users/user[name='%s']/"
-            "libnetconf2-netconf-server:keyboard-interactive", endpt_name, user_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+            "libnetconf2-netconf-server:keyboard-interactive", endpt_name, user_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_ssh_user_interactive(ctx, path, pam_config_name, pam_config_dir, config);
     if (ret) {
@@ -573,14 +545,10 @@ nc_server_config_add_ch_ssh_user_interactive(const struct ly_ctx *ctx, const cha
 
     NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, user_name, pam_config_name, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
             "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/"
-            "libnetconf2-netconf-server:keyboard-interactive", client_name, endpt_name, user_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+            "libnetconf2-netconf-server:keyboard-interactive", client_name, endpt_name, user_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_ssh_user_interactive(ctx, path, pam_config_name, pam_config_dir, config);
     if (ret) {

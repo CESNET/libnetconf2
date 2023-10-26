@@ -351,11 +351,7 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
     *resp = calloc(n_requests, sizeof **resp);
     prompts = calloc(n_requests, sizeof *prompts);
     echo = calloc(n_requests, sizeof *echo);
-    if (!(*resp) || !prompts || !echo) {
-        ERRMEM;
-        r = PAM_BUF_ERR;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(!(*resp) || !prompts || !echo, r = PAM_BUF_ERR, cleanup);
 
     /* set the prompts for the user */
     j = 0;
@@ -814,10 +810,7 @@ nc_sshcb_channel_subsystem(struct nc_session *session, ssh_channel channel, cons
     } else {
         /* additional channel subsystem request, new session is ready as far as SSH is concerned */
         new_session = nc_new_session(NC_SERVER, 1);
-        if (!new_session) {
-            ERRMEM;
-            return -1;
-        }
+        NC_CHECK_ERRMEM_RET(!new_session, -1);
 
         /* insert the new session */
         if (!session->ti.libssh.next) {

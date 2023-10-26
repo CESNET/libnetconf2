@@ -267,10 +267,7 @@ nc_server_config_ks_public_key(const struct lyd_node *node, NC_OPERATION op)
     /* replace the pubkey */
     free(key->pubkey_data);
     key->pubkey_data = strdup(lyd_get_value(node));
-    if (!key->pubkey_data) {
-        ERRMEM;
-        return 1;
-    }
+    NC_CHECK_ERRMEM_RET(!key->pubkey_data, 1);
 
     return 0;
 }
@@ -319,10 +316,7 @@ nc_server_config_ks_cleartext_private_key(const struct lyd_node *node, NC_OPERAT
         /* replace the privkey */
         free(key->privkey_data);
         key->privkey_data = strdup(lyd_get_value(node));
-        if (!key->privkey_data) {
-            ERRMEM;
-            return 1;
-        }
+        NC_CHECK_ERRMEM_RET(!key->privkey_data, 1);
     } else if (op == NC_OP_DELETE) {
         free(key->privkey_data);
         key->privkey_data = NULL;
@@ -384,10 +378,7 @@ nc_server_config_ks_cert_data(const struct lyd_node *node, NC_OPERATION op)
         /* replace the cert data */
         free(cert->data);
         cert->data = strdup(lyd_get_value(node));
-        if (!cert->data) {
-            ERRMEM;
-            return 1;
-        }
+        NC_CHECK_ERRMEM_RET(!cert->data, 1);
     }
 
     return 0;

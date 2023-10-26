@@ -38,10 +38,7 @@ nc_server_reply_ok(void)
     struct nc_server_reply *ret;
 
     ret = malloc(sizeof *ret);
-    if (!ret) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!ret, NULL);
 
     ret->type = NC_RPL_OK;
     return ret;
@@ -60,10 +57,7 @@ nc_server_reply_data(struct lyd_node *data, NC_WD_MODE wd, NC_PARAMTYPE paramtyp
     }
 
     ret = malloc(sizeof *ret);
-    if (!ret) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!ret, NULL);
 
     ret->type = NC_RPL_DATA;
     ret->wd = wd;
@@ -91,10 +85,7 @@ nc_server_reply_err(struct lyd_node *err)
     NC_CHECK_ARG_RET(NULL, err, NULL);
 
     ret = malloc(sizeof *ret);
-    if (!ret) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!ret, NULL);
 
     ret->type = NC_RPL_ERROR;
     ret->err = err;
@@ -797,10 +788,7 @@ nc_server_notif_new(struct lyd_node *event, char *eventtime, NC_PARAMTYPE paramt
     }
 
     ntf = malloc(sizeof *ntf);
-    if (!ntf) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!ntf, NULL);
 
     if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
         ntf->eventtime = strdup(eventtime);

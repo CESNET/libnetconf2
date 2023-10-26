@@ -74,18 +74,12 @@ nc_ssl_error_get_reasons(void)
             /* add "; " */
             reason_size += 2;
             reasons = nc_realloc(reasons, reason_size);
-            if (!reasons) {
-                ERRMEM;
-                return NULL;
-            }
+            NC_CHECK_ERRMEM_RET(!reasons, NULL);
             reason_len += sprintf(reasons + reason_len, "; ");
         }
         reason_size += strlen(ERR_reason_error_string(e));
         reasons = nc_realloc(reasons, reason_size);
-        if (!reasons) {
-            ERRMEM;
-            return NULL;
-        }
+        NC_CHECK_ERRMEM_RET(!reasons, NULL);
         reason_len += sprintf(reasons + reason_len, "%s", ERR_reason_error_string(e));
     }
 
@@ -253,10 +247,7 @@ nc_read_chunk(struct nc_session *session, size_t len, uint32_t inact_timeout, st
     }
 
     *chunk = malloc((len + 1) * sizeof **chunk);
-    if (!*chunk) {
-        ERRMEM;
-        return -1;
-    }
+    NC_CHECK_ERRMEM_RET(!*chunk, -1);
 
     r = nc_read(session, *chunk, len, inact_timeout, ts_act_timeout);
     if (r <= 0) {
@@ -286,10 +277,7 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint
         size = BUFFERSIZE;
     }
     chunk = malloc((size + 1) * sizeof *chunk);
-    if (!chunk) {
-        ERRMEM;
-        return -1;
-    }
+    NC_CHECK_ERRMEM_RET(!chunk, -1);
 
     len = strlen(endtag);
     while (1) {
@@ -305,10 +293,7 @@ nc_read_until(struct nc_session *session, const char *endtag, size_t limit, uint
             /* get more memory */
             size = size + BUFFERSIZE;
             chunk = nc_realloc(chunk, (size + 1) * sizeof *chunk);
-            if (!chunk) {
-                ERRMEM;
-                return -1;
-            }
+            NC_CHECK_ERRMEM_RET(!chunk, -1);
         }
 
         /* get another character */
@@ -431,11 +416,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, struct ly_in **msg, i
 
             /* realloc message buffer, remember to count terminating null byte */
             data = nc_realloc(data, len + chunk_len + 1);
-            if (!data) {
-                ERRMEM;
-                ret = -1;
-                goto cleanup;
-            }
+            NC_CHECK_ERRMEM_GOTO(!data, ret = -1, cleanup);
             memcpy(data + len, chunk, chunk_len);
             len += chunk_len;
             data[len] = '\0';
@@ -951,11 +932,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         /* <rpc> open */
         count = asprintf(&buf, "<rpc xmlns=\"%s\" message-id=\"%" PRIu64 "\"%s>",
                 NC_NS_BASE, session->opts.client.msgid + 1, attrs ? attrs : "");
-        if (count == -1) {
-            ERRMEM;
-            ret = NC_MSG_ERROR;
-            goto cleanup;
-        }
+        NC_CHECK_ERRMEM_GOTO(count == -1, ret = NC_MSG_ERROR, cleanup);
         nc_write_clb((void *)&arg, buf, count, 0);
         free(buf);
 
@@ -1114,11 +1091,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         sid = va_arg(ap, uint32_t *);
 
         count = asprintf(&buf, "<hello xmlns=\"%s\"><capabilities>", NC_NS_BASE);
-        if (count == -1) {
-            ERRMEM;
-            ret = NC_MSG_ERROR;
-            goto cleanup;
-        }
+        NC_CHECK_ERRMEM_GOTO(count == -1, ret = NC_MSG_ERROR, cleanup);
         nc_write_clb((void *)&arg, buf, count, 0);
         free(buf);
         for (i = 0; capabilities[i]; i++) {
@@ -1128,11 +1101,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         }
         if (sid) {
             count = asprintf(&buf, "</capabilities><session-id>%u</session-id></hello>", *sid);
-            if (count == -1) {
-                ERRMEM;
-                ret = NC_MSG_ERROR;
-                goto cleanup;
-            }
+            NC_CHECK_ERRMEM_GOTO(count == -1, ret = NC_MSG_ERROR, cleanup);
             nc_write_clb((void *)&arg, buf, count, 0);
             free(buf);
         } else {
@@ -1194,10 +1163,7 @@ nc_getpw(uid_t uid, const char *username, struct passwd *pwd_buf, char **buf, si
 
         /* allocate some buffer */
         *buf = nc_realloc(*buf, *buf_size);
-        if (!*buf) {
-            ERRMEM;
-            return NULL;
-        }
+        NC_CHECK_ERRMEM_RET(!*buf, NULL);
 
         if (username) {
             ret = getpwnam_r(username, pwd_buf, *buf, *buf_size, &pwd);

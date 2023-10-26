@@ -423,10 +423,7 @@ nc_server_config_ts_cert_data(const struct lyd_node *node, NC_OPERATION op)
 
         free(cert->data);
         cert->data = strdup(lyd_get_value(node));
-        if (!cert->data) {
-            ERRMEM;
-            return 1;
-        }
+        NC_CHECK_ERRMEM_RET(!cert->data, 1);
     }
 
     return 0;
@@ -511,11 +508,7 @@ nc_server_config_ts_public_key(const struct lyd_node *node, NC_OPERATION op)
         /* replace the public key */
         free(pkey->data);
         pkey->data = strdup(lyd_get_value(node));
-        if (!pkey->data) {
-            ERRMEM;
-            ret = 1;
-            goto cleanup;
-        }
+        NC_CHECK_ERRMEM_GOTO(!pkey->data, ret = 1, cleanup);
     }
 
 cleanup:
