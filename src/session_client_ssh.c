@@ -537,7 +537,7 @@ sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
         if (len >= buflen - 1) {
             buflen *= 2;
             buf = nc_realloc(buf, buflen * sizeof *buf);
-            NC_CHECK_ERRMEM_GOTO(!buf,; , error);
+            NC_CHECK_ERRMEM_GOTO(!buf, , error);
         }
         buf[len++] = (char)c;
     }
@@ -594,7 +594,7 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
         if (cur_len >= buflen - 1) {
             buflen *= 2;
             buf = nc_realloc(buf, buflen * sizeof *buf);
-            NC_CHECK_ERRMEM_GOTO(!buf,; , error);
+            NC_CHECK_ERRMEM_GOTO(!buf, , error);
         }
         buf[cur_len++] = (char)c;
     }
@@ -643,7 +643,7 @@ sshauth_privkey_passphrase(const char *privkey_path, void *UNUSED(priv))
         if (len >= buflen - 1) {
             buflen *= 2;
             buf = nc_realloc(buf, buflen * sizeof *buf);
-            NC_CHECK_ERRMEM_GOTO(!buf,; , error);
+            NC_CHECK_ERRMEM_GOTO(!buf, , error);
         }
         buf[len++] = (char)c;
     }
@@ -1504,7 +1504,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
 
         /* remember host */
         host = strdup("localhost");
-        NC_CHECK_ERRMEM_GOTO(!host,; , fail);
+        NC_CHECK_ERRMEM_GOTO(!host, , fail);
         ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
 
         /* create and connect socket */
@@ -1541,7 +1541,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
             } else {
                 username = strdup(opts->username);
             }
-            NC_CHECK_ERRMEM_GOTO(!username,; , fail);
+            NC_CHECK_ERRMEM_GOTO(!username, , fail);
             ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
         }
 
@@ -1631,15 +1631,15 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     if (ssh_opts.knownhosts_path) {
         /* known_hosts file path was set so use it */
         known_hosts_path = strdup(ssh_opts.knownhosts_path);
-        NC_CHECK_ERRMEM_GOTO(!known_hosts_path,; , fail);
+        NC_CHECK_ERRMEM_GOTO(!known_hosts_path, , fail);
     } else if (pw) {
         /* path not set explicitly, but current user's username found in /etc/passwd, so create the path */
-        NC_CHECK_ERRMEM_GOTO(asprintf(&known_hosts_path, "%s/.ssh/known_hosts", pw->pw_dir) == -1,; , fail);
+        NC_CHECK_ERRMEM_GOTO(asprintf(&known_hosts_path, "%s/.ssh/known_hosts", pw->pw_dir) == -1, , fail);
     }
 
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
-    NC_CHECK_ERRMEM_GOTO(!session,; , fail);
+    NC_CHECK_ERRMEM_GOTO(!session, , fail);
     session->status = NC_STATUS_STARTING;
 
     /* transport-specific data */

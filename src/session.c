@@ -1077,7 +1077,7 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
     NC_CHECK_ARG_RET(NULL, ctx, NULL);
 
     cpblts = malloc(size * sizeof *cpblts);
-    NC_CHECK_ERRMEM_GOTO(!cpblts,; , error);
+    NC_CHECK_ERRMEM_GOTO(!cpblts, , error);
     cpblts[0] = strdup("urn:ietf:params:netconf:base:1.0");
     cpblts[1] = strdup("urn:ietf:params:netconf:base:1.1");
     count = 2;
@@ -1179,10 +1179,10 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
             /* get content-id */
             if (server_opts.content_id_clb) {
                 yl_content_id = server_opts.content_id_clb(server_opts.content_id_data);
-                NC_CHECK_ERRMEM_GOTO(!yl_content_id,; , error);
+                NC_CHECK_ERRMEM_GOTO(!yl_content_id, , error);
             } else {
                 yl_content_id = malloc(11);
-                NC_CHECK_ERRMEM_GOTO(!yl_content_id,; , error);
+                NC_CHECK_ERRMEM_GOTO(!yl_content_id, , error);
                 sprintf(yl_content_id, "%u", ly_ctx_get_change_count(ctx));
             }
 

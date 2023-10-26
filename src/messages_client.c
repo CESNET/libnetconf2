@@ -475,10 +475,10 @@ nc_rpc_getdata(const char *datastore, const char *filter, const char *config_fil
     }
     if (origin_filter && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
         rpc->origin_filter = malloc(origin_filter_count * sizeof *rpc->origin_filter);
-        NC_CHECK_ERRMEM_GOTO(!rpc->origin_filter,; , error);
+        NC_CHECK_ERRMEM_GOTO(!rpc->origin_filter, , error);
         for (i = 0; i < origin_filter_count; ++i) {
             rpc->origin_filter[i] = strdup(origin_filter[i]);
-            NC_CHECK_ERRMEM_GOTO(!rpc->origin_filter[i],; , error);
+            NC_CHECK_ERRMEM_GOTO(!rpc->origin_filter[i], , error);
             ++rpc->origin_filter_count;
         }
     } else {
