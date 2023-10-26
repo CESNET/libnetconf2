@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include <libyang/libyang.h>
+#include <libyang/tree_data.h>
 
 #ifdef NC_ENABLED_SSH_TLS
 #include <openssl/err.h>
@@ -3911,7 +3912,7 @@ nc_server_config_anchor_time(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_ch_client *ch_client;
-    time_t anchor_time = {0};
+    struct lyd_value_date_and_time *anchor_time;
 
     assert(!strcmp(LYD_NAME(node), "anchor-time"));
 
@@ -3921,13 +3922,11 @@ nc_server_config_anchor_time(const struct lyd_node *node, NC_OPERATION op)
         return 1;
     }
 
-    ret = ly_time_str2time(lyd_get_value(node), &anchor_time, NULL);
-    if (ret) {
-        goto cleanup;
-    }
+    /* get the value of time from the node directly */
+    LYD_VALUE_GET(&((struct lyd_node_term *)node)->value, anchor_time);
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        ch_client->anchor_time = anchor_time;
+        ch_client->anchor_time = anchor_time->time;
     } else if (op == NC_OP_DELETE) {
         ch_client->anchor_time = 0;
     }
