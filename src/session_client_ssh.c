@@ -333,12 +333,14 @@ nc_client_ssh_do_dnssec_sshfp_check(ssh_session session, enum ssh_keytypes_e srv
 
     if ((srv_pubkey_type != SSH_KEYTYPE_UNKNOWN) && (srv_pubkey_type != SSH_KEYTYPE_RSA1)) {
         if (srv_pubkey_type == SSH_KEYTYPE_DSS) {
-            /* TODO else branch? */
             ret = sshauth_hostkey_hash_dnssec_check(hostname, hash_sha1, 2, 1);
         } else if (srv_pubkey_type == SSH_KEYTYPE_RSA) {
             ret = sshauth_hostkey_hash_dnssec_check(hostname, hash_sha1, 1, 1);
         } else if (srv_pubkey_type == SSH_KEYTYPE_ECDSA) {
             ret = sshauth_hostkey_hash_dnssec_check(hostname, hash_sha1, 3, 1);
+        } else {
+            /* other key types not supported */
+            ret = 1;
         }
 
         /* DNSSEC SSHFP check successful, that's enough */
@@ -515,10 +517,7 @@ sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
     FILE *in = NULL, *out = NULL;
 
     buf = malloc(buflen * sizeof *buf);
-    if (!buf) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!buf, NULL);
 
     if (!(in = nc_open_in(0, &oldterm))) {
         goto error;
@@ -538,10 +537,7 @@ sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
         if (len >= buflen - 1) {
             buflen *= 2;
             buf = nc_realloc(buf, buflen * sizeof *buf);
-            if (!buf) {
-                ERRMEM;
-                goto error;
-            }
+            NC_CHECK_ERRMEM_GOTO(!buf,; , error);
         }
         buf[len++] = (char)c;
     }
@@ -570,10 +566,7 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
     FILE *in = NULL, *out = NULL;
 
     buf = malloc(buflen * sizeof *buf);
-    if (!buf) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!buf, NULL);
 
     if (!(in = nc_open_in(echo, &oldterm))) {
         goto error;
@@ -601,10 +594,7 @@ sshauth_interactive(const char *auth_name, const char *instruction, const char *
         if (cur_len >= buflen - 1) {
             buflen *= 2;
             buf = nc_realloc(buf, buflen * sizeof *buf);
-            if (!buf) {
-                ERRMEM;
-                goto error;
-            }
+            NC_CHECK_ERRMEM_GOTO(!buf,; , error);
         }
         buf[cur_len++] = (char)c;
     }
@@ -633,10 +623,7 @@ sshauth_privkey_passphrase(const char *privkey_path, void *UNUSED(priv))
     FILE *in = NULL, *out = NULL;
 
     buf = malloc(buflen * sizeof *buf);
-    if (!buf) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!buf, NULL);
 
     if (!(in = nc_open_in(0, &oldterm))) {
         goto error;
@@ -656,10 +643,7 @@ sshauth_privkey_passphrase(const char *privkey_path, void *UNUSED(priv))
         if (len >= buflen - 1) {
             buflen *= 2;
             buf = nc_realloc(buf, buflen * sizeof *buf);
-            if (!buf) {
-                ERRMEM;
-                goto error;
-            }
+            NC_CHECK_ERRMEM_GOTO(!buf,; , error);
         }
         buf[len++] = (char)c;
     }
@@ -689,10 +673,7 @@ nc_client_ssh_set_knownhosts_path(const char *path)
     }
 
     ssh_opts.knownhosts_path = strdup(path);
-    if (!ssh_opts.knownhosts_path) {
-        ERRMEM;
-        return 1;
-    }
+    NC_CHECK_ERRMEM_RET(!ssh_opts.knownhosts_path, 1);
 
     return 0;
 }
@@ -897,18 +878,12 @@ _nc_client_ssh_add_keypair(const char *pub_key, const char *priv_key, struct nc_
     /* add the keys */
     ++opts->key_count;
     opts->keys = nc_realloc(opts->keys, opts->key_count * sizeof *opts->keys);
-    if (!opts->keys) {
-        ERRMEM;
-        return -1;
-    }
+    NC_CHECK_ERRMEM_RET(!opts->keys, -1);
     opts->keys[opts->key_count - 1].pubkey_path = strdup(pub_key);
     opts->keys[opts->key_count - 1].privkey_path = strdup(priv_key);
     opts->keys[opts->key_count - 1].privkey_crypt = 0;
 
-    if (!opts->keys[opts->key_count - 1].pubkey_path || !opts->keys[opts->key_count - 1].privkey_path) {
-        ERRMEM;
-        return -1;
-    }
+    NC_CHECK_ERRMEM_RET(!opts->keys[opts->key_count - 1].pubkey_path || !opts->keys[opts->key_count - 1].privkey_path, -1);
 
     /* check encryption */
     if ((key = fopen(priv_key, "r"))) {
@@ -962,10 +937,7 @@ _nc_client_ssh_del_keypair(int idx, struct nc_client_ssh_opts *opts)
     }
     if (opts->key_count) {
         opts->keys = nc_realloc(opts->keys, opts->key_count * sizeof *opts->keys);
-        if (!opts->keys) {
-            ERRMEM;
-            return -1;
-        }
+        NC_CHECK_ERRMEM_RET(!opts->keys, -1);
     } else {
         free(opts->keys);
         opts->keys = NULL;
@@ -1101,10 +1073,7 @@ _nc_client_ssh_set_username(const char *username, struct nc_client_ssh_opts *opt
     }
     if (username) {
         opts->username = strdup(username);
-        if (!opts->username) {
-            ERRMEM;
-            return -1;
-        }
+        NC_CHECK_ERRMEM_RET(!opts->username, -1);
     } else {
         opts->username = NULL;
     }
@@ -1519,10 +1488,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
 
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
-    if (!session) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!session, NULL);
     session->status = NC_STATUS_STARTING;
     session->ti_type = NC_TI_LIBSSH;
     session->ti.libssh.session = ssh_session;
@@ -1538,10 +1504,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
 
         /* remember host */
         host = strdup("localhost");
-        if (!host) {
-            ERRMEM;
-            goto fail;
-        }
+        NC_CHECK_ERRMEM_GOTO(!host,; , fail);
         ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
 
         /* create and connect socket */
@@ -1578,10 +1541,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
             } else {
                 username = strdup(opts->username);
             }
-            if (!username) {
-                ERRMEM;
-                goto fail;
-            }
+            NC_CHECK_ERRMEM_GOTO(!username,; , fail);
             ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
         }
 
@@ -1671,24 +1631,15 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     if (ssh_opts.knownhosts_path) {
         /* known_hosts file path was set so use it */
         known_hosts_path = strdup(ssh_opts.knownhosts_path);
-        if (!known_hosts_path) {
-            ERRMEM;
-            goto fail;
-        }
+        NC_CHECK_ERRMEM_GOTO(!known_hosts_path,; , fail);
     } else if (pw) {
         /* path not set explicitly, but current user's username found in /etc/passwd, so create the path */
-        if (asprintf(&known_hosts_path, "%s/.ssh/known_hosts", pw->pw_dir) == -1) {
-            ERRMEM;
-            goto fail;
-        }
+        NC_CHECK_ERRMEM_GOTO(asprintf(&known_hosts_path, "%s/.ssh/known_hosts", pw->pw_dir) == -1,; , fail);
     }
 
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
-    if (!session) {
-        ERRMEM;
-        goto fail;
-    }
+    NC_CHECK_ERRMEM_GOTO(!session,; , fail);
     session->status = NC_STATUS_STARTING;
 
     /* transport-specific data */
@@ -1773,10 +1724,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
 
     /* prepare session structure */
     new_session = nc_new_session(NC_CLIENT, 1);
-    if (!new_session) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!new_session, NULL);
     new_session->status = NC_STATUS_STARTING;
 
     /* share some parameters including the IO lock (we are using one socket for both sessions) */

@@ -279,10 +279,7 @@ nc_client_set_schema_searchpath(const char *path)
 
     if (path) {
         client_opts.schema_searchpath = strdup(path);
-        if (!client_opts.schema_searchpath) {
-            ERRMEM;
-            return 1;
-        }
+        NC_CHECK_ERRMEM_RET(!client_opts.schema_searchpath, 1);
     } else {
         client_opts.schema_searchpath = NULL;
     }
@@ -920,11 +917,7 @@ build_module_info_yl(struct nc_session *session, int get_data_sup, int xpath_sup
     }
 
     (*result) = calloc(modules->count + 1, sizeof **result);
-    if (!(*result)) {
-        ERRMEM;
-        ret = -1;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(!(*result), ret = -1, cleanup);
 
     for (u = 0; u < modules->count; ++u) {
         submodules_count = 0;
@@ -947,13 +940,7 @@ build_module_info_yl(struct nc_session *session, int get_data_sup, int xpath_sup
                 (*result)[u].implemented = !strcmp(lyd_get_value(iter), "implement");
             } else if (!strcmp(iter->schema->name, "feature")) {
                 (*result)[u].features = nc_realloc((*result)[u].features, (feature_count + 2) * sizeof *(*result)[u].features);
-                if (!(*result)[u].features) {
-                    ERRMEM;
-                    free_module_info(*result);
-                    *result = NULL;
-                    ret = -1;
-                    goto cleanup;
-                }
+                NC_CHECK_ERRMEM_GOTO(!(*result)[u].features, free_module_info(*result); *result = NULL; ret = -1, cleanup);
                 (*result)[u].features[feature_count] = strdup(lyd_get_value(iter));
                 (*result)[u].features[feature_count + 1] = NULL;
                 ++feature_count;
@@ -964,25 +951,18 @@ build_module_info_yl(struct nc_session *session, int get_data_sup, int xpath_sup
 
         if (submodules_count) {
             (*result)[u].submodules = calloc(submodules_count + 1, sizeof *(*result)[u].submodules);
-            if (!(*result)[u].submodules) {
-                ERRMEM;
-                free_module_info(*result);
-                *result = NULL;
-                ret = -1;
-                goto cleanup;
-            } else {
-                v = 0;
-                LY_LIST_FOR(lyd_child(modules->dnodes[u]), iter) {
-                    mod = modules->dnodes[u]->schema->module;
-                    if ((mod == iter->schema->module) && !strcmp(iter->schema->name, "submodule")) {
-                        LY_LIST_FOR(lyd_child(iter), child) {
-                            if (mod != child->schema->module) {
-                                continue;
-                            } else if (!strcmp(child->schema->name, "name")) {
-                                (*result)[u].submodules[v].name = strdup(lyd_get_value(child));
-                            } else if (!strcmp(child->schema->name, "revision")) {
-                                (*result)[u].submodules[v].revision = strdup(lyd_get_value(child));
-                            }
+            NC_CHECK_ERRMEM_GOTO(!(*result)[u].submodules, free_module_info(*result); *result = NULL; ret = -1, cleanup);
+            v = 0;
+            LY_LIST_FOR(lyd_child(modules->dnodes[u]), iter) {
+                mod = modules->dnodes[u]->schema->module;
+                if ((mod == iter->schema->module) && !strcmp(iter->schema->name, "submodule")) {
+                    LY_LIST_FOR(lyd_child(iter), child) {
+                        if (mod != child->schema->module) {
+                            continue;
+                        } else if (!strcmp(child->schema->name, "name")) {
+                            (*result)[u].submodules[v].name = strdup(lyd_get_value(child));
+                        } else if (!strcmp(child->schema->name, "revision")) {
+                            (*result)[u].submodules[v].revision = strdup(lyd_get_value(child));
                         }
                     }
                 }
@@ -1012,10 +992,7 @@ build_module_info_cpblts(char **cpblts, struct module_info **result)
 
     for (u = 0; cpblts[u]; ++u) {}
     (*result) = calloc(u + 1, sizeof **result);
-    if (!(*result)) {
-        ERRMEM;
-        return -1;
-    }
+    NC_CHECK_ERRMEM_RET(!(*result), -1);
 
     for (u = v = 0; cpblts[u]; ++u) {
         module_cpblt = strstr(cpblts[u], "module=");
@@ -1394,10 +1371,7 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
 
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
-    if (!session) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!session, NULL);
     session->status = NC_STATUS_STARTING;
 
     /* transport specific data */
@@ -1462,10 +1436,7 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
 
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
-    if (!session) {
-        ERRMEM;
-        goto fail;
-    }
+    NC_CHECK_ERRMEM_GOTO(!session,; , fail);
     session->status = NC_STATUS_STARTING;
 
     /* transport specific data */
@@ -1487,10 +1458,7 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
     }
     username = strdup(pw->pw_name);
     free(buf);
-    if (!username) {
-        ERRMEM;
-        goto fail;
-    }
+    NC_CHECK_ERRMEM_GOTO(!username,; , fail);
     session->username = username;
 
     /* NETCONF handshake */
@@ -1532,10 +1500,7 @@ nc_saddr2str(const struct sockaddr *saddr, char **str_ip, uint16_t *port)
 
     str_len = (saddr->sa_family == AF_INET) ? INET_ADDRSTRLEN : INET6_ADDRSTRLEN;
     *str_ip = malloc(str_len);
-    if (!*str_ip) {
-        ERRMEM;
-        return -1;
-    }
+    NC_CHECK_ERRMEM_RET(!(*str_ip), -1);
 
     if (saddr->sa_family == AF_INET) {
         addr = &((struct sockaddr_in *)saddr)->sin_addr;
@@ -2110,11 +2075,7 @@ recv_msg(struct nc_session *session, int timeout, NC_MSG_TYPE expected, struct l
             cont_ptr = &((*cont_ptr)->next);
         }
         *cont_ptr = malloc(sizeof **cont_ptr);
-        if (!*cont_ptr) {
-            ERRMEM;
-            ret = NC_MSG_ERROR;
-            goto cleanup_unlock;
-        }
+        NC_CHECK_ERRMEM_GOTO(!*cont_ptr, ret = NC_MSG_ERROR, cleanup_unlock);
         (*cont_ptr)->msg = msg;
         msg = NULL;
         (*cont_ptr)->type = ret;
@@ -2479,10 +2440,8 @@ nc_recv_notif_dispatch_data(struct nc_session *session, nc_notif_dispatch_clb no
     }
 
     ntarg = malloc(sizeof *ntarg);
-    if (!ntarg) {
-        ERRMEM;
-        return -1;
-    }
+    NC_CHECK_ERRMEM_RET(!ntarg, -1);
+
     ntarg->session = session;
     ntarg->notif_clb = notif_clb;
     ntarg->user_data = user_data;

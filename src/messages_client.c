@@ -53,10 +53,7 @@ nc_rpc_act_generic(const struct lyd_node *data, NC_PARAMTYPE paramtype)
     }
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_ACT_GENERIC;
     rpc->has_data = 1;
@@ -81,10 +78,7 @@ nc_rpc_act_generic_xml(const char *xml_str, NC_PARAMTYPE paramtype)
     NC_CHECK_ARG_RET(NULL, xml_str, NULL);
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_ACT_GENERIC;
     rpc->has_data = 0;
@@ -111,10 +105,7 @@ nc_rpc_getconfig(NC_DATASTORE source, const char *filter, NC_WD_MODE wd_mode, NC
     }
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_GETCONFIG;
     rpc->source = source;
@@ -143,10 +134,7 @@ nc_rpc_edit(NC_DATASTORE target, NC_RPC_EDIT_DFLTOP default_op, NC_RPC_EDIT_TEST
     }
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_EDIT;
     rpc->target = target;
@@ -177,10 +165,7 @@ nc_rpc_copy(NC_DATASTORE target, const char *url_trg, NC_DATASTORE source, const
     }
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_COPY;
     rpc->target = target;
@@ -209,10 +194,7 @@ nc_rpc_delete(NC_DATASTORE target, const char *url, NC_PARAMTYPE paramtype)
     NC_CHECK_ARG_RET(NULL, target, NULL);
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_DELETE;
     rpc->target = target;
@@ -234,10 +216,7 @@ nc_rpc_lock(NC_DATASTORE target)
     NC_CHECK_ARG_RET(NULL, target, NULL);
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_LOCK;
     rpc->target = target;
@@ -253,10 +232,7 @@ nc_rpc_unlock(NC_DATASTORE target)
     NC_CHECK_ARG_RET(NULL, target, NULL);
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_UNLOCK;
     rpc->target = target;
@@ -275,10 +251,7 @@ nc_rpc_get(const char *filter, NC_WD_MODE wd_mode, NC_PARAMTYPE paramtype)
     }
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_GET;
     if (filter && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
@@ -300,10 +273,7 @@ nc_rpc_kill(uint32_t session_id)
     NC_CHECK_ARG_RET(NULL, session_id, NULL);
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_KILL;
     rpc->sid = session_id;
@@ -318,10 +288,7 @@ nc_rpc_commit(int confirmed, uint32_t confirm_timeout, const char *persist, cons
     struct nc_rpc_commit *rpc;
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_COMMIT;
     rpc->confirmed = confirmed;
@@ -347,10 +314,7 @@ nc_rpc_discard(void)
     struct nc_rpc *rpc;
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_DISCARD;
 
@@ -363,10 +327,7 @@ nc_rpc_cancel(const char *persist_id, NC_PARAMTYPE paramtype)
     struct nc_rpc_cancel *rpc;
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_CANCEL;
     if (persist_id && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
@@ -392,10 +353,7 @@ nc_rpc_validate(NC_DATASTORE source, const char *url_or_config, NC_PARAMTYPE par
     }
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_VALIDATE;
     rpc->source = source;
@@ -417,10 +375,7 @@ nc_rpc_getschema(const char *identifier, const char *version, const char *format
     NC_CHECK_ARG_RET(NULL, identifier, NULL);
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_GETSCHEMA;
     if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
@@ -455,10 +410,7 @@ nc_rpc_subscribe(const char *stream_name, const char *filter, const char *start_
     }
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_SUBSCRIBE;
     if (stream_name && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
@@ -502,10 +454,7 @@ nc_rpc_getdata(const char *datastore, const char *filter, const char *config_fil
     }
 
     rpc = calloc(1, sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
     rpc->free = (paramtype == NC_PARAMTYPE_CONST ? 0 : 1);
 
     rpc->type = NC_RPC_GETDATA;
@@ -526,16 +475,10 @@ nc_rpc_getdata(const char *datastore, const char *filter, const char *config_fil
     }
     if (origin_filter && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
         rpc->origin_filter = malloc(origin_filter_count * sizeof *rpc->origin_filter);
-        if (!rpc->origin_filter) {
-            ERRMEM;
-            goto error;
-        }
+        NC_CHECK_ERRMEM_GOTO(!rpc->origin_filter,; , error);
         for (i = 0; i < origin_filter_count; ++i) {
             rpc->origin_filter[i] = strdup(origin_filter[i]);
-            if (!rpc->origin_filter[i]) {
-                ERRMEM;
-                goto error;
-            }
+            NC_CHECK_ERRMEM_GOTO(!rpc->origin_filter[i],; , error);
             ++rpc->origin_filter_count;
         }
     } else {
@@ -567,10 +510,7 @@ nc_rpc_editdata(const char *datastore, NC_RPC_EDIT_DFLTOP default_op, const char
     }
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_EDITDATA;
     if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
@@ -604,10 +544,7 @@ nc_rpc_establishsub(const char *filter, const char *stream_name, const char *sta
     }
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_ESTABLISHSUB;
     if (filter && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
@@ -654,10 +591,7 @@ nc_rpc_modifysub(uint32_t id, const char *filter, const char *stop_time, NC_PARA
     }
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_MODIFYSUB;
     rpc->id = id;
@@ -684,10 +618,7 @@ nc_rpc_deletesub(uint32_t id)
     NC_CHECK_ARG_RET(NULL, id, NULL);
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_DELETESUB;
     rpc->id = id;
@@ -703,10 +634,7 @@ nc_rpc_killsub(uint32_t id)
     NC_CHECK_ARG_RET(NULL, id, NULL);
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_KILLSUB;
     rpc->id = id;
@@ -729,10 +657,7 @@ nc_rpc_establishpush_periodic(const char *datastore, const char *filter, const c
     }
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_ESTABLISHPUSH;
     if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
@@ -783,10 +708,7 @@ nc_rpc_establishpush_onchange(const char *datastore, const char *filter, const c
     }
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_ESTABLISHPUSH;
     if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
@@ -842,10 +764,7 @@ nc_rpc_modifypush_periodic(uint32_t id, const char *datastore, const char *filte
     }
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_MODIFYPUSH;
     rpc->id = id;
@@ -891,10 +810,7 @@ nc_rpc_modifypush_onchange(uint32_t id, const char *datastore, const char *filte
     }
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_MODIFYPUSH;
     rpc->id = id;
@@ -928,10 +844,7 @@ nc_rpc_resyncsub(uint32_t id)
     NC_CHECK_ARG_RET(NULL, id, NULL);
 
     rpc = malloc(sizeof *rpc);
-    if (!rpc) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!rpc, NULL);
 
     rpc->type = NC_RPC_RESYNCSUB;
     rpc->id = id;

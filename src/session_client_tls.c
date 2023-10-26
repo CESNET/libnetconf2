@@ -168,17 +168,11 @@ _nc_client_tls_set_cert_key_paths(const char *client_cert, const char *client_ke
     free(opts->key_path);
 
     opts->cert_path = strdup(client_cert);
-    if (!opts->cert_path) {
-        ERRMEM;
-        return -1;
-    }
+    NC_CHECK_ERRMEM_RET(!opts->cert_path, -1);
 
     if (client_key) {
         opts->key_path = strdup(client_key);
-        if (!opts->key_path) {
-            ERRMEM;
-            return -1;
-        }
+        NC_CHECK_ERRMEM_RET(!opts->key_path, -1);
     } else {
         opts->key_path = NULL;
     }
@@ -241,20 +235,14 @@ _nc_client_tls_set_trusted_ca_paths(const char *ca_file, const char *ca_dir, str
 
     if (ca_file) {
         opts->ca_file = strdup(ca_file);
-        if (!opts->ca_file) {
-            ERRMEM;
-            return -1;
-        }
+        NC_CHECK_ERRMEM_RET(!opts->ca_file, -1);
     } else {
         opts->ca_file = NULL;
     }
 
     if (ca_dir) {
         opts->ca_dir = strdup(ca_dir);
-        if (!opts->ca_dir) {
-            ERRMEM;
-            return -1;
-        }
+        NC_CHECK_ERRMEM_RET(!opts->ca_dir, -1);
     } else {
         opts->ca_dir = NULL;
     }
@@ -317,20 +305,14 @@ _nc_client_tls_set_crl_paths(const char *crl_file, const char *crl_dir, struct n
 
     if (crl_file) {
         opts->crl_file = strdup(crl_file);
-        if (!opts->crl_file) {
-            ERRMEM;
-            return -1;
-        }
+        NC_CHECK_ERRMEM_RET(!opts->crl_file, -1);
     } else {
         opts->crl_file = NULL;
     }
 
     if (crl_dir) {
         opts->crl_dir = strdup(crl_dir);
-        if (!opts->crl_dir) {
-            ERRMEM;
-            return -1;
-        }
+        NC_CHECK_ERRMEM_RET(!opts->crl_dir, -1);
     } else {
         opts->crl_dir = NULL;
     }
@@ -567,10 +549,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
 
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
-    if (!session) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!session, NULL);
     session->status = NC_STATUS_STARTING;
 
     /* fill the session */
@@ -649,10 +628,7 @@ nc_connect_libssl(SSL *tls, struct ly_ctx *ctx)
 
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
-    if (!session) {
-        ERRMEM;
-        return NULL;
-    }
+    NC_CHECK_ERRMEM_RET(!session, NULL);
     session->status = NC_STATUS_STARTING;
     session->ti_type = NC_TI_OPENSSL;
     session->ti.tls = tls;

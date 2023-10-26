@@ -136,10 +136,7 @@ nc_base64_to_bin(const char *base64, char **bin)
     nl_count = strlen(base64) / 64;
     remainder = strlen(base64) - 64 * nl_count;
     b64 = calloc(strlen(base64) + nl_count + 1, 1);
-    if (!b64) {
-        ERRMEM;
-        return -1;
-    }
+    NC_CHECK_ERRMEM_RET(!b64, -1);
 
     for (i = 0; i < nl_count; i++) {
         /* copy 64 bytes and add a NL */
@@ -1080,10 +1077,7 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
     NC_CHECK_ARG_RET(NULL, ctx, NULL);
 
     cpblts = malloc(size * sizeof *cpblts);
-    if (!cpblts) {
-        ERRMEM;
-        goto error;
-    }
+    NC_CHECK_ERRMEM_GOTO(!cpblts,; , error);
     cpblts[0] = strdup("urn:ietf:params:netconf:base:1.0");
     cpblts[1] = strdup("urn:ietf:params:netconf:base:1.1");
     count = 2;
@@ -1185,16 +1179,10 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
             /* get content-id */
             if (server_opts.content_id_clb) {
                 yl_content_id = server_opts.content_id_clb(server_opts.content_id_data);
-                if (!yl_content_id) {
-                    ERRMEM;
-                    goto error;
-                }
+                NC_CHECK_ERRMEM_GOTO(!yl_content_id,; , error);
             } else {
                 yl_content_id = malloc(11);
-                if (!yl_content_id) {
-                    ERRMEM;
-                    goto error;
-                }
+                NC_CHECK_ERRMEM_GOTO(!yl_content_id,; , error);
                 sprintf(yl_content_id, "%u", ly_ctx_get_change_count(ctx));
             }
 
@@ -1301,10 +1289,7 @@ parse_cpblts(struct lyd_node *capabilities, char ***list)
         }
         /* last item remains NULL */
         *list = calloc(i + 1, sizeof **list);
-        if (!*list) {
-            ERRMEM;
-            return -1;
-        }
+        NC_CHECK_ERRMEM_RET(!*list, -1);
         i = 0;
     }
 
@@ -1334,10 +1319,7 @@ parse_cpblts(struct lyd_node *capabilities, char ***list)
         /* store capabilities */
         if (list) {
             (*list)[i] = strndup(cpb_start, cpb_end - cpb_start);
-            if (!(*list)[i]) {
-                ERRMEM;
-                return -1;
-            }
+            NC_CHECK_ERRMEM_RET(!(*list)[i], -1);
             i++;
         }
     }
@@ -1360,10 +1342,7 @@ nc_send_hello_io(struct nc_session *session)
     if (session->side == NC_CLIENT) {
         /* client side hello - send only NETCONF base capabilities */
         cpblts = malloc(3 * sizeof *cpblts);
-        if (!cpblts) {
-            ERRMEM;
-            return NC_MSG_ERROR;
-        }
+        NC_CHECK_ERRMEM_RET(!cpblts, NC_MSG_ERROR);
         cpblts[0] = strdup("urn:ietf:params:netconf:base:1.0");
         cpblts[1] = strdup("urn:ietf:params:netconf:base:1.1");
         cpblts[2] = NULL;

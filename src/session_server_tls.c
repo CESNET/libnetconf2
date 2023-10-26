@@ -203,10 +203,7 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
             *strchr(common_name, '/') = '\0';
         }
         *username = strdup(common_name);
-        if (!*username) {
-            ERRMEM;
-            return 1;
-        }
+        NC_CHECK_ERRMEM_RET(!*username, 1);
         free(subject);
     } else {
         /* retrieve subjectAltName's rfc822Name (email), dNSName and iPAddress values */
@@ -224,10 +221,7 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
             if (((map_type == NC_TLS_CTN_SAN_ANY) || (map_type == NC_TLS_CTN_SAN_RFC822_NAME)) &&
                     (san_name->type == GEN_EMAIL)) {
                 *username = strdup((char *)ASN1_STRING_get0_data(san_name->d.rfc822Name));
-                if (!*username) {
-                    ERRMEM;
-                    return 1;
-                }
+                NC_CHECK_ERRMEM_RET(!*username, 1);
                 break;
             }
 
@@ -235,10 +229,7 @@ nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type
             if (((map_type == NC_TLS_CTN_SAN_ANY) || (map_type == NC_TLS_CTN_SAN_DNS_NAME)) &&
                     (san_name->type == GEN_DNS)) {
                 *username = strdup((char *)ASN1_STRING_get0_data(san_name->d.dNSName));
-                if (!*username) {
-                    ERRMEM;
-                    return 1;
-                }
+                NC_CHECK_ERRMEM_RET(!*username, 1);
                 break;
             }
 
@@ -300,17 +291,15 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
 {
     char *digest_md5 = NULL, *digest_sha1 = NULL, *digest_sha224 = NULL;
     char *digest_sha256 = NULL, *digest_sha384 = NULL, *digest_sha512 = NULL;
-    unsigned char *buf = malloc(64);
+    unsigned char *buf;
     unsigned int buf_len = 64;
     int ret = 0;
     struct nc_ctn *ctn;
     NC_TLS_CTN_MAPTYPE map_type;
     char *username = NULL;
 
-    if (!buf) {
-        ERRMEM;
-        return -1;
-    }
+    buf = malloc(buf_len);
+    NC_CHECK_ERRMEM_RET(!buf, -1);
 
     if (!session || !cert) {
         free(buf);
@@ -456,11 +445,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
             if (map_type == NC_TLS_CTN_SPECIFIED) {
                 /* specified -> get username from the ctn entry */
                 session->username = strdup(ctn->name);
-                if (!session->username) {
-                    ERRMEM;
-                    ret = -1;
-                    goto cleanup;
-                }
+                NC_CHECK_ERRMEM_GOTO(!session->username, ret = -1, cleanup);
             } else {
                 /* try to get the username from the cert with this ctn's map type */
                 ret = nc_tls_ctn_get_username_from_cert(session->opts.server.client_cert, map_type, &username);
@@ -512,11 +497,7 @@ nc_server_tls_check_crl(X509_STORE *crl_store, X509_STORE_CTX *x509_ctx, X509 *c
     char *cp;
 
     store_ctx = X509_STORE_CTX_new();
-    if (!store_ctx) {
-        ERRMEM;
-        ret = -1;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(!store_ctx, ret = -1, cleanup);
 
     /* init store context */
     ret = X509_STORE_CTX_init(store_ctx, crl_store, NULL, NULL);
@@ -1126,10 +1107,7 @@ nc_server_tls_curl_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
     data = (struct nc_curl_data *)userdata;
 
     data->data = nc_realloc(data->data, data->size + size);
-    if (!data->data) {
-        ERRMEM;
-        return 0;
-    }
+    NC_CHECK_ERRMEM_RET(!data->data, 0);
 
     memcpy(&data->data[data->size], ptr, size);
     data->size += size;
@@ -1361,10 +1339,7 @@ nc_tls_store_set_crl(struct nc_session *session, struct nc_server_tls_opts *opts
     if (!opts->crl_store) {
         /* first call on this endpoint */
         opts->crl_store = X509_STORE_new();
-        if (!opts->crl_store) {
-            ERRMEM;
-            goto fail;
-        }
+        NC_CHECK_ERRMEM_GOTO(!opts->crl_store,; , fail);
     }
 
     if (opts->crl_path) {

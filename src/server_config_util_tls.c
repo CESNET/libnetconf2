@@ -111,13 +111,9 @@ nc_server_config_add_tls_server_cert(const struct ly_ctx *ctx, const char *endpt
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, privkey_path, cert_path, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
-            "tls/tls-server-parameters/server-identity/certificate", endpt_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+            "tls/tls-server-parameters/server-identity/certificate", endpt_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_tls_server_cert(ctx, path, privkey_path, pubkey_path,
             cert_path, config);
@@ -149,14 +145,10 @@ nc_server_config_add_ch_tls_server_cert(const struct ly_ctx *ctx, const char *cl
 
     NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, privkey_path, cert_path, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/"
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/"
             "netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tls-server-parameters/server-identity/"
-            "certificate", client_name, endpt_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+            "certificate", client_name, endpt_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_tls_server_cert(ctx, path, privkey_path, pubkey_path,
             cert_path, config);
@@ -218,13 +210,9 @@ nc_server_config_add_tls_keystore_ref(const struct ly_ctx *ctx, const char *endp
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, asym_key_ref, cert_ref, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
-            "tls/tls-server-parameters/server-identity/certificate", endpt_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/"
+            "tls/tls-server-parameters/server-identity/certificate", endpt_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_tls_keystore_ref(ctx, path, asym_key_ref, cert_ref, config);
     if (ret) {
@@ -254,13 +242,9 @@ nc_server_config_add_ch_tls_keystore_ref(const struct ly_ctx *ctx, const char *c
 
     NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, asym_key_ref, cert_ref, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
-            "endpoint[name='%s']/tls/tls-server-parameters/server-identity/certificate", client_name, endpt_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
+            "endpoint[name='%s']/tls/tls-server-parameters/server-identity/certificate", client_name, endpt_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_tls_keystore_ref(ctx, path, asym_key_ref, cert_ref, config);
     if (ret) {
@@ -317,13 +301,9 @@ nc_server_config_add_tls_client_cert(const struct ly_ctx *ctx, const char *endpt
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, cert_name, cert_path, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
-            "client-authentication/ee-certs/inline-definition/certificate[name='%s']", endpt_name, cert_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/ee-certs/inline-definition/certificate[name='%s']", endpt_name, cert_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_tls_client_cert(ctx, path, cert_path, config);
     if (ret) {
@@ -368,14 +348,10 @@ nc_server_config_add_ch_tls_client_cert(const struct ly_ctx *ctx, const char *cl
 
     NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, cert_name, cert_path, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
             "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication/ee-certs/"
-            "inline-definition/certificate[name='%s']", client_name, endpt_name, cert_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+            "inline-definition/certificate[name='%s']", client_name, endpt_name, cert_name) == -1;
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_tls_client_cert(ctx, path, cert_path, config);
     if (ret) {
@@ -494,13 +470,9 @@ nc_server_config_add_tls_ca_cert(const struct ly_ctx *ctx, const char *endpt_nam
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, cert_name, cert_path, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
-            "client-authentication/ca-certs/inline-definition/certificate[name='%s']", endpt_name, cert_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
+            "client-authentication/ca-certs/inline-definition/certificate[name='%s']", endpt_name, cert_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_tls_client_cert(ctx, path, cert_path, config);
     if (ret) {
@@ -545,14 +517,10 @@ nc_server_config_add_ch_tls_ca_cert(const struct ly_ctx *ctx, const char *client
 
     NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, cert_name, cert_path, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
             "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication/ca-certs/"
-            "inline-definition/certificate[name='%s']", client_name, endpt_name, cert_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+            "inline-definition/certificate[name='%s']", client_name, endpt_name, cert_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_tls_client_cert(ctx, path, cert_path, config);
     if (ret) {
@@ -732,13 +700,9 @@ nc_server_config_add_tls_ctn(const struct ly_ctx *ctx, const char *endpt_name, u
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, id, name, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/netconf-server-parameters/"
-            "client-identity-mappings/cert-to-name[id='%u']", endpt_name, id) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/netconf-server-parameters/"
+            "client-identity-mappings/cert-to-name[id='%u']", endpt_name, id);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_tls_ctn(ctx, path, fingerprint, map_type, name, config);
     if (ret) {
@@ -774,14 +738,10 @@ nc_server_config_add_ch_tls_ctn(const struct ly_ctx *ctx, const char *client_nam
 
     NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, id, name, config, 1);
 
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
             "endpoints/endpoint[name='%s']/tls/netconf-server-parameters/client-identity-mappings/"
-            "cert-to-name[id='%u']", client_name, endpt_name, id) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+            "cert-to-name[id='%u']", client_name, endpt_name, id);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_tls_ctn(ctx, path, fingerprint, map_type, name, config);
     if (ret) {

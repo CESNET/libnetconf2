@@ -48,11 +48,7 @@ nc_server_config_create(const struct ly_ctx *ctx, struct lyd_node **tree, const 
 
     /* create the path from the format */
     ret = vasprintf(&path, path_fmt, ap);
-    if (ret == -1) {
-        ERRMEM;
-        path = NULL;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(ret == -1, ret = 1; path = NULL, cleanup);
 
     /* create the nodes in the path */
     if (!*tree) {
@@ -94,11 +90,7 @@ nc_server_config_append(const struct ly_ctx *ctx, const char *parent_path, const
 
     /* create the path by appending child to the parent path */
     ret = asprintf(&path, "%s/%s", parent_path, child_name);
-    if (ret == -1) {
-        ERRMEM;
-        path = NULL;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(ret == -1, ret = 1; path = NULL, cleanup);
 
     /* create the nodes in the path */
     if (!*tree) {
@@ -142,11 +134,7 @@ nc_server_config_delete(struct lyd_node **tree, const char *path_fmt, ...)
 
     /* create the path from the format */
     ret = vasprintf(&path, path_fmt, ap);
-    if (ret == -1) {
-        ERRMEM;
-        path = NULL;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(ret == -1, ret = 1; path = NULL, cleanup);
 
     /* find the node we want to delete */
     ret = lyd_find_path(*tree, path, 0, &sub);
@@ -188,11 +176,7 @@ nc_server_config_check_delete(struct lyd_node **tree, const char *path_fmt, ...)
 
     /* create the path from the format */
     ret = vasprintf(&path, path_fmt, ap);
-    if (ret == -1) {
-        ERRMEM;
-        path = NULL;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(ret == -1, ret = 1; path = NULL, cleanup);
 
     /* find the node we want to delete */
     ret = lyd_find_path(*tree, path, 0, &sub);
@@ -253,20 +237,12 @@ nc_server_config_util_pubkey_bin_to_b64(const unsigned char *pub_bin, int bin_le
         /* bin len not divisible by 3, need to add 4 bytes for some padding so that the len is divisible by 4 */
         pub_b64 = malloc((bin_len / 3) * 4 + 4 + 1);
     }
-    if (!pub_b64) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(!pub_b64, ret = 1, cleanup);
 
     /* bin to b64 */
     b64_len = EVP_EncodeBlock((unsigned char *)pub_b64, pub_bin, bin_len);
     *pubkey = strndup(pub_b64, b64_len);
-    if (!*pubkey) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(!*pubkey, ret = 1, cleanup);
 
 cleanup:
     free(pub_b64);
@@ -285,10 +261,7 @@ nc_server_config_util_bn_to_bin(const BIGNUM *bn, unsigned char **bin, int *bin_
 
     /* prepare buffer for converting BN to binary */
     bin_tmp = calloc(BN_num_bytes(bn), sizeof *bin_tmp);
-    if (!bin_tmp) {
-        ERRMEM;
-        return 1;
-    }
+    NC_CHECK_ERRMEM_RET(!bin_tmp, 1);
 
     /* convert to binary */
     *bin_len = BN_bn2bin(bn, bin_tmp);
@@ -296,23 +269,13 @@ nc_server_config_util_bn_to_bin(const BIGNUM *bn, unsigned char **bin, int *bin_
     /* if the highest bit in the MSB is set a byte with the value 0 has to be prepended */
     if (bin_tmp[0] & 0x80) {
         *bin = malloc(*bin_len + 1);
-        if (!*bin) {
-            ERRMEM;
-            ret = 1;
-            goto cleanup;
-        }
-
+        NC_CHECK_ERRMEM_GOTO(!*bin, ret = 1, cleanup);
         (*bin)[0] = 0;
         memcpy(*bin + 1, bin_tmp, *bin_len);
         (*bin_len)++;
     } else {
         *bin = malloc(*bin_len);
-        if (!*bin) {
-            ERRMEM;
-            ret = 1;
-            goto cleanup;
-        }
-
+        NC_CHECK_ERRMEM_GOTO(!*bin, ret = 1, cleanup);
         memcpy(*bin, bin_tmp, *bin_len);
     }
 
@@ -358,11 +321,7 @@ nc_server_config_util_evp_pkey_to_ssh_pubkey(EVP_PKEY *pkey, char **pubkey)
          */
         bin_len = 4 + alg_name_len + 4 + e_len + 4 + n_len;
         bin = malloc(bin_len);
-        if (!bin) {
-            ERRMEM;
-            ret = 1;
-            goto cleanup;
-        }
+        NC_CHECK_ERRMEM_GOTO(!bin, ret = 1, cleanup);
 
         /* to network byte order (big endian) */
         alg_name_len_be = htonl(alg_name_len);
@@ -392,11 +351,7 @@ nc_server_config_util_evp_pkey_to_ssh_pubkey(EVP_PKEY *pkey, char **pubkey)
         }
         /* alloc mem for group + 1 for \0 */
         ec_group = malloc(ec_group_len + 1);
-        if (!ec_group) {
-            ERRMEM;
-            ret = 1;
-            goto cleanup;
-        }
+        NC_CHECK_ERRMEM_GOTO(!ec_group, ret = 1, cleanup);
         /* get the group */
         ret = EVP_PKEY_get_utf8_string_param(pkey, "group", ec_group, ec_group_len + 1, NULL);
         if (!ret) {
@@ -431,11 +386,7 @@ nc_server_config_util_evp_pkey_to_ssh_pubkey(EVP_PKEY *pkey, char **pubkey)
 
         /* prepare buffer for converting p to binary */
         p_bin = malloc(BN_num_bytes(p));
-        if (!p_bin) {
-            ERRMEM;
-            ret = 1;
-            goto cleanup;
-        }
+        NC_CHECK_ERRMEM_GOTO(!p_bin, ret = 1, cleanup);
         /* convert to binary */
         p_len = BN_bn2bin(p, p_bin);
 
@@ -446,11 +397,7 @@ nc_server_config_util_evp_pkey_to_ssh_pubkey(EVP_PKEY *pkey, char **pubkey)
          */
         bin_len = 4 + alg_name_len + 4 + curve_name_len + 4 + p_len;
         bin = malloc(bin_len);
-        if (!bin) {
-            ERRMEM;
-            ret = 1;
-            goto cleanup;
-        }
+        NC_CHECK_ERRMEM_GOTO(!bin, ret = 1, cleanup);
 
         /* to network byte order (big endian) */
         alg_name_len_be = htonl(alg_name_len);
@@ -534,11 +481,7 @@ nc_server_config_util_evp_pkey_to_spki_pubkey(EVP_PKEY *pkey, char **pubkey)
     /* copy the public key without the header and footer */
     *pubkey = strndup(pub_b64 + strlen(NC_SUBJECT_PUBKEY_INFO_HEADER),
             len - strlen(NC_SUBJECT_PUBKEY_INFO_HEADER) - strlen(NC_SUBJECT_PUBKEY_INFO_FOOTER));
-    if (!*pubkey) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(!*pubkey, ret = 1, cleanup);
 
 cleanup:
     BIO_free(bio);
@@ -589,11 +532,7 @@ nc_server_config_util_read_certificate(const char *cert_path, char **cert)
     }
 
     c = malloc(cert_len + 1);
-    if (!c) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(!c, ret = 1, cleanup);
 
     /* read the cert from bio */
     ret = BIO_read(bio, c, cert_len);
@@ -605,11 +544,7 @@ nc_server_config_util_read_certificate(const char *cert_path, char **cert)
 
     /* strip the cert of the header and footer */
     *cert = strdup(c + strlen(NC_PEM_CERTIFICATE_HEADER));
-    if (!*cert) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(!*cert, ret = 1, cleanup);
 
     (*cert)[strlen(*cert) - strlen(NC_PEM_CERTIFICATE_FOOTER)] = '\0';
 
@@ -659,11 +594,7 @@ nc_server_config_util_read_pubkey_ssh2(FILE *f, char **pubkey)
         }
 
         tmp = realloc(*pubkey, pubkey_len + read + 1);
-        if (!tmp) {
-            ERRMEM;
-            ret = 1;
-            goto cleanup;
-        }
+        NC_CHECK_ERRMEM_GOTO(!tmp, ret = 1, cleanup);
 
         *pubkey = tmp;
         memcpy(*pubkey + pubkey_len, buffer, read);
@@ -897,11 +828,7 @@ nc_server_config_util_get_privkey_openssl(const char *privkey_path, FILE *f_priv
     }
 
     *privkey = strndup(priv_b64, len);
-    if (!*privkey) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(!*privkey, ret = 1, cleanup);
 
 cleanup:
     /* priv_b64 is freed with BIO */
@@ -955,11 +882,7 @@ nc_server_config_util_get_privkey_libssh(const char *privkey_path, char **privke
     }
 
     *privkey = strndup(priv_b64, ret);
-    if (!*privkey) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(!*privkey, ret = 1, cleanup);
 
     /* ok */
     ret = 0;
@@ -1019,11 +942,7 @@ nc_server_config_util_get_privkey(const char *privkey_path, NC_PRIVKEY_FORMAT *p
 
     /* strip private key's header and footer */
     *privkey = strdup(priv + strlen(NC_PKCS8_PRIVKEY_HEADER));
-    if (!*privkey) {
-        ERRMEM;
-        ret = 1;
-        goto cleanup;
-    }
+    NC_CHECK_ERRMEM_GOTO(!*privkey, ret = 1, cleanup);
     (*privkey)[strlen(*privkey) - strlen(NC_PKCS8_PRIVKEY_FOOTER)] = '\0';
 
 cleanup:
@@ -1414,12 +1333,8 @@ nc_server_config_add_unix_socket(const struct ly_ctx *ctx, const char *endpt_nam
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, path, config, 1);
 
-    if (asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/libnetconf2-netconf-server:unix-socket", endpt_name) == -1) {
-        ERRMEM;
-        tree_path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+    ret = asprintf(&tree_path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/libnetconf2-netconf-server:unix-socket", endpt_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, tree_path = NULL; ret = 1, cleanup);
 
     /* path to unix socket */
     ret = nc_server_config_append(ctx, tree_path, "path", path, config);
@@ -1575,13 +1490,8 @@ nc_server_config_add_ch_reconnect_strategy(const struct ly_ctx *ctx, const char 
     NC_CHECK_ARG_RET(NULL, ctx, ch_client_name, config, 1);
 
     /* prepared the path */
-    if (asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/"
-            "netconf-client[name='%s']/reconnect-strategy", ch_client_name) == -1) {
-        ERRMEM;
-        path = NULL;
-        ret = 1;
-        goto cleanup;
-    }
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/reconnect-strategy", ch_client_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     if (start_with) {
         /* get string value from enum */

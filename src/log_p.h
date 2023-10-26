@@ -53,6 +53,9 @@ extern ATOMIC_T verbose_level;
 #define ERRINT ERR(NULL, "%s: internal error (%s:%d).", __func__, __FILE__, __LINE__)
 #define ERRARG(session, ARG) ERR(session, "Invalid argument %s (%s()).", #ARG, __func__)
 
+#define NC_CHECK_ERRMEM_RET(COND, RET) if ((COND)) {ERRMEM; return (RET);}
+#define NC_CHECK_ERRMEM_GOTO(COND, RET, GOTO) if ((COND)) {ERRMEM; RET; goto GOTO;}
+
 #define GETMACRO1(_1, NAME, ...) NAME
 #define GETMACRO2(_1, _2, NAME, ...) NAME
 #define GETMACRO3(_1, _2, _3, NAME, ...) NAME
