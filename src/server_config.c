@@ -3931,7 +3931,6 @@ nc_server_config_anchor_time(const struct lyd_node *node, NC_OPERATION op)
         ch_client->anchor_time = 0;
     }
 
-cleanup:
     /* UNLOCK */
     nc_ch_client_unlock(ch_client);
     return ret;
