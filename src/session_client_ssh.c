@@ -388,7 +388,7 @@ nc_client_ssh_auth_hostkey_check(const char *hostname, uint16_t port, ssh_sessio
     case SSH_KNOWN_HOSTS_CHANGED:
         if (knownhosts_mode == NC_SSH_KNOWNHOSTS_ACCEPT) {
             /* is the mode is set to accept, then accept any connection even if the remote key changed */
-            WRN(NULL, "Remote host key changed, but you have requested accept mode so the connection will not be terminated.");
+            WRN(NULL, "Remote host key changed!");
             break;
         } else {
             ERR(NULL, "Remote host key changed, the connection will be terminated!");
@@ -423,7 +423,7 @@ hostkey_not_known:
 
         if (knownhosts_mode == NC_SSH_KNOWNHOSTS_STRICT) {
             /* do not connect if the hostkey is not present in known_hosts file in this mode */
-            ERR(NULL, "No %s host key is known for [%s]:%hu and you have requested strict checking.\n", ssh_key_type_to_char(srv_pubkey_type), hostname, port);
+            ERR(NULL, "No %s host key is known for [%s]:%hu.\n", ssh_key_type_to_char(srv_pubkey_type), hostname, port);
             goto error;
         } else if ((knownhosts_mode == NC_SSH_KNOWNHOSTS_ACCEPT_NEW) || (knownhosts_mode == NC_SSH_KNOWNHOSTS_ACCEPT)) {
             /* add a new entry to the known_hosts file without prompting */
