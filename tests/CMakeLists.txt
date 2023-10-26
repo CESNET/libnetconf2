@@ -8,14 +8,13 @@ if(${SOURCE_FORMAT_ENABLED})
 endif()
 
 # list of all the tests that don't require SSH and TLS
-set(tests test_unix_socket test_client_thread test_fd_comm test_init_destroy_client test_init_destroy_server test_io test_thread_messages)
+set(tests test_unix_socket test_client_thread test_fd_comm test_init_destroy_client test_init_destroy_server
+        test_io test_thread_messages test_client_messages test_client_ssh test_client_tls)
 
 # only enable PAM tests if the version of PAM is greater than 1.4
 if(LIBPAM_HAVE_CONFDIR)
     list(APPEND tests test_auth)
 endif()
-
-# set(client_tests test_client test_client_messages)
 
 # add -Wl,--wrap flags
 set(test test_client_ssh)
@@ -55,31 +54,17 @@ foreach(test_name IN LISTS tests)
     add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
 endforeach()
 
-# foreach(test_name IN LISTS client_tests)
-#     add_executable(${test_name} $<TARGET_OBJECTS:testobj> ./client/${test_name}.c)
-#     target_link_libraries(${test_name} ${CMOCKA_LIBRARIES} ${LIBYANG_LIBRARIES} netconf2)
-#     target_include_directories(${test_name} PRIVATE ${CMOCKA_INCLUDE_DIR})
-#     set_target_properties(${test_name} PROPERTIES LINK_FLAGS "${${test_name}_wrap_link_flags}")
-#     add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
-# endforeach()
-
 if(ENABLE_VALGRIND_TESTS)
     foreach(test_name IN LISTS tests)
         add_test(${test_name}_valgrind valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1
             --suppressions=${PROJECT_SOURCE_DIR}/tests/library_valgrind.supp ${CMAKE_BINARY_DIR}/tests/${test_name})
     endforeach()
-
-    # foreach(test_name IN LISTS client_tests)
-    #     add_test(${test_name}_valgrind valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1
-    #         --suppressions=${PROJECT_SOURCE_DIR}/tests/library_valgrind.supp ${CMAKE_BINARY_DIR}/tests/${test_name})
-    # endforeach()
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/src ${PROJECT_BINARY_DIR})
 configure_file("${PROJECT_SOURCE_DIR}/tests/config.h.in" "${PROJECT_BINARY_DIR}/tests/config.h" ESCAPE_QUOTES @ONLY)
 
 if(LIBPAM_HAVE_CONFDIR)
-
     #compile PAM test module
     add_library(pam_netconf SHARED ${CMAKE_SOURCE_DIR}/tests/pam/pam_netconf.c)
     set_target_properties(pam_netconf PROPERTIES PREFIX "")
