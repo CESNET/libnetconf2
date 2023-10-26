@@ -6,7 +6,7 @@ The example server provides `ietf-yang-library` state data that are returned as 
 
 ### Server Configuration
 The server's default configuration can be found in the `config.json` file. The YANG data stored in this file define three endpoints - two for SSH and one for UNIX socket.
-You can modify this configuration in any way you like, but you need to make sure that it is valid.
+You can modify this configuration in any way you want, however, configuring the server may fail if the configuration is not valid.
 
 ## Example usage
 ### Server
@@ -25,7 +25,7 @@ After the server has been run, in another terminal instance, with the default co
 ```
 $ client -u /tmp/.ln2-unix-socket get "/ietf-yang-library:yang-library/module-set/module[name='ietf-netconf']"
 ```
-In this case, `-u` means that a connection to an UNIX socket will be attemped and a path to the socket needs to be specified, that is `/tmp/ln2-unix-socket` by default.
+In this case, `-u` means that a connection to an UNIX socket will be attempted and a path to the socket needs to be specified, that is `/tmp/ln2-unix-socket` by default.
 The `get` parameter is the name of the RPC and `/ietf-yang-library:yang-library/module-set/module[name='ietf-netconf']` is the RPC's optional XPath filter.
 
 ##### Server output
