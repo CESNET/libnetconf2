@@ -240,6 +240,110 @@ module libnetconf2-netconf-server {
         https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL?annotate=HEAD";
   }
 
+  grouping ssh-authentication-params-grouping {
+    description
+      "Grouping for SSH authentication parameters.";
+
+    leaf auth-attempts {
+      type uint16;
+      default 3;
+      description
+        "Represents the number of failed attempts before an authentication is deemed unsuccessful.";
+    }
+
+    leaf auth-timeout {
+      type uint16;
+      default 30;
+      units "seconds";
+      description
+        "Represents the maximum amount of seconds an authentication can go on for.";
+    }
+  }
+
+  grouping keyboard-interactive-grouping {
+    description
+      "Grouping for the SSH Keyboard interactive authentication method.";
+
+    container keyboard-interactive {
+      presence "Indicates that PAM configuration file name has been configured.
+               This statement is present so the mandatory descendant
+               nodes do not imply that this node must be
+               configured.";
+      description
+        "Keyboard interactive SSH authentication method.";
+      leaf pam-config-file-name {
+        type string;
+        mandatory true;
+      }
+      leaf pam-config-file-dir {
+        type string;
+      }
+    }
+  }
+
+  grouping endpoint-auth-reference-grouping {
+    description
+      "Reference to another endpoint. The purpose is to use the referenced endpoint's authentication mechanisms.
+       If a connection occurs on an endpoint, the connecting user will be tried to be authenticated
+       using the given endpoint's defined methods. If the user wasn't authenticated and the endpoint
+       references another endpoint, the authentication will be tried again. However, this time
+       using the referenced endpoint's mechanisms. The references can be
+       multiple, however there must not be a cycle.";
+
+    leaf endpoint-client-auth {
+      type union {
+        type leafref {
+          path "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:name";
+        }
+        type leafref {
+          path "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints/ncs:endpoint/ncs:name";
+        }
+      }
+    }
+  }
+
+  grouping certificate-revocation-list-grouping {
+    description
+      "A grouping for the Certificate Revocation List, which is used
+       to authenticate clients or to deny access for certain certificates.
+       The given Certificate Revocation List must be PEM or DER encoded.";
+
+    reference
+      "RFC 5280:
+         Internet X.509 Public Key Infrastructure Certificate
+         and Certificate Revocation List (CRL) Profile";
+
+    choice certificate-revocation-list {
+      leaf crl-url {
+        type string;
+        description
+          "An URL from which the Certificate Revocation List will be
+           downloaded and used. The HTTP protocol works, but other
+           protocols, such as FTP, may work as well.";
+      }
+
+      leaf crl-path {
+        type string;
+        description
+          "A path to a Certificate Revocation List file.";
+      }
+
+      leaf crl-cert-ext {
+        type empty;
+        description
+          "Indicates that the Certificate Revocation List
+           Distribution Points extension will be used to fetch
+           Certificate Revocation Lists from. This will be done
+           for all the configured Certificate Authority certificates.";
+
+        reference
+          "RFC 5280:
+             Internet X.509 Public Key Infrastructure Certificate
+             and Certificate Revocation List (CRL) Profile, Section 4.2.1.13";
+      }
+    }
+  }
+
   augment "/ncs:netconf-server" {
     leaf hello-timeout {
       type uint16;
@@ -259,79 +363,26 @@ module libnetconf2-netconf-server {
   }
 
   augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
-    leaf auth-attempts {
-      type uint16;
-      default 3;
-      description
-        "Represents the number of failed attempts before an authentication is deemed unsuccessful.";
-    }
-
-    leaf auth-timeout {
-      type uint16;
-      default 10;
-      units "seconds";
-      description
-        "Represents the maximum amount of seconds an authentication can go on for.";
-    }
+    uses ssh-authentication-params-grouping;
   }
 
-  // CH auth-attempts and auth-timeout
-  augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints/ncs:endpoint/ncs:transport/
-          ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
-    leaf auth-attempts {
-      type uint16;
-      default 3;
-      description
-        "Represents the number of failed attempts before an authentication is deemed unsuccessful.";
-    }
-
-    leaf auth-timeout {
-      type uint16;
-      default 10;
-      units "seconds";
-      description
-        "Represents the maximum amount of seconds an authentication can go on for.";
-    }
+  augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
+    uses ssh-authentication-params-grouping;
   }
 
-  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/
-          ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication/ncs:users/ncs:user" {
-    container keyboard-interactive {
-      presence "";
-      leaf pam-config-file-name {
-        type string;
-        mandatory true;
-      }
-      leaf pam-config-file-dir {
-        type string;
-      }
-      description
-        "Keyboard interactive SSH authentication method.";
-    }
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication/ncs:users/ncs:user" {
+    uses keyboard-interactive-grouping;
   }
 
-  // CH KB int
-  augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints/ncs:endpoint/ncs:transport/
-          ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication/ncs:users/ncs:user" {
-    container keyboard-interactive {
-      presence "";
-      leaf pam-config-file-name {
-        type string;
-        mandatory true;
-      }
-      leaf pam-config-file-dir {
-        type string;
-      }
-      description
-        "Keyboard interactive SSH authentication method.";
-    }
+  augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication/ncs:users/ncs:user" {
+    uses keyboard-interactive-grouping;
   }
 
   augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport" {
-    description
-      "Defines a new transport called UNIX socket.";
     case unix-socket {
       container unix-socket {
+        description
+          "Defines a new transport called UNIX socket.";
         leaf path {
           type string;
           mandatory true;
@@ -352,120 +403,26 @@ module libnetconf2-netconf-server {
   }
 
   augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
-    description
-      "Reference to another SSH endpoint's client-authentication container.
-       All the users set in the referencing endpoint will be tried first and if and only if
-       there is no match, the referenced endpoint's users will be tried. The references can be
-       multiple, however there must not be a cycle.";
+    uses endpoint-auth-reference-grouping;
+  }
 
-    leaf endpoint-client-auth {
-      type leafref {
-        path "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:name";
-      }
-
-      must "deref(.)/../*[local-name() = 'ssh']";
-    }
+  augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
+    uses endpoint-auth-reference-grouping;
   }
 
   augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:tls/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
-    description
-      "Reference to another TLS endpoint's client-authentication container.
-       All the users set in the referencing endpoint will be tried first and if and only if
-       there is no match, the referenced endpoint's users will be tried. The references can be
-       multiple, however there must not be a cycle.";
+    uses endpoint-auth-reference-grouping;
+  }
 
-    leaf endpoint-client-auth {
-      type leafref {
-        path "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:name";
-      }
-
-      must "deref(.)/../*[local-name() = 'tls']";
-    }
+  augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:tls/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
+    uses endpoint-auth-reference-grouping;
   }
 
   augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:tls/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
-    description
-      "Indicates that the TLS server is using a Certificate Revocation List
-       to authenticate clients or to deny access for certain certificates.
-       The given Certificate Revocation List must be PEM or DER encoded.";
-
-    reference
-      "RFC 5280:
-         Internet X.509 Public Key Infrastructure Certificate
-         and Certificate Revocation List (CRL) Profile";
-
-    choice certificate-revocation-list {
-      leaf crl-url {
-        type string;
-        description
-          "An URL from which the Certificate Revocation List will be
-           downloaded and used. The HTTP protocol works, but other
-           protocols, such as FTP, may work as well.";
-      }
-
-      leaf crl-path {
-        type string;
-        description
-          "A path to a Certificate Revocation List file.";
-      }
-
-      leaf crl-cert-ext {
-        type empty;
-        description
-          "Indicates that the Certificate Revocation List
-           Distribution Points extension will be used to fetch
-           Certificate Revocation Lists from. This will be done
-           for all the configured Certificate Authority certificates.";
-
-        reference
-          "RFC 5280:
-             Internet X.509 Public Key Infrastructure Certificate
-             and Certificate Revocation List (CRL) Profile, Section 4.2.1.13";
-      }
-    }
+    uses certificate-revocation-list-grouping;
   }
 
-  // CH CRL
-  augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints/ncs:endpoint/ncs:transport/
-          ncs:tls/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
-    description
-      "Indicates that the Call Home TLS server is using a Certificate Revocation List
-       to authenticate clients or to deny access for certain certificates.
-       The given Certificate Revocation List must be PEM or DER encoded.";
-
-    reference
-      "RFC 5280:
-         Internet X.509 Public Key Infrastructure Certificate
-         and Certificate Revocation List (CRL) Profile";
-
-    choice certificate-revocation-list {
-      leaf crl-url {
-        type string;
-        description
-          "An URL from which the Certificate Revocation List will be
-           downloaded and used. The HTTP protocol works, but other
-           protocols, such as FTP, may work as well.";
-      }
-
-      leaf crl-path {
-        type string;
-        description
-          "A path to a Certificate Revocation List file.";
-      }
-
-      leaf crl-cert-ext {
-        type empty;
-        description
-          "Indicates that the Certificate Revocation List
-           Distribution Points extension will be used to fetch
-           Certificate Revocation Lists from. This will be done
-           for all the configured Certificate Authority certificates.";
-
-        reference
-          "RFC 5280:
-             Internet X.509 Public Key Infrastructure Certificate
-             and Certificate Revocation List (CRL) Profile, Section 4.2.1.13";
-      }
-    }
+  augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:tls/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
+    uses certificate-revocation-list-grouping;
   }
 }
