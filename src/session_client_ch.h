@@ -64,30 +64,6 @@ int nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **sess
  */
 
 /**
- * @brief Set SSH Call Home authentication hostkey check (knownhosts) callback.
- *
- * Repetitive calling causes replacing of the previous callback and its private data. Caller is responsible for
- * freeing the private data when necessary (the private data can be obtained by
- * nc_client_ssh_ch_get_auth_hostkey_check_clb()).
- *
- * @param[in] auth_hostkey_check Function to call, returns 0 on success, non-zero in error.
- * If NULL, the default callback is set.
- * @param[in] priv Optional private data to be passed to the callback function.
- */
-void nc_client_ssh_ch_set_auth_hostkey_check_clb(int (*auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
-        void *priv);
-
-/**
- * @brief Get currently set SSH Call Home authentication hostkey check (knownhosts) callback and its private data
- * previously set by nc_client_ssh_ch_set_auth_hostkey_check_clb().
- *
- * @param[out] auth_hostkey_check Currently set callback, NULL in case of the default callback.
- * @param[out] priv Currently set (optional) private data to be passed to the callback function.
- */
-void nc_client_ssh_ch_get_auth_hostkey_check_clb(int (**auth_hostkey_check)(const char *hostname, ssh_session session, void *priv),
-        void **priv);
-
-/**
  * @brief Set SSH Call Home password authentication callback.
  *
  * Repetitive calling causes replacing of the previous callback and its private data. Caller is responsible for
