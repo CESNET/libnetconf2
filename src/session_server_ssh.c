@@ -829,6 +829,7 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
     int subtype, type, libssh_auth_methods = 0, ret = 0;
     uint16_t i;
     struct nc_auth_client *auth_client = NULL;
+    struct nc_endpt *referenced_endpt;
 
     type = ssh_message_type(msg);
     subtype = ssh_message_subtype(msg);
@@ -980,8 +981,14 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
         }
 
         if (!auth_client) {
-            if (opts->endpt_client_ref) {
-                return nc_session_ssh_msg(session, opts->endpt_client_ref->opts.ssh, msg, state);
+            if (opts->referenced_endpt_name) {
+                /* client not known by the endpt, but it references another one so try it */
+                if (nc_server_get_referenced_endpt(opts->referenced_endpt_name, &referenced_endpt)) {
+                    ERRINT;
+                    return 1;
+                }
+
+                return nc_session_ssh_msg(session, referenced_endpt->opts.ssh, msg, state);
             }
 
             ERR(NULL, "User \"%s\" not known by the server.", username);

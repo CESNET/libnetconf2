@@ -38,11 +38,7 @@
 #include "session_p.h"
 
 struct nc_server_tls_opts tls_ch_opts;
-pthread_mutex_t tls_ch_opts_lock = PTHREAD_MUTEX_INITIALIZER;
 extern struct nc_server_opts server_opts;
-
-static pthread_key_t verify_key;
-static pthread_once_t verify_once = PTHREAD_ONCE_INIT;
 
 static char *
 asn1time_to_str(const ASN1_TIME *t)
@@ -312,7 +308,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
 
         /* first make sure the entry is valid */
         if (!ctn->map_type || ((ctn->map_type == NC_TLS_CTN_SPECIFIED) && !ctn->name)) {
-            VRB(NULL, "Cert verify CTN: entry with id %u not valid, skipping.", ctn->id);
+            VRB(session, "Cert verify CTN: entry with id %u not valid, skipping.", ctn->id);
             continue;
         }
 
@@ -324,7 +320,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
         } else if (!strncmp(ctn->fingerprint, "01", 2)) {
             if (!digest_md5) {
                 if (X509_digest(cert, EVP_md5(), buf, &buf_len) != 1) {
-                    ERR(NULL, "Calculating MD5 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                    ERR(session, "Calculating MD5 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -333,7 +329,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_md5)) {
                 /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                VRB(session, "Cert verify CTN: entry with a matching fingerprint found.");
                 map_type = ctn->map_type;
             }
             free(digest_md5);
@@ -343,7 +339,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
         } else if (!strncmp(ctn->fingerprint, "02", 2)) {
             if (!digest_sha1) {
                 if (X509_digest(cert, EVP_sha1(), buf, &buf_len) != 1) {
-                    ERR(NULL, "Calculating SHA-1 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                    ERR(session, "Calculating SHA-1 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -352,7 +348,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha1)) {
                 /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                VRB(session, "Cert verify CTN: entry with a matching fingerprint found.");
                 map_type = ctn->map_type;
             }
             free(digest_sha1);
@@ -362,7 +358,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
         } else if (!strncmp(ctn->fingerprint, "03", 2)) {
             if (!digest_sha224) {
                 if (X509_digest(cert, EVP_sha224(), buf, &buf_len) != 1) {
-                    ERR(NULL, "Calculating SHA-224 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                    ERR(session, "Calculating SHA-224 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -371,7 +367,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha224)) {
                 /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                VRB(session, "Cert verify CTN: entry with a matching fingerprint found.");
                 map_type = ctn->map_type;
             }
             free(digest_sha224);
@@ -381,7 +377,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
         } else if (!strncmp(ctn->fingerprint, "04", 2)) {
             if (!digest_sha256) {
                 if (X509_digest(cert, EVP_sha256(), buf, &buf_len) != 1) {
-                    ERR(NULL, "Calculating SHA-256 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                    ERR(session, "Calculating SHA-256 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -390,7 +386,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha256)) {
                 /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                VRB(session, "Cert verify CTN: entry with a matching fingerprint found.");
                 map_type = ctn->map_type;
             }
             free(digest_sha256);
@@ -400,7 +396,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
         } else if (!strncmp(ctn->fingerprint, "05", 2)) {
             if (!digest_sha384) {
                 if (X509_digest(cert, EVP_sha384(), buf, &buf_len) != 1) {
-                    ERR(NULL, "Calculating SHA-384 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                    ERR(session, "Calculating SHA-384 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -409,7 +405,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha384)) {
                 /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                VRB(session, "Cert verify CTN: entry with a matching fingerprint found.");
                 map_type = ctn->map_type;
             }
             free(digest_sha384);
@@ -419,7 +415,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
         } else if (!strncmp(ctn->fingerprint, "06", 2)) {
             if (!digest_sha512) {
                 if (X509_digest(cert, EVP_sha512(), buf, &buf_len) != 1) {
-                    ERR(NULL, "Calculating SHA-512 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                    ERR(session, "Calculating SHA-512 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
                     ret = -1;
                     goto cleanup;
                 }
@@ -428,7 +424,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha512)) {
                 /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                VRB(session, "Cert verify CTN: entry with a matching fingerprint found.");
                 map_type = ctn->map_type;
             }
             free(digest_sha512);
@@ -436,7 +432,7 @@ nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *
 
             /* unknown */
         } else {
-            WRN(NULL, "Unknown fingerprint algorithm used (%s), skipping.", ctn->fingerprint);
+            WRN(session, "Unknown fingerprint algorithm used (%s), skipping.", ctn->fingerprint);
             continue;
         }
 
@@ -668,16 +664,24 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
     X509_NAME *issuer;
     X509 *cert;
     char *cp;
+    X509_STORE *store;
 
     STACK_OF(X509) * cert_stack;
     struct nc_session *session;
     struct nc_server_tls_opts *opts;
+    struct nc_endpt *referenced_endpt;
     int rc, depth;
 
-    /* get the thread session */
-    session = pthread_getspecific(verify_key);
+    store = X509_STORE_CTX_get0_store(x509_ctx);
+    if (!store) {
+        ERR(NULL, "Error getting store from context (%s).", ERR_reason_error_string(ERR_get_error()));
+        return 0;
+    }
+
+    /* get session from the store */
+    session = X509_STORE_get_ex_data(store, 0);
     if (!session) {
-        ERRINT;
+        ERR(session, "Error getting session from store (%s).", ERR_reason_error_string(ERR_get_error()));
         return 0;
     }
 
@@ -702,7 +706,7 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         }
 
         /* no match, continue */
-        if (opts->endpt_client_ref) {
+        if (opts->referenced_endpt_name) {
             /* check referenced endpoint's end-entity certs */
             rc = nc_server_tls_do_preverify(session, x509_ctx, 2);
             if (rc == -1) {
@@ -751,12 +755,19 @@ nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
         /* fatal error */
         depth = 0;
         goto fail;
-    } else if ((rc == 1) && !opts->endpt_client_ref) {
+    } else if ((rc == 1) && !opts->referenced_endpt_name) {
         /* no match found and no referenced endpoint */
         goto fail;
-    } else if ((rc == 1) && opts->endpt_client_ref) {
+    } else if ((rc == 1) && opts->referenced_endpt_name) {
         /* no match found, but has a referenced endpoint so try it */
-        rc = nc_tls_cert_to_name(session, opts->endpt_client_ref->opts.tls->ctn, cert);
+        if (nc_server_get_referenced_endpt(opts->referenced_endpt_name, &referenced_endpt)) {
+            /* fatal error */
+            ERRINT;
+            depth = 0;
+            goto fail;
+        }
+
+        rc = nc_tls_cert_to_name(session, referenced_endpt->opts.tls->ctn, cert);
         if (rc) {
             if (rc == -1) {
                 /* fatal error */
@@ -890,12 +901,6 @@ nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *session)
     server_opts.user_verify_clb = verify_clb;
 }
 
-static void
-nc_tls_make_verify_key(void)
-{
-    pthread_key_create(&verify_key, NULL);
-}
-
 static int
 nc_server_tls_ks_ref_get_cert_key(const char *referenced_key_name, const char *referenced_cert_name,
         char **privkey_data, NC_PRIVKEY_FORMAT *privkey_type, char **cert_data)
@@ -918,7 +923,7 @@ nc_server_tls_ks_ref_get_cert_key(const char *referenced_key_name, const char *r
     }
 
     for (j = 0; j < ks->asym_keys[i].cert_count; j++) {
-        if (!strcmp(referenced_cert_name, ks->asym_keys[i].certs[i].name)) {
+        if (!strcmp(referenced_cert_name, ks->asym_keys[i].certs[j].name)) {
             break;
         }
     }
@@ -1403,6 +1408,7 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     SSL_CTX *tls_ctx;
     int ret;
     struct timespec ts_timeout;
+    struct nc_endpt *referenced_endpt;
 
     /* SSL_CTX */
     tls_ctx = SSL_CTX_new(TLS_server_method());
@@ -1424,6 +1430,13 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
         goto error;
     }
 
+    /* store the session, retrieve it when needed */
+    ret = X509_STORE_set_ex_data(cert_store, 0, session);
+    if (!ret) {
+        ERR(session, "Setting certificate store data failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        goto error;
+    }
+
     /* set end-entity certs as cert store data, retrieve them if verification fails later */
     ret = X509_STORE_set_ex_data(cert_store, 1, &opts->ee_certs);
     if (!ret) {
@@ -1432,8 +1445,13 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     }
 
     /* do the same for referenced endpoint's end entity certs */
-    if (opts->endpt_client_ref) {
-        ret = X509_STORE_set_ex_data(cert_store, 2, &opts->endpt_client_ref->opts.tls->ee_certs);
+    if (opts->referenced_endpt_name) {
+        if (nc_server_get_referenced_endpt(opts->referenced_endpt_name, &referenced_endpt)) {
+            ERRINT;
+            goto error;
+        }
+
+        ret = X509_STORE_set_ex_data(cert_store, 2, &referenced_endpt->opts.tls->ee_certs);
         if (!ret) {
             ERR(session, "Setting certificate store data failed (%s).", ERR_reason_error_string(ERR_get_error()));
             goto error;
@@ -1449,8 +1467,8 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     }
 
     /* set referenced endpoint's CA certs if set */
-    if (opts->endpt_client_ref) {
-        if (nc_tls_store_set_trusted_certs(cert_store, &opts->endpt_client_ref->opts.tls->ca_certs)) {
+    if (opts->referenced_endpt_name) {
+        if (nc_tls_store_set_trusted_certs(cert_store, &referenced_endpt->opts.tls->ca_certs)) {
             goto error;
         }
     }
@@ -1501,10 +1519,6 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     SSL_set_fd(session->ti.tls, sock);
     sock = -1;
     SSL_set_mode(session->ti.tls, SSL_MODE_AUTO_RETRY);
-
-    /* store session on per-thread basis */
-    pthread_once(&verify_once, nc_tls_make_verify_key);
-    pthread_setspecific(verify_key, session);
 
     if (timeout > -1) {
         nc_timeouttime_get(&ts_timeout, timeout);

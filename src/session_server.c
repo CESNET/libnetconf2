@@ -151,6 +151,22 @@ nc_server_ch_client_unlock(struct nc_ch_client *client)
     pthread_rwlock_unlock(&server_opts.ch_client_lock);
 }
 
+int
+nc_server_get_referenced_endpt(const char *name, struct nc_endpt **endpt)
+{
+    uint16_t i;
+
+    for (i = 0; i < server_opts.endpt_count; i++) {
+        if (!strcmp(name, server_opts.endpts[i].name)) {
+            *endpt = &server_opts.endpts[i];
+            return 0;
+        }
+    }
+
+    ERR(NULL, "Referenced endpoint \"%s\" was not found.", name);
+    return 1;
+}
+
 API void
 nc_session_set_term_reason(struct nc_session *session, NC_SESSION_TERM_REASON reason)
 {

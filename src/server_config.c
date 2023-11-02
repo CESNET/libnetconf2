@@ -776,10 +776,60 @@ nc_server_config_del_ssh_opts(struct nc_bind *bind, struct nc_server_ssh_opts *o
     free(opts);
 }
 
+static void
+nc_server_config_del_endpt_references(const char *referenced_endpt_name)
+{
+    uint16_t i, j;
+
+    for (i = 0; i < server_opts.endpt_count; i++) {
+        if (server_opts.endpts[i].referenced_endpt_name) {
+            if (!strcmp(server_opts.endpts[i].referenced_endpt_name, referenced_endpt_name)) {
+                free(server_opts.endpts[i].referenced_endpt_name);
+                server_opts.endpts[i].referenced_endpt_name = NULL;
+
+                if (server_opts.endpts[i].ti == NC_TI_LIBSSH) {
+                    server_opts.endpts[i].opts.ssh->referenced_endpt_name = NULL;
+                } else {
+                    server_opts.endpts[i].opts.tls->referenced_endpt_name = NULL;
+                }
+            }
+        }
+    }
+
+    /* LOCK */
+    pthread_rwlock_rdlock(&server_opts.ch_client_lock);
+    for (i = 0; i < server_opts.ch_client_count; i++) {
+        /* LOCK */
+        pthread_mutex_lock(&server_opts.ch_clients[i].lock);
+        for (j = 0; j < server_opts.ch_clients[i].ch_endpt_count; j++) {
+            if (server_opts.ch_clients[i].ch_endpts[j].referenced_endpt_name) {
+                if (!strcmp(server_opts.ch_clients[i].ch_endpts[j].referenced_endpt_name, referenced_endpt_name)) {
+                    free(server_opts.ch_clients[i].ch_endpts[j].referenced_endpt_name);
+                    server_opts.ch_clients[i].ch_endpts[j].referenced_endpt_name = NULL;
+
+                    if (server_opts.ch_clients[i].ch_endpts[j].ti == NC_TI_LIBSSH) {
+                        server_opts.ch_clients[i].ch_endpts[j].opts.ssh->referenced_endpt_name = NULL;
+                    } else {
+                        server_opts.ch_clients[i].ch_endpts[j].opts.tls->referenced_endpt_name = NULL;
+                    }
+                }
+            }
+        }
+        /* UNLOCK */
+        pthread_mutex_unlock(&server_opts.ch_clients[i].lock);
+    }
+
+    /* UNLOCK */
+    pthread_rwlock_unlock(&server_opts.ch_client_lock);
+}
+
 void
 nc_server_config_del_endpt_ssh(struct nc_endpt *endpt, struct nc_bind *bind)
 {
+    /* delete any references to this endpoint */
+    nc_server_config_del_endpt_references(endpt->name);
     free(endpt->name);
+
     free(endpt->referenced_endpt_name);
     nc_server_config_del_ssh_opts(bind, endpt->opts.ssh);
 
@@ -936,7 +986,10 @@ nc_server_config_del_tls_opts(struct nc_bind *bind, struct nc_server_tls_opts *o
 static void
 nc_server_config_del_endpt_tls(struct nc_endpt *endpt, struct nc_bind *bind)
 {
+    /* delete any references to this endpoint */
+    nc_server_config_del_endpt_references(endpt->name);
     free(endpt->name);
+
     free(endpt->referenced_endpt_name);
 
     nc_server_config_del_tls_opts(bind, endpt->opts.tls);
@@ -2954,148 +3007,213 @@ cleanup:
 
 #ifdef NC_ENABLED_SSH_TLS
 
+static int
+nc_server_config_check_endpt_reference_cycle(struct nc_endpt *original, struct nc_endpt *next)
+{
+    if (!next->referenced_endpt_name) {
+        /* no further reference -> no cycle */
+        return 0;
+    }
+
+    if (!strcmp(original->name, next->referenced_endpt_name)) {
+        /* found cycle */
+        return 1;
+    } else {
+        if (nc_server_get_referenced_endpt(next->referenced_endpt_name, &next)) {
+            /* referenced endpoint does not exist */
+            return 1;
+        }
+
+        /* continue further */
+        return nc_server_config_check_endpt_reference_cycle(original, next);
+    }
+}
+
 /**
- * @brief Set all endpoint client auth references, which couldn't be set while parsing data.
+ * @brief Set all endpoint references.
  *
  * @return 0 on success, 1 on error.
  */
 static int
-nc_server_config_fill_endpt_client_auth(void)
+nc_server_config_check_endpt_references(void)
 {
     uint16_t i, j;
+    struct nc_endpt *referenced_endpt = NULL;
 
+    /* first do listen endpoints */
     for (i = 0; i < server_opts.endpt_count; i++) {
         /* go through all the endpoints */
         if (server_opts.endpts[i].referenced_endpt_name) {
-            /* endpt has a reference, that hasn't been set yet */
-            for (j = 0; j < server_opts.endpt_count; j++) {
-                /* go through all the endpts */
-                if (!strcmp(server_opts.endpts[i].referenced_endpt_name, server_opts.endpts[j].name)) {
-                    /* found the endpoint we were looking for,
-                     * assign the server opts from the referenced endpt */
-                    if (server_opts.endpts[i].ti == NC_TI_LIBSSH) {
-                        server_opts.endpts[i].opts.ssh->endpt_client_ref = &server_opts.endpts[j];
-                        break;
-                    } else if (server_opts.endpts[i].ti == NC_TI_OPENSSL) {
-                        server_opts.endpts[i].opts.tls->endpt_client_ref = &server_opts.endpts[j];
-                        break;
-                    } else {
-                        ERRINT;
-                        return 1;
-                    }
-                }
-            }
-
-            /* didn't find the endpoint */
-            if (j == server_opts.endpt_count) {
-                ERR(NULL, "Endpoint \"%s\" referenced by \"%s\" not found.",
+            /* get referenced endpt */
+            if (nc_server_get_referenced_endpt(server_opts.endpts[i].referenced_endpt_name, &referenced_endpt)) {
+                ERR(NULL, "Endpoint \"%s\" referenced by endpoint \"%s\" does not exist.",
                         server_opts.endpts[i].referenced_endpt_name, server_opts.endpts[i].name);
                 return 1;
             }
+
+            /* check if the endpoint references itself */
+            if (&server_opts.endpts[i] == referenced_endpt) {
+                ERR(NULL, "Endpoint \"%s\" references itself.", server_opts.endpts[i].name);
+                return 1;
+            }
+
+            /* check transport */
+            if ((server_opts.endpts[i].ti != referenced_endpt->ti)) {
+                ERR(NULL, "Endpoint \"%s\" referenced by endpoint \"%s\" has different transport type.",
+                        server_opts.endpts[i].referenced_endpt_name, server_opts.endpts[i].name);
+                return 1;
+            } else if ((referenced_endpt->ti != NC_TI_LIBSSH) && (referenced_endpt->ti != NC_TI_OPENSSL)) {
+                ERR(NULL, "Endpoint \"%s\" referenced by endpoint \"%s\" has unsupported transport type.",
+                        server_opts.endpts[i].referenced_endpt_name, server_opts.endpts[i].name);
+                return 1;
+            }
+
+            /* check cyclic reference */
+            if (nc_server_config_check_endpt_reference_cycle(&server_opts.endpts[i], referenced_endpt)) {
+                ERR(NULL, "Endpoint \"%s\" referenced by endpoint \"%s\" creates a cycle.",
+                        server_opts.endpts[i].referenced_endpt_name, server_opts.endpts[i].name);
+                return 1;
+            }
+
+            /* all went well, assign the name to the opts, so we can access it for auth */
+            if (server_opts.endpts[i].ti == NC_TI_LIBSSH) {
+                server_opts.endpts[i].opts.ssh->referenced_endpt_name = referenced_endpt->name;
+            } else {
+                server_opts.endpts[i].opts.tls->referenced_endpt_name = referenced_endpt->name;
+            }
         }
     }
 
+    /* now check all the call home endpoints */
+    /* LOCK */
+    pthread_rwlock_rdlock(&server_opts.ch_client_lock);
+    for (i = 0; i < server_opts.ch_client_count; i++) {
+        /* LOCK */
+        pthread_mutex_lock(&server_opts.ch_clients[i].lock);
+        for (j = 0; j < server_opts.ch_clients[i].ch_endpt_count; j++) {
+            if (server_opts.ch_clients[i].ch_endpts[j].referenced_endpt_name) {
+                /* get referenced endpt */
+                if (nc_server_get_referenced_endpt(server_opts.ch_clients[i].ch_endpts[j].referenced_endpt_name, &referenced_endpt)) {
+                    ERR(NULL, "Endpoint \"%s\" referenced by call home endpoint \"%s\" does not exist.",
+                            server_opts.ch_clients[i].ch_endpts[j].referenced_endpt_name, server_opts.ch_clients[i].ch_endpts[j].name);
+                    goto ch_fail;
+                }
+
+                /* check transport */
+                if (server_opts.ch_clients[i].ch_endpts[j].ti != referenced_endpt->ti) {
+                    ERR(NULL, "Endpoint \"%s\" referenced by call home endpoint \"%s\" has different transport type.",
+                            server_opts.ch_clients[i].ch_endpts[j].referenced_endpt_name, server_opts.ch_clients[i].ch_endpts[j].name);
+                    goto ch_fail;
+                } else if ((referenced_endpt->ti != NC_TI_LIBSSH) && (referenced_endpt->ti != NC_TI_OPENSSL)) {
+                    ERR(NULL, "Endpoint \"%s\" referenced by call home endpoint \"%s\" has unsupported transport type.",
+                            server_opts.ch_clients[i].ch_endpts[j].referenced_endpt_name, server_opts.ch_clients[i].ch_endpts[j].name);
+                    goto ch_fail;
+                }
+
+                /* check cyclic reference */
+                if (nc_server_config_check_endpt_reference_cycle(referenced_endpt, referenced_endpt)) {
+                    ERR(NULL, "Endpoint \"%s\" referenced by call home endpoint \"%s\" creates a cycle.",
+                            server_opts.ch_clients[i].ch_endpts[j].referenced_endpt_name, server_opts.ch_clients[i].ch_endpts[j].name);
+                    goto ch_fail;
+                }
+
+                /* all went well, assign the name to the opts, so we can access it for auth */
+                if (server_opts.ch_clients[i].ch_endpts[j].ti == NC_TI_LIBSSH) {
+                    server_opts.ch_clients[i].ch_endpts[j].opts.ssh->referenced_endpt_name = referenced_endpt->name;
+                } else {
+                    server_opts.ch_clients[i].ch_endpts[j].opts.tls->referenced_endpt_name = referenced_endpt->name;
+                }
+            }
+        }
+        /* UNLOCK */
+        pthread_mutex_unlock(&server_opts.ch_clients[i].lock);
+    }
+
+    /* UNLOCK */
+    pthread_rwlock_unlock(&server_opts.ch_client_lock);
     return 0;
+
+ch_fail:
+    /* UNLOCK */
+    pthread_mutex_unlock(&server_opts.ch_clients[i].lock);
+    /* UNLOCK */
+    pthread_rwlock_unlock(&server_opts.ch_client_lock);
+    return 1;      
 }
 
 static int
-nc_server_config_endpoint_client_auth_has_cycle(struct nc_endpt *original, struct nc_endpt *next)
-{
-    if (original->ti == NC_TI_LIBSSH) {
-        if (!next->opts.ssh->endpt_client_ref) {
-            /* no further reference -> no cycle */
-            return 0;
-        }
-
-        if (next->opts.ssh->endpt_client_ref == original) {
-            /* found cycle */
-            return 1;
-        } else {
-            /* continue further */
-            return nc_server_config_endpoint_client_auth_has_cycle(original, next->opts.ssh->endpt_client_ref);
-        }
-    } else if (original->ti == NC_TI_OPENSSL) {
-        if (!next->opts.tls->endpt_client_ref) {
-            /* no further reference -> no cycle */
-            return 0;
-        }
-
-        if (next->opts.tls->endpt_client_ref == original) {
-            /* found cycle */
-            return 1;
-        } else {
-            /* continue further */
-            return nc_server_config_endpoint_client_auth_has_cycle(original, next->opts.tls->endpt_client_ref);
-        }
-    } else {
-        ERRINT;
-        return 1;
-    }
-}
-
-static int
-nc_server_config_endpoint_client_auth(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_endpoint_reference(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
-    uint16_t i;
-    const char *endpt_name;
-    struct nc_endpt *endpt;
+    struct nc_endpt *endpt = NULL;
+    struct nc_ch_client *ch_client;
+    struct nc_ch_endpt *ch_endpt = NULL;
+    struct nc_server_ssh_opts *ssh = NULL;
+    struct nc_server_tls_opts *tls = NULL;
 
-    assert(!strcmp(LYD_NAME(node), "endpoint-client-auth"));
+    assert(!strcmp(LYD_NAME(node), "endpoint-reference"));
 
-    /* get current endpoint */
-    ret = nc_server_config_get_endpt(node, &endpt, NULL);
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
+        return 1;
+    }
+
+    /* get endpt */
+    if (is_listen(node)) {
+        ret = nc_server_config_get_endpt(node, &endpt, NULL);
+    } else {
+        ret = nc_server_config_get_ch_endpt(node, &ch_endpt);
+    }
     if (ret) {
         goto cleanup;
     }
 
     if (op == NC_OP_DELETE) {
-        if (is_ssh(node)) {
-            endpt->opts.ssh->endpt_client_ref = NULL;
+        if (endpt) {
+            free(endpt->referenced_endpt_name);
+            endpt->referenced_endpt_name = NULL;
         } else {
-            endpt->opts.tls->endpt_client_ref = NULL;
+            free(ch_endpt->referenced_endpt_name);
+            ch_endpt->referenced_endpt_name = NULL;
         }
-        goto cleanup;
-    }
+        if (is_ssh(node)) {
+            if (nc_server_config_get_ssh_opts(node, &ssh)) {
+                ret = 1;
+                goto cleanup;
+            }
+        
+            ssh->referenced_endpt_name = NULL;
+        } else {
+            if (nc_server_config_get_tls_opts(node, &tls)) {
+                ret = 1;
+                goto cleanup;
+            }
 
-    /* find the endpoint leafref is referring to */
-    endpt_name = lyd_get_value(node);
-    for (i = 0; i < server_opts.endpt_count; i++) {
-        if (!strcmp(endpt_name, server_opts.endpts[i].name)) {
-            break;
+            tls->referenced_endpt_name = NULL;
         }
-    }
 
-    if (i == server_opts.endpt_count) {
-        /* endpt not found, save the name and try to look it up later */
-        free(endpt->referenced_endpt_name);
-        endpt->referenced_endpt_name = strdup(endpt_name);
-        NC_CHECK_ERRMEM_GOTO(!endpt->referenced_endpt_name, ret = 1, cleanup);
         goto cleanup;
-    }
-
-    /* check for self reference */
-    if (endpt == &server_opts.endpts[i]) {
-        ERR(NULL, "Self endpoint reference detected for endpoint \"%s\".", endpt->name);
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* check for cyclic references */
-    ret = nc_server_config_endpoint_client_auth_has_cycle(endpt, &server_opts.endpts[i]);
-    if (ret) {
-        ERR(NULL, "Cyclic endpoint reference detected for endpoint \"%s\".", endpt->name);
-        goto cleanup;
-    }
-
-    /* assign the current endpt the referrenced endpt */
-    if (is_ssh(node)) {
-        endpt->opts.ssh->endpt_client_ref = &server_opts.endpts[i];
     } else {
-        endpt->opts.tls->endpt_client_ref = &server_opts.endpts[i];
+        /* just set the name, check it once configuring of all nodes is done */
+        if (endpt) {
+            free(endpt->referenced_endpt_name);
+            endpt->referenced_endpt_name = strdup(lyd_get_value(node));
+            NC_CHECK_ERRMEM_GOTO(!endpt->referenced_endpt_name, ret = 1, cleanup);
+        } else {
+            free(ch_endpt->referenced_endpt_name);
+            ch_endpt->referenced_endpt_name = strdup(lyd_get_value(node));
+            NC_CHECK_ERRMEM_GOTO(!ch_endpt->referenced_endpt_name, ret = 1, cleanup);
+        }
+
+        goto cleanup;
     }
 
 cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
+
     return ret;
 }
 
@@ -3154,7 +3272,7 @@ static int
 nc_server_config_asymmetric_key(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
-    struct nc_endpt *endpt;
+    struct nc_server_tls_opts *opts;
     struct nc_ch_client *ch_client;
 
     assert(!strcmp(LYD_NAME(node), "asymmetric-key"));
@@ -3165,21 +3283,21 @@ nc_server_config_asymmetric_key(const struct lyd_node *node, NC_OPERATION op)
         return 1;
     }
 
-    if (nc_server_config_get_endpt(node, &endpt, NULL)) {
+    if (nc_server_config_get_tls_opts(node, &opts)) {
         ret = 1;
         goto cleanup;
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
         /* set to keystore */
-        endpt->opts.tls->store = NC_STORE_KEYSTORE;
+        opts->store = NC_STORE_KEYSTORE;
 
-        free(endpt->opts.tls->key_ref);
-        endpt->opts.tls->key_ref = strdup(lyd_get_value(node));
-        NC_CHECK_ERRMEM_GOTO(!endpt->opts.tls->key_ref, ret = 1, cleanup);
+        free(opts->key_ref);
+        opts->key_ref = strdup(lyd_get_value(node));
+        NC_CHECK_ERRMEM_GOTO(!opts->key_ref, ret = 1, cleanup);
     } else {
-        free(endpt->opts.tls->key_ref);
-        endpt->opts.tls->key_ref = NULL;
+        free(opts->key_ref);
+        opts->key_ref = NULL;
     }
 
 cleanup:
@@ -4134,8 +4252,8 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
         ret = nc_server_config_encryption_alg(node, op);
     } else if (!strcmp(name, "mac-alg")) {
         ret = nc_server_config_mac_alg(node, op);
-    } else if (!strcmp(name, "endpoint-client-auth")) {
-        ret = nc_server_config_endpoint_client_auth(node, op);
+    } else if (!strcmp(name, "endpoint-reference")) {
+        ret = nc_server_config_endpoint_reference(node, op);
     } else if (!strcmp(name, "tls")) {
         ret = nc_server_config_tls(node, op);
     } else if (!strcmp(name, "cert-data")) {
@@ -4378,8 +4496,8 @@ nc_server_config_fill_nectonf_server(const struct lyd_node *data, NC_OPERATION o
     }
 
 #ifdef NC_ENABLED_SSH_TLS
-    /* backward check of client auth reference */
-    if (nc_server_config_fill_endpt_client_auth()) {
+    /* check and set all endpoint references */
+    if (nc_server_config_check_endpt_references()) {
         ret = 1;
         goto cleanup;
     }
