@@ -752,9 +752,11 @@ nc_server_config_del_ssh_opts(struct nc_bind *bind, struct nc_server_ssh_opts *o
 {
     uint16_t i, hostkey_count, client_count;
 
-    free(bind->address);
-    if (bind->sock > -1) {
-        close(bind->sock);
+    if (bind) {
+        free(bind->address);
+        if (bind->sock > -1) {
+            close(bind->sock);
+        }
     }
 
     /* store in variable because it gets decremented in the function call */
@@ -957,9 +959,11 @@ nc_server_config_del_ctns(struct nc_server_tls_opts *opts)
 static void
 nc_server_config_del_tls_opts(struct nc_bind *bind, struct nc_server_tls_opts *opts)
 {
-    free(bind->address);
-    if (bind->sock > -1) {
-        close(bind->sock);
+    if (bind) {
+        free(bind->address);
+        if (bind->sock > -1) {
+            close(bind->sock);
+        }
     }
 
     if (opts->store == NC_STORE_LOCAL) {
@@ -1044,55 +1048,6 @@ nc_server_config_listen(const struct lyd_node *node, NC_OPERATION op)
     return 0;
 }
 
-#ifdef NC_ENABLED_SSH_TLS
-
-static void
-nc_server_config_ch_del_ssh_opts(struct nc_server_ssh_opts *opts)
-{
-    uint16_t i, hostkey_count, client_count;
-
-    /* store in variable because it gets decremented in the function call */
-    hostkey_count = opts->hostkey_count;
-    for (i = 0; i < hostkey_count; i++) {
-        nc_server_config_del_hostkey(opts, &opts->hostkeys[i]);
-    }
-
-    client_count = opts->client_count;
-    for (i = 0; i < client_count; i++) {
-        nc_server_config_del_auth_client(opts, &opts->auth_clients[i]);
-    }
-
-    free(opts->hostkey_algs);
-    free(opts->kex_algs);
-    free(opts->encryption_algs);
-    free(opts->mac_algs);
-
-    free(opts);
-}
-
-static void
-nc_server_config_ch_del_tls_opts(struct nc_server_tls_opts *opts)
-{
-    if (opts->store == NC_STORE_LOCAL) {
-        free(opts->pubkey_data);
-        free(opts->privkey_data);
-        free(opts->cert_data);
-    }
-
-    nc_server_config_del_certs(&opts->ca_certs);
-    nc_server_config_del_certs(&opts->ee_certs);
-
-    free(opts->crl_path);
-    free(opts->crl_url);
-    X509_STORE_free(opts->crl_store);
-    nc_server_config_del_ctns(opts);
-    free(opts->ciphers);
-
-    free(opts);
-}
-
-#endif /* NC_ENABLED_SSH_TLS */
-
 static void
 nc_server_config_ch_del_endpt(struct nc_ch_client *ch_client, struct nc_ch_endpt *ch_endpt)
 {
@@ -1104,15 +1059,16 @@ nc_server_config_ch_del_endpt(struct nc_ch_client *ch_client, struct nc_ch_endpt
         close(ch_endpt->sock_pending);
         ch_endpt->sock_pending = -1;
     }
+    free(ch_endpt->referenced_endpt_name);
 #endif /* NC_ENABLED_SSH_TLS */
 
     switch (ch_endpt->ti) {
 #ifdef NC_ENABLED_SSH_TLS
     case NC_TI_LIBSSH:
-        nc_server_config_ch_del_ssh_opts(ch_endpt->opts.ssh);
+        nc_server_config_del_ssh_opts(NULL, ch_endpt->opts.ssh);
         break;
     case NC_TI_OPENSSL:
-        nc_server_config_ch_del_tls_opts(ch_endpt->opts.tls);
+        nc_server_config_del_tls_opts(NULL, ch_endpt->opts.tls);
         break;
 #endif /* NC_ENABLED_SSH_TLS */
     default:
@@ -1436,7 +1392,7 @@ nc_server_config_ssh(const struct lyd_node *node, NC_OPERATION op)
                 goto cleanup;
             }
         } else if (op == NC_OP_DELETE) {
-            nc_server_config_ch_del_ssh_opts(ch_endpt->opts.ssh);
+            nc_server_config_del_ssh_opts(NULL, ch_endpt->opts.ssh);
         }
     }
 
@@ -1511,7 +1467,7 @@ nc_server_config_tls(const struct lyd_node *node, NC_OPERATION op)
                 goto cleanup;
             }
         } else if (op == NC_OP_DELETE) {
-            nc_server_config_ch_del_tls_opts(ch_endpt->opts.tls);
+            nc_server_config_del_tls_opts(NULL, ch_endpt->opts.tls);
         }
     }
 
