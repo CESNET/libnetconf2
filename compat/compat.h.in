@@ -17,14 +17,20 @@
 
 #define _GNU_SOURCE /* pthread_rwlock_t */
 
+#cmakedefine HAVE_CRYPT_H
+
+#ifdef HAVE_CRYPT_H
+#   include <crypt.h>
+#endif
+
 #include <alloca.h>
-#include <crypt.h>
 #include <limits.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
 
 #ifndef __WORDSIZE
 #  if defined __x86_64__ && !defined __ILP32__

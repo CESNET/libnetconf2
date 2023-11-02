@@ -63,6 +63,8 @@ macro(USE_COMPAT)
     check_symbol_exists(get_current_dir_name "unistd.h" HAVE_GET_CURRENT_DIR_NAME)
 
     # crypt
+    check_include_file("crypt.h" HAVE_CRYPT_H)
+
     if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
         list(APPEND CMAKE_REQUIRED_LIBRARIES -llogin)
     elseif(NOT APPLE)

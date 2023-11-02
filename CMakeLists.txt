@@ -286,10 +286,6 @@ find_package(LibYANG ${LIBYANG_DEP_SOVERSION} REQUIRED)
 target_link_libraries(netconf2 ${LIBYANG_LIBRARIES})
 include_directories(${LIBYANG_INCLUDE_DIRS})
 
-# header file compatibility - shadow.h and crypt.h
-check_include_file("shadow.h" HAVE_SHADOW)
-check_include_file("crypt.h" HAVE_CRYPT)
-
 # function compatibility - getpeereid on QNX
 if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
     target_link_libraries(netconf2 -lsocket)
