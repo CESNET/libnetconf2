@@ -85,6 +85,7 @@ typedef void (*nc_server_ch_session_release_ctx_cb)(void *cb_data);
  *
  * @param[in] client_name Name of the CH client which established the session.
  * @param[in] new_session New established CH session, the pointer is internally discarded afterwards.
+ * @param[in] user_data Arbitrary new session callback data.
  * @return 0 on success;
  * @return non-zero on error and @p new_session is freed.
  */
@@ -102,6 +103,22 @@ typedef int (*nc_server_ch_new_session_cb)(const char *client_name, struct nc_se
  * @return 0 if the thread was successfully created, -1 on error.
  */
 int nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
+        nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
+        void *new_session_cb_data);
+
+/**
+ * @brief Set callbacks and their data for Call Home threads.
+ *
+ * If set, Call Home threads will be dispatched automatically upon creation of a new Call Home clients.
+ * Calling this will replace all the previously set callbacks and their data.
+ *
+ * @param[in] acquire_ctx_cb Callback for acquiring new session context.
+ * @param[in] release_ctx_cb Callback for releasing session context.
+ * @param[in] ctx_cb_data Arbitrary user data passed to @p acquire_ctx_cb and @p release_ctx_cb.
+ * @param[in] new_session_cb Callback called for every established session on the client.
+ * @param[in] new_session_cb_data Arbitrary user data passed to @p new_session_cb.
+ */
+void nc_server_ch_set_dispatch_data(nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
         nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
         void *new_session_cb_data);
 

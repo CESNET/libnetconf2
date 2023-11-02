@@ -277,6 +277,20 @@ cleanup:
     return ret;
 }
 
+API void
+nc_server_ch_set_dispatch_data(nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
+        nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
+        void *new_session_cb_data)
+{
+    NC_CHECK_ARG_RET(NULL, acquire_ctx_cb, release_ctx_cb, new_session_cb, );
+
+    server_opts.ch_dispatch_data.acquire_ctx_cb = acquire_ctx_cb;
+    server_opts.ch_dispatch_data.release_ctx_cb = release_ctx_cb;
+    server_opts.ch_dispatch_data.ctx_cb_data = ctx_cb_data;
+    server_opts.ch_dispatch_data.new_session_cb = new_session_cb;
+    server_opts.ch_dispatch_data.new_session_cb_data = new_session_cb_data;
+}
+
 int
 nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives *ka)
 {
