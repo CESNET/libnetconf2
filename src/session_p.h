@@ -202,7 +202,7 @@ struct nc_server_ssh_opts {
     struct nc_auth_client *auth_clients;    /**< Server's authorized clients. */
     uint16_t client_count;                  /**< Number of server's authorized clients. */
 
-    struct nc_endpt *endpt_client_ref;      /**< Reference to another endpoint (used for client authentication). */
+    char *referenced_endpt_name;            /**< Reference to another endpoint (used for client authentication). */
 
     char *hostkey_algs;                     /**< Hostkey algorithms supported by the server. */
     char *encryption_algs;                  /**< Encryption algorithms supported by the server. */
@@ -275,7 +275,7 @@ struct nc_server_tls_opts {
     int crl_cert_ext;                           /**< Indicates to use CA's distribution points to obtain CRLs */
     X509_STORE *crl_store;                      /**< Stores all the CRLs */
 
-    struct nc_endpt *endpt_client_ref;          /**< Reference to another endpoint (used for client authentication). */
+    char *referenced_endpt_name;                /**< Reference to another endpoint (used for client authentication). */
 
     unsigned int tls_versions;                  /**< TLS versions */
     char *ciphers;                              /**< TLS ciphers */
@@ -476,12 +476,14 @@ struct nc_server_opts {
      *                modify CH clients - READ lock ch_client_lock + ch_client_lock */
     struct nc_ch_client {
         char *name;
-
         pthread_t tid;                                  /**< Call Home client's thread ID */
         struct nc_ch_client_thread_arg *thread_data;    /**< Data of the Call Home client's thread */
 
         struct nc_ch_endpt {
             char *name;
+#ifdef NC_ENABLED_SSH_TLS
+            char *referenced_endpt_name;
+#endif /* NC_ENABLED_SSH_TLS */
             NC_TRANSPORT_IMPL ti;
             char *address;
             uint16_t port;
@@ -963,6 +965,15 @@ struct nc_ch_endpt *nc_server_ch_client_lock(const char *name, const char *endpt
  * @param[in] endpt Locked CH client structure.
  */
 void nc_server_ch_client_unlock(struct nc_ch_client *client);
+
+/**
+ * @brief Gets an endpoint structure based on its name.
+ * 
+ * @param[in] name The name of the endpoint.
+ * @param[out] endpt Pointer to the endpoint structure.
+ * @return 0 on success, 1 on failure.
+ */
+int nc_server_get_referenced_endpt(const char *name, struct nc_endpt **endpt);
 
 /**
  * @brief Add a client Call Home bind, listen on it.

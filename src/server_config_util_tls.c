@@ -777,7 +777,7 @@ nc_server_config_add_tls_endpoint_client_ref(const struct ly_ctx *ctx, const cha
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, referenced_endpt, config, 1);
 
     return nc_server_config_create(ctx, config, referenced_endpt, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
-            "client-authentication/libnetconf2-netconf-server:endpoint-client-auth", endpt_name);
+            "client-authentication/libnetconf2-netconf-server:endpoint-reference", endpt_name);
 }
 
 API int
@@ -786,5 +786,5 @@ nc_server_config_del_tls_endpoint_client_ref(const char *endpt_name, struct lyd_
     NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
 
     return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tls-server-parameters/"
-            "client-authentication/libnetconf2-netconf-server:endpoint-client-auth", endpt_name);
+            "client-authentication/libnetconf2-netconf-server:endpoint-reference", endpt_name);
 }

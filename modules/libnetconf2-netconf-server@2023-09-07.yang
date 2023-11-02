@@ -281,7 +281,7 @@ module libnetconf2-netconf-server {
     }
   }
 
-  grouping endpoint-auth-reference-grouping {
+  grouping endpoint-reference-grouping {
     description
       "Reference to another endpoint. The purpose is to use the referenced endpoint's authentication mechanisms.
        If a connection occurs on an endpoint, the connecting user will be tried to be authenticated
@@ -290,14 +290,9 @@ module libnetconf2-netconf-server {
        using the referenced endpoint's mechanisms. The references can be
        multiple, however there must not be a cycle.";
 
-    leaf endpoint-client-auth {
-      type union {
-        type leafref {
-          path "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:name";
-        }
-        type leafref {
-          path "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints/ncs:endpoint/ncs:name";
-        }
+    leaf endpoint-reference {
+      type leafref {
+        path "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:name";
       }
     }
   }
@@ -403,19 +398,19 @@ module libnetconf2-netconf-server {
   }
 
   augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
-    uses endpoint-auth-reference-grouping;
+    uses endpoint-reference-grouping;
   }
 
   augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
-    uses endpoint-auth-reference-grouping;
+    uses endpoint-reference-grouping;
   }
 
   augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:tls/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
-    uses endpoint-auth-reference-grouping;
+    uses endpoint-reference-grouping;
   }
 
   augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:tls/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
-    uses endpoint-auth-reference-grouping;
+    uses endpoint-reference-grouping;
   }
 
   augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:tls/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
