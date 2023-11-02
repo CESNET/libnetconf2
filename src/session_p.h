@@ -27,6 +27,7 @@
 #include "compat.h"
 #include "config.h"
 #include "session_client.h"
+#include "session_server_ch.h"
 
 /**
  * Enumeration of diff operation types.
@@ -512,6 +513,14 @@ struct nc_server_opts {
     } *ch_clients;
     uint16_t ch_client_count;
     pthread_rwlock_t ch_client_lock;
+
+    struct nc_ch_dispatch_data {
+        nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb;
+        nc_server_ch_session_release_ctx_cb release_ctx_cb;
+        void *ctx_cb_data;
+        nc_server_ch_new_session_cb new_session_cb;
+        void *new_session_cb_data;
+    } ch_dispatch_data;
 
     /* Atomic IDs */
     ATOMIC_T new_session_id;

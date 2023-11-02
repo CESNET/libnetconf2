@@ -245,7 +245,6 @@
  *
  * Available in __nc_client.h__.
  *
- * - ::nc_client_ssh_ch_set_auth_hostkey_check_clb()
  * - ::nc_client_ssh_ch_set_auth_password_clb()
  * - ::nc_client_ssh_ch_set_auth_interactive_clb()
  * - ::nc_client_ssh_ch_set_auth_privkey_passphrase_clb()
@@ -485,10 +484,16 @@
  *
  * _Call Home_ works with endpoints just like standard sessions, but
  * the options are organized a bit differently and endpoints are added
- * for CH clients. However, one important difference is that
- * once all the mandatory options are set, _libnetconf2_ __will not__
- * immediately start connecting to a client. It will do so only after
- * calling ::nc_connect_ch_client_dispatch() in a separate thread.
+ * for CH clients.
+ * You may choose one of two approaches for creating a new Call Home
+ * session (or in other words making a server connect to a client).
+ * The first is to set all the required callbacks
+ * by calling ::nc_server_ch_set_dispatch_data(). By setting the callbacks,
+ * the server will automatically start connecting to a client, whenever
+ * a new Call Home client is created.
+ * The second approach is to create the Call Home thread manually.
+ * To do this, you need to call ::nc_connect_ch_client_dispatch(),
+ * which then creates a new thread and the server will start to connect.
  * Unix socket _Call Home_ sessions are not supported.
  *
  * Lastly, monitoring of these sessions is up to the application.
