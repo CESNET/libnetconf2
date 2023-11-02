@@ -55,9 +55,9 @@
  * @page howtoinit Init and Thread-safety Information
  *
  * Before working with the library, it must be initialized using ::nc_client_init()
- * or ::nc_server_init(), based on how the library was compiled. To prevent
- * any reachable memory at the end of your application, there are complementary
- * destroy functions (::nc_server_destroy() and ::nc_client_destroy() available. If your
+ * and/or ::nc_server_init(). To prevent any reachable memory at the end of your
+ * application, there are complementary destroy functions
+ * (::nc_server_destroy() and ::nc_client_destroy() available). If your
  * application is multi-threaded, call the destroy functions in the main thread,
  * after all the other threads have ended.
  *
@@ -323,7 +323,7 @@
  * data - *YANG data* and *YANG diff*.
  *
  * YANG data
- * ==
+ * ---
  * Configuring the server using YANG data simplifies the management of network services.
  * With YANG data, you build a structured configuration tree and apply it as a whole.
  * This approach is user-friendly, allowing you to modify the configuration by adding or deleting nodes,
@@ -331,7 +331,7 @@
  * The *libnetconf2* library exports API functions that can help you with creation or deletion of the *YANG* data.
  *
  * YANG diff
- * ==
+ * ---
  * YANG diff, enriched with operation attributes, offers advanced configuration control.
  * It empowers the user to make precise changes within the configuration tree,
  * enabling operations like specific node deletions, additions, and modifications.
@@ -340,7 +340,7 @@
  * For example this is done by the tool [sysrepo](https://www.sysrepo.org/).
  *
  * Usage
- * ==
+ * ---
  * To be able to configure the server, the required models first need to be implemented.
  * To do this, see ::nc_server_config_load_modules().
  * Not all of the *ietf-netconf-server* (and all of its associated modules) features are enabled.
