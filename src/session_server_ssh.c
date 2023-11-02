@@ -15,16 +15,10 @@
 
 #define _GNU_SOURCE
 
-#include "config.h" /* Expose HAVE_SHADOW, HAVE_CRYPT and HAVE_LIBPAM */
+#include "config.h" /* Expose HAVE_LIBPAM */
 
-#ifdef HAVE_SHADOW
-    #include <shadow.h>
-#endif
-#ifdef HAVE_CRYPT
-    #include <crypt.h>
-#endif
 #ifdef HAVE_LIBPAM
-    #include <security/pam_appl.h>
+#   include <security/pam_appl.h>
 #endif
 
 #include <arpa/inet.h>
