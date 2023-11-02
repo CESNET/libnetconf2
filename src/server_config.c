@@ -3138,7 +3138,7 @@ ch_fail:
     pthread_mutex_unlock(&server_opts.ch_clients[i].lock);
     /* UNLOCK */
     pthread_rwlock_unlock(&server_opts.ch_client_lock);
-    return 1;      
+    return 1;
 }
 
 static int
@@ -3181,7 +3181,7 @@ nc_server_config_endpoint_reference(const struct lyd_node *node, NC_OPERATION op
                 ret = 1;
                 goto cleanup;
             }
-        
+
             ssh->referenced_endpt_name = NULL;
         } else {
             if (nc_server_config_get_tls_opts(node, &tls)) {
@@ -3864,17 +3864,19 @@ nc_server_config_netconf_client(const struct lyd_node *node, NC_OPERATION op)
             goto cleanup;
         }
 
+#ifdef NC_ENABLED_SSH_TLS
         if (server_opts.ch_dispatch_data.acquire_ctx_cb && server_opts.ch_dispatch_data.release_ctx_cb &&
-            server_opts.ch_dispatch_data.new_session_cb) {
+                server_opts.ch_dispatch_data.new_session_cb) {
             /* we have all we need for dispatching a new call home thread */
             ret = nc_connect_ch_client_dispatch(lyd_get_value(lyd_child(node)), server_opts.ch_dispatch_data.acquire_ctx_cb,
-                server_opts.ch_dispatch_data.release_ctx_cb, server_opts.ch_dispatch_data.ctx_cb_data,
-                server_opts.ch_dispatch_data.new_session_cb, server_opts.ch_dispatch_data.new_session_cb_data);
+                    server_opts.ch_dispatch_data.release_ctx_cb, server_opts.ch_dispatch_data.ctx_cb_data,
+                    server_opts.ch_dispatch_data.new_session_cb, server_opts.ch_dispatch_data.new_session_cb_data);
             if (ret) {
                 ERR(NULL, "Dispatching a new Call Home thread failed for Call Home client \"%s\".", lyd_get_value(lyd_child(node)));
                 goto cleanup;
             }
         }
+#endif /* NC_ENABLED_SSH_TLS */
     } else if (op == NC_OP_DELETE) {
         if (nc_server_config_get_ch_client(node, &ch_client)) {
             ret = 1;

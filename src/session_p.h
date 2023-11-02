@@ -516,6 +516,7 @@ struct nc_server_opts {
     uint16_t ch_client_count;
     pthread_rwlock_t ch_client_lock;
 
+#ifdef NC_ENABLED_SSH_TLS
     struct nc_ch_dispatch_data {
         nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb;
         nc_server_ch_session_release_ctx_cb release_ctx_cb;
@@ -523,6 +524,7 @@ struct nc_server_opts {
         nc_server_ch_new_session_cb new_session_cb;
         void *new_session_cb_data;
     } ch_dispatch_data;
+#endif /* NC_ENABLED_SSH_TLS */
 
     /* Atomic IDs */
     ATOMIC_T new_session_id;
@@ -968,7 +970,7 @@ void nc_server_ch_client_unlock(struct nc_ch_client *client);
 
 /**
  * @brief Gets an endpoint structure based on its name.
- * 
+ *
  * @param[in] name The name of the endpoint.
  * @param[out] endpt Pointer to the endpoint structure.
  * @return 0 on success, 1 on failure.
