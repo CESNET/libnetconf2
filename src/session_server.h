@@ -526,7 +526,7 @@ void nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *ses
  * @param[in] session Session to get the information from.
  * @return Session start time.
  */
-time_t nc_session_get_start_time(const struct nc_session *session);
+struct timespec nc_session_get_start_time(const struct nc_session *session);
 
 /**
  * @brief Increase session notification subscription flag count.

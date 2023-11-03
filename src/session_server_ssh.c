@@ -1331,7 +1331,7 @@ nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session
     }
 
     nc_realtime_get(&ts_cur);
-    new_session->opts.server.session_start = ts_cur.tv_sec;
+    new_session->opts.server.session_start = ts_cur;
     nc_timeouttime_get(&ts_cur, 0);
     new_session->opts.server.last_rpc = ts_cur.tv_sec;
     new_session->status = NC_STATUS_RUNNING;
@@ -1396,7 +1396,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     }
 
     nc_realtime_get(&ts_cur);
-    new_session->opts.server.session_start = ts_cur.tv_sec;
+    new_session->opts.server.session_start = ts_cur;
     nc_timeouttime_get(&ts_cur, 0);
     new_session->opts.server.last_rpc = ts_cur.tv_sec;
     new_session->status = NC_STATUS_RUNNING;

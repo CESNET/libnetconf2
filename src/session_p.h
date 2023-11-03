@@ -666,8 +666,8 @@ struct nc_session {
         } client;
         struct {
             /* server side only data */
-            time_t session_start;          /**< real time the session was created */
-            time_t last_rpc;               /**< monotonic time (seconds) the last RPC was received on this session */
+            struct timespec session_start;  /**< real time the session was created */
+            time_t last_rpc;                /**< monotonic time (seconds) the last RPC was received on this session */
 
             pthread_mutex_t ntf_status_lock;    /**< lock for ntf_status */
             uint32_t ntf_status;                /**< flag (count) whether the session is subscribed to notifications */
