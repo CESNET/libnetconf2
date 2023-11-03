@@ -429,14 +429,6 @@ struct nc_server_opts {
     uint16_t idle_timeout;
 
 #ifdef NC_ENABLED_SSH_TLS
-    int (*passwd_auth_clb)(const struct nc_session *session, const char *password, void *user_data);
-    void *passwd_auth_data;
-    void (*passwd_auth_data_free)(void *data);
-
-    int (*pubkey_auth_clb)(const struct nc_session *session, ssh_key key, void *user_data);
-    void *pubkey_auth_data;
-    void (*pubkey_auth_data_free)(void *data);
-
     int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg, void *user_data);
     void *interactive_auth_data;
     void (*interactive_auth_data_free)(void *data);

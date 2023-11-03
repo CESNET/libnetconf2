@@ -175,33 +175,6 @@ nc_server_ssh_ts_ref_get_keys(const char *referenced_name, struct nc_public_key 
     return 0;
 }
 
-API void
-nc_server_ssh_set_passwd_auth_clb(int (*passwd_auth_clb)(const struct nc_session *session, const char *password, void *user_data),
-        void *user_data, void (*free_user_data)(void *user_data))
-{
-    server_opts.passwd_auth_clb = passwd_auth_clb;
-    server_opts.passwd_auth_data = user_data;
-    server_opts.passwd_auth_data_free = free_user_data;
-}
-
-API void
-nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess,
-        ssh_message msg, void *user_data), void *user_data, void (*free_user_data)(void *user_data))
-{
-    server_opts.interactive_auth_clb = interactive_auth_clb;
-    server_opts.interactive_auth_data = user_data;
-    server_opts.interactive_auth_data_free = free_user_data;
-}
-
-API void
-nc_server_ssh_set_pubkey_auth_clb(int (*pubkey_auth_clb)(const struct nc_session *session, ssh_key key, void *user_data),
-        void *user_data, void (*free_user_data)(void *user_data))
-{
-    server_opts.pubkey_auth_clb = pubkey_auth_clb;
-    server_opts.pubkey_auth_data = user_data;
-    server_opts.pubkey_auth_data_free = free_user_data;
-}
-
 /**
  * @brief Compare hashed password with a cleartext password for a match.
  *
@@ -246,11 +219,7 @@ nc_sshcb_auth_password(struct nc_session *session, struct nc_auth_client *auth_c
 {
     int auth_ret = 1;
 
-    if (server_opts.passwd_auth_clb) {
-        auth_ret = server_opts.passwd_auth_clb(session, ssh_message_auth_password(msg), server_opts.passwd_auth_data);
-    } else {
-        auth_ret = auth_password_compare_pwd(auth_client->password, ssh_message_auth_password(msg));
-    }
+    auth_ret = auth_password_compare_pwd(auth_client->password, ssh_message_auth_password(msg));
 
     if (auth_ret) {
         ++session->opts.server.ssh_auth_attempts;
@@ -704,17 +673,10 @@ nc_sshcb_auth_pubkey(struct nc_session *session, struct nc_auth_client *auth_cli
 {
     int signature_state, ret = 0;
 
-    if (server_opts.pubkey_auth_clb) {
-        if (server_opts.pubkey_auth_clb(session, ssh_message_auth_pubkey(msg), server_opts.pubkey_auth_data)) {
-            ret = 1;
-            goto fail;
-        }
-    } else {
-        if (auth_pubkey_compare_key(ssh_message_auth_pubkey(msg), auth_client)) {
-            VRB(session, "User \"%s\" tried to use an unknown (unauthorized) public key.", session->username);
-            ret = 1;
-            goto fail;
-        }
+    if (auth_pubkey_compare_key(ssh_message_auth_pubkey(msg), auth_client)) {
+        VRB(session, "User \"%s\" tried to use an unknown (unauthorized) public key.", session->username);
+        ret = 1;
+        goto fail;
     }
 
     signature_state = ssh_message_auth_publickey_state(msg);
