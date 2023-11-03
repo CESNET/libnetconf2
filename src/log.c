@@ -137,14 +137,6 @@ nc_ly_log_clb(LY_LOG_LEVEL lvl, const char *msg, const char *UNUSED(path))
 }
 
 API void
-nc_set_print_clb(void (*clb)(NC_VERB_LEVEL, const char *))
-{
-    print_clb = NULL;
-    depr_print_clb = clb;
-    ly_set_log_clb(nc_ly_log_clb, 1);
-}
-
-API void
 nc_set_print_clb_session(void (*clb)(const struct nc_session *, NC_VERB_LEVEL, const char *))
 {
     print_clb = clb;

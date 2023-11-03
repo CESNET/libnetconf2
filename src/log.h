@@ -72,13 +72,6 @@ void nc_libssh_thread_verbosity(int level);
 #endif /* NC_ENABLED_SSH_TLS */
 
 /**
- * @brief Deprecated, use ::nc_set_print_clb_session() instead.
- *
- * @param[in] clb Callback that is called for every message.
- */
-void nc_set_print_clb(void (*clb)(NC_VERB_LEVEL, const char *));
-
-/**
  * @brief Set libnetconf print callback.
  *
  * This callback is set for libnetconf2 and also libyang that is used internally. libyang
