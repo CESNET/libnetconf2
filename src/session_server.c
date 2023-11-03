@@ -2060,33 +2060,6 @@ nc_server_endpt_count(void)
     return server_opts.endpt_count;
 }
 
-API int
-nc_server_is_endpt(const char *name)
-{
-    uint16_t i;
-    int found = 0;
-
-    if (!name) {
-        return found;
-    }
-
-    /* CONFIG READ LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
-
-    /* check name uniqueness */
-    for (i = 0; i < server_opts.endpt_count; ++i) {
-        if (!strcmp(server_opts.endpts[i].name, name)) {
-            found = 1;
-            break;
-        }
-    }
-
-    /* CONFIG UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
-
-    return found;
-}
-
 API NC_MSG_TYPE
 nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
 {
