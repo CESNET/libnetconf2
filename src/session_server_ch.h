@@ -109,13 +109,12 @@ int nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_
 /**
  * @brief Set callbacks and their data for Call Home threads.
  *
- * If set, Call Home threads will be dispatched automatically upon creation of a new Call Home clients.
- * Calling this will replace all the previously set callbacks and their data.
+ * If set, Call Home threads will be dispatched automatically upon creation of new Call Home clients.
  *
  * @param[in] acquire_ctx_cb Callback for acquiring new session context.
  * @param[in] release_ctx_cb Callback for releasing session context.
  * @param[in] ctx_cb_data Arbitrary user data passed to @p acquire_ctx_cb and @p release_ctx_cb.
- * @param[in] new_session_cb Callback called for every established session on the client.
+ * @param[in] new_session_cb Callback called for every established Call Home session.
  * @param[in] new_session_cb_data Arbitrary user data passed to @p new_session_cb.
  */
 void nc_server_ch_set_dispatch_data(nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,

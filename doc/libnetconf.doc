@@ -496,8 +496,6 @@
  * which then creates a new thread and the server will start to connect.
  * Unix socket _Call Home_ sessions are not supported.
  *
- * Lastly, monitoring of these sessions is up to the application.
- *
  * Functions List
  * --------------
  *
