@@ -1013,7 +1013,7 @@ nc_accept_inout(int fdin, int fdout, const char *username, const struct ly_ctx *
     nc_timeouttime_get(&ts_cur, 0);
     (*session)->opts.server.last_rpc = ts_cur.tv_sec;
     nc_realtime_get(&ts_cur);
-    (*session)->opts.server.session_start = ts_cur.tv_sec;
+    (*session)->opts.server.session_start = ts_cur;
 
     (*session)->status = NC_STATUS_RUNNING;
 
@@ -2188,7 +2188,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
     nc_timeouttime_get(&ts_cur, 0);
     (*session)->opts.server.last_rpc = ts_cur.tv_sec;
     nc_realtime_get(&ts_cur);
-    (*session)->opts.server.session_start = ts_cur.tv_sec;
+    (*session)->opts.server.session_start = ts_cur;
     (*session)->status = NC_STATUS_RUNNING;
 
     return msgtype;
@@ -2363,7 +2363,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
     nc_timeouttime_get(&ts_cur, 0);
     (*session)->opts.server.last_rpc = ts_cur.tv_sec;
     nc_realtime_get(&ts_cur);
-    (*session)->opts.server.session_start = ts_cur.tv_sec;
+    (*session)->opts.server.session_start = ts_cur;
     (*session)->status = NC_STATUS_RUNNING;
 
     return msgtype;
@@ -2783,14 +2783,16 @@ nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acqu
 
 #endif /* NC_ENABLED_SSH_TLS */
 
-API time_t
+API struct timespec
 nc_session_get_start_time(const struct nc_session *session)
 {
-    NC_CHECK_ARG_RET(session, session, 0);
+    struct timespec fail = {0};
+
+    NC_CHECK_ARG_RET(session, session, fail);
 
     if (session->side != NC_SERVER) {
         ERRARG(session, "session");
-        return 0;
+        return fail;
     }
 
     return session->opts.server.session_start;
