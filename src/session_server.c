@@ -893,18 +893,6 @@ nc_server_destroy(void)
     pthread_mutex_destroy(&server_opts.bind_lock);
 
 #ifdef NC_ENABLED_SSH_TLS
-    if (server_opts.passwd_auth_data && server_opts.passwd_auth_data_free) {
-        server_opts.passwd_auth_data_free(server_opts.passwd_auth_data);
-    }
-    server_opts.passwd_auth_data = NULL;
-    server_opts.passwd_auth_data_free = NULL;
-
-    if (server_opts.pubkey_auth_data && server_opts.pubkey_auth_data_free) {
-        server_opts.pubkey_auth_data_free(server_opts.pubkey_auth_data);
-    }
-    server_opts.pubkey_auth_data = NULL;
-    server_opts.pubkey_auth_data_free = NULL;
-
     if (server_opts.interactive_auth_data && server_opts.interactive_auth_data_free) {
         server_opts.interactive_auth_data_free(server_opts.interactive_auth_data);
     }
