@@ -378,14 +378,6 @@ void nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *));
  */
 int nc_server_endpt_count(void);
 
-/**
- * @brief Check if an endpoint exists.
- *
- * @param[in] name Endpoint name.
- * @return 0 if does not exists, non-zero otherwise.
- */
-int nc_server_is_endpt(const char *name);
-
 /** @} */
 
 /**
@@ -474,23 +466,6 @@ void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const st
  * @brief Server-side settings for TLS connections.
  * @{
  */
-
-/**
- * @brief Get a cert-to-name entry.
- *
- * If a parameter is NULL, it is ignored. If its dereferenced value is NULL,
- * it is filled and returned. If the value is set, it is used as a filter.
- * Returns first matching entry.
- *
- * @param[in] endpt_name Existing endpoint name.
- * @param[in,out] id Priority of the entry.
- * @param[in,out] fingerprint Fingerprint fo the entry.
- * @param[in,out] map_type Mapping type of the entry.
- * @param[in,out] name Specific username for the entry.
- * @return 0 on success, -1 on not finding any match.
- */
-int nc_server_tls_endpt_get_ctn(const char *endpt_name, uint32_t *id, char **fingerprint, NC_TLS_CTN_MAPTYPE *map_type,
-        char **name);
 
 /**
  * @brief Get client certificate.
