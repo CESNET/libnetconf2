@@ -1495,20 +1495,21 @@ nc_server_config_add_ch_reconnect_strategy(const struct ly_ctx *ctx, const char 
     ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/reconnect-strategy", ch_client_name);
     NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
-    if (start_with) {
-        /* get string value from enum */
-        if (start_with == NC_CH_FIRST_LISTED) {
-            start_with_val = "first-listed";
-        } else if (start_with == NC_CH_LAST_CONNECTED) {
-            start_with_val = "last-connected";
-        } else {
-            start_with_val = "random-selection";
-        }
+    /* get string value from enum */
+    if (start_with == NC_CH_FIRST_LISTED) {
+        start_with_val = "first-listed";
+    } else if (start_with == NC_CH_LAST_CONNECTED) {
+        start_with_val = "last-connected";
+    } else if (start_with == NC_CH_RANDOM) {
+        start_with_val = "random-selection";
+    } else {
+        ERR(NULL, "Unknown reconnect strategy.");
+        goto cleanup;
+    }
 
-        ret = nc_server_config_append(ctx, path, "start-with", start_with_val, config);
-        if (ret) {
-            goto cleanup;
-        }
+    ret = nc_server_config_append(ctx, path, "start-with", start_with_val, config);
+    if (ret) {
+        goto cleanup;
     }
 
     if (max_attempts) {
