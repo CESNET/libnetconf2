@@ -1619,7 +1619,7 @@ nc_server_config_keepalives(const struct lyd_node *node, NC_OPERATION op)
     struct nc_endpt *endpt;
     struct nc_bind *bind;
     struct nc_ch_endpt *ch_endpt;
-    struct nc_ch_client *ch_client;
+    struct nc_ch_client *ch_client = NULL;
 
     assert(!strcmp(LYD_NAME(node), "keepalives"));
 
@@ -1847,16 +1847,16 @@ nc_server_config_host_key(const struct lyd_node *node, NC_OPERATION op)
 
     assert(!strcmp(LYD_NAME(node), "host-key"));
 
-    if (nc_server_config_get_ssh_opts(node, &opts)) {
-        ret = 1;
-        goto cleanup;
-    }
-
     if (equal_parent_name(node, 1, "server-identity")) {
         /* LOCK */
         if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
             /* to avoid unlock on fail */
             return 1;
+        }
+
+        if (nc_server_config_get_ssh_opts(node, &opts)) {
+            ret = 1;
+            goto cleanup;
         }
 
         if (op == NC_OP_CREATE) {
@@ -1895,6 +1895,12 @@ nc_server_config_public_key_format(const struct lyd_node *node, NC_OPERATION op)
 
     assert(!strcmp(LYD_NAME(node), "public-key-format"));
 
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
+        return 1;
+    }
+
     format = ((struct lyd_node_term *)node)->value.ident->name;
     if (!strcmp(format, "ssh-public-key-format")) {
         pubkey_type = NC_PUBKEY_FORMAT_SSH;
@@ -1904,12 +1910,6 @@ nc_server_config_public_key_format(const struct lyd_node *node, NC_OPERATION op)
         ERR(NULL, "Public key format (%s) not supported.", format);
         ret = 1;
         goto cleanup;
-    }
-
-    /* LOCK */
-    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
-        /* to avoid unlock on fail */
-        return 1;
     }
 
     if (is_ssh(node) && equal_parent_name(node, 4, "server-identity")) {
@@ -2128,6 +2128,12 @@ nc_server_config_private_key_format(const struct lyd_node *node, NC_OPERATION op
 
     assert(!strcmp(LYD_NAME(node), "private-key-format"));
 
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
+        return 1;
+    }
+
     format = ((struct lyd_node_term *)node)->value.ident->name;
     if (!format) {
         ret = 1;
@@ -2139,12 +2145,6 @@ nc_server_config_private_key_format(const struct lyd_node *node, NC_OPERATION op
         ERR(NULL, "Unknown private key format.");
         ret = 1;
         goto cleanup;
-    }
-
-    /* LOCK */
-    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
-        /* to avoid unlock on fail */
-        return 1;
     }
 
     if (is_ssh(node)) {
