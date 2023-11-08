@@ -126,10 +126,10 @@ nc_privkey_format_to_str(NC_PRIVKEY_FORMAT format)
 int
 nc_base64_to_bin(const char *base64, char **bin)
 {
-    BIO *bio, *bio64;
+    BIO *bio, *bio64 = NULL;
     size_t used = 0, size = 0, r = 0;
     void *tmp = NULL;
-    int nl_count, i, remainder;
+    int nl_count, i, remainder, ret = 0;
     char *b64;
 
     /* insert new lines into the base64 string, so BIO_read works correctly */
@@ -150,13 +150,15 @@ nc_base64_to_bin(const char *base64, char **bin)
     bio64 = BIO_new(BIO_f_base64());
     if (!bio64) {
         ERR(NULL, "Error creating a bio (%s).", ERR_reason_error_string(ERR_get_error()));
-        return -1;
+        ret = -1;
+        goto cleanup;
     }
 
     bio = BIO_new_mem_buf(b64, strlen(b64));
     if (!bio) {
         ERR(NULL, "Error creating a bio (%s).", ERR_reason_error_string(ERR_get_error()));
-        return -1;
+        ret = -1;
+        goto cleanup;
     }
 
     BIO_push(bio64, bio);
@@ -168,8 +170,11 @@ nc_base64_to_bin(const char *base64, char **bin)
 
         tmp = realloc(*bin, size);
         if (!tmp) {
+            ERRMEM;
             free(*bin);
-            return -1;
+            *bin = NULL;
+            ret = -1;
+            goto cleanup;
         }
         *bin = tmp;
 
@@ -177,9 +182,12 @@ nc_base64_to_bin(const char *base64, char **bin)
         used += r;
     } while (r == 64);
 
+    ret = size;
+
+cleanup:
     free(b64);
     BIO_free_all(bio64);
-    return size;
+    return ret;
 }
 
 int
