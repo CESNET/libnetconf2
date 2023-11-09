@@ -937,6 +937,11 @@ nc_server_config_del_ctn(struct nc_server_tls_opts *opts, struct nc_ctn *ctn)
         }
     }
 
+    if (!iter) {
+        ERRINT;
+        return;
+    }
+
     iter->next = ctn->next;
     free(ctn);
 }
@@ -3126,9 +3131,11 @@ nc_server_config_endpoint_reference(const struct lyd_node *node, NC_OPERATION op
 
     if (op == NC_OP_DELETE) {
         if (endpt) {
+            /* listen */
             free(endpt->referenced_endpt_name);
             endpt->referenced_endpt_name = NULL;
         } else {
+            /* call home */
             free(ch_endpt->referenced_endpt_name);
             ch_endpt->referenced_endpt_name = NULL;
         }
@@ -3420,6 +3427,7 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
         for (iter = opts->ctn; iter->next && iter->next->id <= id; iter = iter->next) {}
         if (iter->id == id) {
             /* collision */
+            free(new);
             new = iter;
         } else {
             new->next = iter->next;
