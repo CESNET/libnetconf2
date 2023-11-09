@@ -1073,7 +1073,10 @@ nc_server_tls_curl_fetch(struct nc_session *session, CURL *handle, const char *u
     }
 
     /* set err buf */
-    curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, err_buf);
+    if (curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, err_buf)) {
+        ERR(session, "Setting CURL error buffer option failed.");
+        return -1;
+    }
 
     /* download */
     if (curl_easy_perform(handle)) {
