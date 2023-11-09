@@ -698,6 +698,7 @@ nc_rpc_establishpush_onchange(const char *datastore, const char *filter, const c
 {
     struct nc_rpc_establishpush *rpc;
     uint32_t i;
+    void *tmp;
 
     NC_CHECK_ARG_RET(NULL, datastore, NULL);
 
@@ -737,7 +738,15 @@ nc_rpc_establishpush_onchange(const char *datastore, const char *filter, const c
     if (excluded_change && (paramtype == NC_PARAMTYPE_DUP_AND_FREE)) {
         rpc->excluded_change = NULL;
         for (i = 0; excluded_change[i]; ++i) {
-            rpc->excluded_change = realloc(rpc->excluded_change, (i + 2) * sizeof *rpc->excluded_change);
+            tmp = realloc(rpc->excluded_change, (i + 2) * sizeof *rpc->excluded_change);
+            if (!tmp) {
+                /* in case we fail to alloc, just free all the excluded changes, but return the rpc anyways */
+                ERRMEM;
+                free(rpc->excluded_change);
+                rpc->excluded_change = NULL;
+                break;
+            }
+            rpc->excluded_change = tmp;
             rpc->excluded_change[i] = strdup(excluded_change[i]);
             rpc->excluded_change[i + 1] = NULL;
         }
