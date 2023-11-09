@@ -479,7 +479,7 @@ nc_pam_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_mes
 
 cleanup:
     /* destroy the PAM context */
-    if (pam_end(pam_h, ret) != PAM_SUCCESS) {
+    if (pam_h && (pam_end(pam_h, ret) != PAM_SUCCESS)) {
         ERR(NULL, "PAM error occurred (%s).\n", pam_strerror(pam_h, ret));
     }
     return ret;
@@ -551,11 +551,7 @@ nc_server_ssh_create_ssh_pubkey(const char *base64, ssh_key *key)
     const char *pub_type = NULL;
     uint32_t pub_type_len = 0;
 
-    if (!key && !base64) {
-        ERRINT;
-        ret = 1;
-        goto cleanup;
-    }
+    NC_CHECK_ARG_RET(NULL, base64, key, 1);
 
     *key = NULL;
 
@@ -1092,12 +1088,12 @@ static int
 nc_ssh_bind_add_hostkeys(ssh_bind sbind, struct nc_server_ssh_opts *opts, uint16_t hostkey_count)
 {
     uint16_t i;
-    char *privkey_path, *privkey_data;
+    char *privkey_path;
     int ret;
     struct nc_asymmetric_key *key = NULL;
 
     for (i = 0; i < hostkey_count; ++i) {
-        privkey_path = privkey_data = NULL;
+        privkey_path = NULL;
 
         /* get the asymmetric key */
         if (opts->hostkeys[i].store == NC_STORE_LOCAL) {
@@ -1119,7 +1115,7 @@ nc_ssh_bind_add_hostkeys(ssh_bind sbind, struct nc_server_ssh_opts *opts, uint16
         ret = ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HOSTKEY, privkey_path);
 
         /* cleanup */
-        if (privkey_data && unlink(privkey_path)) {
+        if (unlink(privkey_path)) {
             WRN(NULL, "Removing a temporary host key file \"%s\" failed (%s).", privkey_path, strerror(errno));
         }
 
