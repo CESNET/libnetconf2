@@ -210,8 +210,15 @@ endif()
 use_compat()
 
 # netconf2 target
-add_library(netconf2 SHARED ${libsrc} ${compatsrc})
-set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_SOVERSION_FULL} SOVERSION ${LIBNETCONF2_SOVERSION})
+if(ENABLE_STATIC)
+    add_definitions(-DSTATIC)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
+    set(CMAKE_LINK_SEARCH_START_STATIC TRUE)
+    add_library(netconf2 STATIC ${libsrc} ${compatsrc})
+else()
+    add_library(netconf2 SHARED ${libsrc} ${compatsrc})
+    set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_SOVERSION_FULL} SOVERSION ${LIBNETCONF2_SOVERSION})
+endif()
 
 # include repository files with highest priority
 include_directories(${PROJECT_BINARY_DIR}/src)
