@@ -44,7 +44,7 @@ test_msg_callback(const struct nc_session *session, NC_VERB_LEVEL level, const c
     (void) session;
 
     if (strstr(msg, expected)) {
-        strncpy(buffer, msg, 512);
+        strncpy(buffer, msg, 511);
     }
 
     printf("%s\n", msg);
