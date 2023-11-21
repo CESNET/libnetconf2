@@ -57,48 +57,19 @@ struct nc_server_opts server_opts = {
 
 static nc_rpc_clb global_rpc_clb = NULL;
 
-struct nc_endpt *
-nc_server_endpt_lock_get(const char *name, NC_TRANSPORT_IMPL ti, uint16_t *idx)
+/**
+ * @brief Lock CH client structures for reading and lock the specific client.
+ *
+ * @param[in] name Name of the CH client.
+ * @return CH client, NULL if not found.
+ */
+static struct nc_ch_client *
+nc_server_ch_client_lock(const char *name)
 {
     uint16_t i;
-    struct nc_endpt *endpt = NULL;
-
-    NC_CHECK_ARG_RET(NULL, name, NULL);
-
-    /* READ LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
-
-    for (i = 0; i < server_opts.endpt_count; ++i) {
-        if (!strcmp(server_opts.endpts[i].name, name) && (!ti || (server_opts.endpts[i].ti == ti))) {
-            endpt = &server_opts.endpts[i];
-            break;
-        }
-    }
-
-    if (!endpt) {
-        ERR(NULL, "Endpoint \"%s\" was not found.", name);
-        /* UNLOCK */
-        pthread_rwlock_unlock(&server_opts.config_lock);
-        return NULL;
-    }
-
-    if (idx) {
-        *idx = i;
-    }
-
-    return endpt;
-}
-
-struct nc_ch_endpt *
-nc_server_ch_client_lock(const char *name, const char *endpt_name, NC_TRANSPORT_IMPL ti, struct nc_ch_client **client_p)
-{
-    uint16_t i, j;
     struct nc_ch_client *client = NULL;
-    struct nc_ch_endpt *endpt = NULL;
 
-    *client_p = NULL;
-
-    NC_CHECK_ARG_RET(NULL, name, NULL);
+    assert(name);
 
     /* READ LOCK */
     pthread_rwlock_rdlock(&server_opts.ch_client_lock);
@@ -106,42 +77,27 @@ nc_server_ch_client_lock(const char *name, const char *endpt_name, NC_TRANSPORT_
     for (i = 0; i < server_opts.ch_client_count; ++i) {
         if (server_opts.ch_clients[i].name && !strcmp(server_opts.ch_clients[i].name, name)) {
             client = &server_opts.ch_clients[i];
-            if (!endpt_name && !ti) {
-                /* return only client */
-                break;
-            }
-            for (j = 0; j < client->ch_endpt_count; ++j) {
-                if ((!endpt_name || !strcmp(client->ch_endpts[j].name, endpt_name)) &&
-                        (!ti || (ti == client->ch_endpts[j].ti))) {
-                    endpt = &client->ch_endpts[j];
-                    break;
-                }
-            }
             break;
         }
     }
 
     if (!client) {
-        VRB(NULL, "Call Home client \"%s\" was not found.", name);
-
-        /* READ UNLOCK */
-        pthread_rwlock_unlock(&server_opts.ch_client_lock);
-    } else if (endpt_name && ti && !endpt) {
-        ERR(NULL, "Call Home client \"%s\" endpoint \"%s\" was not found.", name, endpt_name);
-
         /* READ UNLOCK */
         pthread_rwlock_unlock(&server_opts.ch_client_lock);
     } else {
         /* CH CLIENT LOCK */
         pthread_mutex_lock(&client->lock);
-
-        *client_p = client;
     }
 
-    return endpt;
+    return client;
 }
 
-void
+/**
+ * @brief Unlock CH client strcutures and the specific client.
+ *
+ * @param[in] endpt Locked CH client structure.
+ */
+static void
 nc_server_ch_client_unlock(struct nc_ch_client *client)
 {
     /* CH CLIENT UNLOCK */
@@ -539,7 +495,8 @@ sock_host_inet6(const struct sockaddr_in6 *addr, char **host, uint16_t *port)
 }
 
 int
-nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t *bind_lock, int timeout, char **host, uint16_t *port, uint16_t *idx)
+nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t *bind_lock, int timeout, char **host,
+        uint16_t *port, uint16_t *idx)
 {
     sigset_t sigmask, origmask;
     uint16_t i, j, pfd_count, client_port;
@@ -1988,26 +1945,34 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
     nc_ps_unlock(ps, q_id, __func__);
 }
 
+/**
+ * @brief Get UID of the owner of a socket.
+ *
+ * @param[in] sock Socket to analyze.
+ * @param[out] uid Socket owner UID.
+ * @return 0 on success,
+ * @return -1 on error.
+ */
 static int
 nc_get_uid(int sock, uid_t *uid)
 {
-    int ret;
+    int r;
 
 #ifdef SO_PEERCRED
     struct ucred ucred;
     socklen_t len;
 
     len = sizeof(ucred);
-    ret = getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &ucred, &len);
-    if (!ret) {
+    r = getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &ucred, &len);
+    if (!r) {
         *uid = ucred.uid;
     }
 #else
-    ret = getpeereid(sock, uid, NULL);
+    r = getpeereid(sock, uid, NULL);
 #endif
 
-    if (ret < 0) {
-        ERR(NULL, "Failed to get credentials from unix socket (%s).", strerror(errno));
+    if (r < 0) {
+        ERR(NULL, "Failed to get owner UID of a UNIX socket (%s).", strerror(errno));
         return -1;
     }
     return 0;
@@ -2350,35 +2315,19 @@ fail:
     return msgtype;
 }
 
-static struct nc_ch_client *
-nc_server_ch_client_with_endpt_lock(const char *name)
-{
-    struct nc_ch_client *client;
-
-    while (1) {
-        /* LOCK */
-        nc_server_ch_client_lock(name, NULL, 0, &client);
-        if (!client) {
-            return NULL;
-        }
-        if (client->ch_endpt_count) {
-            return client;
-        }
-        /* no endpoints defined yet */
-
-        /* UNLOCK */
-        nc_server_ch_client_unlock(client);
-
-        usleep(NC_CH_NO_ENDPT_WAIT * 1000);
-    }
-
-    return NULL;
-}
-
+/**
+ * @brief Wait for any event after a NC session was established on a CH client.
+ *
+ * @param[in] session New NC session.
+ * @param[in] data CH client thread argument.
+ * @return 0 if session was terminated normally,
+ * @return 1 if the CH client was removed,
+ * @return -1 on error.
+ */
 static int
 nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct nc_ch_client_thread_arg *data)
 {
-    int ret = 0, r;
+    int rc = 0, r;
     uint32_t idle_timeout;
     struct timespec ts;
     struct nc_ch_client *client;
@@ -2399,11 +2348,12 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
         /* session terminated, free it and release its context */
         nc_session_free(session, NULL);
         data->release_ctx_cb(data->ctx_cb_data);
-        return ret;
+        return 0;
     }
 
     do {
         nc_timeouttime_get(&ts, NC_CH_THREAD_IDLE_TIMEOUT_SLEEP);
+
         /* CH COND WAIT */
         r = pthread_cond_clockwait(&session->opts.server.ch_cond, &session->opts.server.ch_lock, COMPAT_CLOCK_ID, &ts);
         if (!r) {
@@ -2413,18 +2363,19 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
             }
         } else if (r != ETIMEDOUT) {
             ERR(session, "Pthread condition timedwait failed (%s).", strerror(r));
-            ret = -1;
+            rc = -1;
             break;
         }
 
         /* check whether the client was not removed */
+
         /* LOCK */
-        nc_server_ch_client_lock(data->client_name, NULL, 0, &client);
+        client = nc_server_ch_client_lock(data->client_name);
         if (!client) {
             /* client was removed, finish thread */
             VRB(session, "Call Home client \"%s\" removed, but an established session will not be terminated.",
                     data->client_name);
-            ret = 1;
+            rc = 1;
             break;
         }
 
@@ -2453,7 +2404,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct 
     /* CH UNLOCK */
     pthread_mutex_unlock(&session->opts.server.ch_lock);
 
-    return ret;
+    return rc;
 }
 
 /**
@@ -2526,10 +2477,47 @@ nc_server_ch_client_thread_is_running(struct nc_ch_client_thread_arg *data)
     return ret;
 }
 
+/**
+ * @brief Lock CH client structures for reading and lock the specific client if it has some endpoints, wait otherwise.
+ *
+ * @param[in] name Name of the CH client.
+ * @return Pointer to the CH client.
+ */
+static struct nc_ch_client *
+nc_server_ch_client_with_endpt_lock(const char *name)
+{
+    struct nc_ch_client *client;
+
+    while (1) {
+        /* LOCK */
+        client = nc_server_ch_client_lock(name);
+        if (!client) {
+            return NULL;
+        }
+        if (client->ch_endpt_count) {
+            return client;
+        }
+        /* no endpoints defined yet */
+
+        /* UNLOCK */
+        nc_server_ch_client_unlock(client);
+
+        usleep(NC_CH_NO_ENDPT_WAIT * 1000);
+    }
+
+    return NULL;
+}
+
+/**
+ * @brief Call Home client management thread.
+ *
+ * @param[in] arg CH client thread argument.
+ * @return NULL.
+ */
 static void *
 nc_ch_client_thread(void *arg)
 {
-    struct nc_ch_client_thread_arg *data = (struct nc_ch_client_thread_arg *)arg;
+    struct nc_ch_client_thread_arg *data = arg;
     NC_MSG_TYPE msgtype;
     uint8_t cur_attempts = 0;
     uint16_t next_endpt_index, max_wait;
@@ -2546,17 +2534,12 @@ nc_ch_client_thread(void *arg)
     cur_endpt = &client->ch_endpts[0];
     cur_endpt_name = strdup(cur_endpt->name);
 
-    while (1) {
-        if (!nc_server_ch_client_thread_is_running(data)) {
-            /* thread should stop running */
-            break;
-        }
-
+    while (nc_server_ch_client_thread_is_running(data)) {
         if (!cur_attempts) {
             VRB(NULL, "Call Home client \"%s\" endpoint \"%s\" connecting...", data->client_name, cur_endpt_name);
         }
-        msgtype = nc_connect_ch_endpt(cur_endpt, data->acquire_ctx_cb, data->release_ctx_cb, data->ctx_cb_data, &session);
 
+        msgtype = nc_connect_ch_endpt(cur_endpt, data->acquire_ctx_cb, data->release_ctx_cb, data->ctx_cb_data, &session);
         if (msgtype == NC_MSG_HELLO) {
             /* UNLOCK */
             nc_server_ch_client_unlock(client);
@@ -2684,6 +2667,7 @@ nc_ch_client_thread(void *arg)
         free(cur_endpt_name);
         cur_endpt_name = strdup(cur_endpt->name);
     }
+
     /* UNLOCK if we break out of the loop */
     nc_server_ch_client_unlock(client);
 
@@ -2700,58 +2684,55 @@ nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acqu
         nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
         void *new_session_cb_data)
 {
-    int ret;
+    int rc = 0, r;
     pthread_t tid;
-    struct nc_ch_client_thread_arg *arg;
-    uint16_t i;
+    struct nc_ch_client_thread_arg *arg = NULL;
     struct nc_ch_client *ch_client;
 
     NC_CHECK_ARG_RET(NULL, client_name, acquire_ctx_cb, release_ctx_cb, new_session_cb, -1);
 
-    for (i = 0; i < server_opts.ch_client_count; i++) {
-        if (!strcmp(server_opts.ch_clients[i].name, client_name)) {
-            ch_client = &server_opts.ch_clients[i];
-            break;
-        }
-    }
-
-    if (i == server_opts.ch_client_count) {
+    /* LOCK */
+    ch_client = nc_server_ch_client_lock(client_name);
+    if (!ch_client) {
         ERR(NULL, "Client \"%s\" not found.", client_name);
         return -1;
     }
 
-    arg = malloc(sizeof *arg);
-    NC_CHECK_ERRMEM_RET(!arg, -1);
+    /* create the thread argument */
+    arg = calloc(1, sizeof *arg);
+    NC_CHECK_ERRMEM_GOTO(!arg, rc = -1, cleanup);
     arg->client_name = strdup(client_name);
-    if (!arg->client_name) {
-        ERRMEM;
-        free(arg);
-        return -1;
-    }
+    NC_CHECK_ERRMEM_GOTO(!arg->client_name, rc = -1, cleanup);
     arg->acquire_ctx_cb = acquire_ctx_cb;
     arg->release_ctx_cb = release_ctx_cb;
     arg->ctx_cb_data = ctx_cb_data;
     arg->new_session_cb = new_session_cb;
     arg->new_session_cb_data = new_session_cb_data;
-    /* thread is now running */
-    arg->thread_running = 1;
-    /* initialize the condition */
     pthread_cond_init(&arg->cond, NULL);
-    /* initialize the mutex */
     pthread_mutex_init(&arg->cond_lock, NULL);
 
-    ret = pthread_create(&tid, NULL, nc_ch_client_thread, arg);
-    if (ret) {
-        ERR(NULL, "Creating a new thread failed (%s).", strerror(ret));
-        free(arg->client_name);
-        free(arg);
-        return -1;
+    /* creating the thread */
+    arg->thread_running = 1;
+    if ((r = pthread_create(&tid, NULL, nc_ch_client_thread, arg))) {
+        ERR(NULL, "Creating a new thread failed (%s).", strerror(r));
+        rc = -1;
+        goto cleanup;
     }
+
     /* the thread now manages arg */
     ch_client->tid = tid;
     ch_client->thread_data = arg;
+    arg = NULL;
 
-    return 0;
+cleanup:
+    /* UNLOCK */
+    nc_server_ch_client_unlock(ch_client);
+
+    if (arg) {
+        free(arg->client_name);
+        free(arg);
+    }
+    return rc;
 }
 
 #endif /* NC_ENABLED_SSH_TLS */

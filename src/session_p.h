@@ -929,36 +929,8 @@ int nc_sock_listen_unix(const struct nc_server_unix_opts *opts);
  * @param[out] idx Index of the bind that was accepted. Can be NULL.
  * @return Accepted socket of the new connection, -1 on error.
  */
-int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t *bind_lock, int timeout, char **host, uint16_t *port, uint16_t *idx);
-
-/**
- * @brief Lock endpoint structures for reading and the specific endpoint.
- *
- * @param[in] name Name of the endpoint.
- * @param[in] ti Expected transport.
- * @param[out] idx Index of the endpoint. Optional.
- * @return Endpoint structure.
- */
-struct nc_endpt *nc_server_endpt_lock_get(const char *name, NC_TRANSPORT_IMPL ti, uint16_t *idx);
-
-/**
- * @brief Lock CH client structures for reading and lock the specific client.
- *
- * @param[in] name Name of the CH client.
- * @param[in] endpt_name Endpoint of the CH client.
- * @param[in] ti Expected transport.
- * @param[out] client_p Pointer to the CH client.
- * @return CH endpoint structure.
- */
-struct nc_ch_endpt *nc_server_ch_client_lock(const char *name, const char *endpt_name, NC_TRANSPORT_IMPL ti,
-        struct nc_ch_client **client_p);
-
-/**
- * @brief Unlock CH client strcutures and the specific client.
- *
- * @param[in] endpt Locked CH client structure.
- */
-void nc_server_ch_client_unlock(struct nc_ch_client *client);
+int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t *bind_lock, int timeout,
+        char **host, uint16_t *port, uint16_t *idx);
 
 /**
  * @brief Gets an endpoint structure based on its name.
