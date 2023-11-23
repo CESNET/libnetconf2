@@ -45,11 +45,6 @@
 #cmakedefine HAVE_LIBPAM
 
 /*
-* Support for older PAM versions
-*/
-#cmakedefine LIBPAM_HAVE_CONFDIR
-
-/*
  * Location of installed YANG modules on the system
  */
 #define NC_SERVER_SEARCH_DIR "@YANG_MODULE_DIR@"

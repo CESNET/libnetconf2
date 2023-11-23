@@ -1,10 +1,10 @@
 /**
  * @file test_auth.c
  * @author Roman Janota <xjanot04@fit.vutbr.cz>
- * @brief libnetconf2 Linux PAM keyboard-interactive authentication test
+ * @brief libnetconf2 SSH authentication methods test
  *
  * @copyright
- * Copyright (c) 2022 CESNET, z.s.p.o.
+ * Copyright (c) 2023 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -66,73 +66,6 @@ server_thread(void *arg)
     nc_ps_clear(ps, 1, NULL);
     nc_ps_free(ps);
     return NULL;
-}
-
-static char *
-auth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo, void *priv)
-{
-    (void) instruction;
-    (void) echo;
-    (void) auth_name;
-    (void) priv;
-
-    /* send the replies to keyboard-interactive authentication */
-    if (strstr(prompt, "backwards")) {
-        return strdup("tni_tset");
-    } else if (strstr(prompt, "1+1")) {
-        return strdup("2");
-    } else {
-        return NULL;
-    }
-}
-
-static void *
-client_thread_interactive(void *arg)
-{
-    int ret;
-    struct nc_session *session = NULL;
-    struct test_state *state = arg;
-
-    /* skip all hostkey and known_hosts checks */
-    nc_client_ssh_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_SKIP);
-
-    ret = nc_client_set_schema_searchpath(MODULES_DIR);
-    assert_int_equal(ret, 0);
-
-    ret = nc_client_ssh_set_username("test_int");
-    assert_int_equal(ret, 0);
-
-    /* set keyboard-interactive authentication callback */
-    nc_client_ssh_set_auth_interactive_clb(auth_interactive, NULL);
-
-    nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PUBLICKEY, -1);
-    nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PASSWORD, -1);
-    nc_client_ssh_set_auth_pref(NC_SSH_AUTH_INTERACTIVE, 1);
-
-    pthread_barrier_wait(&state->barrier);
-    session = nc_connect_ssh("127.0.0.1", 10005, NULL);
-    assert_non_null(session);
-
-    nc_session_free(session, NULL);
-    return NULL;
-}
-
-static void
-test_nc_auth_interactive(void **state)
-{
-    int ret, i;
-    pthread_t tids[2];
-
-    assert_non_null(state);
-
-    ret = pthread_create(&tids[0], NULL, client_thread_interactive, *state);
-    assert_int_equal(ret, 0);
-    ret = pthread_create(&tids[1], NULL, server_thread, *state);
-    assert_int_equal(ret, 0);
-
-    for (i = 0; i < 2; i++) {
-        pthread_join(tids[i], NULL);
-    }
 }
 
 static char *
@@ -324,9 +257,6 @@ setup_f(void **state)
     ret = nc_server_config_add_ssh_user_pubkey(ctx, "endpt", "test_pk", "pubkey", TESTS_DIR "/data/key_rsa.pub", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_ssh_user_interactive(ctx, "endpt", "test_int", "netconf.conf", BUILD_DIR "/tests", &tree);
-    assert_int_equal(ret, 0);
-
     ret = nc_server_config_add_ssh_user_password(ctx, "endpt", "test_pw", "testpw", &tree);
     assert_int_equal(ret, 0);
 
@@ -374,7 +304,6 @@ int
 main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup_teardown(test_nc_auth_interactive, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_auth_pubkey, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_auth_password, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_auth_none, setup_f, teardown_f)

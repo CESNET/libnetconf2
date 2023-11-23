@@ -240,9 +240,7 @@ nc_sshcb_auth_password(struct nc_session *session, struct nc_auth_client *auth_c
  * @param[in] msg PAM module's messages.
  * @param[out] resp User responses.
  * @param[in] appdata_ptr Callback's data.
- * @return PAM_SUCCESS on success;
- * @return PAM_BUF_ERR on memory allocation error;
- * @return PAM_CONV_ERR otherwise.
+ * @return PAM_SUCCESS on success, PAM_BUF_ERR on memory allocation error, PAM_CONV_ERR otherwise.
  */
 static int
 nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_response **resp, void *appdata_ptr)
@@ -256,10 +254,10 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
     struct nc_pam_thread_arg *clb_data = appdata_ptr;
     ssh_session libssh_session;
     struct timespec ts_timeout;
-    struct nc_server_ssh_opts *opts;
+    uint16_t auth_timeout;
 
     libssh_session = clb_data->session->ti.libssh.session;
-    opts = clb_data->opts;
+    auth_timeout = clb_data->auth_timeout;
 
     /* PAM_MAX_NUM_MSG == 32 by default */
     if ((n_messages <= 0) || (n_messages >= PAM_MAX_NUM_MSG)) {
@@ -331,8 +329,8 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
         goto cleanup;
     }
 
-    if (opts->auth_timeout) {
-        nc_timeouttime_get(&ts_timeout, opts->auth_timeout * 1000);
+    if (auth_timeout) {
+        nc_timeouttime_get(&ts_timeout, auth_timeout * 1000);
     }
 
     /* get user's replies */
@@ -349,7 +347,7 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
         }
 
         usleep(NC_TIMEOUT_STEP);
-    } while (opts->auth_timeout && (nc_timeouttime_cur_diff(&ts_timeout) >= 1));
+    } while (auth_timeout && (nc_timeouttime_cur_diff(&ts_timeout) >= 1));
 
     if (!reply) {
         ERR(NULL, "Authentication timeout.");
@@ -397,50 +395,30 @@ cleanup:
  * @return PAM error otherwise.
  */
 static int
-nc_pam_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message ssh_msg)
+nc_pam_auth(struct nc_session *session, struct nc_auth_client *client, uint16_t auth_timeout, ssh_message ssh_msg)
 {
     pam_handle_t *pam_h = NULL;
     int ret;
     struct nc_pam_thread_arg clb_data;
     struct pam_conv conv;
-    uint16_t i;
 
     /* structure holding callback's data */
     clb_data.msg = ssh_msg;
     clb_data.session = session;
-    clb_data.opts = opts;
+    clb_data.auth_timeout = auth_timeout;
 
     /* PAM conversation structure holding the callback and it's data */
     conv.conv = nc_pam_conv_clb;
     conv.appdata_ptr = &clb_data;
 
-    /* get the current client's configuration file */
-    for (i = 0; i < opts->client_count; i++) {
-        if (!strcmp(opts->auth_clients[i].username, session->username)) {
-            break;
-        }
-    }
-
-    if (i == opts->client_count) {
-        ERR(NULL, "User \"%s\" not found.", session->username);
-        ret = 1;
-        goto cleanup;
-    }
-
-    if (!opts->auth_clients[i].pam_config_name) {
-        ERR(NULL, "User's \"%s\" PAM configuration filename not set.");
+    if (!server_opts.pam_config_name) {
+        ERR(NULL, "PAM configuration filename not set.");
         ret = 1;
         goto cleanup;
     }
 
     /* initialize PAM and see if the given configuration file exists */
-# ifdef LIBPAM_HAVE_CONFDIR
-    /* PAM version >= 1.4 */
-    ret = pam_start_confdir(opts->auth_clients[i].pam_config_name, session->username, &conv, opts->auth_clients[i].pam_config_dir, &pam_h);
-# else
-    /* PAM version < 1.4 */
-    ret = pam_start(opts->auth_clients[i].pam_config_name, session->username, &conv, &pam_h);
-# endif
+    ret = pam_start(server_opts.pam_config_name, client->username, &conv, &pam_h);
     if (ret != PAM_SUCCESS) {
         ERR(NULL, "PAM error occurred (%s).\n", pam_strerror(pam_h, ret));
         goto cleanup;
@@ -470,7 +448,7 @@ nc_pam_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_mes
         VRB(NULL, "PAM warning occurred (%s).\n", pam_strerror(pam_h, ret));
         ret = pam_chauthtok(pam_h, PAM_CHANGE_EXPIRED_AUTHTOK);
         if (ret == PAM_SUCCESS) {
-            VRB(NULL, "The authentication token of user \"%s\" updated successfully.", session->username);
+            VRB(NULL, "The authentication token of user \"%s\" updated successfully.", client->username);
         } else {
             ERR(NULL, "PAM error occurred (%s).\n", pam_strerror(pam_h, ret));
             goto cleanup;
@@ -485,10 +463,10 @@ cleanup:
     return ret;
 }
 
-#endif
+#endif /* HAVE_LIBPAM */
 
 static int
-nc_sshcb_auth_kbdint(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg)
+nc_sshcb_auth_kbdint(struct nc_session *session, struct nc_auth_client *client, uint16_t auth_timeout, ssh_message msg)
 {
     int auth_ret = 1;
 
@@ -496,7 +474,7 @@ nc_sshcb_auth_kbdint(struct nc_session *session, struct nc_server_ssh_opts *opts
         auth_ret = server_opts.interactive_auth_clb(session, session->ti.libssh.session, msg, server_opts.interactive_auth_data);
     } else {
 #ifdef HAVE_LIBPAM
-        if (nc_pam_auth(session, opts, msg) == PAM_SUCCESS) {
+        if (nc_pam_auth(session, client, auth_timeout, msg) == PAM_SUCCESS) {
             auth_ret = 0;
         }
 #else
@@ -514,6 +492,40 @@ nc_sshcb_auth_kbdint(struct nc_session *session, struct nc_server_ssh_opts *opts
 
     return auth_ret;
 }
+
+API void
+nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg, void *user_data),
+        void *user_data, void (*free_user_data)(void *user_data))
+{
+    server_opts.interactive_auth_clb = interactive_auth_clb;
+    server_opts.interactive_auth_data = user_data;
+    server_opts.interactive_auth_data_free = free_user_data;
+}
+
+#ifdef HAVE_LIBPAM
+
+API int
+nc_server_ssh_set_pam_conf_filename(const char *filename)
+{
+    NC_CHECK_ARG_RET(NULL, filename, 1);
+
+    free(server_opts.pam_config_name);
+    server_opts.pam_config_name = strdup(filename);
+    NC_CHECK_ERRMEM_RET(!server_opts.pam_config_name, 1);
+    return 0;
+}
+
+#else
+
+API int
+nc_server_ssh_set_pam_conf_filename(const char *filename)
+{
+    (void) filename;
+    ERR("LibPAM not found.");
+    return 1;
+}
+
+#endif /* HAVE_LIBPAM */
 
 /*
  *  Get the public key type from binary data stored in buffer.
@@ -654,7 +666,7 @@ auth_pubkey_compare_key(ssh_key key, struct nc_auth_client *auth_client)
 static void
 nc_sshcb_auth_none(struct nc_session *session, struct nc_auth_client *auth_client, ssh_message msg)
 {
-    if (auth_client->supports_none && !auth_client->password && !auth_client->pubkey_count && !auth_client->pam_config_name) {
+    if (auth_client->none_enabled && !auth_client->password && !auth_client->pubkey_count && !auth_client->kb_int_enabled) {
         /* only authenticate the client if he supports none and no other method */
         session->flags |= NC_SESSION_SSH_AUTHENTICATED;
         VRB(session, "User \"%s\" authenticated.", session->username);
@@ -963,11 +975,11 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
                 state->auth_method_count++;
                 libssh_auth_methods |= SSH_AUTH_METHOD_PASSWORD;
             }
-            if (auth_client->pam_config_name) {
+            if (auth_client->kb_int_enabled) {
                 state->auth_method_count++;
                 libssh_auth_methods |= SSH_AUTH_METHOD_INTERACTIVE;
             }
-            if (auth_client->supports_none) {
+            if (auth_client->none_enabled) {
                 libssh_auth_methods |= SSH_AUTH_METHOD_NONE;
             }
 
@@ -995,7 +1007,7 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
         } else if (subtype == SSH_AUTH_METHOD_PUBLICKEY) {
             ret = nc_sshcb_auth_pubkey(session, auth_client, msg);
         } else if (subtype == SSH_AUTH_METHOD_INTERACTIVE) {
-            ret = nc_sshcb_auth_kbdint(session, opts, msg);
+            ret = nc_sshcb_auth_kbdint(session, auth_client, opts->auth_timeout, msg);
         }
 
         if (!ret) {

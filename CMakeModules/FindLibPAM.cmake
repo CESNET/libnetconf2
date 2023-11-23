@@ -4,7 +4,6 @@
 #  LIBPAM_FOUND - system has LibPAM
 #  LIBPAM_INCLUDE_DIRS - the LibPAM include directory
 #  LIBPAM_LIBRARIES - link these to use LibPAM
-#  LIBPAM_HAVE_CONFDIR - LibPAM version >= 1.4
 #
 #  Author Roman Janota <xjanot04@fit.vutbr.cz>
 #  Copyright (c) 2022 CESNET, z.s.p.o.
@@ -63,14 +62,6 @@ else()
 
   if(LIBPAM_INCLUDE_DIR AND LIBPAM_LIBRARY)
     set(LIBPAM_FOUND TRUE)
-    # there is no reliable way to check the version of PAM, so see if the declaration of a function pam_start_confdir
-    # is in the header file (added in PAM 1.4)
-    file(STRINGS ${LIBPAM_INCLUDE_DIR}/security/pam_appl.h PAM_CONFDIR REGEX "pam_start_confdir")
-    if ("${PAM_CONFDIR}" STREQUAL "")
-      set(LIBPAM_HAVE_CONFDIR FALSE)
-    else()
-      set(LIBPAM_HAVE_CONFDIR TRUE)
-    endif()
   else()
     set(LIBPAM_FOUND FALSE)
   endif()
