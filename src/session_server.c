@@ -2320,14 +2320,14 @@ fail:
 /**
  * @brief Wait for any event after a NC session was established on a CH client.
  *
- * @param[in] session New NC session.
  * @param[in] data CH client thread argument.
+ * @param[in] session New NC session. The session is invalid upon being freed (= function exit).
  * @return 0 if session was terminated normally,
  * @return 1 if the CH client was removed,
  * @return -1 on error.
  */
 static int
-nc_server_ch_client_thread_session_cond_wait(struct nc_session *session, struct nc_ch_client_thread_arg *data)
+nc_server_ch_client_thread_session_cond_wait(struct nc_ch_client_thread_arg *data, struct nc_session *session)
 {
     int rc = 0, r;
     uint32_t idle_timeout;
@@ -2531,7 +2531,10 @@ nc_ch_client_thread(void *arg)
 
     /* LOCK */
     client = nc_server_ch_client_with_endpt_lock(data->client_name);
-    assert(client);
+    if (!client) {
+        VRB(NULL, "Call Home client \"%s\" removed.", data->client_name);
+        goto cleanup;
+    }
 
     cur_endpt = &client->ch_endpts[0];
     cur_endpt_name = strdup(cur_endpt->name);
@@ -2553,11 +2556,12 @@ nc_ch_client_thread(void *arg)
 
             /* run while the session is established */
             VRB(session, "Call Home client \"%s\" session %u established.", data->client_name, session->id);
-            if (nc_server_ch_client_thread_session_cond_wait(session, data)) {
+            if (nc_server_ch_client_thread_session_cond_wait(data, session)) {
                 goto cleanup;
             }
+            session = NULL;
 
-            VRB(session, "Call Home client \"%s\" session terminated.", data->client_name);
+            VRB(NULL, "Call Home client \"%s\" session terminated.", data->client_name);
             if (!nc_server_ch_client_thread_is_running(data)) {
                 /* thread should stop running */
                 goto cleanup;
@@ -2565,7 +2569,10 @@ nc_ch_client_thread(void *arg)
 
             /* LOCK */
             client = nc_server_ch_client_with_endpt_lock(data->client_name);
-            assert(client);
+            if (!client) {
+                VRB(NULL, "Call Home client \"%s\" removed.", data->client_name);
+                goto cleanup;
+            }
 
             /* session changed status -> it was disconnected for whatever reason,
              * persistent connection immediately tries to reconnect, periodic connects at specific times */
@@ -2677,6 +2684,8 @@ cleanup:
     VRB(session, "Call Home client \"%s\" thread exit.", data->client_name);
     free(cur_endpt_name);
     free(data->client_name);
+    pthread_cond_destroy(&data->cond);
+    pthread_mutex_destroy(&data->cond_lock);
     free(data);
     return NULL;
 }
