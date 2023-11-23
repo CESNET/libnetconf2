@@ -160,8 +160,7 @@ set(format_sources
     examples/*.h*
     src/*.c
     src/*.h
-    tests/*.c
-    tests/pam/*.c)
+    tests/*.c)
 
 #
 # checks
@@ -254,13 +253,6 @@ if(ENABLE_SSH_TLS)
     find_package(LibPAM)
     if(LibPAM_FOUND)
         set(HAVE_LIBPAM TRUE)
-
-        # enable PAM test if a PAM header file contains a declaration of a function pam_start_confdir
-        if (LIBPAM_HAVE_CONFDIR)
-            message(STATUS "LibPAM found, version >= 1.4, enabled PAM tests")
-        else()
-            message(STATUS "LibPAM found, version < 1.4, disabled PAM tests")
-        endif()
 
         target_link_libraries(netconf2 ${LIBPAM_LIBRARIES})
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBPAM_LIBRARIES})

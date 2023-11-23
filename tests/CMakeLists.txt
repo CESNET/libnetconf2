@@ -11,14 +11,9 @@ endif()
 set(tests test_unix_socket test_client_thread test_fd_comm test_init_destroy_client test_init_destroy_server
         test_io test_thread_messages test_client_messages)
 
-# only enable PAM tests if the version of PAM is greater than 1.4
-if(LIBPAM_HAVE_CONFDIR)
-    list(APPEND tests test_auth)
-endif()
-
 #append tests depending on SSH/TLS
 if(ENABLE_SSH_TLS)
-    list(APPEND tests test_two_channels test_ks_ts test_ec
+    list(APPEND tests test_auth test_two_channels test_ks_ts test_ec
         test_ed25519 test_replace test_endpt_share_clients test_tls test_crl test_ch
         test_runtime_changes test_client_ssh test_client_tls)
 endif()
@@ -63,19 +58,3 @@ endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/src ${PROJECT_BINARY_DIR})
 configure_file("${PROJECT_SOURCE_DIR}/tests/config.h.in" "${PROJECT_BINARY_DIR}/tests/config.h" ESCAPE_QUOTES @ONLY)
-
-if(LIBPAM_HAVE_CONFDIR)
-    #compile PAM test module
-    add_library(pam_netconf SHARED ${CMAKE_SOURCE_DIR}/tests/pam/pam_netconf.c)
-    set_target_properties(pam_netconf PROPERTIES PREFIX "")
-    target_link_libraries(pam_netconf ${LIBPAM_LIBRARIES})
-
-    #generate PAM configuration file
-    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/netconf.conf
-        "#%PAM-1.4\n"
-        "auth required ${CMAKE_CURRENT_BINARY_DIR}/pam_netconf.so\n"
-        "account required ${CMAKE_CURRENT_BINARY_DIR}/pam_netconf.so\n"
-        "password required ${CMAKE_CURRENT_BINARY_DIR}/pam_netconf.so\n"
-    )
-
-endif()

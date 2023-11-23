@@ -735,8 +735,6 @@ nc_server_config_del_auth_client(struct nc_server_ssh_opts *opts, struct nc_auth
     }
 
     free(auth_client->password);
-    free(auth_client->pam_config_name);
-    free(auth_client->pam_config_dir);
 
     opts->client_count--;
     if (!opts->client_count) {
@@ -2502,13 +2500,13 @@ cleanup:
 }
 
 static int
-nc_server_config_pam_name(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_kb_int(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_auth_client *auth_client;
-    struct nc_ch_client *ch_client;
+    struct nc_ch_client *ch_client = NULL;
 
-    assert(!strcmp(LYD_NAME(node), "pam-config-file-name"));
+    assert(!strcmp(LYD_NAME(node), "keyboard-interactive"));
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
@@ -2521,50 +2519,10 @@ nc_server_config_pam_name(const struct lyd_node *node, NC_OPERATION op)
         goto cleanup;
     }
 
-    if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        free(auth_client->pam_config_name);
-        auth_client->pam_config_name = strdup(lyd_get_value(node));
-        NC_CHECK_ERRMEM_GOTO(!auth_client->pam_config_name, ret = 1, cleanup);
+    if (op == NC_OP_CREATE) {
+        auth_client->kb_int_enabled = 1;
     } else {
-        free(auth_client->pam_config_name);
-        auth_client->pam_config_name = NULL;
-    }
-
-cleanup:
-    if (is_ch(node)) {
-        /* UNLOCK */
-        nc_ch_client_unlock(ch_client);
-    }
-    return ret;
-}
-
-static int
-nc_server_config_pam_dir(const struct lyd_node *node, NC_OPERATION op)
-{
-    int ret = 0;
-    struct nc_auth_client *auth_client;
-    struct nc_ch_client *ch_client;
-
-    assert(!strcmp(LYD_NAME(node), "pam-config-file-dir"));
-
-    /* LOCK */
-    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
-        /* to avoid unlock on fail */
-        return 1;
-    }
-
-    if (nc_server_config_get_auth_client(node, &auth_client)) {
-        ret = 1;
-        goto cleanup;
-    }
-
-    if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        free(auth_client->pam_config_dir);
-        auth_client->pam_config_dir = strdup(lyd_get_value(node));
-        NC_CHECK_ERRMEM_GOTO(!auth_client->pam_config_dir, ret = 1, cleanup);
-    } else {
-        free(auth_client->pam_config_dir);
-        auth_client->pam_config_dir = NULL;
+        auth_client->kb_int_enabled = 0;
     }
 
 cleanup:
@@ -2597,9 +2555,9 @@ nc_server_config_none(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if (op == NC_OP_CREATE) {
-        auth_client->supports_none = 1;
+        auth_client->none_enabled = 1;
     } else {
-        auth_client->supports_none = 0;
+        auth_client->none_enabled = 0;
     }
 
 cleanup:
@@ -4204,10 +4162,8 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
         ret = nc_server_config_truststore_reference(node, op);
     } else if (!strcmp(name, "password")) {
         ret = nc_server_config_password(node, op);
-    } else if (!strcmp(name, "pam-config-file-name")) {
-        ret = nc_server_config_pam_name(node, op);
-    } else if (!strcmp(name, "pam-config-file-dir")) {
-        ret = nc_server_config_pam_dir(node, op);
+    } else if (!strcmp(name, "keyboard-interactive")) {
+        ret = nc_server_config_kb_int(node, op);
     } else if (!strcmp(name, "none")) {
         ret = nc_server_config_none(node, op);
     } else if (!strcmp(name, "host-key-alg")) {

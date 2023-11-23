@@ -174,9 +174,8 @@ struct nc_auth_client {
     };
 
     char *password;                         /**< Client's password */
-    char *pam_config_name;                  /**< Client's PAM configuration file name. */
-    char *pam_config_dir;                   /**< Client's PAM configuration file directory. */
-    int supports_none;                      /**< Implies that the client supports the none authentication method. */
+    int kb_int_enabled;                     /**< Indicates that the client supports keyboard-interactive authentication. */
+    int none_enabled;                       /**< Implies that the client supports the none authentication method. */
 };
 
 /**
@@ -429,6 +428,7 @@ struct nc_server_opts {
     uint16_t idle_timeout;
 
 #ifdef NC_ENABLED_SSH_TLS
+    char *pam_config_name;              /**< PAM configuration file name. */
     int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg, void *user_data);
     void *interactive_auth_data;
     void (*interactive_auth_data_free)(void *data);
@@ -732,9 +732,9 @@ struct nc_ntf_thread_arg {
  * @brief PAM callback arguments.
  */
 struct nc_pam_thread_arg {
-    ssh_message msg;            /**< libssh message */
-    struct nc_session *session; /**< NETCONF session */
-    struct nc_server_ssh_opts *opts; /**< SSH server opts */
+    ssh_message msg;                /**< libssh message */
+    struct nc_session *session;     /**< NETCONF session */
+    uint16_t auth_timeout;          /**< Authentication timeout. */
 };
 
 /**

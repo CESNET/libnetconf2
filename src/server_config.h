@@ -413,8 +413,23 @@ int nc_server_config_del_ssh_user_password(const char *endpt_name, const char *u
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
+
+/**
+ * @brief Creates new YANG configuration data nodes for an SSH user's keyboard interactive authentication method.
+ *
+ * To set the PAM configuration filename, see ::nc_server_ssh_set_pam_conf_filename().
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, its user might be changed.
+ * @param[in] user_name Arbitrary identifier of the user.
+ * If an user with this identifier already exists, its contents will be changed.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
 int nc_server_config_add_ssh_user_interactive(const struct ly_ctx *ctx, const char *endpt_name,
-        const char *user_name, const char *pam_config_name, const char *pam_config_dir, struct lyd_node **config);
+        const char *user_name, struct lyd_node **config);
 
 /**
  * @brief Deletes an SSH user's keyboard interactive authentication from the YANG data.
@@ -1045,6 +1060,8 @@ int nc_server_config_del_ch_ssh_user_password(const char *client_name, const cha
 /**
  * @brief Creates new YANG configuration data nodes for a Call Home SSH user's keyboard interactive authentication method.
  *
+ * To set the PAM configuration filename, see ::nc_server_ssh_set_pam_conf_filename().
+ *
  * @param[in] ctx libyang context.
  * @param[in] client_name Arbitrary identifier of the Call Home client.
  * If a Call Home client with this identifier already exists, its contents will be changed.
@@ -1052,16 +1069,12 @@ int nc_server_config_del_ch_ssh_user_password(const char *client_name, const cha
  * If the client's endpoint with this identifier already exists, its contents will be changed.
  * @param[in] user_name Arbitrary identifier of the endpoint's user.
  * If the endpoint's user with this identifier already exists, its contents will be changed.
- * @param[in] pam_config_name Name of the PAM configuration file.
- * @param[in] pam_config_dir Optional. The absolute path to the directory in which the configuration file
- * with the name pam_config_name is located. A newer version (>= 1.4) of PAM library is required to be able to specify
- * the path. If NULL is passed, then the PAM's system directories will be searched (usually /etc/pam.d/).
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_add_ch_ssh_user_interactive(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
-        const char *user_name, const char *pam_config_name, const char *pam_config_dir, struct lyd_node **config);
+        const char *user_name, struct lyd_node **config);
 
 /**
  * @brief Deletes a Call Home SSH user's keyboard interactive authentication from the YANG data.

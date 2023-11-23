@@ -457,6 +457,19 @@ NC_MSG_TYPE nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_sessio
 void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session,
         ssh_session ssh_sess, ssh_message msg, void *user_data), void *user_data, void (*free_user_data)(void *user_data));
 
+/**
+ * @brief Set the name of the PAM configuration file.
+ *
+ * This filename will be set globally for all clients wishing to authenticate via the
+ * SSH Keyboard Interactive authentication method.
+ *
+ * @param[in] filename Name of the PAM configuration file. The file needs to be located in
+ * the default PAM directory (usually /etc/pam.d/).
+ *
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_ssh_set_pam_conf_filename(const char *filename);
+
 /** @} Server SSH */
 
 /**

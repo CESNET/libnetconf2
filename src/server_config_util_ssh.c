@@ -474,45 +474,21 @@ nc_server_config_del_ch_ssh_user_password(const char *client_name, const char *e
             "users/user[name='%s']/password", client_name, endpt_name, user_name);
 }
 
-static int
-_nc_server_config_add_ssh_user_interactive(const struct ly_ctx *ctx, const char *tree_path,
-        const char *pam_config_name, const char *pam_config_dir, struct lyd_node **config)
-{
-    int ret = 0;
-
-    ret = nc_server_config_append(ctx, tree_path, "pam-config-file-name", pam_config_name, config);
-    if (ret) {
-        goto cleanup;
-    }
-
-    if (pam_config_dir) {
-        ret = nc_server_config_append(ctx, tree_path, "pam-config-file-dir", pam_config_dir, config);
-        if (ret) {
-            goto cleanup;
-        }
-    }
-
-cleanup:
-    return ret;
-}
-
 API int
 nc_server_config_add_ssh_user_interactive(const struct ly_ctx *ctx, const char *endpt_name,
-        const char *user_name, const char *pam_config_name, const char *pam_config_dir, struct lyd_node **config)
+        const char *user_name, struct lyd_node **config)
 {
     int ret = 0;
     char *path = NULL;
 
-    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, pam_config_name, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, config, 1);
 
     ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
-            "client-authentication/users/user[name='%s']/"
-            "libnetconf2-netconf-server:keyboard-interactive", endpt_name, user_name);
+            "client-authentication/users/user[name='%s']", endpt_name, user_name);
     NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
-    ret = _nc_server_config_add_ssh_user_interactive(ctx, path, pam_config_name, pam_config_dir, config);
+    ret = nc_server_config_append(ctx, path, "libnetconf2-netconf-server:keyboard-interactive", NULL, config);
     if (ret) {
-        ERR(NULL, "Creating new SSH user's keyboard interactive nodes failed.");
         goto cleanup;
     }
 
@@ -523,21 +499,20 @@ cleanup:
 
 API int
 nc_server_config_add_ch_ssh_user_interactive(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
-        const char *user_name, const char *pam_config_name, const char *pam_config_dir, struct lyd_node **config)
+        const char *user_name, struct lyd_node **config)
 {
     int ret = 0;
     char *path = NULL;
 
-    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, user_name, pam_config_name, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, user_name, config, 1);
 
     ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
-            "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/"
-            "libnetconf2-netconf-server:keyboard-interactive", client_name, endpt_name, user_name);
+            "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']",
+            client_name, endpt_name, user_name);
     NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
-    ret = _nc_server_config_add_ssh_user_interactive(ctx, path, pam_config_name, pam_config_dir, config);
+    ret = nc_server_config_append(ctx, path, "libnetconf2-netconf-server:keyboard-interactive", NULL, config);
     if (ret) {
-        ERR(NULL, "Creating new CH SSH user's keyboard interactive nodes failed.");
         goto cleanup;
     }
 
