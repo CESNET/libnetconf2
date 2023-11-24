@@ -57,6 +57,7 @@ struct nc_server_opts server_opts = {
 
 static nc_rpc_clb global_rpc_clb = NULL;
 
+#ifdef NC_ENABLED_SSH_TLS
 /**
  * @brief Lock CH client structures for reading and lock the specific client.
  *
@@ -106,6 +107,8 @@ nc_server_ch_client_unlock(struct nc_ch_client *client)
     /* READ UNLOCK */
     pthread_rwlock_unlock(&server_opts.ch_client_lock);
 }
+
+#endif /* NC_ENABLED_SSH_TLS */
 
 int
 nc_server_get_referenced_endpt(const char *name, struct nc_endpt **endpt)
@@ -2258,7 +2261,6 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
     (*session)->port = endpt->port;
 
     /* sock gets assigned to session or closed */
-#ifdef NC_ENABLED_SSH_TLS
     if (endpt->ti == NC_TI_LIBSSH) {
         ret = nc_accept_ssh_session(*session, endpt->opts.ssh, sock, NC_TRANSPORT_TIMEOUT);
         (*session)->data = NULL;
@@ -2282,9 +2284,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
             msgtype = NC_MSG_WOULDBLOCK;
             goto fail;
         }
-    } else
-#endif /* NC_ENABLED_SSH_TLS */
-    {
+    } else {
         ERRINT;
         close(sock);
         msgtype = NC_MSG_ERROR;
