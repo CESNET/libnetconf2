@@ -420,7 +420,7 @@ nc_pam_auth(struct nc_session *session, struct nc_auth_client *client, uint16_t 
     /* initialize PAM and see if the given configuration file exists */
     ret = pam_start(server_opts.pam_config_name, client->username, &conv, &pam_h);
     if (ret != PAM_SUCCESS) {
-        ERR(NULL, "PAM error occurred (%s).\n", pam_strerror(pam_h, ret));
+        ERR(NULL, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
         goto cleanup;
     }
 
@@ -428,10 +428,10 @@ nc_pam_auth(struct nc_session *session, struct nc_auth_client *client, uint16_t 
     ret = pam_authenticate(pam_h, 0);
     if (ret != PAM_SUCCESS) {
         if (ret == PAM_ABORT) {
-            ERR(NULL, "PAM error occurred (%s).\n", pam_strerror(pam_h, ret));
+            ERR(NULL, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
             goto cleanup;
         } else {
-            VRB(NULL, "PAM error occurred (%s).\n", pam_strerror(pam_h, ret));
+            VRB(NULL, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
             goto cleanup;
         }
     }
@@ -439,18 +439,18 @@ nc_pam_auth(struct nc_session *session, struct nc_auth_client *client, uint16_t 
     /* correct token entered, check other requirements(the time of the day, expired token, ...) */
     ret = pam_acct_mgmt(pam_h, 0);
     if ((ret != PAM_SUCCESS) && (ret != PAM_NEW_AUTHTOK_REQD)) {
-        VRB(NULL, "PAM error occurred (%s).\n", pam_strerror(pam_h, ret));
+        VRB(NULL, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
         goto cleanup;
     }
 
     /* if a token has expired a new one will be generated */
     if (ret == PAM_NEW_AUTHTOK_REQD) {
-        VRB(NULL, "PAM warning occurred (%s).\n", pam_strerror(pam_h, ret));
+        VRB(NULL, "PAM warning occurred (%s).", pam_strerror(pam_h, ret));
         ret = pam_chauthtok(pam_h, PAM_CHANGE_EXPIRED_AUTHTOK);
         if (ret == PAM_SUCCESS) {
             VRB(NULL, "The authentication token of user \"%s\" updated successfully.", client->username);
         } else {
-            ERR(NULL, "PAM error occurred (%s).\n", pam_strerror(pam_h, ret));
+            ERR(NULL, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
             goto cleanup;
         }
     }
@@ -458,7 +458,7 @@ nc_pam_auth(struct nc_session *session, struct nc_auth_client *client, uint16_t 
 cleanup:
     /* destroy the PAM context */
     if (pam_h && (pam_end(pam_h, ret) != PAM_SUCCESS)) {
-        ERR(NULL, "PAM error occurred (%s).\n", pam_strerror(pam_h, ret));
+        ERR(NULL, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
     }
     return ret;
 }
