@@ -375,38 +375,6 @@ module libnetconf2-netconf-server {
     uses keyboard-interactive-grouping;
   }
 
-  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport" {
-    case unix-socket {
-      container unix-socket {
-        description
-          "UNIX socket listening configuration for inbound connections.";
-        leaf path {
-          type string;
-          mandatory true;
-          description
-            "Path to the socket on which the communication will occur.";
-        }
-        leaf mode {
-          type string {
-            pattern '[0124567]{3}';
-          }
-          description
-            "Mode of the socket.";
-        }
-        leaf uid {
-          type uint16;
-          description
-            "User ID of the socket.";
-        }
-        leaf gid {
-          type uint16;
-          description
-            "Group ID of the socket.";
-        }
-      }
-    }
-  }
-
   augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh" +
           "/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
     uses endpoint-reference-grouping;

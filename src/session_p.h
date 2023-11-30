@@ -769,6 +769,25 @@ int nc_is_pk_subject_public_key_info(const char *b64);
 
 void *nc_realloc(void *ptr, size_t size);
 
+/**
+ * @brief Set the andress and port of an endpoint.
+ *
+ * @param[in] endpt Endpoint to set the address/port for.
+ * @param[in] bind Bind to set the address/port for.
+ * @param[in] address Address to set, can be a path to a UNIX socket.
+ * @param[in] port Port to set, invalid for UNIX socket endpoint.
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_set_address_port(struct nc_endpt *endpt, struct nc_bind *bind, const char *address, uint16_t port);
+
+/**
+ * @brief Frees memory allocated by a UNIX socket endpoint.
+ *
+ * @param[in] endpt UNIX socket endpoint.
+ * @param[in] bind UNIX socket bind.
+ */
+void _nc_server_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *bind);
+
 struct passwd *nc_getpw(uid_t uid, const char *username, struct passwd *pwd_buf, char **buf, size_t *buf_size);
 
 NC_MSG_TYPE nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op);

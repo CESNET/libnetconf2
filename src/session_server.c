@@ -1950,6 +1950,69 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
     nc_ps_unlock(ps, q_id, __func__);
 }
 
+int
+nc_server_set_address_port(struct nc_endpt *endpt, struct nc_bind *bind, const char *address, uint16_t port)
+{
+    int sock = -1, set_addr, ret = 0;
+
+    assert((address && !port) || (!address && port) || (endpt->ti == NC_TI_UNIX));
+
+    if (address) {
+        set_addr = 1;
+    } else {
+        set_addr = 0;
+    }
+
+    if (set_addr) {
+        port = bind->port;
+    } else {
+        address = bind->address;
+    }
+
+    /* we have all the information we need to create a listening socket */
+    if ((address && port) || (endpt->ti == NC_TI_UNIX)) {
+        /* create new socket, close the old one */
+        if (endpt->ti == NC_TI_UNIX) {
+            sock = nc_sock_listen_unix(endpt->opts.unixsock);
+        } else {
+            sock = nc_sock_listen_inet(address, port, &endpt->ka);
+        }
+
+        if (sock == -1) {
+            ret = 1;
+            goto cleanup;
+        }
+
+        if (bind->sock > -1) {
+            close(bind->sock);
+        }
+        bind->sock = sock;
+    }
+
+    if (sock > -1) {
+        switch (endpt->ti) {
+        case NC_TI_UNIX:
+            VRB(NULL, "Listening on %s for UNIX connections.", endpt->opts.unixsock->address);
+            break;
+#ifdef NC_ENABLED_SSH_TLS
+        case NC_TI_LIBSSH:
+            VRB(NULL, "Listening on %s:%u for SSH connections.", address, port);
+            break;
+        case NC_TI_OPENSSL:
+            VRB(NULL, "Listening on %s:%u for TLS connections.", address, port);
+            break;
+#endif /* NC_ENABLED_SSH_TLS */
+        default:
+            ERRINT;
+            ret = 1;
+            break;
+        }
+    }
+
+cleanup:
+    return ret;
+}
+
 /**
  * @brief Get UID of the owner of a socket.
  *
@@ -2022,6 +2085,142 @@ nc_accept_unix(struct nc_session *session, int sock)
 #else
     return -1;
 #endif
+}
+
+API int
+nc_server_add_endpt_unix_socket_listen(const char *endpt_name, const char *unix_socket_path, mode_t mode, uid_t uid, gid_t gid)
+{
+    int ret = 0;
+    void *tmp;
+    uint16_t i;
+
+    NC_CHECK_ARG_RET(NULL, endpt_name, unix_socket_path, 1);
+
+    /* CONFIG LOCK */
+    pthread_rwlock_wrlock(&server_opts.config_lock);
+
+    /* check name uniqueness */
+    for (i = 0; i < server_opts.endpt_count; i++) {
+        if (!strcmp(endpt_name, server_opts.endpts[i].name)) {
+            ERR(NULL, "Endpoint \"%s\" already exists.", endpt_name);
+            ret = 1;
+            goto cleanup;
+        }
+    }
+
+    /* alloc a new endpoint */
+    tmp = nc_realloc(server_opts.endpts, (server_opts.endpt_count + 1) * sizeof *server_opts.endpts);
+    NC_CHECK_ERRMEM_GOTO(!tmp, ret = 1, cleanup);
+    server_opts.endpts = tmp;
+    memset(&server_opts.endpts[server_opts.endpt_count], 0, sizeof *server_opts.endpts);
+
+    /* alloc a new bind */
+    tmp = nc_realloc(server_opts.binds, (server_opts.endpt_count + 1) * sizeof *server_opts.binds);
+    NC_CHECK_ERRMEM_GOTO(!tmp, ret = 1, cleanup);
+    server_opts.binds = tmp;
+    memset(&server_opts.binds[server_opts.endpt_count], 0, sizeof *server_opts.binds);
+    server_opts.binds[server_opts.endpt_count].sock = -1;
+    server_opts.endpt_count++;
+
+    /* set name and ti */
+    server_opts.endpts[server_opts.endpt_count - 1].name = strdup(endpt_name);
+    NC_CHECK_ERRMEM_GOTO(!server_opts.endpts[server_opts.endpt_count - 1].name, ret = 1, cleanup);
+    server_opts.endpts[server_opts.endpt_count - 1].ti = NC_TI_UNIX;
+
+    /* set the bind data */
+    server_opts.binds[server_opts.endpt_count - 1].address = strdup(unix_socket_path);
+    NC_CHECK_ERRMEM_GOTO(!server_opts.binds[server_opts.endpt_count - 1].address, ret = 1, cleanup);
+
+    /* alloc unix opts */
+    server_opts.endpts[server_opts.endpt_count - 1].opts.unixsock = calloc(1, sizeof(struct nc_server_unix_opts));
+    NC_CHECK_ERRMEM_GOTO(!server_opts.endpts[server_opts.endpt_count - 1].opts.unixsock, ret = 1, cleanup);
+
+    /* set the opts data */
+    server_opts.endpts[server_opts.endpt_count - 1].opts.unixsock->address = strdup(unix_socket_path);
+    NC_CHECK_ERRMEM_GOTO(!server_opts.endpts[server_opts.endpt_count - 1].opts.unixsock->address, ret = 1, cleanup);
+    server_opts.endpts[server_opts.endpt_count - 1].opts.unixsock->mode = (mode == (mode_t) -1) ? (mode_t) -1 : mode;
+    server_opts.endpts[server_opts.endpt_count - 1].opts.unixsock->uid = (uid == (uid_t) -1) ? (uid_t) -1 : uid;
+    server_opts.endpts[server_opts.endpt_count - 1].opts.unixsock->gid = (gid == (gid_t) -1) ? (gid_t) -1 : gid;
+
+    /* start listening */
+    ret = nc_server_set_address_port(&server_opts.endpts[server_opts.endpt_count - 1],
+            &server_opts.binds[server_opts.endpt_count - 1], NULL, 0);
+    if (ret) {
+        ERR(NULL, "Listening on UNIX socket \"%s\" failed.", unix_socket_path);
+        goto cleanup;
+    }
+
+cleanup:
+    /* CONFIG UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
+    return ret;
+}
+
+static void
+nc_server_del_endpt_unix_socket_opts(struct nc_bind *bind, struct nc_server_unix_opts *opts)
+{
+    if (bind->sock > -1) {
+        close(bind->sock);
+    }
+
+    unlink(bind->address);
+    free(bind->address);
+    free(opts->address);
+
+    free(opts);
+}
+
+void
+_nc_server_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *bind)
+{
+    free(endpt->name);
+    nc_server_del_endpt_unix_socket_opts(bind, endpt->opts.unixsock);
+
+    server_opts.endpt_count--;
+    if (!server_opts.endpt_count) {
+        free(server_opts.endpts);
+        free(server_opts.binds);
+        server_opts.endpts = NULL;
+        server_opts.binds = NULL;
+    } else if (endpt != &server_opts.endpts[server_opts.endpt_count]) {
+        memcpy(endpt, &server_opts.endpts[server_opts.endpt_count], sizeof *server_opts.endpts);
+        memcpy(bind, &server_opts.binds[server_opts.endpt_count], sizeof *server_opts.binds);
+    }
+}
+
+API void
+nc_server_del_endpt_unix_socket(const char *endpt_name)
+{
+    uint16_t i;
+    struct nc_endpt *endpt = NULL;
+    struct nc_bind *bind;
+
+    /* CONFIG LOCK */
+    pthread_rwlock_wrlock(&server_opts.config_lock);
+
+    NC_CHECK_ARG_RET(NULL, endpt_name, );
+
+    for (i = 0; i < server_opts.endpt_count; i++) {
+        if (!strcmp(server_opts.endpts[i].name, endpt_name)) {
+            endpt = &server_opts.endpts[i];
+            bind = &server_opts.binds[i];
+            break;
+        }
+    }
+    if (!endpt) {
+        ERR(NULL, "Endpoint \"%s\" not found.", endpt_name);
+        goto end;
+    }
+    if (endpt->ti != NC_TI_UNIX) {
+        ERR(NULL, "Endpoint \"%s\" is not a UNIX socket endpoint.", endpt_name);
+        goto end;
+    }
+
+    _nc_server_del_endpt_unix_socket(endpt, bind);
+
+end:
+    /* CONFIG UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
 }
 
 API int

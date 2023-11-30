@@ -770,42 +770,6 @@ nc_server_config_del_endpt_ssh(struct nc_endpt *endpt, struct nc_bind *bind)
     }
 }
 
-#endif /* NC_ENABLED_SSH_TLS */
-
-void
-nc_server_config_del_unix_socket_opts(struct nc_bind *bind, struct nc_server_unix_opts *opts)
-{
-    if (bind->sock > -1) {
-        close(bind->sock);
-    }
-
-    unlink(bind->address);
-    free(bind->address);
-    free(opts->address);
-
-    free(opts);
-}
-
-void
-nc_server_config_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *bind)
-{
-    free(endpt->name);
-    nc_server_config_del_unix_socket_opts(bind, endpt->opts.unixsock);
-
-    server_opts.endpt_count--;
-    if (!server_opts.endpt_count) {
-        free(server_opts.endpts);
-        free(server_opts.binds);
-        server_opts.endpts = NULL;
-        server_opts.binds = NULL;
-    } else if (endpt != &server_opts.endpts[server_opts.endpt_count]) {
-        memcpy(endpt, &server_opts.endpts[server_opts.endpt_count], sizeof *server_opts.endpts);
-        memcpy(bind, &server_opts.binds[server_opts.endpt_count], sizeof *server_opts.binds);
-    }
-}
-
-#ifdef NC_ENABLED_SSH_TLS
-
 static void
 nc_server_config_del_cert(struct nc_cert_grouping *certs, struct nc_certificate *cert)
 {
@@ -1060,7 +1024,7 @@ nc_server_config_listen(const struct lyd_node *node, NC_OPERATION op)
                 break;
 #endif /* NC_ENABLED_SSH_TLS */
             case NC_TI_UNIX:
-                nc_server_config_del_endpt_unix_socket(&server_opts.endpts[i], &server_opts.binds[i]);
+                _nc_server_del_endpt_unix_socket(&server_opts.endpts[i], &server_opts.binds[i]);
                 break;
             case NC_TI_NONE:
             case NC_TI_FD:
@@ -1234,7 +1198,7 @@ nc_server_config_endpoint(const struct lyd_node *node, NC_OPERATION op)
                 break;
 #endif /* NC_ENABLED_SSH_TLS */
             case NC_TI_UNIX:
-                nc_server_config_del_endpt_unix_socket(endpt, bind);
+                _nc_server_del_endpt_unix_socket(endpt, bind);
                 break;
             case NC_TI_NONE:
             case NC_TI_FD:
@@ -1429,73 +1393,6 @@ cleanup:
     return ret;
 }
 
-#endif /* NC_ENABLED_SSH_TLS */
-
-static int
-nc_server_config_set_address_port(struct nc_endpt *endpt, struct nc_bind *bind, const char *address, uint16_t port)
-{
-    int sock = -1, set_addr, ret = 0;
-
-    assert((address && !port) || (!address && port) || (endpt->ti == NC_TI_UNIX));
-
-    if (address) {
-        set_addr = 1;
-    } else {
-        set_addr = 0;
-    }
-
-    if (set_addr) {
-        port = bind->port;
-    } else {
-        address = bind->address;
-    }
-
-    /* we have all the information we need to create a listening socket */
-    if ((address && port) || (endpt->ti == NC_TI_UNIX)) {
-        /* create new socket, close the old one */
-        if (endpt->ti == NC_TI_UNIX) {
-            sock = nc_sock_listen_unix(endpt->opts.unixsock);
-        } else {
-            sock = nc_sock_listen_inet(address, port, &endpt->ka);
-        }
-
-        if (sock == -1) {
-            ret = 1;
-            goto cleanup;
-        }
-
-        if (bind->sock > -1) {
-            close(bind->sock);
-        }
-        bind->sock = sock;
-    }
-
-    if (sock > -1) {
-        switch (endpt->ti) {
-        case NC_TI_UNIX:
-            VRB(NULL, "Listening on %s for UNIX connections.", endpt->opts.unixsock->address);
-            break;
-#ifdef NC_ENABLED_SSH_TLS
-        case NC_TI_LIBSSH:
-            VRB(NULL, "Listening on %s:%u for SSH connections.", address, port);
-            break;
-        case NC_TI_OPENSSL:
-            VRB(NULL, "Listening on %s:%u for TLS connections.", address, port);
-            break;
-#endif /* NC_ENABLED_SSH_TLS */
-        default:
-            ERRINT;
-            ret = 1;
-            break;
-        }
-    }
-
-cleanup:
-    return ret;
-}
-
-#ifdef NC_ENABLED_SSH_TLS
-
 /* mandatory leaf */
 static int
 nc_server_config_local_address(const struct lyd_node *node, NC_OPERATION op)
@@ -1518,7 +1415,7 @@ nc_server_config_local_address(const struct lyd_node *node, NC_OPERATION op)
         bind->address = strdup(lyd_get_value(node));
         NC_CHECK_ERRMEM_GOTO(!bind->address, ret = 1, cleanup);
 
-        ret = nc_server_config_set_address_port(endpt, bind, lyd_get_value(node), 0);
+        ret = nc_server_set_address_port(endpt, bind, lyd_get_value(node), 0);
         if (ret) {
             goto cleanup;
         }
@@ -1551,7 +1448,7 @@ nc_server_config_local_port(const struct lyd_node *node, NC_OPERATION op)
             bind->port = 0;
         }
 
-        ret = nc_server_config_set_address_port(endpt, bind, NULL, bind->port);
+        ret = nc_server_set_address_port(endpt, bind, NULL, bind->port);
         if (ret) {
             goto cleanup;
         }
@@ -2790,89 +2687,6 @@ cleanup:
     return ret;
 }
 
-#endif /* NC_ENABLED_SSH_TLS */
-
-static int
-nc_server_config_create_unix_socket(struct nc_endpt *endpt)
-{
-    endpt->ti = NC_TI_UNIX;
-    endpt->opts.unixsock = calloc(1, sizeof *endpt->opts.unixsock);
-    NC_CHECK_ERRMEM_RET(!endpt->opts.unixsock, 1);
-
-    /* set default values */
-    endpt->opts.unixsock->mode = -1;
-    endpt->opts.unixsock->uid = -1;
-    endpt->opts.unixsock->gid = -1;
-
-    return 0;
-}
-
-static int
-nc_server_config_unix_socket(const struct lyd_node *node, NC_OPERATION op)
-{
-    int ret = 0;
-    uint32_t log_options = 0;
-    struct nc_endpt *endpt;
-    struct nc_bind *bind;
-    struct nc_server_unix_opts *opts;
-    struct lyd_node *data = NULL;
-
-    assert(!strcmp(LYD_NAME(node), "unix-socket"));
-
-    if (nc_server_config_get_endpt(node, &endpt, &bind)) {
-        ret = 1;
-        goto cleanup;
-    }
-
-    if (op == NC_OP_CREATE) {
-        if (nc_server_config_create_unix_socket(endpt)) {
-            ret = 1;
-            goto cleanup;
-        }
-
-        opts = endpt->opts.unixsock;
-
-        lyd_find_path(node, "path", 0, &data);
-        assert(data);
-
-        opts->address = strdup(lyd_get_value(data));
-        bind->address = strdup(lyd_get_value(data));
-        NC_CHECK_ERRMEM_GOTO(!opts->address || !bind->address, ret = 1, cleanup);
-
-        /* silently search for non-mandatory parameters */
-        ly_temp_log_options(&log_options);
-        ret = lyd_find_path(node, "mode", 0, &data);
-        if (!ret) {
-            opts->mode = strtol(lyd_get_value(data), NULL, 8);
-        }
-
-        ret = lyd_find_path(node, "uid", 0, &data);
-        if (!ret) {
-            opts->uid = strtol(lyd_get_value(data), NULL, 10);
-        }
-
-        ret = lyd_find_path(node, "gid", 0, &data);
-        if (!ret) {
-            opts->gid = strtol(lyd_get_value(data), NULL, 10);
-        }
-
-        /* reset the logging options */
-        ly_temp_log_options(NULL);
-
-        ret = nc_server_config_set_address_port(endpt, bind, NULL, 0);
-        if (ret) {
-            goto cleanup;
-        }
-    } else if (op == NC_OP_DELETE) {
-        nc_server_config_del_unix_socket_opts(bind, endpt->opts.unixsock);
-    }
-
-cleanup:
-    return ret;
-}
-
-#ifdef NC_ENABLED_SSH_TLS
-
 static int
 nc_server_config_check_endpt_reference_cycle(struct nc_endpt *original, struct nc_endpt *next)
 {
@@ -4063,8 +3877,6 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
         ret = nc_server_config_hello_timeout(node, op);
     } else if (!strcmp(name, "endpoint")) {
         ret = nc_server_config_endpoint(node, op);
-    } else if (!strcmp(name, "unix-socket")) {
-        ret = nc_server_config_unix_socket(node, op);
     }
 #ifdef NC_ENABLED_SSH_TLS
     else if (!strcmp(name, "ssh")) {
