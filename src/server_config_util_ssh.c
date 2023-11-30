@@ -484,10 +484,10 @@ nc_server_config_add_ssh_user_interactive(const struct ly_ctx *ctx, const char *
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, config, 1);
 
     ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
-            "client-authentication/users/user[name='%s']", endpt_name, user_name);
+            "client-authentication/users/user[name='%s']/libnetconf2-netconf-server:keyboard-interactive", endpt_name, user_name);
     NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
-    ret = nc_server_config_append(ctx, path, "libnetconf2-netconf-server:keyboard-interactive", NULL, config);
+    ret = nc_server_config_append(ctx, path, "use-system-auth", NULL, config);
     if (ret) {
         goto cleanup;
     }
@@ -507,11 +507,11 @@ nc_server_config_add_ch_ssh_user_interactive(const struct ly_ctx *ctx, const cha
     NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, user_name, config, 1);
 
     ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
-            "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']",
-            client_name, endpt_name, user_name);
+            "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/"
+            "libnetconf2-netconf-server:keyboard-interactive", client_name, endpt_name, user_name);
     NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
-    ret = nc_server_config_append(ctx, path, "libnetconf2-netconf-server:keyboard-interactive", NULL, config);
+    ret = nc_server_config_append(ctx, path, "use-system-auth", NULL, config);
     if (ret) {
         goto cleanup;
     }

@@ -15,10 +15,13 @@
 
 #define _GNU_SOURCE
 
-#include "config.h" /* Expose HAVE_LIBPAM */
+#include "config.h" /* Expose HAVE_LIBPAM and HAVE_SHADOW */
 
 #ifdef HAVE_LIBPAM
 #   include <security/pam_appl.h>
+#endif
+#ifdef HAVE_SHADOW
+#   include <shadow.h>
 #endif
 
 #include <arpa/inet.h>
@@ -231,6 +234,46 @@ nc_sshcb_auth_password(struct nc_session *session, struct nc_auth_client *auth_c
     return auth_ret;
 }
 
+/* get answers to kbdint prompts on the given libssh session and return the number of them, -1 on timeout/dc */
+static int
+nc_server_ssh_kbdint_get_nanswers(struct nc_session *session, ssh_session libssh_session, uint16_t auth_timeout)
+{
+    int ret = 0;
+    struct timespec ts_timeout = {0};
+    ssh_message reply;
+
+    if (auth_timeout) {
+        nc_timeouttime_get(&ts_timeout, auth_timeout * 1000);
+    }
+
+    /* wait for answers from the client */
+    do {
+        if (!nc_session_is_connected(session)) {
+            ERR(NULL, "SSH communication socket unexpectedly closed.");
+            ret = -1;
+            goto cleanup;
+        }
+
+        reply = ssh_message_get(libssh_session);
+        if (reply) {
+            break;
+        }
+
+        usleep(NC_TIMEOUT_STEP);
+    } while (auth_timeout && (nc_timeouttime_cur_diff(&ts_timeout) >= 1));
+    if (!reply) {
+        ERR(NULL, "Authentication timeout.");
+        ret = -1;
+        goto cleanup;
+    }
+
+    ret = ssh_userauth_kbdint_getnanswers(libssh_session);
+
+cleanup:
+    ssh_message_free(reply);
+    return ret;
+}
+
 #ifdef HAVE_LIBPAM
 
 /**
@@ -253,7 +296,6 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
     ssh_message reply = NULL;
     struct nc_pam_thread_arg *clb_data = appdata_ptr;
     ssh_session libssh_session;
-    struct timespec ts_timeout;
     uint16_t auth_timeout;
 
     libssh_session = clb_data->session->ti.libssh.session;
@@ -261,7 +303,7 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
 
     /* PAM_MAX_NUM_MSG == 32 by default */
     if ((n_messages <= 0) || (n_messages >= PAM_MAX_NUM_MSG)) {
-        ERR(NULL, "Bad number of PAM messages (#%d).", n_messages);
+        ERR(clb_data->session, "Bad number of PAM messages (#%d).", n_messages);
         r = PAM_CONV_ERR;
         goto cleanup;
     }
@@ -270,7 +312,7 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
     for (i = 0; i < n_messages; i++) {
         t = msg[i]->msg_style;
         if ((t != PAM_PROMPT_ECHO_OFF) && (t != PAM_PROMPT_ECHO_ON) && (t != PAM_TEXT_INFO) && (t != PAM_ERROR_MSG)) {
-            ERR(NULL, "PAM conversation callback received an unexpected type of message.");
+            ERR(clb_data->session, "PAM conversation callback received an unexpected type of message.");
             r = PAM_CONV_ERR;
             goto cleanup;
         }
@@ -279,11 +321,11 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
     /* display messages with errors and/or some information and count the amount of actual authentication challenges */
     for (i = 0; i < n_messages; i++) {
         if (msg[i]->msg_style == PAM_TEXT_INFO) {
-            VRB(NULL, "PAM conversation callback received a message with some information for the client (%s).", msg[i]->msg);
+            VRB(clb_data->session, "PAM conversation callback received a message with some information for the client (%s).", msg[i]->msg);
             n_requests--;
         }
         if (msg[i]->msg_style == PAM_ERROR_MSG) {
-            ERR(NULL, "PAM conversation callback received an error message (%s).", msg[i]->msg);
+            ERR(clb_data->session, "PAM conversation callback received an error message (%s).", msg[i]->msg);
             r = PAM_CONV_ERR;
             goto cleanup;
         }
@@ -324,41 +366,19 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
     /* print all the keyboard-interactive challenges to the user */
     r = ssh_message_auth_interactive_request(clb_data->msg, name, instruction, n_requests, prompts, echo);
     if (r != SSH_OK) {
-        ERR(NULL, "Failed to send an authentication request.");
+        ERR(clb_data->session, "Failed to send an authentication request.");
         r = PAM_CONV_ERR;
         goto cleanup;
     }
 
-    if (auth_timeout) {
-        nc_timeouttime_get(&ts_timeout, auth_timeout * 1000);
-    }
-
-    /* get user's replies */
-    do {
-        if (!nc_session_is_connected(clb_data->session)) {
-            ERR(NULL, "Communication SSH socket unexpectedly closed.");
-            r = PAM_CONV_ERR;
-            goto cleanup;
-        }
-
-        reply = ssh_message_get(libssh_session);
-        if (reply) {
-            break;
-        }
-
-        usleep(NC_TIMEOUT_STEP);
-    } while (auth_timeout && (nc_timeouttime_cur_diff(&ts_timeout) >= 1));
-
-    if (!reply) {
-        ERR(NULL, "Authentication timeout.");
+    n_answers = nc_server_ssh_kbdint_get_nanswers(clb_data->session, libssh_session, auth_timeout);
+    if (n_answers < 0) {
+        /* timeout or dc */
         r = PAM_CONV_ERR;
         goto cleanup;
-    }
-
-    /* check if the amount of replies matches the amount of requests */
-    n_answers = ssh_userauth_kbdint_getnanswers(libssh_session);
-    if (n_answers != n_requests) {
-        ERR(NULL, "Expected %d response(s), got %d.", n_requests, n_answers);
+    } else if (n_answers != n_requests) {
+        /* check if the number of answers and requests matches */
+        ERR(clb_data->session, "Expected %d response(s), got %d.", n_requests, n_answers);
         r = PAM_CONV_ERR;
         goto cleanup;
     }
@@ -412,7 +432,7 @@ nc_pam_auth(struct nc_session *session, struct nc_auth_client *client, uint16_t 
     conv.appdata_ptr = &clb_data;
 
     if (!server_opts.pam_config_name) {
-        ERR(NULL, "PAM configuration filename not set.");
+        ERR(session, "PAM configuration filename not set.");
         ret = 1;
         goto cleanup;
     }
@@ -420,7 +440,7 @@ nc_pam_auth(struct nc_session *session, struct nc_auth_client *client, uint16_t 
     /* initialize PAM and see if the given configuration file exists */
     ret = pam_start(server_opts.pam_config_name, client->username, &conv, &pam_h);
     if (ret != PAM_SUCCESS) {
-        ERR(NULL, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
+        ERR(session, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
         goto cleanup;
     }
 
@@ -428,10 +448,10 @@ nc_pam_auth(struct nc_session *session, struct nc_auth_client *client, uint16_t 
     ret = pam_authenticate(pam_h, 0);
     if (ret != PAM_SUCCESS) {
         if (ret == PAM_ABORT) {
-            ERR(NULL, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
+            ERR(session, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
             goto cleanup;
         } else {
-            VRB(NULL, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
+            VRB(session, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
             goto cleanup;
         }
     }
@@ -439,18 +459,18 @@ nc_pam_auth(struct nc_session *session, struct nc_auth_client *client, uint16_t 
     /* correct token entered, check other requirements(the time of the day, expired token, ...) */
     ret = pam_acct_mgmt(pam_h, 0);
     if ((ret != PAM_SUCCESS) && (ret != PAM_NEW_AUTHTOK_REQD)) {
-        VRB(NULL, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
+        VRB(session, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
         goto cleanup;
     }
 
     /* if a token has expired a new one will be generated */
     if (ret == PAM_NEW_AUTHTOK_REQD) {
-        VRB(NULL, "PAM warning occurred (%s).", pam_strerror(pam_h, ret));
+        VRB(session, "PAM warning occurred (%s).", pam_strerror(pam_h, ret));
         ret = pam_chauthtok(pam_h, PAM_CHANGE_EXPIRED_AUTHTOK);
         if (ret == PAM_SUCCESS) {
-            VRB(NULL, "The authentication token of user \"%s\" updated successfully.", client->username);
+            VRB(session, "The authentication token of user \"%s\" updated successfully.", client->username);
         } else {
-            ERR(NULL, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
+            ERR(session, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
             goto cleanup;
         }
     }
@@ -463,7 +483,189 @@ cleanup:
     return ret;
 }
 
-#endif /* HAVE_LIBPAM */
+#elif defined (HAVE_SHADOW)
+
+static struct passwd *
+nc_server_ssh_getpwnam(const char *username, struct passwd *pwd_buf, char **buf, size_t *buf_size)
+{
+    struct passwd *pwd = NULL;
+    char *mem;
+    int r = 0;
+
+    do {
+        r = getpwnam_r(username, pwd_buf, *buf, *buf_size, &pwd);
+        if (pwd) {
+            /* entry found */
+            break;
+        }
+
+        if (r == ERANGE) {
+            /* small buffer, enlarge */
+            *buf_size <<= 2;
+            mem = realloc(*buf, *buf_size);
+            if (!mem) {
+                ERRMEM;
+                return NULL;
+            }
+            *buf = mem;
+        }
+    } while (r == ERANGE);
+
+    return pwd;
+}
+
+static struct spwd *
+nc_server_ssh_getspnam(const char *username, struct spwd *spwd_buf, char **buf, size_t *buf_size)
+{
+    struct spwd *spwd = NULL;
+    char *mem;
+    int r = 0;
+
+    do {
+# ifndef __QNXNTO__
+        r = getspnam_r(username, spwd_buf, *buf, *buf_size, &spwd);
+# else
+        spwd = getspnam_r(username, spwd_buf, *buf, *buf_size);
+# endif
+        if (spwd) {
+            /* entry found */
+            break;
+        }
+
+        if (r == ERANGE) {
+            /* small buffer, enlarge */
+            *buf_size <<= 2;
+            mem = realloc(*buf, *buf_size);
+            if (!mem) {
+                ERRMEM;
+                return NULL;
+            }
+            *buf = mem;
+        }
+    } while (r == ERANGE);
+
+    return spwd;
+}
+
+static char *
+nc_server_ssh_get_pwd_hash(const char *username)
+{
+    struct passwd *pwd, pwd_buf;
+    struct spwd *spwd, spwd_buf;
+    char *pass_hash = NULL, *buf = NULL;
+    size_t buf_size = 256;
+
+    buf = malloc(buf_size);
+    NC_CHECK_ERRMEM_GOTO(!buf, , error);
+
+    pwd = nc_server_ssh_getpwnam(username, &pwd_buf, &buf, &buf_size);
+    if (!pwd) {
+        VRB(NULL, "User \"%s\" not found locally.", username);
+        goto error;
+    }
+
+    if (!strcmp(pwd->pw_passwd, "x")) {
+        spwd = nc_server_ssh_getspnam(username, &spwd_buf, &buf, &buf_size);
+        if (!spwd) {
+            VRB(NULL, "Failed to retrieve the shadow entry for \"%s\".", username);
+            goto error;
+        } else if ((spwd->sp_expire > -1) && (spwd->sp_expire <= (time(NULL) / (60 * 60 * 24)))) {
+            WRN(NULL, "User \"%s\" account has expired.", username);
+            goto error;
+        }
+
+        pass_hash = spwd->sp_pwdp;
+    } else {
+        pass_hash = pwd->pw_passwd;
+    }
+
+    if (!pass_hash) {
+        ERR(NULL, "No password could be retrieved for \"%s\".", username);
+        goto error;
+    }
+
+    /* check the hash structure for special meaning */
+    if (!strcmp(pass_hash, "*") || !strcmp(pass_hash, "!")) {
+        VRB(NULL, "User \"%s\" is not allowed to authenticate using a password.", username);
+        goto error;
+    }
+    if (!strcmp(pass_hash, "*NP*")) {
+        VRB(NULL, "Retrieving password for \"%s\" from a NIS+ server not supported.", username);
+        goto error;
+    }
+
+    pass_hash = strdup(pass_hash);
+    free(buf);
+    return pass_hash;
+
+error:
+    free(buf);
+    return NULL;
+}
+
+/**
+ * @brief Authenticate using locally stored credentials.
+ *
+ * @param[in] session Session to authenticate on.
+ * @param[in] client Client to authenticate.
+ * @param[in] auth_timeout Authentication timeout.
+ * @param[in] msg SSH message that originally requested kbdint authentication.
+ *
+ * @return 0 on success, non-zero otherwise.
+ */
+static int
+nc_server_ssh_system_auth(struct nc_session *session, struct nc_auth_client *client, uint16_t auth_timeout, ssh_message msg)
+{
+    int ret = 0, n_answers;
+    const char *name = "Keyboard-Interactive Authentication";
+    const char *instruction = "Please enter your authentication token";
+    char *prompt = NULL, *local_pw = NULL, *received_pw = NULL;
+    char echo[] = {0};
+
+    /* try to get the client's locally stored pw hash */
+    local_pw = nc_server_ssh_get_pwd_hash(client->username);
+    if (!local_pw) {
+        ERR(session, "Unable to get %s's credentials.", client->username);
+        ret = 1;
+        goto cleanup;
+    }
+
+    ret = asprintf(&prompt, "%s's password:", client->username);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, prompt = NULL; ret = 1, cleanup);
+
+    /* send the password prompt to the client */
+    ret = ssh_message_auth_interactive_request(msg, name, instruction, 1, (const char **) &prompt, echo);
+    if (ret) {
+        ERR(session, "Failed to send an authentication request to client \"%s\".", client->username);
+        goto cleanup;
+    }
+
+    /* get the reply */
+    n_answers = nc_server_ssh_kbdint_get_nanswers(session, session->ti.libssh.session, auth_timeout);
+    if (n_answers < 0) {
+        /* timeout or dc */
+        ret = 1;
+        goto cleanup;
+    } else if (n_answers != 1) {
+        /* only expecting a single answer */
+        ERR(session, "Unexpected amount of answers in system auth. Expected 1, got \"%d\".", n_answers);
+        ret = 1;
+        goto cleanup;
+    }
+    received_pw = strdup(ssh_userauth_kbdint_getanswer(session->ti.libssh.session, 0));
+    NC_CHECK_ERRMEM_GOTO(!received_pw, ret = 1, cleanup);
+
+    /* cmp the pw hashes */
+    ret = auth_password_compare_pwd(local_pw, received_pw);
+
+cleanup:
+    free(local_pw);
+    free(received_pw);
+    free(prompt);
+    return ret;
+}
+
+#endif
 
 static int
 nc_sshcb_auth_kbdint(struct nc_session *session, struct nc_auth_client *client, uint16_t auth_timeout, ssh_message msg)
@@ -474,18 +676,25 @@ nc_sshcb_auth_kbdint(struct nc_session *session, struct nc_auth_client *client, 
         auth_ret = server_opts.interactive_auth_clb(session, session->ti.libssh.session, msg, server_opts.interactive_auth_data);
     } else {
 #ifdef HAVE_LIBPAM
-        if (nc_pam_auth(session, client, auth_timeout, msg) == PAM_SUCCESS) {
+        /* authenticate using PAM */
+        if (!nc_pam_auth(session, client, auth_timeout, msg)) {
+            auth_ret = 0;
+        }
+#elif defined (HAVE_SHADOW)
+        /* authenticate using locally configured users */
+        if (!nc_server_ssh_system_auth(session, client, auth_timeout, msg)) {
             auth_ret = 0;
         }
 #else
-        ERR(session, "PAM-based SSH authentication is not supported.");
+        (void) auth_timeout;
+        ERR(NULL, "Keyboard-interactive method not supported.");
 #endif
     }
 
     /* Authenticate message based on outcome */
     if (auth_ret) {
         ++session->opts.server.ssh_auth_attempts;
-        VRB(session, "Failed user \"%s\" authentication attempt (#%d).", session->username,
+        VRB(session, "Failed user \"%s\" authentication attempt (#%d).", client->username,
                 session->opts.server.ssh_auth_attempts);
         ssh_message_reply_default(msg);
     }
@@ -497,9 +706,15 @@ API void
 nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg, void *user_data),
         void *user_data, void (*free_user_data)(void *user_data))
 {
+    /* CONFIG LOCK */
+    pthread_rwlock_wrlock(&server_opts.config_lock);
+
     server_opts.interactive_auth_clb = interactive_auth_clb;
     server_opts.interactive_auth_data = user_data;
     server_opts.interactive_auth_data_free = free_user_data;
+
+    /* CONFIG UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
 }
 
 #ifdef HAVE_LIBPAM
@@ -507,12 +722,23 @@ nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct 
 API int
 nc_server_ssh_set_pam_conf_filename(const char *filename)
 {
+    int ret = 0;
+
     NC_CHECK_ARG_RET(NULL, filename, 1);
+
+    /* CONFIG LOCK */
+    pthread_rwlock_wrlock(&server_opts.config_lock);
 
     free(server_opts.pam_config_name);
     server_opts.pam_config_name = strdup(filename);
-    NC_CHECK_ERRMEM_RET(!server_opts.pam_config_name, 1);
-    return 0;
+    if (!server_opts.pam_config_name) {
+        ERRMEM;
+        ret = 1;
+    }
+
+    /* CONFIG UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
+    return ret;
 }
 
 #else
