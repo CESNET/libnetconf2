@@ -265,8 +265,7 @@ module libnetconf2-netconf-server {
       "Grouping for the SSH Keyboard interactive authentication method.";
 
     container keyboard-interactive {
-      presence "Indicates that PAM configuration file name has been configured and that
-                the given client supportsthe SSH Keyboard Interactive authentication method.";
+      presence "Indicates that the given client supports the SSH Keyboard Interactive authentication method.";
       description
         "Keyboard interactive SSH authentication method.";
 
@@ -274,6 +273,20 @@ module libnetconf2-netconf-server {
         "RFC 4256:
             Generic Message Exchange Authentication for
             the Secure Shell Protocol (SSH)";
+
+      choice method {
+        mandatory true;
+        description
+          "Method to perform the authentication with.";
+
+        container use-system-auth {
+          presence
+            "Indicates that the system will handle the authentication.";
+
+          description
+            "Authentication is done using the system's mechanisms.";
+        }
+      }
     }
   }
 

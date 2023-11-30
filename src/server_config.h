@@ -383,24 +383,7 @@ int nc_server_config_del_ssh_user_password(const char *endpt_name, const char *u
 /**
  * @brief Creates new YANG configuration data nodes for an SSH user's keyboard interactive authentication method.
  *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its user might be changed.
- * @param[in] user_name Arbitrary identifier of the user.
- * If an user with this identifier already exists, its contents will be changed.
- * @param[in] pam_config_name Name of the PAM configuration file.
- * @param[in] pam_config_dir Optional. The absolute path to the directory in which the configuration file
- * with the name pam_config_name is located. A newer version (>= 1.4) of PAM library is required to be able to specify
- * the path. If NULL is passed, then the PAM's system directories will be searched (usually /etc/pam.d/).
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-
-/**
- * @brief Creates new YANG configuration data nodes for an SSH user's keyboard interactive authentication method.
- *
- * To set the PAM configuration filename, see ::nc_server_ssh_set_pam_conf_filename().
+ * One of Linux PAM, local users, or user callback is used to authenticate users with this SSH method (see \ref ln2doc_kbdint "the documentation").
  *
  * @param[in] ctx libyang context.
  * @param[in] endpt_name Arbitrary identifier of the endpoint.
@@ -1043,7 +1026,7 @@ int nc_server_config_del_ch_ssh_user_password(const char *client_name, const cha
 /**
  * @brief Creates new YANG configuration data nodes for a Call Home SSH user's keyboard interactive authentication method.
  *
- * To set the PAM configuration filename, see ::nc_server_ssh_set_pam_conf_filename().
+ * One of Linux PAM, local users, or user callback is used to authenticate users with this SSH method (see \ref ln2doc_kbdint "the documentation").
  *
  * @param[in] ctx libyang context.
  * @param[in] client_name Arbitrary identifier of the Call Home client.

@@ -2344,13 +2344,13 @@ cleanup:
 }
 
 static int
-nc_server_config_kb_int(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_use_system_auth(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     struct nc_auth_client *auth_client;
     struct nc_ch_client *ch_client = NULL;
 
-    assert(!strcmp(LYD_NAME(node), "keyboard-interactive"));
+    assert(!strcmp(LYD_NAME(node), "use-system-auth"));
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
@@ -3915,8 +3915,8 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
         ret = nc_server_config_truststore_reference(node, op);
     } else if (!strcmp(name, "password")) {
         ret = nc_server_config_password(node, op);
-    } else if (!strcmp(name, "keyboard-interactive")) {
-        ret = nc_server_config_kb_int(node, op);
+    } else if (!strcmp(name, "use-system-auth")) {
+        ret = nc_server_config_use_system_auth(node, op);
     } else if (!strcmp(name, "none")) {
         ret = nc_server_config_none(node, op);
     } else if (!strcmp(name, "host-key-alg")) {
