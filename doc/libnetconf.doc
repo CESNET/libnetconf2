@@ -351,8 +351,7 @@
  *
  * If you wish not to create the __YANG data__ yourself, you may use the library's functions to do this for you.
  * For example ::nc_server_config_add_address_port() creates __YANG data__ corresponding to an SSH/TLS endpoint.
- * The variant for UNIX socket is ::nc_server_config_add_unix_socket(). You can then apply this data
- * by calling ::nc_server_config_setup_data() (or ::nc_server_config_setup_diff() for diff).
+ * You can then apply this data by calling ::nc_server_config_setup_data() (or ::nc_server_config_setup_diff() for diff).
  * See *examples/server.c* for a simple example.
  *
  * You may also create entries in the keystore or truststore. For example the asymmetric key and certificate entries
@@ -371,7 +370,6 @@
  * - ::nc_server_config_setup_path()
  *
  * - ::nc_server_config_add_address_port()
- * - ::nc_server_config_add_unix_socket()
  * - ::nc_server_config_del_endpt()
  * - ::nc_server_config_add_keystore_asym_key()
  * - ::nc_server_config_del_keystore_asym_key()
@@ -392,6 +390,14 @@
  * For example if you wish to create an SSH user that can authenticate using a password, use ::nc_server_config_add_ssh_user_password().
  * Another option for authorized clients is to reference another endpoint's clients, however be careful not to create a cyclic reference
  * (see ::nc_server_config_add_ssh_endpoint_client_ref()). An authorized client MUST authenticate to all of it's configured authentication methods.
+ *
+ * \anchor ln2doc_kbdint
+ * The Keyboard Interactive authentication method is also supported. It can be done in three ways.
+ * If libpam is found, Linux PAM is used to handle the authentication. You need to specify the service name using ::nc_server_ssh_set_pam_conf_filename().
+ * Else if the standard functions for accessing local users are found on the system, they are used. The only Keyboard Interactive challenge will be the given
+ * user's password (that is if he's found on the system).
+ * Either way, you can always define your own callback to perform the authentication, see ::nc_server_ssh_set_interactive_auth_clb().
+ * The callback has a higher priority than the other two methods.
  *
  * There are also some other optional settings.
  *
@@ -416,6 +422,9 @@
  * - ::nc_server_config_del_ssh_truststore_ref()
  * - ::nc_server_config_add_ssh_endpoint_client_ref()
  * - ::nc_server_config_del_ssh_endpoint_client_ref()
+ *
+ * - ::nc_server_ssh_set_pam_conf_filename()
+ * - ::nc_server_ssh_set_interactive_auth_clb()
  *
  * TLS
  * ===
