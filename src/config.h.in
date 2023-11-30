@@ -35,11 +35,6 @@
 #cmakedefine HAVE_SHADOW
 
 /*
- * Support for crypt.h
- */
-#cmakedefine HAVE_CRYPT
-
-/*
  * Support for keyboard-interactive SSH authentication method
  */
 #cmakedefine HAVE_LIBPAM
