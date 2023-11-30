@@ -378,6 +378,27 @@ void nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *));
  */
 int nc_server_endpt_count(void);
 
+/**
+ * @brief Create a new UNIX socket endpoint and start listening.
+ *
+ * @param[in] endpt_name Arbitrary unique identifier of the endpoint.
+ * @param[in] unix_socket_path Path to the listening socket.
+ * @param[in] mode New mode, -1 to use default.
+ * @param[in] uid New uid, -1 to use default.
+ * @param[in] gid New gid, -1 to use default.
+ *
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_add_endpt_unix_socket_listen(const char *endpt_name, const char *unix_socket_path, mode_t mode, uid_t uid, gid_t gid);
+
+/**
+ * @brief Deletes a UNIX socket endpoint.
+ *
+ * @param[in] endpt_name Identifier of the endpoint.
+ * Has no effect if the endpoint doesn't exist or if its transport is not UNIX socket.
+ */
+void nc_server_del_endpt_unix_socket(const char *endpt_name);
+
 /** @} */
 
 /**

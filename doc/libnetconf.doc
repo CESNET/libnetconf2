@@ -307,6 +307,9 @@
  *
  * - ::nc_server_set_capab_withdefaults()
  * - ::nc_server_set_capability()
+ * - ::nc_server_endpt_count()
+ * - ::nc_server_add_endpt_unix_socket_listen()
+ * - ::nc_server_del_endpt_unix_socket()
  *
  * Server Configuration
  * ===

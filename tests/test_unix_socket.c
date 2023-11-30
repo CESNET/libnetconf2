@@ -127,16 +127,8 @@ setup_f(void **state)
     ret = nc_server_init_ctx(&ctx);
     assert_int_equal(ret, 0);
 
-    /* load ietf-netconf-server module and it's dependencies into context */
-    ret = nc_server_config_load_modules(&ctx);
-    assert_int_equal(ret, 0);
-
     /* create the UNIX socket */
-    ret = nc_server_config_add_unix_socket(ctx, "unix", "/tmp/nc2_test_unix_sock", 0700, -1, -1, &tree);
-    assert_int_equal(ret, 0);
-
-    /* configure the server based on the data */
-    ret = nc_server_config_setup_data(tree);
+    ret = nc_server_add_endpt_unix_socket_listen("unix", "/tmp/nc2_test_unix_sock", 0700, -1, -1);
     assert_int_equal(ret, 0);
 
     /* initialize server */
