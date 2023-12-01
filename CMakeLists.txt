@@ -224,6 +224,9 @@ target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
 set(CMAKE_REQUIRED_LIBRARIES pthread)
 check_function_exists(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
 
+# header file compatibility - shadow.h
+check_include_file("shadow.h" HAVE_SHADOW)
+
 if(ENABLE_SSH_TLS)
     # dependencies - openssl
     find_package(OpenSSL 3.0.0 REQUIRED)
@@ -257,8 +260,12 @@ if(ENABLE_SSH_TLS)
         target_link_libraries(netconf2 ${LIBPAM_LIBRARIES})
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBPAM_LIBRARIES})
         include_directories(${LIBPAM_INCLUDE_DIRS})
+
+        message(STATUS "SSH Keyboard Interactive system method: Linux PAM")
+    elseif(HAVE_SHADOW)
+        message(STATUS "SSH Keyboard Interactive system method: local users")
     else()
-        message(WARNING "LibPAM not found, PAM-based keyboard-interactive SSH server authentication method is disabled")
+        message(WARNING "SSH Keyboard Interactive system method: disabled")
     endif()
 
     # set compiler flag
@@ -277,9 +284,6 @@ endif()
 find_package(LibYANG ${LIBYANG_DEP_SOVERSION} REQUIRED)
 target_link_libraries(netconf2 ${LIBYANG_LIBRARIES})
 include_directories(${LIBYANG_INCLUDE_DIRS})
-
-# header file compatibility - shadow.h
-check_include_file("shadow.h" HAVE_SHADOW)
 
 # function compatibility - getpeereid on QNX
 if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
