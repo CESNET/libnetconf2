@@ -354,51 +354,61 @@ static char *
 retrieve_module_data_localfile(const char *name, const char *rev, struct clb_data_s *clb_data,
         LYS_INFORMAT *format)
 {
-    char *localfile = NULL;
+    char *localfile = NULL, *model_data = NULL;
+    const char *ptr;
     FILE *f;
     long length, l;
-    char *model_data = NULL;
 
     if (lys_search_localfile(ly_ctx_get_searchdirs(clb_data->session->ctx),
             !(ly_ctx_get_options(clb_data->session->ctx) & LY_CTX_DISABLE_SEARCHDIR_CWD),
             name, rev, &localfile, format)) {
         return NULL;
     }
-    if (localfile) {
-        VRB(clb_data->session, "Reading module \"%s@%s\" from local file \"%s\".", name, rev ? rev : "<latest>",
-                localfile);
-        f = fopen(localfile, "r");
-        if (!f) {
-            ERR(clb_data->session, "Unable to open file \"%s\" (%s).", localfile, strerror(errno));
-            free(localfile);
-            return NULL;
+    if (localfile && rev) {
+        ptr = strrchr(localfile, '/');
+        if (!strchr(ptr, '@')) {
+            /* we do not know the revision of the module and we require a specific one, so ignore this module */
+            localfile = NULL;
         }
-
-        fseek(f, 0, SEEK_END);
-        length = ftell(f);
-        if (length < 0) {
-            ERR(clb_data->session, "Unable to get the size of module file \"%s\".", localfile);
-            free(localfile);
-            fclose(f);
-            return NULL;
-        }
-        fseek(f, 0, SEEK_SET);
-
-        model_data = malloc(length + 1);
-        if (!model_data) {
-            ERRMEM;
-        } else if ((l = fread(model_data, 1, length, f)) != length) {
-            ERR(clb_data->session, "Reading module from \"%s\" failed (%d bytes read, but %d expected).", localfile, l,
-                    length);
-            free(model_data);
-            model_data = NULL;
-        } else {
-            /* terminating NULL byte */
-            model_data[length] = '\0';
-        }
-        fclose(f);
-        free(localfile);
     }
+
+    if (!localfile) {
+        return NULL;
+    }
+
+    VRB(clb_data->session, "Reading module \"%s@%s\" from local file \"%s\".", name, rev ? rev : "<latest>",
+            localfile);
+    f = fopen(localfile, "r");
+    if (!f) {
+        ERR(clb_data->session, "Unable to open file \"%s\" (%s).", localfile, strerror(errno));
+        free(localfile);
+        return NULL;
+    }
+
+    fseek(f, 0, SEEK_END);
+    length = ftell(f);
+    if (length < 0) {
+        ERR(clb_data->session, "Unable to get the size of module file \"%s\".", localfile);
+        free(localfile);
+        fclose(f);
+        return NULL;
+    }
+    fseek(f, 0, SEEK_SET);
+
+    model_data = malloc(length + 1);
+    if (!model_data) {
+        ERRMEM;
+    } else if ((l = fread(model_data, 1, length, f)) != length) {
+        ERR(clb_data->session, "Reading module from \"%s\" failed (%d bytes read, but %d expected).", localfile, l,
+                length);
+        free(model_data);
+        model_data = NULL;
+    } else {
+        /* terminating NULL byte */
+        model_data[length] = '\0';
+    }
+    fclose(f);
+    free(localfile);
 
     return model_data;
 }
