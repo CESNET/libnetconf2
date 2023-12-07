@@ -2195,10 +2195,10 @@ nc_server_del_endpt_unix_socket(const char *endpt_name)
     struct nc_endpt *endpt = NULL;
     struct nc_bind *bind;
 
+    NC_CHECK_ARG_RET(NULL, endpt_name, );
+
     /* CONFIG LOCK */
     pthread_rwlock_wrlock(&server_opts.config_lock);
-
-    NC_CHECK_ARG_RET(NULL, endpt_name, );
 
     for (i = 0; i < server_opts.endpt_count; i++) {
         if (!strcmp(server_opts.endpts[i].name, endpt_name)) {
