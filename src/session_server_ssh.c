@@ -240,7 +240,7 @@ nc_server_ssh_kbdint_get_nanswers(struct nc_session *session, ssh_session libssh
 {
     int ret = 0;
     struct timespec ts_timeout = {0};
-    ssh_message reply;
+    ssh_message reply = NULL;
 
     if (auth_timeout) {
         nc_timeouttime_get(&ts_timeout, auth_timeout * 1000);
