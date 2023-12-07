@@ -945,18 +945,22 @@ nc_server_config_destroy_ch_client(struct nc_ch_client *ch_client)
     pthread_t tid;
     uint16_t i, ch_endpt_count;
 
+    /* CH COND LOCK */
+    pthread_mutex_lock(&ch_client->thread_data->cond_lock);
     if (ch_client->thread_data->thread_running) {
-        /* get tid */
-        tid = ch_client->tid;
-        /* CH COND LOCK */
-        pthread_mutex_lock(&ch_client->thread_data->cond_lock);
         ch_client->thread_data->thread_running = 0;
         pthread_cond_signal(&ch_client->thread_data->cond);
         /* CH COND UNLOCK */
         pthread_mutex_unlock(&ch_client->thread_data->cond_lock);
 
+        /* get tid */
+        tid = ch_client->tid;
+
         /* wait for the thread to terminate */
         pthread_join(tid, NULL);
+    } else {
+        /* CH COND UNLOCK */
+        pthread_mutex_unlock(&ch_client->thread_data->cond_lock);
     }
 
     /* free its members */
