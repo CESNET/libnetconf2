@@ -805,8 +805,8 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
             /* remember sock so we can close it */
             sock = ssh_get_fd(session->ti.libssh.session);
             if (connected) {
+                /* does not close sock */
                 ssh_disconnect(session->ti.libssh.session);
-                sock = -1;
             }
             ssh_free(session->ti.libssh.session);
         } else {
