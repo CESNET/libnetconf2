@@ -746,8 +746,8 @@ nc_server_ssh_set_pam_conf_filename(const char *filename)
 API int
 nc_server_ssh_set_pam_conf_filename(const char *filename)
 {
+    /* LibPAM not supported */
     (void) filename;
-    ERR(NULL, "LibPAM not found.");
     return 1;
 }
 
