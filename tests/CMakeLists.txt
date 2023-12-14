@@ -16,6 +16,10 @@ if(ENABLE_SSH_TLS)
     list(APPEND tests test_auth test_two_channels test_ks_ts test_ec
         test_ed25519 test_replace test_endpt_share_clients test_tls test_crl test_ch
         test_runtime_changes test_client_ssh test_client_tls)
+
+    if (LIBPAM_HAVE_CONFDIR)
+        list(APPEND tests test_pam)
+    endif()
 endif()
 
 foreach(src IN LISTS libsrc)
@@ -23,22 +27,22 @@ foreach(src IN LISTS libsrc)
 endforeach()
 add_library(testobj OBJECT ${test_srcs} ${compatsrc})
 
-# add -Wl,--wrap flags
-set(test test_client_ssh)
-set(${test}_mock_funcs connect ssh_connect ssh_userauth_none ssh_userauth_kbdint ssh_is_connected
+# set the mocked functions for the tests
+set(mock_tests test_client_ssh test_client_tls test_pam)
+set(test_client_ssh_mock_funcs connect ssh_connect ssh_userauth_none ssh_userauth_kbdint ssh_is_connected
     ssh_channel_open_session ssh_channel_request_subsystem ssh_channel_is_close ssh_channel_write
     ssh_channel_poll_timeout ssh_userauth_password nc_handshake_io nc_ctx_check_and_fill
     ssh_userauth_try_publickey ssh_userauth_publickey nc_sock_listen_inet nc_sock_accept_binds nc_accept_callhome_ssh_sock)
-set(${test}_wrap_link_flags "-Wl")
-foreach(mock_func IN LISTS ${test}_mock_funcs)
-    set(${test}_wrap_link_flags "${${test}_wrap_link_flags},--wrap=${mock_func}")
-endforeach()
+set(test_client_tls_mock_funcs connect SSL_connect nc_send_hello_io nc_handshake_io nc_ctx_check_and_fill)
+set(test_pam_mock_funcs pam_start)
 
-set(test test_client_tls)
-set(${test}_mock_funcs connect SSL_connect nc_send_hello_io nc_handshake_io nc_ctx_check_and_fill)
-set(${test}_wrap_link_flags "-Wl")
-foreach(mock_func IN LISTS ${test}_mock_funcs)
-    set(${test}_wrap_link_flags "${${test}_wrap_link_flags},--wrap=${mock_func}")
+# add -Wl,--wrap flags to tests that require it
+set(moc_funcs test_client_ssh_mock_funcs test_client_tls_mock_funcs test_pam_mock_funcs)
+foreach(mock_test IN LISTS mock_tests)
+    set(${mock_test}_wrap_link_flags "-Wl")
+    foreach(mock_func IN LISTS ${mock_test}_mock_funcs)
+        set(${mock_test}_wrap_link_flags "${${mock_test}_wrap_link_flags},--wrap=${mock_func}")
+    endforeach()
 endforeach()
 
 foreach(test_name IN LISTS tests)
@@ -58,3 +62,16 @@ endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/src ${PROJECT_BINARY_DIR})
 configure_file("${PROJECT_SOURCE_DIR}/tests/config.h.in" "${PROJECT_BINARY_DIR}/tests/config.h" ESCAPE_QUOTES @ONLY)
+
+# compile PAM test module
+add_library(pam_netconf SHARED ${CMAKE_SOURCE_DIR}/tests/pam/pam_netconf.c)
+set_target_properties(pam_netconf PROPERTIES PREFIX "")
+target_link_libraries(pam_netconf ${LIBPAM_LIBRARIES})
+
+# generate PAM configuration file
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/netconf.conf
+    "#%PAM-1.4\n"
+    "auth required ${CMAKE_CURRENT_BINARY_DIR}/pam_netconf.so\n"
+    "account required ${CMAKE_CURRENT_BINARY_DIR}/pam_netconf.so\n"
+    "password required ${CMAKE_CURRENT_BINARY_DIR}/pam_netconf.so\n"
+)
