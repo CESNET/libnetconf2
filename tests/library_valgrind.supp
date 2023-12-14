@@ -9,21 +9,19 @@
    fun:ly_ctx_new
 }
 {
-   CI:test_pam:pam_start_confdir
+   CI:test_pam:__wrap_pam_start
    Memcheck:Leak
    match-leak-kinds: definite
    fun:malloc
    ...
    fun:server_thread
    fun:start_thread
-   fun:clone
 }
 {
-   test_pam:pam_start_confdir
+   test_pam:__wrap_pam_start
    Memcheck:Leak
    match-leak-kinds: definite
    fun:malloc
    ...
    fun:server_thread
-   fun:clone
 }
