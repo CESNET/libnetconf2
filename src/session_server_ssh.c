@@ -26,6 +26,7 @@
 
 #include <arpa/inet.h>
 #include <assert.h>
+#include <ctype.h>
 #include <errno.h>
 #include <libssh/libssh.h>
 #include <libssh/server.h>
@@ -176,6 +177,232 @@ nc_server_ssh_ts_ref_get_keys(const char *referenced_name, struct nc_public_key 
     *pubkeys = ts->pub_bags[i].pubkeys;
     *pubkey_count = ts->pub_bags[i].pubkey_count;
     return 0;
+}
+
+static char *
+nc_server_ssh_uid_to_str(uid_t uid)
+{
+    int buf_len;
+    char *uid_str;
+
+    /* get the number of digits and alloc */
+    buf_len = snprintf(NULL, 0, "%u", uid);
+    uid_str = malloc(buf_len + 1);
+    NC_CHECK_ERRMEM_RET(!uid_str, NULL);
+
+    /* convert to string */
+    sprintf(uid_str, "%u", uid);
+    uid_str[buf_len] = '\0';
+    return uid_str;
+}
+
+static int
+nc_server_ssh_str_append(const char src_c, const char *src_str, int *size, int *idx, char **dst)
+{
+    int src_size, allocate = 0, ret;
+
+    /* get size of char/string we want to append */
+    if (src_str) {
+        src_size = strlen(src_str);
+    } else {
+        src_size = 1;
+    }
+
+    /* check if we have enough space, if not realloc */
+    while ((src_size + *idx) >= *size) {
+        (*size) += 16;
+        allocate = 1;
+    }
+    if (allocate) {
+        *dst = nc_realloc(*dst, *size);
+        NC_CHECK_ERRMEM_RET(!*dst, 1);
+    }
+
+    /* append the char/string */
+    if (src_str) {
+        ret = sprintf(*dst + *idx, "%s", src_str);
+    } else {
+        ret = sprintf(*dst + *idx, "%c", src_c);
+    }
+    if (ret < 0) {
+        return 1;
+    }
+
+    *idx += ret;
+    return 0;
+}
+
+static int
+nc_server_ssh_get_system_keys_path(const char *username, char **out_path)
+{
+    int ret = 0, i, have_percent = 0, size = 0, idx = 0;
+    const char *path_fmt = server_opts.authkey_path_fmt;
+    char *path = NULL, *buf = NULL, *uid = NULL;
+    struct passwd *pw, pw_buf;
+    size_t buf_len = 0;
+
+    /* check if the path format contains any tokens */
+    if (strstr(path_fmt, "%h") || strstr(path_fmt, "%U") || strstr(path_fmt, "%u") || strstr(path_fmt, "%%")) {
+        /* get pw */
+        pw = nc_getpw(0, username, &pw_buf, &buf, &buf_len);
+        if (!pw) {
+            ERR(NULL, "Unable to get passwd entry for user \"%s\".", username);
+            ret = 1;
+            goto cleanup;
+        }
+
+        /* convert UID to a string */
+        uid = nc_server_ssh_uid_to_str(pw->pw_uid);
+        if (!uid) {
+            ret = 1;
+            goto cleanup;
+        }
+    } else {
+        /* no tokens, just copy the path and return */
+        *out_path = strdup(path_fmt);
+        NC_CHECK_ERRMEM_RET(!*out_path, 1);
+        goto cleanup;
+    }
+
+    /* go over characters from format, copy them to path and interpret tokens correctly */
+    for (i = 0; path_fmt[i]; i++) {
+        if (have_percent) {
+            /* special token, need to convert it */
+            if (path_fmt[i] == '%') {
+                ret = nc_server_ssh_str_append('%', NULL, &size, &idx, &path);
+            } else if (path_fmt[i] == 'h') {
+                /* user home */
+                ret = nc_server_ssh_str_append(0, pw->pw_dir, &size, &idx, &path);
+            } else if (path_fmt[i] == 'u') {
+                /* username */
+                ret = nc_server_ssh_str_append(0, username, &size, &idx, &path);
+            } else if (path_fmt[i] == 'U') {
+                /* UID */
+                ret = nc_server_ssh_str_append(0, uid, &size, &idx, &path);
+            } else {
+                ERR(NULL, "Failed to parse system public keys path format \"%s\".", server_opts.authkey_path_fmt);
+                ret = 1;
+            }
+
+            have_percent = 0;
+        } else {
+            if (path_fmt[i] == '%') {
+                have_percent = 1;
+            } else {
+                /* ordinary character with no meaning */
+                ret = nc_server_ssh_str_append(path_fmt[i], NULL, &size, &idx, &path);
+            }
+        }
+
+        if (ret) {
+            free(path);
+            goto cleanup;
+        }
+    }
+
+    *out_path = path;
+cleanup:
+    free(uid);
+    free(buf);
+    return ret;
+}
+
+/* reads public keys from authorized_keys-like file */
+static int
+nc_server_ssh_read_authorized_keys_file(const char *path, struct nc_public_key **pubkeys, uint16_t *pubkey_count)
+{
+    int ret = 0, line_num = 0;
+    FILE *f = NULL;
+    char *line = NULL, *ptr, *ptr2;
+    size_t n;
+    enum ssh_keytypes_e ktype;
+
+    NC_CHECK_ARG_RET(NULL, path, pubkeys, 1);
+
+    *pubkeys = NULL;
+    *pubkey_count = 0;
+
+    f = fopen(path, "r");
+    if (!f) {
+        ERR(NULL, "Unable to open \"%s\" (%s).", path, strerror(errno));
+        ret = 1;
+        goto cleanup;
+    }
+
+    while (getline(&line, &n, f) > -1) {
+        ++line_num;
+        if ((line[0] == '#') || (line[0] == '\n')) {
+            /* comment or empty line */
+            continue;
+        }
+
+        /* separate key type */
+        ptr = line;
+        for (ptr2 = ptr; ptr2[0] && !isspace(ptr2[0]); ptr2++) {}
+        if (!ptr2[0]) {
+            ERR(NULL, "Invalid format of authorized keys file \"%s\" on line %d.", path, line_num);
+            ret = 1;
+            goto cleanup;
+        }
+        ptr2[0] = '\0';
+
+        /* detect key type */
+        ktype = ssh_key_type_from_name(ptr);
+        if ((ktype != SSH_KEYTYPE_RSA) && (ktype != SSH_KEYTYPE_ECDSA_P256) && (ktype != SSH_KEYTYPE_ECDSA_P384) &&
+                (ktype != SSH_KEYTYPE_ECDSA_P521) && (ktype != SSH_KEYTYPE_ED25519)) {
+            WRN(NULL, "Unsupported key type \"%s\" in authorized keys file \"%s\" on line %d.", ptr, path, line_num);
+            continue;
+        }
+
+        /* get key data */
+        ptr = ptr2 + 1;
+        for (ptr2 = ptr; ptr2[0] && !isspace(ptr2[0]); ptr2++) {}
+        ptr2[0] = '\0';
+
+        /* add the key */
+        *pubkeys = nc_realloc(*pubkeys, (*pubkey_count + 1) * sizeof **pubkeys);
+        NC_CHECK_ERRMEM_GOTO(!(*pubkeys), ret = 1, cleanup);
+        ret = asprintf(&(*pubkeys)[*pubkey_count].name, "authorized_key_%" PRIu16, *pubkey_count);
+        NC_CHECK_ERRMEM_GOTO(ret == -1, (*pubkeys)[*pubkey_count].name = NULL; ret = 1, cleanup);
+        (*pubkeys)[*pubkey_count].type = NC_PUBKEY_FORMAT_SSH;
+        (*pubkeys)[*pubkey_count].data = strdup(ptr);
+        NC_CHECK_ERRMEM_GOTO(!(*pubkeys)[*pubkey_count].data, ret = 1, cleanup);
+        (*pubkey_count)++;
+    }
+
+    /* ok */
+    ret = 0;
+cleanup:
+    if (f) {
+        fclose(f);
+    }
+    free(line);
+    return ret;
+}
+
+static int
+nc_server_ssh_get_system_keys(const char *username, struct nc_public_key **pubkeys, uint16_t *pubkey_count)
+{
+    int ret = 0;
+    char *path = NULL;
+
+    /* convert the path format to get the actual path */
+    ret = nc_server_ssh_get_system_keys_path(username, &path);
+    if (ret) {
+        ERR(NULL, "Getting system keys path failed.");
+        goto cleanup;
+    }
+
+    /* get the keys */
+    ret = nc_server_ssh_read_authorized_keys_file(path, pubkeys, pubkey_count);
+    if (ret) {
+        ERR(NULL, "Reading system keys failed.");
+        goto cleanup;
+    }
+
+cleanup:
+    free(path);
+    return ret;
 }
 
 /**
@@ -753,6 +980,28 @@ nc_server_ssh_set_pam_conf_filename(const char *filename)
 
 #endif /* HAVE_LIBPAM */
 
+API int
+nc_server_ssh_set_authkey_path_format(const char *path)
+{
+    int ret = 0;
+
+    NC_CHECK_ARG_RET(NULL, path, 1);
+
+    /* CONFIG LOCK */
+    pthread_rwlock_wrlock(&server_opts.config_lock);
+
+    free(server_opts.authkey_path_fmt);
+    server_opts.authkey_path_fmt = strdup(path);
+    if (!server_opts.authkey_path_fmt) {
+        ERRMEM;
+        ret = 1;
+    }
+
+    /* CONFIG UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
+    return ret;
+}
+
 /*
  *  Get the public key type from binary data stored in buffer.
  *  The data is in the form of: 4 bytes = data length, then data of data length
@@ -845,18 +1094,27 @@ auth_pubkey_compare_key(ssh_key key, struct nc_auth_client *auth_client)
     uint16_t i, pubkey_count;
     int ret = 0;
     ssh_key new_key = NULL;
-    struct nc_public_key *pubkeys;
+    struct nc_public_key *pubkeys = NULL;
 
     /* get the correct public key storage */
     if (auth_client->store == NC_STORE_LOCAL) {
         pubkeys = auth_client->pubkeys;
         pubkey_count = auth_client->pubkey_count;
-    } else {
+    } else if (auth_client->store == NC_STORE_TRUSTSTORE) {
         ret = nc_server_ssh_ts_ref_get_keys(auth_client->ts_ref, &pubkeys, &pubkey_count);
         if (ret) {
             ERR(NULL, "Error getting \"%s\"'s public keys from the truststore.", auth_client->username);
-            return ret;
+            goto cleanup;
         }
+    } else if (auth_client->store == NC_STORE_SYSTEM) {
+        ret = nc_server_ssh_get_system_keys(auth_client->username, &pubkeys, &pubkey_count);
+        if (ret) {
+            ERR(NULL, "Failed to retrieve public keys of user \"%s\" from the system.", auth_client->username);
+            goto cleanup;
+        }
+    } else {
+        ERRINT;
+        return 1;
     }
 
     /* try to compare all of the client's keys with the key received in the SSH message */
@@ -876,16 +1134,24 @@ auth_pubkey_compare_key(ssh_key key, struct nc_auth_client *auth_client)
             ssh_key_free(new_key);
         }
     }
-
     if (i == pubkey_count) {
         ret = 1;
+        goto cleanup;
     }
 
+cleanup:
     if (!ret) {
         /* only free a key if everything was ok, it would have already been freed otherwise */
         ssh_key_free(new_key);
     }
 
+    if ((auth_client->store == NC_STORE_SYSTEM) && pubkeys) {
+        for (i = 0; i < pubkey_count; i++) {
+            free(pubkeys[i].name);
+            free(pubkeys[i].data);
+        }
+        free(pubkeys);
+    }
     return ret;
 }
 
@@ -1194,7 +1460,11 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
                 if (auth_client->pubkey_count) {
                     libssh_auth_methods |= SSH_AUTH_METHOD_PUBLICKEY;
                 }
-            } else if (auth_client->ts_ref) {
+            } else if (auth_client->store == NC_STORE_TRUSTSTORE) {
+                if (auth_client->ts_ref) {
+                    libssh_auth_methods |= SSH_AUTH_METHOD_PUBLICKEY;
+                }
+            } else if (auth_client->store == NC_STORE_SYSTEM) {
                 libssh_auth_methods |= SSH_AUTH_METHOD_PUBLICKEY;
             }
             if (auth_client->password) {

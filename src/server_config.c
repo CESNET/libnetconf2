@@ -652,7 +652,7 @@ nc_server_config_del_auth_client(struct nc_server_ssh_opts *opts, struct nc_auth
         for (i = 0; i < pubkey_count; i++) {
             nc_server_config_del_auth_client_pubkey(auth_client, &auth_client->pubkeys[i]);
         }
-    } else {
+    } else if (auth_client->store == NC_STORE_TRUSTSTORE) {
         free(auth_client->ts_ref);
     }
 
@@ -797,7 +797,7 @@ nc_server_config_del_certs(struct nc_cert_grouping *certs_grp)
         }
         free(certs_grp->certs);
         certs_grp->certs = NULL;
-    } else {
+    } else if (certs_grp->store == NC_STORE_TRUSTSTORE) {
         free(certs_grp->ts_ref);
     }
 }
@@ -862,7 +862,7 @@ nc_server_config_del_tls_opts(struct nc_bind *bind, struct nc_server_tls_opts *o
         free(opts->pubkey_data);
         free(opts->privkey_data);
         free(opts->cert_data);
-    } else {
+    } else if (opts->store == NC_STORE_KEYSTORE) {
         free(opts->key_ref);
         free(opts->cert_ref);
     }
@@ -2299,6 +2299,38 @@ nc_server_config_truststore_reference(const struct lyd_node *node, NC_OPERATION 
             free(certs_grp->ts_ref);
             certs_grp->ts_ref = NULL;
         }
+    }
+
+cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
+    return ret;
+}
+
+static int
+nc_server_config_use_system_keys(const struct lyd_node *node, NC_OPERATION op)
+{
+    int ret = 0;
+    struct nc_auth_client *auth_client;
+    struct nc_ch_client *ch_client = NULL;
+
+    assert(!strcmp(LYD_NAME(node), "use-system-keys"));
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
+        return 1;
+    }
+
+    if (nc_server_config_get_auth_client(node, ch_client, &auth_client)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    if (op == NC_OP_CREATE) {
+        auth_client->store = NC_STORE_SYSTEM;
     }
 
 cleanup:
@@ -3917,6 +3949,8 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
         ret = nc_server_config_auth_timeout(node, op);
     } else if (!strcmp(name, "truststore-reference")) {
         ret = nc_server_config_truststore_reference(node, op);
+    } else if (!strcmp(name, "use-system-keys")) {
+        ret = nc_server_config_use_system_keys(node, op);
     } else if (!strcmp(name, "password")) {
         ret = nc_server_config_password(node, op);
     } else if (!strcmp(name, "use-system-auth")) {
