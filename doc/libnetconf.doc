@@ -432,6 +432,7 @@
  * - ::nc_server_config_add_ssh_endpoint_client_ref()
  * - ::nc_server_config_del_ssh_endpoint_client_ref()
  *
+ * - ::nc_server_ssh_set_authkey_path_format()
  * - ::nc_server_ssh_set_pam_conf_filename()
  * - ::nc_server_ssh_set_interactive_auth_clb()
  *
