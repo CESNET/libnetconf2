@@ -265,9 +265,15 @@ module libnetconf2-netconf-server {
       "Grouping for using the system configured keys in the SSH public key authentication method.";
 
       container use-system-keys {
-        presence "Indicates that the given user will be authenticated using the system's configured public keys.";
+        presence
+          "Indicates that the given user will be authenticated using the system's configured public keys.";
+
         description
           "Authentication is done using the system's mechanisms.";
+
+        reference
+          "libnetconf2 documentation:
+              Section SSH";
       }
   }
 
@@ -296,6 +302,10 @@ module libnetconf2-netconf-server {
 
           description
             "Authentication is done using the system's mechanisms.";
+
+          reference
+          "libnetconf2 documentation:
+              Section SSH";
         }
       }
     }

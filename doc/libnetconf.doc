@@ -391,6 +391,15 @@
  * Another option for authorized clients is to reference another endpoint's clients, however be careful not to create a cyclic reference
  * (see ::nc_server_config_add_ssh_endpoint_client_ref()). An authorized client MUST authenticate to all of it's configured authentication methods.
  *
+ * \anchor ln2doc_pubkey
+ * The Public Key authentication method is supported. If you wish to use this method, you need to specify the given user's
+ * public keys, which will be compared with the key(s) presented by the SSH client when authenticating. One option is to configure
+ * the public keys directly in the ietf-netconf-server YANG data (inline-definition). Other option is to configure the keys' data
+ * in the ietf-trustore module's YANG data and then reference them (truststore-reference). The final option is to set the global
+ * path to file with public keys. This path may contain special tokens, see ::nc_server_ssh_set_authkey_path_format().
+ * If the path is set and the use-system-keys container is present in the data for the client wishing to authenticate,
+ * then the keys from the file will be used for authentication.
+ *
  * \anchor ln2doc_kbdint
  * The Keyboard Interactive authentication method is also supported. It can be done in three ways.
  * If libpam is found, Linux PAM is used to handle the authentication. You need to specify the service name using ::nc_server_ssh_set_pam_conf_filename().
