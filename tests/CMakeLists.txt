@@ -15,7 +15,7 @@ set(tests test_unix_socket test_client_thread test_fd_comm test_init_destroy_cli
 if(ENABLE_SSH_TLS)
     list(APPEND tests test_auth test_two_channels test_ks_ts test_ec
         test_ed25519 test_replace test_endpt_share_clients test_tls test_crl test_ch
-        test_runtime_changes test_client_ssh test_client_tls)
+        test_runtime_changes test_client_ssh test_client_tls test_authkeys)
 
     if (LIBPAM_HAVE_CONFDIR)
         list(APPEND tests test_pam)

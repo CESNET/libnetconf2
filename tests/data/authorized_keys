@@ -1,0 +1,2 @@
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOr46rptg6BsWhO1JMomuh3cuCYmeuO6JfOUPs/YO35w test@libnetconf2
+ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBIY62KY++anyNuwrmQu2jQdyB9pYZMGEGyf5zl15jRJC7OGPq+TGqRgwFOoBylYtuPrFWGlM+zktqUMn19+5qPo= test@libnetconf2
