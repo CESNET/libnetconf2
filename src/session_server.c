@@ -853,6 +853,8 @@ nc_server_destroy(void)
     pthread_mutex_destroy(&server_opts.bind_lock);
 
 #ifdef NC_ENABLED_SSH_TLS
+    free(server_opts.authkey_path_fmt);
+    server_opts.authkey_path_fmt = NULL;
     free(server_opts.pam_config_name);
     server_opts.pam_config_name = NULL;
     if (server_opts.interactive_auth_data && server_opts.interactive_auth_data_free) {

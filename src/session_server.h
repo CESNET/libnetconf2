@@ -468,6 +468,21 @@ NC_MSG_TYPE nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_sessio
  */
 
 /**
+ * @brief Set the format of the path to authorized_keys files.
+ *
+ * This path format will be set globally for all clients wishing to authenticate via the
+ * SSH Public Key system authentication.
+ *
+ * @param[in] path Path to authorized_keys files. The path may contain the following tokens:
+ * - %u - replaced by the username of the user trying to authenticate,
+ * - %h - replaced by the home directory of the user trying to authenticate,
+ * - %U - replaced by the UID of the user trying to authenticate,
+ * - %% - a literal '%'.
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_ssh_set_authkey_path_format(const char *path);
+
+/**
  * @brief Set the callback for SSH interactive authentication. If not set, local PAM-based authentication is used.
  *
  * @param[in] interactive_auth_clb Callback that should authenticate the user.

@@ -46,7 +46,8 @@ typedef enum {
 typedef enum {
     NC_STORE_LOCAL,     /**< key/certificate is stored locally in the ietf-netconf-server YANG data */
     NC_STORE_KEYSTORE,  /**< key/certificate is stored externally in a keystore module YANG data */
-    NC_STORE_TRUSTSTORE /**< key/certificate is stored externally in a truststore module YANG data */
+    NC_STORE_TRUSTSTORE, /**< key/certificate is stored externally in a truststore module YANG data */
+    NC_STORE_SYSTEM     /**< key/certificate is managed by the system */
 } NC_STORE_TYPE;
 
 #ifdef NC_ENABLED_SSH_TLS
@@ -428,6 +429,7 @@ struct nc_server_opts {
     uint16_t idle_timeout;
 
 #ifdef NC_ENABLED_SSH_TLS
+    char *authkey_path_fmt;             /**< Path to users' public keys that may contain tokens with special meaning. */
     char *pam_config_name;              /**< PAM configuration file name. */
     int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg, void *user_data);
     void *interactive_auth_data;

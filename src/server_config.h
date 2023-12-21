@@ -354,6 +354,34 @@ int nc_server_config_del_ssh_user_pubkey(const char *endpt_name, const char *use
         const char *pubkey_name, struct lyd_node **config);
 
 /**
+ * @brief Creates new YANG configuration data nodes for an SSH user that will use system's authorized_keys to authenticate.
+ *
+ * The path to the authorized_keys file must be configured to successfully
+ * authenticate, see ::nc_server_ssh_set_authkey_path_format().
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, its user might be changed.
+ * @param[in] user_name Arbitrary identifier of the user.
+ * If an user with this identifier already exists, its contents will be changed.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_add_ssh_user_authkey(const struct ly_ctx *ctx, const char *endpt_name,
+        const char *user_name, struct lyd_node **config);
+
+/**
+ * @brief Deletes an SSH user's authorized_keys method from the YANG data.
+ *
+ * @param[in] endpt_name Identifier of an existing endpoint.
+ * @param[in] user_name Identifier of an existing user on the given endpoint.
+ * @param[in,out] config Modified configuration YANG data tree.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_del_ssh_user_authkey(const char *endpt_name, const char *user_name, struct lyd_node **config);
+
+/**
  * @brief Creates new YANG configuration data nodes for an SSH user's password authentication method.
  *
  * @param[in] ctx libyang context.
@@ -992,6 +1020,38 @@ int nc_server_config_add_ch_ssh_user_pubkey(const struct ly_ctx *ctx, const char
  */
 int nc_server_config_del_ch_ssh_user_pubkey(const char *client_name, const char *endpt_name,
         const char *user_name, const char *pubkey_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG configuration data nodes for a Call Home SSH user that will use system's authorized_keys to authenticate.
+ *
+ * The path to the authorized_keys file must be configured to successfully
+ * authenticate, see ::nc_server_ssh_set_authkey_path_format().
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] client_name Arbitrary identifier of the Call Home client.
+ * If a Call Home client with this identifier already exists, its contents will be changed.
+ * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
+ * If the client's endpoint with this identifier already exists, its contents will be changed.
+ * @param[in] user_name Arbitrary identifier of the endpoint's user.
+ * If the endpoint's user with this identifier already exists, its contents will be changed.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_add_ch_ssh_user_authkey(const struct ly_ctx *ctx, const char *client_name,
+        const char *endpt_name, const char *user_name, struct lyd_node **config);
+
+/**
+ * @brief Deletes a Call Home SSH user's authorized_keys method from the YANG data.
+ *
+ * @param[in] client_name Identifier of an existing Call Home client.
+ * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
+ * @param[in] user_name Identifier of an existing user on the given endpoint.
+ * @param[in,out] config Modified configuration YANG data tree.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_ch_del_ssh_user_authkey(const char *client_name, const char *endpt_name,
+        const char *user_name, struct lyd_node **config);
 
 /**
  * @brief Creates new YANG data nodes for a Call Home SSH user's password authentication method.

@@ -303,6 +303,14 @@ nc_server_config_add_ssh_user_pubkey(const struct ly_ctx *ctx, const char *endpt
         goto cleanup;
     }
 
+    /* delete use system auth if present */
+    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+            "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/"
+            "libnetconf2-netconf-server:use-system-keys", endpt_name, user_name);
+    if (ret) {
+        goto cleanup;
+    }
+
 cleanup:
     free(path);
     return ret;
@@ -333,6 +341,15 @@ nc_server_config_add_ch_ssh_user_pubkey(const struct ly_ctx *ctx, const char *cl
     ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
             "endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/"
             "public-keys/truststore-reference", client_name, endpt_name, user_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* delete use system auth if present */
+    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/call-home/"
+            "netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/"
+            "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/"
+            "libnetconf2-netconf-server:use-system-keys", client_name, endpt_name, user_name);
     if (ret) {
         goto cleanup;
     }
@@ -376,6 +393,106 @@ nc_server_config_del_ch_ssh_user_pubkey(const char *client_name, const char *end
                 "users/user[name='%s']/public-keys/inline-definition/public-key", client_name,
                 endpt_name, user_name);
     }
+}
+
+API int
+nc_server_config_add_ssh_user_authkey(const struct ly_ctx *ctx, const char *endpt_name,
+        const char *user_name, struct lyd_node **config)
+{
+    int ret = 0;
+    char *path = NULL;
+
+    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, config, 1);
+
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
+            "client-authentication/users/user[name='%s']/public-keys", endpt_name, user_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
+
+    ret = nc_server_config_append(ctx, path, "libnetconf2-netconf-server:use-system-keys", NULL, config);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* delete inline definition nodes if present */
+    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+            "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/inline-definition",
+            endpt_name, user_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* delete truststore reference if present */
+    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+            "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/truststore-reference",
+            endpt_name, user_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(path);
+    return ret;
+}
+
+API int
+nc_server_config_add_ch_ssh_user_authkey(const struct ly_ctx *ctx, const char *client_name,
+        const char *endpt_name, const char *user_name, struct lyd_node **config)
+{
+    int ret = 0;
+    char *path = NULL;
+
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, user_name, config, 1);
+
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
+            "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users"
+            "/user[name='%s']/public-keys", client_name, endpt_name, user_name);
+    NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
+
+    ret = nc_server_config_append(ctx, path, "libnetconf2-netconf-server:use-system-keys", NULL, config);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* delete inline definition nodes if present */
+    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+            "endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/"
+            "public-keys/inline-definition", client_name, endpt_name, user_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* delete truststore reference if present */
+    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+            "endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/"
+            "public-keys/truststore-reference", client_name, endpt_name, user_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(path);
+    return ret;
+}
+
+API int
+nc_server_config_del_ssh_user_authkey(const char *endpt_name, const char *user_name, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, endpt_name, user_name, config, 1);
+
+    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+            "ssh-server-parameters/client-authentication/users/user[name='%s']/"
+            "public-keys/libnetconf2-netconf-server:use-system-keys", endpt_name, user_name);
+}
+
+API int
+nc_server_config_ch_del_ssh_user_authkey(const char *client_name, const char *endpt_name,
+        const char *user_name, struct lyd_node **config)
+{
+    NC_CHECK_ARG_RET(NULL, client_name, endpt_name, user_name, config, 1);
+
+    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
+            "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/"
+            "public-keys/libnetconf2-netconf-server:use-system-keys", endpt_name, user_name);
 }
 
 static int
@@ -615,6 +732,14 @@ nc_server_config_add_ssh_truststore_ref(const struct ly_ctx *ctx, const char *en
         goto cleanup;
     }
 
+    /* delete use system auth if present */
+    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+            "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/"
+            "libnetconf2-netconf-server:use-system-keys", endpt_name, user_name);
+    if (ret) {
+        goto cleanup;
+    }
+
 cleanup:
     return ret;
 }
@@ -638,6 +763,15 @@ nc_server_config_add_ch_ssh_truststore_ref(const struct ly_ctx *ctx, const char 
     ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
             "endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/"
             "public-keys/inline-definition", client_name, endpt_name, user_name);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* delete use system auth if present */
+    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/call-home/"
+            "netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/"
+            "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/"
+            "libnetconf2-netconf-server:use-system-keys", client_name, endpt_name, user_name);
     if (ret) {
         goto cleanup;
     }

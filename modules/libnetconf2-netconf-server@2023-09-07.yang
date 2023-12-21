@@ -260,6 +260,17 @@ module libnetconf2-netconf-server {
     }
   }
 
+  grouping system-auth-public-keys-grouping {
+    description
+      "Grouping for using the system configured keys in the SSH public key authentication method.";
+
+      container use-system-keys {
+        presence "Indicates that the given user will be authenticated using the system's configured public keys.";
+        description
+          "Authentication is done using the system's mechanisms.";
+      }
+  }
+
   grouping keyboard-interactive-grouping {
     description
       "Grouping for the SSH Keyboard interactive authentication method.";
@@ -376,6 +387,20 @@ module libnetconf2-netconf-server {
   augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints" +
           "/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
     uses ssh-authentication-params-grouping;
+  }
+
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters" +
+          "/ncs:client-authentication/ncs:users/ncs:user/ncs:public-keys/ncs:inline-or-truststore" {
+    case system-auth-public-keys {
+      uses system-auth-public-keys-grouping;
+    }
+  }
+
+  augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:ssh" +
+          "/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication/ncs:users/ncs:user/ncs:public-keys/ncs:inline-or-truststore" {
+    case system-auth-public-keys {
+      uses system-auth-public-keys-grouping;
+    }
   }
 
   augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh" +
