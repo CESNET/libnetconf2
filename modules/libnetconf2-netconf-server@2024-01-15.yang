@@ -31,7 +31,7 @@ module libnetconf2-netconf-server {
     prefix tlss;
   }
 
-  revision "2023-09-07" {
+  revision "2024-01-15" {
     description "Initial revision.";
   }
 
@@ -317,7 +317,7 @@ module libnetconf2-netconf-server {
 
     leaf endpoint-reference {
       type leafref {
-        path "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:name";
+        path "/ncs:netconf-server/ncs:listen/ncs:endpoints/ncs:endpoint/ncs:name";
       }
       description
         "Reference to another endpoint. The purpose is to use the referenced endpoint's authentication mechanisms.
@@ -371,25 +371,7 @@ module libnetconf2-netconf-server {
     }
   }
 
-  augment "/ncs:netconf-server" {
-    leaf hello-timeout {
-      type uint16;
-      default 60;
-      description
-        "Represents the maximum number of seconds the server will wait for receiving a hello message.";
-    }
-  }
-
-  augment "/ncs:netconf-server" {
-    leaf idle-timeout {
-      type uint16;
-      default 0;
-      description
-        "Represents the maximum number of seconds a NETCONF session may remain idle. The value of 0 represents indefinitely.";
-    }
-  }
-
-  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh" +
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:ssh" +
           "/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
     uses ssh-authentication-params-grouping;
   }
@@ -399,7 +381,7 @@ module libnetconf2-netconf-server {
     uses ssh-authentication-params-grouping;
   }
 
-  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters" +
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters" +
           "/ncs:client-authentication/ncs:users/ncs:user/ncs:public-keys/ncs:inline-or-truststore" {
     case system-auth-public-keys {
       uses system-auth-public-keys-grouping;
@@ -413,7 +395,7 @@ module libnetconf2-netconf-server {
     }
   }
 
-  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh" +
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:ssh" +
           "/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication/ncs:users/ncs:user" {
     uses keyboard-interactive-grouping;
   }
@@ -423,7 +405,7 @@ module libnetconf2-netconf-server {
     uses keyboard-interactive-grouping;
   }
 
-  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:ssh" +
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:ssh" +
           "/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
     uses endpoint-reference-grouping;
   }
@@ -433,7 +415,7 @@ module libnetconf2-netconf-server {
     uses endpoint-reference-grouping;
   }
 
-  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:tls" +
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:tls" +
           "/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
     uses endpoint-reference-grouping;
   }
@@ -443,7 +425,7 @@ module libnetconf2-netconf-server {
     uses endpoint-reference-grouping;
   }
 
-  augment "/ncs:netconf-server/ncs:listen/ncs:endpoint/ncs:transport/ncs:tls" +
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:tls" +
           "/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
     uses certificate-revocation-list-grouping;
   }

@@ -92,6 +92,7 @@ static struct nc_session *
 test_new_session(NC_SIDE side)
 {
     struct nc_session *sess;
+    struct timespec ts;
 
     sess = calloc(1, sizeof *sess);
     if (!sess) {
@@ -101,9 +102,13 @@ test_new_session(NC_SIDE side)
     sess->side = side;
 
     if (side == NC_SERVER) {
+        pthread_mutex_init(&sess->opts.server.ntf_status_lock, NULL);
         pthread_mutex_init(&sess->opts.server.rpc_lock, NULL);
         pthread_cond_init(&sess->opts.server.rpc_cond, NULL);
         sess->opts.server.rpc_inuse = 0;
+
+        nc_timeouttime_get(&ts, 0);
+        sess->opts.server.last_rpc = ts.tv_sec;
     }
 
     sess->io_lock = malloc(sizeof *sess->io_lock);

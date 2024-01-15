@@ -1015,12 +1015,12 @@ nc_server_config_add_address_port(const struct ly_ctx *ctx, const char *endpt_na
 
     if (transport == NC_TI_LIBSSH) {
         /* SSH path */
-        address_fmt = "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/tcp-server-parameters/local-address";
-        port_fmt = "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/tcp-server-parameters/local-port";
+        address_fmt = "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/tcp-server-parameters/local-address";
+        port_fmt = "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/tcp-server-parameters/local-port";
     } else if (transport == NC_TI_OPENSSL) {
         /* TLS path */
-        address_fmt = "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tcp-server-parameters/local-address";
-        port_fmt = "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/tls/tcp-server-parameters/local-port";
+        address_fmt = "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/tcp-server-parameters/local-address";
+        port_fmt = "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/tcp-server-parameters/local-port";
     } else {
         ERR(NULL, "Can not set address and port of a non SSH/TLS endpoint.");
         ret = 1;
@@ -1085,9 +1085,9 @@ nc_server_config_del_endpt(const char *endpt_name, struct lyd_node **config)
     NC_CHECK_ARG_RET(NULL, config, 1);
 
     if (endpt_name) {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']", endpt_name);
+        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']", endpt_name);
     } else {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint");
+        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint");
     }
 }
 

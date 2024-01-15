@@ -78,7 +78,7 @@ module ietf-netconf-server {
      (RFC 8174) when, and only when, they appear in all
      capitals, as shown here.";
 
-  revision 2023-04-17 {
+  revision 2023-12-28 {
     description
       "Initial version";
     reference
@@ -194,7 +194,7 @@ module ietf-netconf-server {
   grouping netconf-server-listen-stack-grouping {
     description
       "A reusable grouping for configuring a NETCONF server
-       'listen' protocol stack for a single connection.";
+       'listen' protocol stack for listening on a single port.";
     choice transport {
       mandatory true;
       description
@@ -203,12 +203,12 @@ module ietf-netconf-server {
         if-feature "ssh-listen";
         container ssh {
           description
-            "SSH-specific listening configuration for inbound
-             connections.";
+            "TCP, SSH, and NETCONF configuration to listen
+             for NETCONF over SSH connections.";
           container tcp-server-parameters {
             description
-              "A wrapper around the TCP client parameters
-               to avoid name collisions.";
+              "TCP-level server parameters to listen
+               for NETCONF over SSH connections.";
             uses tcps:tcp-server-grouping {
               refine "local-port" {
                 default "830";
@@ -222,19 +222,19 @@ module ietf-netconf-server {
           }
           container ssh-server-parameters {
             description
-              "A wrapper around the SSH server parameters
-               to avoid name collisions.";
+              "SSH-level server parameters to listen
+               for NETCONF over SSH connections.";
             uses sshs:ssh-server-grouping;
           }
           container netconf-server-parameters {
             description
-              "A wrapper around the NETCONF server parameters
-               to avoid name collisions.";
+              "NETCONF-level server parameters to listen
+               for NETCONF over SSH connections.";
             uses ncs:netconf-server-grouping {
               refine "client-identity-mappings" {
                 if-feature "sshcmn:ssh-x509-certs";
                 description
-                  "Augments in an 'if-feature' statement
+                  "Adds in an 'if-feature' statement
                    ensuring the 'client-identity-mappings'
                    descendant is enabled only when SSH
                    supports X.509 certificates.";
@@ -259,12 +259,12 @@ module ietf-netconf-server {
         if-feature "tls-listen";
         container tls {
           description
-            "TLS-specific listening configuration for inbound
-             connections.";
+            "TCP, TLS, and NETCONF configuration to listen
+             for NETCONF over TLS connections.";
           container tcp-server-parameters {
             description
-              "A wrapper around the TCP client parameters
-               to avoid name collisions.";
+              "TCP-level server parameters to listen
+               for NETCONF over TLS connections.";
             uses tcps:tcp-server-grouping {
               refine "local-port" {
                 default "6513";
@@ -278,15 +278,15 @@ module ietf-netconf-server {
           }
           container tls-server-parameters {
             description
-              "A wrapper around the TLS server parameters to
-               avoid name collisions.";
+              "TLS-level server parameters to listen
+               for NETCONF over TLS connections.";
             uses tlss:tls-server-grouping {
               refine "client-authentication" {
                 must 'ca-certs or ee-certs';
                 description
                   "NETCONF/TLS servers MUST validate client
                    certificates.  This configures certificates
-                   at the socket-level (i.e. bags), more
+                   at the socket-level (i.e. bags).  More
                    discriminating client-certificate checks
                    SHOULD be implemented by the application.";
                 reference
@@ -298,8 +298,8 @@ module ietf-netconf-server {
           }
           container netconf-server-parameters {
             description
-              "A wrapper around the NETCONF server parameters
-               to avoid name collisions.";
+              "NETCONF-level server parameters to listen
+               for NETCONF over TLS connections.";
             uses ncs:netconf-server-grouping {
               refine "client-identity-mappings/cert-to-name" {
                 min-elements 1;
@@ -316,7 +316,8 @@ module ietf-netconf-server {
   grouping netconf-server-callhome-stack-grouping {
     description
       "A reusable grouping for configuring a NETCONF server
-       'call-home' protocol stack, for a single connection.";
+       'call-home' protocol stack, for a single outbound
+       connection.";
     choice transport {
       mandatory true;
       description
@@ -325,12 +326,12 @@ module ietf-netconf-server {
         if-feature "ssh-call-home";
         container ssh {
           description
-            "Specifies SSH-specific call-home transport
-             configuration.";
+            "TCP, SSH, and NETCONF configuration to initiate
+             a NETCONF over SSH Call Home connection.";
           container tcp-client-parameters {
             description
-              "A wrapper around the TCP client parameters
-               to avoid name collisions.";
+              "TCP-level client parameters to initiate a
+               NETCONF over SSH Call Home connection.";
             uses tcpc:tcp-client-grouping {
               refine "remote-port" {
                 default "4334";
@@ -344,19 +345,19 @@ module ietf-netconf-server {
           }
           container ssh-server-parameters {
             description
-              "A wrapper around the SSH server parameters
-               to avoid name collisions.";
+              "SSH-level server parameters to initiate a
+               NETCONF over SSH Call Home connection.";
             uses sshs:ssh-server-grouping;
           }
           container netconf-server-parameters {
             description
-              "A wrapper around the NETCONF server parameters
-               to avoid name collisions.";
+              "NETCONF-level server parameters to initiate a
+               NETCONF over SSH Call Home connection.";
             uses ncs:netconf-server-grouping {
               refine "client-identity-mappings" {
                 if-feature "sshcmn:ssh-x509-certs";
                 description
-                  "Augments in an 'if-feature' statement
+                  "Adds in an 'if-feature' statement
                    ensuring the 'client-identity-mappings'
                    descendant is enabled only when SSH
                    supports X.509 certificates.";
@@ -381,12 +382,12 @@ module ietf-netconf-server {
         if-feature "tls-call-home";
         container tls {
           description
-            "Specifies TLS-specific call-home transport
-             configuration.";
+            "TCP, TLS, and NETCONF configuration to initiate
+             a NETCONF over TLS Call Home connection.";
           container tcp-client-parameters {
             description
-              "A wrapper around the TCP client parameters
-               to avoid name collisions.";
+              "TCP-level client parameters to initiate a
+               NETCONF over TLS Call Home connection.";
             uses tcpc:tcp-client-grouping {
               refine "remote-port" {
                 default "4335";
@@ -400,15 +401,15 @@ module ietf-netconf-server {
           }
           container tls-server-parameters {
             description
-              "A wrapper around the TLS server parameters to
-               avoid name collisions.";
+              "TLS-level server parameters to initiate a
+               NETCONF over TLS Call Home connection.";
             uses tlss:tls-server-grouping {
               refine "client-authentication" {
                 must 'ca-certs or ee-certs';
                 description
                   "NETCONF/TLS servers MUST validate client
                    certificates.  This configures certificates
-                   at the socket-level (i.e. bags), more
+                   at the socket-level (i.e. bags).  More
                    discriminating client-certificate checks
                    SHOULD be implemented by the application.";
                 reference
@@ -420,8 +421,8 @@ module ietf-netconf-server {
           }
           container netconf-server-parameters {
             description
-              "A wrapper around the NETCONF server parameters
-               to avoid name collisions.";
+              "NETCONF-level server parameters to initiate a
+               NETCONF over TLS Call Home connection.";
             uses ncs:netconf-server-grouping {
               refine "client-identity-mappings/cert-to-name" {
                 min-elements 1;
@@ -459,17 +460,21 @@ module ietf-netconf-server {
            number of seconds.  If set to zero, then the server
            will never drop a session because it is idle.";
       }
-      list endpoint {
-        key "name";
-        min-elements 1;
+      container endpoints {
         description
-          "List of endpoints to listen for NETCONF connections.";
-        leaf name {
-          type string;
+          "Container for a list of endpoints.";
+        list endpoint {
+          key "name";
+          min-elements 1;
           description
-            "An arbitrary name for the NETCONF listen endpoint.";
+            "List of endpoints to listen for NETCONF connections.";
+          leaf name {
+            type string;
+            description
+              "An arbitrary name for the NETCONF listen endpoint.";
+          }
+          uses netconf-server-listen-stack-grouping;
         }
-        uses netconf-server-listen-stack-grouping;
       }
     }
     container call-home {

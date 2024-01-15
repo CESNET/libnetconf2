@@ -1078,22 +1078,6 @@ nc_server_config_ch(const struct lyd_node *node, NC_OPERATION op)
 
 /* default leaf */
 static int
-nc_server_config_hello_timeout(const struct lyd_node *node, NC_OPERATION op)
-{
-    assert(!strcmp(LYD_NAME(node), "hello-timeout"));
-
-    if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        server_opts.hello_timeout = ((struct lyd_node_term *)node)->value.uint16;
-    } else {
-        /* default value */
-        server_opts.hello_timeout = 60;
-    }
-
-    return 0;
-}
-
-/* default leaf */
-static int
 nc_server_config_idle_timeout(const struct lyd_node *node, NC_OPERATION op)
 {
     struct nc_ch_client *ch_client = NULL;
@@ -1115,12 +1099,12 @@ nc_server_config_idle_timeout(const struct lyd_node *node, NC_OPERATION op)
 
         nc_ch_client_unlock(ch_client);
     } else {
-        /* whole server idle timeout */
+        /* listen idle timeout */
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
             server_opts.idle_timeout = ((struct lyd_node_term *)node)->value.uint16;
         } else {
             /* default value */
-            server_opts.idle_timeout = 0;
+            server_opts.idle_timeout = 180;
         }
     }
 
@@ -1154,7 +1138,8 @@ nc_server_config_create_endpoint(const struct lyd_node *node)
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
 
-    return nc_server_config_realloc(lyd_get_value(node), (void **)&server_opts.endpts, sizeof *server_opts.endpts, &server_opts.endpt_count);
+    return nc_server_config_realloc(lyd_get_value(node), (void **)&server_opts.endpts, sizeof *server_opts.endpts,
+            &server_opts.endpt_count);
 }
 
 static int
@@ -1163,7 +1148,8 @@ nc_server_config_ch_create_endpoint(const struct lyd_node *node, struct nc_ch_cl
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
 
-    return nc_server_config_realloc(lyd_get_value(node), (void **)&ch_client->ch_endpts, sizeof *ch_client->ch_endpts, &ch_client->ch_endpt_count);
+    return nc_server_config_realloc(lyd_get_value(node), (void **)&ch_client->ch_endpts, sizeof *ch_client->ch_endpts,
+            &ch_client->ch_endpt_count);
 }
 
 /* list */
@@ -1409,7 +1395,7 @@ nc_server_config_local_address(const struct lyd_node *node, NC_OPERATION op)
 
     assert(!strcmp(LYD_NAME(node), "local-address"));
 
-    if (equal_parent_name(node, 4, "listen")) {
+    if (equal_parent_name(node, 5, "listen")) {
         if (nc_server_config_get_endpt(node, &endpt, &bind)) {
             ret = 1;
             goto cleanup;
@@ -1439,7 +1425,7 @@ nc_server_config_local_port(const struct lyd_node *node, NC_OPERATION op)
 
     assert(!strcmp(LYD_NAME(node), "local-port"));
 
-    if (equal_parent_name(node, 4, "listen")) {
+    if (equal_parent_name(node, 5, "listen")) {
         if (nc_server_config_get_endpt(node, &endpt, &bind)) {
             ret = 1;
             goto cleanup;
@@ -1462,7 +1448,7 @@ cleanup:
     return ret;
 }
 
-/* P container */
+/* NP container */
 static int
 nc_server_config_keepalives(const struct lyd_node *node, NC_OPERATION op)
 {
@@ -1516,7 +1502,7 @@ cleanup:
     return ret;
 }
 
-/* mandatory leaf */
+/* leaf with default value */
 static int
 nc_server_config_idle_time(const struct lyd_node *node, NC_OPERATION op)
 {
@@ -1537,7 +1523,8 @@ nc_server_config_idle_time(const struct lyd_node *node, NC_OPERATION op)
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
             endpt->ka.idle_time = ((struct lyd_node_term *)node)->value.uint16;
         } else {
-            endpt->ka.idle_time = 0;
+            /* delete -> set to default */
+            endpt->ka.idle_time = 7200;
         }
         ret = nc_sock_configure_keepalive(bind->sock, &endpt->ka);
         if (ret) {
@@ -1558,7 +1545,8 @@ nc_server_config_idle_time(const struct lyd_node *node, NC_OPERATION op)
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
             ch_endpt->ka.idle_time = ((struct lyd_node_term *)node)->value.uint16;
         } else {
-            ch_endpt->ka.idle_time = 0;
+            /* delete -> set to default */
+            ch_endpt->ka.idle_time = 7200;
         }
     }
 
@@ -1570,7 +1558,7 @@ cleanup:
     return ret;
 }
 
-/* mandatory leaf */
+/* leaf with default value */
 static int
 nc_server_config_max_probes(const struct lyd_node *node, NC_OPERATION op)
 {
@@ -1591,7 +1579,8 @@ nc_server_config_max_probes(const struct lyd_node *node, NC_OPERATION op)
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
             endpt->ka.max_probes = ((struct lyd_node_term *)node)->value.uint16;
         } else {
-            endpt->ka.max_probes = 0;
+            /* delete -> set to default */
+            endpt->ka.max_probes = 9;
         }
         ret = nc_sock_configure_keepalive(bind->sock, &endpt->ka);
         if (ret) {
@@ -1612,7 +1601,8 @@ nc_server_config_max_probes(const struct lyd_node *node, NC_OPERATION op)
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
             ch_endpt->ka.max_probes = ((struct lyd_node_term *)node)->value.uint16;
         } else {
-            ch_endpt->ka.max_probes = 0;
+            /* delete -> set to default */
+            ch_endpt->ka.max_probes = 9;
         }
     }
 
@@ -1624,7 +1614,7 @@ cleanup:
     return ret;
 }
 
-/* mandatory leaf */
+/* leaf with default value */
 static int
 nc_server_config_probe_interval(const struct lyd_node *node, NC_OPERATION op)
 {
@@ -1645,7 +1635,8 @@ nc_server_config_probe_interval(const struct lyd_node *node, NC_OPERATION op)
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
             endpt->ka.probe_interval = ((struct lyd_node_term *)node)->value.uint16;
         } else {
-            endpt->ka.probe_interval = 0;
+            /* delete -> set to default */
+            endpt->ka.probe_interval = 75;
         }
         ret = nc_sock_configure_keepalive(bind->sock, &endpt->ka);
         if (ret) {
@@ -1666,7 +1657,8 @@ nc_server_config_probe_interval(const struct lyd_node *node, NC_OPERATION op)
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
             ch_endpt->ka.probe_interval = ((struct lyd_node_term *)node)->value.uint16;
         } else {
-            ch_endpt->ka.max_probes = 0;
+            /* delete -> set to default */
+            ch_endpt->ka.probe_interval = 75;
         }
     }
 
@@ -1811,7 +1803,8 @@ nc_server_config_create_auth_key_public_key_list(const struct lyd_node *node, st
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
 
-    return nc_server_config_realloc(lyd_get_value(node), (void **)&auth_client->pubkeys, sizeof *auth_client->pubkeys, &auth_client->pubkey_count);
+    return nc_server_config_realloc(lyd_get_value(node), (void **)&auth_client->pubkeys, sizeof *auth_client->pubkeys,
+            &auth_client->pubkey_count);
 }
 
 static int
@@ -2088,7 +2081,7 @@ nc_server_config_keystore_reference(const struct lyd_node *node, NC_OPERATION op
     struct nc_hostkey *hostkey;
     struct nc_ch_client *ch_client = NULL;
 
-    assert(!strcmp(LYD_NAME(node), "keystore-reference"));
+    assert(!strcmp(LYD_NAME(node), "central-keystore-reference"));
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
@@ -2250,7 +2243,7 @@ nc_server_config_truststore_reference(const struct lyd_node *node, NC_OPERATION 
     struct nc_server_tls_opts *opts;
     struct nc_cert_grouping *certs_grp;
 
-    assert(!strcmp(LYD_NAME(node), "truststore-reference"));
+    assert(!strcmp(LYD_NAME(node), "central-truststore-reference"));
 
     /* LOCK */
     if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
@@ -3034,7 +3027,8 @@ nc_server_config_create_ca_certs_certificate(const struct lyd_node *node, struct
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
 
-    return nc_server_config_realloc(lyd_get_value(node), (void **)&opts->ca_certs.certs, sizeof *opts->ca_certs.certs, &opts->ca_certs.cert_count);
+    return nc_server_config_realloc(lyd_get_value(node), (void **)&opts->ca_certs.certs, sizeof *opts->ca_certs.certs,
+            &opts->ca_certs.cert_count);
 }
 
 static int
@@ -3045,7 +3039,8 @@ nc_server_config_create_ee_certs_certificate(const struct lyd_node *node, struct
     node = lyd_child(node);
     assert(!strcmp(LYD_NAME(node), "name"));
 
-    return nc_server_config_realloc(lyd_get_value(node), (void **)&opts->ee_certs.certs, sizeof *opts->ee_certs.certs, &opts->ee_certs.cert_count);
+    return nc_server_config_realloc(lyd_get_value(node), (void **)&opts->ee_certs.certs, sizeof *opts->ee_certs.certs,
+            &opts->ee_certs.cert_count);
 }
 
 static int
@@ -3069,7 +3064,7 @@ nc_server_config_certificate(const struct lyd_node *node, NC_OPERATION op)
         goto cleanup;
     }
 
-    if (equal_parent_name(node, 1, "keystore-reference")) {
+    if (equal_parent_name(node, 1, "central-keystore-reference")) {
         /* TLS server-identity */
         if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
             /* set to keystore */
@@ -3909,8 +3904,6 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
         ret = nc_server_config_listen(node, op);
     } else if (!strcmp(name, "call-home")) {
         ret = nc_server_config_ch(node, op);
-    } else if (!strcmp(name, "hello-timeout")) {
-        ret = nc_server_config_hello_timeout(node, op);
     } else if (!strcmp(name, "endpoint")) {
         ret = nc_server_config_endpoint(node, op);
     }
@@ -3939,7 +3932,7 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
         ret = nc_server_config_private_key_format(node, op);
     } else if (!strcmp(name, "cleartext-private-key")) {
         ret = nc_server_config_cleartext_private_key(node, op);
-    } else if (!strcmp(name, "keystore-reference")) {
+    } else if (!strcmp(name, "central-keystore-reference")) {
         ret = nc_server_config_keystore_reference(node, op);
     } else if (!strcmp(name, "user")) {
         ret = nc_server_config_user(node, op);
@@ -3947,7 +3940,7 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
         ret = nc_server_config_auth_attempts(node, op);
     } else if (!strcmp(name, "auth-timeout")) {
         ret = nc_server_config_auth_timeout(node, op);
-    } else if (!strcmp(name, "truststore-reference")) {
+    } else if (!strcmp(name, "central-truststore-reference")) {
         ret = nc_server_config_truststore_reference(node, op);
     } else if (!strcmp(name, "use-system-keys")) {
         ret = nc_server_config_use_system_keys(node, op);
@@ -4187,7 +4180,7 @@ error:
 }
 
 static int
-nc_server_config_fill_nectonf_server(const struct lyd_node *data, NC_OPERATION op)
+nc_server_config_fill_netconf_server(const struct lyd_node *data, NC_OPERATION op)
 {
     int ret = 0;
     uint32_t log_options = 0;
@@ -4249,7 +4242,7 @@ nc_server_config_setup_diff(const struct lyd_node *data)
 #endif /* NC_ENABLED_SSH_TLS */
 
     /* configure netconf-server */
-    ret = nc_server_config_fill_nectonf_server(data, NC_OP_UNKNOWN);
+    ret = nc_server_config_fill_netconf_server(data, NC_OP_UNKNOWN);
     if (ret) {
         ERR(NULL, "Filling netconf-server failed.");
         goto cleanup;
@@ -4314,7 +4307,7 @@ nc_server_config_setup_data(const struct lyd_node *data)
 #endif /* NC_ENABLED_SSH_TLS */
 
     /* configure netconf-server */
-    ret = nc_server_config_fill_nectonf_server(data, NC_OP_CREATE);
+    ret = nc_server_config_fill_netconf_server(data, NC_OP_CREATE);
     if (ret) {
         ERR(NULL, "Filling netconf-server failed.");
         goto cleanup;

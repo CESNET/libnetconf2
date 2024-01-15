@@ -53,6 +53,7 @@
 struct nc_server_opts server_opts = {
     .config_lock = PTHREAD_RWLOCK_INITIALIZER,
     .ch_client_lock = PTHREAD_RWLOCK_INITIALIZER,
+    .idle_timeout = 180,    /**< default idle timeout (not in config for UNIX socket) */
 };
 
 static nc_rpc_clb global_rpc_clb = NULL;

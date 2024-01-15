@@ -56,7 +56,7 @@ module ietf-tls-common {
      (RFC 8174) when, and only when, they appear in all
      capitals, as shown here.";
 
-  revision 2023-04-17 {
+  revision 2023-12-28 {
     description
       "Initial version";
     reference
@@ -87,7 +87,7 @@ module ietf-tls-common {
   feature tls12 {
     status "deprecated";
     description
-      "TLS Protocol Version 1.2 is supported  TLS 1.2 is obsolete
+      "TLS Protocol Version 1.2 is supported. TLS 1.2 is obsolete
        and thus it is NOT RECOMMENDED to enable this feature.";
     reference
       "RFC 5246: The Transport Layer Security (TLS) Protocol
@@ -162,6 +162,8 @@ module ietf-tls-common {
                  Protocol Version 1.3";
   }
 
+  // Typedefs
+
   typedef epsk-supported-hash {
     type enumeration {
       enum sha-256 {
@@ -179,12 +181,9 @@ module ietf-tls-common {
        Key (EPSK).";
     reference
       "RFC 8446: The Transport Layer Security (TLS)
-                 Protocol Version 1.3
-       I-D.ietf-tls-external-psk-importer: Importing
-                 External PSKs for TLS
-       I-D.ietf-tls-external-psk-guidance: Guidance
-                 for External PSK Usage in TLS";
+                 Protocol Version 1.3";
   }
+
 
   // Groupings
 
@@ -203,6 +202,7 @@ module ietf-tls-common {
         type identityref {
           base tls-version-base;
         }
+        ordered-by user;
         description
           "Acceptable TLS protocol versions.
 
@@ -251,7 +251,7 @@ module ietf-tls-common {
            cipher suite 'tls-rsa-with-aes-256-cbc-sha256' maps
            to the RSA public key.";
       }
-      leaf bits {
+      leaf num-bits {
         type uint16;
         description
           "Specifies the number of bits in the key to create.
@@ -259,47 +259,51 @@ module ietf-tls-common {
            the default is 3072 bits. Generally, 3072 bits is
            considered sufficient. DSA keys must be exactly 1024
            bits as specified by FIPS 186-2.  For elliptical
-           keys, the 'bits' value determines the key length
+           keys, the 'num-bits' value determines the key length
            of the curve (e.g., 256, 384 or 521), where valid
            values supported by the server are conveyed via an
            unspecified mechanism.  For some public algorithms,
-           the keys have a fixed length and the 'bits' value,
-           if specified, will be ignored.";
+           the keys have a fixed length and thus the 'num-bits'
+           value is not specified.";
       }
-      choice private-key-encoding {
-        default cleartext;
+      container private-key-encoding {
         description
-          "A choice amongst optional private key handling.";
-        case cleartext {
-          if-feature "ct:cleartext-private-keys";
-          leaf cleartext {
-            type empty;
-            description
-              "Indicates that the private key is to be returned
-               as a cleartext value.";
+          "Indicates how the private key is to be encoded.";
+        choice private-key-encoding {
+          mandatory true;
+          description
+            "A choice amongst optional private key handling.";
+          case cleartext {
+            if-feature "ct:cleartext-private-keys";
+            leaf cleartext {
+              type empty;
+              description
+                "Indicates that the private key is to be returned
+                 as a cleartext value.";
+            }
           }
-        }
-        case encrypt {
-          if-feature "ct:encrypted-private-keys";
-          container encrypt-with {
-            description
-               "Indicates that the key is to be encrypted using
-                the specified symmetric or asymmetric key.";
-            uses ks:encrypted-by-choice-grouping;
+          case encrypted {
+            if-feature "ct:encrypted-private-keys";
+            container encrypted {
+              description
+                 "Indicates that the key is to be encrypted using
+                  the specified symmetric or asymmetric key.";
+              uses ks:encrypted-by-grouping;
+            }
           }
-        }
-        case hide {
-          if-feature "ct:hidden-private-keys";
-          leaf hide {
-            type empty;
-            description
-              "Indicates that the private key is to be hidden.
+          case hidden {
+            if-feature "ct:hidden-private-keys";
+            leaf hidden {
+              type empty;
+              description
+                "Indicates that the private key is to be hidden.
 
-               Unlike the 'cleartext' and 'encrypt' options, the
-               key returned is a placeholder for an internally
-               stored key.  See the 'Support for Built-in Keys'
-               section in RFC CCCC for information about hidden
-               keys.";
+                 Unlike the 'cleartext' and 'encrypt' options, the
+                 key returned is a placeholder for an internally
+                 stored key.  See the 'Support for Built-in Keys'
+                 section in RFC CCCC for information about hidden
+                 keys.";
+            }
           }
         }
       }

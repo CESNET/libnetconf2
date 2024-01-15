@@ -59,7 +59,7 @@ module ietf-tcp-client {
      (RFC 8174) when, and only when, they appear in all
      capitals, as shown here.";
 
-  revision 2023-04-17 {
+  revision 2023-12-28 {
     description
       "Initial version";
     reference
@@ -315,7 +315,7 @@ module ietf-tcp-client {
     }
 
     uses tcpcmn:tcp-common-grouping {
-      augment "keepalives" {
+      refine "keepalives" {
         if-feature "tcp-client-keepalives";
         description
           "Add an if-feature statement so that implementations

@@ -72,7 +72,7 @@ module ietf-ssh-server {
      (RFC 8174) when, and only when, they appear in all
      capitals, as shown here.";
 
-  revision 2023-04-17 {
+  revision 2023-12-28 {
     description
       "Initial version";
     reference
@@ -99,9 +99,8 @@ module ietf-ssh-server {
     description
       "Indicates that the 'publickey' authentication type,
        per RFC 4252, is supported for locally-defined users.
-
        The 'publickey' authentication type is required by
-       RFC 4252, but common implementations enable it to
+       RFC 4252, but common implementations allow it to
        be disabled.";
     reference
       "RFC 4252:
@@ -127,6 +126,7 @@ module ietf-ssh-server {
       "RFC 4252:
         The Secure Shell (SSH) Authentication Protocol";
   }
+
   feature local-user-auth-none {
     if-feature "local-users-supported";
     description
@@ -190,13 +190,14 @@ module ietf-ssh-server {
               "RFC CCCC: A YANG Data Model for a Keystore";
             uses ks:inline-or-keystore-asymmetric-key-grouping {
               refine "inline-or-keystore/inline/inline-definition" {
-                must 'derived-from-or-self(public-key-format,'
-                   + ' "ct:ssh-public-key-format")';
+                must 'not(public-key-format) or derived-from-or-self'
+                 + '(public-key-format, "ct:ssh-public-key-format")';
 
               }
-              refine "inline-or-keystore/keystore/"
-                   + "keystore-reference" {
-                must 'derived-from-or-self(deref(.)/../ks:public-'
+              refine "inline-or-keystore/central-keystore/"
+                   + "central-keystore-reference" {
+                must 'not(deref(.)/../ks:public-key-format) or '
+                   + 'derived-from-or-self(deref(.)/../ks:public-'
                    + 'key-format, "ct:ssh-public-key-format")';
               }
             }
@@ -212,14 +213,15 @@ module ietf-ssh-server {
             uses
             ks:inline-or-keystore-end-entity-cert-with-key-grouping{
               refine "inline-or-keystore/inline/inline-definition" {
-                must 'derived-from-or-self(public-key-format,'
-                   + ' "ct:subject-public-key-info-format")';
+                must 'not(public-key-format) or derived-from-or-self'
+                   + '(public-key-format, "ct:subject-public-key-'
+                   + 'info-format")';
               }
-              refine "inline-or-keystore/keystore/keystore-reference"
-                   + "/asymmetric-key" {
-                must
-                  'derived-from-or-self(deref(.)/../ks:public-key-'
-                  + 'format, "ct:subject-public-key-info-format")';
+              refine "inline-or-keystore/central-keystore/"
+                   + "central-keystore-reference/asymmetric-key" {
+                must 'not(deref(.)/../ks:public-key-format) or '
+                   + 'derived-from-or-self(deref(.)/../ks:public-key'
+                   + '-format, "ct:subject-public-key-info-format")';
               }
             }
           }
@@ -283,8 +285,8 @@ module ietf-ssh-server {
                 must 'derived-from-or-self(public-key-format,'
                    + ' "ct:ssh-public-key-format")';
               }
-              refine "inline-or-truststore/truststore/truststore-"
-                   + "reference" {
+              refine "inline-or-truststore/central-truststore/"
+                   + "central-truststore-reference" {
                 must 'not(deref(.)/../ts:public-key/ts:public-key-'
                    + 'format[not(derived-from-or-self(., "ct:ssh-'
                    + 'public-key-format"))])';
@@ -318,8 +320,8 @@ module ietf-ssh-server {
                 must 'derived-from-or-self(public-key-format,'
                    + ' "ct:ssh-public-key-format")';
               }
-              refine "inline-or-truststore/truststore/truststore-"
-                   + "reference" {
+              refine "inline-or-truststore/central-truststore/"
+                   + "central-truststore-reference" {
                 must 'not(deref(.)/../ts:public-key/ts:public-key-'
                    + 'format[not(derived-from-or-self(., "ct:ssh-'
                    + 'public-key-format"))])';
@@ -337,7 +339,7 @@ module ietf-ssh-server {
                          Protocol.";
           }
         }
-      }
+      } // users
       container ca-certs {
         if-feature "sshcmn:ssh-x509-certs";
         presence

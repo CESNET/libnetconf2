@@ -78,7 +78,7 @@ _nc_server_config_add_ssh_hostkey(const struct ly_ctx *ctx, const char *tree_pat
     }
 
     /* delete keystore choice nodes if present */
-    ret = nc_server_config_check_delete(config, "%s/keystore-reference", tree_path);
+    ret = nc_server_config_check_delete(config, "%s/central-keystore-reference", tree_path);
     if (ret) {
         goto cleanup;
     }
@@ -98,7 +98,7 @@ nc_server_config_add_ssh_hostkey(const struct ly_ctx *ctx, const char *endpt_nam
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, hostkey_name, privkey_path, config, 1);
 
-    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/"
             "server-identity/host-key[name='%s']/public-key", endpt_name, hostkey_name);
     NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
@@ -145,11 +145,11 @@ nc_server_config_del_ssh_hostkey(const struct ly_ctx *ctx, const char *endpt_nam
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, config, 1);
 
     if (hostkey_name) {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
-                "server-identity/host-key[name='%s']", endpt_name, hostkey_name);
+        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/"
+                "ssh/ssh-server-parameters/server-identity/host-key[name='%s']", endpt_name, hostkey_name);
     } else {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
-                "server-identity/host-key", endpt_name);
+        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/"
+                "ssh/ssh-server-parameters/server-identity/host-key", endpt_name);
     }
 }
 
@@ -179,15 +179,15 @@ nc_server_config_add_ssh_keystore_ref(const struct ly_ctx *ctx, const char *endp
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, hostkey_name, keystore_reference, config, 1);
 
     ret = nc_server_config_create(ctx, config, keystore_reference, "/ietf-netconf-server:netconf-server/listen/"
-            "endpoint[name='%s']/ssh/ssh-server-parameters/server-identity/host-key[name='%s']/public-key/"
-            "keystore-reference", endpt_name, hostkey_name);
+            "endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/server-identity/host-key[name='%s']/public-key/"
+            "central-keystore-reference", endpt_name, hostkey_name);
     if (ret) {
         goto cleanup;
     }
 
     /* delete inline definition nodes if present */
     ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/"
-            "endpoint[name='%s']/ssh/ssh-server-parameters/server-identity/host-key[name='%s']/public-key/"
+            "endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/server-identity/host-key[name='%s']/public-key/"
             "inline-definition", endpt_name, hostkey_name);
     if (ret) {
         goto cleanup;
@@ -207,7 +207,7 @@ nc_server_config_add_ch_ssh_keystore_ref(const struct ly_ctx *ctx, const char *c
 
     ret = nc_server_config_create(ctx, config, keystore_reference, "/ietf-netconf-server:netconf-server/call-home/"
             "netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/server-identity/"
-            "host-key[name='%s']/public-key/keystore-reference", client_name, endpt_name, hostkey_name);
+            "host-key[name='%s']/public-key/central-keystore-reference", client_name, endpt_name, hostkey_name);
     if (ret) {
         goto cleanup;
     }
@@ -230,9 +230,9 @@ nc_server_config_del_ssh_keystore_ref(const char *endpt_name, const char *hostke
 {
     NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
 
-    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/"
+    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/"
             "endpoint[name='%s']/ssh/ssh-server-parameters/server-identity/host-key[name='%s']/public-key/"
-            "keystore-reference", endpt_name, hostkey_name);
+            "central-keystore-reference", endpt_name, hostkey_name);
 }
 
 API int
@@ -243,7 +243,7 @@ nc_server_config_del_ch_ssh_keystore_ref(const char *client_name, const char *en
 
     return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/"
             "netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/server-identity/"
-            "host-key[name='%s']/public-key/keystore-reference", client_name, endpt_name, hostkey_name);
+            "host-key[name='%s']/public-key/central-keystore-reference", client_name, endpt_name, hostkey_name);
 }
 
 static int
@@ -284,7 +284,7 @@ nc_server_config_add_ssh_user_pubkey(const struct ly_ctx *ctx, const char *endpt
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, pubkey_name, pubkey_path, config, 1);
 
-    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/"
             "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/inline-definition/"
             "public-key[name='%s']", endpt_name, user_name, pubkey_name);
     NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
@@ -296,15 +296,15 @@ nc_server_config_add_ssh_user_pubkey(const struct ly_ctx *ctx, const char *endpt
     }
 
     /* delete truststore reference if present */
-    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
-            "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/truststore-reference",
+    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/"
+            "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/central-truststore-reference",
             endpt_name, user_name);
     if (ret) {
         goto cleanup;
     }
 
     /* delete use system auth if present */
-    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/"
             "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/"
             "libnetconf2-netconf-server:use-system-keys", endpt_name, user_name);
     if (ret) {
@@ -340,7 +340,7 @@ nc_server_config_add_ch_ssh_user_pubkey(const struct ly_ctx *ctx, const char *cl
     /* delete truststore reference if present */
     ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
             "endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/"
-            "public-keys/truststore-reference", client_name, endpt_name, user_name);
+            "public-keys/central-truststore-reference", client_name, endpt_name, user_name);
     if (ret) {
         goto cleanup;
     }
@@ -366,11 +366,11 @@ nc_server_config_del_ssh_user_pubkey(const char *endpt_name, const char *user_na
     NC_CHECK_ARG_RET(NULL, endpt_name, user_name, config, 1);
 
     if (pubkey_name) {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/"
                 "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/inline-definition/"
                 "public-key[name='%s']", endpt_name, user_name, pubkey_name);
     } else {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/"
                 "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/inline-definition/"
                 "public-key", endpt_name, user_name);
     }
@@ -404,7 +404,7 @@ nc_server_config_add_ssh_user_authkey(const struct ly_ctx *ctx, const char *endp
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, config, 1);
 
-    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/"
             "client-authentication/users/user[name='%s']/public-keys", endpt_name, user_name);
     NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
@@ -414,7 +414,7 @@ nc_server_config_add_ssh_user_authkey(const struct ly_ctx *ctx, const char *endp
     }
 
     /* delete inline definition nodes if present */
-    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/"
             "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/inline-definition",
             endpt_name, user_name);
     if (ret) {
@@ -422,8 +422,8 @@ nc_server_config_add_ssh_user_authkey(const struct ly_ctx *ctx, const char *endp
     }
 
     /* delete truststore reference if present */
-    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
-            "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/truststore-reference",
+    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/"
+            "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/central-truststore-reference",
             endpt_name, user_name);
     if (ret) {
         goto cleanup;
@@ -464,7 +464,7 @@ nc_server_config_add_ch_ssh_user_authkey(const struct ly_ctx *ctx, const char *c
     /* delete truststore reference if present */
     ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
             "endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/"
-            "public-keys/truststore-reference", client_name, endpt_name, user_name);
+            "public-keys/central-truststore-reference", client_name, endpt_name, user_name);
     if (ret) {
         goto cleanup;
     }
@@ -479,7 +479,7 @@ nc_server_config_del_ssh_user_authkey(const char *endpt_name, const char *user_n
 {
     NC_CHECK_ARG_RET(NULL, endpt_name, user_name, config, 1);
 
-    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/"
             "ssh-server-parameters/client-authentication/users/user[name='%s']/"
             "public-keys/libnetconf2-netconf-server:use-system-keys", endpt_name, user_name);
 }
@@ -531,7 +531,7 @@ nc_server_config_add_ssh_user_password(const struct ly_ctx *ctx, const char *end
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, password, config, 1);
 
-    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/"
             "client-authentication/users/user[name='%s']", endpt_name, user_name);
     NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
@@ -576,7 +576,7 @@ nc_server_config_del_ssh_user_password(const char *endpt_name, const char *user_
 {
     NC_CHECK_ARG_RET(NULL, endpt_name, user_name, config, 1);
 
-    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/"
             "ssh-server-parameters/client-authentication/users/user[name='%s']/password", endpt_name, user_name);
 }
 
@@ -600,7 +600,7 @@ nc_server_config_add_ssh_user_interactive(const struct ly_ctx *ctx, const char *
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, config, 1);
 
-    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
+    ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/"
             "client-authentication/users/user[name='%s']/libnetconf2-netconf-server:keyboard-interactive", endpt_name, user_name);
     NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
@@ -643,7 +643,7 @@ nc_server_config_del_ssh_user_interactive(const char *endpt_name, const char *us
 {
     NC_CHECK_ARG_RET(NULL, endpt_name, user_name, config, 1);
 
-    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/"
             "ssh-server-parameters/client-authentication/users/user[name='%s']/"
             "libnetconf2-netconf-server:keyboard-interactive", endpt_name, user_name);
 }
@@ -666,10 +666,10 @@ nc_server_config_del_ssh_user(const char *endpt_name,
     NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
 
     if (user_name) {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/"
                 "ssh-server-parameters/client-authentication/users/user[name='%s']", endpt_name, user_name);
     } else {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/"
                 "ssh-server-parameters/client-authentication/users/user", endpt_name);
     }
 }
@@ -696,8 +696,9 @@ nc_server_config_add_ssh_endpoint_client_ref(const struct ly_ctx *ctx, const cha
 {
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, referenced_endpt, config, 1);
 
-    return nc_server_config_create(ctx, config, referenced_endpt, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
-            "client-authentication/libnetconf2-netconf-server:endpoint-reference", endpt_name);
+    return nc_server_config_create(ctx, config, referenced_endpt, "/ietf-netconf-server:netconf-server/listen/endpoints/"
+            "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/libnetconf2-netconf-server:endpoint-reference",
+            endpt_name);
 }
 
 API int
@@ -705,8 +706,8 @@ nc_server_config_del_ssh_endpoint_client_ref(const char *endpt_name, struct lyd_
 {
     NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
 
-    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/ssh-server-parameters/"
-            "client-authentication/libnetconf2-netconf-server:endpoint-reference", endpt_name);
+    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/"
+            "ssh/ssh-server-parameters/client-authentication/libnetconf2-netconf-server:endpoint-reference", endpt_name);
 }
 
 API int
@@ -718,14 +719,14 @@ nc_server_config_add_ssh_truststore_ref(const struct ly_ctx *ctx, const char *en
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, truststore_reference, config, 1);
 
     ret = nc_server_config_create(ctx, config, truststore_reference, "/ietf-netconf-server:netconf-server/listen/"
-            "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/"
-            "truststore-reference", endpt_name, user_name);
+            "endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/"
+            "central-truststore-reference", endpt_name, user_name);
     if (ret) {
         goto cleanup;
     }
 
     /* delete inline definition nodes if present */
-    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/"
             "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/inline-definition",
             endpt_name, user_name);
     if (ret) {
@@ -733,7 +734,7 @@ nc_server_config_add_ssh_truststore_ref(const struct ly_ctx *ctx, const char *en
     }
 
     /* delete use system auth if present */
-    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoint[name='%s']/ssh/"
+    ret = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/"
             "ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/"
             "libnetconf2-netconf-server:use-system-keys", endpt_name, user_name);
     if (ret) {
@@ -754,7 +755,7 @@ nc_server_config_add_ch_ssh_truststore_ref(const struct ly_ctx *ctx, const char 
 
     ret = nc_server_config_create(ctx, config, truststore_reference, "/ietf-netconf-server:netconf-server/call-home/"
             "netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
-            "users/user[name='%s']/public-keys/truststore-reference", client_name, endpt_name, user_name);
+            "users/user[name='%s']/public-keys/central-truststore-reference", client_name, endpt_name, user_name);
     if (ret) {
         goto cleanup;
     }
@@ -788,7 +789,7 @@ nc_server_config_del_ssh_truststore_ref(const char *endpt_name, const char *user
 
     return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/"
             "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/public-keys/"
-            "truststore-reference", endpt_name, user_name);
+            "central-truststore-reference", endpt_name, user_name);
 }
 
 API int
@@ -799,5 +800,5 @@ nc_server_config_del_ch_ssh_truststore_ref(const char *client_name, const char *
 
     return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/"
             "netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
-            "users/user[name='%s']/public-keys/truststore-reference", client_name, endpt_name, user_name);
+            "users/user[name='%s']/public-keys/central-truststore-reference", client_name, endpt_name, user_name);
 }

@@ -260,8 +260,8 @@ setup_f(void **state)
     ret = nc_server_config_add_ssh_user_password(ctx, "endpt", "test_pw", "testpw", &tree);
     assert_int_equal(ret, 0);
 
-    ret = lyd_new_path(tree, ctx, "/ietf-netconf-server:netconf-server/listen/endpoint[name='endpt']/ssh/ssh-server-parameters/"
-            "client-authentication/users/user[name='test_none']/none", NULL, 0, NULL);
+    ret = lyd_new_path(tree, ctx, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='endpt']/ssh/"
+            "ssh-server-parameters/client-authentication/users/user[name='test_none']/none", NULL, 0, NULL);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */

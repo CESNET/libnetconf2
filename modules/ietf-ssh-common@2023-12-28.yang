@@ -54,6 +54,7 @@ module ietf-ssh-common {
 
      Copyright (c) 2023 IETF Trust and the persons identified
      as authors of the code. All rights reserved.
+
      Redistribution and use in source and binary forms, with
      or without modification, is permitted pursuant to, and
      subject to the license terms contained in, the Revised
@@ -72,7 +73,7 @@ module ietf-ssh-common {
      (RFC 8174) when, and only when, they appear in all
      capitals, as shown here.";
 
-  revision 2023-04-17 {
+  revision 2023-12-28 {
     description
       "Initial version";
     reference
@@ -193,7 +194,7 @@ module ietf-ssh-common {
         description
           "The algorithm to be used when generating the key.";
       }
-      leaf bits {
+      leaf num-bits {
         type uint16;
         description
           "Specifies the number of bits in the key to create.
@@ -201,49 +202,53 @@ module ietf-ssh-common {
            the default is 3072 bits. Generally, 3072 bits is
            considered sufficient. DSA keys must be exactly 1024
            bits as specified by FIPS 186-6.  For ECDSA keys, the
-           'bits' value determines the key length by selecting
+           'num-bits' value determines the key length by selecting
            from one of three elliptic curve sizes: 256, 384 or
            521 bits. Attempting to use bit lengths other than
            these three values for ECDSA keys will fail. ECDSA-SK,
            Ed25519 and Ed25519-SK keys have a fixed length and
-           the 'bits' value, if specified, will be ignored.";
+           thus the 'num-bits' value is not specified.";
         reference
           "FIPS 186-6: Digital Signature Standard (DSS)";
       }
-      choice private-key-encoding {
-        mandatory true;
+      container private-key-encoding {
         description
-          "A choice amongst optional private key handling.";
-        case cleartext {
-          if-feature "ct:encrypted-private-keys";
-          leaf cleartext {
-            type empty;
-            description
-              "Indicates that the private key is to be returned
-               as a cleartext value.";
+          "Indicates how the private key is to be encoded.";
+        choice private-key-encoding {
+          mandatory true;
+          description
+            "A choice amongst optional private key handling.";
+          case cleartext {
+            if-feature "ct:cleartext-private-keys";
+            leaf cleartext {
+              type empty;
+              description
+                "Indicates that the private key is to be returned
+                 as a cleartext value.";
+            }
           }
-        }
-        case encrypt {
-          if-feature "ct:encrypted-private-keys";
-          container encrypt-with {
-            description
-               "Indicates that the key is to be encrypted using
-                the specified symmetric or asymmetric key.";
-            uses ks:encrypted-by-choice-grouping;
+          case encrypted {
+            if-feature "ct:encrypted-private-keys";
+            container encrypted {
+              description
+                 "Indicates that the private key is to be encrypted
+                  using the specified symmetric or asymmetric key.";
+              uses ks:encrypted-by-grouping;
+            }
           }
-        }
-        case hide {
-          if-feature "ct:hidden-private-keys";
-          leaf hide {
-            type empty;
-            description
-              "Indicates that the private key is to be hidden.
+          case hidden {
+            if-feature "ct:hidden-private-keys";
+            leaf hidden {
+              type empty;
+              description
+                "Indicates that the private key is to be hidden.
 
-               Unlike the 'cleartext' and 'encrypt' options, the
-               key returned is a placeholder for an internally
-               stored key.  See the 'Support for Built-in Keys'
-               section in RFC CCCC for information about hidden
-               keys.";
+                 Unlike the 'cleartext' and 'encrypt' options, the
+                 key returned is a placeholder for an internally
+                 stored key.  See the 'Support for Built-in Keys'
+                 section in RFC CCCC for information about hidden
+                 keys.";
+            }
           }
         }
       }

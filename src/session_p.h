@@ -425,7 +425,6 @@ struct nc_server_opts {
 
     void (*content_id_data_free)(void *data);
 
-    uint16_t hello_timeout;
     uint16_t idle_timeout;
 
 #ifdef NC_ENABLED_SSH_TLS

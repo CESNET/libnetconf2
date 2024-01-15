@@ -166,8 +166,8 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* set path to a CRL file */
-    ret = lyd_new_path(tree, ctx, "/ietf-netconf-server:netconf-server/listen/endpoint[name='endpt']/tls/tls-server-parameters/"
-            "client-authentication/libnetconf2-netconf-server:crl-path", TESTS_DIR "/data/crl.pem", 0, NULL);
+    ret = lyd_new_path(tree, ctx, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='endpt']/tls/"
+            "tls-server-parameters/client-authentication/libnetconf2-netconf-server:crl-path", TESTS_DIR "/data/crl.pem", 0, NULL);
     assert_int_equal(ret, 0);
 
     /* configure the server based on the data */

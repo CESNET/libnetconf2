@@ -46,7 +46,7 @@
 
 /* in seconds */
 #define NC_CLIENT_HELLO_TIMEOUT 60
-#define NC_SERVER_HELLO_TIMEOUT 60
+#define NC_SERVER_CH_HELLO_TIMEOUT 180
 
 /* in milliseconds */
 #define NC_CLOSE_REPLY_TIMEOUT 200
@@ -272,6 +272,7 @@ struct nc_session *
 nc_new_session(NC_SIDE side, int shared_ti)
 {
     struct nc_session *sess;
+    struct timespec ts_cur;
 
     sess = calloc(1, sizeof *sess);
     if (!sess) {
@@ -287,6 +288,10 @@ nc_new_session(NC_SIDE side, int shared_ti)
 
         pthread_mutex_init(&sess->opts.server.ch_lock, NULL);
         pthread_cond_init(&sess->opts.server.ch_cond, NULL);
+
+        /* initialize last_rpc for idle_timeout */
+        nc_timeouttime_get(&ts_cur, 0);
+        sess->opts.server.last_rpc = ts_cur.tv_sec;
     } else {
         pthread_mutex_init(&sess->opts.client.msgs_lock, NULL);
     }
@@ -1343,7 +1348,7 @@ static NC_MSG_TYPE
 nc_send_hello_io(struct nc_session *session)
 {
     NC_MSG_TYPE ret;
-    int i, io_timeout;
+    int i, timeout_io;
     char **cpblts;
     uint32_t *sid;
 
@@ -1355,7 +1360,7 @@ nc_send_hello_io(struct nc_session *session)
         cpblts[1] = strdup("urn:ietf:params:netconf:base:1.1");
         cpblts[2] = NULL;
 
-        io_timeout = NC_CLIENT_HELLO_TIMEOUT * 1000;
+        timeout_io = NC_CLIENT_HELLO_TIMEOUT * 1000;
         sid = NULL;
     } else {
         cpblts = nc_server_get_cpblts_version(session->ctx, LYS_VERSION_1_0);
@@ -1363,11 +1368,15 @@ nc_send_hello_io(struct nc_session *session)
             return NC_MSG_ERROR;
         }
 
-        io_timeout = NC_SERVER_HELLO_TIMEOUT * 1000;
+        if (session->flags & NC_SESSION_CALLHOME) {
+            timeout_io = NC_SERVER_CH_HELLO_TIMEOUT * 1000;
+        } else {
+            timeout_io = server_opts.idle_timeout * 1000;
+        }
         sid = &session->id;
     }
 
-    ret = nc_write_msg_io(session, io_timeout, NC_MSG_HELLO, cpblts, sid);
+    ret = nc_write_msg_io(session, timeout_io, NC_MSG_HELLO, cpblts, sid);
 
     for (i = 0; cpblts[i]; ++i) {
         free(cpblts[i]);
@@ -1469,7 +1478,12 @@ nc_recv_server_hello_io(struct nc_session *session)
     NC_MSG_TYPE rc = NC_MSG_HELLO;
     int r, ver = -1, flag = 0, timeout_io;
 
-    timeout_io = server_opts.hello_timeout ? server_opts.hello_timeout * 1000 : NC_SERVER_HELLO_TIMEOUT * 1000;
+    if (session->flags & NC_SESSION_CALLHOME) {
+        timeout_io = NC_SERVER_CH_HELLO_TIMEOUT * 1000;
+    } else {
+        timeout_io = server_opts.idle_timeout * 1000;
+    }
+
     r = nc_read_msg_poll_io(session, timeout_io, &msg);
     switch (r) {
     case 1:

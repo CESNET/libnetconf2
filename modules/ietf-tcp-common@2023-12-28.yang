@@ -17,8 +17,10 @@ module ietf-tcp-common {
                <mailto:michael.scharf@hs-esslingen.de>";
 
   description
-    "This module defines reusable groupings for TCP commons that
-     can be used as a basis for specific TCP common instances.
+    "This module define a reusable 'grouping' that is common
+     to both TCP-clients and TCP-servers.  This grouping statement
+     is used by both the 'ietf-tcp-client' and 'ietf-tcp-server'
+     modules.
 
      Copyright (c) 2023 IETF Trust and the persons identified
      as authors of the code. All rights reserved.
@@ -41,7 +43,7 @@ module ietf-tcp-common {
      (RFC 8174) when, and only when, they appear in all
      capitals, as shown here.";
 
-  revision 2023-04-17 {
+  revision 2023-12-28 {
     description
       "Initial version";
     reference
@@ -56,6 +58,7 @@ module ietf-tcp-common {
   }
 
   // Groupings
+
   grouping tcp-common-grouping {
     description
       "A reusable grouping for configuring TCP parameters common
@@ -63,15 +66,12 @@ module ietf-tcp-common {
        whole.";
     container keepalives {
       if-feature "keepalives-supported";
-      presence
-        "Indicates that keepalives are enabled.  This statement is
-         present so the mandatory descendant nodes do not imply that
-         this node must be configured.";
       description
         "Configures the keep-alive policy, to proactively test the
          aliveness of the TCP peer.  An unresponsive TCP peer is
-         dropped after approximately (idle-time + max-probes
-         * probe-interval) seconds.";
+         dropped after approximately (idle-time + max-probes *
+         probe-interval) seconds.  Further guidance can be found
+         in Section 2.1.5 of RFC DDDD.";
       reference
         "RFC 9293:
           Transmission Control Protocol (TCP), Section 3.8.4..";
@@ -80,7 +80,7 @@ module ietf-tcp-common {
           range "1..max";
         }
         units "seconds";
-        mandatory true;
+        default 7200;
         description
           "Sets the amount of time after which if no data has been
            received from the TCP peer, a TCP-level probe message
@@ -94,7 +94,7 @@ module ietf-tcp-common {
         type uint16 {
           range "1..max";
         }
-        mandatory true;
+        default 9;
         description
           "Sets the maximum number of sequential keep-alive probes
            that can fail to obtain a response from the TCP peer
@@ -105,7 +105,7 @@ module ietf-tcp-common {
           range "1..max";
         }
         units "seconds";
-        mandatory true;
+        default 75;
         description
           "Sets the time interval between failed probes. The interval
            SHOULD be significantly longer than one second in order to
