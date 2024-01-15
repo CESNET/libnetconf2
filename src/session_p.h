@@ -930,14 +930,6 @@ int nc_sock_accept(int sock, int timeout, char **peer_host, uint16_t *peer_port)
 int nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives *ka);
 
 /**
- * @brief Create a listening socket (AF_UNIX).
- *
- * @param[in] opts The server options (unix permissions and address of the socket).
- * @return Listening socket, -1 on error.
- */
-int nc_sock_listen_unix(const struct nc_server_unix_opts *opts);
-
-/**
  * @brief Accept a new connection on a listening socket.
  *
  * @param[in] binds Structure with the listening sockets.

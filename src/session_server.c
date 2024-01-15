@@ -356,7 +356,13 @@ fail:
     return -1;
 }
 
-int
+/**
+ * @brief Create a listening socket (AF_UNIX).
+ *
+ * @param[in] opts The server options (unix permissions and address of the socket).
+ * @return Listening socket, -1 on error.
+ */
+static int
 nc_sock_listen_unix(const struct nc_server_unix_opts *opts)
 {
     struct sockaddr_un sun;
