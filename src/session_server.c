@@ -1589,7 +1589,7 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
     /* check timeout first */
     if (!(session->flags & NC_SESSION_CALLHOME) && !nc_session_get_notif_status(session) && server_opts.idle_timeout &&
             (now_mono >= session->opts.server.last_rpc + (unsigned) server_opts.idle_timeout)) {
-        sprintf(msg, "session idle timeout elapsed");
+        sprintf(msg, "Session idle timeout elapsed");
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_TIMEOUT;
         return NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
@@ -1597,7 +1597,7 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
 
     r = nc_session_io_lock(session, io_timeout, __func__);
     if (r < 0) {
-        sprintf(msg, "session IO lock failed to be acquired");
+        sprintf(msg, "Session IO lock failed to be acquired");
         return NC_PSPOLL_ERROR;
     } else if (!r) {
         return NC_PSPOLL_TIMEOUT;
@@ -1660,7 +1660,7 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
             /* no data pending in the SSL buffer, poll fd */
             pfd.fd = SSL_get_rfd(session->ti.tls);
             if (pfd.fd < 0) {
-                sprintf(msg, "internal error (%s:%d)", __FILE__, __LINE__);
+                sprintf(msg, "Internal error (%s:%d)", __FILE__, __LINE__);
                 ret = NC_PSPOLL_ERROR;
                 break;
             }
@@ -1669,17 +1669,17 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
             r = poll(&pfd, 1, 0);
 
             if ((r < 0) && (errno != EINTR)) {
-                sprintf(msg, "poll failed (%s)", strerror(errno));
+                sprintf(msg, "Poll failed (%s)", strerror(errno));
                 session->status = NC_STATUS_INVALID;
                 ret = NC_PSPOLL_ERROR;
             } else if (r > 0) {
                 if (pfd.revents & (POLLHUP | POLLNVAL)) {
-                    sprintf(msg, "communication socket unexpectedly closed");
+                    sprintf(msg, "Communication socket unexpectedly closed");
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_DROPPED;
                     ret = NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
                 } else if (pfd.revents & POLLERR) {
-                    sprintf(msg, "communication socket error");
+                    sprintf(msg, "Communication socket error");
                     session->status = NC_STATUS_INVALID;
                     session->term_reason = NC_SESSION_TERM_OTHER;
                     ret = NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
@@ -1702,17 +1702,17 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
         r = poll(&pfd, 1, 0);
 
         if ((r < 0) && (errno != EINTR)) {
-            sprintf(msg, "poll failed (%s)", strerror(errno));
+            sprintf(msg, "Poll failed (%s)", strerror(errno));
             session->status = NC_STATUS_INVALID;
             ret = NC_PSPOLL_ERROR;
         } else if (r > 0) {
             if (pfd.revents & (POLLHUP | POLLNVAL)) {
-                sprintf(msg, "communication socket unexpectedly closed");
+                sprintf(msg, "Communication socket unexpectedly closed");
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_DROPPED;
                 ret = NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
             } else if (pfd.revents & POLLERR) {
-                sprintf(msg, "communication socket error");
+                sprintf(msg, "Communication socket error");
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_OTHER;
                 ret = NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
@@ -1724,7 +1724,7 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
         }
         break;
     case NC_TI_NONE:
-        sprintf(msg, "internal error (%s:%d)", __FILE__, __LINE__);
+        sprintf(msg, "Internal error (%s:%d)", __FILE__, __LINE__);
         ret = NC_PSPOLL_ERROR;
         break;
     }
