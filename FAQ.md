@@ -17,8 +17,9 @@ Starting the SSH session failed ()
 
 __A:__ The most likely reason for this is that the SSH key that is used
    for this session authentication uses an algorithm not supported by
-   your system. The supported algorithms are automatically loaded by *libssh*
-   from OpenSSH configuration files (more info in `ssh_config(5)` and `sshd_config(5)`).
+   your system. The supported algorithms can be configured but if not, they
+   are automatically loaded by *libssh* from OpenSSH configuration files
+   (more info in `ssh_config(5)` and `sshd_config(5)`).
 
 __Q: When I try to connect to a server I immediately get a timeout after authenticating:__
 
