@@ -1447,7 +1447,10 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
                 return nc_session_ssh_msg(session, referenced_endpt->opts.ssh, msg, state);
             }
 
+            /* user not known, set his authentication methods to public key only so that
+             * there is no interaction and it will simply be denied */
             ERR(NULL, "User \"%s\" not known by the server.", username);
+            ssh_set_auth_methods(session->ti.libssh.session, SSH_AUTH_METHOD_PUBLICKEY);
             ssh_message_reply_default(msg);
             return 0;
         }
