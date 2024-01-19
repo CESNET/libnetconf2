@@ -842,7 +842,7 @@ error:
 API void
 nc_server_destroy(void)
 {
-    uint32_t i;
+    uint32_t i, endpt_count;
 
     for (i = 0; i < server_opts.capabilities_count; i++) {
         free(server_opts.capabilities[i]);
@@ -856,6 +856,13 @@ nc_server_destroy(void)
 
     nc_server_config_listen(NULL, NC_OP_DELETE);
     nc_server_config_ch(NULL, NC_OP_DELETE);
+
+    endpt_count = server_opts.endpt_count;
+    for (i = 0; i < endpt_count; i++) {
+        if (server_opts.endpts[i].ti == NC_TI_UNIX) {
+            _nc_server_del_endpt_unix_socket(&server_opts.endpts[i], &server_opts.binds[i]);
+        }
+    }
 
     pthread_mutex_destroy(&server_opts.bind_lock);
 

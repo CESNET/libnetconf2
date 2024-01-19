@@ -1027,6 +1027,8 @@ nc_server_config_listen(const struct lyd_node *node, NC_OPERATION op)
                 nc_server_config_del_endpt_tls(&server_opts.endpts[i], &server_opts.binds[i]);
                 break;
 #endif /* NC_ENABLED_SSH_TLS */
+            case NC_TI_UNIX:
+                break;
             case NC_TI_NONE:
             case NC_TI_FD:
                 ERRINT;
@@ -1184,6 +1186,8 @@ nc_server_config_endpoint(const struct lyd_node *node, NC_OPERATION op)
                 nc_server_config_del_endpt_tls(endpt, bind);
                 break;
 #endif /* NC_ENABLED_SSH_TLS */
+            case NC_TI_UNIX:
+                break;
             case NC_TI_NONE:
             case NC_TI_FD:
                 ERRINT;
