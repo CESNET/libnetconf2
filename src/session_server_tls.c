@@ -30,6 +30,7 @@
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
+#include <openssl/engine.h>
 
 #include "compat.h"
 #include "config.h"
@@ -862,6 +863,9 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, struct nc_server_tls_opts *opts
     NC_PRIVKEY_FORMAT privkey_type;
     X509 *cert = NULL;
     EVP_PKEY *pkey = NULL;
+    ENGINE *pkcs11 = NULL;
+    const char* uri = getenv("TOKEN_KEY_URI");
+    const char* pin = getenv("DEFAULT_USER_PIN");
 
     NC_CHECK_ARG_RET(NULL, tls_ctx, opts, -1);
 
@@ -896,12 +900,52 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, struct nc_server_tls_opts *opts
         goto cleanup;
     }
 
-    /* load the private key */
-    pkey = base64der_to_privatekey(privkey_data, nc_privkey_format_to_str(privkey_type));
-    if (!pkey) {
-        ERR(NULL, "Converting private key data to private key format failed.");
-        ret = -1;
-        goto cleanup;
+    ENGINE_load_dynamic();
+    pkcs11 = ENGINE_by_id("pkcs11");
+    if (!pkcs11)
+    {
+        /* load the private key */
+        pkey = base64der_to_privatekey(privkey_data, nc_privkey_format_to_str(privkey_type));
+        if (!pkey) {
+            ERR(NULL, "Converting private key data to private key format failed.");
+            ret = -1;
+            goto cleanup;
+        }
+    } else {
+        if (!uri) {
+            ERR(NULL, "TOKEN_KEY_URI is not set. Loading private key using pkcs11 engine failed.");
+            ret = -1;
+            goto cleanup;
+        }
+
+        if (!pin) {
+            ERR(NULL, "DEFAULT_USER_PIN is not set. Loading private key using pkcs11 engine failed.");
+            ret = -1;
+            goto cleanup;
+        }
+
+        if (!ENGINE_init(pkcs11))
+        {
+            ERR(NULL, "Initializing the pkcs11 engine failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = -1;
+            goto cleanup;
+        }
+
+        if (!ENGINE_ctrl_cmd_string(pkcs11, "PIN", pin, 0))
+        {
+            ERR(NULL, "Setting pin failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = -1;
+            goto cleanup;
+        }
+
+        /* load server key using pkcs11 engine*/
+        pkey = ENGINE_load_private_key(pkcs11, uri, NULL, NULL);
+        if (!pkey)
+        {
+            ERR(NULL, "Reading the private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = -1;
+            goto cleanup;
+        }
     }
 
     /* set server key */
@@ -917,6 +961,9 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, struct nc_server_tls_opts *opts
 cleanup:
     X509_free(cert);
     EVP_PKEY_free(pkey);
+    if (pkcs11) {
+        ENGINE_free(pkcs11);
+    }
     return ret;
 }
 

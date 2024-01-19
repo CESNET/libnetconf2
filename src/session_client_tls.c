@@ -27,6 +27,7 @@
 #include <openssl/err.h>
 #include <openssl/ossl_typ.h>
 #include <openssl/x509.h>
+#include <openssl/engine.h>
 
 #include "config.h"
 #include "log_p.h"
@@ -387,6 +388,9 @@ nc_client_tls_update_opts(struct nc_client_tls_opts *opts, const char *peername)
     char *key;
     X509_LOOKUP *lookup;
     X509_VERIFY_PARAM *vpm = NULL;
+    EVP_PKEY *pkey = NULL;
+    ENGINE *pkcs11 = NULL;
+    const char* pin = getenv("DEFAULT_USER_PIN");
 
     if (!opts->tls_ctx || opts->tls_ctx_change) {
         SSL_CTX_free(opts->tls_ctx);
@@ -412,11 +416,54 @@ nc_client_tls_update_opts(struct nc_client_tls_opts *opts, const char *peername)
         } else {
             key = opts->key_path;
         }
-        if (SSL_CTX_use_PrivateKey_file(opts->tls_ctx, key, SSL_FILETYPE_PEM) != 1) {
-            ERR(NULL, "Loading the client private key from \'%s\' failed (%s).", key,
-                    ERR_reason_error_string(ERR_get_error()));
-            rc = -1;
-            goto cleanup;
+
+        ENGINE_load_dynamic();
+        pkcs11 = ENGINE_by_id("pkcs11");
+        if (!pkcs11)
+        {
+            if (SSL_CTX_use_PrivateKey_file(opts->tls_ctx, key, SSL_FILETYPE_PEM) != 1) {
+                ERR(NULL, "Loading the client private key from \'%s\' failed (%s).", key,
+                        ERR_reason_error_string(ERR_get_error()));
+                rc = -1;
+                goto cleanup;
+            }
+        } else {
+            if (!pin) {
+                ERR(NULL, "DEFAULT_USER_PIN is not set. Loading private key using pkcs11 engine failed.");
+                rc -1;
+                goto cleanup;
+            }
+
+            if (!ENGINE_init(pkcs11))
+            {
+                ERR(NULL, "Initializing the pkcs11 engine failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                rc = -1;
+                goto cleanup;
+            }
+
+            if (!ENGINE_ctrl_cmd_string(pkcs11, "PIN", pin, 0))
+            {
+                ERR(NULL, "Setting pin failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                rc = -1;
+                goto cleanup;
+            }
+
+            /* load server key using pkcs11 engine*/
+            pkey = ENGINE_load_private_key(pkcs11, key, NULL, NULL);
+            if (!pkey)
+            {
+                ERR(NULL, "Reading the private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                rc = -1;
+                goto cleanup;
+            }
+
+            /* set server key */
+            if ((SSL_CTX_use_PrivateKey(opts->tls_ctx, pkey) != 1))
+            {
+                ERR(NULL, "Loading the client private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+                rc = -1;
+                goto cleanup;
+            }
         }
 
         if (!SSL_CTX_load_verify_locations(opts->tls_ctx, opts->ca_file, opts->ca_dir)) {
@@ -481,6 +528,12 @@ nc_client_tls_update_opts(struct nc_client_tls_opts *opts, const char *peername)
     }
 
 cleanup:
+    if (pkcs11) {
+        ENGINE_free(pkcs11);
+    }
+    if (pkey){
+        EVP_PKEY_free(pkey);
+    }
     X509_VERIFY_PARAM_free(vpm);
     return rc;
 }
