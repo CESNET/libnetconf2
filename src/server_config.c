@@ -40,38 +40,6 @@
 #include "server_config_p.h"
 #include "session_p.h"
 
-#ifdef NC_ENABLED_SSH_TLS
-
-/* All libssh supported host-key, key-exchange, encryption and mac algorithms as of version 0.10.90 */
-
-static const char *supported_hostkey_algs[] = {
-    "openssh-ssh-ed25519-cert-v01", "openssh-ecdsa-sha2-nistp521-cert-v01",
-    "openssh-ecdsa-sha2-nistp384-cert-v01", "openssh-ecdsa-sha2-nistp256-cert-v01",
-    "openssh-rsa-sha2-512-cert-v01", "openssh-rsa-sha2-256-cert-v01",
-    "openssh-ssh-rsa-cert-v01", "openssh-ssh-dss-cert-v01",
-    "ssh-ed25519", "ecdsa-sha2-nistp521", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp256",
-    "rsa-sha2-512", "rsa-sha2-256", "ssh-rsa", "ssh-dss", NULL
-};
-
-static const char *supported_kex_algs[] = {
-    "diffie-hellman-group-exchange-sha1", "curve25519-sha256", "libssh-curve25519-sha256",
-    "ecdh-sha2-nistp256", "ecdh-sha2-nistp384", "ecdh-sha2-nistp521", "diffie-hellman-group18-sha512",
-    "diffie-hellman-group16-sha512", "diffie-hellman-group-exchange-sha256", "diffie-hellman-group14-sha256", NULL
-};
-
-static const char *supported_encryption_algs[] = {
-    "openssh-chacha20-poly1305", "openssh-aes256-gcm", "openssh-aes128-gcm",
-    "aes256-ctr", "aes192-ctr", "aes128-ctr", "aes256-cbc", "aes192-cbc", "aes128-cbc",
-    "blowfish-cbc", "triple-des-cbc", "none", NULL
-};
-
-static const char *supported_mac_algs[] = {
-    "openssh-hmac-sha2-256-etm", "openssh-hmac-sha2-512-etm", "openssh-hmac-sha1-etm",
-    "hmac-sha2-256", "hmac-sha2-512", "hmac-sha1", NULL
-};
-
-#endif /* NC_ENABLED_SSH_TLS */
-
 extern struct nc_server_opts server_opts;
 
 /* returns a parent node of 'node' that matches the name 'name' */
@@ -2520,7 +2488,6 @@ nc_server_config_host_key_alg(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     const char *alg;
-    uint8_t i;
     struct nc_server_ssh_opts *opts;
     struct nc_ch_client *ch_client = NULL;
 
@@ -2537,23 +2504,11 @@ nc_server_config_host_key_alg(const struct lyd_node *node, NC_OPERATION op)
         goto cleanup;
     }
 
-    /* get the algorithm name and compare it with algs supported by libssh */
+    /* get the algorithm name and append it to supported algs */
     alg = ((struct lyd_node_term *)node)->value.ident->name;
-    i = 0;
-    while (supported_hostkey_algs[i]) {
-        if (!strcmp(supported_hostkey_algs[i], alg)) {
-            if (nc_server_config_transport_params(alg, &opts->hostkey_algs, op)) {
-                ret = 1;
-                goto cleanup;
-            }
-            break;
-        }
-        i++;
-    }
-    if (!supported_hostkey_algs[i]) {
-        /* algorithm not supported */
-        ERR(NULL, "Public key algorithm (%s) not supported by libssh.", alg);
+    if (nc_server_config_transport_params(alg, &opts->hostkey_algs, op)) {
         ret = 1;
+        goto cleanup;
     }
 
 cleanup:
@@ -2570,7 +2525,6 @@ nc_server_config_kex_alg(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     const char *alg;
-    uint8_t i;
     struct nc_server_ssh_opts *opts;
     struct nc_ch_client *ch_client = NULL;
 
@@ -2587,23 +2541,11 @@ nc_server_config_kex_alg(const struct lyd_node *node, NC_OPERATION op)
         goto cleanup;
     }
 
-    /* get the algorithm name and compare it with algs supported by libssh */
+    /* get the algorithm name and append it to supported algs */
     alg = ((struct lyd_node_term *)node)->value.ident->name;
-    i = 0;
-    while (supported_kex_algs[i]) {
-        if (!strcmp(supported_kex_algs[i], alg)) {
-            if (nc_server_config_transport_params(alg, &opts->kex_algs, op)) {
-                ret = 1;
-                goto cleanup;
-            }
-            break;
-        }
-        i++;
-    }
-    if (!supported_kex_algs[i]) {
-        /* algorithm not supported */
-        ERR(NULL, "Key exchange algorithm (%s) not supported by libssh.", alg);
+    if (nc_server_config_transport_params(alg, &opts->kex_algs, op)) {
         ret = 1;
+        goto cleanup;
     }
 
 cleanup:
@@ -2620,7 +2562,6 @@ nc_server_config_encryption_alg(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     const char *alg;
-    uint8_t i;
     struct nc_server_ssh_opts *opts;
     struct nc_ch_client *ch_client = NULL;
 
@@ -2637,23 +2578,11 @@ nc_server_config_encryption_alg(const struct lyd_node *node, NC_OPERATION op)
         goto cleanup;
     }
 
-    /* get the algorithm name and compare it with algs supported by libssh */
+    /* get the algorithm name and append it to supported algs */
     alg = ((struct lyd_node_term *)node)->value.ident->name;
-    i = 0;
-    while (supported_encryption_algs[i]) {
-        if (!strcmp(supported_encryption_algs[i], alg)) {
-            if (nc_server_config_transport_params(alg, &opts->encryption_algs, op)) {
-                ret = 1;
-                goto cleanup;
-            }
-            break;
-        }
-        i++;
-    }
-    if (!supported_encryption_algs[i]) {
-        /* algorithm not supported */
-        ERR(NULL, "Encryption algorithm (%s) not supported by libssh.", alg);
+    if (nc_server_config_transport_params(alg, &opts->encryption_algs, op)) {
         ret = 1;
+        goto cleanup;
     }
 
 cleanup:
@@ -2670,7 +2599,6 @@ nc_server_config_mac_alg(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
     const char *alg;
-    uint8_t i;
     struct nc_server_ssh_opts *opts;
     struct nc_ch_client *ch_client = NULL;
 
@@ -2687,23 +2615,11 @@ nc_server_config_mac_alg(const struct lyd_node *node, NC_OPERATION op)
         goto cleanup;
     }
 
-    /* get the algorithm name and compare it with algs supported by libssh */
+    /* get the algorithm name and append it to supported algs */
     alg = ((struct lyd_node_term *)node)->value.ident->name;
-    i = 0;
-    while (supported_mac_algs[i]) {
-        if (!strcmp(supported_mac_algs[i], alg)) {
-            if (nc_server_config_transport_params(alg, &opts->mac_algs, op)) {
-                ret = 1;
-                goto cleanup;
-            }
-            break;
-        }
-        i++;
-    }
-    if (!supported_mac_algs[i]) {
-        /* algorithm not supported */
-        ERR(NULL, "MAC algorithm (%s) not supported by libssh.", alg);
+    if (nc_server_config_transport_params(alg, &opts->mac_algs, op)) {
         ret = 1;
+        goto cleanup;
     }
 
 cleanup:
@@ -4339,3 +4255,146 @@ cleanup:
     lyd_free_all(tree);
     return ret;
 }
+
+#ifdef NC_ENABLED_SSH_TLS
+
+static int
+nc_server_config_oper_get_algs(const struct ly_ctx *ctx, const char *mod_name, const char *ln2_algs[],
+        const char *mod_algs[], struct lyd_node **algs)
+{
+    int ret, r, i;
+    struct lyd_node *parent = NULL;
+    char *path = NULL;
+
+    NC_CHECK_ARG_RET(NULL, ctx, mod_name, ln2_algs, mod_algs, algs, 1);
+
+    *algs = NULL;
+
+    r = asprintf(&path, "/%s:supported-algorithms", mod_name);
+    NC_CHECK_ERRMEM_RET(r == -1, 1);
+
+    /* create supported algorithms container */
+    ret = lyd_new_path(NULL, ctx, path, NULL, 0, &parent);
+    free(path);
+    if (ret) {
+        ERR(NULL, "Creating supported algorithms container failed.");
+        goto cleanup;
+    }
+
+    /* append algs from libnetconf2-netconf-server */
+    for (i = 0; ln2_algs[i]; i++) {
+        r = asprintf(&path, "libnetconf2-netconf-server:%s", ln2_algs[i]);
+        NC_CHECK_ERRMEM_GOTO(r == -1, ret = 1, cleanup);
+        ret = lyd_new_term(parent, NULL, "supported-algorithm", path, 0, NULL);
+        free(path);
+        if (ret) {
+            ERR(NULL, "Creating new supported algorithm failed.");
+            goto cleanup;
+        }
+    }
+
+    /* append algs from mod_name module */
+    for (i = 0; mod_algs[i]; i++) {
+        r = asprintf(&path, "%s:%s", mod_name, mod_algs[i]);
+        NC_CHECK_ERRMEM_GOTO(r == -1, ret = 1, cleanup);
+        ret = lyd_new_term(parent, NULL, "supported-algorithm", path, 0, NULL);
+        free(path);
+        if (ret) {
+            ERR(NULL, "Creating new supported algorithm failed.");
+            goto cleanup;
+        }
+    }
+
+cleanup:
+    if (ret) {
+        lyd_free_tree(parent);
+    } else {
+        *algs = parent;
+    }
+    return ret;
+}
+
+API int
+nc_server_config_oper_get_hostkey_algs(const struct ly_ctx *ctx, struct lyd_node **hostkey_algs)
+{
+    /* identities of hostkey algs supported by libssh (v0.10.5) defined in libnetconf2-netconf-server yang module */
+    const char *libnetconf2_hostkey_algs[] = {
+        "openssh-ssh-ed25519-cert-v01", "openssh-ecdsa-sha2-nistp521-cert-v01",
+        "openssh-ecdsa-sha2-nistp384-cert-v01", "openssh-ecdsa-sha2-nistp256-cert-v01",
+        "openssh-rsa-sha2-512-cert-v01", "openssh-rsa-sha2-256-cert-v01",
+        "openssh-ssh-rsa-cert-v01", "openssh-ssh-dss-cert-v01", NULL
+    };
+
+    /* identities of hostkey algs supported by libssh (v0.10.5) defined in iana-ssh-public-key-algs yang module */
+    const char *iana_hostkey_algs[] = {
+        "ssh-ed25519", "ecdsa-sha2-nistp521", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp256",
+        "rsa-sha2-512", "rsa-sha2-256", "ssh-rsa", "ssh-dss", NULL
+    };
+
+    NC_CHECK_ARG_RET(NULL, ctx, hostkey_algs, 1);
+
+    return nc_server_config_oper_get_algs(ctx, "iana-ssh-public-key-algs", libnetconf2_hostkey_algs,
+            iana_hostkey_algs, hostkey_algs);
+}
+
+API int
+nc_server_config_oper_get_kex_algs(const struct ly_ctx *ctx, struct lyd_node **kex_algs)
+{
+    /* identities of kex algs supported by libssh (v0.10.5) defined in libnetconf2-netconf-server yang module */
+    const char *libnetconf2_kex_algs[] = {
+        "libssh-curve25519-sha256", NULL
+    };
+
+    /* identities of kex algs supported by libssh (v0.10.5) defined in iana-ssh-key-exchange-algs yang module */
+    const char *iana_kex_algs[] = {
+        "diffie-hellman-group-exchange-sha1", "curve25519-sha256", "ecdh-sha2-nistp256", "ecdh-sha2-nistp384",
+        "ecdh-sha2-nistp521", "diffie-hellman-group18-sha512", "diffie-hellman-group16-sha512",
+        "diffie-hellman-group-exchange-sha256", "diffie-hellman-group14-sha256", NULL
+    };
+
+    NC_CHECK_ARG_RET(NULL, ctx, kex_algs, 1);
+
+    return nc_server_config_oper_get_algs(ctx, "iana-ssh-key-exchange-algs", libnetconf2_kex_algs,
+            iana_kex_algs, kex_algs);
+}
+
+API int
+nc_server_config_oper_get_encryption_algs(const struct ly_ctx *ctx, struct lyd_node **encryption_algs)
+{
+    /* identities of encryption algs supported by libssh (v0.10.5) defined in libnetconf2-netconf-server yang module */
+    const char *libnetconf2_encryption_algs[] = {
+        "openssh-chacha20-poly1305", "openssh-aes256-gcm", "openssh-aes128-gcm", NULL
+    };
+
+    /* identities of encryption algs supported by libssh (v0.10.5) defined in iana-ssh-encryption-algs yang module */
+    const char *iana_encryption_algs[] = {
+        "aes256-ctr", "aes192-ctr", "aes128-ctr", "aes256-cbc", "aes192-cbc", "aes128-cbc",
+        "blowfish-cbc", "triple-des-cbc", "none", NULL
+    };
+
+    NC_CHECK_ARG_RET(NULL, ctx, encryption_algs, 1);
+
+    return nc_server_config_oper_get_algs(ctx, "iana-ssh-encryption-algs", libnetconf2_encryption_algs,
+            iana_encryption_algs, encryption_algs);
+}
+
+API int
+nc_server_config_oper_get_mac_algs(const struct ly_ctx *ctx, struct lyd_node **mac_algs)
+{
+    /* identities of mac algs supported by libssh (v0.10.5) defined in libnetconf2-netconf-server yang module */
+    const char *libnetconf2_mac_algs[] = {
+        "openssh-hmac-sha2-256-etm", "openssh-hmac-sha2-512-etm", "openssh-hmac-sha1-etm", NULL
+    };
+
+    /* identities of mac algs supported by libssh (v0.10.5) defined in iana-ssh-mac-algs yang module */
+    const char *iana_mac_algs[] = {
+        "hmac-sha2-256", "hmac-sha2-512", "hmac-sha1", NULL
+    };
+
+    NC_CHECK_ARG_RET(NULL, ctx, mac_algs, 1);
+
+    return nc_server_config_oper_get_algs(ctx, "iana-ssh-mac-algs", libnetconf2_mac_algs,
+            iana_mac_algs, mac_algs);
+}
+
+#endif /* NC_ENABLED_SSH_TLS */
