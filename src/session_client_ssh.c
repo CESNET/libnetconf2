@@ -21,6 +21,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <pthread.h>
 #include <pwd.h>
 #include <stddef.h>
@@ -876,14 +877,25 @@ _nc_client_ssh_add_keypair(const char *pub_key, const char *priv_key, struct nc_
     }
 
     /* add the keys */
-    ++opts->key_count;
-    opts->keys = nc_realloc(opts->keys, opts->key_count * sizeof *opts->keys);
+    opts->keys = nc_realloc(opts->keys, (opts->key_count + 1) * sizeof *opts->keys);
     NC_CHECK_ERRMEM_RET(!opts->keys, -1);
-    opts->keys[opts->key_count - 1].pubkey_path = strdup(pub_key);
-    opts->keys[opts->key_count - 1].privkey_path = strdup(priv_key);
-    opts->keys[opts->key_count - 1].privkey_crypt = 0;
 
-    NC_CHECK_ERRMEM_RET(!opts->keys[opts->key_count - 1].pubkey_path || !opts->keys[opts->key_count - 1].privkey_path, -1);
+    opts->keys[opts->key_count].pubkey_path = realpath(pub_key, NULL);
+    if (!opts->keys[opts->key_count].pubkey_path) {
+        ERR(NULL, "Invalid public key path \"%s\" (%s).", pub_key, strerror(errno));
+        return -1;
+    }
+    opts->keys[opts->key_count].privkey_path = realpath(priv_key, NULL);
+    if (!opts->keys[opts->key_count].privkey_path) {
+        ERR(NULL, "Invalid private key path \"%s\" (%s).", priv_key, strerror(errno));
+        free(opts->keys[opts->key_count].pubkey_path);
+        return -1;
+    }
+    opts->keys[opts->key_count].privkey_crypt = 0;
+    ++opts->key_count;
+
+    /* use normalized path */
+    priv_key = opts->keys[opts->key_count - 1].privkey_path;
 
     /* check encryption */
     if ((key = fopen(priv_key, "r"))) {

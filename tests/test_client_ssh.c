@@ -383,14 +383,14 @@ test_nc_client_ssh_adding_keypair(void **state)
     assert_int_equal(ret, 1);
 
     /* add second keypair */
-    ret = nc_client_ssh_add_keypair("key_pub", "key_priv");
+    ret = nc_client_ssh_add_keypair(TESTS_DIR "/data/key_rsa.pub", TESTS_DIR "/data/key_rsa");
     assert_int_equal(ret, 0);
     ret = nc_client_ssh_get_keypair_count();
     assert_int_equal(ret, 2);
     ret = nc_client_ssh_get_keypair(1, &pubkey1, &pubkey2);
     assert_int_equal(ret, 0);
-    assert_string_equal(pubkey1, "key_pub");
-    assert_string_equal(pubkey2, "key_priv");
+    assert_string_equal(pubkey1, TESTS_DIR "/data/key_rsa.pub");
+    assert_string_equal(pubkey2, TESTS_DIR "/data/key_rsa");
 
     /* delete first keypair */
     ret = nc_client_ssh_del_keypair(0);
@@ -402,7 +402,7 @@ test_nc_client_ssh_adding_keypair(void **state)
     assert_int_equal(ret, -1);
 
     /* try to add keypair that is already set */
-    ret = nc_client_ssh_add_keypair("key_pub", "key_priv");
+    ret = nc_client_ssh_add_keypair(TESTS_DIR "/data/key_rsa.pub", TESTS_DIR "/data/key_rsa");
     assert_int_equal(ret, -1);
     ret = nc_client_ssh_get_keypair_count();
     assert_int_equal(ret, 1);
