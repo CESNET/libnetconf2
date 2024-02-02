@@ -3035,29 +3035,34 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
     int ret = 0;
     struct lyd_node *n;
     struct nc_ctn *new, *iter;
-    const char *map_type, *name;
+    const char *map_type, *name = NULL;
     uint32_t id;
     NC_TLS_CTN_MAPTYPE m_type;
 
     assert(!strcmp(LYD_NAME(node), "cert-to-name"));
 
-    /* get all the data */
     /* find the list's key */
     lyd_find_path(node, "id", 0, &n);
     assert(n);
     id = ((struct lyd_node_term *)n)->value.uint32;
 
-    /* find the ctn's name */
-    lyd_find_path(node, "name", 0, &n);
-    assert(n);
-    name = lyd_get_value(n);
-
-    /* find the ctn's map-type */
-    lyd_find_path(node, "map-type", 0, &n);
-    assert(n);
+    /* get CTN map-type */
+    if (lyd_find_path(node, "map-type", 0, &n)) {
+        ERR(NULL, "Missing CTN map-type.");
+        ret = 1;
+        goto cleanup;
+    }
     map_type = ((struct lyd_node_term *)n)->value.ident->name;
     if (!strcmp(map_type, "specified")) {
         m_type = NC_TLS_CTN_SPECIFIED;
+
+        /* get CTN name */
+        if (lyd_find_path(node, "name", 0, &n)) {
+            ERR(NULL, "Missing CTN \"specified\" user name.");
+            ret = 1;
+            goto cleanup;
+        }
+        name = lyd_get_value(n);
     } else if (!strcmp(map_type, "san-rfc822-name")) {
         m_type = NC_TLS_CTN_SAN_RFC822_NAME;
     } else if (!strcmp(map_type, "san-dns-name")) {
@@ -3069,7 +3074,7 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
     } else if (!strcmp(map_type, "common-name")) {
         m_type = NC_TLS_CTN_COMMON_NAME;
     } else {
-        ERR(NULL, "Map-type identity \"%s\" not supported.", map_type);
+        ERR(NULL, "CTN map-type \"%s\" not supported.", map_type);
         ret = 1;
         goto cleanup;
     }
@@ -3090,9 +3095,11 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
         /* have to find the right place */
         for (iter = opts->ctn; iter->next && iter->next->id <= id; iter = iter->next) {}
         if (iter->id == id) {
-            /* collision */
+            /* collision, replace */
             free(new);
             new = iter;
+            free(new->name);
+            new->name = NULL;
         } else {
             new->next = iter->next;
             iter->next = new;
@@ -3101,9 +3108,10 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
 
     /* insert the right data */
     new->id = id;
-    free(new->name);
-    new->name = strdup(name);
-    NC_CHECK_ERRMEM_GOTO(!new->name, ret = 1, cleanup);
+    if (name) {
+        new->name = strdup(name);
+        NC_CHECK_ERRMEM_GOTO(!new->name, ret = 1, cleanup);
+    }
     new->map_type = m_type;
 
 cleanup:
