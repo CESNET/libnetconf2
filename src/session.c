@@ -1371,7 +1371,7 @@ nc_send_hello_io(struct nc_session *session)
         if (session->flags & NC_SESSION_CALLHOME) {
             timeout_io = NC_SERVER_CH_HELLO_TIMEOUT * 1000;
         } else {
-            timeout_io = server_opts.idle_timeout * 1000;
+            timeout_io = server_opts.idle_timeout ? server_opts.idle_timeout * 1000 : -1;
         }
         sid = &session->id;
     }
@@ -1481,7 +1481,7 @@ nc_recv_server_hello_io(struct nc_session *session)
     if (session->flags & NC_SESSION_CALLHOME) {
         timeout_io = NC_SERVER_CH_HELLO_TIMEOUT * 1000;
     } else {
-        timeout_io = server_opts.idle_timeout * 1000;
+        timeout_io = server_opts.idle_timeout ? server_opts.idle_timeout * 1000 : -1;
     }
 
     r = nc_read_msg_poll_io(session, timeout_io, &msg);
