@@ -1523,16 +1523,18 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
             free(host);
             goto fail;
         }
-        free(host);
 
         /* create and connect socket */
         sock = nc_sock_connect(host, port, -1, ka, NULL, &ip_host);
         if (sock == -1) {
             ERR(NULL, "Unable to connect to %s:%u (%s).", host, port, strerror(errno));
+            free(host);
             goto fail;
         }
         ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_FD, &sock);
         ssh_set_blocking(session->ti.libssh.session, 0);
+
+        free(host);
         host = ip_host;
     }
 
