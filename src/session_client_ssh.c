@@ -1517,7 +1517,13 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
         /* remember host */
         host = strdup("localhost");
         NC_CHECK_ERRMEM_GOTO(!host, , fail);
-        ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
+
+        if (ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host) != SSH_OK) {
+            ERR(NULL, "Failed to use hostname \"%s\".", host);
+            free(host);
+            goto fail;
+        }
+        free(host);
 
         /* create and connect socket */
         sock = nc_sock_connect(host, port, -1, ka, NULL, &ip_host);
@@ -1527,8 +1533,6 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
         }
         ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_FD, &sock);
         ssh_set_blocking(session->ti.libssh.session, 0);
-
-        free(host);
         host = ip_host;
     }
 
@@ -1663,7 +1667,10 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     }
 
     /* set some basic SSH session options */
-    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host);
+    if (ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_HOST, host) != SSH_OK) {
+        ERR(session, "Failed to use hostname \"%s\".", host);
+        goto fail;
+    }
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_PORT, &port_uint);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_TIMEOUT, &timeout);
@@ -1810,10 +1817,15 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
 
     ssh_options_set(sess, SSH_OPTIONS_FD, &sock);
     ssh_set_blocking(sess, 0);
-    ssh_options_set(sess, SSH_OPTIONS_HOST, host);
+    if (ssh_options_set(sess, SSH_OPTIONS_HOST, host) != SSH_OK) {
+        ERR(NULL, "Failed to use hostname \"%s\".", host);
+        ssh_free(sess);
+        return NULL;
+    }
     uint_port = port;
     ssh_options_set(sess, SSH_OPTIONS_PORT, &uint_port);
     ssh_options_set(sess, SSH_OPTIONS_TIMEOUT, &ssh_timeout);
+
     if (!ssh_ch_opts.username) {
         pw = nc_getpw(getuid(), NULL, &pw_buf, &buf, &buf_len);
         if (!pw) {
@@ -1826,6 +1838,7 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
     } else {
         ssh_options_set(sess, SSH_OPTIONS_USER, ssh_ch_opts.username);
     }
+
     ssh_options_set(sess, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519,ecdsa-sha2-nistp256,"
             "ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-rsa,rsa-sha2-512,rsa-sha2-256,ssh-dss");
 #ifdef HAVE_LIBSSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES
