@@ -127,7 +127,8 @@ prv_printf(const struct nc_session *session, NC_VERB_LEVEL level, const char *fo
 }
 
 static void
-nc_ly_log_clb(LY_LOG_LEVEL lvl, const char *msg, const char *UNUSED(path))
+nc_ly_log_clb(LY_LOG_LEVEL lvl, const char *msg, const char *UNUSED(data_path), const char *UNUSED(schema_path),
+        uint64_t UNUSED(line))
 {
     if (print_clb) {
         print_clb(NULL, (NC_VERB_LEVEL)lvl, msg);
@@ -141,5 +142,5 @@ nc_set_print_clb_session(void (*clb)(const struct nc_session *, NC_VERB_LEVEL, c
 {
     print_clb = clb;
     depr_print_clb = NULL;
-    ly_set_log_clb(nc_ly_log_clb, 1);
+    ly_set_log_clb(nc_ly_log_clb);
 }

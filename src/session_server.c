@@ -736,7 +736,7 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *session)
         free(model_data);
         return NULL;
     }
-    if (lyd_new_any(data, NULL, "data", model_data, 1, LYD_ANYDATA_STRING, 1, NULL)) {
+    if (lyd_new_any(data, NULL, "data", model_data, LYD_ANYDATA_STRING, LYD_NEW_ANY_USE_VALUE | LYD_NEW_VAL_OUTPUT, NULL)) {
         ERRINT;
         free(model_data);
         lyd_free_tree(data);
@@ -1423,7 +1423,7 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
         if ((*rpc)->envp) {
             /* at least the envelopes were parsed */
             e = nc_err(session->ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
-            nc_err_set_msg(e, ly_errmsg(session->ctx), "en");
+            nc_err_set_msg(e, ly_err_last(session->ctx)->msg, "en");
             reply = nc_server_reply_err(e);
         } else if (session->version == NC_VERSION_11) {
             /* completely malformed message, NETCONF version 1.1 defines sending error reply from

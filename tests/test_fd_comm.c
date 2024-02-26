@@ -61,7 +61,7 @@ my_getconfig_rpc_clb(struct lyd_node *rpc, struct nc_session *session)
     assert_string_equal(rpc->schema->name, "get-config");
     assert_ptr_equal(session, server_session);
 
-    lyd_new_path(NULL, session->ctx, "/ietf-netconf:get-config/data", NULL, LYD_NEW_PATH_OUTPUT, &data);
+    lyd_new_path(NULL, session->ctx, "/ietf-netconf:get-config/data", NULL, LYD_NEW_VAL_OUTPUT, &data);
     assert_non_null(data);
 
     return nc_server_reply_data(data, NC_WD_EXPLICIT, NC_PARAMTYPE_FREE);

@@ -127,7 +127,7 @@ get_rpc(struct lyd_node *rpc, struct nc_session *session)
     }
 
     /* create the get RPC anyxml "data" output node with the requested data */
-    if (lyd_new_any(duplicate, NULL, "data", root, 1, LYD_ANYDATA_DATATREE, 1, NULL)) {
+    if (lyd_new_any(duplicate, NULL, "data", root, LYD_ANYDATA_DATATREE, LYD_NEW_ANY_USE_VALUE | LYD_NEW_VAL_OUTPUT, NULL)) {
         err = nc_err(ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
         goto error;
     }
