@@ -1825,7 +1825,7 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
     NC_CHECK_ARG_RET(NULL, session, -1);
 
     if (!client_opts.ch_binds) {
-        ERRINIT;
+        ERR(NULL, "Call-Home binds not set.");
         return -1;
     }
 

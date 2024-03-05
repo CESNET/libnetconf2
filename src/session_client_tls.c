@@ -528,8 +528,11 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     struct timespec ts_timeout;
     char *ip_host = NULL;
 
-    if (!tls_opts.cert_path || (!tls_opts.ca_file && !tls_opts.ca_dir)) {
-        ERRINIT;
+    if (!tls_opts.cert_path) {
+        ERR(NULL, "Client certificate not set.");
+        return NULL;
+    } else if (!tls_opts.ca_file && !tls_opts.ca_dir) {
+        ERR(NULL, "Certificate authority certificates not set.");
         return NULL;
     }
 

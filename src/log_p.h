@@ -49,10 +49,11 @@ extern ATOMIC_T verbose_level;
 #define DBL(session, ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_DEBUG_LOWLVL){prv_printf(session, NC_VERB_DEBUG_LOWLVL, __VA_ARGS__);}
 
 #define ERRMEM ERR(NULL, "%s: memory reallocation failed (%s:%d).", __func__, __FILE__, __LINE__)
-#define ERRINIT ERR(NULL, "%s: libnetconf2 not initialized.", __func__)
+#define ERRINITSRV ERR(NULL, "%s: server not initialized.", __func__)
 #define ERRINT ERR(NULL, "%s: internal error (%s:%d).", __func__, __FILE__, __LINE__)
 #define ERRARG(session, ARG) ERR(session, "Invalid argument %s (%s()).", #ARG, __func__)
 
+#define NC_CHECK_SRV_INIT_RET(RET) if (!ATOMIC_LOAD_RELAXED(server_opts.new_session_id)) {ERRINITSRV; return (RET);}
 #define NC_CHECK_ERRMEM_RET(COND, RET) if ((COND)) {ERRMEM; return (RET);}
 #define NC_CHECK_ERRMEM_GOTO(COND, RET, GOTO) if ((COND)) {ERRMEM; RET; goto GOTO;}
 

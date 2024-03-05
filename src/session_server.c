@@ -790,8 +790,8 @@ nc_server_init(void)
     pthread_rwlockattr_t attr, *attr_p = NULL;
     int r;
 
-    server_opts.new_session_id = 1;
-    server_opts.new_client_id = 1;
+    ATOMIC_STORE_RELAXED(server_opts.new_session_id, 1);
+    ATOMIC_STORE_RELAXED(server_opts.new_client_id, 1);
 
 #ifdef HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP
     if ((r = pthread_rwlockattr_init(&attr))) {
@@ -950,15 +950,9 @@ nc_accept_inout(int fdin, int fdout, const char *username, const struct ly_ctx *
     NC_MSG_TYPE msgtype;
     struct timespec ts_cur;
 
-    NC_CHECK_ARG_RET(NULL, ctx, username, session, NC_MSG_ERROR);
+    NC_CHECK_ARG_RET(NULL, ctx, username, fdin >= 0, fdout >= 0, session, NC_MSG_ERROR);
 
-    if (fdin < 0) {
-        ERRARG(NULL, "fdin");
-        return NC_MSG_ERROR;
-    } else if (fdout < 0) {
-        ERRARG(NULL, "fdout");
-        return NC_MSG_ERROR;
-    }
+    NC_CHECK_SRV_INIT_RET(NC_MSG_ERROR);
 
     /* init ctx as needed */
     nc_server_init_cb_ctx(ctx);
@@ -2256,6 +2250,10 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
 
     NC_CHECK_ARG_RET(NULL, ctx, session, NC_MSG_ERROR);
 
+    NC_CHECK_SRV_INIT_RET(NC_MSG_ERROR);
+
+    *session = NULL;
+
     /* init ctx as needed */
     nc_server_init_cb_ctx(ctx);
 
@@ -2916,6 +2914,8 @@ nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acqu
     struct nc_ch_client *ch_client;
 
     NC_CHECK_ARG_RET(NULL, client_name, acquire_ctx_cb, release_ctx_cb, new_session_cb, -1);
+
+    NC_CHECK_SRV_INIT_RET(-1);
 
     /* LOCK */
     ch_client = nc_server_ch_client_lock(client_name);
