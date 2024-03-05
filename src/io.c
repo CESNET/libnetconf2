@@ -582,7 +582,7 @@ nc_read_msg_poll_io(struct nc_session *session, int io_timeout, struct ly_in **m
 
 /* does not really log, only fatal errors */
 int
-nc_session_is_connected(struct nc_session *session)
+nc_session_is_connected(const struct nc_session *session)
 {
     int ret;
     struct pollfd fds;

@@ -735,7 +735,6 @@ struct nc_ntf_thread_arg {
 struct nc_pam_thread_arg {
     ssh_message msg;                /**< libssh message */
     struct nc_session *session;     /**< NETCONF session */
-    uint16_t auth_timeout;          /**< Authentication timeout. */
 };
 
 /**
@@ -1116,6 +1115,6 @@ NC_MSG_TYPE nc_write_msg_io(struct nc_session *session, int io_timeout, int type
  * @param[in] session Session to check.
  * @return 1 if connected, 0 if not.
  */
-int nc_session_is_connected(struct nc_session *session);
+int nc_session_is_connected(const struct nc_session *session);
 
 #endif /* NC_SESSION_PRIVATE_H_ */

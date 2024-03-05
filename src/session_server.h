@@ -483,15 +483,46 @@ NC_MSG_TYPE nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_sessio
 int nc_server_ssh_set_authkey_path_format(const char *path);
 
 /**
- * @brief Set the callback for SSH interactive authentication. If not set, local PAM-based authentication is used.
+ * @brief Keyboard interactive authentication callback.
  *
- * @param[in] interactive_auth_clb Callback that should authenticate the user.
- * Zero return indicates success, non-zero an error.
+ * The callback has to handle sending interactive challenges and receiving responses by itself.
+ * An example callback may fit the following description:
+ * Prepare all prompts for the user and send them via `ssh_message_auth_interactive_request()`.
+ * Get the answers either by calling `ssh_message_get()` or `nc_server_ssh_kbdint_get_nanswers()`.
+ * Return value based on your authentication logic and user answers retrieved by
+ * calling `ssh_userauth_kbdint_getanswer()`.
+ *
+ * @param[in] session NETCONF session.
+ * @param[in] ssh_sess libssh session.
+ * @param[in] msg SSH message that contains the interactive request and which expects a reply with prompts.
+ * @param[in] user_data Arbitrary user data.
+ * @return 0 for successful authentication, non-zero to deny the user.
+ */
+typedef int (*nc_server_ssh_interactive_auth_clb)(const struct nc_session *session,
+        ssh_session ssh_sess, ssh_message msg, void *user_data);
+
+/**
+ * @brief Set the callback for SSH interactive authentication.
+ *
+ * @param[in] auth_clb Keyboard interactive authentication callback. This callback is only called once per authentication.
  * @param[in] user_data Optional arbitrary user data that will be passed to @p interactive_auth_clb.
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
  */
-void nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session,
-        ssh_session ssh_sess, ssh_message msg, void *user_data), void *user_data, void (*free_user_data)(void *user_data));
+void nc_server_ssh_set_interactive_auth_clb(nc_server_ssh_interactive_auth_clb auth_clb, void *user_data, void (*free_user_data)(void *user_data));
+
+/**
+ * @brief Get the number of answers to Keyboard interactive authentication prompts.
+ *
+ * The actual answers can later be retrieved by calling `ssh_userauth_kbdint_getanswer()` on
+ * the @p libssh_session.
+ *
+ * @param[in] session NETCONF session.
+ * @param[in] libssh_session libssh session.
+ *
+ * @return Non-negative number of answers on success, -1 on configurable authentication timeout,
+ * disconnect or other error.
+ */
+int nc_server_ssh_kbdint_get_nanswers(const struct nc_session *session, ssh_session libssh_session);
 
 /**
  * @brief Set the name of the PAM configuration file.

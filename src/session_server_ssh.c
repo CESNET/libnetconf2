@@ -461,13 +461,15 @@ nc_sshcb_auth_password(struct nc_session *session, struct nc_auth_client *auth_c
     return auth_ret;
 }
 
-/* get answers to kbdint prompts on the given libssh session and return the number of them, -1 on timeout/dc */
-static int
-nc_server_ssh_kbdint_get_nanswers(struct nc_session *session, ssh_session libssh_session, uint16_t auth_timeout)
+API int
+nc_server_ssh_kbdint_get_nanswers(const struct nc_session *session, ssh_session libssh_session)
 {
     int ret = 0;
     struct timespec ts_timeout = {0};
     ssh_message reply = NULL;
+    uint16_t auth_timeout = *((uint16_t *)session->data);
+
+    NC_CHECK_ARG_RET(NULL, session, libssh_session, -1);
 
     if (auth_timeout) {
         nc_timeouttime_get(&ts_timeout, auth_timeout * 1000);
@@ -523,10 +525,8 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
     ssh_message reply = NULL;
     struct nc_pam_thread_arg *clb_data = appdata_ptr;
     ssh_session libssh_session;
-    uint16_t auth_timeout;
 
     libssh_session = clb_data->session->ti.libssh.session;
-    auth_timeout = clb_data->auth_timeout;
 
     /* PAM_MAX_NUM_MSG == 32 by default */
     if ((n_messages <= 0) || (n_messages >= PAM_MAX_NUM_MSG)) {
@@ -598,7 +598,7 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
         goto cleanup;
     }
 
-    n_answers = nc_server_ssh_kbdint_get_nanswers(clb_data->session, libssh_session, auth_timeout);
+    n_answers = nc_server_ssh_kbdint_get_nanswers(clb_data->session, libssh_session);
     if (n_answers < 0) {
         /* timeout or dc */
         r = PAM_CONV_ERR;
@@ -642,7 +642,7 @@ cleanup:
  * @return PAM error otherwise.
  */
 static int
-nc_pam_auth(struct nc_session *session, struct nc_auth_client *client, uint16_t auth_timeout, ssh_message ssh_msg)
+nc_pam_auth(struct nc_session *session, struct nc_auth_client *client, ssh_message ssh_msg)
 {
     pam_handle_t *pam_h = NULL;
     int ret;
@@ -652,7 +652,6 @@ nc_pam_auth(struct nc_session *session, struct nc_auth_client *client, uint16_t 
     /* structure holding callback's data */
     clb_data.msg = ssh_msg;
     clb_data.session = session;
-    clb_data.auth_timeout = auth_timeout;
 
     /* PAM conversation structure holding the callback and it's data */
     conv.conv = nc_pam_conv_clb;
@@ -835,13 +834,12 @@ error:
  *
  * @param[in] session Session to authenticate on.
  * @param[in] client Client to authenticate.
- * @param[in] auth_timeout Authentication timeout.
  * @param[in] msg SSH message that originally requested kbdint authentication.
  *
  * @return 0 on success, non-zero otherwise.
  */
 static int
-nc_server_ssh_system_auth(struct nc_session *session, struct nc_auth_client *client, uint16_t auth_timeout, ssh_message msg)
+nc_server_ssh_system_auth(struct nc_session *session, struct nc_auth_client *client, ssh_message msg)
 {
     int ret = 0, n_answers;
     const char *name = "Keyboard-Interactive Authentication";
@@ -868,7 +866,7 @@ nc_server_ssh_system_auth(struct nc_session *session, struct nc_auth_client *cli
     }
 
     /* get the reply */
-    n_answers = nc_server_ssh_kbdint_get_nanswers(session, session->ti.libssh.session, auth_timeout);
+    n_answers = nc_server_ssh_kbdint_get_nanswers(session, session->ti.libssh.session);
     if (n_answers < 0) {
         /* timeout or dc */
         ret = 1;
@@ -895,7 +893,7 @@ cleanup:
 #endif
 
 static int
-nc_sshcb_auth_kbdint(struct nc_session *session, struct nc_auth_client *client, uint16_t auth_timeout, ssh_message msg)
+nc_sshcb_auth_kbdint(struct nc_session *session, struct nc_auth_client *client, ssh_message msg)
 {
     int auth_ret = 1;
 
@@ -904,16 +902,15 @@ nc_sshcb_auth_kbdint(struct nc_session *session, struct nc_auth_client *client, 
     } else {
 #ifdef HAVE_LIBPAM
         /* authenticate using PAM */
-        if (!nc_pam_auth(session, client, auth_timeout, msg)) {
+        if (!nc_pam_auth(session, client, msg)) {
             auth_ret = 0;
         }
 #elif defined (HAVE_SHADOW)
         /* authenticate using locally configured users */
-        if (!nc_server_ssh_system_auth(session, client, auth_timeout, msg)) {
+        if (!nc_server_ssh_system_auth(session, client, msg)) {
             auth_ret = 0;
         }
 #else
-        (void) auth_timeout;
         ERR(NULL, "Keyboard-interactive method not supported.");
 #endif
     }
@@ -1506,7 +1503,7 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
         } else if (subtype == SSH_AUTH_METHOD_PUBLICKEY) {
             ret = nc_sshcb_auth_pubkey(session, auth_client, msg);
         } else if (subtype == SSH_AUTH_METHOD_INTERACTIVE) {
-            ret = nc_sshcb_auth_kbdint(session, auth_client, opts->auth_timeout, msg);
+            ret = nc_sshcb_auth_kbdint(session, auth_client, msg);
         }
 
         if (!ret) {
@@ -1780,8 +1777,11 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
         goto cleanup;
     }
 
-    /* authenticate */
-    if ((rc = nc_accept_ssh_session_auth(session, opts)) != 1) {
+    /* authenticate, store auth_timeout in session so we can retrieve it in kb interactive API */
+    session->data = &opts->auth_timeout;
+    rc = nc_accept_ssh_session_auth(session, opts);
+    session->data = NULL;
+    if (rc != 1) {
         goto cleanup;
     }
 
