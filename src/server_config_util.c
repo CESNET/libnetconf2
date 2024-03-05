@@ -1141,7 +1141,6 @@ nc_server_config_add_keystore_asym_key(const struct ly_ctx *ctx, NC_TRANSPORT_IM
         goto cleanup;
     }
     if (ret) {
-        ERR(NULL, "Getting keys from file(s) failed.");
         goto cleanup;
     }
 

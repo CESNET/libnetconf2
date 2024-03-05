@@ -47,7 +47,6 @@ _nc_server_config_add_ssh_hostkey(const struct ly_ctx *ctx, const char *tree_pat
     ret = nc_server_config_util_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_SSH, &privkey,
             &privkey_type, &pubkey);
     if (ret) {
-        ERR(NULL, "Getting keys from file(s) failed.");
         goto cleanup;
     }
 
@@ -105,7 +104,6 @@ nc_server_config_add_ssh_hostkey(const struct ly_ctx *ctx, const char *endpt_nam
 
     ret = _nc_server_config_add_ssh_hostkey(ctx, path, privkey_path, pubkey_path, config);
     if (ret) {
-        ERR(NULL, "Creating new hostkey YANG data nodes failed.");
         goto cleanup;
     }
 
@@ -130,7 +128,6 @@ nc_server_config_add_ch_ssh_hostkey(const struct ly_ctx *ctx, const char *client
 
     ret = _nc_server_config_add_ssh_hostkey(ctx, path, privkey_path, pubkey_path, config);
     if (ret) {
-        ERR(NULL, "Creating new Call-Home hostkey YANG data nodes failed.");
         goto cleanup;
     }
 
@@ -292,7 +289,6 @@ nc_server_config_add_ssh_user_pubkey(const struct ly_ctx *ctx, const char *endpt
 
     ret = _nc_server_config_add_ssh_user_pubkey(ctx, path, pubkey_path, config);
     if (ret) {
-        ERR(NULL, "Creating new SSH user's public key failed.");
         goto cleanup;
     }
 
@@ -334,7 +330,6 @@ nc_server_config_add_ch_ssh_user_pubkey(const struct ly_ctx *ctx, const char *cl
 
     ret = _nc_server_config_add_ssh_user_pubkey(ctx, path, pubkey_path, config);
     if (ret) {
-        ERR(NULL, "Creating new CH SSH user's public key failed.");
         goto cleanup;
     }
 
@@ -538,7 +533,6 @@ nc_server_config_add_ssh_user_password(const struct ly_ctx *ctx, const char *end
 
     ret = _nc_server_config_add_ssh_user_password(ctx, path, password, config);
     if (ret) {
-        ERR(NULL, "Creating new SSH user's password failed.");
         goto cleanup;
     }
 
@@ -563,7 +557,6 @@ nc_server_config_add_ch_ssh_user_password(const struct ly_ctx *ctx, const char *
 
     ret = _nc_server_config_add_ssh_user_password(ctx, path, password, config);
     if (ret) {
-        ERR(NULL, "Creating new CH SSH user's password failed.");
         goto cleanup;
     }
 
