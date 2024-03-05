@@ -47,18 +47,18 @@ server_thread(void *arg)
     assert_non_null(ps);
 
     while (del_session_count < 2) {
-        msgtype = nc_accept(0, ctx, &session);
+        msgtype = nc_accept(0, ctx, &new_session);
 
         if (msgtype == NC_MSG_HELLO) {
-            ret = nc_ps_add_session(ps, session);
+            ret = nc_ps_add_session(ps, new_session);
             assert_int_equal(ret, 0);
         }
 
-        ret = nc_ps_poll(ps, 0, &new_session);
+        ret = nc_ps_poll(ps, 0, &session);
 
         if (ret & NC_PSPOLL_SESSION_TERM) {
-            nc_ps_del_session(ps, new_session);
-            nc_session_free(new_session, NULL);
+            nc_ps_del_session(ps, session);
+            nc_session_free(session, NULL);
             del_session_count++;
         } else if (ret & NC_PSPOLL_SSH_CHANNEL) {
             msgtype = nc_session_accept_ssh_channel(session, &new_session);
