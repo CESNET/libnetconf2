@@ -44,7 +44,8 @@ _nc_server_config_add_ssh_hostkey(const struct ly_ctx *ctx, const char *tree_pat
     NC_CHECK_ARG_RET(NULL, ctx, tree_path, privkey_path, config, 1);
 
     /* get the keys as a string from the given files */
-    ret = nc_server_config_util_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_SSH, &privkey, &privkey_type, &pubkey);
+    ret = nc_server_config_util_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_SSH, &privkey,
+            &privkey_type, &pubkey);
     if (ret) {
         ERR(NULL, "Getting keys from file(s) failed.");
         goto cleanup;

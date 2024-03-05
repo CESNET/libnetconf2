@@ -1130,9 +1130,11 @@ nc_server_config_add_keystore_asym_key(const struct ly_ctx *ctx, NC_TRANSPORT_IM
 
     /* get the keys as a string from the given files */
     if (ti == NC_TI_LIBSSH) {
-        ret = nc_server_config_util_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_SSH, &privkey, &privkey_type, &pubkey);
+        ret = nc_server_config_util_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_SSH, &privkey,
+                &privkey_type, &pubkey);
     } else if (ti == NC_TI_OPENSSL) {
-        ret = nc_server_config_util_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_X509, &privkey, &privkey_type, &pubkey);
+        ret = nc_server_config_util_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_X509, &privkey,
+                &privkey_type, &pubkey);
     } else {
         ERR(NULL, "Only SSH and TLS transports can be used to create an asymmetric key pair in the keystore.");
         ret = 1;
