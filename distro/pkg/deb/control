@@ -6,7 +6,7 @@ Priority: optional
 Standards-Version: 4.5.0
 Build-Depends: cmake,
                debhelper (>= 10),
-               libyang2-dev,
+               libyang-dev,
                libssl-dev (>= 3.0.0),
                libssh-dev (>= 0.9.5),
                libpam0g-dev,
@@ -15,7 +15,7 @@ Build-Depends: cmake,
 Vcs-Browser: https://github.com/CESNET/libnetconf2/tree/master
 Vcs-Git: https://github.com/CESNET/libnetconf2.git
 
-Package: libnetconf2
+Package: libnetconf4
 Depends: ${misc:Depends},
          ${shlibs:Depends}
 Architecture: any
@@ -29,8 +29,8 @@ Description: library implementing NETCONF protocol - runtime
  It is implemented in C.
 
 Package: libnetconf2-dev
-Depends: libyang2-dev,
-         libnetconf2 (= ${binary:Version}),
+Depends: libyang-dev,
+         libnetconf4 (= ${binary:Version}),
          ${misc:Depends}
 Section: libdevel
 Architecture: any
