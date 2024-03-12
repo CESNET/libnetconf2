@@ -1326,7 +1326,7 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     SSL_CTX *tls_ctx;
     int ret;
     struct timespec ts_timeout;
-    struct nc_endpt *referenced_endpt;
+    struct nc_endpt *referenced_endpt = NULL;
 
     /* SSL_CTX */
     tls_ctx = SSL_CTX_new(TLS_server_method());
