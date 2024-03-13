@@ -787,13 +787,15 @@ nc_server_init_cb_ctx(const struct ly_ctx *ctx)
 API int
 nc_server_init(void)
 {
-    pthread_rwlockattr_t attr, *attr_p = NULL;
+    pthread_rwlockattr_t *attr_p = NULL;
     int r;
 
     ATOMIC_STORE_RELAXED(server_opts.new_session_id, 1);
     ATOMIC_STORE_RELAXED(server_opts.new_client_id, 1);
 
 #ifdef HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP
+    pthread_rwlockattr_t attr;
+
     if ((r = pthread_rwlockattr_init(&attr))) {
         ERR(NULL, "%s: failed init attribute (%s).", __func__, strerror(r));
         goto error;
@@ -2023,6 +2025,8 @@ cleanup:
     return ret;
 }
 
+#if defined (SO_PEERCRED) || defined (HAVE_GETPEEREID)
+
 /**
  * @brief Get UID of the owner of a socket.
  *
@@ -2055,6 +2059,8 @@ nc_get_uid(int sock, uid_t *uid)
     }
     return 0;
 }
+
+#endif
 
 static int
 nc_accept_unix(struct nc_session *session, int sock)
@@ -2093,6 +2099,9 @@ nc_accept_unix(struct nc_session *session, int sock)
 
     return 1;
 #else
+    (void)session;
+    (void)sock;
+
     return -1;
 #endif
 }
