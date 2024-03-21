@@ -111,13 +111,13 @@ nc_privkey_format_to_str(NC_PRIVKEY_FORMAT format)
 {
     switch (format) {
     case NC_PRIVKEY_FORMAT_RSA:
-        return "RSA";
+        return " RSA ";
     case NC_PRIVKEY_FORMAT_EC:
-        return "EC";
+        return " EC ";
     case NC_PRIVKEY_FORMAT_X509:
-        return NULL;
+        return " ";
     case NC_PRIVKEY_FORMAT_OPENSSH:
-        return "OPENSSH";
+        return " OPENSSH ";
     default:
         return NULL;
     }

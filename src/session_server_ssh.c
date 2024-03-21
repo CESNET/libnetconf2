@@ -75,33 +75,33 @@ base64der_privkey_to_tmp_file(const char *in, const char *privkey_format)
     }
 
     /* write header */
-    written = fwrite("-----BEGIN ", 1, 11, file);
+    written = fwrite("-----BEGIN", 1, 10, file);
     if (privkey_format) {
         written += fwrite(privkey_format, 1, strlen(privkey_format), file);
-        written += fwrite(" PRIVATE KEY-----\n", 1, 18, file);
-    } else {
         written += fwrite("PRIVATE KEY-----\n", 1, 17, file);
+    } else {
+        written += fwrite(" PRIVATE KEY-----\n", 1, 18, file);
     }
 
     /* write data */
     written += fwrite(in, 1, strlen(in), file);
 
     /* write footer */
-    written += fwrite("\n-----END ", 1, 10, file);
+    written += fwrite("\n-----END", 1, 9, file);
     if (privkey_format) {
         written += fwrite(privkey_format, 1, strlen(privkey_format), file);
-        written += fwrite(" PRIVATE KEY-----", 1, 17, file);
-    } else {
         written += fwrite("PRIVATE KEY-----", 1, 16, file);
+    } else {
+        written += fwrite(" PRIVATE KEY-----", 1, 17, file);
     }
 
     fclose(file);
 
     /* checksum */
     if (privkey_format) {
-        len = 11 + strlen(privkey_format) + 18 + strlen(in) + 10 + strlen(privkey_format) + 17;
+        len = 10 + strlen(privkey_format) + 17 + strlen(in) + 9 + strlen(privkey_format) + 16;
     } else {
-        len = 11 + 17 + strlen(in) + 10 + 16;
+        len = 10 + 18 + strlen(in) + 9 + 17;
     }
 
     if ((unsigned)written != len) {

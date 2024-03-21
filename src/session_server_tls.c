@@ -137,8 +137,12 @@ base64der_to_privatekey(const char *in, const char *key_str)
         return NULL;
     }
 
-    if (asprintf(&buf, "%s%s%s%s%s%s%s", "-----BEGIN ", key_str, " PRIVATE KEY-----\n", in, "\n-----END ",
-            key_str, " PRIVATE KEY-----") == -1) {
+    if (!key_str) {
+        /* avoid writing (null) for possibly unknown key formats */
+        key_str = "";
+    }
+    if (asprintf(&buf, "%s%s%s%s%s%s%s", "-----BEGIN", key_str, "PRIVATE KEY-----\n", in, "\n-----END",
+            key_str, "PRIVATE KEY-----") == -1) {
         return NULL;
     }
     bio = BIO_new_mem_buf(buf, strlen(buf));
