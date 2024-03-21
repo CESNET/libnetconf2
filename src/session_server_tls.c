@@ -883,6 +883,11 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, struct nc_server_tls_opts *opts
             return -1;
         }
     }
+    if (!cert_data || !privkey_data) {
+        ERR(NULL, "Server certificate not configured.");
+        ret = -1;
+        goto cleanup;
+    }
 
     /* load the cert */
     cert = base64der_to_cert(cert_data);
