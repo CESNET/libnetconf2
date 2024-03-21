@@ -449,7 +449,11 @@ nc_sshcb_auth_password(struct nc_session *session, struct nc_auth_client *auth_c
 {
     int auth_ret = 1;
 
-    auth_ret = auth_password_compare_pwd(auth_client->password, ssh_message_auth_password(msg));
+    if (!auth_client->password) {
+        VRB(session, "User \"%s\" does not have password method configured, but a request was received.", auth_client->username);
+    } else {
+        auth_ret = auth_password_compare_pwd(auth_client->password, ssh_message_auth_password(msg));
+    }
 
     if (auth_ret) {
         ++session->opts.server.ssh_auth_attempts;
@@ -897,7 +901,9 @@ nc_sshcb_auth_kbdint(struct nc_session *session, struct nc_auth_client *client, 
 {
     int auth_ret = 1;
 
-    if (server_opts.interactive_auth_clb) {
+    if (!client->kb_int_enabled) {
+        VRB(session, "User \"%s\" does not have Keyboard-interactive method configured, but a request was received.", client->username);
+    } else if (server_opts.interactive_auth_clb) {
         auth_ret = server_opts.interactive_auth_clb(session, session->ti.libssh.session, msg, server_opts.interactive_auth_data);
     } else {
 #ifdef HAVE_LIBPAM
@@ -1504,6 +1510,10 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
             ret = nc_sshcb_auth_pubkey(session, auth_client, msg);
         } else if (subtype == SSH_AUTH_METHOD_INTERACTIVE) {
             ret = nc_sshcb_auth_kbdint(session, auth_client, msg);
+        } else {
+            VRB(session, "Authentication method \"%s\" not supported.", str_subtype);
+            ssh_message_reply_default(msg);
+            return 0;
         }
 
         if (!ret) {
