@@ -2112,6 +2112,7 @@ recv_reply(struct nc_session *session, int timeout, struct lyd_node *op, uint64_
     LY_ERR lyrc;
     struct ly_in *msg = NULL;
     NC_MSG_TYPE ret = NC_MSG_ERROR;
+    uint32_t temp_lo = LY_LOSTORE, *prev_lo;
 
     assert(op && (op->schema->nodetype & (LYS_RPC | LYS_ACTION)));
 
@@ -2124,11 +2125,18 @@ recv_reply(struct nc_session *session, int timeout, struct lyd_node *op, uint64_
     }
 
     /* parse */
+    prev_lo = ly_temp_log_options(&temp_lo);
     lyrc = lyd_parse_op(NULL, op, msg, LYD_XML, LYD_TYPE_REPLY_NETCONF, envp, NULL);
-    if (!lyrc) {
+    ly_temp_log_options(prev_lo);
+
+    if (*envp) {
+        /* if the envelopes were parsed, check the message-id, even on error */
         ret = recv_reply_check_msgid(session, *envp, msgid);
         goto cleanup;
-    } else {
+    }
+
+    if (lyrc) {
+        /* parsing error */
         ERR(session, "Received an invalid message (%s).", ly_err_last(LYD_CTX(op))->msg);
         lyd_free_tree(*envp);
         *envp = NULL;
