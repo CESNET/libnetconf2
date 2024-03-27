@@ -198,12 +198,11 @@ help_print()
             "\n"
             "    Available options:\n"
             "    -h, --help\t     \tPrint usage help.\n"
-            "    -u, --unix\t<path>\tCreate a UNIX socket at the place specified by <path>.\n"
-            "    -s, --ssh\t<path>\tCreate a SSH server with the host SSH key located at <path>.\n\n");
+            "    -u, --unix\t<path>\tCreate a UNIX socket endpoint at the place specified by <path>.\n\n");
 }
 
 static int
-init(struct ly_ctx **context, struct nc_pollsession **ps)
+init(const char *unix_socket_path, struct ly_ctx **context, struct nc_pollsession **ps)
 {
     int rc = 0;
     struct lyd_node *config = NULL;
@@ -237,6 +236,14 @@ init(struct ly_ctx **context, struct nc_pollsession **ps)
         ERR_MSG_CLEANUP("Error occurred while initializing the server.\n");
     }
 
+    /* create unix socket endpoint if path was set */
+    if (unix_socket_path) {
+        rc = nc_server_add_endpt_unix_socket_listen("unix-socket-endpt", unix_socket_path, -1, -1, -1);
+        if (rc) {
+            ERR_MSG_CLEANUP("Creating UNIX socket endpoint failed.\n");
+        }
+    }
+
     /* create a new poll session structure, which is used for polling RPCs sent by clients */
     *ps = nc_ps_new();
     if (!*ps) {
@@ -261,16 +268,18 @@ main(int argc, char **argv)
     struct ly_ctx *context = NULL;
     struct nc_session *session, *new_session;
     struct nc_pollsession *ps = NULL;
+    const char *unix_socket_path = NULL;
 
     struct option options[] = {
         {"help",    no_argument,        NULL, 'h'},
         {"debug",   no_argument,        NULL, 'd'},
+        {"unix",    required_argument,  NULL, 'u'},
         {NULL,      0,                  NULL,  0}
     };
 
     opterr = 0;
 
-    while ((opt = getopt_long(argc, argv, "hd", options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hdu:", options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             help_print();
@@ -280,13 +289,17 @@ main(int argc, char **argv)
             nc_verbosity(NC_VERB_DEBUG);
             break;
 
+        case 'u':
+            unix_socket_path = optarg;
+            break;
+
         default:
             ERR_MSG_CLEANUP("Invalid option or missing argument\n");
         }
     }
 
     /* initialize the server */
-    r = init(&context, &ps);
+    r = init(unix_socket_path, &context, &ps);
     if (r) {
         ERR_MSG_CLEANUP("Initializing the server failed.");
     }

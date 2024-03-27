@@ -5,27 +5,28 @@ There are two examples `server` and `client` demonstrating a simple NETCONF serv
 The example server provides `ietf-yang-library` state data that are returned as a reply to `get` RPC. In case an XPath filter is used it is properly applied on these data. If some unsupported parameters are specified, the server replies with a NETCONF error.
 
 ### Server Configuration
-The server's default configuration can be found in the `config.json` file. The YANG data stored in this file define three endpoints - two for SSH and one for UNIX socket.
+The server's default configuration can be found in the `config.json` file. The YANG data stored in this file define two SSH endpoints - they differ in port and in how clients get authenticated.
 You can modify this configuration in any way you want, however, configuring the server may fail if the configuration is not valid.
 
 ## Example usage
 ### Server
 First start the server:
 ```
-$ server
+$ server -u ./example-socket
 ```
-The server will be started and configured per YANG data stored in the file `config.json`. A UNIX socket with the default address `/tmp/.ln2-unix-socket` will be created.
-In addition to that two SSH endpoints with the addresses `127.0.0.1:10000` and `127.0.0.1:10001` will be listening.
+The server will be started and configured per YANG data stored in the file `config.json`.
+Two SSH endpoints with the addresses `127.0.0.1:10000` and `127.0.0.1:10001` will start listening for new connections.
 This first endpoint has a single user that can authenticate with a password (which is set to `admin` by default).
 The second endpoint has a single user that can authenticate with a publickey (the asymmetric key pair used is stored in `admin_key` and `admin_key.pub`).
+The `-u` option specifies that a UNIX socket endpoint will be created and `./example-socket` is the path to where the socket will be listening.
 
 ### Client
 #### UNIX socket
 After the server has been run, in another terminal instance, with the default configuration:
 ```
-$ client -u /tmp/.ln2-unix-socket get "/ietf-yang-library:yang-library/module-set/module[name='ietf-netconf']"
+$ client -u ./example-socket get "/ietf-yang-library:yang-library/module-set/module[name='ietf-netconf']"
 ```
-In this case, `-u` means that a connection to an UNIX socket will be attempted and a path to the socket needs to be specified, that is `/tmp/ln2-unix-socket` by default.
+In this case, `-u` means that a connection to an UNIX socket will be attempted and a path to the socket needs to be specified.
 The `get` parameter is the name of the RPC and `/ietf-yang-library:yang-library/module-set/module[name='ietf-netconf']` is the RPC's optional XPath filter.
 
 ##### Server output
@@ -87,10 +88,10 @@ The client received a single `ietf-yang-library` module based on the used filter
 #### SSH
 After the server has been run, in another terminal instance, with the default configuration:
 ```
-$ client -p 10000 get-config candidate
+$ client -p 10000 get-config startup
 ```
 In this case, `-p 10000` is the port to connect to. By default the endpoint with this port has a single authorized client that needs to authenticate with a password.
-The parameter `get-config` is the name of the RPC and `candidate` is the source datastore for the retrieved data of the get-config RPC.
+The parameter `get-config` is the name of the RPC and `startup` is the source datastore for the retrieved data of the get-config RPC.
 
 ##### Server output
 ```
@@ -123,10 +124,11 @@ admin@127.0.0.1 password:             <-- prompts for password, type in 'admin'
   <ok/>
 </rpc-reply>
 ```
+No `startup` configuration is returned, because the example server lacks this functionality.
 The _username_ in the `example.h` header file. The _password_ is located in `config.json`.
 
 If you wish to connect to the SSH public key endpoint, you need to specify its port and the asymmetric key pair to use.
 By default the command to connect would look like so:
 ```
-$ ./examples/client -p 10001 -P /home/roman/libnetconf2/examples/admin_key.pub -i /home/roman/libnetconf2/examples/admin_key get
+$ client -p 10001 -P ~/libnetconf2/examples/admin_key.pub -i ~/libnetconf2/examples/admin_key get
 ```
