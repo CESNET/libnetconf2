@@ -1094,7 +1094,7 @@ cleanup:
 static int
 auth_pubkey_compare_key(ssh_key key, struct nc_auth_client *auth_client)
 {
-    uint16_t i, pubkey_count;
+    uint16_t i, pubkey_count = 0;
     int ret = 0;
     ssh_key new_key = NULL;
     struct nc_public_key *pubkeys = NULL;

@@ -370,7 +370,7 @@ test_nc_client_ssh_adding_keypair(void **state)
 {
     (void)state;
     int ret;
-    const char *pubkey1, *pubkey2;
+    const char *pubkey1 = NULL, *pubkey2 = NULL;
 
     /* at the beginning keypair count should be 0 */
     ret = nc_client_ssh_get_keypair_count();
