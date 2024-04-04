@@ -58,8 +58,16 @@ struct nc_client_context *nc_client_context_location(void);
 #define ssh_opts nc_client_context_location()->ssh_opts
 #define ssh_ch_opts nc_client_context_location()->ssh_ch_opts
 
+/**
+ * @brief Open a terminal FILE with no echo.
+ *
+ * @param[in] path Filesystem terminal path.
+ * @param[in] oldterm Old terminal options.
+ * @return Opened terminal;
+ * @return NULL on error.
+ */
 static FILE *
-open_tty_noecho(const char *path, struct termios *oldterm)
+nc_open_tty_noecho(const char *path, struct termios *oldterm)
 {
     struct termios newterm;
     FILE *ret;
@@ -88,6 +96,14 @@ open_tty_noecho(const char *path, struct termios *oldterm)
     return ret;
 }
 
+/**
+ * @brief Open an input terminal FILE.
+ *
+ * @param[in] echo Whether to turn echo on or off.
+ * @param[in] oldterm Old terminal options.
+ * @return Opened terminal;
+ * @return NULL on error.
+ */
 static FILE *
 nc_open_in(int echo, struct termios *oldterm)
 {
@@ -96,7 +112,7 @@ nc_open_in(int echo, struct termios *oldterm)
     FILE *in;
 
     if (!echo) {
-        in = open_tty_noecho("/dev/tty", oldterm);
+        in = nc_open_tty_noecho("/dev/tty", oldterm);
     } else {
         in = fopen("/dev/tty", "r");
         if (!in) {
@@ -111,7 +127,7 @@ nc_open_in(int echo, struct termios *oldterm)
         }
 
         if (!echo) {
-            in = open_tty_noecho(buf, oldterm);
+            in = nc_open_tty_noecho(buf, oldterm);
         } else {
             in = fopen(buf, "r");
             if (!in) {
@@ -123,6 +139,12 @@ nc_open_in(int echo, struct termios *oldterm)
     return in;
 }
 
+/**
+ * @brief Open an output terminal FILE.
+ *
+ * @return Opened terminal;
+ * @return NULL on error.
+ */
 static FILE *
 nc_open_out(void)
 {
@@ -148,6 +170,14 @@ nc_open_out(void)
     return out;
 }
 
+/**
+ * @brief Close an input/output terminal FILE.
+ *
+ * @param[in] inout Terminal FILE to close.
+ * @param[in] echo Old terminal options.
+ * @return Opened terminal;
+ * @return NULL on error.
+ */
 static void
 nc_close_inout(FILE *inout, int echo, struct termios *oldterm)
 {
