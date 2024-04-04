@@ -124,7 +124,8 @@ if(ENABLE_SSH_TLS)
         src/session_server_tls.c
         src/server_config_util_tls.c
         src/server_config_ks.c
-        src/server_config_ts.c)
+        src/server_config_ts.c
+        src/session_mbedtls.c)
     set(SSH_TLS_MACRO "#ifndef NC_ENABLED_SSH_TLS\n#define NC_ENABLED_SSH_TLS\n#endif")
 endif()
 
@@ -231,10 +232,20 @@ check_include_file("shadow.h" HAVE_SHADOW)
 check_include_file("termios.h" HAVE_TERMIOS)
 
 if(ENABLE_SSH_TLS)
-    # dependencies - openssl
-    find_package(OpenSSL 3.0.0 REQUIRED)
-    target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
-    include_directories(${OPENSSL_INCLUDE_DIR})
+    find_package(LibMbedTLS 3.5.0) # TODO
+    if (LIBMBEDTLS_FOUND)
+        set(HAVE_LIBMBEDTLS TRUE)
+        target_link_libraries(netconf2 ${LIBMBEDTLS_LIBRARIES})
+        list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBMBEDTLS_LIBRARIES})
+        include_directories(${LIBMBEDTLS_INCLUDE_DIRS})
+        #target_sources(netconf2 PRIVATE src/session_mbedtls.c)
+    else()
+        # dependencies - openssl
+        find_package(OpenSSL 3.0.0 REQUIRED)
+        target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
+        include_directories(${OPENSSL_INCLUDE_DIR})
+        target_sources(netconf2 PRIVATE src/session_openssl.c)
+    endif()
 
     # dependencies - libssh
     find_package(LibSSH 0.9.5 REQUIRED)
