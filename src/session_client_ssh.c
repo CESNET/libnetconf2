@@ -84,9 +84,13 @@ nc_open_tty_noecho(const char *path, struct termios *oldterm)
     }
 
     newterm = *oldterm;
+
+    /* turn off echo */
     newterm.c_lflag &= ~ECHO;
-    newterm.c_lflag &= ~ICANON;
+
+    /* get rid of any leftover characters */
     tcflush(fileno(ret), TCIFLUSH);
+
     if (tcsetattr(fileno(ret), TCSANOW, &newterm)) {
         ERR(NULL, "Unable to change terminal \"%s\" settings for hiding password (%s).", path, strerror(errno));
         fclose(ret);
