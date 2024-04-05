@@ -1338,3 +1338,81 @@ nc_tls_import_pubkey_file_wrap(const char *pubkey_path)
 
     return pk;
 }
+
+int
+nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *uri_count)
+{
+    int ret = 0, i, j, k, gtype;
+    CURL *handle = NULL;
+    struct nc_curl_data downloaded = {0};
+
+    STACK_OF(X509_OBJECT) * objs;
+    X509_OBJECT *obj;
+    X509 *cert;
+
+    STACK_OF(DIST_POINT) * dist_points;
+    DIST_POINT *dist_point;
+    GENERAL_NAMES *general_names;
+    GENERAL_NAME *general_name;
+    ASN1_STRING *asn_string_uri;
+    const char *crl_distpoint_uri;
+    void *tmp;
+
+    NC_CHECK_ARG_RET(NULL, cert_store, uris, uri_count, 1);
+
+    *uris = NULL;
+    *uri_count = 0;
+
+    /* treat all entries in the cert_store as X509_OBJECTs */
+    objs = X509_STORE_get0_objects(cert_store);
+    if (!objs) {
+        ERR(NULL, "Getting certificates from store failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ret = -1;
+        goto cleanup;
+    }
+
+    /* iterate over all the CAs */
+    for (i = 0; i < sk_X509_OBJECT_num(objs); i++) {
+        obj = sk_X509_OBJECT_value(objs, i);
+        cert = X509_OBJECT_get0_X509(obj);
+        if (!cert) {
+            /* the object on this index was not a certificate */
+            continue;
+        }
+
+        /* get all the distribution points for this CA */
+        dist_points = X509_get_ext_d2i(cert, NID_crl_distribution_points, NULL, NULL);
+
+        /* iterate over all the dist points (there can be multiple for a single cert) */
+        for (j = 0; j < sk_DIST_POINT_num(dist_points); j++) {
+            dist_point = sk_DIST_POINT_value(dist_points, j);
+            if (!dist_point) {
+                continue;
+            }
+            general_names = dist_point->distpoint->name.fullname;
+
+            /* iterate over all the GeneralesNames in the distribution point */
+            for (k = 0; k < sk_GENERAL_NAME_num(general_names); k++) {
+                general_name = sk_GENERAL_NAME_value(general_names, k);
+                asn_string_uri = GENERAL_NAME_get0_value(general_name, &gtype);
+
+                /* check if the general name is a URI and has a valid length */
+                if ((gtype != GEN_URI) || (ASN1_STRING_length(asn_string_uri) <= 6)) {
+                    continue;
+                }
+
+                /* found an URI */
+                tmp = realloc(*uris, (*uri_count + 1) * sizeof **uris);
+                NC_CHECK_ERRMEM_GOTO(!tmp, ret = 1, cleanup);
+                *uris = tmp;
+
+                *uris[*uri_count] = strdup((const char *) ASN1_STRING_get0_data(asn_string_uri));
+                NC_CHECK_ERRMEM_GOTO(!*uris[*uri_count], ret = 1, cleanup);
+                ++(*uri_count);
+            }
+        }
+    }
+
+cleanup:
+    return ret;
+}

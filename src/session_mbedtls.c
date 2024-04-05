@@ -1565,3 +1565,194 @@ nc_tls_import_pubkey_file_wrap(const char *pubkey_path)
 
     return pk;
 }
+
+int
+nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *uri_count)
+{
+    int ret = 0;
+    mbedtls_x509_crt *cert;
+    unsigned char *p, *end_v3_ext, *end_ext, *end_ext_octet, *end_crl_dist_points;
+    size_t len;
+    mbedtls_x509_buf ext_oid = {0};
+    int is_critical = 0;
+    mbedtls_x509_sequence general_names = {0};
+    mbedtls_x509_sequence *iter = NULL;
+    mbedtls_x509_subject_alternative_name san = {0};
+    void *tmp;
+
+    NC_CHECK_ARG_RET(NULL, cert_store, uris, uri_count, 1);
+
+    *uris = NULL;
+    *uri_count = 0;
+
+    /* iterate over all the CAs */
+    cert = cert_store;
+    while (cert) {
+        if (!cert->v3_ext.len) {
+            /* no extensions, skip this cert */
+            cert = cert->next;
+            continue;
+        }
+
+        /* go over all the extensions and try to find the CRL distribution points */
+        p = cert->v3_ext.p;
+        end_v3_ext = p + cert->v3_ext.len;
+
+        /*
+         * Extensions  ::=  SEQUENCE SIZE (1..MAX) OF Extension
+         */
+        ret = mbedtls_asn1_get_tag(&p, end_v3_ext, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
+        if (ret) {
+            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+            goto cleanup;
+        }
+
+        while (p < end_v3_ext) {
+            /*
+             * Extension  ::=  SEQUENCE  {
+             *      extnID      OBJECT IDENTIFIER,
+             *      critical    BOOLEAN DEFAULT FALSE,
+             *      extnValue   OCTET STRING  }
+             */
+            ret = mbedtls_asn1_get_tag(&p, end_v3_ext, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
+            if (ret) {
+                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                goto cleanup;
+            }
+
+            end_ext = p + len;
+
+            /* parse extnID */
+            ret = mbedtls_asn1_get_tag(&p, end_ext, &ext_oid.len, MBEDTLS_ASN1_OID);
+            if (ret) {
+                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                goto cleanup;
+            }
+            ext_oid.tag = MBEDTLS_ASN1_OID;
+            ext_oid.p = p;
+
+            if (memcmp(ext_oid.p, MBEDTLS_OID_CRL_DISTRIBUTION_POINTS, ext_oid.len)) {
+                /* not the extension we are looking for */
+                p = end_ext;
+                continue;
+            }
+
+            p += ext_oid.len;
+
+            /* parse optional critical */
+            ret = mbedtls_asn1_get_bool(&p, end_ext, &is_critical);
+            if (ret && (ret != MBEDTLS_ERR_ASN1_UNEXPECTED_TAG)) {
+                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                goto cleanup;
+            }
+
+            /* parse extnValue */
+            ret = mbedtls_asn1_get_tag(&p, end_ext, &len, MBEDTLS_ASN1_OCTET_STRING);
+            if (ret) {
+                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                goto cleanup;
+            }
+
+            end_ext_octet = p + len;
+
+            /*
+             * parse extnValue, that is CRLDistributionPoints
+             *
+             * CRLDistributionPoints ::= SEQUENCE SIZE (1..MAX) OF DistributionPoint
+             */
+            ret = mbedtls_asn1_get_tag(&p, end_ext_octet, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
+            if (ret) {
+                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                goto cleanup;
+            }
+            if (p + len != end_ext_octet) {
+                /* length mismatch */
+                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                goto cleanup;
+            } else if (!len) {
+                /* empty sequence, but size is 1..max */
+                ERR(NULL, "Failed to parse CRL distribution points extension (empty sequence).");
+                goto cleanup;
+            }
+
+            end_crl_dist_points = p + len;
+
+            while (p < end_crl_dist_points) {
+                /*
+                 * DistributionPoint ::= SEQUENCE {
+                 *      distributionPoint       [0]     DistributionPointName OPTIONAL,
+                 *      reasons                 [1]     ReasonFlags OPTIONAL,
+                 *      cRLIssuer               [2]     GeneralNames OPTIONAL }
+                 */
+                ret = mbedtls_asn1_get_tag(&p, end_ext_octet, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
+                if (ret) {
+                    ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                    goto cleanup;
+                }
+                if (!len) {
+                    /* empty sequence */
+                    continue;
+                }
+
+                /* parse distributionPoint */
+                ret = mbedtls_asn1_get_tag(&p, end_ext_octet, &len, MBEDTLS_ASN1_CONTEXT_SPECIFIC | MBEDTLS_ASN1_CONSTRUCTED | 0);
+                if (!ret) {
+                    /*
+                     * DistributionPointName ::= CHOICE {
+                     *      fullName                [0]     GeneralNames,
+                     *      nameRelativeToCRLIssuer [1]     RelativeDistinguishedName }
+                     */
+                    ret = mbedtls_asn1_get_tag(&p, end_ext_octet, &len, MBEDTLS_ASN1_CONTEXT_SPECIFIC | MBEDTLS_ASN1_CONSTRUCTED | 0);
+                    if (ret) {
+                        if ((ret == MBEDTLS_ERR_ASN1_UNEXPECTED_TAG) && (*p == (MBEDTLS_ASN1_CONTEXT_SPECIFIC | MBEDTLS_ASN1_CONSTRUCTED | 1))) {
+                            /* it's nameRelativeToCRLIssuer, but we don't support it */
+                            ERR(NULL, "Failed to parse CRL distribution points extension (nameRelativeToCRLIssuer not supported).");
+                            goto cleanup;
+                        } else {
+                            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                            goto cleanup;
+                        }
+                    }
+
+                    /* parse GeneralNames, but thankfully there is an api for this */
+                    ret = mbedtls_x509_get_subject_alt_name_ext(&p, p + len, &general_names);
+                    if (ret) {
+                        ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                        goto cleanup;
+                    }
+
+                    /* iterate over all the GeneralNames */
+                    iter = &general_names;
+                    while (iter) {
+                        ret = mbedtls_x509_parse_subject_alt_name(&iter->buf, &san);
+                        if (ret && (ret != MBEDTLS_ERR_X509_FEATURE_UNAVAILABLE)) {
+                            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                            goto cleanup;
+                        }
+
+                        if (san.type == MBEDTLS_X509_SAN_UNIFORM_RESOURCE_IDENTIFIER) {
+                            /* found an URI */
+                            tmp = realloc(*uris, (*uri_count + 1) * sizeof **uris);
+                            NC_CHECK_ERRMEM_GOTO(!tmp, ret = 1, cleanup);
+                            *uris = tmp;
+
+                            *uris[*uri_count] = strndup((const char *)san.san.unstructured_name.p, san.san.unstructured_name.len);
+                            NC_CHECK_ERRMEM_GOTO(!*uris[*uri_count], ret = 1, cleanup);
+                            ++(*uri_count);
+                        }
+                        iter = iter->next;
+                    }
+
+                } else if (ret != MBEDTLS_ERR_ASN1_UNEXPECTED_TAG) {
+                    /* failed to parse it, but not because it's optional */
+                    ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                    goto cleanup;
+                }
+            }
+        }
+        cert = cert->next;
+    }
+
+cleanup:
+    return ret;
+}
