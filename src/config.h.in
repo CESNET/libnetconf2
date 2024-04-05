@@ -45,6 +45,11 @@
 #cmakedefine HAVE_LIBPAM
 
 /*
+ * Use MbedTLS as TLS back-end
+ */
+#cmakedefine HAVE_LIBMBEDTLS
+
+/*
  * Location of installed YANG modules on the system
  */
 #define NC_SERVER_SEARCH_DIR "@YANG_MODULE_DIR@"
