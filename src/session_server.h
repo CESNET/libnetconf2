@@ -24,7 +24,6 @@ extern "C" {
 #include <stdint.h>
 #include <sys/types.h>
 
-
 #include "config.h"
 #include "netconf.h"
 #include "session.h"

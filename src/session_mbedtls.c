@@ -3,11 +3,11 @@
 #include <dirent.h>
 #include <errno.h>
 #include <poll.h>
-#include <sys/stat.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <curl/curl.h>
@@ -19,20 +19,20 @@
 #include "session_p.h"
 #include "session_wrapper.h"
 
-#include <mbedtls/entropy.h>
-#include <mbedtls/ctr_drbg.h>
-#include <mbedtls/x509.h>
-#include <mbedtls/ssl.h>
-#include <mbedtls/net_sockets.h>
-#include <mbedtls/error.h>
-#include <mbedtls/debug.h>
-#include <mbedtls/bignum.h>
-#include <mbedtls/x509_crt.h>
-#include <mbedtls/x509_crl.h>
-#include <mbedtls/x509_csr.h>
-#include <mbedtls/pem.h>
-#include <mbedtls/oid.h>
 #include <mbedtls/base64.h>
+#include <mbedtls/bignum.h>
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/debug.h>
+#include <mbedtls/entropy.h>
+#include <mbedtls/error.h>
+#include <mbedtls/net_sockets.h>
+#include <mbedtls/oid.h>
+#include <mbedtls/pem.h>
+#include <mbedtls/ssl.h>
+#include <mbedtls/x509.h>
+#include <mbedtls/x509_crl.h>
+#include <mbedtls/x509_crt.h>
+#include <mbedtls/x509_csr.h>
 
 extern struct nc_server_opts server_opts;
 
@@ -474,7 +474,7 @@ nc_server_tls_dn2str(const mbedtls_x509_name *dn)
     str = malloc(len);
     NC_CHECK_ERRMEM_RET(!str, NULL);
 
-    while ((r = mbedtls_x509_dn_gets(str, len, dn)) == MBEDTLS_ERR_X509_BUFFER_TOO_SMALL)  {
+    while ((r = mbedtls_x509_dn_gets(str, len, dn)) == MBEDTLS_ERR_X509_BUFFER_TOO_SMALL) {
         len <<= 1;
         ptr = realloc(str, len);
         if (!ptr) {
@@ -555,7 +555,7 @@ nc_server_tls_get_username_from_cert_wrap(void *cert, NC_TLS_CTN_MAPTYPE map_typ
                 break;
             }
 
-                    /* iPAddress */
+            /* iPAddress */
             if (((map_type == NC_TLS_CTN_SAN_ANY) || (map_type == NC_TLS_CTN_SAN_IP_ADDRESS)) &&
                     (san.type == MBEDTLS_X509_SAN_IP_ADDRESS)) {
                 ip = &san.san.unstructured_name;
@@ -729,7 +729,7 @@ nc_server_tls_handshake_step_wrap(void *tls_session)
     rc = mbedtls_ssl_handshake(tls_session);
     if (!rc) {
         return 1;
-    } else if (rc == MBEDTLS_ERR_SSL_WANT_READ || rc == MBEDTLS_ERR_SSL_WANT_WRITE) {
+    } else if ((rc == MBEDTLS_ERR_SSL_WANT_READ) || (rc == MBEDTLS_ERR_SSL_WANT_WRITE)) {
         return 0;
     } else {
         return -1;
@@ -1082,7 +1082,7 @@ nc_client_tls_handshake_step_wrap(void *tls_session)
     rc = mbedtls_ssl_handshake(tls_session);
     if (!rc) {
         return 1;
-    } else if (rc == MBEDTLS_ERR_SSL_WANT_READ || rc == MBEDTLS_ERR_SSL_WANT_WRITE) {
+    } else if ((rc == MBEDTLS_ERR_SSL_WANT_READ) || (rc == MBEDTLS_ERR_SSL_WANT_WRITE)) {
         return 0;
     } else {
         return rc;
