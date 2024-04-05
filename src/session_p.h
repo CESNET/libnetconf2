@@ -29,6 +29,7 @@
 #include "config.h"
 #include "session_client.h"
 #include "session_server_ch.h"
+#include "session_wrapper.h"
 
 /**
  * Enumeration of diff operation types.
@@ -54,7 +55,6 @@ typedef enum {
 #ifdef NC_ENABLED_SSH_TLS
 
 #include <libssh/libssh.h>
-#include <openssl/ssl.h>
 
 /* seconds */
 #define NC_SSH_TIMEOUT 10
@@ -271,10 +271,10 @@ struct nc_server_tls_opts {
 
     struct nc_cert_grouping ca_certs;           /**< Client certificate authorities */
     struct nc_cert_grouping ee_certs;           /**< Client end-entity certificates */
+
     char *crl_url;                              /**< URI to download the CRL from */
     char *crl_path;                             /**< Path to a CRL file */
     int crl_cert_ext;                           /**< Indicates to use CA's distribution points to obtain CRLs */
-    X509_STORE *crl_store;                      /**< Stores all the CRLs */
 
     char *referenced_endpt_name;                /**< Reference to another endpoint (used for client authentication). */
 
@@ -352,15 +352,12 @@ struct nc_client_ssh_opts {
 struct nc_client_tls_opts {
     char *cert_path;
     char *key_path;
+
     char *ca_file;
     char *ca_dir;
-    int8_t tls_ctx_change;
-    SSL_CTX *tls_ctx;
 
     char *crl_file;
     char *crl_dir;
-    int8_t crl_store_change;
-    X509_STORE *crl_store;
 };
 
 #endif /* NC_ENABLED_SSH_TLS */
@@ -635,7 +632,12 @@ struct nc_session {
                                           otherwise there is a ring list of the NETCONF sessions */
         } libssh;
 
-        SSL *tls;
+        struct {
+            void *session;
+            void *config;
+            struct nc_tls_ctx ctx;
+        } tls;
+
 #endif /* NC_ENABLED_SSH_TLS */
     } ti;                          /**< transport implementation data */
     char *username;
@@ -690,7 +692,7 @@ struct nc_session {
 #           define NC_SESSION_SSH_SUBSYS_NETCONF 0x20
             uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
 
-            X509 *client_cert;                /**< TLS client certificate if used for authentication */
+            void *client_cert;                /**< TLS client certificate if used for authentication */
 #endif /* NC_ENABLED_SSH_TLS */
         } server;
     } opts;
@@ -747,15 +749,6 @@ struct nc_pam_thread_arg {
  * @return String representing the private key or NULL.
  */
 const char *nc_privkey_format_to_str(NC_PRIVKEY_FORMAT format);
-
-/**
- * @brief Decodes base64 to binary.
- *
- * @param[in] base64 Base64 string.
- * @param[out] bin Binary result, memory managed by the caller.
- * @return Length of the binary data on success, -1 on error.
- */
-int nc_base64_to_bin(const char *base64, char **bin);
 
 /**
  * @brief Checks if the given base64 belongs to a public key in the SubjectPublicKeyInfo format.
