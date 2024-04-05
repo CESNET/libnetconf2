@@ -26,13 +26,6 @@
 #include <libyang/libyang.h>
 #include <libyang/tree_data.h>
 
-#ifdef NC_ENABLED_SSH_TLS
-#include <openssl/err.h>
-#include <openssl/evp.h> // EVP_PKEY_free
-#include <openssl/x509.h> // d2i_PUBKEY
-#include <openssl/x509_vfy.h> // X509_STORE_free
-#endif
-
 #include "compat.h"
 #include "config.h"
 #include "log_p.h"
@@ -840,7 +833,6 @@ nc_server_config_del_tls_opts(struct nc_bind *bind, struct nc_server_tls_opts *o
 
     free(opts->crl_path);
     free(opts->crl_url);
-    X509_STORE_free(opts->crl_store);
 
     nc_server_config_del_ctns(opts);
     free(opts->ciphers);
