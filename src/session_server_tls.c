@@ -403,7 +403,7 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn_first, void *cert, struct nc_ctn_d
             if (!(map_type & data->matched_ctns)) {
                 data->matched_ctns |= map_type;
                 data->matched_ctn_type[data->matched_ctn_count++] = map_type;
-                if (!data->username && map_type == NC_TLS_CTN_SPECIFIED) {
+                if (!data->username && (map_type == NC_TLS_CTN_SPECIFIED)) {
                     data->username = ctn->name; // TODO make a copy?
                 }
             }
@@ -812,7 +812,7 @@ nc_server_tls_accept_check(int accept_ret, void *tls_session)
 
     /* check certificate verification result */
     verify = nc_tls_get_verify_result_wrap(tls_session);
-    if (!verify && accept_ret == 1) {
+    if (!verify && (accept_ret == 1)) {
         VRB(NULL, "Client certificate verified.");
     }
 

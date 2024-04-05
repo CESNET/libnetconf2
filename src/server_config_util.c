@@ -867,7 +867,6 @@ cleanup:
     return ret;
 }
 
-
 API int
 nc_server_config_add_address_port(const struct ly_ctx *ctx, const char *endpt_name, NC_TRANSPORT_IMPL transport,
         const char *address, uint16_t port, struct lyd_node **config)

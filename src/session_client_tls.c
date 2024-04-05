@@ -279,7 +279,7 @@ nc_client_tls_connect_check(int connect_ret, void *tls_session, const char *peer
 
     /* check certificate verification result */
     verify = nc_tls_get_verify_result_wrap(tls_session);
-    if (!verify && connect_ret == 1) {
+    if (!verify && (connect_ret == 1)) {
         VRB(NULL, "Server certificate verified (domain \"%s\").", peername);
     } else if (verify) {
         ERR(NULL, "Server certificate error (%s).", nc_tls_verify_error_string_wrap(verify));

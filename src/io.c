@@ -30,8 +30,8 @@
 
 #include <libyang/libyang.h>
 
-#include "config.h"
 #include "compat.h"
+#include "config.h"
 #include "log_p.h"
 #include "messages_p.h"
 #include "netconf.h"

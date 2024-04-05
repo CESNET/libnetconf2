@@ -637,7 +637,6 @@ struct nc_session {
             void *config;
             struct nc_tls_ctx ctx;
         } tls;
-
 #endif /* NC_ENABLED_SSH_TLS */
     } ti;                          /**< transport implementation data */
     char *username;

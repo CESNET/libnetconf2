@@ -1,4 +1,3 @@
-
 #ifndef _SESSION_WRAPPER_H_
 #define _SESSION_WRAPPER_H_
 
@@ -8,11 +7,11 @@
 
 #ifdef HAVE_LIBMBEDTLS
 
-#include <mbedtls/ssl.h>
 #include <mbedtls/ctr_drbg.h>
+#include <mbedtls/ssl.h>
 
 struct nc_tls_ctx {
-	int *sock;
+    int *sock;
     mbedtls_entropy_context *entropy;
     mbedtls_ctr_drbg_context *ctr_drbg;
     mbedtls_x509_crt *cert;
@@ -26,7 +25,7 @@ struct nc_tls_ctx {
 #include <openssl/ssh.h>
 
 struct nc_tls_ctx {
-	char dummy[0];
+    char dummy[0];
 };
 
 #endif
@@ -39,10 +38,10 @@ struct nc_tls_verify_cb_data {
     struct nc_cert_grouping *referenced_ee_certs;
     struct nc_server_tls_opts *opts;
     struct nc_ctn_data {
-    	char *username;
-    	int matched_ctns;
-    	int matched_ctn_type[6];
-    	int matched_ctn_count;
+        char *username;
+        int matched_ctns;
+        int matched_ctn_type[6];
+        int matched_ctn_count;
     } ctn_data;
 };
 
