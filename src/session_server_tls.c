@@ -24,801 +24,16 @@
 #include <unistd.h>
 
 #include <curl/curl.h>
-#include <openssl/bio.h>
-#include <openssl/err.h>
-#include <openssl/evp.h>
-#include <openssl/ssl.h>
-#include <openssl/x509.h>
-#include <openssl/x509v3.h>
 
 #include "compat.h"
 #include "config.h"
 #include "log_p.h"
 #include "session.h"
 #include "session_p.h"
+#include "session_wrapper.h"
 
 struct nc_server_tls_opts tls_ch_opts;
 extern struct nc_server_opts server_opts;
-
-static char *
-asn1time_to_str(const ASN1_TIME *t)
-{
-    char *cp;
-    BIO *bio;
-    int n;
-
-    if (!t) {
-        return NULL;
-    }
-
-    bio = BIO_new(BIO_s_mem());
-    if (!bio) {
-        return NULL;
-    }
-
-    ASN1_TIME_print(bio, t);
-    n = BIO_pending(bio);
-    cp = malloc(n + 1);
-    if (!cp) {
-        ERRMEM;
-        BIO_free(bio);
-        return NULL;
-    }
-
-    n = BIO_read(bio, cp, n);
-    if (n < 0) {
-        BIO_free(bio);
-        free(cp);
-        return NULL;
-    }
-
-    cp[n] = '\0';
-    BIO_free(bio);
-    return cp;
-}
-
-static void
-digest_to_str(const unsigned char *digest, unsigned int dig_len, char **str)
-{
-    unsigned int i;
-
-    *str = malloc(dig_len * 3);
-    if (!*str) {
-        ERRMEM;
-        return;
-    }
-    for (i = 0; i < dig_len - 1; ++i) {
-        sprintf((*str) + (i * 3), "%02x:", digest[i]);
-    }
-    sprintf((*str) + (i * 3), "%02x", digest[i]);
-}
-
-/* return NULL - SSL error can be retrieved */
-static X509 *
-base64der_to_cert(const char *in)
-{
-    X509 *out;
-    char *buf;
-    BIO *bio;
-
-    if (in == NULL) {
-        return NULL;
-    }
-
-    if (asprintf(&buf, "%s%s%s", "-----BEGIN CERTIFICATE-----\n", in, "\n-----END CERTIFICATE-----") == -1) {
-        return NULL;
-    }
-    bio = BIO_new_mem_buf(buf, strlen(buf));
-    if (!bio) {
-        free(buf);
-        return NULL;
-    }
-
-    out = PEM_read_bio_X509(bio, NULL, NULL, NULL);
-    if (!out) {
-        free(buf);
-        BIO_free(bio);
-        return NULL;
-    }
-
-    free(buf);
-    BIO_free(bio);
-    return out;
-}
-
-static EVP_PKEY *
-base64der_to_privatekey(const char *in, const char *key_str)
-{
-    EVP_PKEY *out;
-    char *buf;
-    BIO *bio;
-
-    if (in == NULL) {
-        return NULL;
-    }
-
-    if (!key_str) {
-        /* avoid writing (null) for possibly unknown key formats */
-        key_str = "";
-    }
-    if (asprintf(&buf, "%s%s%s%s%s%s%s", "-----BEGIN", key_str, "PRIVATE KEY-----\n", in, "\n-----END",
-            key_str, "PRIVATE KEY-----") == -1) {
-        return NULL;
-    }
-    bio = BIO_new_mem_buf(buf, strlen(buf));
-    if (!bio) {
-        free(buf);
-        return NULL;
-    }
-
-    out = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
-    if (!out) {
-        free(buf);
-        BIO_free(bio);
-        return NULL;
-    }
-
-    free(buf);
-    BIO_free(bio);
-    return out;
-}
-
-static int
-cert_pubkey_match(X509 *cert1, X509 *cert2)
-{
-    ASN1_BIT_STRING *bitstr1, *bitstr2;
-
-    bitstr1 = X509_get0_pubkey_bitstr(cert1);
-    bitstr2 = X509_get0_pubkey_bitstr(cert2);
-
-    if (!bitstr1 || !bitstr2 || (bitstr1->length != bitstr2->length) ||
-            memcmp(bitstr1->data, bitstr2->data, bitstr1->length)) {
-        return 0;
-    }
-
-    return 1;
-}
-
-static int
-nc_tls_ctn_get_username_from_cert(X509 *client_cert, NC_TLS_CTN_MAPTYPE map_type, char **username)
-{
-    STACK_OF(GENERAL_NAME) * san_names;
-    GENERAL_NAME *san_name;
-    ASN1_OCTET_STRING *ip;
-    int i, san_count;
-    char *subject, *common_name;
-
-    *username = NULL;
-
-    if (map_type == NC_TLS_CTN_COMMON_NAME) {
-        subject = X509_NAME_oneline(X509_get_subject_name(client_cert), NULL, 0);
-        common_name = strstr(subject, "CN=");
-        if (!common_name) {
-            WRN(NULL, "Certificate does not include the commonName field.");
-            free(subject);
-            return 1;
-        }
-        common_name += 3;
-        if (strchr(common_name, '/')) {
-            *strchr(common_name, '/') = '\0';
-        }
-        *username = strdup(common_name);
-        NC_CHECK_ERRMEM_RET(!*username, 1);
-        free(subject);
-    } else {
-        /* retrieve subjectAltName's rfc822Name (email), dNSName and iPAddress values */
-        san_names = X509_get_ext_d2i(client_cert, NID_subject_alt_name, NULL, NULL);
-        if (!san_names) {
-            WRN(NULL, "Certificate has no SANs or failed to retrieve them.");
-            return 1;
-        }
-
-        san_count = sk_GENERAL_NAME_num(san_names);
-        for (i = 0; i < san_count; ++i) {
-            san_name = sk_GENERAL_NAME_value(san_names, i);
-
-            /* rfc822Name (email) */
-            if (((map_type == NC_TLS_CTN_SAN_ANY) || (map_type == NC_TLS_CTN_SAN_RFC822_NAME)) &&
-                    (san_name->type == GEN_EMAIL)) {
-                *username = strdup((char *)ASN1_STRING_get0_data(san_name->d.rfc822Name));
-                NC_CHECK_ERRMEM_RET(!*username, 1);
-                break;
-            }
-
-            /* dNSName */
-            if (((map_type == NC_TLS_CTN_SAN_ANY) || (map_type == NC_TLS_CTN_SAN_DNS_NAME)) &&
-                    (san_name->type == GEN_DNS)) {
-                *username = strdup((char *)ASN1_STRING_get0_data(san_name->d.dNSName));
-                NC_CHECK_ERRMEM_RET(!*username, 1);
-                break;
-            }
-
-            /* iPAddress */
-            if (((map_type == NC_TLS_CTN_SAN_ANY) || (map_type == NC_TLS_CTN_SAN_IP_ADDRESS)) &&
-                    (san_name->type == GEN_IPADD)) {
-                ip = san_name->d.iPAddress;
-                if (ip->length == 4) {
-                    if (asprintf(username, "%d.%d.%d.%d", ip->data[0], ip->data[1], ip->data[2], ip->data[3]) == -1) {
-                        ERRMEM;
-                        sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
-                        return -1;
-                    }
-                    break;
-                } else if (ip->length == 16) {
-                    if (asprintf(username, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
-                            ip->data[0], ip->data[1], ip->data[2], ip->data[3], ip->data[4], ip->data[5],
-                            ip->data[6], ip->data[7], ip->data[8], ip->data[9], ip->data[10], ip->data[11],
-                            ip->data[12], ip->data[13], ip->data[14], ip->data[15]) == -1) {
-                        ERRMEM;
-                        sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
-                        return -1;
-                    }
-                    break;
-                } else {
-                    WRN(NULL, "SAN IP address in an unknown format (length is %d).", ip->length);
-                }
-            }
-        }
-        sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
-
-        if (i == san_count) {
-            switch (map_type) {
-            case NC_TLS_CTN_SAN_RFC822_NAME:
-                WRN(NULL, "Certificate does not include the SAN rfc822Name field.");
-                break;
-            case NC_TLS_CTN_SAN_DNS_NAME:
-                WRN(NULL, "Certificate does not include the SAN dNSName field.");
-                break;
-            case NC_TLS_CTN_SAN_IP_ADDRESS:
-                WRN(NULL, "Certificate does not include the SAN iPAddress field.");
-                break;
-            case NC_TLS_CTN_SAN_ANY:
-                WRN(NULL, "Certificate does not include any relevant SAN fields.");
-                break;
-            default:
-                break;
-            }
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
-/* return: 0 - OK, 1 - no match, -1 - error */
-static int
-nc_tls_cert_to_name(struct nc_session *session, struct nc_ctn *ctn_first, X509 *cert)
-{
-    char *digest_md5 = NULL, *digest_sha1 = NULL, *digest_sha224 = NULL;
-    char *digest_sha256 = NULL, *digest_sha384 = NULL, *digest_sha512 = NULL;
-    unsigned char *buf;
-    unsigned int buf_len = 64;
-    int ret = 0;
-    struct nc_ctn *ctn;
-    NC_TLS_CTN_MAPTYPE map_type;
-    char *username = NULL;
-
-    buf = malloc(buf_len);
-    NC_CHECK_ERRMEM_RET(!buf, -1);
-
-    if (!session || !cert) {
-        free(buf);
-        return -1;
-    }
-
-    for (ctn = ctn_first; ctn; ctn = ctn->next) {
-        /* reset map_type */
-        map_type = NC_TLS_CTN_UNKNOWN;
-
-        /* first make sure the entry is valid */
-        if (!ctn->map_type || ((ctn->map_type == NC_TLS_CTN_SPECIFIED) && !ctn->name)) {
-            VRB(session, "Cert verify CTN: entry with id %u not valid, skipping.", ctn->id);
-            continue;
-        }
-
-        /* if ctn has no fingerprint, it will match any certificate */
-        if (!ctn->fingerprint) {
-            map_type = ctn->map_type;
-
-            /* MD5 */
-        } else if (!strncmp(ctn->fingerprint, "01", 2)) {
-            if (!digest_md5) {
-                if (X509_digest(cert, EVP_md5(), buf, &buf_len) != 1) {
-                    ERR(session, "Calculating MD5 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
-                    ret = -1;
-                    goto cleanup;
-                }
-                digest_to_str(buf, buf_len, &digest_md5);
-            }
-
-            if (!strcasecmp(ctn->fingerprint + 3, digest_md5)) {
-                /* we got ourselves a potential winner! */
-                VRB(session, "Cert verify CTN: entry with a matching fingerprint found.");
-                map_type = ctn->map_type;
-            }
-            free(digest_md5);
-            digest_md5 = NULL;
-
-            /* SHA-1 */
-        } else if (!strncmp(ctn->fingerprint, "02", 2)) {
-            if (!digest_sha1) {
-                if (X509_digest(cert, EVP_sha1(), buf, &buf_len) != 1) {
-                    ERR(session, "Calculating SHA-1 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
-                    ret = -1;
-                    goto cleanup;
-                }
-                digest_to_str(buf, buf_len, &digest_sha1);
-            }
-
-            if (!strcasecmp(ctn->fingerprint + 3, digest_sha1)) {
-                /* we got ourselves a potential winner! */
-                VRB(session, "Cert verify CTN: entry with a matching fingerprint found.");
-                map_type = ctn->map_type;
-            }
-            free(digest_sha1);
-            digest_sha1 = NULL;
-
-            /* SHA-224 */
-        } else if (!strncmp(ctn->fingerprint, "03", 2)) {
-            if (!digest_sha224) {
-                if (X509_digest(cert, EVP_sha224(), buf, &buf_len) != 1) {
-                    ERR(session, "Calculating SHA-224 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
-                    ret = -1;
-                    goto cleanup;
-                }
-                digest_to_str(buf, buf_len, &digest_sha224);
-            }
-
-            if (!strcasecmp(ctn->fingerprint + 3, digest_sha224)) {
-                /* we got ourselves a potential winner! */
-                VRB(session, "Cert verify CTN: entry with a matching fingerprint found.");
-                map_type = ctn->map_type;
-            }
-            free(digest_sha224);
-            digest_sha224 = NULL;
-
-            /* SHA-256 */
-        } else if (!strncmp(ctn->fingerprint, "04", 2)) {
-            if (!digest_sha256) {
-                if (X509_digest(cert, EVP_sha256(), buf, &buf_len) != 1) {
-                    ERR(session, "Calculating SHA-256 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
-                    ret = -1;
-                    goto cleanup;
-                }
-                digest_to_str(buf, buf_len, &digest_sha256);
-            }
-
-            if (!strcasecmp(ctn->fingerprint + 3, digest_sha256)) {
-                /* we got ourselves a potential winner! */
-                VRB(session, "Cert verify CTN: entry with a matching fingerprint found.");
-                map_type = ctn->map_type;
-            }
-            free(digest_sha256);
-            digest_sha256 = NULL;
-
-            /* SHA-384 */
-        } else if (!strncmp(ctn->fingerprint, "05", 2)) {
-            if (!digest_sha384) {
-                if (X509_digest(cert, EVP_sha384(), buf, &buf_len) != 1) {
-                    ERR(session, "Calculating SHA-384 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
-                    ret = -1;
-                    goto cleanup;
-                }
-                digest_to_str(buf, buf_len, &digest_sha384);
-            }
-
-            if (!strcasecmp(ctn->fingerprint + 3, digest_sha384)) {
-                /* we got ourselves a potential winner! */
-                VRB(session, "Cert verify CTN: entry with a matching fingerprint found.");
-                map_type = ctn->map_type;
-            }
-            free(digest_sha384);
-            digest_sha384 = NULL;
-
-            /* SHA-512 */
-        } else if (!strncmp(ctn->fingerprint, "06", 2)) {
-            if (!digest_sha512) {
-                if (X509_digest(cert, EVP_sha512(), buf, &buf_len) != 1) {
-                    ERR(session, "Calculating SHA-512 digest failed (%s).", ERR_reason_error_string(ERR_get_error()));
-                    ret = -1;
-                    goto cleanup;
-                }
-                digest_to_str(buf, buf_len, &digest_sha512);
-            }
-
-            if (!strcasecmp(ctn->fingerprint + 3, digest_sha512)) {
-                /* we got ourselves a potential winner! */
-                VRB(session, "Cert verify CTN: entry with a matching fingerprint found.");
-                map_type = ctn->map_type;
-            }
-            free(digest_sha512);
-            digest_sha512 = NULL;
-
-            /* unknown */
-        } else {
-            WRN(session, "Unknown fingerprint algorithm used (%s), skipping.", ctn->fingerprint);
-            continue;
-        }
-
-        if (map_type != NC_TLS_CTN_UNKNOWN) {
-            /* found a fingerprint match */
-            if (map_type == NC_TLS_CTN_SPECIFIED) {
-                /* specified -> get username from the ctn entry */
-                session->username = strdup(ctn->name);
-                NC_CHECK_ERRMEM_GOTO(!session->username, ret = -1, cleanup);
-            } else {
-                /* try to get the username from the cert with this ctn's map type */
-                ret = nc_tls_ctn_get_username_from_cert(session->opts.server.client_cert, map_type, &username);
-                if (ret == -1) {
-                    /* fatal error */
-                    goto cleanup;
-                } else if (ret) {
-                    /* didn't get username, try next ctn entry */
-                    continue;
-                }
-
-                /* success */
-                session->username = username;
-            }
-
-            /* matching fingerprint found and username obtained, success */
-            ret = 0;
-            goto cleanup;
-        }
-    }
-
-    if (!ctn) {
-        ret = 1;
-    }
-
-cleanup:
-    free(digest_md5);
-    free(digest_sha1);
-    free(digest_sha224);
-    free(digest_sha256);
-    free(digest_sha384);
-    free(digest_sha512);
-    free(buf);
-    return ret;
-}
-
-static int
-nc_server_tls_check_crl(X509_STORE *crl_store, X509_STORE_CTX *x509_ctx, X509 *cert,
-        const X509_NAME *subject, const X509_NAME *issuer)
-{
-    int n, i, ret = 0;
-    X509_STORE_CTX *store_ctx = NULL;
-    X509_OBJECT *obj = NULL;
-    X509_CRL *crl;
-    X509_REVOKED *revoked;
-    EVP_PKEY *pubkey;
-    const ASN1_INTEGER *serial;
-    const ASN1_TIME *last_update = NULL, *next_update = NULL;
-    char *cp;
-
-    store_ctx = X509_STORE_CTX_new();
-    NC_CHECK_ERRMEM_GOTO(!store_ctx, ret = -1, cleanup);
-
-    /* init store context */
-    ret = X509_STORE_CTX_init(store_ctx, crl_store, NULL, NULL);
-    if (!ret) {
-        ERR(NULL, "Initializing x509 store ctx failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        ret = -1;
-        goto cleanup;
-    }
-    ret = 0;
-
-    /* try to find a CRL entry that corresponds to the current certificate in question */
-    obj = X509_STORE_CTX_get_obj_by_subject(store_ctx, X509_LU_CRL, subject);
-    crl = X509_OBJECT_get0_X509_CRL(obj);
-    X509_OBJECT_free(obj);
-    if (crl) {
-        /* found it */
-        cp = X509_NAME_oneline(subject, NULL, 0);
-        VRB(NULL, "Cert verify CRL: issuer: %s.", cp);
-        OPENSSL_free(cp);
-
-        last_update = X509_CRL_get0_lastUpdate(crl);
-        next_update = X509_CRL_get0_nextUpdate(crl);
-        cp = asn1time_to_str(last_update);
-        VRB(NULL, "Cert verify CRL: last update: %s.", cp);
-        free(cp);
-        cp = asn1time_to_str(next_update);
-        VRB(NULL, "Cert verify CRL: next update: %s.", cp);
-        free(cp);
-
-        /* verify the signature on this CRL */
-        pubkey = X509_get0_pubkey(cert);
-        if (X509_CRL_verify(crl, pubkey) <= 0) {
-            ERR(NULL, "Cert verify CRL: invalid signature.");
-            X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CRL_SIGNATURE_FAILURE);
-            ret = -1;
-            goto cleanup;
-        }
-
-        /* check date of CRL to make sure it's not expired */
-        if (!next_update) {
-            ERR(NULL, "Cert verify CRL: invalid nextUpdate field.");
-            X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD);
-            ret = -1;
-            goto cleanup;
-        }
-
-        if (X509_cmp_current_time(next_update) < 0) {
-            ERR(NULL, "Cert verify CRL: expired - revoking all certificates.");
-            X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CRL_HAS_EXPIRED);
-            ret = -1;
-            goto cleanup;
-        }
-    }
-
-    /* try to retrieve a CRL corresponding to the _issuer_ of
-     * the current certificate in order to check for revocation */
-    obj = X509_STORE_CTX_get_obj_by_subject(store_ctx, X509_LU_CRL, issuer);
-    crl = X509_OBJECT_get0_X509_CRL(obj);
-    if (crl) {
-        n = sk_X509_REVOKED_num(X509_CRL_get_REVOKED(crl));
-        for (i = 0; i < n; i++) {
-            revoked = sk_X509_REVOKED_value(X509_CRL_get_REVOKED(crl), i);
-            serial = X509_REVOKED_get0_serialNumber(revoked);
-            if (ASN1_INTEGER_cmp(serial, X509_get_serialNumber(cert)) == 0) {
-                cp = X509_NAME_oneline(issuer, NULL, 0);
-                ERR(NULL, "Cert verify CRL: certificate with serial %ld (0x%lX) revoked per CRL from issuer %s.",
-                        serial, serial, cp);
-                OPENSSL_free(cp);
-                X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CERT_REVOKED);
-                ret = -1;
-                goto cleanup;
-            }
-        }
-    }
-
-cleanup:
-    X509_STORE_CTX_free(store_ctx);
-    X509_OBJECT_free(obj);
-    return ret;
-}
-
-static int
-nc_server_tls_ts_ref_get_certs(const char *referenced_name, struct nc_certificate **certs, uint16_t *cert_count)
-{
-    uint16_t i;
-    struct nc_truststore *ts = &server_opts.truststore;
-
-    *certs = NULL;
-    *cert_count = 0;
-
-    /* lookup name */
-    for (i = 0; i < ts->cert_bag_count; i++) {
-        if (!strcmp(referenced_name, ts->cert_bags[i].name)) {
-            break;
-        }
-    }
-
-    if (i == ts->cert_bag_count) {
-        ERR(NULL, "Truststore entry \"%s\" not found.", referenced_name);
-        return -1;
-    }
-
-    *certs = ts->cert_bags[i].certs;
-    *cert_count = ts->cert_bags[i].cert_count;
-    return 0;
-}
-
-/* In case a CA chain verification failed an end-entity certificate must match.
- * The meaning of local_or_referenced is that it states, which end-entity certificates to check
- * (1 = current endpoint's, 2 = referenced endpoint's).
- */
-static int
-nc_server_tls_do_preverify(struct nc_session *session, X509_STORE_CTX *x509_ctx, int local_or_referenced)
-{
-    X509_STORE *store;
-    struct nc_cert_grouping *ee_certs;
-    int i, ret;
-    X509 *cert;
-    struct nc_certificate *certs;
-    uint16_t cert_count;
-
-    store = X509_STORE_CTX_get0_store(x509_ctx);
-    if (!store) {
-        ERR(session, "Error getting store from context (%s).", ERR_reason_error_string(ERR_get_error()));
-        return -1;
-    }
-
-    /* get the data from the store */
-    ee_certs = X509_STORE_get_ex_data(store, local_or_referenced);
-    if (!ee_certs) {
-        ERR(session, "Error getting data from store (%s).", ERR_reason_error_string(ERR_get_error()));
-        return -1;
-    }
-
-    if (ee_certs->store == NC_STORE_LOCAL) {
-        /* local definition */
-        certs = ee_certs->certs;
-        cert_count = ee_certs->cert_count;
-    } else {
-        /* truststore reference */
-        if (nc_server_tls_ts_ref_get_certs(ee_certs->ts_ref, &certs, &cert_count)) {
-            ERR(NULL, "Error getting end-entity certificates from the truststore reference \"%s\".", ee_certs->ts_ref);
-            return -1;
-        }
-    }
-
-    for (i = 0; i < cert_count; i++) {
-        cert = base64der_to_cert(certs[i].data);
-        ret = cert_pubkey_match(session->opts.server.client_cert, cert);
-        X509_free(cert);
-        if (ret) {
-            /* we are just overriding the failed standard certificate verification (preverify_ok == 0),
-             * this callback will be called again with the same current certificate and preverify_ok == 1 */
-            VRB(session, "Cert verify: fail (%s), but the end-entity certificate is trusted, continuing.",
-                    X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
-            X509_STORE_CTX_set_error(x509_ctx, X509_V_OK);
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
-static int
-nc_tlsclb_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
-{
-    X509_NAME *subject;
-    X509_NAME *issuer;
-    X509 *cert;
-    char *cp;
-    X509_STORE *store;
-
-    STACK_OF(X509) * cert_stack;
-    struct nc_session *session;
-    struct nc_server_tls_opts *opts;
-    struct nc_endpt *referenced_endpt;
-    int rc, depth;
-
-    store = X509_STORE_CTX_get0_store(x509_ctx);
-    if (!store) {
-        ERR(NULL, "Error getting store from context (%s).", ERR_reason_error_string(ERR_get_error()));
-        return 0;
-    }
-
-    /* get session from the store */
-    session = X509_STORE_get_ex_data(store, 0);
-    if (!session) {
-        ERR(session, "Error getting session from store (%s).", ERR_reason_error_string(ERR_get_error()));
-        return 0;
-    }
-
-    opts = session->data;
-
-    /* get the last certificate, that is the peer (client) certificate */
-    if (!session->opts.server.client_cert) {
-        cert_stack = X509_STORE_CTX_get1_chain(x509_ctx);
-        session->opts.server.client_cert = sk_X509_value(cert_stack, 0);
-        X509_up_ref(session->opts.server.client_cert);
-        sk_X509_pop_free(cert_stack, X509_free);
-    }
-
-    /* standard certificate verification failed, so an end-entity client cert must match to continue */
-    if (!preverify_ok) {
-        /* check current endpoint's end-entity certs */
-        rc = nc_server_tls_do_preverify(session, x509_ctx, 1);
-        if (rc == -1) {
-            return 0;
-        } else if (rc == 1) {
-            return 1;
-        }
-
-        /* no match, continue */
-        if (opts->referenced_endpt_name) {
-            /* check referenced endpoint's end-entity certs */
-            rc = nc_server_tls_do_preverify(session, x509_ctx, 2);
-            if (rc == -1) {
-                return 0;
-            } else if (rc == 1) {
-                return 1;
-            }
-        }
-
-        /* no match, fail */
-        ERR(session, "Cert verify: fail (%s).", X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
-        return 0;
-    }
-
-    /* print cert verify info */
-    depth = X509_STORE_CTX_get_error_depth(x509_ctx);
-    VRB(session, "Cert verify: depth %d.", depth);
-
-    cert = X509_STORE_CTX_get_current_cert(x509_ctx);
-    subject = X509_get_subject_name(cert);
-    issuer = X509_get_issuer_name(cert);
-
-    cp = X509_NAME_oneline(subject, NULL, 0);
-    VRB(session, "Cert verify: subject: %s.", cp);
-    OPENSSL_free(cp);
-    cp = X509_NAME_oneline(issuer, NULL, 0);
-    VRB(session, "Cert verify: issuer:  %s.", cp);
-    OPENSSL_free(cp);
-
-    /* check if the current certificate is revoked if CRL is set */
-    if (opts->crl_store) {
-        rc = nc_server_tls_check_crl(opts->crl_store, x509_ctx, cert, subject, issuer);
-        if (rc) {
-            return 0;
-        }
-    }
-
-    /* cert-to-name already successful */
-    if (session->username) {
-        return 1;
-    }
-
-    /* cert-to-name */
-    rc = nc_tls_cert_to_name(session, opts->ctn, cert);
-    if (rc == -1) {
-        /* fatal error */
-        depth = 0;
-        goto fail;
-    } else if ((rc == 1) && !opts->referenced_endpt_name) {
-        /* no match found and no referenced endpoint */
-        goto fail;
-    } else if ((rc == 1) && opts->referenced_endpt_name) {
-        /* no match found, but has a referenced endpoint so try it */
-        if (nc_server_get_referenced_endpt(opts->referenced_endpt_name, &referenced_endpt)) {
-            /* fatal error */
-            ERRINT;
-            depth = 0;
-            goto fail;
-        }
-
-        rc = nc_tls_cert_to_name(session, referenced_endpt->opts.tls->ctn, cert);
-        if (rc) {
-            if (rc == -1) {
-                /* fatal error */
-                depth = 0;
-            }
-            /* rc == 1 is a normal CTN fail (no match found) */
-            goto fail;
-        }
-    }
-
-    VRB(session, "Cert verify CTN: new client username recognized as \"%s\".", session->username);
-
-    if (server_opts.user_verify_clb && !server_opts.user_verify_clb(session)) {
-        VRB(session, "Cert verify: user verify callback revoked authorization.");
-        X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_APPLICATION_VERIFICATION);
-        return 0;
-    }
-
-    return 1;
-
-fail:
-    if (depth > 0) {
-        VRB(session, "Cert verify CTN: cert fail, cert-to-name will continue on the next cert in chain.");
-        return 1;
-    }
-
-    VRB(session, "Cert-to-name unsuccessful, dropping the new client.");
-    X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_APPLICATION_VERIFICATION);
-    return 0;
-}
-
-API const X509 *
-nc_session_get_client_cert(const struct nc_session *session)
-{
-    if (!session || (session->side != NC_SERVER)) {
-        ERRARG(session, "session");
-        return NULL;
-    }
-
-    return session->opts.server.client_cert;
-}
-
-API void
-nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *session))
-{
-    server_opts.user_verify_clb = verify_clb;
-}
 
 static int
 nc_server_tls_ks_ref_get_cert_key(const char *referenced_key_name, const char *referenced_cert_name,
@@ -859,15 +74,507 @@ nc_server_tls_ks_ref_get_cert_key(const char *referenced_key_name, const char *r
 }
 
 static int
-nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, struct nc_server_tls_opts *opts)
+nc_server_tls_ts_ref_get_certs(const char *referenced_name, struct nc_certificate **certs, uint16_t *cert_count)
+{
+    uint16_t i;
+    struct nc_truststore *ts = &server_opts.truststore;
+
+    *certs = NULL;
+    *cert_count = 0;
+
+    /* lookup name */
+    for (i = 0; i < ts->cert_bag_count; i++) {
+        if (!strcmp(referenced_name, ts->cert_bags[i].name)) {
+            break;
+        }
+    }
+
+    if (i == ts->cert_bag_count) {
+        ERR(NULL, "Truststore entry \"%s\" not found.", referenced_name);
+        return -1;
+    }
+
+    *certs = ts->cert_bags[i].certs;
+    *cert_count = ts->cert_bags[i].cert_count;
+    return 0;
+}
+
+static void *
+nc_base64der_to_cert(const char *in)
+{
+    char *buf;
+    void *cert = NULL;
+
+    NC_CHECK_ARG_RET(NULL, in, NULL);
+
+    if (asprintf(&buf, "%s%s%s", "-----BEGIN CERTIFICATE-----\n", in, "\n-----END CERTIFICATE-----") == -1) {
+        ERRMEM;
+        return NULL;
+    }
+
+    cert = nc_tls_pem_to_cert_wrap(buf);
+    free(buf);
+    return cert;
+}
+
+int
+nc_base64der_to_cert_add_to_store(const char *in, void *cert_store)
+{
+    int ret;
+    char *buf;
+
+    NC_CHECK_ARG_RET(NULL, in, cert_store, 1);
+
+    if (asprintf(&buf, "%s%s%s", "-----BEGIN CERTIFICATE-----\n", in, "\n-----END CERTIFICATE-----") == -1) {
+        ERRMEM;
+        return 1;
+    }
+
+    ret = nc_tls_pem_to_cert_add_to_store_wrap(buf, cert_store);
+    free(buf);
+    return ret;
+}
+
+static void *
+nc_base64der_to_privatekey(const char *in, const char *key_str)
+{
+    char *buf;
+    void *pkey;
+
+    NC_CHECK_ARG_RET(NULL, in, NULL);
+
+    if (asprintf(&buf, "%s%s%s%s%s%s%s", "-----BEGIN ", key_str, " PRIVATE KEY-----\n", in, "\n-----END ",
+            key_str, " PRIVATE KEY-----") == -1) {
+        ERRMEM;
+        return NULL;
+    }
+
+    pkey = nc_tls_pem_to_privkey_wrap(buf);
+    free(buf);
+    return pkey;
+}
+
+char *
+nc_server_tls_digest_to_hex(const unsigned char *digest, unsigned int digest_len)
+{
+    unsigned int i;
+    char *hex;
+
+    hex = malloc(digest_len * 3);
+    NC_CHECK_ERRMEM_RET(!hex, NULL);
+
+    for (i = 0; i < digest_len - 1; ++i) {
+        sprintf(hex + (i * 3), "%02x:", digest[i]);
+    }
+    sprintf(hex + (i * 3), "%02x", digest[i]);
+
+    return hex;
+}
+
+char *
+nc_server_tls_md5(void *cert)
+{
+    int rc;
+    unsigned int buf_len = 16;
+    unsigned char buf[buf_len];
+
+    /* compute MD-5 hash of cert and store it in buf */
+    rc = nc_server_tls_md5_wrap(cert, buf);
+    if (rc) {
+        return NULL;
+    }
+
+    /* convert the hash to hex */
+    return nc_server_tls_digest_to_hex(buf, buf_len);
+}
+
+char *
+nc_server_tls_sha1(void *cert)
+{
+    int rc;
+    unsigned int buf_len = 20;
+    unsigned char buf[buf_len];
+
+    /* compute SHA-1 hash of cert and store it in buf */
+    rc = nc_server_tls_sha1_wrap(cert, buf);
+    if (rc) {
+        return NULL;
+    }
+
+    /* convert the hash to hex */
+    return nc_server_tls_digest_to_hex(buf, buf_len);
+}
+
+char *
+nc_server_tls_sha224(void *cert)
+{
+    int rc;
+    unsigned int buf_len = 28;
+    unsigned char buf[buf_len];
+
+    /* compute SHA-224 hash of cert and store it in buf */
+    rc = nc_server_tls_sha224_wrap(cert, buf);
+    if (rc) {
+        return NULL;
+    }
+
+    /* convert the hash to hex */
+    return nc_server_tls_digest_to_hex(buf, buf_len);
+}
+
+char *
+nc_server_tls_sha256(void *cert)
+{
+    int rc;
+    unsigned int buf_len = 32;
+    unsigned char buf[buf_len];
+
+    /* compute SHA-256 hash of cert and store it in buf */
+    rc = nc_server_tls_sha256_wrap(cert, buf);
+    if (rc) {
+        return NULL;
+    }
+
+    /* convert the hash to hex */
+    return nc_server_tls_digest_to_hex(buf, buf_len);
+}
+
+char *
+nc_server_tls_sha384(void *cert)
+{
+    int rc;
+    unsigned int buf_len = 48;
+    unsigned char buf[buf_len];
+
+    /* compute SHA-384 hash of cert and store it in buf */
+    rc = nc_server_tls_sha384_wrap(cert, buf);
+    if (rc) {
+        return NULL;
+    }
+
+    /* convert the hash to hex */
+    return nc_server_tls_digest_to_hex(buf, buf_len);
+}
+
+char *
+nc_server_tls_sha512(void *cert)
+{
+    int rc;
+    unsigned int buf_len = 64;
+    unsigned char buf[buf_len];
+
+    /* compute SHA-512 hash of cert and store it in buf */
+    rc = nc_server_tls_sha512_wrap(cert, buf);
+    if (rc) {
+        return NULL;
+    }
+
+    /* convert the hash to hex */
+    return nc_server_tls_digest_to_hex(buf, buf_len);
+}
+
+static int
+nc_server_tls_cert_to_name(struct nc_ctn *ctn_first, void *cert, struct nc_ctn_data *data)
+{
+    int ret = 0;
+    char *digest_md5 = NULL, *digest_sha1 = NULL, *digest_sha224 = NULL;
+    char *digest_sha256 = NULL, *digest_sha384 = NULL, *digest_sha512 = NULL;
+    struct nc_ctn *ctn;
+    NC_TLS_CTN_MAPTYPE map_type;
+
+    for (ctn = ctn_first; ctn; ctn = ctn->next) {
+        /* reset map_type */
+        map_type = NC_TLS_CTN_UNKNOWN;
+
+        /* first make sure the entry is valid */
+        if (!ctn->map_type || ((ctn->map_type == NC_TLS_CTN_SPECIFIED) && !ctn->name)) {
+            VRB(NULL, "Cert verify CTN: entry with id %u not valid, skipping.", ctn->id);
+            continue;
+        }
+
+        /* if ctn has no fingerprint, it will match any certificate */
+        if (!ctn->fingerprint) {
+            map_type = ctn->map_type;
+
+            /* MD5 */
+        } else if (!strncmp(ctn->fingerprint, "01", 2)) {
+            if (!digest_md5) {
+                digest_md5 = nc_server_tls_md5(cert);
+                if (!digest_md5) {
+                    ret = -1;
+                    goto cleanup;
+                }
+            }
+
+            if (!strcasecmp(ctn->fingerprint + 3, digest_md5)) {
+                /* we got ourselves a potential winner! */
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                map_type = ctn->map_type;
+            }
+
+            /* SHA-1 */
+        } else if (!strncmp(ctn->fingerprint, "02", 2)) {
+            if (!digest_sha1) {
+                digest_sha1 = nc_server_tls_sha1(cert);
+                if (!digest_sha1) {
+                    ret = -1;
+                    goto cleanup;
+                }
+            }
+
+            if (!strcasecmp(ctn->fingerprint + 3, digest_sha1)) {
+                /* we got ourselves a potential winner! */
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                map_type = ctn->map_type;
+            }
+
+            /* SHA-224 */
+        } else if (!strncmp(ctn->fingerprint, "03", 2)) {
+            if (!digest_sha224) {
+                digest_sha224 = nc_server_tls_sha224(cert);
+                if (!digest_sha224) {
+                    ret = -1;
+                    goto cleanup;
+                }
+            }
+
+            if (!strcasecmp(ctn->fingerprint + 3, digest_sha224)) {
+                /* we got ourselves a potential winner! */
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                map_type = ctn->map_type;
+            }
+
+            /* SHA-256 */
+        } else if (!strncmp(ctn->fingerprint, "04", 2)) {
+            if (!digest_sha256) {
+                digest_sha256 = nc_server_tls_sha256(cert);
+                if (!digest_sha256) {
+                    ret = -1;
+                    goto cleanup;
+                }
+            }
+
+            if (!strcasecmp(ctn->fingerprint + 3, digest_sha256)) {
+                /* we got ourselves a potential winner! */
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                map_type = ctn->map_type;
+            }
+
+            /* SHA-384 */
+        } else if (!strncmp(ctn->fingerprint, "05", 2)) {
+            if (!digest_sha384) {
+                digest_sha384 = nc_server_tls_sha384(cert);
+                if (!digest_sha384) {
+                    ret = -1;
+                    goto cleanup;
+                }
+            }
+
+            if (!strcasecmp(ctn->fingerprint + 3, digest_sha384)) {
+                /* we got ourselves a potential winner! */
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                map_type = ctn->map_type;
+            }
+
+            /* SHA-512 */
+        } else if (!strncmp(ctn->fingerprint, "06", 2)) {
+            if (!digest_sha512) {
+                digest_sha512 = nc_server_tls_sha512(cert);
+                if (!digest_sha512) {
+                    ret = -1;
+                    goto cleanup;
+                }
+            }
+
+            if (!strcasecmp(ctn->fingerprint + 3, digest_sha512)) {
+                /* we got ourselves a potential winner! */
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                map_type = ctn->map_type;
+            }
+
+            /* unknown */
+        } else {
+            WRN(NULL, "Unknown fingerprint algorithm used (%s), skipping.", ctn->fingerprint);
+            continue;
+        }
+
+        if (map_type != NC_TLS_CTN_UNKNOWN) {
+            /* found a fingerprint match */
+            if (!(map_type & data->matched_ctns)) {
+                data->matched_ctns |= map_type;
+                data->matched_ctn_type[data->matched_ctn_count++] = map_type;
+                if (!data->username && map_type == NC_TLS_CTN_SPECIFIED) {
+                    data->username = ctn->name; // TODO make a copy?
+                }
+            }
+        }
+    }
+
+cleanup:
+    free(digest_md5);
+    free(digest_sha1);
+    free(digest_sha224);
+    free(digest_sha256);
+    free(digest_sha384);
+    free(digest_sha512);
+    return ret;
+}
+
+static int
+nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_cert_grouping *ee_certs)
+{
+    int i, ret;
+    void *cert;
+    struct nc_certificate *certs;
+    uint16_t cert_count;
+
+    if (ee_certs->store == NC_STORE_LOCAL) {
+        /* local definition */
+        certs = ee_certs->certs;
+        cert_count = ee_certs->cert_count;
+    } else {
+        /* truststore reference */
+        if (nc_server_tls_ts_ref_get_certs(ee_certs->ts_ref, &certs, &cert_count)) {
+            ERR(NULL, "Error getting end-entity certificates from the truststore reference \"%s\".", ee_certs->ts_ref);
+            return -1;
+        }
+    }
+
+    for (i = 0; i < cert_count; i++) {
+        cert = nc_tls_base64_to_cert_wrap(certs[i].data);
+        if (!cert) {
+            /* TODO skip? */
+            continue;
+        }
+        ret = nc_server_tls_certs_match_wrap(peer_cert, cert);
+        nc_tls_cert_destroy_wrap(cert);
+        if (ret) {
+            /* found a match */
+            VRB(NULL, "Cert verify: fail, but the end-entity certificate is trusted, continuing.");
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+int
+nc_server_tls_verify_cert(void *cert, int depth, int self_signed, struct nc_tls_verify_cb_data *cb_data)
+{
+    int ret = 0, i;
+    char *subject = NULL, *issuer = NULL;
+    struct nc_server_tls_opts *opts = cb_data->opts;
+    struct nc_session *session = cb_data->session;
+    struct nc_endpt *referenced_endpt;
+
+    subject = nc_server_tls_get_subject_wrap(cert);
+    issuer = nc_server_tls_get_issuer_wrap(cert);
+    if (!subject || !issuer) {
+        ERR(session, "Failed to get certificate's subject or issuer.");
+        ret = -1;
+        goto cleanup;
+    }
+
+    VRB(session, "Cert verify: depth %d.", depth);
+    VRB(session, "Cert verify: subject: %s.", subject);
+    VRB(session, "Cert verify: issuer: %s.", issuer);
+
+    if (depth == 0) {
+        if (self_signed) {
+            /* peer cert is not trusted, so it must match any configured end-entity cert
+             * on the given endpoint in order for the cert to be authenticated */
+            ret = nc_server_tls_verify_peer_cert(cert, &opts->ee_certs);
+            if (ret) {
+                /* we can still check the referenced endpoint's ee certs */
+                if (opts->referenced_endpt_name) {
+                    if (nc_server_get_referenced_endpt(opts->referenced_endpt_name, &referenced_endpt)) {
+                        ERRINT;
+                        ret = -1;
+                        goto cleanup;
+                    }
+
+                    ret = nc_server_tls_verify_peer_cert(cert, &referenced_endpt->opts.tls->ee_certs);
+                }
+                if (ret) {
+                    ERR(session, "Cert verify: fail (Client certificate not trusted and does not match any configured end-entity certificate).");
+                    goto cleanup;
+                }
+            }
+        }
+    }
+
+    ret = nc_server_tls_cert_to_name(opts->ctn, cert, &cb_data->ctn_data);
+    if (ret == -1) {
+        /* fatal error */
+        goto cleanup;
+    }
+
+    /* check the referenced endpoint's ctn entries */
+    if (opts->referenced_endpt_name) {
+        if (nc_server_get_referenced_endpt(opts->referenced_endpt_name, &referenced_endpt)) {
+            ERRINT;
+            ret = -1;
+            goto cleanup;
+        }
+
+        ret = nc_server_tls_cert_to_name(referenced_endpt->opts.tls->ctn, cert, &cb_data->ctn_data);
+        if (ret == -1) {
+            /* fatal error */
+            goto cleanup;
+        }
+    }
+
+    /* ctn */
+    if (depth == 0) {
+        for (i = 0; i < cb_data->ctn_data.matched_ctn_count; i++) {
+            if (cb_data->ctn_data.matched_ctn_type[i] == NC_TLS_CTN_SPECIFIED) {
+                session->username = strdup(cb_data->ctn_data.username);
+                NC_CHECK_ERRMEM_RET(!session->username, -1);
+            } else {
+                ret = nc_server_tls_get_username_from_cert_wrap(cert, cb_data->ctn_data.matched_ctn_type[i], &session->username);
+                if (ret == -1) {
+                    goto cleanup;
+                }
+            }
+        }
+    }
+
+    if (server_opts.user_verify_clb && !server_opts.user_verify_clb(session)) {
+        VRB(session, "Cert verify: user verify callback revoked authorization.");
+        ret = -1;
+        goto cleanup;
+    }
+
+cleanup:
+    free(subject);
+    free(issuer);
+    return ret;
+}
+
+API const void *
+nc_session_get_client_cert(const struct nc_session *session)
+{
+    if (!session || (session->side != NC_SERVER)) {
+        ERRARG(session, "session");
+        return NULL;
+    }
+
+    return session->opts.server.client_cert;
+}
+
+API void
+nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *session))
+{
+    server_opts.user_verify_clb = verify_clb;
+}
+
+int
+nc_server_tls_load_server_cert_key(struct nc_server_tls_opts *opts, void **srv_cert, void **srv_pkey)
 {
     char *privkey_data = NULL, *cert_data = NULL;
-    int ret = 0;
     NC_PRIVKEY_FORMAT privkey_type;
-    X509 *cert = NULL;
-    EVP_PKEY *pkey = NULL;
-
-    NC_CHECK_ARG_RET(NULL, tls_ctx, opts, -1);
+    void *cert = NULL;
+    void *pkey = NULL;
 
     /* get data needed for setting the server cert */
     if (opts->store == NC_STORE_LOCAL) {
@@ -877,10 +584,9 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, struct nc_server_tls_opts *opts
         privkey_type = opts->privkey_type;
     } else {
         /* keystore */
-        ret = nc_server_tls_ks_ref_get_cert_key(opts->key_ref, opts->cert_ref, &privkey_data, &privkey_type, &cert_data);
-        if (ret) {
+        if (nc_server_tls_ks_ref_get_cert_key(opts->key_ref, opts->cert_ref, &privkey_data, &privkey_type, &cert_data)) {
             ERR(NULL, "Getting server certificate from the keystore reference \"%s\" failed.", opts->key_ref);
-            return -1;
+            return 1;
         }
     }
     if (!cert_data || !privkey_data) {
@@ -889,141 +595,20 @@ nc_tls_ctx_set_server_cert_key(SSL_CTX *tls_ctx, struct nc_server_tls_opts *opts
         goto cleanup;
     }
 
-    /* load the cert */
-    cert = base64der_to_cert(cert_data);
+    cert = nc_base64der_to_cert(cert_data);
     if (!cert) {
-        ERR(NULL, "Converting certificate data to certificate format failed.");
-        ret = -1;
-        goto cleanup;
+        return 1;
     }
 
-    /* set server cert */
-    ret = SSL_CTX_use_certificate(tls_ctx, cert);
-    if (ret != 1) {
-        ERR(NULL, "Loading the server certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        ret = -1;
-        goto cleanup;
-    }
-
-    /* load the private key */
-    pkey = base64der_to_privatekey(privkey_data, nc_privkey_format_to_str(privkey_type));
+    pkey = nc_base64der_to_privatekey(privkey_data, nc_privkey_format_to_str(privkey_type));
     if (!pkey) {
-        ERR(NULL, "Converting private key data to private key format failed.");
-        ret = -1;
-        goto cleanup;
+        nc_tls_cert_destroy_wrap(cert);
+        return 1;
     }
 
-    /* set server key */
-    ret = SSL_CTX_use_PrivateKey(tls_ctx, pkey);
-    if (ret != 1) {
-        ERR(NULL, "Loading the server private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        ret = -1;
-        goto cleanup;
-    }
-
-    ret = 0;
-
-cleanup:
-    X509_free(cert);
-    EVP_PKEY_free(pkey);
-    return ret;
-}
-
-static int
-tls_store_add_trusted_cert(X509_STORE *cert_store, const char *cert_data)
-{
-    X509 *cert;
-
-    cert = base64der_to_cert(cert_data);
-
-    if (!cert) {
-        ERR(NULL, "Loading a trusted certificate (data \"%s\") failed (%s).", cert_data,
-                ERR_reason_error_string(ERR_get_error()));
-        return -1;
-    }
-
-    /* add the trusted certificate */
-    if (X509_STORE_add_cert(cert_store, cert) != 1) {
-        ERR(NULL, "Adding a trusted certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        X509_free(cert);
-        return -1;
-    }
-    X509_free(cert);
-
+    *srv_cert = cert;
+    *srv_pkey = pkey;
     return 0;
-}
-
-static int
-nc_tls_store_set_trusted_certs(X509_STORE *cert_store, struct nc_cert_grouping *ca_certs)
-{
-    uint16_t i;
-    struct nc_certificate *certs;
-    uint16_t cert_count;
-
-    if (ca_certs->store == NC_STORE_LOCAL) {
-        /* local definition */
-        certs = ca_certs->certs;
-        cert_count = ca_certs->cert_count;
-    } else {
-        /* truststore */
-        if (nc_server_tls_ts_ref_get_certs(ca_certs->ts_ref, &certs, &cert_count)) {
-            ERR(NULL, "Error getting certificate-authority certificates from the truststore reference \"%s\".", ca_certs->ts_ref);
-            return -1;
-        }
-    }
-
-    for (i = 0; i < cert_count; i++) {
-        if (tls_store_add_trusted_cert(cert_store, certs[i].data)) {
-            return -1;
-        }
-    }
-
-    return 0;
-}
-
-static int
-nc_server_tls_crl_path(struct nc_session *session, const char *crl_path, X509_STORE *store)
-{
-    int ret = 0;
-    X509_CRL *crl = NULL;
-    FILE *f;
-
-    f = fopen(crl_path, "r");
-    if (!f) {
-        ERR(session, "Unable to open CRL file \"%s\".", crl_path);
-        return -1;
-    }
-
-    /* try DER first */
-    crl = d2i_X509_CRL_fp(f, NULL);
-    if (crl) {
-        /* success */
-        goto ok;
-    }
-
-    /* DER failed, try PEM */
-    rewind(f);
-    crl = PEM_read_X509_CRL(f, NULL, NULL, NULL);
-    if (!crl) {
-        ERR(session, "Reading CRL from file \"%s\" failed.", crl_path);
-        ret = -1;
-        goto cleanup;
-    }
-
-ok:
-    ret = X509_STORE_add_crl(store, crl);
-    if (!ret) {
-        ERR(session, "Error adding CRL to store (%s).", ERR_reason_error_string(ERR_get_error()));
-        ret = -1;
-        goto cleanup;
-    }
-    /* ok */
-    ret = 0;
-
-cleanup:
-    fclose(f);
-    X509_CRL_free(crl);
-    return ret;
 }
 
 static size_t
@@ -1045,51 +630,25 @@ nc_server_tls_curl_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
 }
 
 static int
-nc_server_tls_curl_init(struct nc_session *session, CURL **handle, struct nc_curl_data *data)
-{
-    NC_CHECK_ARG_RET(session, handle, data, -1);
-
-    *handle = NULL;
-
-    *handle = curl_easy_init();
-    if (!*handle) {
-        ERR(session, "Initializing CURL failed.");
-        return -1;
-    }
-
-    if (curl_easy_setopt(*handle, CURLOPT_WRITEFUNCTION, nc_server_tls_curl_cb)) {
-        ERR(session, "Setting curl callback failed.");
-        return -1;
-    }
-
-    if (curl_easy_setopt(*handle, CURLOPT_WRITEDATA, data)) {
-        ERR(session, "Setting curl callback data failed.");
-        return -1;
-    }
-
-    return 0;
-}
-
-static int
-nc_server_tls_curl_fetch(struct nc_session *session, CURL *handle, const char *url)
+nc_server_tls_curl_fetch(CURL *handle, const char *url)
 {
     char err_buf[CURL_ERROR_SIZE];
 
     /* set uri */
     if (curl_easy_setopt(handle, CURLOPT_URL, url)) {
-        ERR(session, "Setting URI \"%s\" to download CRL from failed.", url);
+        ERR(NULL, "Setting URI \"%s\" to download CRL from failed.", url);
         return -1;
     }
 
     /* set err buf */
     if (curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, err_buf)) {
-        ERR(session, "Setting CURL error buffer option failed.");
+        ERR(NULL, "Setting CURL error buffer option failed.");
         return -1;
     }
 
     /* download */
     if (curl_easy_perform(handle)) {
-        ERR(session, "Downloading CRL from \"%s\" failed (%s).", url, err_buf);
+        ERR(NULL, "Downloading CRL from \"%s\" failed (%s).", url, err_buf);
         return -1;
     }
 
@@ -1097,75 +656,99 @@ nc_server_tls_curl_fetch(struct nc_session *session, CURL *handle, const char *u
 }
 
 static int
-nc_server_tls_add_crl_to_store(struct nc_session *session, struct nc_curl_data *downloaded, X509_STORE *store)
+nc_server_tls_curl_init(CURL **handle, struct nc_curl_data *data)
+{
+    NC_CHECK_ARG_RET(NULL, handle, data, -1);
+
+    *handle = NULL;
+
+    *handle = curl_easy_init();
+    if (!*handle) {
+        ERR(NULL, "Initializing CURL failed.");
+        return -1;
+    }
+
+    if (curl_easy_setopt(*handle, CURLOPT_WRITEFUNCTION, nc_server_tls_curl_cb)) {
+        ERR(NULL, "Setting curl callback failed.");
+        return -1;
+    }
+
+    if (curl_easy_setopt(*handle, CURLOPT_WRITEDATA, data)) {
+        ERR(NULL, "Setting curl callback data failed.");
+        return -1;
+    }
+
+    return 0;
+}
+
+static int
+nc_server_tls_crl_cert_ext(void *cert_store, void *crl_store)
 {
     int ret = 0;
-    X509_CRL *crl = NULL;
-    BIO *bio = NULL;
+    CURL *handle = NULL;
+    struct nc_curl_data downloaded = {0};
+    char **uris = NULL;
+    int uri_count = 0, i;
 
-    /* try DER first */
-    crl = d2i_X509_CRL(NULL, (const unsigned char **) &downloaded->data, downloaded->size);
-    if (crl) {
-        /* it was DER */
-        goto ok;
-    }
-
-    /* DER failed, try PEM next */
-    bio = BIO_new_mem_buf(downloaded->data, downloaded->size);
-    if (!bio) {
-        ERR(session, "Creating new bio failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        ret = -1;
+    /* init curl */
+    ret = nc_server_tls_curl_init(&handle, &downloaded);
+    if (ret) {
         goto cleanup;
     }
 
-    /* try to parse PEM from the downloaded data */
-    crl = PEM_read_bio_X509_CRL(bio, NULL, NULL, NULL);
-    if (!crl) {
-        ERR(session, "Reading downloaded CRL failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        ret = -1;
+    ret = nc_server_tls_get_crl_distpoint_uris_wrap(cert_store, &uris, &uri_count);
+    if (ret) {
         goto cleanup;
     }
 
-ok:
-    /* we obtained the CRL, now add it to the CRL store */
-    ret = X509_STORE_add_crl(store, crl);
-    if (!ret) {
-        ERR(session, "Error adding CRL to store (%s).", ERR_reason_error_string(ERR_get_error()));
-        ret = -1;
-        goto cleanup;
+    for (i = 0; i < uri_count; i++) {
+        VRB(NULL, "Downloading CRL from \"%s\".", uris[i]);
+        ret = nc_server_tls_curl_fetch(handle, uris[i]);
+        if (ret) {
+            /* failed to download the CRL from this entry, try the next entry */
+            WRN(NULL, "Failed to fetch CRL from \"%s\".", uris[i]);
+            continue;
+        }
+
+        /* convert the downloaded data to CRL and add it to the store */
+        ret = nc_server_tls_add_crl_to_store_wrap(downloaded.data, downloaded.size, cert_store, crl_store);
+        if (ret) {
+            goto cleanup;
+        }
     }
-    /* ok */
-    ret = 0;
 
 cleanup:
-    X509_CRL_free(crl);
-    BIO_free(bio);
+    for (i = 0; i < uri_count; i++) {
+        free(uris[i]);
+    }
+    free(uris);
+    curl_easy_cleanup(handle);
     return ret;
 }
 
 static int
-nc_server_tls_crl_url(struct nc_session *session, const char *url, X509_STORE *store)
+nc_server_tls_crl_url(const char *url, void *cert_store, void *crl_store)
 {
     int ret = 0;
     CURL *handle = NULL;
     struct nc_curl_data downloaded = {0};
 
     /* init curl */
-    ret = nc_server_tls_curl_init(session, &handle, &downloaded);
+    ret = nc_server_tls_curl_init(&handle, &downloaded);
     if (ret) {
         goto cleanup;
     }
 
-    VRB(session, "Downloading CRL from \"%s\".", url);
+    VRB(NULL, "Downloading CRL from \"%s\".", url);
 
     /* download the CRL */
-    ret = nc_server_tls_curl_fetch(session, handle, url);
+    ret = nc_server_tls_curl_fetch(handle, url);
     if (ret) {
         goto cleanup;
     }
 
     /* convert the downloaded data to CRL and add it to the store */
-    ret = nc_server_tls_add_crl_to_store(session, &downloaded, store);
+    ret = nc_server_tls_add_crl_to_store_wrap(downloaded.data, downloaded.size, cert_store, crl_store);
     if (ret) {
         goto cleanup;
     }
@@ -1175,154 +758,66 @@ cleanup:
     return ret;
 }
 
-static int
-nc_server_tls_crl_cert_ext(struct nc_session *session, X509_STORE *cert_store, X509_STORE *crl_store)
+int
+nc_server_tls_load_crl(struct nc_server_tls_opts *opts, void *cert_store, void *crl_store)
 {
-    int ret = 0, i, j, k, gtype;
-    CURL *handle = NULL;
-    struct nc_curl_data downloaded = {0};
-
-    STACK_OF(X509_OBJECT) * objs;
-    X509_OBJECT *obj;
-    X509 *cert;
-
-    STACK_OF(DIST_POINT) * dist_points;
-    DIST_POINT *dist_point;
-    GENERAL_NAMES *general_names;
-    GENERAL_NAME *general_name;
-    ASN1_STRING *asn_string_uri;
-    const char *crl_distpoint_uri;
-
-    /* init curl */
-    ret = nc_server_tls_curl_init(session, &handle, &downloaded);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* treat all entries in the cert_store as X509_OBJECTs */
-    objs = X509_STORE_get0_objects(cert_store);
-    if (!objs) {
-        ERR(session, "Getting certificates from store failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        ret = -1;
-        goto cleanup;
-    }
-
-    /* iterate over all the CAs */
-    for (i = 0; i < sk_X509_OBJECT_num(objs); i++) {
-        obj = sk_X509_OBJECT_value(objs, i);
-        cert = X509_OBJECT_get0_X509(obj);
-        if (!cert) {
-            /* the object on this index was not a certificate */
-            continue;
-        }
-
-        /* get all the distribution points for this CA */
-        dist_points = X509_get_ext_d2i(cert, NID_crl_distribution_points, NULL, NULL);
-
-        /* iterate over all the dist points (there can be multiple for a single cert) */
-        for (j = 0; j < sk_DIST_POINT_num(dist_points); j++) {
-            dist_point = sk_DIST_POINT_value(dist_points, j);
-            if (!dist_point) {
-                continue;
-            }
-            general_names = dist_point->distpoint->name.fullname;
-
-            /* iterate over all the GeneralesNames in the distribution point */
-            for (k = 0; k < sk_GENERAL_NAME_num(general_names); k++) {
-                general_name = sk_GENERAL_NAME_value(general_names, k);
-                asn_string_uri = GENERAL_NAME_get0_value(general_name, &gtype);
-
-                /* check if the general name is a URI and has a valid length */
-                if ((gtype != GEN_URI) || (ASN1_STRING_length(asn_string_uri) <= 6)) {
-                    continue;
-                }
-
-                crl_distpoint_uri = (const char *) ASN1_STRING_get0_data(asn_string_uri);
-
-                VRB(session, "Downloading CRL from \"%s\".", crl_distpoint_uri);
-
-                /* download the CRL */
-                ret = nc_server_tls_curl_fetch(session, handle, crl_distpoint_uri);
-                if (ret) {
-                    /* failed to download the CRL from this entry, try th next */
-                    continue;
-                }
-
-                /* convert the downloaded data to CRL and add it to the store */
-                ret = nc_server_tls_add_crl_to_store(session, &downloaded, crl_store);
-                if (ret) {
-                    goto cleanup;
-                }
-
-                /* the CRL was downloaded, no need to download it again using different protocol */
-                break;
-            }
-        }
-    }
-
-cleanup:
-    curl_easy_cleanup(handle);
-    return ret;
-}
-
-static int
-nc_tls_store_set_crl(struct nc_session *session, struct nc_server_tls_opts *opts, X509_STORE *store)
-{
-    if (!opts->crl_store) {
-        /* first call on this endpoint */
-        opts->crl_store = X509_STORE_new();
-        NC_CHECK_ERRMEM_GOTO(!opts->crl_store, , fail);
-    }
-
     if (opts->crl_path) {
-        if (nc_server_tls_crl_path(session, opts->crl_path, opts->crl_store)) {
-            goto fail;
+        if (nc_server_tls_crl_path_wrap(opts->crl_path, cert_store, crl_store)) {
+            return 1;
         }
     } else if (opts->crl_url) {
-        if (nc_server_tls_crl_url(session, opts->crl_url, opts->crl_store)) {
-            goto fail;
+        if (nc_server_tls_crl_url(opts->crl_url, cert_store, crl_store)) {
+            return 1;
         }
     } else {
-        if (nc_server_tls_crl_cert_ext(session, store, opts->crl_store)) {
-            goto fail;
+        if (nc_server_tls_crl_cert_ext(cert_store, crl_store)) {
+            return 1;
         }
     }
 
     return 0;
+}
 
-fail:
-    return -1;
+int
+nc_server_tls_load_trusted_certs(struct nc_cert_grouping *ca_certs, void *cert_store)
+{
+    struct nc_certificate *certs;
+    uint16_t i, cert_count;
+
+    if (ca_certs->store == NC_STORE_LOCAL) {
+        /* local definition */
+        certs = ca_certs->certs;
+        cert_count = ca_certs->cert_count;
+    } else {
+        /* truststore */
+        if (nc_server_tls_ts_ref_get_certs(ca_certs->ts_ref, &certs, &cert_count)) {
+            ERR(NULL, "Error getting certificate-authority certificates from the truststore reference \"%s\".", ca_certs->ts_ref);
+            return 1;
+        }
+    }
+
+    for (i = 0; i < cert_count; i++) {
+        if (nc_base64der_to_cert_add_to_store(certs[i].data, cert_store)) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 static int
-nc_server_tls_accept_check(int accept_ret, struct nc_session *session)
+nc_server_tls_accept_check(int accept_ret, void *tls_session)
 {
-    int verify;
+    uint32_t verify;
 
     /* check certificate verification result */
-    verify = SSL_get_verify_result(session->ti.tls);
-    switch (verify) {
-    case X509_V_OK:
-        if (accept_ret == 1) {
-            VRB(session, "Client certificate verified.");
-        }
-        break;
-    default:
-        ERR(session, "Client certificate error (%s).", X509_verify_cert_error_string(verify));
+    verify = nc_tls_get_verify_result_wrap(tls_session);
+    if (!verify && accept_ret == 1) {
+        VRB(NULL, "Client certificate verified.");
     }
 
     if (accept_ret != 1) {
-        switch (SSL_get_error(session->ti.tls, accept_ret)) {
-        case SSL_ERROR_SYSCALL:
-            ERR(session, "SSL accept failed (%s).", strerror(errno));
-            break;
-        case SSL_ERROR_SSL:
-            ERR(session, "SSL accept failed (%s).", ERR_reason_error_string(ERR_get_error()));
-            break;
-        default:
-            ERR(session, "SSL accept failed.");
-            break;
-        }
+        nc_server_tls_print_accept_error_wrap(accept_ret, tls_session);
     }
 
     return accept_ret;
@@ -1331,142 +826,140 @@ nc_server_tls_accept_check(int accept_ret, struct nc_session *session)
 int
 nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opts, int sock, int timeout)
 {
-    X509_STORE *cert_store;
-    SSL_CTX *tls_ctx;
-    int ret;
+    int rc, timeouted = 0;
     struct timespec ts_timeout;
-    struct nc_endpt *referenced_endpt = NULL;
+    struct nc_tls_verify_cb_data cb_data = {0};
+    struct nc_endpt *referenced_endpt;
+    void *tls_cfg, *srv_cert, *srv_pkey, *cert_store, *crl_store;
 
-    /* SSL_CTX */
-    tls_ctx = SSL_CTX_new(TLS_server_method());
+    tls_cfg = srv_cert = srv_pkey = cert_store = crl_store = NULL;
 
-    if (!tls_ctx) {
-        ERR(session, "Failed to create TLS context.");
-        goto error;
-    }
-
-    SSL_CTX_set_verify(tls_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nc_tlsclb_verify);
-    if (nc_tls_ctx_set_server_cert_key(tls_ctx, opts)) {
-        goto error;
-    }
-
-    /* X509_STORE, managed (freed) with the context */
-    cert_store = X509_STORE_new();
-    if (!cert_store) {
-        ERR(session, "Creating certificate store failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        goto error;
-    }
-
-    /* store the session, retrieve it when needed */
-    ret = X509_STORE_set_ex_data(cert_store, 0, session);
-    if (!ret) {
-        ERR(session, "Setting certificate store data failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        goto error;
-    }
-
-    /* set end-entity certs as cert store data, retrieve them if verification fails later */
-    ret = X509_STORE_set_ex_data(cert_store, 1, &opts->ee_certs);
-    if (!ret) {
-        ERR(session, "Setting certificate store data failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        goto error;
-    }
-
-    /* do the same for referenced endpoint's end entity certs */
+    /* set verify cb data */
+    cb_data.session = session;
+    cb_data.opts = opts;
+    cb_data.ee_certs = &opts->ee_certs;
     if (opts->referenced_endpt_name) {
         if (nc_server_get_referenced_endpt(opts->referenced_endpt_name, &referenced_endpt)) {
             ERRINT;
-            goto error;
+            return 1;
         }
-
-        ret = X509_STORE_set_ex_data(cert_store, 2, &referenced_endpt->opts.tls->ee_certs);
-        if (!ret) {
-            ERR(session, "Setting certificate store data failed (%s).", ERR_reason_error_string(ERR_get_error()));
-            goto error;
-        }
+        cb_data.referenced_ee_certs = &referenced_endpt->opts.tls->ee_certs;
     }
 
-    /* set store to the context */
-    SSL_CTX_set_cert_store(tls_ctx, cert_store);
-
-    /* set certificate authority certs */
-    if (nc_tls_store_set_trusted_certs(cert_store, &opts->ca_certs)) {
-        goto error;
+    /* prepare TLS context from which a session will be created */
+    tls_cfg = nc_server_tls_config_new_wrap();
+    if (!tls_cfg) {
+        goto fail;
     }
 
-    /* set referenced endpoint's CA certs if set */
+    /* opaque CA/CRL certificate store */
+    cert_store = nc_tls_cert_store_new_wrap();
+    if (!cert_store) {
+        goto fail;
+    }
+
+    /* load server's key and certificate */
+    if (nc_server_tls_load_server_cert_key(opts, &srv_cert, &srv_pkey)) {
+        ERR(session, "Loading server certificate and/or private key failed.");
+        goto fail;
+    }
+
+    /* load trusted CA certificates */
+    if (nc_server_tls_load_trusted_certs(&opts->ca_certs, cert_store)) {
+        ERR(session, "Loading server CA certs failed.");
+        goto fail;
+    }
+
+    /* load referenced endpoint's trusted CA certs if set */
     if (opts->referenced_endpt_name) {
-        if (nc_tls_store_set_trusted_certs(cert_store, &referenced_endpt->opts.tls->ca_certs)) {
-            goto error;
+        if (nc_server_tls_load_trusted_certs(&referenced_endpt->opts.tls->ca_certs, cert_store)) {
+            ERR(session, "Loading server CA certs from referenced endpoint failed.");
+            goto fail;
         }
     }
 
-    /* set Certificate Revocation List if configured */
     if (opts->crl_path || opts->crl_url || opts->crl_cert_ext) {
-        if (nc_tls_store_set_crl(session, opts, cert_store)) {
-            goto error;
+        /* opaque CRL store */
+        crl_store = nc_tls_crl_store_new_wrap();
+        if (!crl_store) {
+            goto fail;
+        }
+
+        /* load CRLs into one of the stores */
+        if (nc_server_tls_load_crl(opts, cert_store, crl_store)) {
+            ERR(session, "Loading server CRL failed.");
+            goto fail;
         }
     }
 
-    session->ti_type = NC_TI_OPENSSL;
-    session->ti.tls = SSL_new(tls_ctx);
-
-    /* context can be freed already, trusted certs must be freed manually */
-    SSL_CTX_free(tls_ctx);
-    tls_ctx = NULL;
-
-    if (!session->ti.tls) {
-        ERR(session, "Failed to create TLS structure from context.");
-        goto error;
-    }
-
-    /* set TLS versions for the current SSL session */
+    /* set supported TLS versions */
     if (opts->tls_versions) {
-        if (!(opts->tls_versions & NC_TLS_VERSION_10)) {
-            SSL_set_options(session->ti.tls, SSL_OP_NO_TLSv1);
-        }
-        if (!(opts->tls_versions & NC_TLS_VERSION_11)) {
-            SSL_set_options(session->ti.tls, SSL_OP_NO_TLSv1_1);
-        }
-        if (!(opts->tls_versions & NC_TLS_VERSION_12)) {
-            SSL_set_options(session->ti.tls, SSL_OP_NO_TLSv1_2);
-        }
-        if (!(opts->tls_versions & NC_TLS_VERSION_13)) {
-            SSL_set_options(session->ti.tls, SSL_OP_NO_TLSv1_3);
+        if (nc_server_tls_set_tls_versions_wrap(tls_cfg, opts->tls_versions)) {
+            ERR(session, "Setting supported server TLS versions failed.");
+            goto fail;
         }
     }
 
-    /* set TLS cipher suites */
-    if (opts->ciphers) {
-        /* set for TLS1.2 and lower */
-        SSL_set_cipher_list(session->ti.tls, opts->ciphers);
-        /* set for TLS1.3 */
-        SSL_set_ciphersuites(session->ti.tls, opts->ciphers);
+    /* init TLS context and store data which may be needed later in it */
+    if (nc_tls_init_ctx_wrap(&session->ti.tls.ctx, sock, srv_cert, srv_pkey, cert_store, crl_store)) {
+        goto fail;
     }
 
-    SSL_set_fd(session->ti.tls, sock);
+    /* memory is managed by context now */
+    srv_cert = srv_pkey = cert_store = crl_store = NULL;
+
+    /* setup config from ctx */
+    if (nc_tls_setup_config_wrap(tls_cfg, NC_SERVER, &session->ti.tls.ctx)) {
+        goto fail;
+    } // TODO free openssl shit
+
+    /* fill session data and create TLS session from config */
+    session->ti_type = NC_TI_OPENSSL; // TODO: prejmenovat
+    if (!(session->ti.tls.session = nc_tls_session_new_wrap(tls_cfg))) {
+        goto fail;
+    }
+    session->ti.tls.config = tls_cfg;
+
+    /* set verify callback and its data */
+    nc_server_tls_set_verify_cb_wrap(session->ti.tls.session, &cb_data);
+
+    /* set session fd */
+    nc_server_tls_set_fd_wrap(session->ti.tls.session, sock, &session->ti.tls.ctx);
+
+    /* TODO: ciphers */
+
     sock = -1;
-    SSL_set_mode(session->ti.tls, SSL_MODE_AUTO_RETRY);
 
+    /* do the handshake */
     if (timeout > -1) {
         nc_timeouttime_get(&ts_timeout, timeout);
     }
-    while (((ret = SSL_accept(session->ti.tls)) == -1) && (SSL_get_error(session->ti.tls, ret) == SSL_ERROR_WANT_READ)) {
+    while ((rc = nc_server_tls_handshake_step_wrap(session->ti.tls.session)) == 0) {
         usleep(NC_TIMEOUT_STEP);
         if ((timeout > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
-            ERR(session, "SSL accept timeout.");
-            return 0;
+            ERR(session, "TLS accept timeout.");
+            timeouted = 1;
+            goto fail;
         }
     }
-    if (nc_server_tls_accept_check(ret, session) != 1) {
-        return -1;
+
+    /* check if handshake was ok */
+    if (nc_server_tls_accept_check(rc, session->ti.tls.session) != 1) {
+        goto fail;
     }
 
     return 1;
 
-error:
+fail:
     if (sock > -1) {
         close(sock);
     }
-    SSL_CTX_free(tls_ctx);
-    return -1;
+
+    nc_tls_session_new_cleanup_wrap(tls_cfg, srv_cert, srv_pkey, cert_store, crl_store);
+
+    if (timeouted) {
+        return 0;
+    } else {
+        return -1;
+    }
 }
