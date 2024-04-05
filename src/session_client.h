@@ -22,14 +22,14 @@ extern "C" {
 
 #include <libyang/libyang.h>
 
-#ifdef NC_ENABLED_SSH_TLS
-# include <libssh/libssh.h>
-# include <openssl/ssl.h>
-#endif /* NC_ENABLED_SSH_TLS */
-
+#include "config.h"
 #include "messages_client.h"
 #include "netconf.h"
 #include "session.h"
+
+#ifdef NC_ENABLED_SSH_TLS
+# include <libssh/libssh.h>
+#endif /* NC_ENABLED_SSH_TLS */
 
 /**
  * @addtogroup client
@@ -472,17 +472,9 @@ void nc_client_tls_get_crl_paths(const char **crl_file, const char **crl_dir);
 struct nc_session *nc_connect_tls(const char *host, uint16_t port, struct ly_ctx *ctx);
 
 /**
- * @brief Connect to the NETCONF server using the provided TLS (libssl) session.
- *
- * The TLS session supplied is expected to be fully connected and authenticated!
- *
- * @param[in] tls libssl structure representing the TLS session object.
- * @param[in,out] ctx Optional custom context to use for the session. If not set, a default context is created.
- * Any YANG modules not present in the context and supported by the server are loaded using \<get-schema\>
- * (if supported) and/or by searching the searchpath (see ::nc_client_set_schema_searchpath()).
- * @return Created NETCONF session object or NULL on error.
+ * @brief Deprecated. Should not be needed.
  */
-struct nc_session *nc_connect_libssl(SSL *tls, struct ly_ctx *ctx);
+struct nc_session *nc_connect_libssl(void *tls, struct ly_ctx *ctx);
 
 /** @} Client TLS */
 
