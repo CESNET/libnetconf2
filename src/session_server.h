@@ -24,16 +24,16 @@ extern "C" {
 #include <stdint.h>
 #include <sys/types.h>
 
-#ifdef NC_ENABLED_SSH_TLS
-# include <openssl/x509.h>
 
+#include "config.h"
+#include "netconf.h"
+#include "session.h"
+
+#ifdef NC_ENABLED_SSH_TLS
 # include <libssh/callbacks.h>
 # include <libssh/libssh.h>
 # include <libssh/server.h>
 #endif /* NC_ENABLED_SSH_TLS */
-
-#include "netconf.h"
-#include "session.h"
 
 /**
  * @defgroup server_session Server Session
@@ -553,7 +553,7 @@ int nc_server_ssh_set_pam_conf_filename(const char *filename);
  * @param[in] session Session to get the information from.
  * @return Const session client certificate.
  */
-const X509 *nc_session_get_client_cert(const struct nc_session *session);
+const void *nc_session_get_client_cert(const struct nc_session *session);
 
 /**
  * @brief Set TLS authentication additional verify callback.

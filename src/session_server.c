@@ -33,11 +33,6 @@
 #include <time.h>
 #include <unistd.h>
 
-#ifdef NC_ENABLED_SSH_TLS
-#include <curl/curl.h>
-#include <libssh/libssh.h>
-#endif
-
 #include "compat.h"
 #include "config.h"
 #include "log_p.h"
@@ -48,6 +43,12 @@
 #include "session_p.h"
 #include "session_server.h"
 #include "session_server_ch.h"
+#include "session_wrapper.h"
+
+#ifdef NC_ENABLED_SSH_TLS
+#include <curl/curl.h>
+#include <libssh/libssh.h>
+#endif
 
 struct nc_server_opts server_opts = {
     .config_lock = PTHREAD_RWLOCK_INITIALIZER,
@@ -1650,10 +1651,10 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
         }
         break;
     case NC_TI_OPENSSL:
-        r = SSL_pending(session->ti.tls);
+        r = nc_tls_have_pending_wrap(session->ti.tls.session);
         if (!r) {
             /* no data pending in the SSL buffer, poll fd */
-            pfd.fd = SSL_get_rfd(session->ti.tls);
+            pfd.fd = nc_tls_get_fd_wrap(session);
             if (pfd.fd < 0) {
                 sprintf(msg, "Internal error (%s:%d)", __FILE__, __LINE__);
                 ret = NC_PSPOLL_ERROR;
