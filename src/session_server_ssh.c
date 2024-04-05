@@ -31,9 +31,6 @@
 #include <libssh/libssh.h>
 #include <libssh/server.h>
 #include <libyang/libyang.h>
-#include <openssl/bio.h>
-#include <openssl/err.h>
-#include <openssl/evp.h>
 #include <pwd.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -47,6 +44,7 @@
 #include "log_p.h"
 #include "session.h"
 #include "session_p.h"
+#include "session_wrapper.h"
 
 extern struct nc_server_opts server_opts;
 
@@ -1046,7 +1044,7 @@ nc_server_ssh_create_ssh_pubkey(const char *base64, ssh_key *key)
     *key = NULL;
 
     /* convert base64 to binary */
-    if (nc_base64_to_bin(base64, &bin) == -1) {
+    if (nc_base64_decode_wrap(base64, &bin) == -1) {
         ERR(NULL, "Unable to decode base64.");
         ret = 1;
         goto cleanup;
