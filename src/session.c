@@ -37,12 +37,8 @@
 
 #ifdef NC_ENABLED_SSH_TLS
 
+#include "session_wrapper.h"
 #include <libssh/libssh.h>
-#include <openssl/bio.h>
-#include <openssl/conf.h>
-#include <openssl/err.h>
-#include <openssl/evp.h>
-#include <openssl/x509.h>
 
 #endif /* NC_ENABLED_SSH_TLS */
 
@@ -159,82 +155,14 @@ nc_privkey_format_to_str(NC_PRIVKEY_FORMAT format)
 }
 
 int
-nc_base64_to_bin(const char *base64, char **bin)
-{
-    BIO *bio, *bio64 = NULL;
-    size_t used = 0, size = 0, r = 0;
-    void *tmp = NULL;
-    int nl_count, i, remainder, ret = 0;
-    char *b64;
-
-    /* insert new lines into the base64 string, so BIO_read works correctly */
-    nl_count = strlen(base64) / 64;
-    remainder = strlen(base64) - 64 * nl_count;
-    b64 = calloc(strlen(base64) + nl_count + 1, 1);
-    NC_CHECK_ERRMEM_RET(!b64, -1);
-
-    for (i = 0; i < nl_count; i++) {
-        /* copy 64 bytes and add a NL */
-        strncpy(b64 + i * 65, base64 + i * 64, 64);
-        b64[i * 65 + 64] = '\n';
-    }
-
-    /* copy the rest */
-    strncpy(b64 + i * 65, base64 + i * 64, remainder);
-
-    bio64 = BIO_new(BIO_f_base64());
-    if (!bio64) {
-        ERR(NULL, "Error creating a bio (%s).", ERR_reason_error_string(ERR_get_error()));
-        ret = -1;
-        goto cleanup;
-    }
-
-    bio = BIO_new_mem_buf(b64, strlen(b64));
-    if (!bio) {
-        ERR(NULL, "Error creating a bio (%s).", ERR_reason_error_string(ERR_get_error()));
-        ret = -1;
-        goto cleanup;
-    }
-
-    BIO_push(bio64, bio);
-
-    /* store the decoded base64 in bin */
-    *bin = NULL;
-    do {
-        size += 64;
-
-        tmp = realloc(*bin, size);
-        if (!tmp) {
-            ERRMEM;
-            free(*bin);
-            *bin = NULL;
-            ret = -1;
-            goto cleanup;
-        }
-        *bin = tmp;
-
-        r = BIO_read(bio64, *bin + used, 64);
-        used += r;
-    } while (r == 64);
-
-    ret = size;
-
-cleanup:
-    free(b64);
-    BIO_free_all(bio64);
-    return ret;
-}
-
-int
 nc_is_pk_subject_public_key_info(const char *b64)
 {
     int ret = 0;
     long len;
     char *bin = NULL, *tmp;
-    EVP_PKEY *pkey = NULL;
 
-    /* base64 2 binary */
-    len = nc_base64_to_bin(b64, &bin);
+    /* decode base64 */
+    len = nc_base64_decode_wrap(b64, &bin);
     if (len == -1) {
         ERR(NULL, "Decoding base64 public key to binary failed.");
         ret = -1;
@@ -244,18 +172,16 @@ nc_is_pk_subject_public_key_info(const char *b64)
     /* for deallocation later */
     tmp = bin;
 
-    /* try to create EVP_PKEY from the supposed SubjectPublicKeyInfo binary data */
-    pkey = d2i_PUBKEY(NULL, (const unsigned char **)&tmp, len);
-    if (pkey) {
-        /* success, it's most likely SubjectPublicKeyInfo pubkey */
+    /* try to parse the supposed SubjectPublicKeyInfo binary data */
+    if (!nc_der_to_pubkey_wrap((const unsigned char *)tmp, len)) {
+        /* success, it's most likely SubjectPublicKeyInfo */
         ret = 1;
     } else {
-        /* fail, it's most likely not SubjectPublicKeyInfo pubkey */
+        /* it's most likely not SubjectPublicKeyInfo */
         ret = 0;
     }
 
 cleanup:
-    EVP_PKEY_free(pkey);
     free(bin);
     return ret;
 }
@@ -869,17 +795,22 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
         break;
     }
     case NC_TI_OPENSSL:
-        /* remember sock so we can close it */
-        sock = SSL_get_fd(session->ti.tls);
+        sock = nc_tls_get_fd_wrap(session);
 
         if (connected) {
-            SSL_shutdown(session->ti.tls);
+            /* notify the peer that we're shutting down */
+            nc_tls_close_notify_wrap(session->ti.tls.session);
         }
-        SSL_free(session->ti.tls);
+
+        nc_tls_ctx_destroy_wrap(&session->ti.tls.ctx);
+        nc_tls_session_destroy_wrap(session->ti.tls.session);
+        nc_tls_config_destroy_wrap(session->ti.tls.config);
 
         if (session->side == NC_SERVER) {
-            X509_free(session->opts.server.client_cert);
+            // TODO
+            nc_tls_cert_destroy_wrap(session->opts.server.client_cert);
         }
+
         break;
 #endif /* NC_ENABLED_SSH_TLS */
     case NC_TI_NONE:
