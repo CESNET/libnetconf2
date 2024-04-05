@@ -28,15 +28,10 @@
 #include <time.h>
 #include <unistd.h>
 
-#ifdef NC_ENABLED_SSH_TLS
-#   include <openssl/err.h>
-#   include <openssl/ssl.h>
-#endif /* NC_ENABLED_SSH_TLS */
-
 #include <libyang/libyang.h>
 
-#include "compat.h"
 #include "config.h"
+#include "compat.h"
 #include "log_p.h"
 #include "messages_p.h"
 #include "netconf.h"
@@ -56,36 +51,6 @@ const char *nc_msgtype2str[] = {
 };
 
 #define BUFFERSIZE 512
-
-#ifdef NC_ENABLED_SSH_TLS
-
-static char *
-nc_ssl_error_get_reasons(void)
-{
-    unsigned int e;
-    int reason_size, reason_len;
-    char *reasons = NULL;
-
-    reason_size = 1;
-    reason_len = 0;
-    while ((e = ERR_get_error())) {
-        if (reason_len) {
-            /* add "; " */
-            reason_size += 2;
-            reasons = nc_realloc(reasons, reason_size);
-            NC_CHECK_ERRMEM_RET(!reasons, NULL);
-            reason_len += sprintf(reasons + reason_len, "; ");
-        }
-        reason_size += strlen(ERR_reason_error_string(e));
-        reasons = nc_realloc(reasons, reason_size);
-        NC_CHECK_ERRMEM_RET(!reasons, NULL);
-        reason_len += sprintf(reasons + reason_len, "%s", ERR_reason_error_string(e));
-    }
-
-    return reasons;
-}
-
-#endif /* NC_ENABLED_SSH_TLS */
 
 static ssize_t
 nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_timeout, struct timespec *ts_act_timeout)
@@ -164,41 +129,10 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
             break;
 
         case NC_TI_OPENSSL:
-            /* read via OpenSSL */
-            ERR_clear_error();
-            r = SSL_read(session->ti.tls, buf + readd, count - readd);
-            if (r <= 0) {
-                int e;
-                char *reasons;
-
-                switch (e = SSL_get_error(session->ti.tls, r)) {
-                case SSL_ERROR_WANT_READ:
-                case SSL_ERROR_WANT_WRITE:
-                    r = 0;
-                    break;
-                case SSL_ERROR_ZERO_RETURN:
-                    ERR(session, "Communication socket unexpectedly closed (OpenSSL).");
-                    session->status = NC_STATUS_INVALID;
-                    session->term_reason = NC_SESSION_TERM_DROPPED;
-                    return -1;
-                case SSL_ERROR_SYSCALL:
-                    ERR(session, "SSL socket error (%s).", errno ? strerror(errno) : "unexpected EOF");
-                    session->status = NC_STATUS_INVALID;
-                    session->term_reason = NC_SESSION_TERM_OTHER;
-                    return -1;
-                case SSL_ERROR_SSL:
-                    reasons = nc_ssl_error_get_reasons();
-                    ERR(session, "SSL error (%s).", reasons);
-                    free(reasons);
-                    session->status = NC_STATUS_INVALID;
-                    session->term_reason = NC_SESSION_TERM_OTHER;
-                    return -1;
-                default:
-                    ERR(session, "Unknown SSL error occurred (err code %d).", e);
-                    session->status = NC_STATUS_INVALID;
-                    session->term_reason = NC_SESSION_TERM_OTHER;
-                    return -1;
-                }
+            r = nc_tls_read_wrap(session, (unsigned char *)buf + readd, count - readd);
+            if (r < 0) {
+                /* non-recoverable error */
+                return r;
             }
             break;
 #endif /* NC_ENABLED_SSH_TLS */
@@ -484,7 +418,7 @@ nc_read_poll(struct nc_session *session, int io_timeout)
         }
         break;
     case NC_TI_OPENSSL:
-        ret = SSL_pending(session->ti.tls);
+        ret = nc_tls_have_pending_wrap(session->ti.tls.session);
         if (ret) {
             /* some buffered TLS data available */
             ret = 1;
@@ -492,7 +426,7 @@ nc_read_poll(struct nc_session *session, int io_timeout)
             break;
         }
 
-        fds.fd = SSL_get_fd(session->ti.tls);
+        fds.fd = nc_tls_get_fd_wrap(session);
 #endif /* NC_ENABLED_SSH_TLS */
     /* fallthrough */
     case NC_TI_FD:
@@ -592,7 +526,7 @@ nc_session_is_connected(const struct nc_session *session)
     case NC_TI_LIBSSH:
         return ssh_is_connected(session->ti.libssh.session);
     case NC_TI_OPENSSL:
-        fds.fd = SSL_get_fd(session->ti.tls);
+        fds.fd = nc_tls_get_fd_wrap(session);
         break;
 #endif /* NC_ENABLED_SSH_TLS */
     default:
@@ -637,10 +571,6 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
 {
     int c, fd, interrupted;
     uint32_t written = 0;
-
-#ifdef NC_ENABLED_SSH_TLS
-    unsigned long e;
-#endif /* NC_ENABLED_SSH_TLS */
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
         return -1;
@@ -693,30 +623,10 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
             }
             break;
         case NC_TI_OPENSSL:
-            c = SSL_write(session->ti.tls, (char *)(buf + written), count - written);
-            if (c < 1) {
-                char *reasons;
-
-                switch ((e = SSL_get_error(session->ti.tls, c))) {
-                case SSL_ERROR_ZERO_RETURN:
-                    ERR(session, "SSL connection was properly closed.");
-                    return -1;
-                case SSL_ERROR_WANT_WRITE:
-                case SSL_ERROR_WANT_READ:
-                    c = 0;
-                    break;
-                case SSL_ERROR_SYSCALL:
-                    ERR(session, "SSL socket error (%s).", strerror(errno));
-                    return -1;
-                case SSL_ERROR_SSL:
-                    reasons = nc_ssl_error_get_reasons();
-                    ERR(session, "SSL error (%s).", reasons);
-                    free(reasons);
-                    return -1;
-                default:
-                    ERR(session, "Unknown SSL error occurred (err code %d).", e);
-                    return -1;
-                }
+            c = nc_tls_write_wrap(session, (const unsigned char *)(buf + written), count - written);
+            if (c < 0) {
+                /* possible client dc, or some socket/TLS communication error */
+                return -1;
             }
             break;
 #endif /* NC_ENABLED_SSH_TLS */
