@@ -37,8 +37,14 @@
 /* private key's pkcs1 rsa header */
 #define NC_PKCS1_RSA_PRIVKEY_HEADER "-----BEGIN RSA PRIVATE KEY-----\n"
 
+/* private key's pkcs1 rsa footer */
+#define NC_PKCS1_RSA_PRIVKEY_FOOTER "\n-----END RSA PRIVATE KEY-----\n"
+
 /* private key's sec1 ec header */
 #define NC_SEC1_EC_PRIVKEY_HEADER "-----BEGIN EC PRIVATE KEY-----\n"
+
+/* private key's sec1 ec footer */
+#define NC_SEC1_EC_PRIVKEY_FOOTER "\n-----END EC PRIVATE KEY-----\n"
 
 /* private key's header when getting an EC/RSA privkey from file using libssh */
 #define NC_LIBSSH_PRIVKEY_HEADER "-----BEGIN PRIVATE KEY-----\n"
