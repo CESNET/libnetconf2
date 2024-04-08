@@ -7,58 +7,68 @@ if(${SOURCE_FORMAT_ENABLED})
     add_test(NAME format WORKING_DIRECTORY ${CMAKE_BINARY_DIR} COMMAND cmake --build ${CMAKE_BINARY_DIR} --target format-check)
 endif()
 
-# list of all the tests that don't require SSH and TLS
-set(tests test_unix_socket test_client_thread test_fd_comm test_init_destroy_client test_init_destroy_server
-        test_io test_thread_messages test_client_messages)
-
-#append tests depending on SSH/TLS
-if(ENABLE_SSH_TLS)
-    list(APPEND tests test_auth test_two_channels test_ks_ts test_ec
-        test_ed25519 test_replace test_endpt_share_clients test_tls test_crl test_ch
-        test_runtime_changes test_client_ssh test_client_tls test_authkeys)
-
-    if (LIBPAM_HAVE_CONFDIR)
-        list(APPEND tests test_pam)
-    endif()
-endif()
-
 foreach(src IN LISTS libsrc)
     list(APPEND test_srcs "../${src}")
 endforeach()
 add_library(testobj OBJECT ${test_srcs} ${compatsrc})
 
-# set the mocked functions for the tests
-set(mock_tests test_client_ssh test_client_tls test_pam)
-set(test_client_ssh_mock_funcs connect ssh_connect ssh_userauth_none ssh_userauth_kbdint ssh_is_connected
-    ssh_channel_open_session ssh_channel_request_subsystem ssh_channel_is_close ssh_channel_write
-    ssh_channel_poll_timeout ssh_userauth_password nc_handshake_io nc_ctx_check_and_fill
-    ssh_userauth_try_publickey ssh_userauth_publickey nc_sock_listen_inet nc_sock_accept_binds nc_accept_callhome_ssh_sock)
-set(test_client_tls_mock_funcs connect SSL_connect nc_send_hello_io nc_handshake_io nc_ctx_check_and_fill)
-set(test_pam_mock_funcs pam_start)
+function(libnetconf2_test)
+    cmake_parse_arguments(TEST "" "NAME" "WRAP_FUNCS" ${ARGN})
 
-# add -Wl,--wrap flags to tests that require it
-set(moc_funcs test_client_ssh_mock_funcs test_client_tls_mock_funcs test_pam_mock_funcs)
-foreach(mock_test IN LISTS mock_tests)
-    set(${mock_test}_wrap_link_flags "-Wl")
-    foreach(mock_func IN LISTS ${mock_test}_mock_funcs)
-        set(${mock_test}_wrap_link_flags "${${mock_test}_wrap_link_flags},--wrap=${mock_func}")
-    endforeach()
-endforeach()
+    add_executable(${TEST_NAME} $<TARGET_OBJECTS:testobj> ${TEST_NAME}.c)
+    target_link_libraries(${TEST_NAME} ${CMOCKA_LIBRARIES} ${LIBYANG_LIBRARIES} netconf2)
+    target_include_directories(${TEST_NAME} PRIVATE ${CMOCKA_INCLUDE_DIR})
+    if(TEST_WRAP_FUNCS)
+        set(wrap_link_flags "-Wl")
+        foreach(mock_func IN LISTS TEST_WRAP_FUNCS)
+            set(wrap_link_flags "${wrap_link_flags},--wrap=${mock_func}")
+        endforeach()
+        set_target_properties(${TEST_NAME} PROPERTIES LINK_FLAGS "${wrap_link_flags}")
+    endif()
+    add_test(NAME ${TEST_NAME} COMMAND $<TARGET_FILE:${TEST_NAME}>)
 
-foreach(test_name IN LISTS tests)
-    add_executable(${test_name} $<TARGET_OBJECTS:testobj> ${test_name}.c)
-    target_link_libraries(${test_name} ${CMOCKA_LIBRARIES} ${LIBYANG_LIBRARIES} netconf2)
-    target_include_directories(${test_name} PRIVATE ${CMOCKA_INCLUDE_DIR})
-    set_target_properties(${test_name} PROPERTIES LINK_FLAGS "${${test_name}_wrap_link_flags}")
-    add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
-endforeach()
+    if(ENABLE_VALGRIND_TESTS)
+        add_test(${TEST_NAME}_valgrind valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1
+            --suppressions=${PROJECT_SOURCE_DIR}/tests/library_valgrind.supp ${CMAKE_BINARY_DIR}/tests/${TEST_NAME})
+    endif()
+endfunction()
 
-if(ENABLE_VALGRIND_TESTS)
-    foreach(test_name IN LISTS tests)
-        add_test(${test_name}_valgrind valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1
-            --suppressions=${PROJECT_SOURCE_DIR}/tests/library_valgrind.supp ${CMAKE_BINARY_DIR}/tests/${test_name})
-    endforeach()
+# all the tests that don't require SSH and TLS
+libnetconf2_test(NAME test_unix_socket)
+libnetconf2_test(NAME test_client_thread)
+libnetconf2_test(NAME test_fd_comm)
+libnetconf2_test(NAME test_init_destroy_client)
+libnetconf2_test(NAME test_init_destroy_server)
+libnetconf2_test(NAME test_io)
+libnetconf2_test(NAME test_thread_messages)
+libnetconf2_test(NAME test_client_messages)
+
+# tests depending on SSH/TLS
+if(ENABLE_SSH_TLS)
+    libnetconf2_test(NAME test_auth)
+    libnetconf2_test(NAME test_two_channels)
+    libnetconf2_test(NAME test_ks_ts)
+    libnetconf2_test(NAME test_ec)
+    libnetconf2_test(NAME test_ed25519)
+    libnetconf2_test(NAME test_replace)
+    libnetconf2_test(NAME test_endpt_share_clients)
+    libnetconf2_test(NAME test_tls)
+    libnetconf2_test(NAME test_crl)
+    libnetconf2_test(NAME test_ch)
+    libnetconf2_test(NAME test_runtime_changes)
+    libnetconf2_test(NAME test_client_ssh
+        WRAP_FUNCS connect ssh_connect ssh_userauth_none ssh_userauth_kbdint ssh_is_connected
+            ssh_channel_open_session ssh_channel_request_subsystem ssh_channel_is_close ssh_channel_write
+            ssh_channel_poll_timeout ssh_userauth_password nc_handshake_io nc_ctx_check_and_fill
+            ssh_userauth_try_publickey ssh_userauth_publickey nc_sock_listen_inet nc_sock_accept_binds nc_accept_callhome_ssh_sock)
+    libnetconf2_test(NAME test_client_tls
+        WRAP_FUNCS connect SSL_connect nc_send_hello_io nc_handshake_io nc_ctx_check_and_fill)
+    libnetconf2_test(NAME test_authkeys)
+    if (LIBPAM_HAVE_CONFDIR)
+        libnetconf2_test(NAME test_pam WRAP_FUNCS pam_start)
+    endif()
 endif()
+
 
 include_directories(${CMAKE_SOURCE_DIR}/src ${PROJECT_BINARY_DIR})
 configure_file("${PROJECT_SOURCE_DIR}/tests/config.h.in" "${PROJECT_BINARY_DIR}/tests/config.h" ESCAPE_QUOTES @ONLY)
