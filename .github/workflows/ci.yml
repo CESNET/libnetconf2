@@ -188,4 +188,4 @@ jobs:
         working-directory: ${{ github.workspace }}/build
         run: |
           export LSAN_OPTIONS=suppressions=${{ github.workspace }}/tests/library_lsan.supp
-          ctest --output-on-failure
+          ctest -j4 --output-on-failure
