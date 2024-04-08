@@ -86,7 +86,7 @@ client_thread_ssh(void *arg)
     assert_int_equal(ret, 0);
 
     pthread_barrier_wait(&state->barrier);
-    session = nc_connect_ssh("127.0.0.1", 10005, NULL);
+    session = nc_connect_ssh("127.0.0.1", TEST_PORT, NULL);
     assert_non_null(session);
 
     nc_session_free(session, NULL);
@@ -138,7 +138,7 @@ setup_ssh(void **state)
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", 10005, &tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_add_ssh_keystore_ref(ctx, "endpt", "hostkey", "test_keystore", &tree);
@@ -188,7 +188,7 @@ client_thread_tls(void *arg)
     assert_int_equal(ret, 0);
 
     pthread_barrier_wait(&state->barrier);
-    session = nc_connect_tls("127.0.0.1", 10005, NULL);
+    session = nc_connect_tls("127.0.0.1", TEST_PORT, NULL);
     assert_non_null(session);
 
     nc_session_free(session, NULL);
@@ -244,7 +244,7 @@ setup_tls(void **state)
     assert_int_equal(ret, 0);
 
     /* new tls bind */
-    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_OPENSSL, "127.0.0.1", 10005, &tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_OPENSSL, "127.0.0.1", TEST_PORT, &tree);
     assert_int_equal(ret, 0);
 
     /* new keystore asym key pair */

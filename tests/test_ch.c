@@ -152,7 +152,7 @@ client_thread_ssh(void *arg)
     assert_int_equal(ret, 0);
 
     /* add call-home bind */
-    ret = nc_client_ssh_ch_add_bind_listen("127.0.0.1", 10009);
+    ret = nc_client_ssh_ch_add_bind_listen("127.0.0.1", TEST_PORT);
     assert_int_equal(ret, 0);
 
     pthread_barrier_wait(&state->barrier);
@@ -160,7 +160,7 @@ client_thread_ssh(void *arg)
     ret = nc_accept_callhome(NC_ACCEPT_TIMEOUT, NULL, &session);
     assert_int_equal(ret, 1);
 
-    ret = nc_client_ssh_ch_del_bind("127.0.0.1", 10009);
+    ret = nc_client_ssh_ch_del_bind("127.0.0.1", TEST_PORT);
     assert_int_equal(ret, 0);
 
     nc_session_free(session, NULL);
@@ -198,7 +198,7 @@ setup_ssh(void **state)
     assert_int_equal(ret, 0);
 
     /* set call-home address and port */
-    ret = nc_server_config_add_ch_address_port(ctx, "ch_ssh", "endpt", NC_TI_LIBSSH, "127.0.0.1", "10009", &test_state->ssh_tree);
+    ret = nc_server_config_add_ch_address_port(ctx, "ch_ssh", "endpt", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT_STR, &test_state->ssh_tree);
     assert_int_equal(ret, 0);
 
     /* set connection type to persistent */
@@ -333,7 +333,7 @@ client_thread_tls(void *arg)
     assert_int_equal(ret, 0);
 
     /* add call-home bind */
-    ret = nc_client_tls_ch_add_bind_listen("127.0.0.1", 10010);
+    ret = nc_client_tls_ch_add_bind_listen("127.0.0.1", TEST_PORT_2);
     assert_int_equal(ret, 0);
 
     pthread_barrier_wait(&state->barrier);
@@ -341,7 +341,7 @@ client_thread_tls(void *arg)
     ret = nc_accept_callhome(NC_ACCEPT_TIMEOUT, NULL, &session);
     assert_int_equal(ret, 1);
 
-    ret = nc_client_tls_ch_del_bind("127.0.0.1", 10010);
+    ret = nc_client_tls_ch_del_bind("127.0.0.1", TEST_PORT_2);
     assert_int_equal(ret, 0);
 
     nc_session_free(session, NULL);
@@ -400,7 +400,7 @@ setup_tls(void **state)
     assert_int_equal(ret, 0);
 
     /* set call-home address and port */
-    ret = nc_server_config_add_ch_address_port(ctx, "ch_tls", "endpt", NC_TI_OPENSSL, "127.0.0.1", "10010", &test_state->tls_tree);
+    ret = nc_server_config_add_ch_address_port(ctx, "ch_tls", "endpt", NC_TI_OPENSSL, "127.0.0.1", TEST_PORT_2_STR, &test_state->tls_tree);
     assert_int_equal(ret, 0);
 
     /* set call-home server certificate */

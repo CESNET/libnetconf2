@@ -96,7 +96,7 @@ client_thread(void *arg)
     ret = nc_client_ssh_set_username("client_1");
     assert_int_equal(ret, 0);
 
-    session_cl1 = nc_connect_ssh("127.0.0.1", 10005, NULL);
+    session_cl1 = nc_connect_ssh("127.0.0.1", TEST_PORT, NULL);
     assert_non_null(session_cl1);
 
     ret = nc_client_ssh_set_username("client_2");
@@ -154,7 +154,7 @@ setup_f(void **state)
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", 10005, &tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_add_ssh_hostkey(ctx, "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa", NULL, &tree);
