@@ -45,7 +45,7 @@ const char *old_data =
         "            <ssh>\n"
         "                <tcp-server-parameters>\n"
         "                    <local-address>127.0.0.1</local-address>\n"
-        "                    <local-port>10005</local-port>\n"
+        "                    <local-port>" TEST_PORT_STR "</local-port>\n"
         "                </tcp-server-parameters>\n"
         "                <ssh-server-parameters>\n"
         "                    <server-identity>\n"
@@ -84,7 +84,7 @@ const char *new_data =
         "            <ssh>\n"
         "                <tcp-server-parameters>\n"
         "                    <local-address>127.0.0.1</local-address>\n"
-        "                    <local-port>10005</local-port>\n"
+        "                    <local-port>" TEST_PORT_STR "</local-port>\n"
         "                </tcp-server-parameters>\n"
         "                <ssh-server-parameters>\n"
         "                    <server-identity>\n"
@@ -178,7 +178,7 @@ client_thread(void *arg)
     pthread_barrier_wait(&state->barrier);
 
     /* connect */
-    session = nc_connect_ssh("127.0.0.1", 10005, NULL);
+    session = nc_connect_ssh("127.0.0.1", TEST_PORT, NULL);
     assert_non_null(session);
 
     nc_session_free(session, NULL);
@@ -233,7 +233,7 @@ setup_f(void **state)
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_address_port(ctx, "old", NC_TI_LIBSSH, "127.0.0.1", 10005, &old_tree);
+    ret = nc_server_config_add_address_port(ctx, "old", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT, &old_tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_add_ssh_hostkey(ctx, "old", "old_key", TESTS_DIR "/data/key_rsa", NULL, &old_tree);
@@ -246,7 +246,7 @@ setup_f(void **state)
     ret = nc_server_config_setup_data(old_tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_address_port(ctx, "new", NC_TI_LIBSSH, "127.0.0.1", 10005, &new_tree);
+    ret = nc_server_config_add_address_port(ctx, "new", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT, &new_tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_add_ssh_hostkey(ctx, "new", "new_key", TESTS_DIR "/data/key_rsa", NULL, &new_tree);

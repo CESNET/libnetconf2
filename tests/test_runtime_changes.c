@@ -118,7 +118,7 @@ client_thread_tls(void *arg)
     while (1) {
         /* config ready, wait for client/server to be ready */
         pthread_barrier_wait(&state->start_barrier);
-        session = nc_connect_tls("127.0.0.1", 10005, NULL);
+        session = nc_connect_tls("127.0.0.1", TEST_PORT, NULL);
         if (expect_ok) {
             assert_non_null(session);
             nc_session_free(session, NULL);
@@ -164,7 +164,7 @@ client_thread_ssh(void *arg)
     while (1) {
         /* config ready, wait for client/server to be ready */
         pthread_barrier_wait(&state->start_barrier);
-        session = nc_connect_ssh("127.0.0.1", 10006, NULL);
+        session = nc_connect_ssh("127.0.0.1", TEST_PORT_2, NULL);
         if (expect_ok) {
             assert_non_null(session);
             nc_session_free(session, NULL);
@@ -385,7 +385,7 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* create new address and port data */
-    ret = nc_server_config_add_address_port(ctx, "endpt_tls", NC_TI_OPENSSL, "127.0.0.1", 10005, &test_state->tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt_tls", NC_TI_OPENSSL, "127.0.0.1", TEST_PORT, &test_state->tree);
     assert_int_equal(ret, 0);
 
     /* create new server certificate data */
@@ -403,7 +403,7 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* create new address and port data */
-    ret = nc_server_config_add_address_port(ctx, "endpt_ssh", NC_TI_LIBSSH, "127.0.0.1", 10006, &test_state->tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt_ssh", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT_2, &test_state->tree);
     assert_int_equal(ret, 0);
 
     /* create new hostkey data */

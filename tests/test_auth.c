@@ -105,7 +105,7 @@ client_thread_password(void *arg)
     nc_client_ssh_set_auth_pref(NC_SSH_AUTH_INTERACTIVE, -1);
 
     pthread_barrier_wait(&state->barrier);
-    session = nc_connect_ssh("127.0.0.1", 10005, NULL);
+    session = nc_connect_ssh("127.0.0.1", TEST_PORT, NULL);
     assert_non_null(session);
 
     nc_session_free(session, NULL);
@@ -154,7 +154,7 @@ client_thread_pubkey(void *arg)
     assert_int_equal(ret, 0);
 
     pthread_barrier_wait(&state->barrier);
-    session = nc_connect_ssh("127.0.0.1", 10005, NULL);
+    session = nc_connect_ssh("127.0.0.1", TEST_PORT, NULL);
     assert_non_null(session);
 
     nc_session_free(session, NULL);
@@ -196,7 +196,7 @@ client_thread_none(void *arg)
     assert_int_equal(ret, 0);
 
     pthread_barrier_wait(&state->barrier);
-    session = nc_connect_ssh("127.0.0.1", 10005, NULL);
+    session = nc_connect_ssh("127.0.0.1", TEST_PORT, NULL);
     assert_non_null(session);
 
     nc_session_free(session, NULL);
@@ -248,7 +248,7 @@ setup_f(void **state)
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", 10005, &tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_add_ssh_hostkey(ctx, "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa", NULL, &tree);
