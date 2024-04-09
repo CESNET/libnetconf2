@@ -74,8 +74,6 @@ void nc_libssh_thread_verbosity(int level);
 /**
  * @brief Set libnetconf print callback.
  *
- * This callback is set for libnetconf2 and also libyang that is used internally. libyang
- * callback can be set explicitly, but must be done so after calling this function.
  * The callback is not set per-session, it is a global resource. It might be called with
  * a NULL session parameter.
  *
