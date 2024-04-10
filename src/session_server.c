@@ -2906,7 +2906,9 @@ cleanup:
     VRB(session, "Call Home client \"%s\" thread exit.", data->client_name);
     free(cur_endpt_name);
     free(data->client_name);
+    pthread_mutex_lock(&data->cond_lock);
     pthread_cond_destroy(&data->cond);
+    pthread_mutex_unlock(&data->cond_lock);
     pthread_mutex_destroy(&data->cond_lock);
     free(data);
     return NULL;
