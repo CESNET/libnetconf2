@@ -106,7 +106,7 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
             break;
 
 #ifdef NC_ENABLED_SSH_TLS
-        case NC_TI_LIBSSH:
+        case NC_TI_SSH:
             /* read via libssh */
             r = ssh_channel_read(session->ti.libssh.channel, buf + readd, count - readd, 0);
             if (r == SSH_AGAIN) {
@@ -128,7 +128,7 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
             }
             break;
 
-        case NC_TI_OPENSSL:
+        case NC_TI_TLS:
             r = nc_tls_read_wrap(session, (unsigned char *)buf + readd, count - readd);
             if (r < 0) {
                 /* non-recoverable error */
@@ -396,7 +396,7 @@ nc_read_poll(struct nc_session *session, int io_timeout)
 
     switch (session->ti_type) {
 #ifdef NC_ENABLED_SSH_TLS
-    case NC_TI_LIBSSH:
+    case NC_TI_SSH:
         /* EINTR is handled, it resumes waiting */
         ret = ssh_channel_poll_timeout(session->ti.libssh.channel, io_timeout, 0);
         if (ret == SSH_ERROR) {
@@ -417,7 +417,7 @@ nc_read_poll(struct nc_session *session, int io_timeout)
             fds.revents = 0;
         }
         break;
-    case NC_TI_OPENSSL:
+    case NC_TI_TLS:
         ret = nc_tls_have_pending_wrap(session->ti.tls.session);
         if (ret) {
             /* some buffered TLS data available */
@@ -523,9 +523,9 @@ nc_session_is_connected(const struct nc_session *session)
         fds.fd = session->ti.unixsock.sock;
         break;
 #ifdef NC_ENABLED_SSH_TLS
-    case NC_TI_LIBSSH:
+    case NC_TI_SSH:
         return ssh_is_connected(session->ti.libssh.session);
-    case NC_TI_OPENSSL:
+    case NC_TI_TLS:
         fds.fd = nc_tls_get_fd_wrap(session);
         break;
 #endif /* NC_ENABLED_SSH_TLS */
@@ -605,7 +605,7 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
             break;
 
 #ifdef NC_ENABLED_SSH_TLS
-        case NC_TI_LIBSSH:
+        case NC_TI_SSH:
             if (ssh_channel_is_closed(session->ti.libssh.channel) || ssh_channel_is_eof(session->ti.libssh.channel)) {
                 if (ssh_channel_is_closed(session->ti.libssh.channel)) {
                     ERR(session, "SSH channel unexpectedly closed.");
@@ -622,7 +622,7 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
                 return -1;
             }
             break;
-        case NC_TI_OPENSSL:
+        case NC_TI_TLS:
             c = nc_tls_write_wrap(session, (const unsigned char *)(buf + written), count - written);
             if (c < 0) {
                 /* possible client dc, or some socket/TLS communication error */

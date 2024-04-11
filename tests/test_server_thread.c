@@ -113,7 +113,7 @@ add_endpt_thread(void *arg)
     int ret;
 
     pthread_barrier_wait(&barrier);
-    ret = nc_server_add_endpt("tertiary", NC_TI_LIBSSH);
+    ret = nc_server_add_endpt("tertiary", NC_TI_SSH);
     nc_assert(!ret);
 
     return NULL;
@@ -687,7 +687,7 @@ main(void)
     nc_server_ssh_set_hostkey_clb(clb_hostkeys, NULL, NULL);
 
     /* do first, so that client can connect on SSH */
-    ret = nc_server_add_endpt("main_ssh", NC_TI_LIBSSH);
+    ret = nc_server_add_endpt("main_ssh", NC_TI_SSH);
     nc_assert(!ret);
     ret = nc_server_endpt_set_address("main_ssh", "0.0.0.0");
     nc_assert(!ret);
@@ -707,7 +707,7 @@ main(void)
     ret = nc_server_ssh_add_authkey_path(TESTS_DIR "/data/key_ecdsa.pub", "test2");
     nc_assert(!ret);
 
-    ret = nc_server_add_endpt("secondary", NC_TI_LIBSSH);
+    ret = nc_server_add_endpt("secondary", NC_TI_SSH);
     nc_assert(!ret);
 #endif
 
@@ -717,7 +717,7 @@ main(void)
     nc_server_tls_set_trusted_cert_list_clb(clb_trusted_cert_lists, NULL, NULL);
 
     /* do first, so that client can connect on TLS */
-    ret = nc_server_add_endpt("main_tls", NC_TI_OPENSSL);
+    ret = nc_server_add_endpt("main_tls", NC_TI_TLS);
     nc_assert(!ret);
     ret = nc_server_endpt_set_address("main_tls", "0.0.0.0");
     nc_assert(!ret);
@@ -739,7 +739,7 @@ main(void)
     ret = nc_server_tls_endpt_add_ctn("main_tls", 1, "02:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:A0:A1:A2:A3", NC_TLS_CTN_SAN_ANY, NULL);
     nc_assert(!ret);
 
-    ret = nc_server_add_endpt("quaternary", NC_TI_OPENSSL);
+    ret = nc_server_add_endpt("quaternary", NC_TI_TLS);
     nc_assert(!ret);
 #endif
 

@@ -672,7 +672,7 @@ nc_server_config_del_endpt_references(const char *referenced_endpt_name)
                 free(server_opts.endpts[i].referenced_endpt_name);
                 server_opts.endpts[i].referenced_endpt_name = NULL;
 
-                if (server_opts.endpts[i].ti == NC_TI_LIBSSH) {
+                if (server_opts.endpts[i].ti == NC_TI_SSH) {
                     server_opts.endpts[i].opts.ssh->referenced_endpt_name = NULL;
                 } else {
                     server_opts.endpts[i].opts.tls->referenced_endpt_name = NULL;
@@ -693,7 +693,7 @@ nc_server_config_del_endpt_references(const char *referenced_endpt_name)
                     free(server_opts.ch_clients[i].ch_endpts[j].referenced_endpt_name);
                     server_opts.ch_clients[i].ch_endpts[j].referenced_endpt_name = NULL;
 
-                    if (server_opts.ch_clients[i].ch_endpts[j].ti == NC_TI_LIBSSH) {
+                    if (server_opts.ch_clients[i].ch_endpts[j].ti == NC_TI_SSH) {
                         server_opts.ch_clients[i].ch_endpts[j].opts.ssh->referenced_endpt_name = NULL;
                     } else {
                         server_opts.ch_clients[i].ch_endpts[j].opts.tls->referenced_endpt_name = NULL;
@@ -880,10 +880,10 @@ nc_server_config_ch_del_endpt(struct nc_ch_client *ch_client, struct nc_ch_endpt
 
     switch (ch_endpt->ti) {
 #ifdef NC_ENABLED_SSH_TLS
-    case NC_TI_LIBSSH:
+    case NC_TI_SSH:
         nc_server_config_del_ssh_opts(NULL, ch_endpt->opts.ssh);
         break;
-    case NC_TI_OPENSSL:
+    case NC_TI_TLS:
         nc_server_config_del_tls_opts(NULL, ch_endpt->opts.tls);
         break;
 #endif /* NC_ENABLED_SSH_TLS */
@@ -980,10 +980,10 @@ nc_server_config_listen(const struct lyd_node *node, NC_OPERATION op)
         for (i = 0; i < endpt_count; i++) {
             switch (server_opts.endpts[i].ti) {
 #ifdef NC_ENABLED_SSH_TLS
-            case NC_TI_LIBSSH:
+            case NC_TI_SSH:
                 nc_server_config_del_endpt_ssh(&server_opts.endpts[i], &server_opts.binds[i]);
                 break;
-            case NC_TI_OPENSSL:
+            case NC_TI_TLS:
                 nc_server_config_del_endpt_tls(&server_opts.endpts[i], &server_opts.binds[i]);
                 break;
 #endif /* NC_ENABLED_SSH_TLS */
@@ -1139,10 +1139,10 @@ nc_server_config_endpoint(const struct lyd_node *node, NC_OPERATION op)
 
             switch (endpt->ti) {
 #ifdef NC_ENABLED_SSH_TLS
-            case NC_TI_LIBSSH:
+            case NC_TI_SSH:
                 nc_server_config_del_endpt_ssh(endpt, bind);
                 break;
-            case NC_TI_OPENSSL:
+            case NC_TI_TLS:
                 nc_server_config_del_endpt_tls(endpt, bind);
                 break;
 #endif /* NC_ENABLED_SSH_TLS */
@@ -1193,7 +1193,7 @@ cleanup:
 static int
 nc_server_config_create_ssh(struct nc_endpt *endpt)
 {
-    endpt->ti = NC_TI_LIBSSH;
+    endpt->ti = NC_TI_SSH;
     endpt->opts.ssh = calloc(1, sizeof(struct nc_server_ssh_opts));
     NC_CHECK_ERRMEM_RET(!endpt->opts.ssh, 1);
 
@@ -1203,7 +1203,7 @@ nc_server_config_create_ssh(struct nc_endpt *endpt)
 static int
 nc_server_config_ch_create_ssh(struct nc_ch_endpt *ch_endpt)
 {
-    ch_endpt->ti = NC_TI_LIBSSH;
+    ch_endpt->ti = NC_TI_SSH;
     ch_endpt->opts.ssh = calloc(1, sizeof(struct nc_server_ssh_opts));
     NC_CHECK_ERRMEM_RET(!ch_endpt->opts.ssh, 1);
 
@@ -1269,7 +1269,7 @@ cleanup:
 static int
 nc_server_config_create_tls(struct nc_endpt *endpt)
 {
-    endpt->ti = NC_TI_OPENSSL;
+    endpt->ti = NC_TI_TLS;
     endpt->opts.tls = calloc(1, sizeof *endpt->opts.tls);
     NC_CHECK_ERRMEM_RET(!endpt->opts.tls, 1);
 
@@ -1279,7 +1279,7 @@ nc_server_config_create_tls(struct nc_endpt *endpt)
 static int
 nc_server_config_ch_create_tls(struct nc_ch_endpt *ch_endpt)
 {
-    ch_endpt->ti = NC_TI_OPENSSL;
+    ch_endpt->ti = NC_TI_TLS;
     ch_endpt->opts.tls = calloc(1, sizeof(struct nc_server_tls_opts));
     NC_CHECK_ERRMEM_RET(!ch_endpt->opts.tls, 1);
 
@@ -2661,7 +2661,7 @@ nc_server_config_check_endpt_references(void)
                 ERR(NULL, "Endpoint \"%s\" referenced by endpoint \"%s\" has different transport type.",
                         server_opts.endpts[i].referenced_endpt_name, server_opts.endpts[i].name);
                 return 1;
-            } else if ((referenced_endpt->ti != NC_TI_LIBSSH) && (referenced_endpt->ti != NC_TI_OPENSSL)) {
+            } else if ((referenced_endpt->ti != NC_TI_SSH) && (referenced_endpt->ti != NC_TI_TLS)) {
                 ERR(NULL, "Endpoint \"%s\" referenced by endpoint \"%s\" has unsupported transport type.",
                         server_opts.endpts[i].referenced_endpt_name, server_opts.endpts[i].name);
                 return 1;
@@ -2675,7 +2675,7 @@ nc_server_config_check_endpt_references(void)
             }
 
             /* all went well, assign the name to the opts, so we can access it for auth */
-            if (server_opts.endpts[i].ti == NC_TI_LIBSSH) {
+            if (server_opts.endpts[i].ti == NC_TI_SSH) {
                 server_opts.endpts[i].opts.ssh->referenced_endpt_name = referenced_endpt->name;
             } else {
                 server_opts.endpts[i].opts.tls->referenced_endpt_name = referenced_endpt->name;
@@ -2703,7 +2703,7 @@ nc_server_config_check_endpt_references(void)
                     ERR(NULL, "Endpoint \"%s\" referenced by call home endpoint \"%s\" has different transport type.",
                             server_opts.ch_clients[i].ch_endpts[j].referenced_endpt_name, server_opts.ch_clients[i].ch_endpts[j].name);
                     goto ch_fail;
-                } else if ((referenced_endpt->ti != NC_TI_LIBSSH) && (referenced_endpt->ti != NC_TI_OPENSSL)) {
+                } else if ((referenced_endpt->ti != NC_TI_SSH) && (referenced_endpt->ti != NC_TI_TLS)) {
                     ERR(NULL, "Endpoint \"%s\" referenced by call home endpoint \"%s\" has unsupported transport type.",
                             server_opts.ch_clients[i].ch_endpts[j].referenced_endpt_name, server_opts.ch_clients[i].ch_endpts[j].name);
                     goto ch_fail;
@@ -2717,7 +2717,7 @@ nc_server_config_check_endpt_references(void)
                 }
 
                 /* all went well, assign the name to the opts, so we can access it for auth */
-                if (server_opts.ch_clients[i].ch_endpts[j].ti == NC_TI_LIBSSH) {
+                if (server_opts.ch_clients[i].ch_endpts[j].ti == NC_TI_SSH) {
                     server_opts.ch_clients[i].ch_endpts[j].opts.ssh->referenced_endpt_name = referenced_endpt->name;
                 } else {
                     server_opts.ch_clients[i].ch_endpts[j].opts.tls->referenced_endpt_name = referenced_endpt->name;
@@ -3232,39 +3232,22 @@ static int
 nc_server_config_create_cipher_suite(struct nc_server_tls_opts *opts, const char *cipher)
 {
     int ret = 0;
-    char *ssl_cipher = NULL;
-    uint16_t i;
-    void *tmp;
+    char *processed_cipher = NULL;
 
-    ssl_cipher = malloc(strlen(cipher) + 1);
-    NC_CHECK_ERRMEM_GOTO(!ssl_cipher, ret = 1, cleanup);
-
-    for (i = 0; cipher[i]; i++) {
-        if (cipher[i] == '-') {
-            /* OpenSSL requires _ instead of - in cipher names */
-            ssl_cipher[i] = '_';
-        } else {
-            /* and requires uppercase unlike the identities */
-            ssl_cipher[i] = toupper(cipher[i]);
-        }
+    ret = nc_tls_process_cipher_suite_wrap(cipher, &processed_cipher);
+    if (ret) {
+        ERR(NULL, "Failed to process the cipher suite \"%s\".", cipher);
+        goto cleanup;
     }
-    ssl_cipher[i] = '\0';
 
-    if (!opts->ciphers) {
-        /* first entry */
-        opts->ciphers = strdup(ssl_cipher);
-        NC_CHECK_ERRMEM_GOTO(!opts->ciphers, ret = 1, cleanup);
-    } else {
-        /* + 1 because of : between entries */
-        tmp = nc_realloc(opts->ciphers, strlen(opts->ciphers) + strlen(ssl_cipher) + 1 + 1);
-        NC_CHECK_ERRMEM_GOTO(!tmp, ret = 1, cleanup);
-        opts->ciphers = tmp;
-        strcat(opts->ciphers, ":");
-        strcat(opts->ciphers, ssl_cipher);
+    ret = nc_tls_append_cipher_suite_wrap(opts, processed_cipher);
+    if (ret) {
+        ERR(NULL, "Failed to append the cipher suite \"%s\".", cipher);
+        goto cleanup;
     }
 
 cleanup:
-    free(ssl_cipher);
+    free(processed_cipher);
     return ret;
 }
 

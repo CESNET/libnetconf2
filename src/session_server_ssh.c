@@ -1265,7 +1265,7 @@ nc_sshcb_channel_subsystem(struct nc_session *session, ssh_channel channel, cons
         session->ti.libssh.next = new_session;
 
         new_session->status = NC_STATUS_STARTING;
-        new_session->ti_type = NC_TI_LIBSSH;
+        new_session->ti_type = NC_TI_SSH;
         new_session->io_lock = session->io_lock;
         new_session->ti.libssh.channel = channel;
         new_session->ti.libssh.session = session->ti.libssh.session;
@@ -1711,7 +1711,7 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
     const char *err_msg;
 
     /* other transport-specific data */
-    session->ti_type = NC_TI_LIBSSH;
+    session->ti_type = NC_TI_SSH;
     session->ti.libssh.session = ssh_new();
     if (!session->ti.libssh.session) {
         ERR(NULL, "Failed to initialize a new SSH session.");
@@ -1815,7 +1815,7 @@ nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session
 
     NC_CHECK_ARG_RET(orig_session, orig_session, session, NC_MSG_ERROR);
 
-    if ((orig_session->status == NC_STATUS_RUNNING) && (orig_session->ti_type == NC_TI_LIBSSH) &&
+    if ((orig_session->status == NC_STATUS_RUNNING) && (orig_session->ti_type == NC_TI_SSH) &&
             orig_session->ti.libssh.next) {
         for (new_session = orig_session->ti.libssh.next;
                 new_session != orig_session;
@@ -1873,7 +1873,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
 
     for (i = 0; i < ps->session_count; ++i) {
         cur_session = ps->sessions[i]->session;
-        if ((cur_session->status == NC_STATUS_RUNNING) && (cur_session->ti_type == NC_TI_LIBSSH) &&
+        if ((cur_session->status == NC_STATUS_RUNNING) && (cur_session->ti_type == NC_TI_SSH) &&
                 cur_session->ti.libssh.next) {
             /* an SSH session with more channels */
             for (new_session = cur_session->ti.libssh.next;

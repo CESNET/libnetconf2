@@ -1601,7 +1601,7 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
 
     switch (session->ti_type) {
 #ifdef NC_ENABLED_SSH_TLS
-    case NC_TI_LIBSSH:
+    case NC_TI_SSH:
         ssh_msg = ssh_message_get(session->ti.libssh.session);
         if (ssh_msg) {
             nc_session_ssh_msg(session, NULL, ssh_msg, NULL);
@@ -1650,7 +1650,7 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
             ret = NC_PSPOLL_RPC;
         }
         break;
-    case NC_TI_OPENSSL:
+    case NC_TI_TLS:
         r = nc_tls_have_pending_wrap(session->ti.tls.session);
         if (!r) {
             /* no data pending in the SSL buffer, poll fd */
@@ -2000,10 +2000,10 @@ nc_server_set_address_port(struct nc_endpt *endpt, struct nc_bind *bind, const c
             VRB(NULL, "Listening on %s for UNIX connections.", endpt->opts.unixsock->address);
             break;
 #ifdef NC_ENABLED_SSH_TLS
-        case NC_TI_LIBSSH:
+        case NC_TI_SSH:
             VRB(NULL, "Listening on %s:%u for SSH connections.", address, port);
             break;
-        case NC_TI_OPENSSL:
+        case NC_TI_TLS:
             VRB(NULL, "Listening on %s:%u for TLS connections.", address, port);
             break;
 #endif /* NC_ENABLED_SSH_TLS */
@@ -2292,7 +2292,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
 
     /* sock gets assigned to session or closed */
 #ifdef NC_ENABLED_SSH_TLS
-    if (server_opts.endpts[bind_idx].ti == NC_TI_LIBSSH) {
+    if (server_opts.endpts[bind_idx].ti == NC_TI_SSH) {
         ret = nc_accept_ssh_session(*session, server_opts.endpts[bind_idx].opts.ssh, sock, NC_TRANSPORT_TIMEOUT);
         sock = -1;
         if (ret < 0) {
@@ -2302,7 +2302,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
             msgtype = NC_MSG_WOULDBLOCK;
             goto cleanup;
         }
-    } else if (server_opts.endpts[bind_idx].ti == NC_TI_OPENSSL) {
+    } else if (server_opts.endpts[bind_idx].ti == NC_TI_TLS) {
         (*session)->data = server_opts.endpts[bind_idx].opts.tls;
         ret = nc_accept_tls_session(*session, server_opts.endpts[bind_idx].opts.tls, sock, NC_TRANSPORT_TIMEOUT);
         sock = -1;
@@ -2482,7 +2482,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
     (*session)->port = endpt->port;
 
     /* sock gets assigned to session or closed */
-    if (endpt->ti == NC_TI_LIBSSH) {
+    if (endpt->ti == NC_TI_SSH) {
         ret = nc_accept_ssh_session(*session, endpt->opts.ssh, sock, NC_TRANSPORT_TIMEOUT);
         (*session)->data = NULL;
 
@@ -2493,7 +2493,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
             msgtype = NC_MSG_WOULDBLOCK;
             goto fail;
         }
-    } else if (endpt->ti == NC_TI_OPENSSL) {
+    } else if (endpt->ti == NC_TI_TLS) {
         (*session)->data = endpt->opts.tls;
         ret = nc_accept_tls_session(*session, endpt->opts.tls, sock, NC_TRANSPORT_TIMEOUT);
         (*session)->data = NULL;

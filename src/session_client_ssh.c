@@ -1207,13 +1207,13 @@ nc_client_ssh_ch_get_username(void)
 API int
 nc_client_ssh_ch_add_bind_listen(const char *address, uint16_t port)
 {
-    return nc_client_ch_add_bind_listen(address, port, NULL, NC_TI_LIBSSH);
+    return nc_client_ch_add_bind_listen(address, port, NULL, NC_TI_SSH);
 }
 
 API int
 nc_client_ssh_ch_del_bind(const char *address, uint16_t port)
 {
-    return nc_client_ch_del_bind(address, port, NC_TI_LIBSSH);
+    return nc_client_ch_del_bind(address, port, NC_TI_SSH);
 }
 
 /* Establish a secure SSH connection and authenticate.
@@ -1583,7 +1583,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
     session = nc_new_session(NC_CLIENT, 0);
     NC_CHECK_ERRMEM_RET(!session, NULL);
     session->status = NC_STATUS_STARTING;
-    session->ti_type = NC_TI_LIBSSH;
+    session->ti_type = NC_TI_SSH;
     session->ti.libssh.session = ssh_session;
 
     /* was port set? */
@@ -1742,7 +1742,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     session->status = NC_STATUS_STARTING;
 
     /* transport-specific data */
-    session->ti_type = NC_TI_LIBSSH;
+    session->ti_type = NC_TI_SSH;
     session->ti.libssh.session = ssh_new();
     if (!session->ti.libssh.session) {
         ERR(session, "Unable to initialize SSH session.");
@@ -1830,7 +1830,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     new_session->status = NC_STATUS_STARTING;
 
     /* share some parameters including the IO lock (we are using one socket for both sessions) */
-    new_session->ti_type = NC_TI_LIBSSH;
+    new_session->ti_type = NC_TI_SSH;
     new_session->ti.libssh.session = session->ti.libssh.session;
     new_session->io_lock = session->io_lock;
 

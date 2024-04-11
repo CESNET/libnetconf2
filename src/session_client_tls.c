@@ -257,19 +257,19 @@ nc_client_tls_ch_get_crl_paths(const char **crl_file, const char **crl_dir)
 API int
 nc_client_tls_ch_add_bind_listen(const char *address, uint16_t port)
 {
-    return nc_client_ch_add_bind_listen(address, port, NULL, NC_TI_OPENSSL);
+    return nc_client_ch_add_bind_listen(address, port, NULL, NC_TI_TLS);
 }
 
 API int
 nc_client_tls_ch_add_bind_hostname_listen(const char *address, uint16_t port, const char *hostname)
 {
-    return nc_client_ch_add_bind_listen(address, port, hostname, NC_TI_OPENSSL);
+    return nc_client_ch_add_bind_listen(address, port, hostname, NC_TI_TLS);
 }
 
 API int
 nc_client_tls_ch_del_bind(const char *address, uint16_t port)
 {
-    return nc_client_ch_del_bind(address, port, NC_TI_OPENSSL);
+    return nc_client_ch_del_bind(address, port, NC_TI_TLS);
 }
 
 static int
@@ -433,7 +433,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     }
 
     /* fill the session */
-    session->ti_type = NC_TI_OPENSSL;
+    session->ti_type = NC_TI_TLS;
     if (!(session->ti.tls.session = nc_client_tls_session_new(sock, host, NC_TRANSPORT_TIMEOUT, &tls_opts, &tls_cfg, &tls_ctx))) {
         goto fail;
     }
@@ -492,7 +492,7 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
     session->status = NC_STATUS_STARTING;
 
     /* fill the session */
-    session->ti_type = NC_TI_OPENSSL;
+    session->ti_type = NC_TI_TLS;
     if (!(session->ti.tls.session = nc_client_tls_session_new(sock, peername, timeout, &tls_ch_opts, &tls_cfg, &tls_ctx))) {
         goto fail;
     }
