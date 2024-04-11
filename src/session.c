@@ -729,7 +729,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
         break;
 
 #ifdef NC_ENABLED_SSH_TLS
-    case NC_TI_LIBSSH: {
+    case NC_TI_SSH: {
         int r;
 
         if (connected) {
@@ -794,7 +794,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
         }
         break;
     }
-    case NC_TI_OPENSSL:
+    case NC_TI_TLS:
         sock = nc_tls_get_fd_wrap(session);
 
         if (connected) {

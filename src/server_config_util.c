@@ -877,11 +877,11 @@ nc_server_config_add_address_port(const struct ly_ctx *ctx, const char *endpt_na
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, address, config, 1);
 
-    if (transport == NC_TI_LIBSSH) {
+    if (transport == NC_TI_SSH) {
         /* SSH path */
         address_fmt = "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/tcp-server-parameters/local-address";
         port_fmt = "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/tcp-server-parameters/local-port";
-    } else if (transport == NC_TI_OPENSSL) {
+    } else if (transport == NC_TI_TLS) {
         /* TLS path */
         address_fmt = "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/tcp-server-parameters/local-address";
         port_fmt = "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/tcp-server-parameters/local-port";
@@ -915,11 +915,11 @@ nc_server_config_add_ch_address_port(const struct ly_ctx *ctx, const char *clien
 
     NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, address, port, config, 1);
 
-    if (transport == NC_TI_LIBSSH) {
+    if (transport == NC_TI_SSH) {
         /* SSH path */
         address_fmt = "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/tcp-client-parameters/remote-address";
         port_fmt = "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/tcp-client-parameters/remote-port";
-    } else if (transport == NC_TI_OPENSSL) {
+    } else if (transport == NC_TI_TLS) {
         /* TLS path */
         address_fmt = "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tcp-client-parameters/remote-address";
         port_fmt = "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tcp-client-parameters/remote-port";
@@ -993,10 +993,10 @@ nc_server_config_add_keystore_asym_key(const struct ly_ctx *ctx, NC_TRANSPORT_IM
     NC_CHECK_ARG_RET(NULL, ctx, asym_key_name, privkey_path, config, 1);
 
     /* get the keys as a string from the given files */
-    if (ti == NC_TI_LIBSSH) {
+    if (ti == NC_TI_SSH) {
         ret = nc_server_config_util_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_SSH, &privkey,
                 &privkey_type, &pubkey);
-    } else if (ti == NC_TI_OPENSSL) {
+    } else if (ti == NC_TI_TLS) {
         ret = nc_server_config_util_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_X509, &privkey,
                 &privkey_type, &pubkey);
     } else {
@@ -1009,7 +1009,7 @@ nc_server_config_add_keystore_asym_key(const struct ly_ctx *ctx, NC_TRANSPORT_IM
     }
 
     /* get pubkey format str */
-    if (ti == NC_TI_LIBSSH) {
+    if (ti == NC_TI_SSH) {
         pubkey_format = "ietf-crypto-types:ssh-public-key-format";
     } else {
         pubkey_format = "ietf-crypto-types:subject-public-key-info-format";

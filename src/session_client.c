@@ -1851,9 +1851,9 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
         return -1;
     }
 
-    if (client_opts.ch_binds_aux[idx].ti == NC_TI_LIBSSH) {
+    if (client_opts.ch_binds_aux[idx].ti == NC_TI_SSH) {
         *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
-    } else if (client_opts.ch_binds_aux[idx].ti == NC_TI_OPENSSL) {
+    } else if (client_opts.ch_binds_aux[idx].ti == NC_TI_TLS) {
         *session = nc_accept_callhome_tls_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT,
                 client_opts.ch_binds_aux[idx].hostname);
     } else {

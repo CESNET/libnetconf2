@@ -90,9 +90,9 @@ typedef enum {
                            outside the current application */
     NC_TI_UNIX,       /**< unix socket */
 #ifdef NC_ENABLED_SSH_TLS
-    NC_TI_LIBSSH,     /**< libssh - use libssh library, only for NETCONF over SSH transport */
+    NC_TI_SSH,        /**< SSH - use libssh library, only for NETCONF over SSH transport */
 
-    NC_TI_OPENSSL     /**< OpenSSL - use OpenSSL library, only for NETCONF over TLS transport TODO: prejmenovat*/
+    NC_TI_TLS         /**< TLS - use either OpenSSL or MbedTLS library, only for NETCONF over TLS transport */
 #endif /* NC_ENABLED_SSH_TLS */
 } NC_TRANSPORT_IMPL;
 
