@@ -1342,8 +1342,8 @@ nc_ctx_check_and_fill(struct nc_session *session)
         goto cleanup;
     }
 
-    /* set support for schema-mount, if possible */
-    if (nc_ctx_schema_mount(session, nmda_support, xpath_support)) {
+    /* set support for schema-mount, if possible (requires ietf-yang-library support) */
+    if (yanglib_support && nc_ctx_schema_mount(session, nmda_support, xpath_support)) {
         goto cleanup;
     }
 
