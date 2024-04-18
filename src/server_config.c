@@ -1434,14 +1434,10 @@ nc_server_config_keepalives(const struct lyd_node *node, NC_OPERATION op)
 
         if (op == NC_OP_CREATE) {
             endpt->ka.enabled = 1;
-            /* set default values */
-            endpt->ka.idle_time = 7200;
-            endpt->ka.max_probes = 9;
-            endpt->ka.probe_interval = 75;
         } else {
             endpt->ka.enabled = 0;
         }
-        ret = nc_sock_configure_keepalive(bind->sock, &endpt->ka);
+        ret = nc_sock_configure_ka(bind->sock, endpt->ka.enabled);
         if (ret) {
             goto cleanup;
         }
@@ -1496,7 +1492,7 @@ nc_server_config_idle_time(const struct lyd_node *node, NC_OPERATION op)
             /* delete -> set to default */
             endpt->ka.idle_time = 7200;
         }
-        ret = nc_sock_configure_keepalive(bind->sock, &endpt->ka);
+        ret = nc_sock_configure_ka_idle_time(bind->sock, endpt->ka.idle_time);
         if (ret) {
             goto cleanup;
         }
@@ -1552,7 +1548,7 @@ nc_server_config_max_probes(const struct lyd_node *node, NC_OPERATION op)
             /* delete -> set to default */
             endpt->ka.max_probes = 9;
         }
-        ret = nc_sock_configure_keepalive(bind->sock, &endpt->ka);
+        ret = nc_sock_configure_ka_max_probes(bind->sock, endpt->ka.max_probes);
         if (ret) {
             goto cleanup;
         }
@@ -1608,7 +1604,7 @@ nc_server_config_probe_interval(const struct lyd_node *node, NC_OPERATION op)
             /* delete -> set to default */
             endpt->ka.probe_interval = 75;
         }
-        ret = nc_sock_configure_keepalive(bind->sock, &endpt->ka);
+        ret = nc_sock_configure_ka_probe_interval(bind->sock, endpt->ka.probe_interval);
         if (ret) {
             goto cleanup;
         }

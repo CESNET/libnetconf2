@@ -1618,9 +1618,20 @@ sock_connect(int timeout_ms, int *sock_pending, struct addrinfo *res, struct nc_
         goto cleanup;
     }
 
-    /* enable keep-alive */
-    if (nc_sock_configure_keepalive(sock, ka)) {
+    /* configure keepalives */
+    if (nc_sock_configure_ka(sock, ka->enabled)) {
         goto cleanup;
+    }
+    if (ka->enabled) {
+        if (nc_sock_configure_ka_idle_time(sock, ka->idle_time)) {
+            goto cleanup;
+        }
+        if (nc_sock_configure_ka_max_probes(sock, ka->max_probes)) {
+            goto cleanup;
+        }
+        if (nc_sock_configure_ka_probe_interval(sock, ka->probe_interval)) {
+            goto cleanup;
+        }
     }
 
     /* connected */

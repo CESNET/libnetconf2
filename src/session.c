@@ -230,39 +230,60 @@ cleanup:
 #endif /* NC_ENABLED_SSH_TLS */
 
 int
-nc_sock_configure_keepalive(int sock, struct nc_keepalives *ka)
+nc_sock_configure_ka(int sock, int enabled)
 {
-    int opt;
-
-    opt = ka->enabled;
-    if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof opt) == -1) {
-        ERR(NULL, "Could not set SO_KEEPALIVE option (%s).", strerror(errno));
+    if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &enabled, sizeof enabled) == -1) {
+        ERR(NULL, "Failed to set SO_KEEPALIVE (%s).", strerror(errno));
         return -1;
     }
-    if (!ka->enabled) {
-        return 0;
+
+    return 0;
+}
+
+int
+nc_sock_configure_ka_idle_time(int sock, int idle_time)
+{
+    if (idle_time < 1) {
+        ERRARG(NULL, "idle_time");
     }
 
 #ifdef TCP_KEEPIDLE
-    opt = ka->idle_time;
-    if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &opt, sizeof opt) == -1) {
-        ERR(NULL, "Setsockopt failed (%s).", strerror(errno));
+    if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &idle_time, sizeof idle_time) == -1) {
+        ERR(NULL, "Failed to set TCP_KEEPIDLE (%s).", strerror(errno));
         return -1;
     }
 #endif
+
+    return 0;
+}
+
+int
+nc_sock_configure_ka_max_probes(int sock, int max_probes)
+{
+    if (max_probes < 1) {
+        ERRARG(NULL, "max_probes");
+    }
 
 #ifdef TCP_KEEPCNT
-    opt = ka->max_probes;
-    if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &opt, sizeof opt) == -1) {
-        ERR(NULL, "Setsockopt failed (%s).", strerror(errno));
+    if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &max_probes, sizeof max_probes) == -1) {
+        ERR(NULL, "Failed to set TCP_KEEPCNT (%s).", strerror(errno));
         return -1;
     }
 #endif
 
+    return 0;
+}
+
+int
+nc_sock_configure_ka_probe_interval(int sock, int probe_interval)
+{
+    if (probe_interval < 1) {
+        ERRARG(NULL, "probe_interval");
+    }
+
 #ifdef TCP_KEEPINTVL
-    opt = ka->probe_interval;
-    if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &opt, sizeof opt) == -1) {
-        ERR(NULL, "Setsockopt failed (%s).", strerror(errno));
+    if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &probe_interval, sizeof probe_interval) == -1) {
+        ERR(NULL, "Failed to set TCP_KEEPINTVL (%s).", strerror(errno));
         return -1;
     }
 #endif

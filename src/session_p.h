@@ -815,7 +815,41 @@ int32_t nc_timeouttime_cur_diff(const struct timespec *ts);
  */
 void nc_realtime_get(struct timespec *ts);
 
-int nc_sock_configure_keepalive(int sock, struct nc_keepalives *ka);
+/**
+ * @brief Enables/disables TCP keepalives.
+ *
+ * @param[in] sock Socket to set this option for.
+ * @param[in] enabled 1 to enable, 0 to disable keepalives.
+ * @return 0 on success, -1 on fail.
+ */
+int nc_sock_configure_ka(int sock, int enabled);
+
+/**
+ * @brief Set TCP keepalives idle time.
+ *
+ * @param[in] sock Socket to set this option for.
+ * @param[in] idle_time Time in seconds before keepalive packets are sent.
+ * @return 0 on success, -1 on fail.
+ */
+int nc_sock_configure_ka_idle_time(int sock, int idle_time);
+
+/**
+ * @brief Set TCP keepalives max probes.
+ *
+ * @param[in] sock Socket to set this option for.
+ * @param[in] max_probes Maximum number of probes sent before dropping the connection.
+ * @return 0 on success, -1 on fail.
+ */
+int nc_sock_configure_ka_max_probes(int sock, int max_probes);
+
+/**
+ * @brief Set TCP keepalives probe interval.
+ *
+ * @param[in] sock Socket to set this option for.
+ * @param[in] probe_interval Time in seconds between keepalive probes.
+ * @return 0 on success, -1 on fail.
+ */
+int nc_sock_configure_ka_probe_interval(int sock, int probe_interval);
 
 struct nc_session *nc_new_session(NC_SIDE side, int shared_ti);
 

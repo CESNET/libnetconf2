@@ -304,8 +304,20 @@ nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives *ka
         goto fail;
     }
 
-    if (nc_sock_configure_keepalive(sock, ka)) {
+    /* configure keepalives */
+    if (nc_sock_configure_ka(sock, ka->enabled)) {
         goto fail;
+    }
+    if (ka->enabled) {
+        if (nc_sock_configure_ka_idle_time(sock, ka->idle_time)) {
+            goto fail;
+        }
+        if (nc_sock_configure_ka_max_probes(sock, ka->max_probes)) {
+            goto fail;
+        }
+        if (nc_sock_configure_ka_probe_interval(sock, ka->probe_interval)) {
+            goto fail;
+        }
     }
 
     memset(&saddr, 0, sizeof(struct sockaddr_storage));
