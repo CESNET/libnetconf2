@@ -18,6 +18,8 @@
 #include <ctype.h>
 #include <errno.h>
 #include <libyang/libyang.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
