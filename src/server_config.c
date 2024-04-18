@@ -1434,6 +1434,10 @@ nc_server_config_keepalives(const struct lyd_node *node, NC_OPERATION op)
 
         if (op == NC_OP_CREATE) {
             endpt->ka.enabled = 1;
+            /* set default values */
+            endpt->ka.idle_time = 7200;
+            endpt->ka.max_probes = 9;
+            endpt->ka.probe_interval = 75;
         } else {
             endpt->ka.enabled = 0;
         }
