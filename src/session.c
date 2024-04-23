@@ -159,12 +159,11 @@ nc_is_pk_subject_public_key_info(const char *b64)
 {
     int ret = 0;
     long len;
-    char *bin = NULL, *tmp;
+    unsigned char *bin = NULL, *tmp;
 
     /* decode base64 */
     len = nc_base64_decode_wrap(b64, &bin);
     if (len == -1) {
-        ERR(NULL, "Decoding base64 public key to binary failed.");
         ret = -1;
         goto cleanup;
     }
@@ -173,7 +172,7 @@ nc_is_pk_subject_public_key_info(const char *b64)
     tmp = bin;
 
     /* try to parse the supposed SubjectPublicKeyInfo binary data */
-    if (!nc_der_to_pubkey_wrap((const unsigned char *)tmp, len)) {
+    if (nc_tls_is_der_subpubkey_wrap(tmp, len)) {
         /* success, it's most likely SubjectPublicKeyInfo */
         ret = 1;
     } else {
@@ -803,8 +802,11 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
         }
 
         nc_tls_ctx_destroy_wrap(&session->ti.tls.ctx);
+        memset(&session->ti.tls.ctx, 0, sizeof session->ti.tls.ctx);
         nc_tls_session_destroy_wrap(session->ti.tls.session);
+        session->ti.tls.session = NULL;
         nc_tls_config_destroy_wrap(session->ti.tls.config);
+        session->ti.tls.config = NULL;
 
         if (session->side == NC_SERVER) {
             // TODO
