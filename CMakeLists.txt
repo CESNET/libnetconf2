@@ -124,8 +124,7 @@ if(ENABLE_SSH_TLS)
         src/session_server_tls.c
         src/server_config_util_tls.c
         src/server_config_ks.c
-        src/server_config_ts.c
-        src/session_mbedtls.c)
+        src/server_config_ts.c)
     set(SSH_TLS_MACRO "#ifndef NC_ENABLED_SSH_TLS\n#define NC_ENABLED_SSH_TLS\n#endif")
 endif()
 
@@ -211,8 +210,10 @@ endif()
 # use compat
 use_compat()
 
-# netconf2 target
-add_library(netconf2 ${libsrc} ${compatsrc})
+# netconf2 sourceless target - need it for linking libs, but the required sources will be added later
+add_library(netconf2)
+
+# set the shared library version
 set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_SOVERSION_FULL} SOVERSION ${LIBNETCONF2_SOVERSION})
 
 # include repository files with highest priority
@@ -232,19 +233,22 @@ check_include_file("shadow.h" HAVE_SHADOW)
 check_include_file("termios.h" HAVE_TERMIOS)
 
 if(ENABLE_SSH_TLS)
-    find_package(LibMbedTLS 3.5.0) # TODO
+    # dependencies - mbedTLS (higher preference) or OpenSSL
+    find_package(LibMbedTLS 3.5.2)
     if (LIBMBEDTLS_FOUND)
+        # dependencies - mbedtls
         set(HAVE_LIBMBEDTLS TRUE)
+        list(APPEND libsrc src/session_mbedtls.c)
+        include_directories(${LIBMBEDTLS_INCLUDE_DIRS})
         target_link_libraries(netconf2 ${LIBMBEDTLS_LIBRARIES})
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBMBEDTLS_LIBRARIES})
-        include_directories(${LIBMBEDTLS_INCLUDE_DIRS})
-        #target_sources(netconf2 PRIVATE src/session_mbedtls.c)
     else()
         # dependencies - openssl
         find_package(OpenSSL 3.0.0 REQUIRED)
-        target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
+        list(APPEND libsrc src/session_openssl.c)
         include_directories(${OPENSSL_INCLUDE_DIR})
-        target_sources(netconf2 PRIVATE src/session_openssl.c)
+        target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
+        list(APPEND CMAKE_REQUIRED_LIBRARIES ${OPENSSL_LIBRARIES})
     endif()
 
     # dependencies - libssh
@@ -311,6 +315,9 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
     check_symbol_exists(getpeereid "sys/types.h;unistd.h" HAVE_GETPEEREID)
     list(REMOVE_ITEM CMAKE_REQUIRED_DEFINITIONS -D_QNX_SOURCE)
 endif()
+
+# set sources
+target_sources(netconf2 PRIVATE ${libsrc} ${compatsrc})
 
 # generate config file
 configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)
