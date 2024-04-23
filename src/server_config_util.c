@@ -219,7 +219,7 @@ nc_server_config_util_privkey_format_to_identityref(NC_PRIVKEY_FORMAT format)
 }
 
 static int
-nc_server_config_util_bn_to_bin(void *bn, unsigned char **bin, int *bin_len)
+nc_server_config_util_rsa_pubkey_param_to_bin(void *bn, unsigned char **bin, int *bin_len)
 {
     int ret = 0;
     unsigned char *bin_tmp = NULL;
@@ -228,13 +228,11 @@ nc_server_config_util_bn_to_bin(void *bn, unsigned char **bin, int *bin_len)
 
     *bin = NULL;
 
-    /* prepare buffer for converting BN to binary */
-    *bin_len = nc_tls_get_bn_num_bytes_wrap(bn);
-    bin_tmp = calloc(*bin_len, sizeof *bin_tmp);
-    NC_CHECK_ERRMEM_RET(!bin_tmp, 1);
-
     /* convert to binary */
-    nc_tls_bn_bn2bin_wrap(bn, bin_tmp);
+    if (nc_tls_mpi2bin_wrap(bn, &bin_tmp, bin_len)) {
+        ret = 1;
+        goto cleanup;
+    }
 
     /* if the highest bit in the MSB is set a byte with the value 0 has to be prepended */
     if (bin_tmp[0] & 0x80) {
@@ -259,7 +257,7 @@ static int
 nc_server_config_util_evp_pkey_to_ssh_pubkey(void *pkey, char **pubkey)
 {
     int ret = 0, e_len, n_len, p_len, bin_len;
-    void *e = NULL, *n = NULL;
+    void *e = NULL, *n = NULL, *p = NULL, *p_grp = NULL;
     unsigned char *e_bin = NULL, *n_bin = NULL, *p_bin = NULL, *bin = NULL, *bin_tmp;
     const char *algorithm_name, *curve_name;
     char *ec_group = NULL;
@@ -278,7 +276,8 @@ nc_server_config_util_evp_pkey_to_ssh_pubkey(void *pkey, char **pubkey)
         }
 
         /* BIGNUM to bin */
-        if (nc_server_config_util_bn_to_bin(e, &e_bin, &e_len) || nc_server_config_util_bn_to_bin(n, &n_bin, &n_len)) {
+        if (nc_server_config_util_rsa_pubkey_param_to_bin(e, &e_bin, &e_len) ||
+                nc_server_config_util_rsa_pubkey_param_to_bin(n, &n_bin, &n_len)) {
             ret = 1;
             goto cleanup;
         }
@@ -334,9 +333,17 @@ nc_server_config_util_evp_pkey_to_ssh_pubkey(void *pkey, char **pubkey)
         }
 
         /* get the public key - p, which is a point on the elliptic curve */
-        ret = nc_tls_get_ec_pubkey_param_wrap(pkey, &p_bin, &p_len);
+        ret = nc_tls_get_ec_pubkey_params_wrap(pkey, &p, &p_grp);
         if (ret) {
             ERR(NULL, "Getting public key point from the EC private key failed.");
+            ret = 1;
+            goto cleanup;
+        }
+
+        /* EC point to bin */
+        ret = nc_tls_ec_point_to_bin_wrap(p, p_grp, &p_bin, &p_len);
+        if (ret) {
+            ERR(NULL, "Converting EC public key point to binary failed.");
             ret = 1;
             goto cleanup;
         }
@@ -382,6 +389,10 @@ nc_server_config_util_evp_pkey_to_ssh_pubkey(void *pkey, char **pubkey)
     }
 
 cleanup:
+    nc_tls_destroy_mpi_wrap(e);
+    nc_tls_destroy_mpi_wrap(n);
+    nc_tls_ec_point_destroy_wrap(p);
+    nc_tls_ec_group_destroy_wrap(p_grp);
     free(bin);
     free(e_bin);
     free(n_bin);
@@ -399,7 +410,7 @@ nc_server_config_util_evp_pkey_to_spki_pubkey(void *pkey, char **pubkey)
 
     NC_CHECK_ARG_RET(NULL, pkey, pubkey, 1);
 
-    pub_pem = nc_tls_export_pubkey_wrap(pkey);
+    pub_pem = nc_tls_export_pubkey_pem_wrap(pkey);
     if (!pub_pem) {
         ret = 1;
         goto cleanup;
@@ -429,7 +440,7 @@ nc_server_config_util_read_certificate(const char *cert_path, char **cert)
         return 1;
     }
 
-    pem = nc_tls_export_cert_wrap(crt);
+    pem = nc_tls_export_cert_pem_wrap(crt);
     if (!pem) {
         ret = 1;
         goto cleanup;
@@ -662,21 +673,21 @@ nc_server_config_util_privkey_header_to_format(FILE *f_privkey, const char *priv
 }
 
 static int
-nc_server_config_util_get_privkey_openssl(const char *privkey_path, FILE *f_privkey, char **privkey, void **pkey)
+nc_server_config_util_get_privkey_openssl(const char *privkey_path, char **privkey, void **pkey)
 {
     void *pkey_tmp;
     char *privkey_tmp;
 
-    NC_CHECK_ARG_RET(NULL, privkey_path, f_privkey, privkey, pkey, 1);
+    NC_CHECK_ARG_RET(NULL, privkey_path, privkey, pkey, 1);
 
     *privkey = *pkey = NULL;
 
-    pkey_tmp = nc_tls_import_key_file_wrap(privkey_path, f_privkey);
+    pkey_tmp = nc_tls_import_privkey_file_wrap(privkey_path);
     if (!pkey_tmp) {
         return 1;
     }
 
-    privkey_tmp = nc_tls_export_key_wrap(pkey_tmp);
+    privkey_tmp = nc_tls_export_privkey_pem_wrap(pkey_tmp);
     if (!privkey_tmp) {
         nc_tls_privkey_destroy_wrap(pkey_tmp);
         return 1;
@@ -787,7 +798,7 @@ nc_server_config_util_get_privkey(const char *privkey_path, NC_PRIVKEY_FORMAT *p
     case NC_PRIVKEY_FORMAT_EC:
     case NC_PRIVKEY_FORMAT_X509:
         /* OpenSSL solely can do this */
-        ret = nc_server_config_util_get_privkey_openssl(privkey_path, f_privkey, &priv, pkey);
+        ret = nc_server_config_util_get_privkey_openssl(privkey_path, &priv, pkey);
         break;
     case NC_PRIVKEY_FORMAT_OPENSSH:
         /* need the help of libssh */
