@@ -279,7 +279,8 @@ struct nc_server_tls_opts {
     char *referenced_endpt_name;                /**< Reference to another endpoint (used for client authentication). */
 
     unsigned int tls_versions;                  /**< TLS versions */
-    char *ciphers;                              /**< TLS ciphers */
+    void *ciphers;                              /**< TLS ciphers */
+    uint16_t cipher_count;                      /**< Number of TLS ciphers */
 
     struct nc_ctn *ctn;                         /**< Cert-to-name entries */
 };
