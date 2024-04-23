@@ -117,24 +117,6 @@ nc_base64der_to_cert(const char *in)
     return cert;
 }
 
-static int
-nc_base64der_to_cert_add_to_store(const char *in, void *cert_store)
-{
-    int ret;
-    char *buf = NULL;
-
-    NC_CHECK_ARG_RET(NULL, in, cert_store, 1);
-
-    if (asprintf(&buf, "%s%s%s", "-----BEGIN CERTIFICATE-----\n", in, "\n-----END CERTIFICATE-----") == -1) {
-        ERRMEM;
-        return 1;
-    }
-
-    ret = nc_tls_pem_to_cert_add_to_store_wrap(buf, cert_store);
-    free(buf);
-    return ret;
-}
-
 static void *
 nc_base64der_to_privkey(const char *in, const char *key_str)
 {
@@ -420,55 +402,18 @@ cleanup:
     return ret;
 }
 
-static int
-nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_cert_grouping *ee_certs)
-{
-    int i, ret;
-    void *cert;
-    struct nc_certificate *certs;
-    uint16_t cert_count;
-
-    if (ee_certs->store == NC_STORE_LOCAL) {
-        /* local definition */
-        certs = ee_certs->certs;
-        cert_count = ee_certs->cert_count;
-    } else {
-        /* truststore reference */
-        if (nc_server_tls_ts_ref_get_certs(ee_certs->ts_ref, &certs, &cert_count)) {
-            ERR(NULL, "Error getting end-entity certificates from the truststore reference \"%s\".", ee_certs->ts_ref);
-            return -1;
-        }
-    }
-
-    for (i = 0; i < cert_count; i++) {
-        /* import stored cert */
-        cert = nc_base64der_to_cert(certs[i].data);
-
-        /* compare stored with received */
-        ret = nc_server_tls_certs_match_wrap(peer_cert, cert);
-        nc_tls_cert_destroy_wrap(cert);
-        if (ret) {
-            /* found a match */
-            VRB(NULL, "Cert verify: fail, but the end-entity certificate is trusted, continuing.");
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
 int
 nc_server_tls_get_username_from_cert(void *cert, NC_TLS_CTN_MAPTYPE map_type, char **username)
 {
-    char *subject, *cn, *san_value = NULL;
+    char *subject, *cn, *san_value = NULL, rdn_separator;
     void *sans;
     int i, nsans = 0, rc;
     NC_TLS_CTN_MAPTYPE san_type = 0;
 
 #ifdef HAVE_LIBMEDTLS
-    char rdn_separator = ',';
+    rdn_separator = ',';
 #else
-    char rdn_separator = '/';
+    rdn_separator = '/';
 #endif
 
     if (map_type == NC_TLS_CTN_COMMON_NAME) {
@@ -546,6 +491,69 @@ nc_server_tls_get_username_from_cert(void *cert, NC_TLS_CTN_MAPTYPE map_type, ch
     return 0;
 }
 
+static int
+_nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_cert_grouping *ee_certs)
+{
+    int i, ret;
+    void *cert;
+    struct nc_certificate *certs;
+    uint16_t cert_count;
+
+    if (ee_certs->store == NC_STORE_LOCAL) {
+        /* local definition */
+        certs = ee_certs->certs;
+        cert_count = ee_certs->cert_count;
+    } else {
+        /* truststore reference */
+        if (nc_server_tls_ts_ref_get_certs(ee_certs->ts_ref, &certs, &cert_count)) {
+            ERR(NULL, "Error getting end-entity certificates from the truststore reference \"%s\".", ee_certs->ts_ref);
+            return -1;
+        }
+    }
+
+    for (i = 0; i < cert_count; i++) {
+        /* import stored cert */
+        cert = nc_base64der_to_cert(certs[i].data);
+
+        /* compare stored with received */
+        ret = nc_server_tls_certs_match_wrap(peer_cert, cert);
+        nc_tls_cert_destroy_wrap(cert);
+        if (ret) {
+            /* found a match */
+            VRB(NULL, "Cert verify: fail, but the end-entity certificate is trusted, continuing.");
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+int
+nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_server_tls_opts *opts)
+{
+    int rc;
+    struct nc_endpt *referenced_endpt;
+
+    rc = _nc_server_tls_verify_peer_cert(peer_cert, &opts->ee_certs);
+    if (!rc) {
+        return 0;
+    }
+
+    if (opts->referenced_endpt_name) {
+        if (nc_server_get_referenced_endpt(opts->referenced_endpt_name, &referenced_endpt)) {
+            ERRINT;
+            return -1;
+        }
+
+        rc = _nc_server_tls_verify_peer_cert(peer_cert, &referenced_endpt->opts.tls->ee_certs);
+        if (!rc) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 int
 nc_server_tls_verify_cert(void *cert, int depth, int self_signed, struct nc_tls_verify_cb_data *cb_data)
 {
@@ -571,22 +579,10 @@ nc_server_tls_verify_cert(void *cert, int depth, int self_signed, struct nc_tls_
         if (self_signed) {
             /* peer cert is not trusted, so it must match any configured end-entity cert
              * on the given endpoint in order for the client to be authenticated */
-            ret = nc_server_tls_verify_peer_cert(cert, &opts->ee_certs);
+            ret = nc_server_tls_verify_peer_cert(cert, opts);
             if (ret) {
-                /* we can still check the referenced endpoint's ee certs */
-                if (opts->referenced_endpt_name) {
-                    if (nc_server_get_referenced_endpt(opts->referenced_endpt_name, &referenced_endpt)) {
-                        ERRINT;
-                        ret = -1;
-                        goto cleanup;
-                    }
-
-                    ret = nc_server_tls_verify_peer_cert(cert, &referenced_endpt->opts.tls->ee_certs);
-                }
-                if (ret) {
-                    ERR(session, "Cert verify: fail (Client certificate not trusted and does not match any configured end-entity certificate).");
-                    goto cleanup;
-                }
+                ERR(session, "Cert verify: fail (Client certificate not trusted and does not match any configured end-entity certificate).");
+                goto cleanup;
             }
         }
     }
@@ -784,13 +780,13 @@ nc_server_tls_curl_init(CURL **handle, struct nc_curl_data *data)
 }
 
 static int
-nc_server_tls_crl_path(const char *path, void *cert_store, void *crl_store)
+nc_server_tls_crl_path(const char *path, void *crl_store)
 {
-    return nc_tls_import_crl_path_wrap(path, cert_store, crl_store);
+    return nc_tls_import_crl_path_wrap(path, crl_store);
 }
 
 static int
-nc_server_tls_crl_url(const char *url, void *cert_store, void *crl_store)
+nc_server_tls_crl_url(const char *url, void *crl_store)
 {
     int ret = 0;
     CURL *handle = NULL;
@@ -811,7 +807,7 @@ nc_server_tls_crl_url(const char *url, void *cert_store, void *crl_store)
     }
 
     /* convert the downloaded data to CRL and add it to the store */
-    ret = nc_server_tls_add_crl_to_store_wrap(downloaded.data, downloaded.size, cert_store, crl_store);
+    ret = nc_server_tls_add_crl_to_store_wrap(downloaded.data, downloaded.size, crl_store);
     if (ret) {
         goto cleanup;
     }
@@ -852,7 +848,7 @@ nc_server_tls_crl_cert_ext(void *cert_store, void *crl_store)
         }
 
         /* convert the downloaded data to CRL and add it to the store */
-        ret = nc_server_tls_add_crl_to_store_wrap(downloaded.data, downloaded.size, cert_store, crl_store);
+        ret = nc_server_tls_add_crl_to_store_wrap(downloaded.data, downloaded.size, crl_store);
         if (ret) {
             goto cleanup;
         }
@@ -871,11 +867,11 @@ int
 nc_server_tls_load_crl(struct nc_server_tls_opts *opts, void *cert_store, void *crl_store)
 {
     if (opts->crl_path) {
-        if (nc_server_tls_crl_path(opts->crl_path, cert_store, crl_store)) {
+        if (nc_server_tls_crl_path(opts->crl_path, crl_store)) {
             return 1;
         }
     } else if (opts->crl_url) {
-        if (nc_server_tls_crl_url(opts->crl_url, cert_store, crl_store)) {
+        if (nc_server_tls_crl_url(opts->crl_url, crl_store)) {
             return 1;
         }
     } else {
@@ -892,6 +888,7 @@ nc_server_tls_load_trusted_certs(struct nc_cert_grouping *ca_certs, void *cert_s
 {
     struct nc_certificate *certs;
     uint16_t i, cert_count;
+    void *cert;
 
     if (ca_certs->store == NC_STORE_LOCAL) {
         /* local definition */
@@ -906,7 +903,15 @@ nc_server_tls_load_trusted_certs(struct nc_cert_grouping *ca_certs, void *cert_s
     }
 
     for (i = 0; i < cert_count; i++) {
-        if (nc_base64der_to_cert_add_to_store(certs[i].data, cert_store)) {
+        /* parse data into cert */
+        cert = nc_base64der_to_cert(certs[i].data);
+        if (!cert) {
+            return 1;
+        }
+
+        /* store cert in cert store */
+        if (nc_tls_add_cert_to_store_wrap(cert, cert_store)) {
+            nc_tls_cert_destroy_wrap(cert);
             return 1;
         }
     }
@@ -931,7 +936,7 @@ nc_server_tls_accept_check(int accept_ret, void *tls_session)
     }
 
     if (accept_ret != 1) {
-        nc_server_tls_print_accept_error_wrap(accept_ret, tls_session);
+        nc_server_tls_print_accept_err_wrap(accept_ret, tls_session);
     }
 
     return accept_ret;
@@ -953,7 +958,7 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     cb_data.opts = opts;
 
     /* prepare TLS context from which a session will be created */
-    tls_cfg = nc_server_tls_config_new_wrap();
+    tls_cfg = nc_tls_config_new_wrap(NC_SERVER);
     if (!tls_cfg) {
         goto fail;
     }
@@ -1016,8 +1021,11 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
         nc_server_tls_set_cipher_suites_wrap(tls_cfg, opts->ciphers);
     }
 
+    /* set verify flags, callback and its data */
+    nc_server_tls_set_verify_wrap(tls_cfg, &cb_data);
+
     /* init TLS context and store data which may be needed later in it */
-    if (nc_tls_init_ctx_wrap(&session->ti.tls.ctx, sock, srv_cert, srv_pkey, cert_store, crl_store)) {
+    if (nc_tls_init_ctx_wrap(sock, srv_cert, srv_pkey, cert_store, crl_store, &session->ti.tls.ctx)) {
         goto fail;
     }
 
@@ -1025,9 +1033,9 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     srv_cert = srv_pkey = cert_store = crl_store = NULL;
 
     /* setup config from ctx */
-    if (nc_tls_setup_config_wrap(tls_cfg, NC_SERVER, &session->ti.tls.ctx)) {
+    if (nc_tls_setup_config_from_ctx_wrap(&session->ti.tls.ctx, NC_SERVER, tls_cfg)) {
         goto fail;
-    } // TODO free openssl shit
+    }
     session->ti.tls.config = tls_cfg;
     tls_cfg = NULL;
 
@@ -1036,9 +1044,6 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     if (!(session->ti.tls.session = nc_tls_session_new_wrap(session->ti.tls.config))) {
         goto fail;
     }
-
-    /* set verify callback and its data */
-    nc_server_tls_set_verify_cb_wrap(session->ti.tls.session, &cb_data);
 
     /* set session fd */
     nc_server_tls_set_fd_wrap(session->ti.tls.session, sock, &session->ti.tls.ctx);

@@ -1651,7 +1651,7 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
         }
         break;
     case NC_TI_TLS:
-        r = nc_tls_have_pending_wrap(session->ti.tls.session);
+        r = nc_tls_get_num_pending_bytes_wrap(session->ti.tls.session);
         if (!r) {
             /* no data pending in the SSL buffer, poll fd */
             pfd.fd = nc_tls_get_fd_wrap(session);
