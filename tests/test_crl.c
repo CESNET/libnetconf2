@@ -60,7 +60,7 @@ server_thread(void *arg)
     /* set print clb so we get access to messages */
     nc_set_print_clb_session(test_msg_callback);
     buffer[0] = '\0';
-    strcpy(expected, "revoked per CRL");
+    strcpy(expected, "revoked");
 
     /* accept a session and add it to the poll session structure */
     pthread_barrier_wait(&state->barrier);
