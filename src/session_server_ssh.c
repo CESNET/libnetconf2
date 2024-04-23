@@ -1009,7 +1009,7 @@ nc_server_ssh_set_authkey_path_format(const char *path)
  *  and the data is in network byte order. The key has to be in the SSH2 format.
  */
 static const char *
-nc_server_ssh_get_pubkey_type(const char *buffer, uint32_t *len)
+nc_server_ssh_get_pubkey_type(const unsigned char *buffer, uint32_t *len)
 {
     uint32_t type_len;
 
@@ -1021,7 +1021,7 @@ nc_server_ssh_get_pubkey_type(const char *buffer, uint32_t *len)
 
     /* move 4 bytes in the buffer, this is where the type should be */
     buffer += sizeof type_len;
-    return buffer;
+    return (const char *)buffer;
 }
 
 /**
@@ -1035,7 +1035,7 @@ static int
 nc_server_ssh_create_ssh_pubkey(const char *base64, ssh_key *key)
 {
     int ret = 0;
-    char *bin = NULL;
+    unsigned char *bin = NULL;
     const char *pub_type = NULL;
     uint32_t pub_type_len = 0;
 
@@ -1045,7 +1045,6 @@ nc_server_ssh_create_ssh_pubkey(const char *base64, ssh_key *key)
 
     /* convert base64 to binary */
     if (nc_base64_decode_wrap(base64, &bin) == -1) {
-        ERR(NULL, "Unable to decode base64.");
         ret = 1;
         goto cleanup;
     }

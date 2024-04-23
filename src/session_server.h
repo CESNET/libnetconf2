@@ -558,8 +558,7 @@ const void *nc_session_get_client_cert(const struct nc_session *session);
  * @brief Set TLS authentication additional verify callback.
  *
  * Server will always perform cert-to-name based on its configuration. Only after it passes
- * and this callback is set, it is also called. It should return exactly what OpenSSL
- * verify callback meaning 1 for success, 0 to deny the user.
+ * and this callback is set, it is also called. It should return non-zero for success, 0 to deny the user.
  *
  * @param[in] verify_clb Additional user verify callback.
  */
