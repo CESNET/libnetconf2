@@ -20,11 +20,13 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <signal.h>
 #include <string.h>
 #include <unistd.h>
 
 #include <libyang/libyang.h>
 
+#include "compat.h"
 #include "config.h"
 #include "log_p.h"
 #include "session_client.h"
@@ -276,18 +278,21 @@ static int
 nc_client_tls_connect_check(int connect_ret, void *tls_session, const char *peername)
 {
     uint32_t verify;
+    char *err;
 
     /* check certificate verification result */
     verify = nc_tls_get_verify_result_wrap(tls_session);
     if (!verify && (connect_ret == 1)) {
         VRB(NULL, "Server certificate verified (domain \"%s\").", peername);
     } else if (verify) {
-        ERR(NULL, "Server certificate error (%s).", nc_tls_verify_error_string_wrap(verify));
+        err = nc_tls_verify_error_string_wrap(verify);
+        ERR(NULL, "Server certificate error (%s).", err);
+        free(err);
     }
 
     /* check TLS connection result */
     if (connect_ret != 1) {
-        nc_tls_print_error_string_wrap(connect_ret, peername, tls_session);
+        nc_client_tls_print_connect_err_wrap(connect_ret, peername, tls_session);
     }
 
     return connect_ret;
@@ -296,14 +301,14 @@ nc_client_tls_connect_check(int connect_ret, void *tls_session, const char *peer
 static void *
 nc_client_tls_session_new(int sock, const char *host, int timeout, struct nc_client_tls_opts *opts, void **out_tls_cfg, struct nc_tls_ctx *tls_ctx)
 {
-    int ret = 0;
+    int ret = 0, sock_tmp = sock;
     struct timespec ts_timeout;
     void *tls_session, *tls_cfg, *cli_cert, *cli_pkey, *cert_store, *crl_store;
 
     tls_session = tls_cfg = cli_cert = cli_pkey = cert_store = crl_store = NULL;
 
     /* prepare TLS context from which a session will be created */
-    tls_cfg = nc_client_tls_config_new_wrap();
+    tls_cfg = nc_tls_config_new_wrap(NC_CLIENT);
     if (!tls_cfg) {
         goto fail;
     }
@@ -331,22 +336,25 @@ nc_client_tls_session_new(int sock, const char *host, int timeout, struct nc_cli
             goto fail;
         }
 
-        /* load CRLs into one of the stores */
-        if (nc_client_tls_load_crl_wrap(cert_store, crl_store, opts->crl_file, opts->crl_dir)) {
+        /* load CRLs into the crl store */
+        if (nc_client_tls_load_crl_wrap(crl_store, opts->crl_file, opts->crl_dir)) {
             goto fail;
         }
     }
 
+    /* set client's verify mode flags */
+    nc_client_tls_set_verify_wrap(tls_cfg);
+
     /* init TLS context and store data which may be needed later in it */
-    if (nc_tls_init_ctx_wrap(tls_ctx, sock, cli_cert, cli_pkey, cert_store, crl_store)) {
-        goto fail; // TODO: openssl free all the shit
+    if (nc_tls_init_ctx_wrap(sock, cli_cert, cli_pkey, cert_store, crl_store, tls_ctx)) {
+        goto fail;
     }
 
     /* memory is managed by context now */
     cli_cert = cli_pkey = cert_store = crl_store = NULL;
 
     /* setup config from ctx */
-    if (nc_tls_setup_config_wrap(tls_cfg, NC_CLIENT, tls_ctx)) {
+    if (nc_tls_setup_config_from_ctx_wrap(tls_ctx, NC_CLIENT, tls_cfg)) {
         goto fail;
     }
 
@@ -370,7 +378,7 @@ nc_client_tls_session_new(int sock, const char *host, int timeout, struct nc_cli
     if (timeout > -1) {
         nc_timeouttime_get(&ts_timeout, timeout);
     }
-    while ((ret = nc_client_tls_handshake_step_wrap(tls_session)) == 0) {
+    while ((ret = nc_client_tls_handshake_step_wrap(tls_session, sock_tmp)) == 0) {
         usleep(NC_TIMEOUT_STEP);
         if ((timeout > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
             ERR(NULL, "SSL connect timeout.");
@@ -390,7 +398,13 @@ fail:
     if (sock > -1) {
         close(sock);
     }
-    nc_tls_session_new_cleanup_wrap(tls_cfg, cli_cert, cli_pkey, cert_store, crl_store);
+
+    nc_tls_session_destroy_wrap(tls_session);
+    nc_tls_cert_destroy_wrap(cli_cert);
+    nc_tls_privkey_destroy_wrap(cli_pkey);
+    nc_tls_cert_store_destroy_wrap(cert_store);
+    nc_tls_crl_store_destroy_wrap(crl_store);
+    nc_tls_config_destroy_wrap(tls_cfg);
     return NULL;
 }
 
@@ -458,7 +472,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
         goto fail;
     }
 
-    /* store information into session and the dictionary */
+    /* store information into session */
     session->host = ip_host;
     session->port = port;
     session->username = strdup("certificate-based");
@@ -497,7 +511,10 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
         goto fail;
     }
     session->ti.tls.config = tls_cfg;
+
+    /* memory belongs to session */
     memcpy(&session->ti.tls.ctx, &tls_ctx, sizeof tls_ctx);
+    memset(&tls_ctx, 0, sizeof tls_ctx);
 
     if (nc_client_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
         goto fail;
@@ -516,7 +533,7 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
 
     session->flags |= NC_SESSION_CALLHOME;
 
-    /* store information into session and the dictionary */
+    /* store information into session */
     session->host = strdup(host);
     session->port = port;
     session->username = strdup("certificate-based");
@@ -524,5 +541,7 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
     return session;
 
 fail:
+    nc_session_free(session, NULL);
+    nc_tls_ctx_destroy_wrap(&tls_ctx);
     return NULL;
 }
