@@ -37,6 +37,7 @@
 #include "netconf.h"
 #include "session.h"
 #include "session_p.h"
+#include "session_wrapper.h"
 
 const char *nc_msgtype2str[] = {
     "error",
@@ -418,7 +419,7 @@ nc_read_poll(struct nc_session *session, int io_timeout)
         }
         break;
     case NC_TI_TLS:
-        ret = nc_tls_have_pending_wrap(session->ti.tls.session);
+        ret = nc_tls_get_num_pending_bytes_wrap(session->ti.tls.session);
         if (ret) {
             /* some buffered TLS data available */
             ret = 1;
