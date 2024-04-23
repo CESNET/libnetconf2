@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <poll.h>
@@ -34,7 +35,124 @@
 #include <mbedtls/x509_crt.h>
 #include <mbedtls/x509_csr.h>
 
-extern struct nc_server_opts server_opts;
+/* some mbedTLS functions may return 'high' and some 'low' level errors, try to handle both cases this way */
+static const char *
+nc_get_mbedtls_str_err(int err)
+{
+    const char *err_str;
+
+    err_str = mbedtls_high_level_strerr(err);
+    if (err_str) {
+        return err_str;
+    }
+
+    err_str = mbedtls_low_level_strerr(err);
+    if (err_str) {
+        return err_str;
+    }
+
+    return "unknown error";
+}
+
+/**
+ * @brief Converts DN to a string.
+ *
+ * @param[in] dn Internal DN representation.
+ * @return DN string on success, NULL of fail.
+ */
+static char *
+nc_server_tls_dn2str(const mbedtls_x509_name *dn)
+{
+    char *str;
+    size_t len = 64;
+    int r;
+
+    str = malloc(len);
+    NC_CHECK_ERRMEM_RET(!str, NULL);
+
+    while ((r = mbedtls_x509_dn_gets(str, len, dn)) == MBEDTLS_ERR_X509_BUFFER_TOO_SMALL) {
+        len <<= 1;
+        str = nc_realloc(str, len);
+        NC_CHECK_ERRMEM_RET(!str, NULL);
+    }
+    if (r < 1) {
+        free(str);
+        ERR(NULL, "Failed to convert DN to string (%s).", nc_get_mbedtls_str_err(r));
+        return NULL;
+    }
+
+    return str;
+}
+
+/* creates a new rng context needed for PK operations and for ssl config */
+static int
+nc_tls_rng_new(mbedtls_ctr_drbg_context **ctr_drbg, mbedtls_entropy_context **entropy)
+{
+    int rc;
+
+    *ctr_drbg = NULL;
+    *entropy = NULL;
+
+    *entropy = malloc(sizeof **entropy);
+    NC_CHECK_ERRMEM_GOTO(!*entropy, , fail);
+    *ctr_drbg = malloc(sizeof **ctr_drbg);
+    NC_CHECK_ERRMEM_GOTO(!*ctr_drbg, , fail);
+
+    mbedtls_entropy_init(*entropy);
+    mbedtls_ctr_drbg_init(*ctr_drbg);
+
+    rc = mbedtls_ctr_drbg_seed(*ctr_drbg, mbedtls_entropy_func, *entropy, NULL, 0);
+    if (rc) {
+        ERR(NULL, "Seeding ctr_drbg failed (%s).", nc_get_mbedtls_str_err(rc));
+        goto fail;
+    }
+
+    return 0;
+
+fail:
+    mbedtls_ctr_drbg_free(*ctr_drbg);
+    free(*ctr_drbg);
+    if (*entropy) {
+        mbedtls_entropy_free(*entropy);
+        free(*entropy);
+    }
+    *ctr_drbg = NULL;
+    *entropy = NULL;
+    return 1;
+}
+
+static void
+nc_tls_rng_destroy(mbedtls_ctr_drbg_context *ctr_drbg, mbedtls_entropy_context *entropy)
+{
+    mbedtls_ctr_drbg_free(ctr_drbg);
+    free(ctr_drbg);
+    if (entropy) {
+        mbedtls_entropy_free(entropy);
+        free(entropy);
+    }
+}
+
+/* get verify err string, caller is responsible for freeing it, 256B should be more than enough */
+static char *
+nc_tls_get_verify_err_str(int err)
+{
+    int ret;
+    char *err_buf = NULL;
+
+    err_buf = malloc(256);
+    NC_CHECK_ERRMEM_RET(!err_buf, NULL);
+
+    ret = mbedtls_x509_crt_verify_info(err_buf, 256, "", err);
+    if (ret < 0) {
+        free(err_buf);
+        return NULL;
+    }
+
+    /* strip the NL */
+    err_buf[ret - 1] = '\0';
+
+    return err_buf;
+}
 
 void *
 nc_tls_session_new_wrap(void *tls_cfg)
@@ -49,7 +167,7 @@ nc_tls_session_new_wrap(void *tls_cfg)
 
     rc = mbedtls_ssl_setup(session, tls_cfg);
     if (rc) {
-        ERR(NULL, "Setting up TLS context failed (%s).", mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Setting up TLS session failed (%s).", nc_get_mbedtls_str_err(rc));
         mbedtls_ssl_free(session);
         free(session);
         return NULL;
@@ -66,19 +184,7 @@ nc_tls_session_destroy_wrap(void *tls_session)
 }
 
 void *
-nc_server_tls_config_new_wrap()
-{
-    mbedtls_ssl_config *tls_cfg;
-
-    tls_cfg = malloc(sizeof *tls_cfg);
-    NC_CHECK_ERRMEM_RET(!tls_cfg, NULL);
-
-    mbedtls_ssl_config_init(tls_cfg);
-    return tls_cfg;
-}
-
-void *
-nc_client_tls_config_new_wrap()
+nc_tls_config_new_wrap(int UNUSED(side))
 {
     mbedtls_ssl_config *tls_cfg;
 
@@ -119,8 +225,8 @@ nc_tls_cert_destroy_wrap(void *cert)
     free(cert);
 }
 
-void *
-nc_tls_privkey_new_wrap()
+static void *
+nc_tls_pkey_new_wrap(void)
 {
     mbedtls_pk_context *pkey;
 
@@ -141,12 +247,14 @@ nc_tls_privkey_destroy_wrap(void *pkey)
 void *
 nc_tls_cert_store_new_wrap()
 {
+    /* certificate is the same as a certificate store in MbedTLS */
     return nc_tls_cert_new_wrap();
 }
 
 void
 nc_tls_cert_store_destroy_wrap(void *cert_store)
 {
+    /* certificate is the same as a certificate store in MbedTLS */
     nc_tls_cert_destroy_wrap(cert_store);
 }
 
@@ -163,70 +271,10 @@ nc_tls_crl_store_new_wrap()
 }
 
 void
-nc_tls_crl_store_destroy_wrap(void *crl)
+nc_tls_crl_store_destroy_wrap(void *crl_store)
 {
-    mbedtls_x509_crl_free(crl);
-    free(crl);
-}
-
-static int
-nc_tls_rng_new(mbedtls_ctr_drbg_context **ctr_drbg, mbedtls_entropy_context **entropy)
-{
-    *ctr_drbg = NULL;
-    *entropy = NULL;
-
-    *entropy = malloc(sizeof **entropy);
-    NC_CHECK_ERRMEM_GOTO(!*entropy, , fail);
-    *ctr_drbg = malloc(sizeof **ctr_drbg);
-    NC_CHECK_ERRMEM_GOTO(!*ctr_drbg, , fail);
-
-    mbedtls_entropy_init(*entropy);
-    mbedtls_ctr_drbg_init(*ctr_drbg);
-
-    if (mbedtls_ctr_drbg_seed(*ctr_drbg, mbedtls_entropy_func, *entropy, NULL, 0)) {
-        ERR(NULL, "Seeding ctr_drbg failed.");
-        goto fail;
-    }
-
-    return 0;
-
-fail:
-    mbedtls_ctr_drbg_free(*ctr_drbg);
-    free(*ctr_drbg);
-    mbedtls_entropy_free(*entropy);
-    free(*entropy);
-    *ctr_drbg = NULL;
-    *entropy = NULL;
-    return 1;
-}
-
-static void
-nc_tls_rng_destroy(mbedtls_ctr_drbg_context *ctr_drbg, mbedtls_entropy_context *entropy)
-{
-    mbedtls_ctr_drbg_free(ctr_drbg);
-    free(ctr_drbg);
-    mbedtls_entropy_free(entropy);
-    free(entropy);
-}
-
-void
-nc_tls_set_authmode_wrap(void *tls_cfg)
-{
-    mbedtls_ssl_conf_authmode(tls_cfg, MBEDTLS_SSL_VERIFY_REQUIRED);
-}
-
-int
-nc_server_tls_set_config_defaults_wrap(void *tls_cfg)
-{
-    int rc;
-
-    rc = mbedtls_ssl_config_defaults(tls_cfg, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
-    if (rc) {
-        ERR(NULL, "Setting default TLS config failed (%s).", mbedtls_high_level_strerr(rc));
-        return 1;
-    }
-
-    return 0;
+    mbedtls_x509_crl_free(crl_store);
+    free(crl_store);
 }
 
 void *
@@ -242,36 +290,7 @@ nc_tls_pem_to_cert_wrap(const char *cert_data)
 
     rc = mbedtls_x509_crt_parse(cert, (const unsigned char *)cert_data, strlen(cert_data) + 1);
     if (rc) {
-        ERR(NULL, "Parsing certificate data failed (%s).", mbedtls_high_level_strerr(rc));
-        nc_tls_cert_destroy_wrap(cert);
-        return NULL;
-    }
-
-    return cert;
-}
-
-void *
-nc_tls_base64_to_cert_wrap(const char *cert_data)
-{
-    int rc;
-    mbedtls_x509_crt *cert;
-    char *pem = NULL;
-
-    cert = nc_tls_cert_new_wrap();
-    if (!cert) {
-        return NULL;
-    }
-
-    rc = asprintf(&pem, "-----BEGIN CERTIFICATE-----\n%s\n-----END CERTIFICATE-----", cert_data);
-    if (rc == -1) {
-        ERRMEM;
-        nc_tls_cert_destroy_wrap(cert);
-        return NULL;
-    }
-
-    rc = mbedtls_x509_crt_parse(cert, (const unsigned char *)pem, strlen(pem) + 1);
-    if (rc) {
-        ERR(NULL, "Parsing certificate data failed (%s).", mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Parsing certificate data failed (%s).", nc_get_mbedtls_str_err(rc));
         nc_tls_cert_destroy_wrap(cert);
         return NULL;
     }
@@ -280,15 +299,16 @@ nc_tls_base64_to_cert_wrap(const char *cert_data)
 }
 
 int
-nc_tls_pem_to_cert_add_to_store_wrap(const char *cert_data, void *cert_store)
+nc_tls_add_cert_to_store_wrap(void *cert, void *cert_store)
 {
-    int rc;
+    mbedtls_x509_crt *iter;
 
-    rc = mbedtls_x509_crt_parse(cert_store, (const unsigned char *)cert_data, strlen(cert_data) + 1);
-    if (rc) {
-        ERR(NULL, "Parsing certificate data failed (%s).", mbedtls_high_level_strerr(rc));
-        return 1;
+    /* store is a linked list */
+    iter = cert_store;
+    while (iter->next) {
+        iter = iter->next;
     }
+    iter->next = cert;
 
     return 0;
 }
@@ -296,39 +316,45 @@ nc_tls_pem_to_cert_add_to_store_wrap(const char *cert_data, void *cert_store)
 void *
 nc_tls_pem_to_privkey_wrap(const char *privkey_data)
 {
-    int rc;
-    mbedtls_pk_context *pkey;
-    mbedtls_ctr_drbg_context *ctr_drbg;
-    mbedtls_entropy_context *entropy;
+    int rc, ret = 0;
+    mbedtls_pk_context *pkey = NULL;
+    mbedtls_ctr_drbg_context *ctr_drbg = NULL;
+    mbedtls_entropy_context *entropy = NULL;
 
-    if (nc_tls_rng_new(&ctr_drbg, &entropy)) {
-        return NULL;
+    ret = nc_tls_rng_new(&ctr_drbg, &entropy);
+    if (ret) {
+        goto cleanup;
     }
 
-    pkey = nc_tls_privkey_new_wrap();
+    pkey = nc_tls_pkey_new_wrap();
     if (!pkey) {
-        nc_tls_rng_destroy(ctr_drbg, entropy);
-        return NULL;
+        ret = 1;
+        goto cleanup;
     }
 
     rc = mbedtls_pk_parse_key(pkey, (const unsigned char *)privkey_data, strlen(privkey_data) + 1, NULL, 0, mbedtls_ctr_drbg_random, ctr_drbg);
-    nc_tls_rng_destroy(ctr_drbg, entropy);
     if (rc) {
-        ERR(NULL, "Parsing private key data failed (%s).", mbedtls_high_level_strerr(rc));
-        nc_tls_privkey_destroy_wrap(pkey);
-        return NULL;
+        ERR(NULL, "Parsing private key data failed (%s).", nc_get_mbedtls_str_err(rc));
+        ret = 1;
+        goto cleanup;
     }
+
+cleanup:
+    if (ret) {
+        nc_tls_privkey_destroy_wrap(pkey);
+    }
+    nc_tls_rng_destroy(ctr_drbg, entropy);
     return pkey;
 }
 
 int
-nc_tls_load_cert_private_key_wrap(void *tls_cfg, void *cert, void *pkey)
+nc_tls_import_crl_path_wrap(const char *path, void *crl_store)
 {
     int rc;
 
-    rc = mbedtls_ssl_conf_own_cert(tls_cfg, cert, pkey);
+    rc = mbedtls_x509_crl_parse_file(crl_store, path);
     if (rc) {
-        ERR(NULL, "Loading the server certificate or private key failed (%s).", mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Failed to import CRL from file \"%s\" (%s).", path, nc_get_mbedtls_str_err(rc));
         return 1;
     }
 
@@ -336,27 +362,9 @@ nc_tls_load_cert_private_key_wrap(void *tls_cfg, void *cert, void *pkey)
 }
 
 int
-nc_server_tls_crl_path_wrap(const char *crl_path, void *cert_store, void *crl_store)
+nc_server_tls_add_crl_to_store_wrap(const unsigned char *crl_data, size_t size, void *crl_store)
 {
     int rc;
-
-    (void) cert_store;
-
-    rc = mbedtls_x509_crl_parse_file(crl_store, crl_path);
-    if (rc) {
-        ERR(NULL, "Error adding CRL to store (%s)", mbedtls_high_level_strerr(rc));
-        return 1;
-    }
-
-    return 0;
-}
-
-int
-nc_server_tls_add_crl_to_store_wrap(const unsigned char *crl_data, size_t size, void *cert_store, void *crl_store)
-{
-    int rc;
-
-    (void) cert_store;
 
     /* try DER first */
     rc = mbedtls_x509_crl_parse_der(crl_store, crl_data, size);
@@ -366,7 +374,7 @@ nc_server_tls_add_crl_to_store_wrap(const unsigned char *crl_data, size_t size, 
     }
 
     /* DER failed, try PEM */
-    rc = mbedtls_x509_crl_parse(crl_store, crl_data, size);
+    rc = mbedtls_x509_crl_parse(crl_store, crl_data, size + 1);
     if (!rc) {
         /* success, it was PEM */
         return 0;
@@ -375,12 +383,6 @@ nc_server_tls_add_crl_to_store_wrap(const unsigned char *crl_data, size_t size, 
     /* failed to parse it */
     ERR(NULL, "Reading downloaded CRL failed.");
     return 1;
-}
-
-void
-nc_server_tls_set_certs_wrap(void *tls_cfg, void *cert_store, void *crl_store)
-{
-    mbedtls_ssl_conf_ca_chain(tls_cfg, cert_store, crl_store);
 }
 
 int
@@ -413,29 +415,33 @@ nc_server_tls_verify_cb(void *cb_data, mbedtls_x509_crt *cert, int depth, uint32
 {
     int ret = 0;
     struct nc_tls_verify_cb_data *data = cb_data;
-    size_t buf_len = 256;
-    char err_buf[buf_len];
+    char *err;
 
     if (!*flags) {
         /* in-built verification was successful */
         ret = nc_server_tls_verify_cert(cert, depth, 0, data);
     } else {
-        /* in-built verification was failed, either check if peer cert matches any configured cert, or just
-         * return success and wait until we reach depth 0
+        /* in-built verification failed, but the client still may be authenticated if:
+         * 1) the peer cert matches any configured end-entity cert
+         * 2) the peer cert has a valid chain of trust to any configured certificate authority cert
+         * otherwise just continue until we reach the peer cert (depth = 0)
          */
         if ((depth == 0) && (*flags == MBEDTLS_X509_BADCERT_NOT_TRUSTED)) {
-            /* not trusted self-signed peer certificate */
+            /* not trusted self-signed peer certificate, case 1) */
             ret = nc_server_tls_verify_cert(cert, depth, 1, data);
             if (!ret) {
                 *flags &= ~MBEDTLS_X509_BADCERT_NOT_TRUSTED;
             }
-        } else {
-            buf_len = mbedtls_x509_crt_verify_info(err_buf, buf_len, "", *flags);
-            if (buf_len > 0) {
-                /* strip the NL and print it */
-                err_buf[buf_len - 1] = '\0';
-                ERR(data->session, "Cert verify: fail (%s).", err_buf);
+        } else if (*flags == MBEDTLS_X509_BADCERT_MISSING) {
+            /* full chain of trust is invalid, but it may be valid partially, case 2) */
+            ret = nc_server_tls_verify_cert(cert, depth, 1, data);
+            if (!ret) {
+                *flags &= ~MBEDTLS_X509_BADCERT_MISSING;
             }
+        } else {
+            err = nc_tls_get_verify_err_str(*flags);
+            ERR(data->session, "Cert verify: fail (%s).", err);
+            free(err);
             ret = 1;
         }
     }
@@ -451,45 +457,26 @@ nc_server_tls_verify_cb(void *cb_data, mbedtls_x509_crt *cert, int depth, uint32
             /* chain verify failed, but peer cert can still match */
             return 0;
         } else {
-            /* peer cert did not match */
-            return 1;
+            /* failed to verify peer cert, but return 0 so that we can propagate the error via the flags */
+            if (!*flags) {
+                *flags |= MBEDTLS_X509_BADCERT_OTHER;
+            }
+            return 0;
         }
     }
 }
 
 void
-nc_server_tls_set_verify_cb_wrap(void *tls_session, struct nc_tls_verify_cb_data *cb_data)
+nc_server_tls_set_verify_wrap(void *tls_cfg, struct nc_tls_verify_cb_data *cb_data)
 {
-    mbedtls_ssl_set_verify(tls_session, nc_server_tls_verify_cb, cb_data);
+    mbedtls_ssl_conf_authmode(tls_cfg, MBEDTLS_SSL_VERIFY_REQUIRED);
+    mbedtls_ssl_conf_verify(tls_cfg, nc_server_tls_verify_cb, cb_data);
 }
 
-static char *
-nc_server_tls_dn2str(const mbedtls_x509_name *dn)
+void
+nc_client_tls_set_verify_wrap(void *tls_cfg)
 {
-    char *str;
-    size_t len = 64;
-    int r;
-    void *ptr;
-
-    str = malloc(len);
-    NC_CHECK_ERRMEM_RET(!str, NULL);
-
-    while ((r = mbedtls_x509_dn_gets(str, len, dn)) == MBEDTLS_ERR_X509_BUFFER_TOO_SMALL) {
-        len <<= 1;
-        ptr = realloc(str, len);
-        if (!ptr) {
-            ERRMEM;
-            free(str);
-            return NULL;
-        }
-        str = ptr;
-    }
-    if (r < 1) {
-        free(str);
-        ERRMEM;
-        return NULL;
-    }
-    return str;
+    mbedtls_ssl_conf_authmode(tls_cfg, MBEDTLS_SSL_VERIFY_REQUIRED);
 }
 
 char *
@@ -504,106 +491,96 @@ nc_server_tls_get_issuer_wrap(void *cert)
     return nc_server_tls_dn2str(&(((mbedtls_x509_crt *)cert)->issuer));
 }
 
-int
-nc_server_tls_get_username_from_cert_wrap(void *cert, NC_TLS_CTN_MAPTYPE map_type, char **username)
+void *
+nc_tls_get_sans_wrap(void *cert)
 {
-    int rc;
-    char *subject, *common_name;
-    mbedtls_x509_subject_alternative_name san = {0};
-    mbedtls_x509_sequence *cur = NULL;
-    const mbedtls_x509_buf *ip;
-    mbedtls_x509_crt *peer_cert = cert;
+    return &(((mbedtls_x509_crt *)cert)->subject_alt_names);
+}
 
-    *username = NULL;
-    if (map_type == NC_TLS_CTN_COMMON_NAME) {
-        subject = nc_server_tls_get_subject_wrap(peer_cert);
-        NC_CHECK_ERRMEM_RET(!subject, -1);
-        common_name = strstr(subject, "CN=");
-        if (!common_name) {
-            WRN(NULL, "Certificate does not include the commonName field.");
-            free(subject);
-            return 1;
-        }
-        common_name += 3;
-        if (strchr(common_name, ',')) {
-            *strchr(common_name, ',') = '\0';
-        }
-        *username = strdup(common_name);
-        free(subject);
-        NC_CHECK_ERRMEM_RET(!*username, -1);
-    } else {
-        /* retrieve subjectAltName's rfc822Name (email), dNSName and iPAddress values */
-        cur = &peer_cert->subject_alt_names;
-        while (cur) {
-            rc = mbedtls_x509_parse_subject_alt_name(&cur->buf, &san);
-            if (rc && (rc != MBEDTLS_ERR_X509_FEATURE_UNAVAILABLE)) {
-                ERR(NULL, "Getting SANs failed.");
-                return 1;
-            }
+void
+nc_tls_sans_destroy_wrap(void *UNUSED(sans))
+{
+    return;
+}
 
-            if (((map_type == NC_TLS_CTN_SAN_ANY) || (map_type == NC_TLS_CTN_SAN_DNS_NAME)) &&
-                    (san.type == MBEDTLS_X509_SAN_DNS_NAME)) {
-                *username = strndup((const char *)san.san.unstructured_name.p, san.san.unstructured_name.len); // TODO: tolower()?
-                NC_CHECK_ERRMEM_RET(!*username, -1);
-                break;
-            }
+int
+nc_tls_get_num_sans_wrap(void *sans)
+{
+    mbedtls_x509_sequence *iter;
+    int n = 0;
 
-            if (((map_type == NC_TLS_CTN_SAN_ANY) || (map_type == NC_TLS_CTN_SAN_RFC822_NAME)) &&
-                    (san.type == MBEDTLS_X509_SAN_RFC822_NAME)) {
-                *username = strndup((const char *)san.san.unstructured_name.p, san.san.unstructured_name.len);
-                NC_CHECK_ERRMEM_RET(!*username, -1);
-                break;
-            }
-
-            /* iPAddress */
-            if (((map_type == NC_TLS_CTN_SAN_ANY) || (map_type == NC_TLS_CTN_SAN_IP_ADDRESS)) &&
-                    (san.type == MBEDTLS_X509_SAN_IP_ADDRESS)) {
-                ip = &san.san.unstructured_name;
-                if (ip->len == 4) {
-                    if (asprintf(username, "%d.%d.%d.%d", ip->p[0], ip->p[1], ip->p[2], ip->p[3]) == -1) {
-                        ERRMEM;
-                        return -1;
-                    }
-                    break;
-                } else if (ip->len == 16) {
-                    if (asprintf(username, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
-                            ip->p[0], ip->p[1], ip->p[2], ip->p[3], ip->p[4], ip->p[5],
-                            ip->p[6], ip->p[7], ip->p[8], ip->p[9], ip->p[10], ip->p[11],
-                            ip->p[12], ip->p[13], ip->p[14], ip->p[15]) == -1) {
-                        ERRMEM;
-                        return -1;
-                    }
-                    break;
-                } else {
-                    WRN(NULL, "SAN IP address in an unknown format (length is %d).", ip->len);
-                }
-            }
-
-            cur = cur->next;
-        }
-
-        if (!*username) {
-            switch (map_type) {
-            case NC_TLS_CTN_SAN_RFC822_NAME:
-                WRN(NULL, "Certificate does not include the SAN rfc822Name field.");
-                break;
-            case NC_TLS_CTN_SAN_DNS_NAME:
-                WRN(NULL, "Certificate does not include the SAN dNSName field.");
-                break;
-            case NC_TLS_CTN_SAN_IP_ADDRESS:
-                WRN(NULL, "Certificate does not include the SAN iPAddress field.");
-                break;
-            case NC_TLS_CTN_SAN_ANY:
-                WRN(NULL, "Certificate does not include any relevant SAN fields.");
-                break;
-            default:
-                break;
-            }
-            return 1;
-        }
+    /* sans are a linked list */
+    iter = sans;
+    while (iter) {
+        ++n;
+        iter = iter->next;
     }
 
-    return 0;
+    return n;
+}
+
+int
+nc_tls_get_san_value_type_wrap(void *sans, int idx, char **san_value, NC_TLS_CTN_MAPTYPE *san_type)
+{
+    int i, rc, ret = 0;
+    mbedtls_x509_sequence *iter;
+    mbedtls_x509_subject_alternative_name san = {0};
+    const mbedtls_x509_buf *ip;
+
+    *san_value = NULL;
+    *san_type = NC_TLS_CTN_UNKNOWN;
+
+    /* find the SAN */
+    iter = sans;
+    for (i = 0; i < idx; i++) {
+        iter = iter->next;
+    }
+
+    /* parse it */
+    rc = mbedtls_x509_parse_subject_alt_name(&iter->buf, &san);
+    if (rc && (rc != MBEDTLS_ERR_X509_FEATURE_UNAVAILABLE)) {
+        return -1;
+    }
+
+    /* get its type and value */
+    switch (san.type) {
+    case MBEDTLS_X509_SAN_DNS_NAME:
+        *san_type = NC_TLS_CTN_SAN_DNS_NAME;
+        *san_value = strndup((const char *)san.san.unstructured_name.p, san.san.unstructured_name.len);
+        NC_CHECK_ERRMEM_GOTO(!*san_value, ret = -1, cleanup);
+        break;
+    case MBEDTLS_X509_SAN_RFC822_NAME:
+        *san_type = NC_TLS_CTN_SAN_RFC822_NAME;
+        *san_value = strndup((const char *)san.san.unstructured_name.p, san.san.unstructured_name.len);
+        NC_CHECK_ERRMEM_GOTO(!*san_value, ret = -1, cleanup);
+        break;
+    case MBEDTLS_X509_SAN_IP_ADDRESS:
+        *san_type = NC_TLS_CTN_SAN_IP_ADDRESS;
+        ip = &san.san.unstructured_name;
+        if (ip->len == 4) {
+            rc = asprintf(san_value, "%d.%d.%d.%d", ip->p[0], ip->p[1], ip->p[2], ip->p[3]) == -1;
+            NC_CHECK_ERRMEM_GOTO(rc == -1, ret = -1, cleanup);
+        } else if (ip->len == 16) {
+            rc = asprintf(san_value, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+                    ip->p[0], ip->p[1], ip->p[2], ip->p[3], ip->p[4], ip->p[5],
+                    ip->p[6], ip->p[7], ip->p[8], ip->p[9], ip->p[10], ip->p[11],
+                    ip->p[12], ip->p[13], ip->p[14], ip->p[15]);
+            NC_CHECK_ERRMEM_GOTO(rc == -1, ret = -1, cleanup);
+        } else {
+            WRN(NULL, "SAN IP address in an unknown format (length is %d).", ip->len);
+            ret = 1;
+        }
+        break;
+    default:
+        /* we dont care about other types */
+        *san_type = NC_TLS_CTN_UNKNOWN;
+        ret = 1;
+        break;
+    }
+
+cleanup:
+    mbedtls_x509_free_subject_alt_name(&san);
+    return ret;
 }
 
 int
@@ -633,7 +610,7 @@ nc_server_tls_md5_wrap(void *cert, unsigned char *buf)
 
     rc = mbedtls_md5(c->raw.p, c->raw.len, buf);
     if (rc) {
-        ERR(NULL, "Calculating MD5 digest failed (%s).", mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Calculating MD5 digest failed (%s).", nc_get_mbedtls_str_err(rc));
         return 1;
     }
 
@@ -648,7 +625,7 @@ nc_server_tls_sha1_wrap(void *cert, unsigned char *buf)
 
     rc = mbedtls_sha1(c->raw.p, c->raw.len, buf);
     if (rc) {
-        ERR(NULL, "Calculating SHA-1 digest failed (%s).", mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Calculating SHA-1 digest failed (%s).", nc_get_mbedtls_str_err(rc));
         return 1;
     }
 
@@ -663,7 +640,7 @@ nc_server_tls_sha224_wrap(void *cert, unsigned char *buf)
 
     rc = mbedtls_sha256(c->raw.p, c->raw.len, buf, 1);
     if (rc) {
-        ERR(NULL, "Calculating SHA-224 digest failed (%s).", mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Calculating SHA-224 digest failed (%s).", nc_get_mbedtls_str_err(rc));
         return 1;
     }
 
@@ -678,7 +655,7 @@ nc_server_tls_sha256_wrap(void *cert, unsigned char *buf)
 
     rc = mbedtls_sha256(c->raw.p, c->raw.len, buf, 0);
     if (rc) {
-        ERR(NULL, "Calculating SHA-256 digest failed (%s).", mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Calculating SHA-256 digest failed (%s).", nc_get_mbedtls_str_err(rc));
         return 1;
     }
 
@@ -693,7 +670,7 @@ nc_server_tls_sha384_wrap(void *cert, unsigned char *buf)
 
     rc = mbedtls_sha512(c->raw.p, c->raw.len, buf, 1);
     if (rc) {
-        ERR(NULL, "Calculating SHA-384 digest failed (%s).", mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Calculating SHA-384 digest failed (%s).", nc_get_mbedtls_str_err(rc));
         return 1;
     }
 
@@ -708,17 +685,64 @@ nc_server_tls_sha512_wrap(void *cert, unsigned char *buf)
 
     rc = mbedtls_sha512(c->raw.p, c->raw.len, buf, 0);
     if (rc) {
-        ERR(NULL, "Calculating SHA-512 digest failed (%s).", mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Calculating SHA-512 digest failed (%s).", nc_get_mbedtls_str_err(rc));
         return 1;
     }
 
     return 0;
 }
 
+static int
+nc_server_tls_send(void *ctx, const unsigned char *buf, size_t len)
+{
+    int sock, ret;
+
+    NC_CHECK_ARG_RET(NULL, ctx, MBEDTLS_ERR_NET_INVALID_CONTEXT);
+
+    sock = *(int *)ctx;
+
+    ret = send(sock, buf, len, MSG_NOSIGNAL);
+    if (ret < 0) {
+        if ((errno == EWOULDBLOCK) || (errno = EAGAIN) || (errno == EINTR)) {
+            return MBEDTLS_ERR_SSL_WANT_WRITE;
+        } else if ((errno == EPIPE) || (errno == ECONNRESET)) {
+            return MBEDTLS_ERR_NET_CONN_RESET;
+        } else {
+            return MBEDTLS_ERR_NET_SEND_FAILED;
+        }
+    }
+
+    return ret;
+}
+
+static int
+nc_server_tls_recv(void *ctx, unsigned char *buf, size_t len)
+{
+    int sock, ret;
+
+    NC_CHECK_ARG_RET(NULL, ctx, MBEDTLS_ERR_NET_INVALID_CONTEXT);
+
+    sock = *(int *)ctx;
+
+    ret = recv(sock, buf, len, 0);
+    if (ret < 0) {
+        if ((errno == EWOULDBLOCK) || (errno = EAGAIN) || (errno == EINTR)) {
+            return MBEDTLS_ERR_SSL_WANT_READ;
+        } else if ((errno == EPIPE) || (errno == ECONNRESET)) {
+            return MBEDTLS_ERR_NET_CONN_RESET;
+        } else {
+            return MBEDTLS_ERR_NET_RECV_FAILED;
+        }
+    }
+
+    return ret;
+}
+
 void
 nc_server_tls_set_fd_wrap(void *tls_session, int UNUSED(sock), struct nc_tls_ctx *tls_ctx)
 {
-    mbedtls_ssl_set_bio(tls_session, tls_ctx->sock, mbedtls_net_send, mbedtls_net_recv, NULL);
+    /* mbedtls sets a pointer to the sock, which is stored in tls_ctx */
+    mbedtls_ssl_set_bio(tls_session, tls_ctx->sock, nc_server_tls_send, nc_server_tls_recv, NULL);
 }
 
 int
@@ -732,72 +756,39 @@ nc_server_tls_handshake_step_wrap(void *tls_session)
     } else if ((rc == MBEDTLS_ERR_SSL_WANT_READ) || (rc == MBEDTLS_ERR_SSL_WANT_WRITE)) {
         return 0;
     } else {
-        return -1;
+        return rc;
     }
 }
 
 int
-nc_server_tls_fill_config_wrap(void *tls_cfg, void *srv_cert, void *srv_pkey, void *cert_store, void *crl_store, struct nc_tls_ctx *tls_ctx)
+nc_client_tls_handshake_step_wrap(void *tls_session, int sock)
 {
-    int rc;
+    int rc = 0;
+    struct pollfd pfd = {sock, 0, 0};
 
-    rc = mbedtls_ssl_config_defaults(tls_cfg, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
-    if (rc) {
-        ERR(NULL, "Setting default TLS config failed (%s).", mbedtls_high_level_strerr(rc));
+    rc = mbedtls_ssl_handshake(tls_session);
+    if (!rc) {
         return 1;
+    } else if ((rc == MBEDTLS_ERR_SSL_WANT_READ) || (rc == MBEDTLS_ERR_SSL_WANT_WRITE)) {
+        /* check for EPIPE */
+        if (poll(&pfd, 1, 0) < 0) {
+            return -1;
+        } else {
+            if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                return -1;
+            } else {
+                return 0;
+            }
+        }
+    } else {
+        return rc;
     }
-
-    mbedtls_ssl_conf_rng(tls_cfg, mbedtls_ctr_drbg_random, tls_ctx->ctr_drbg);
-    mbedtls_ssl_conf_authmode(tls_cfg, MBEDTLS_SSL_VERIFY_REQUIRED);
-
-    mbedtls_ssl_conf_own_cert(tls_cfg, srv_cert, srv_pkey);
-    mbedtls_ssl_conf_ca_chain(tls_cfg, cert_store, crl_store);
-
-    tls_ctx->cert = srv_cert;
-    tls_ctx->pkey = srv_pkey;
-    tls_ctx->cert_store = cert_store;
-    tls_ctx->crl_store = crl_store;
-    return 0;
-}
-
-int
-nc_server_tls_setup_config_fill_ctx_wrap(void *tls_cfg, struct nc_tls_ctx *tls_ctx, void *srv_cert, void *srv_pkey, void *cert_store, void *crl_store, int sock)
-{
-    int rc;
-
-    rc = mbedtls_ssl_config_defaults(tls_cfg, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
-    if (rc) {
-        ERR(NULL, "Setting default TLS config failed (%s).", mbedtls_high_level_strerr(rc));
-        return 1;
-    }
-
-    rc = nc_tls_rng_new(&tls_ctx->ctr_drbg, &tls_ctx->entropy);
-    if (rc) {
-        return 1;
-    }
-
-    mbedtls_ssl_conf_rng(tls_cfg, mbedtls_ctr_drbg_random, tls_ctx->ctr_drbg);
-    mbedtls_ssl_conf_authmode(tls_cfg, MBEDTLS_SSL_VERIFY_REQUIRED);
-
-    mbedtls_ssl_conf_own_cert(tls_cfg, srv_cert, srv_pkey);
-    mbedtls_ssl_conf_ca_chain(tls_cfg, cert_store, crl_store);
-
-    tls_ctx->cert = srv_cert;
-    tls_ctx->pkey = srv_pkey;
-    tls_ctx->cert_store = cert_store;
-    tls_ctx->crl_store = crl_store;
-    tls_ctx->sock = malloc(sizeof *tls_ctx->sock);
-    NC_CHECK_ERRMEM_RET(!tls_ctx->sock, 1);
-    *tls_ctx->sock = sock;
-    return 0;
 }
 
 void
 nc_tls_ctx_destroy_wrap(struct nc_tls_ctx *tls_ctx)
 {
-    if (tls_ctx->ctr_drbg && tls_ctx->entropy) {
-        nc_tls_rng_destroy(tls_ctx->ctr_drbg, tls_ctx->entropy);
-    }
+    nc_tls_rng_destroy(tls_ctx->ctr_drbg, tls_ctx->entropy);
     nc_tls_cert_destroy_wrap(tls_ctx->cert);
     nc_tls_privkey_destroy_wrap(tls_ctx->pkey);
     nc_tls_cert_store_destroy_wrap(tls_ctx->cert_store);
@@ -805,8 +796,8 @@ nc_tls_ctx_destroy_wrap(struct nc_tls_ctx *tls_ctx)
     free(tls_ctx->sock);
 }
 
-static mbedtls_pk_context *
-nc_tls_file_to_privkey(const char *privkey_path)
+void *
+nc_tls_import_privkey_file_wrap(const char *privkey_path)
 {
     int rc;
     mbedtls_pk_context *pkey;
@@ -817,7 +808,7 @@ nc_tls_file_to_privkey(const char *privkey_path)
         return NULL;
     }
 
-    pkey = nc_tls_privkey_new_wrap();
+    pkey = nc_tls_pkey_new_wrap();
     if (!pkey) {
         nc_tls_rng_destroy(ctr_drbg, entropy);
         return NULL;
@@ -826,50 +817,11 @@ nc_tls_file_to_privkey(const char *privkey_path)
     rc = mbedtls_pk_parse_keyfile(pkey, privkey_path, NULL, mbedtls_ctr_drbg_random, ctr_drbg);
     nc_tls_rng_destroy(ctr_drbg, entropy);
     if (rc) {
-        ERR(NULL, "Parsing private key data failed (%s).", mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Parsing private key from file \"%s\" failed (%s).", privkey_path, nc_get_mbedtls_str_err(rc));
         nc_tls_privkey_destroy_wrap(pkey);
         return NULL;
     }
     return pkey;
-}
-
-static int
-read_pem_file(const char *cert_path, char **out)
-{
-    int ret = 0;
-    FILE *f;
-    char *buf = NULL;
-    size_t size, read;
-
-    f = fopen(cert_path, "r");
-    if (!f) {
-        ERR(NULL, "Unable to open file \"%s\".", cert_path);
-        ret = 1;
-        goto cleanup;
-    }
-
-    fseek(f, 0, SEEK_END);
-    size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    buf = malloc(size + 1);
-    NC_CHECK_ERRMEM_GOTO(!buf, ret = 1, cleanup);
-
-    read = fread(buf, 1, size, f);
-    if (size != read) {
-        ERR(NULL, "Error reading from file \"%s\".", cert_path);
-        ret = 1;
-        goto cleanup;
-    }
-
-    buf[size] = '\0';
-    *out = buf;
-
-cleanup:
-    if (f) {
-        fclose(f);
-    }
-    return ret;
 }
 
 int
@@ -878,8 +830,8 @@ nc_client_tls_load_cert_key_wrap(const char *cert_path, const char *key_path, vo
     int ret = 0;
     mbedtls_x509_crt *c;
     mbedtls_pk_context *pk;
-    char *buf = NULL, *ptr;
-    const char *cert_footer = "-----END CERTIFICATE-----\n";
+
+    NC_CHECK_ARG_RET(NULL, cert_path, key_path, cert, pkey, 1);
 
     c = nc_tls_cert_new_wrap();
     if (!c) {
@@ -888,41 +840,14 @@ nc_client_tls_load_cert_key_wrap(const char *cert_path, const char *key_path, vo
 
     ret = mbedtls_x509_crt_parse_file(c, cert_path);
     if (ret) {
-        ERR(NULL, "Parsing certificate from file \"%s\" failed (%s).", cert_path, mbedtls_high_level_strerr(ret));
+        ERR(NULL, "Parsing certificate from file \"%s\" failed (%s).", cert_path, nc_get_mbedtls_str_err(ret));
         goto cleanup;
     }
 
-    if (key_path) {
-        pk = nc_tls_file_to_privkey(key_path);
-        if (!pk) {
-            ret = 1;
-            goto cleanup;
-        }
-    } else {
-        ret = read_pem_file(cert_path, &buf);
-        if (ret) {
-            goto cleanup;
-        }
-
-        ptr = strstr(buf, cert_footer);
-        if (!ptr) {
-            ERR(NULL, "Invalid certificate file.");
-            ret = 1;
-            goto cleanup;
-        }
-
-        ptr += strlen(cert_footer);
-        if (*ptr == '\0') {
-            ERR(NULL, "File \"%s\" doesn't contain a private key.");
-            ret = 1;
-            goto cleanup;
-        }
-
-        pk = nc_tls_pem_to_privkey_wrap(ptr);
-        if (!pk) {
-            ret = 1;
-            goto cleanup;
-        }
+    pk = nc_tls_import_privkey_file_wrap(key_path);
+    if (!pk) {
+        ret = 1;
+        goto cleanup;
     }
 
     *cert = c;
@@ -938,12 +863,12 @@ nc_client_tls_load_trusted_certs_wrap(void *cert_store, const char *file_path, c
     int rc;
 
     if (file_path && ((rc = mbedtls_x509_crt_parse_file(cert_store, file_path)) < 0)) {
-        ERR(NULL, "Loading CA certificate from file \"%s\" failed (%s).", file_path, mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Loading CA certificate from file \"%s\" failed (%s).", file_path, nc_get_mbedtls_str_err(rc));
         return 1;
     }
 
     if (dir_path && ((rc = mbedtls_x509_crt_parse_path(cert_store, dir_path)) < 0)) {
-        ERR(NULL, "Loading CA certificate from directory \"%s\" failed (%s).", dir_path, mbedtls_low_level_strerr(rc));
+        ERR(NULL, "Loading CA certificate from directory \"%s\" failed (%s).", dir_path, nc_get_mbedtls_str_err(rc));
         return 1;
     }
 
@@ -951,16 +876,16 @@ nc_client_tls_load_trusted_certs_wrap(void *cert_store, const char *file_path, c
 }
 
 int
-nc_client_tls_load_crl_wrap(void *UNUSED(cert_store), void *crl_store, const char *file_path, const char *dir_path)
+nc_client_tls_load_crl_wrap(void *crl_store, const char *file_path, const char *dir_path)
 {
-    int rc;
-    DIR *dir;
+    int rc, ret = 0;
+    DIR *dir = NULL;
     struct dirent *entry;
     struct stat st = {0};
-    char *path;
+    char *path = NULL;
 
     if (file_path && (rc = mbedtls_x509_crl_parse_file(crl_store, file_path))) {
-        ERR(NULL, "Loading CRL from file \"%s\" failed (%s).", file_path, mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Loading CRL from file \"%s\" failed (%s).", file_path, nc_get_mbedtls_str_err(rc));
         return 1;
     }
 
@@ -969,6 +894,7 @@ nc_client_tls_load_crl_wrap(void *UNUSED(cert_store), void *crl_store, const cha
         dir = opendir(dir_path);
         if (!dir) {
             ERR(NULL, "Failed to open directory \"%s\" (%s).", dir_path, strerror(errno));
+            return 1;
         }
 
         while ((entry = readdir(dir))) {
@@ -977,11 +903,8 @@ nc_client_tls_load_crl_wrap(void *UNUSED(cert_store), void *crl_store, const cha
                 continue;
             }
 
-            if (asprintf(&path, "%s/%s", dir_path, entry->d_name) == -1) {
-                ERRMEM;
-                closedir(dir);
-                return 1;
-            }
+            rc = asprintf(&path, "%s/%s", dir_path, entry->d_name);
+            NC_CHECK_ERRMEM_GOTO(rc == -1, ret = 1; path = NULL, cleanup);
 
             if (stat(path, &st) == -1) {
                 if (errno == ENOENT) {
@@ -990,9 +913,8 @@ nc_client_tls_load_crl_wrap(void *UNUSED(cert_store), void *crl_store, const cha
                     continue;
                 } else {
                     ERR(NULL, "Failed to get information about \"%s\" (%s).", path, strerror(errno));
-                    free(path);
-                    closedir(dir);
-                    return 1;
+                    ret = 1;
+                    goto cleanup;
                 }
             }
 
@@ -1004,14 +926,18 @@ nc_client_tls_load_crl_wrap(void *UNUSED(cert_store), void *crl_store, const cha
 
             rc = mbedtls_x509_crl_parse_file(crl_store, path);
             if (rc) {
-                ERR(NULL, "Loading CRL from file \"%s\" failed (%s).", path, mbedtls_high_level_strerr(rc));
+                WRN(NULL, "Loading CRL from file \"%s\" failed (%s), skipping.", path, nc_get_mbedtls_str_err(rc));
             }
 
             free(path);
+            path = NULL;
         }
     }
 
-    return 0;
+cleanup:
+    free(path);
+    closedir(dir);
+    return ret;
 }
 
 int
@@ -1021,7 +947,7 @@ nc_client_tls_set_hostname_wrap(void *tls_session, const char *hostname)
 
     rc = mbedtls_ssl_set_hostname(tls_session, hostname);
     if (rc) {
-        ERR(NULL, "Setting hostname failed (%s).", mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Setting hostname failed (%s).", nc_get_mbedtls_str_err(rc));
         return 1;
     }
 
@@ -1029,34 +955,7 @@ nc_client_tls_set_hostname_wrap(void *tls_session, const char *hostname)
 }
 
 int
-nc_tls_setup_config_wrap(void *tls_cfg, int side, struct nc_tls_ctx *tls_ctx)
-{
-    int rc;
-
-    /* set default config data */
-    if (side == NC_SERVER) {
-        rc = mbedtls_ssl_config_defaults(tls_cfg, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
-    } else {
-        rc = mbedtls_ssl_config_defaults(tls_cfg, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
-    }
-    if (rc) {
-        ERR(NULL, "Setting default TLS config failed (%s).", mbedtls_high_level_strerr(rc));
-        return 1;
-    }
-
-    /* set config's rng */
-    mbedtls_ssl_conf_rng(tls_cfg, mbedtls_ctr_drbg_random, tls_ctx->ctr_drbg);
-    /* set config's authmode */
-    mbedtls_ssl_conf_authmode(tls_cfg, MBEDTLS_SSL_VERIFY_REQUIRED);
-    /* set config's cert and key */
-    mbedtls_ssl_conf_own_cert(tls_cfg, tls_ctx->cert, tls_ctx->pkey);
-    /* set config's CA and CRL cert store */
-    mbedtls_ssl_conf_ca_chain(tls_cfg, tls_ctx->cert_store, tls_ctx->crl_store);
-    return 0;
-}
-
-int
-nc_tls_init_ctx_wrap(struct nc_tls_ctx *tls_ctx, int sock, void *cli_cert, void *cli_pkey, void *cert_store, void *crl_store)
+nc_tls_init_ctx_wrap(int sock, void *cert, void *pkey, void *cert_store, void *crl_store, struct nc_tls_ctx *tls_ctx)
 {
     /* setup rng */
     if (nc_tls_rng_new(&tls_ctx->ctr_drbg, &tls_ctx->entropy)) {
@@ -1067,26 +966,36 @@ nc_tls_init_ctx_wrap(struct nc_tls_ctx *tls_ctx, int sock, void *cli_cert, void 
     tls_ctx->sock = malloc(sizeof *tls_ctx->sock);
     NC_CHECK_ERRMEM_RET(!tls_ctx->sock, 1);
     *tls_ctx->sock = sock;
-    tls_ctx->cert = cli_cert;
-    tls_ctx->pkey = cli_pkey;
+    tls_ctx->cert = cert;
+    tls_ctx->pkey = pkey;
     tls_ctx->cert_store = cert_store;
     tls_ctx->crl_store = crl_store;
     return 0;
 }
 
 int
-nc_client_tls_handshake_step_wrap(void *tls_session)
+nc_tls_setup_config_from_ctx_wrap(struct nc_tls_ctx *tls_ctx, int side, void *tls_cfg)
 {
-    int rc = 0;
+    int rc;
 
-    rc = mbedtls_ssl_handshake(tls_session);
-    if (!rc) {
-        return 1;
-    } else if ((rc == MBEDTLS_ERR_SSL_WANT_READ) || (rc == MBEDTLS_ERR_SSL_WANT_WRITE)) {
-        return 0;
+    /* set default config data */
+    if (side == NC_SERVER) {
+        rc = mbedtls_ssl_config_defaults(tls_cfg, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
     } else {
-        return rc;
+        rc = mbedtls_ssl_config_defaults(tls_cfg, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
     }
+    if (rc) {
+        ERR(NULL, "Setting default TLS config failed (%s).", nc_get_mbedtls_str_err(rc));
+        return 1;
+    }
+
+    /* set config's rng */
+    mbedtls_ssl_conf_rng(tls_cfg, mbedtls_ctr_drbg_random, tls_ctx->ctr_drbg);
+    /* set config's cert and key */
+    mbedtls_ssl_conf_own_cert(tls_cfg, tls_ctx->cert, tls_ctx->pkey);
+    /* set config's CA and CRL cert store */
+    mbedtls_ssl_conf_ca_chain(tls_cfg, tls_ctx->cert_store, tls_ctx->crl_store);
+    return 0;
 }
 
 uint32_t
@@ -1095,78 +1004,78 @@ nc_tls_get_verify_result_wrap(void *tls_session)
     return mbedtls_ssl_get_verify_result(tls_session);
 }
 
-const char *
+char *
 nc_tls_verify_error_string_wrap(uint32_t err_code)
 {
-    const char *err;
-
-    return (err = mbedtls_low_level_strerr(err_code)) ? err : "";
+    return nc_tls_get_verify_err_str(err_code);
 }
 
 void
-nc_tls_print_error_string_wrap(int connect_ret, const char *peername, void *UNUSED(tls_session))
+nc_client_tls_print_connect_err_wrap(int connect_ret, const char *peername, void *UNUSED(tls_session))
 {
-    ERR(NULL, "TLS connection to \"%s\" failed (%s).", peername, mbedtls_high_level_strerr(connect_ret));
-}
+    const char *err = nc_get_mbedtls_str_err(connect_ret);
 
-void
-nc_server_tls_print_accept_error_wrap(int UNUSED(accept_ret), void *UNUSED(tls_session))
-{
-    ERR(NULL, "TLS accept failed.");
-}
-
-void
-nc_tls_session_new_cleanup_wrap(void *tls_cfg, void *cli_cert, void *cli_pkey, void *cert_store, void *crl_store)
-{
-    mbedtls_ssl_config_free(tls_cfg);
-    free(tls_cfg);
-    mbedtls_x509_crt_free(cli_cert);
-    free(cli_cert);
-    mbedtls_pk_free(cli_pkey);
-    free(cli_pkey);
-    mbedtls_x509_crt_free(cert_store);
-    free(cert_store);
-    mbedtls_x509_crl_free(crl_store);
-    free(crl_store);
-}
-
-int
-nc_der_to_pubkey_wrap(const unsigned char *der, long len)
-{
-    int ret;
-    mbedtls_pk_context *pkey;
-
-    pkey = malloc(sizeof *pkey);
-    NC_CHECK_ERRMEM_RET(!pkey, -1);
-    mbedtls_pk_init(pkey);
-
-    ret = mbedtls_pk_parse_public_key(pkey, (const unsigned char *)der, len);
-    nc_tls_privkey_destroy_wrap(pkey);
-    if (!ret) {
-        /* success */
-        return 0;
+    if (err) {
+        ERR(NULL, "TLS connection to \"%s\" failed (%s).", peername, err);
     } else {
-        /* fail */
-        return 1;
+        ERR(NULL, "TLS connection to \"%s\" failed.", peername);
+    }
+}
+
+void
+nc_server_tls_print_accept_err_wrap(int accept_ret, void *UNUSED(tls_session))
+{
+    const char *err = nc_get_mbedtls_str_err(accept_ret);
+
+    if (err) {
+        ERR(NULL, "TLS accept failed (%s).", err);
+    } else {
+        ERR(NULL, "TLS accept failed.");
     }
 }
 
 int
-nc_base64_decode_wrap(const char *base64, char **bin)
+nc_tls_is_der_subpubkey_wrap(unsigned char *der, long len)
+{
+    int ret;
+    mbedtls_pk_context *pkey;
+
+    pkey = nc_tls_pkey_new_wrap();
+    if (!pkey) {
+        return -1;
+    }
+
+    ret = mbedtls_pk_parse_subpubkey(&der, der + len, pkey);
+    nc_tls_privkey_destroy_wrap(pkey);
+    if (!ret) {
+        /* success */
+        return 1;
+    } else {
+        /* fail */
+        return 0;
+    }
+}
+
+int
+nc_base64_decode_wrap(const char *base64, unsigned char **bin)
 {
     size_t size;
-    int ret;
+    int rc;
 
-    ret = mbedtls_base64_decode(NULL, 0, &size, (const unsigned char *)base64, strlen(base64));
-    if (ret != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+    /* get the size of the decoded data */
+    rc = mbedtls_base64_decode(NULL, 0, &size, (const unsigned char *)base64, strlen(base64));
+    if (rc != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+        ERR(NULL, "Base64 decoding failed (%s).", nc_get_mbedtls_str_err(rc));
         return -1;
     }
 
     *bin = malloc(size);
     NC_CHECK_ERRMEM_RET(!*bin, -1);
 
-    ret = mbedtls_base64_decode((unsigned char *)*bin, size, &size, (const unsigned char *)base64, strlen(base64));
-    if (ret) {
+    /* decode */
+    rc = mbedtls_base64_decode(*bin, size, &size, (const unsigned char *)base64, strlen(base64));
+    if (rc) {
+        ERR(NULL, "Base64 decoding failed (%s).", nc_get_mbedtls_str_err(rc));
         free(*bin);
         *bin = NULL;
         return -1;
@@ -1179,18 +1088,20 @@ int
 nc_base64_encode_wrap(const unsigned char *bin, size_t len, char **base64)
 {
     size_t size;
-    int ret;
+    int rc;
 
-    ret = mbedtls_base64_encode(NULL, 0, &size, bin, len);
-    if (ret != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+    rc = mbedtls_base64_encode(NULL, 0, &size, bin, len);
+    if (rc != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+        ERR(NULL, "Base64 encoding failed (%s).", nc_get_mbedtls_str_err(rc));
         return -1;
     }
 
     *base64 = malloc(size);
     NC_CHECK_ERRMEM_RET(!*base64, -1);
 
-    ret = mbedtls_base64_encode((unsigned char *)*base64, size, &size, bin, len);
-    if (ret) {
+    rc = mbedtls_base64_encode((unsigned char *)*base64, size, &size, bin, len);
+    if (rc) {
+        ERR(NULL, "Base64 encoding failed (%s).", nc_get_mbedtls_str_err(rc));
         free(*base64);
         *base64 = NULL;
         return -1;
@@ -1219,7 +1130,7 @@ nc_tls_read_wrap(struct nc_session *session, unsigned char *buf, size_t size)
             rc = -1;
             break;
         default:
-            ERR(session, "TLS communication error occurred (%s).", mbedtls_high_level_strerr(rc));
+            ERR(session, "TLS communication error occurred (%s).", nc_get_mbedtls_str_err(rc));
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_OTHER;
             rc = -1;
@@ -1248,7 +1159,7 @@ nc_tls_write_wrap(struct nc_session *session, const unsigned char *buf, size_t s
             rc = -1;
             break;
         default:
-            ERR(session, "TLS communication error occurred (%s).", mbedtls_high_level_strerr(rc));
+            ERR(session, "TLS communication error occurred (%s).", nc_get_mbedtls_str_err(rc));
             rc = -1;
             break;
         }
@@ -1258,7 +1169,7 @@ nc_tls_write_wrap(struct nc_session *session, const unsigned char *buf, size_t s
 }
 
 int
-nc_tls_have_pending_wrap(void *tls_session)
+nc_tls_get_num_pending_bytes_wrap(void *tls_session)
 {
     return mbedtls_ssl_get_bytes_avail(tls_session);
 }
@@ -1266,11 +1177,7 @@ nc_tls_have_pending_wrap(void *tls_session)
 int
 nc_tls_get_fd_wrap(const struct nc_session *session)
 {
-    if (!session->ti.tls.ctx.sock) {
-        return -1;
-    } else {
-        return *session->ti.tls.ctx.sock;
-    }
+    return session->ti.tls.ctx.sock ? *session->ti.tls.ctx.sock : -1;
 }
 
 void
@@ -1281,15 +1188,10 @@ nc_tls_close_notify_wrap(void *tls_session)
     while ((rc = mbedtls_ssl_close_notify(tls_session))) {
         if ((rc != MBEDTLS_ERR_SSL_WANT_READ) && (rc != MBEDTLS_ERR_SSL_WANT_WRITE)) {
             /* some error occurred */
+            ERR(NULL, "Sending TLS close notify failed (%s).", nc_get_mbedtls_str_err(rc));
             return;
         }
     }
-}
-
-void *
-nc_tls_import_key_file_wrap(const char *key_path, FILE *UNUSED(file))
-{
-    return nc_tls_file_to_privkey(key_path);
 }
 
 void *
@@ -1305,7 +1207,7 @@ nc_tls_import_cert_file_wrap(const char *cert_path)
 
     rc = mbedtls_x509_crt_parse_file(c, cert_path);
     if (rc) {
-        ERR(NULL, "Parsing certificate from file \"%s\" failed (%s).", cert_path, mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Parsing certificate from file \"%s\" failed (%s).", cert_path, nc_get_mbedtls_str_err(rc));
         nc_tls_cert_destroy_wrap(c);
         return NULL;
     }
@@ -1314,28 +1216,22 @@ nc_tls_import_cert_file_wrap(const char *cert_path)
 }
 
 char *
-nc_tls_export_key_wrap(void *pkey)
+nc_tls_export_privkey_pem_wrap(void *pkey)
 {
     int rc;
     char *pem;
     size_t size = 128;
-    void *tmp;
 
     pem = malloc(size);
     NC_CHECK_ERRMEM_RET(!pem, NULL);
 
     while ((rc = mbedtls_pk_write_key_pem(pkey, (unsigned char *)pem, size)) == MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
         size <<= 1;
-        tmp = realloc(pem, size);
-        if (!tmp) {
-            ERRMEM;
-            free(pem);
-            return NULL;
-        }
-        pem = tmp;
+        pem = nc_realloc(pem, size);
+        NC_CHECK_ERRMEM_RET(!pem, NULL);
     }
     if (rc < 0) {
-        ERR(NULL, "Exporting private key to PEM format failed (%s).", mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Exporting private key to PEM format failed (%s).", nc_get_mbedtls_str_err(rc));
         free(pem);
         return NULL;
     }
@@ -1344,10 +1240,11 @@ nc_tls_export_key_wrap(void *pkey)
 }
 
 char *
-nc_tls_export_cert_wrap(void *cert)
+nc_tls_export_cert_pem_wrap(void *cert)
 {
     char *b64 = NULL, *pem = NULL;
 
+    /* encode the certificate */
     if (nc_base64_encode_wrap(((mbedtls_x509_crt *)cert)->raw.p, ((mbedtls_x509_crt *)cert)->raw.len, &b64)) {
         goto cleanup;
     }
@@ -1364,53 +1261,27 @@ cleanup:
 }
 
 char *
-nc_tls_export_pubkey_wrap(void *pkey)
+nc_tls_export_pubkey_pem_wrap(void *pkey)
 {
     int rc;
     char *pem;
     size_t size = 128;
-    void *tmp;
 
     pem = malloc(size);
     NC_CHECK_ERRMEM_RET(!pem, NULL);
 
     while ((rc = mbedtls_pk_write_pubkey_pem(pkey, (unsigned char *)pem, size)) == MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
         size <<= 1;
-        tmp = realloc(pem, size);
-        if (!tmp) {
-            ERRMEM;
-            free(pem);
-            return NULL;
-        }
-        pem = tmp;
+        pem = nc_realloc(pem, size);
+        NC_CHECK_ERRMEM_RET(!pem, NULL);
     }
     if (rc < 0) {
-        ERR(NULL, "Exporting public key to PEM format failed (%s).", mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Exporting public key to PEM format failed (%s).", nc_get_mbedtls_str_err(rc));
         free(pem);
         return NULL;
     }
 
     return pem;
-}
-
-int
-nc_tls_export_key_der_wrap(void *pkey, unsigned char **der, size_t *size)
-{
-    int rc;
-
-    *size = mbedtls_pk_get_len(pkey);
-    *der = malloc(*size);
-    NC_CHECK_ERRMEM_RET(!*der, 1);
-
-    rc = mbedtls_pk_write_key_der(pkey, *der, *size);
-    if (rc < 0) {
-        ERR(NULL, "Exporting private key to DER format failed (%s).", mbedtls_high_level_strerr(rc));
-        free(*der);
-        *der = NULL;
-        return 1;
-    }
-
-    return 0;
 }
 
 int
@@ -1435,7 +1306,7 @@ nc_tls_get_rsa_pubkey_params_wrap(void *pkey, void **e, void **n)
     mbedtls_mpi_init(mod);
 
     if ((rc = mbedtls_rsa_export(mbedtls_pk_rsa(*(mbedtls_pk_context *)pkey), mod, NULL, NULL, NULL, exp))) {
-        ERR(NULL, "Failed to export RSA public key parameters (%s).", mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Failed to export RSA public key parameters (%s).", nc_get_mbedtls_str_err(rc));
         goto fail;
     }
 
@@ -1451,6 +1322,13 @@ fail:
     return 1;
 }
 
+void
+nc_tls_destroy_mpi_wrap(void *mpi)
+{
+    mbedtls_mpi_free(mpi);
+    free(mpi);
+}
+
 int
 nc_tls_privkey_is_ec_wrap(void *pkey)
 {
@@ -1464,85 +1342,123 @@ nc_tls_get_ec_group_wrap(void *pkey)
     mbedtls_ecp_group_id group_id;
     mbedtls_ecp_keypair *ec;
 
+    /* get the group ID from the EC key */
     ec = mbedtls_pk_ec(*(mbedtls_pk_context *)pkey);
     group_id = ec->private_grp.id;
+
+    /* get the group name based on the id */
     curve_info = mbedtls_ecp_curve_info_from_grp_id(group_id);
     return strdup(curve_info->name);
 }
 
 int
-nc_tls_get_ec_pubkey_param_wrap(void *pkey, unsigned char **bin, int *bin_len)
+nc_tls_get_ec_pubkey_params_wrap(void *pkey, void **q, void **q_grp)
 {
-    int rc = 0;
-    unsigned char *bin_tmp;
-    size_t bin_len_tmp = 32, out_len;
-    mbedtls_ecp_keypair *ec;
-    void *tmp;
+    int ret;
+    mbedtls_ecp_group *grp = NULL;
+    mbedtls_ecp_point *p = NULL;
+    mbedtls_mpi *d = NULL;
 
-    bin_tmp = malloc(bin_len_tmp);
-    NC_CHECK_ERRMEM_RET(!bin_tmp, 1);
+    /* init group, mpi and point */
+    grp = malloc(sizeof *grp);
+    d = malloc(sizeof *d);
+    p = malloc(sizeof *p);
+    if (!grp || !p || !d) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+    mbedtls_ecp_group_init(grp);
+    mbedtls_mpi_init(d);
+    mbedtls_ecp_point_init(p);
 
-    ec = mbedtls_pk_ec(*(mbedtls_pk_context *)pkey);
-    while ((rc = mbedtls_ecp_point_write_binary(&ec->private_grp, &ec->private_Q, MBEDTLS_ECP_PF_COMPRESSED, &out_len, bin_tmp, bin_len_tmp)) == MBEDTLS_ERR_ECP_BUFFER_TOO_SMALL) {
-        bin_len_tmp <<= 1;
-        tmp = realloc(bin_tmp, bin_len_tmp);
-        if (!tmp) {
-            ERRMEM;
-            free(bin_tmp);
-            return 1;
+    /* get the group and public key */
+    ret = mbedtls_ecp_export(mbedtls_pk_ec(*(mbedtls_pk_context *)pkey), grp, d, p);
+    if (ret) {
+        ERR(NULL, "Failed to export EC public key parameters (%s).", nc_get_mbedtls_str_err(ret));
+        ret = 1;
+        goto cleanup;
+    }
+
+    *q_grp = grp;
+    grp = NULL;
+    *q = p;
+    p = NULL;
+
+cleanup:
+    mbedtls_ecp_group_free(grp);
+    free(grp);
+    mbedtls_mpi_free(d);
+    free(d);
+    mbedtls_ecp_point_free(p);
+    free(p);
+    return ret;
+}
+
+int
+nc_tls_ec_point_to_bin_wrap(void *q, void *q_grp, unsigned char **bin, int *bin_len)
+{
+    int rc;
+    unsigned char *buf;
+    size_t buf_len = 32, out_len;
+
+    buf = malloc(buf_len);
+    NC_CHECK_ERRMEM_RET(!buf, 1);
+
+    while ((rc = (mbedtls_ecp_point_write_binary(q_grp, q, MBEDTLS_ECP_PF_COMPRESSED, &out_len, buf, buf_len)))) {
+        if (rc != MBEDTLS_ERR_ECP_BUFFER_TOO_SMALL) {
+            break;
         }
-        bin_tmp = tmp;
+        buf_len <<= 1;
+        buf = nc_realloc(buf, buf_len);
+        NC_CHECK_ERRMEM_RET(!buf, 1);
     }
     if (rc) {
-        ERR(NULL, "Failed to write public key binary (%s).", mbedtls_high_level_strerr(rc));
-        free(bin_tmp);
+        ERR(NULL, "Failed to write EC public key binary (%s).", nc_get_mbedtls_str_err(rc));
+        free(buf);
         return 1;
     }
 
-    *bin = bin_tmp;
+    *bin = buf;
     *bin_len = out_len;
     return 0;
 }
 
-int
-nc_tls_get_bn_num_bytes_wrap(void *bn)
+void
+nc_tls_ec_point_destroy_wrap(void *p)
 {
-    return mbedtls_mpi_size(bn);
+    mbedtls_ecp_point_free(p);
+    free(p);
 }
 
 void
-nc_tls_bn_bn2bin_wrap(void *bn, unsigned char *bin)
+nc_tls_ec_group_destroy_wrap(void *grp)
 {
-    mbedtls_mpi_write_binary(bn, bin, mbedtls_mpi_size(bn));
+    mbedtls_ecp_group_free(grp);
+    free(grp);
 }
 
 int
-nc_tls_get_pubkey_file_wrap(const char *pubkey_path, char **pubout)
+nc_tls_mpi2bin_wrap(void *mpi, unsigned char **bin, int *bin_len)
 {
-    int rc = 0, ret = 0;
-    mbedtls_pk_context *pk = NULL;
+    int rc;
+    unsigned char *buf;
+    int buf_len;
 
-    pk = nc_tls_privkey_new_wrap();
-    if (!pk) {
+    buf_len = mbedtls_mpi_size(mpi);
+    buf = malloc(buf_len);
+    NC_CHECK_ERRMEM_RET(!buf, 1);
+
+    rc = mbedtls_mpi_write_binary(mpi, buf, buf_len);
+    if (rc) {
+        ERR(NULL, "Failed to convert MPI to binary (%s).", nc_get_mbedtls_str_err(rc));
+        free(buf);
         return 1;
     }
 
-    rc = mbedtls_pk_parse_public_keyfile(pk, pubkey_path);
-    if (rc) {
-        ERR(NULL, "Parsing public key from file \"%s\" failed (%s).", pubkey_path, mbedtls_high_level_strerr(rc));
-        ret = 1;
-        goto cleanup;
-    }
-
-    *pubout = nc_tls_export_key_wrap(pk);
-    if (!*pubout) {
-        ret = 1;
-        goto cleanup;
-    }
-
-cleanup:
-    nc_tls_privkey_destroy_wrap(pk);
-    return ret;
+    *bin = buf;
+    *bin_len = buf_len;
+    return 0;
 }
 
 void *
@@ -1551,14 +1467,14 @@ nc_tls_import_pubkey_file_wrap(const char *pubkey_path)
     int rc = 0;
     mbedtls_pk_context *pk = NULL;
 
-    pk = nc_tls_privkey_new_wrap();
+    pk = nc_tls_pkey_new_wrap();
     if (!pk) {
         return NULL;
     }
 
     rc = mbedtls_pk_parse_public_keyfile(pk, pubkey_path);
     if (rc) {
-        ERR(NULL, "Parsing public key from file \"%s\" failed (%s).", pubkey_path, mbedtls_high_level_strerr(rc));
+        ERR(NULL, "Parsing public key from file \"%s\" failed (%s).", pubkey_path, nc_get_mbedtls_str_err(rc));
         nc_tls_privkey_destroy_wrap(pk);
         return NULL;
     }
@@ -1603,7 +1519,7 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
          */
         ret = mbedtls_asn1_get_tag(&p, end_v3_ext, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
         if (ret) {
-            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
             goto cleanup;
         }
 
@@ -1616,7 +1532,7 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
              */
             ret = mbedtls_asn1_get_tag(&p, end_v3_ext, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
             if (ret) {
-                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
                 goto cleanup;
             }
 
@@ -1625,7 +1541,7 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
             /* parse extnID */
             ret = mbedtls_asn1_get_tag(&p, end_ext, &ext_oid.len, MBEDTLS_ASN1_OID);
             if (ret) {
-                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
                 goto cleanup;
             }
             ext_oid.tag = MBEDTLS_ASN1_OID;
@@ -1642,14 +1558,14 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
             /* parse optional critical */
             ret = mbedtls_asn1_get_bool(&p, end_ext, &is_critical);
             if (ret && (ret != MBEDTLS_ERR_ASN1_UNEXPECTED_TAG)) {
-                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
                 goto cleanup;
             }
 
             /* parse extnValue */
             ret = mbedtls_asn1_get_tag(&p, end_ext, &len, MBEDTLS_ASN1_OCTET_STRING);
             if (ret) {
-                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
                 goto cleanup;
             }
 
@@ -1662,12 +1578,12 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
              */
             ret = mbedtls_asn1_get_tag(&p, end_ext_octet, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
             if (ret) {
-                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
                 goto cleanup;
             }
             if (p + len != end_ext_octet) {
                 /* length mismatch */
-                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
                 goto cleanup;
             } else if (!len) {
                 /* empty sequence, but size is 1..max */
@@ -1686,7 +1602,7 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
                  */
                 ret = mbedtls_asn1_get_tag(&p, end_ext_octet, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
                 if (ret) {
-                    ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                    ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
                     goto cleanup;
                 }
                 if (!len) {
@@ -1706,10 +1622,10 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
                     if (ret) {
                         if ((ret == MBEDTLS_ERR_ASN1_UNEXPECTED_TAG) && (*p == (MBEDTLS_ASN1_CONTEXT_SPECIFIC | MBEDTLS_ASN1_CONSTRUCTED | 1))) {
                             /* it's nameRelativeToCRLIssuer, but we don't support it */
-                            ERR(NULL, "Failed to parse CRL distribution points extension (nameRelativeToCRLIssuer not supported).");
+                            ERR(NULL, "Failed to parse CRL distribution points extension (nameRelativeToCRLIssuer not yet supported).");
                             goto cleanup;
                         } else {
-                            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
                             goto cleanup;
                         }
                     }
@@ -1717,7 +1633,7 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
                     /* parse GeneralNames, but thankfully there is an api for this */
                     ret = mbedtls_x509_get_subject_alt_name_ext(&p, p + len, &general_names);
                     if (ret) {
-                        ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                        ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
                         goto cleanup;
                     }
 
@@ -1726,26 +1642,38 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
                     while (iter) {
                         ret = mbedtls_x509_parse_subject_alt_name(&iter->buf, &san);
                         if (ret && (ret != MBEDTLS_ERR_X509_FEATURE_UNAVAILABLE)) {
-                            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
                             goto cleanup;
                         }
 
                         if (san.type == MBEDTLS_X509_SAN_UNIFORM_RESOURCE_IDENTIFIER) {
                             /* found an URI */
                             tmp = realloc(*uris, (*uri_count + 1) * sizeof **uris);
-                            NC_CHECK_ERRMEM_GOTO(!tmp, ret = 1, cleanup);
+                            if (!tmp) {
+                                ERRMEM;
+                                ret = 1;
+                                mbedtls_x509_free_subject_alt_name(&san);
+                                goto cleanup;
+                            }
                             *uris = tmp;
 
                             *uris[*uri_count] = strndup((const char *)san.san.unstructured_name.p, san.san.unstructured_name.len);
-                            NC_CHECK_ERRMEM_GOTO(!*uris[*uri_count], ret = 1, cleanup);
+                            if (!*uris[*uri_count]) {
+                                ERRMEM;
+                                ret = 1;
+                                mbedtls_x509_free_subject_alt_name(&san);
+                                goto cleanup;
+                            }
                             ++(*uri_count);
                         }
+
+                        mbedtls_x509_free_subject_alt_name(&san);
                         iter = iter->next;
                     }
 
                 } else if (ret != MBEDTLS_ERR_ASN1_UNEXPECTED_TAG) {
                     /* failed to parse it, but not because it's optional */
-                    ERR(NULL, "Failed to parse CRL distribution points extension (%s).", mbedtls_low_level_strerr(ret));
+                    ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
                     goto cleanup;
                 }
             }
@@ -1755,4 +1683,69 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
 
 cleanup:
     return ret;
+}
+
+int
+nc_tls_process_cipher_suite_wrap(const char *cipher, char **out)
+{
+    const char *begin, *ptr;
+
+    /* check if it's a TLS 1.3 cipher suite */
+    if (!strcmp(cipher, "tls-aes-256-gcm-sha384") || !strcmp(cipher, "tls-aes-128-gcm-sha256") ||
+            !strcmp(cipher, "tls-chacha20-poly1305-sha256") || !strcmp(cipher, "tls-aes-128-ccm-sha256") ||
+            !strcmp(cipher, "tls-aes-128-ccm-8-sha256")) {
+        /* + 3 because mbedtls has "TLS1-3" prefix for 1.3 suites */
+        *out = malloc(strlen(cipher) + 3 + 1);
+        NC_CHECK_ERRMEM_RET(!*out, 1);
+        sprintf(*out, "TLS1-3");
+        begin = cipher + 4;
+    } else {
+        *out = malloc(strlen(cipher) + 1);
+        NC_CHECK_ERRMEM_RET(!*out, 1);
+        begin = cipher;
+    }
+
+    /* convert to uppercase */
+    for (ptr = begin; *ptr; ptr++) {
+        (*out)[ptr - begin] = toupper(*ptr);
+    }
+
+    (*out)[ptr - begin] = '\0';
+    return 0;
+}
+
+int
+nc_tls_append_cipher_suite_wrap(struct nc_server_tls_opts *opts, const char *cipher_suite)
+{
+    int cipher_id;
+
+    cipher_id = mbedtls_ssl_get_ciphersuite_id(cipher_suite);
+    if (!cipher_id) {
+        return 1;
+    }
+
+    /* append the cipher suite to a zero terminated array */
+    if (!opts->ciphers) {
+        /* first entry, account for terminating 0 */
+        opts->ciphers = malloc(2 * sizeof *opts->ciphers);
+        NC_CHECK_ERRMEM_RET(!opts->ciphers, 1);
+        ((int *)opts->ciphers)[0] = cipher_id;
+        opts->cipher_count = 1;
+    } else {
+        /* +2 because of terminating 0 */
+        opts->ciphers = nc_realloc(opts->ciphers, (opts->cipher_count + 2) * sizeof *opts->ciphers);
+        NC_CHECK_ERRMEM_RET(!opts->ciphers, 1);
+        ((int *)opts->ciphers)[opts->cipher_count] = cipher_id;
+        opts->cipher_count++;
+    }
+
+    /* terminate the array */
+    ((int *)opts->ciphers)[opts->cipher_count] = 0;
+    return 0;
+}
+
+void
+nc_server_tls_set_cipher_suites_wrap(void *tls_cfg, void *cipher_suites)
+{
+    mbedtls_ssl_conf_ciphersuites(tls_cfg, cipher_suites);
 }
