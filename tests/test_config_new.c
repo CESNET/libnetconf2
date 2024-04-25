@@ -154,7 +154,7 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* create new address and port data */
-    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT, &tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_SSH, "127.0.0.1", TEST_PORT, &tree);
     assert_int_equal(ret, 0);
 
     /* create the host-key algorithms data */

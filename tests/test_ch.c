@@ -198,7 +198,7 @@ setup_ssh(void **state)
     assert_int_equal(ret, 0);
 
     /* set call-home address and port */
-    ret = nc_server_config_add_ch_address_port(ctx, "ch_ssh", "endpt", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT_STR, &test_state->ssh_tree);
+    ret = nc_server_config_add_ch_address_port(ctx, "ch_ssh", "endpt", NC_TI_SSH, "127.0.0.1", TEST_PORT_STR, &test_state->ssh_tree);
     assert_int_equal(ret, 0);
 
     /* set connection type to persistent */
@@ -400,7 +400,7 @@ setup_tls(void **state)
     assert_int_equal(ret, 0);
 
     /* set call-home address and port */
-    ret = nc_server_config_add_ch_address_port(ctx, "ch_tls", "endpt", NC_TI_OPENSSL, "127.0.0.1", TEST_PORT_2_STR, &test_state->tls_tree);
+    ret = nc_server_config_add_ch_address_port(ctx, "ch_tls", "endpt", NC_TI_TLS, "127.0.0.1", TEST_PORT_2_STR, &test_state->tls_tree);
     assert_int_equal(ret, 0);
 
     /* set call-home server certificate */
