@@ -138,7 +138,7 @@ setup_ssh(void **state)
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT, &tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_SSH, "127.0.0.1", TEST_PORT, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_add_ssh_keystore_ref(ctx, "endpt", "hostkey", "test_keystore", &tree);
@@ -147,7 +147,7 @@ setup_ssh(void **state)
     ret = nc_server_config_add_ssh_truststore_ref(ctx, "endpt", "client", "test_truststore", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_keystore_asym_key(ctx, NC_TI_LIBSSH, "test_keystore", TESTS_DIR "/data/key_rsa", NULL, &tree);
+    ret = nc_server_config_add_keystore_asym_key(ctx, NC_TI_SSH, "test_keystore", TESTS_DIR "/data/key_rsa", NULL, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_add_truststore_pubkey(ctx, "test_truststore", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);
@@ -244,11 +244,11 @@ setup_tls(void **state)
     assert_int_equal(ret, 0);
 
     /* new tls bind */
-    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_OPENSSL, "127.0.0.1", TEST_PORT, &tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_TLS, "127.0.0.1", TEST_PORT, &tree);
     assert_int_equal(ret, 0);
 
     /* new keystore asym key pair */
-    ret = nc_server_config_add_keystore_asym_key(ctx, NC_TI_OPENSSL, "server_key", TESTS_DIR "/data/server.key", NULL, &tree);
+    ret = nc_server_config_add_keystore_asym_key(ctx, NC_TI_TLS, "server_key", TESTS_DIR "/data/server.key", NULL, &tree);
     assert_int_equal(ret, 0);
 
     /* new keystore cert belonging to the key pair */

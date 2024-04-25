@@ -196,7 +196,7 @@ setup_ssh(void **state)
     ret = nc_server_config_add_ssh_hostkey(ctx, "SSH_endpt_1", "hostkey", TESTS_DIR "/data/key_rsa", NULL, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_address_port(ctx, "SSH_endpt_1", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT, &tree);
+    ret = nc_server_config_add_address_port(ctx, "SSH_endpt_1", NC_TI_SSH, "127.0.0.1", TEST_PORT, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_add_ssh_endpoint_client_ref(ctx, "SSH_endpt_1", "SSH_endpt_2", &tree);
@@ -206,7 +206,7 @@ setup_ssh(void **state)
     ret = nc_server_config_add_ssh_hostkey(ctx, "SSH_endpt_2", "hostkey", TESTS_DIR "/data/key_rsa", NULL, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_address_port(ctx, "SSH_endpt_2", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT_2, &tree);
+    ret = nc_server_config_add_address_port(ctx, "SSH_endpt_2", NC_TI_SSH, "127.0.0.1", TEST_PORT_2, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_add_ssh_user_pubkey(ctx, "SSH_endpt_2", "client", "pubkey", TESTS_DIR "/data/key_rsa.pub", &tree);
@@ -263,7 +263,7 @@ setup_tls(void **state)
     ret = nc_server_config_add_tls_server_cert(ctx, "TLS_endpt_1", TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_address_port(ctx, "TLS_endpt_1", NC_TI_OPENSSL, "127.0.0.1", TEST_PORT_3, &tree);
+    ret = nc_server_config_add_address_port(ctx, "TLS_endpt_1", NC_TI_TLS, "127.0.0.1", TEST_PORT_3, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_add_tls_client_cert(ctx, "TLS_endpt_1", "cert_client", TESTS_DIR "/data/client.crt", &tree);
@@ -282,7 +282,7 @@ setup_tls(void **state)
             TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_address_port(ctx, "TLS_endpt_2", NC_TI_OPENSSL, "127.0.0.1", TEST_PORT_4, &tree);
+    ret = nc_server_config_add_address_port(ctx, "TLS_endpt_2", NC_TI_TLS, "127.0.0.1", TEST_PORT_4, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_add_tls_endpoint_client_ref(ctx, "TLS_endpt_2", "TLS_endpt_1", &tree);

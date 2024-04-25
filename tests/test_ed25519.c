@@ -153,7 +153,7 @@ setup_f(void **state)
     ret = nc_server_config_add_ssh_hostkey(ctx, "endpt", "hostkey", TESTS_DIR "/data/server.key", NULL, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT, &tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_SSH, "127.0.0.1", TEST_PORT, &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_add_ssh_user_pubkey(ctx, "endpt", "test_ed25519", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);

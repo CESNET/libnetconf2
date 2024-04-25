@@ -233,7 +233,7 @@ setup_f(void **state)
     ret = nc_server_config_load_modules(&ctx);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_address_port(ctx, "old", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT, &old_tree);
+    ret = nc_server_config_add_address_port(ctx, "old", NC_TI_SSH, "127.0.0.1", TEST_PORT, &old_tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_add_ssh_hostkey(ctx, "old", "old_key", TESTS_DIR "/data/key_rsa", NULL, &old_tree);
@@ -246,7 +246,7 @@ setup_f(void **state)
     ret = nc_server_config_setup_data(old_tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_address_port(ctx, "new", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT, &new_tree);
+    ret = nc_server_config_add_address_port(ctx, "new", NC_TI_SSH, "127.0.0.1", TEST_PORT, &new_tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_add_ssh_hostkey(ctx, "new", "new_key", TESTS_DIR "/data/key_rsa", NULL, &new_tree);

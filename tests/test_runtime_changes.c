@@ -320,7 +320,7 @@ test_nc_change_ssh_hostkey(void **state)
     assert_int_equal(ret, 0);
     configure(test_state, NC_TEST_EXPECT_OK, NC_TEST_STATE_RUN);
 
-    ret = nc_server_config_add_keystore_asym_key(ctx, NC_TI_LIBSSH, "keystore_hostkey", TESTS_DIR "/data/key_rsa", TESTS_DIR "/data/key_rsa.pub", &test_state->tree);
+    ret = nc_server_config_add_keystore_asym_key(ctx, NC_TI_SSH, "keystore_hostkey", TESTS_DIR "/data/key_rsa", TESTS_DIR "/data/key_rsa.pub", &test_state->tree);
     assert_int_equal(ret, 0);
     ret = nc_server_config_add_ssh_keystore_ref(ctx, "endpt_ssh", "hostkey", "keystore_hostkey", &test_state->tree);
     assert_int_equal(ret, 0);
@@ -385,7 +385,7 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* create new address and port data */
-    ret = nc_server_config_add_address_port(ctx, "endpt_tls", NC_TI_OPENSSL, "127.0.0.1", TEST_PORT, &test_state->tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt_tls", NC_TI_TLS, "127.0.0.1", TEST_PORT, &test_state->tree);
     assert_int_equal(ret, 0);
 
     /* create new server certificate data */
@@ -403,7 +403,7 @@ setup_f(void **state)
     assert_int_equal(ret, 0);
 
     /* create new address and port data */
-    ret = nc_server_config_add_address_port(ctx, "endpt_ssh", NC_TI_LIBSSH, "127.0.0.1", TEST_PORT_2, &test_state->tree);
+    ret = nc_server_config_add_address_port(ctx, "endpt_ssh", NC_TI_SSH, "127.0.0.1", TEST_PORT_2, &test_state->tree);
     assert_int_equal(ret, 0);
 
     /* create new hostkey data */
