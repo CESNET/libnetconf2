@@ -8,7 +8,11 @@
 #ifdef HAVE_LIBMBEDTLS
 
 #include <mbedtls/ctr_drbg.h>
+#include <mbedtls/entropy.h>
+#include <mbedtls/pk.h>
 #include <mbedtls/ssl.h>
+#include <mbedtls/x509_crl.h>
+#include <mbedtls/x509_crt.h>
 
 struct nc_tls_ctx {
     int *sock;
@@ -22,7 +26,9 @@ struct nc_tls_ctx {
 
 #else
 
+#include <openssl/evp.h>
 #include <openssl/ssl.h>
+#include <openssl/x509.h>
 
 struct nc_tls_ctx {
     X509 *cert;
