@@ -316,32 +316,32 @@ nc_tls_add_cert_to_store_wrap(void *cert, void *cert_store)
 void *
 nc_tls_pem_to_privkey_wrap(const char *privkey_data)
 {
-    int rc, ret = 0;
+    int rc = 0;
     mbedtls_pk_context *pkey = NULL;
     mbedtls_ctr_drbg_context *ctr_drbg = NULL;
     mbedtls_entropy_context *entropy = NULL;
 
-    ret = nc_tls_rng_new(&ctr_drbg, &entropy);
-    if (ret) {
+    rc = nc_tls_rng_new(&ctr_drbg, &entropy);
+    if (rc) {
         goto cleanup;
     }
 
     pkey = nc_tls_pkey_new_wrap();
     if (!pkey) {
-        ret = 1;
+        rc = 1;
         goto cleanup;
     }
 
     rc = mbedtls_pk_parse_key(pkey, (const unsigned char *)privkey_data, strlen(privkey_data) + 1, NULL, 0, mbedtls_ctr_drbg_random, ctr_drbg);
     if (rc) {
         ERR(NULL, "Parsing private key data failed (%s).", nc_get_mbedtls_str_err(rc));
-        ret = 1;
         goto cleanup;
     }
 
 cleanup:
-    if (ret) {
+    if (rc) {
         nc_tls_privkey_destroy_wrap(pkey);
+        pkey = NULL;
     }
     nc_tls_rng_destroy(ctr_drbg, entropy);
     return pkey;
