@@ -689,8 +689,7 @@ nc_server_tls_load_server_cert_key(struct nc_server_tls_opts *opts, void **srv_c
     }
     if (!cert_data || !privkey_data) {
         ERR(NULL, "Server certificate not configured.");
-        ret = -1;
-        goto cleanup;
+        return 1;
     }
 
     cert = nc_base64der_to_cert(cert_data);
