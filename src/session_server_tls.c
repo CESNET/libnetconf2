@@ -125,8 +125,8 @@ nc_base64der_to_privkey(const char *in, const char *key_str)
 
     NC_CHECK_ARG_RET(NULL, in, NULL);
 
-    if (asprintf(&buf, "%s%s%s%s%s%s%s", "-----BEGIN ", key_str, " PRIVATE KEY-----\n", in, "\n-----END ",
-            key_str, " PRIVATE KEY-----") == -1) {
+    if (asprintf(&buf, "%s%s%s%s%s%s%s", "-----BEGIN", key_str, "PRIVATE KEY-----\n", in, "\n-----END",
+            key_str, "PRIVATE KEY-----") == -1) {
         ERRMEM;
         return NULL;
     }
