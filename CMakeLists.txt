@@ -19,16 +19,6 @@ if(POLICY CMP0075)
     cmake_policy(SET CMP0075 NEW)
 endif()
 
-set(LIBNETCONF2_DESCRIPTION "NETCONF server and client library in C.")
-
-# check the supported platform
-if(NOT UNIX)
-    message(FATAL_ERROR "Only *nix like systems are supported.")
-endif()
-
-# osx specific
-set(CMAKE_MACOSX_RPATH TRUE)
-
 # set default build type if not specified by user
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
@@ -53,6 +43,15 @@ elseif("${BUILD_TYPE_UPPER}" STREQUAL "DOCONLY")
     set(CMAKE_BUILD_TYPE "DocOnly" CACHE STRING "Build Type" FORCE)
 endif()
 
+#
+# variables
+#
+
+set(LIBNETCONF2_DESCRIPTION "NETCONF server and client library in C.")
+
+# osx specific
+set(CMAKE_MACOSX_RPATH TRUE)
+
 # Version of the project
 # Generic version of not only the library. Major version is reserved for really big changes of the project,
 # minor version changes with added functionality (new tool, functionality of the tool or library, ...) and
@@ -76,6 +75,7 @@ set(LIBYANG_DEP_VERSION 2.0.0)
 set(LIBYANG_DEP_SOVERSION 3.0.0)
 set(LIBYANG_DEP_SOVERSION_MAJOR 3)
 
+# global C flags
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -fvisibility=hidden -std=c99")
 
 #
