@@ -92,6 +92,7 @@ option(ENABLE_EXAMPLES "Build examples" ON)
 option(ENABLE_COVERAGE "Build code coverage report from tests" OFF)
 option(ENABLE_SSH_TLS "Enable NETCONF over SSH and TLS support (via libssh and OpenSSL)" ON)
 option(ENABLE_DNSSEC "Enable support for SSHFP retrieval using DNSSEC for SSH (requires OpenSSL and libval)" OFF)
+option(ENABLE_COMMON_TARGETS "Define common custom target names such as 'doc' or 'uninstall', may cause conflicts when using add_subdirectory() to build this project" ON)
 option(BUILD_SHARED_LIBS "By default, shared libs are enabled. Turn off for a static build." ON)
 set(READ_INACTIVE_TIMEOUT 20 CACHE STRING "Maximum number of seconds waiting for new data once some data have arrived")
 set(READ_ACTIVE_TIMEOUT 300 CACHE STRING "Maximum number of seconds for receiving a full message")
@@ -349,7 +350,9 @@ endif()
 gen_coverage("test_.*" "test_.*_valgrind")
 
 # generate doxygen documentation for libnetconf2 API
-gen_doc("${doxy_files}" ${LIBNETCONF2_VERSION} ${LIBNETCONF2_DESCRIPTION} "")
+if(ENABLE_COMMON_TARGETS)
+    gen_doc("${doxy_files}" ${LIBNETCONF2_VERSION} ${LIBNETCONF2_DESCRIPTION} "")
+endif()
 
 # generate API/ABI report
 if ("${BUILD_TYPE_UPPER}" STREQUAL "ABICHECK")
@@ -360,11 +363,15 @@ endif()
 source_format(${format_sources})
 
 # clean cmake cache
-add_custom_target(cleancache
-                  COMMAND make clean
-                  COMMAND find . -iname '*cmake*' -not -name CMakeLists.txt -exec rm -rf {} +
-                  COMMAND rm -rf Makefile Doxyfile
-                  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+if(ENABLE_COMMON_TARGETS)
+    add_custom_target(cleancache
+            COMMAND make clean
+            COMMAND find . -iname '*cmake*' -not -name CMakeLists.txt -exec rm -rf {} +
+            COMMAND rm -rf Makefile Doxyfile
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+endif()
 
 # uninstall
-add_custom_target(uninstall "${CMAKE_COMMAND}" -P "${CMAKE_MODULE_PATH}/uninstall.cmake")
+if(ENABLE_COMMON_TARGETS)
+    add_custom_target(uninstall "${CMAKE_COMMAND}" -P "${CMAKE_MODULE_PATH}/uninstall.cmake")
+endif()
