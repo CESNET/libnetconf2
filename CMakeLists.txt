@@ -92,6 +92,7 @@ option(ENABLE_EXAMPLES "Build examples" ON)
 option(ENABLE_COVERAGE "Build code coverage report from tests" OFF)
 option(ENABLE_SSH_TLS "Enable NETCONF over SSH and TLS support (via libssh and OpenSSL)" ON)
 option(ENABLE_DNSSEC "Enable support for SSHFP retrieval using DNSSEC for SSH (requires OpenSSL and libval)" OFF)
+option(BUILD_SHARED_LIBS "By default, shared libs are enabled. Turn off for a static build." ON)
 set(READ_INACTIVE_TIMEOUT 20 CACHE STRING "Maximum number of seconds waiting for new data once some data have arrived")
 set(READ_ACTIVE_TIMEOUT 300 CACHE STRING "Maximum number of seconds for receiving a full message")
 set(MAX_PSPOLL_THREAD_COUNT 6 CACHE STRING "Maximum number of threads that could simultaneously access a ps_poll structure")
@@ -209,7 +210,7 @@ endif()
 use_compat()
 
 # netconf2 target
-add_library(netconf2 SHARED ${libsrc} ${compatsrc})
+add_library(netconf2 ${libsrc} ${compatsrc})
 set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_SOVERSION_FULL} SOVERSION ${LIBNETCONF2_SOVERSION})
 
 # include repository files with highest priority
