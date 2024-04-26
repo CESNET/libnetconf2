@@ -247,12 +247,19 @@ if(ENABLE_SSH_TLS)
     target_link_libraries(netconf2 CURL::libcurl)
 
     # crypt
-    if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
-        target_link_libraries(netconf2 -llogin)
-        list(APPEND CMAKE_REQUIRED_LIBRARIES login)
-    elseif(NOT APPLE)
-        target_link_libraries(netconf2 -lcrypt)
-        list(APPEND CMAKE_REQUIRED_LIBRARIES crypt)
+    check_function_exists(crypt HAVE_CRYPT_NOLIB)
+    if(NOT HAVE_CRYPT_NOLIB)
+        # we may need to link it explicitly
+        if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
+            set(LIBCRYPT login)
+        else()
+            set(LIBCRYPT crypt)
+        endif()
+        check_library_exists(${LIBCRYPT} crypt "" HAVE_CRYPT)
+        if(HAVE_CRYPT)
+            target_link_libraries(netconf2 ${LIBCRYPT})
+            list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBCRYPT})
+        endif()
     endif()
 
     # libpam
