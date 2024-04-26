@@ -30,16 +30,15 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <termios.h>
 #include <time.h>
 #include <unistd.h>
 
 #ifdef ENABLE_DNSSEC
-#   include <validator/resolver.h>
-#   include <validator/validator.h>
-#   include <validator/validator-config.h>
+# include <validator/resolver.h>
+# include <validator/validator.h>
+# include <validator/validator-config.h>
 
-#   include <validator/validator-compat.h>
+# include <validator/validator-compat.h>
 #endif
 
 #include <libssh/libssh.h>
@@ -52,11 +51,18 @@
 #include "session_client_ch.h"
 #include "session_p.h"
 
+/* must be after config.h */
+#ifdef HAVE_TERMIOS
+# include <termios.h>
+#endif
+
 struct nc_client_context *nc_client_context_location(void);
 
 #define client_opts nc_client_context_location()->opts
 #define ssh_opts nc_client_context_location()->ssh_opts
 #define ssh_ch_opts nc_client_context_location()->ssh_ch_opts
+
+#ifdef HAVE_TERMIOS
 
 /**
  * @brief Open a terminal FILE with no echo.
@@ -178,7 +184,8 @@ nc_open_out(void)
  * @brief Close an input/output terminal FILE.
  *
  * @param[in] inout Terminal FILE to close.
- * @param[in] echo Old terminal options.
+ * @param[in] echo Whether echo was turned on or off.
+ * @param[in] oldterm Old terminal options.
  * @return Opened terminal;
  * @return NULL on error.
  */
@@ -192,6 +199,8 @@ nc_close_inout(FILE *inout, int echo, struct termios *oldterm)
         fclose(inout);
     }
 }
+
+#endif
 
 void
 _nc_client_ssh_destroy_opts(struct nc_client_ssh_opts *opts)
@@ -399,9 +408,13 @@ nc_client_ssh_auth_hostkey_check(const char *hostname, uint16_t port, ssh_sessio
     unsigned char *hash_sha1 = NULL;
     NC_SSH_KNOWNHOSTS_MODE knownhosts_mode = ssh_opts.knownhosts_mode;
     enum ssh_keytypes_e srv_pubkey_type;
+    int state;
+
+#ifdef HAVE_TERMIOS
+    int c;
     char answer[5];
     FILE *out = NULL, *in = NULL;
-    int c, state;
+#endif
 
 #ifdef ENABLE_DNSSEC
     int dnssec_ret;
@@ -447,15 +460,6 @@ hostkey_not_known:
         }
 #endif
 
-        /* open the files for reading/writing */
-        if (!(in = nc_open_in(1, NULL))) {
-            goto error;
-        }
-
-        if (!(out = nc_open_out())) {
-            goto error;
-        }
-
         if (knownhosts_mode == NC_SSH_KNOWNHOSTS_STRICT) {
             /* do not connect if the hostkey is not present in known_hosts file in this mode */
             ERR(NULL, "No %s host key is known for [%s]:%hu.\n", ssh_key_type_to_char(srv_pubkey_type), hostname, port);
@@ -471,6 +475,16 @@ hostkey_not_known:
             break;
         }
 
+#ifdef HAVE_TERMIOS
+        /* open the files for reading/writing */
+        if (!(in = nc_open_in(1, NULL))) {
+            goto error;
+        }
+
+        if (!(out = nc_open_out())) {
+            goto error;
+        }
+
         /* try to get result from user */
         if (fprintf(out, "The authenticity of the host \'%s\' cannot be established.\n", hostname) < 1) {
             ERR(NULL, "Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
@@ -481,7 +495,7 @@ hostkey_not_known:
             goto error;
         }
 
-#ifdef ENABLE_DNSSEC
+# ifdef ENABLE_DNSSEC
         if (dnssec_ret == 2) {
             if (fprintf(out, "No matching host key fingerprint found using DNS.\n") < 1) {
                 ERR(NULL, "Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
@@ -493,7 +507,7 @@ hostkey_not_known:
                 goto error;
             }
         }
-#endif
+# endif
 
         if (fprintf(out, "Are you sure you want to continue connecting (yes/no)? ") < 1) {
             ERR(NULL, "Writing into output failed (%s).", feof(out) ? "EOF" : strerror(errno));
@@ -522,6 +536,10 @@ hostkey_not_known:
                 fflush(out);
             }
         } while (strcmp(answer, "yes") && strcmp(answer, "no"));
+#else
+        ERR(NULL, "Unable to get input from user, terminate the connection.");
+        goto error;
+#endif
 
         break;
     case SSH_KNOWN_HOSTS_ERROR:
@@ -529,15 +547,19 @@ hostkey_not_known:
         goto error;
     }
 
+#ifdef HAVE_TERMIOS
     nc_close_inout(in, 1, NULL);
     nc_close_inout(out, 1, NULL);
+#endif
     ssh_clean_pubkey_hash(&hash_sha1);
     ssh_string_free_char(hexa);
     return 0;
 
 error:
+#ifdef HAVE_TERMIOS
     nc_close_inout(in, 1, NULL);
     nc_close_inout(out, 1, NULL);
+#endif
     ssh_clean_pubkey_hash(&hash_sha1);
     ssh_string_free_char(hexa);
     return -1;
@@ -546,6 +568,7 @@ error:
 char *
 sshauth_password(const char *username, const char *hostname, void *UNUSED(priv))
 {
+#ifdef HAVE_TERMIOS
     char *buf = NULL;
     int c, buflen = 1024, len;
     struct termios oldterm;
@@ -589,12 +612,20 @@ error:
     nc_close_inout(out, 1, NULL);
     free(buf);
     return NULL;
+#else
+    (void)username;
+    (void)hostname;
+
+    ERR(NULL, "Unable to get input from user, authentication failed.");
+    return NULL;
+#endif
 }
 
 char *
 sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo, void *UNUSED(priv))
 {
-    unsigned int buflen = 64, cur_len;
+#ifdef HAVE_TERMIOS
+    uint32_t buflen = 64, cur_len;
     int c;
     struct termios oldterm;
     char *buf = NULL;
@@ -647,11 +678,21 @@ error:
     nc_close_inout(out, 1, NULL);
     free(buf);
     return NULL;
+#else
+    (void)auth_name;
+    (void)instruction;
+    (void)prompt;
+    (void)echo;
+
+    ERR(NULL, "Unable to get input from user, authentication failed.");
+    return NULL;
+#endif
 }
 
 char *
 sshauth_privkey_passphrase(const char *privkey_path, void *UNUSED(priv))
 {
+#ifdef HAVE_TERMIOS
     char *buf = NULL;
     int c, buflen = 1024, len;
     struct termios oldterm;
@@ -695,6 +736,12 @@ error:
     nc_close_inout(out, 1, NULL);
     free(buf);
     return NULL;
+#else
+    (void)privkey_path;
+
+    ERR(NULL, "Unable to get input from user, encrypted private key unusable.");
+    return NULL;
+#endif
 }
 
 API int

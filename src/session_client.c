@@ -161,6 +161,11 @@ nc_client_context_location(void)
             /* set default values */
             e->refcount = 1;
 #ifdef NC_ENABLED_SSH_TLS
+# ifdef HAVE_TERMIOS
+            e->ssh_opts.knownhosts_mode = NC_SSH_KNOWNHOSTS_ASK;
+# else
+            e->ssh_opts.knownhosts_mode = NC_SSH_KNOWNHOSTS_ACCEPT;
+# endif
             e->ssh_opts.auth_pref[0].type = NC_SSH_AUTH_INTERACTIVE;
             e->ssh_opts.auth_pref[0].value = 1;
             e->ssh_opts.auth_pref[1].type = NC_SSH_AUTH_PASSWORD;

@@ -226,8 +226,9 @@ target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
 set(CMAKE_REQUIRED_LIBRARIES pthread)
 check_function_exists(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
 
-# header file compatibility - shadow.h
+# header file compatibility
 check_include_file("shadow.h" HAVE_SHADOW)
+check_include_file("termios.h" HAVE_TERMIOS)
 
 if(ENABLE_SSH_TLS)
     # dependencies - openssl
