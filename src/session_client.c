@@ -2800,7 +2800,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         rpc_k = (struct nc_rpc_kill *)rpc;
 
         CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "kill-session", 0, &data));
-        sprintf(str, "%u", rpc_k->sid);
+        sprintf(str, "%" PRIu32, rpc_k->sid);
         CHECK_LYRC_BREAK(lyd_new_term(data, mod, "session-id", str, 0, NULL));
         break;
 
@@ -2813,7 +2813,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         }
 
         if (rpc_com->confirm_timeout) {
-            sprintf(str, "%u", rpc_com->confirm_timeout);
+            sprintf(str, "%" PRIu32, rpc_com->confirm_timeout);
             CHECK_LYRC_BREAK(lyd_new_term(data, mod, "confirm-timeout", str, 0, NULL));
         }
         if (rpc_com->persist) {
@@ -2976,7 +2976,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "modify-subscription", 0, &data));
 
-        sprintf(str, "%u", rpc_modsub->id);
+        sprintf(str, "%" PRIu32, rpc_modsub->id);
         CHECK_LYRC_BREAK(lyd_new_term(data, mod, "id", str, 0, NULL));
 
         if (rpc_modsub->filter) {
@@ -2999,7 +2999,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "delete-subscription", 0, &data));
 
-        sprintf(str, "%u", rpc_delsub->id);
+        sprintf(str, "%" PRIu32, rpc_delsub->id);
         CHECK_LYRC_BREAK(lyd_new_term(data, mod, "id", str, 0, NULL));
         break;
 
@@ -3008,7 +3008,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "kill-subscription", 0, &data));
 
-        sprintf(str, "%u", rpc_killsub->id);
+        sprintf(str, "%" PRIu32, rpc_killsub->id);
         CHECK_LYRC_BREAK(lyd_new_term(data, mod, "id", str, 0, NULL));
         break;
 
@@ -3065,7 +3065,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "modify-subscription", 0, &data));
 
-        sprintf(str, "%u", rpc_modpush->id);
+        sprintf(str, "%" PRIu32, rpc_modpush->id);
         CHECK_LYRC_BREAK(lyd_new_term(data, mod, "id", str, 0, NULL));
         CHECK_LYRC_BREAK(lyd_new_term(data, mod2, "datastore", rpc_modpush->datastore, 0, NULL));
 
@@ -3103,7 +3103,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         rpc_resyncsub = (struct nc_rpc_resyncsub *)rpc;
 
         CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "resync-subscription", 0, &data));
-        sprintf(str, "%u", rpc_resyncsub->id);
+        sprintf(str, "%" PRIu32, rpc_resyncsub->id);
         CHECK_LYRC_BREAK(lyd_new_term(data, mod, "id", str, 0, NULL));
         break;
 

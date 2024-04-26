@@ -103,7 +103,7 @@ prv_vprintf(const struct nc_session *session, NC_VERB_LEVEL level, const char *f
     if (print_clb) {
         print_clb(session, level, prv_msg);
     } else if (session && session->id) {
-        fprintf(stderr, "Session %u %s: %s\n", session->id, verb[level].label, prv_msg);
+        fprintf(stderr, "Session %" PRIu32 " %s: %s\n", session->id, verb[level].label, prv_msg);
     } else {
         fprintf(stderr, "%s: %s\n", verb[level].label, prv_msg);
     }

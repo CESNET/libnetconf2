@@ -701,7 +701,7 @@ nc_server_config_add_tls_ctn(const struct ly_ctx *ctx, const char *endpt_name, u
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, id, name, config, 1);
 
     ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/netconf-server-parameters/"
-            "client-identity-mappings/cert-to-name[id='%u']", endpt_name, id);
+            "client-identity-mappings/cert-to-name[id='%" PRIu32 "']", endpt_name, id);
     NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_tls_ctn(ctx, path, fingerprint, map_type, name, config);
@@ -722,7 +722,7 @@ nc_server_config_del_tls_ctn(const char *endpt_name, uint32_t id, struct lyd_nod
 
     if (id) {
         return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
-                "netconf-server-parameters/client-identity-mappings/cert-to-name[id='%u']", endpt_name, id);
+                "netconf-server-parameters/client-identity-mappings/cert-to-name[id='%" PRIu32 "']", endpt_name, id);
     } else {
         return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
                 "netconf-server-parameters/client-identity-mappings/cert-to-name", endpt_name);
@@ -740,7 +740,7 @@ nc_server_config_add_ch_tls_ctn(const struct ly_ctx *ctx, const char *client_nam
 
     ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
             "endpoints/endpoint[name='%s']/tls/netconf-server-parameters/client-identity-mappings/"
-            "cert-to-name[id='%u']", client_name, endpt_name, id);
+            "cert-to-name[id='%" PRIu32 "']", client_name, endpt_name, id);
     NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_tls_ctn(ctx, path, fingerprint, map_type, name, config);

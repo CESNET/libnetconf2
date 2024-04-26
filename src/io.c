@@ -1100,7 +1100,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
             nc_write_clb((void *)&arg, "</capability>", 13, 0);
         }
         if (sid) {
-            count = asprintf(&buf, "</capabilities><session-id>%u</session-id></hello>", *sid);
+            count = asprintf(&buf, "</capabilities><session-id>%" PRIu32 "</session-id></hello>", *sid);
             NC_CHECK_ERRMEM_GOTO(count == -1, ret = NC_MSG_ERROR, cleanup);
             nc_write_clb((void *)&arg, buf, count, 0);
             free(buf);
