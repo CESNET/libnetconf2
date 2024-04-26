@@ -305,11 +305,14 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
     list(REMOVE_ITEM CMAKE_REQUIRED_DEFINITIONS -D_QNX_SOURCE)
 endif()
 
-# generate files
+# generate config file
 configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)
-configure_file(nc_client.h.in nc_client.h)
-configure_file(nc_server.h.in nc_server.h)
-configure_file(nc_version.h.in nc_version.h)
+
+# generate and copy public header files
+configure_file("${PROJECT_SOURCE_DIR}/nc_client.h.in" "${PROJECT_BINARY_DIR}/include/nc_client.h")
+configure_file("${PROJECT_SOURCE_DIR}/nc_server.h.in" "${PROJECT_BINARY_DIR}/include/nc_server.h")
+configure_file("${PROJECT_SOURCE_DIR}/nc_version.h.in" "${PROJECT_BINARY_DIR}/include/nc_version.h")
+file(COPY ${headers} DESTINATION "${PROJECT_BINARY_DIR}/include/libnetconf2")
 
 # install YANG modules
 install(DIRECTORY "${PROJECT_SOURCE_DIR}/modules/" DESTINATION ${YANG_MODULE_DIR} FILES_MATCHING PATTERN "*.yang")
@@ -318,16 +321,16 @@ install(DIRECTORY "${PROJECT_SOURCE_DIR}/modules/" DESTINATION ${YANG_MODULE_DIR
 install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # install headers
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_client.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_server.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nc_version.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-install(FILES ${headers} ${PROJECT_BINARY_DIR}/src/config.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libnetconf2)
+install(FILES ${PROJECT_BINARY_DIR}/include/nc_client.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(FILES ${PROJECT_BINARY_DIR}/include/nc_server.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(FILES ${PROJECT_BINARY_DIR}/include/nc_version.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY ${PROJECT_BINARY_DIR}/include/libnetconf2 DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 # install pkg-config file
 find_package(PkgConfig)
 if(PKG_CONFIG_FOUND)
     configure_file("libnetconf2.pc.in" "libnetconf2.pc" @ONLY)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libnetconf2.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+    install(FILES "${PROJECT_BINARY_DIR}/libnetconf2.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
     # check that pkg-config includes the used path
     execute_process(COMMAND ${PKG_CONFIG_EXECUTABLE} --variable pc_path pkg-config RESULT_VARIABLE RETURN OUTPUT_VARIABLE PC_PATH ERROR_QUIET)
     if(RETURN EQUAL 0)
