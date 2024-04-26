@@ -254,7 +254,7 @@ cleanup:
 
 /* ssh pubkey defined in RFC 4253 section 6.6 */
 static int
-nc_server_config_util_evp_pkey_to_ssh_pubkey(void *pkey, char **pubkey)
+nc_server_config_util_pkey_to_ssh_pubkey(void *pkey, char **pubkey)
 {
     int ret = 0, e_len, n_len, p_len, bin_len;
     void *e = NULL, *n = NULL, *p = NULL, *p_grp = NULL;
@@ -403,7 +403,7 @@ cleanup:
 
 /* spki = subject public key info */
 static int
-nc_server_config_util_evp_pkey_to_spki_pubkey(void *pkey, char **pubkey)
+nc_server_config_util_pkey_to_spki_pubkey(void *pkey, char **pubkey)
 {
     int ret = 0;
     char *pub_pem = NULL;
@@ -458,7 +458,7 @@ cleanup:
 }
 
 static int
-nc_server_config_util_read_pubkey_ssh2(const char *pubkey_path, char **pubkey)
+nc_server_config_util_read_ssh2_pubkey(const char *pubkey_path, char **pubkey)
 {
     char *buffer = NULL;
     size_t size = 0, pubkey_len = 0;
@@ -518,7 +518,7 @@ cleanup:
 }
 
 static int
-nc_server_config_util_read_pubkey_openssl(const char *pubkey_path, char **pubkey)
+nc_server_config_util_read_spki_pubkey(const char *pubkey_path, char **pubkey)
 {
     int ret = 0;
     void *pub_pkey = NULL;
@@ -531,13 +531,13 @@ nc_server_config_util_read_pubkey_openssl(const char *pubkey_path, char **pubkey
         return 1;
     }
 
-    ret = nc_server_config_util_evp_pkey_to_ssh_pubkey(pub_pkey, pubkey);
+    ret = nc_server_config_util_pkey_to_ssh_pubkey(pub_pkey, pubkey);
     nc_tls_privkey_destroy_wrap(pub_pkey);
     return ret;
 }
 
 static int
-nc_server_config_util_read_pubkey_libssh(const char *pubkey_path, char **pubkey)
+nc_server_config_util_read_openssh_pubkey(const char *pubkey_path, char **pubkey)
 {
     int ret = 0;
     ssh_key pub_sshkey = NULL;
@@ -591,13 +591,13 @@ nc_server_config_util_get_ssh_pubkey_file(const char *pubkey_path, char **pubkey
 
     if (!strncmp(header, NC_SUBJECT_PUBKEY_INFO_HEADER, strlen(NC_SUBJECT_PUBKEY_INFO_HEADER))) {
         /* it's subject public key info public key */
-        ret = nc_server_config_util_read_pubkey_openssl(pubkey_path, pubkey);
+        ret = nc_server_config_util_read_spki_pubkey(pubkey_path, pubkey);
     } else if (!strncmp(header, NC_SSH2_PUBKEY_HEADER, strlen(NC_SSH2_PUBKEY_HEADER))) {
         /* it's ssh2 public key */
-        ret = nc_server_config_util_read_pubkey_ssh2(pubkey_path, pubkey);
+        ret = nc_server_config_util_read_ssh2_pubkey(pubkey_path, pubkey);
     } else {
         /* it's probably OpenSSH public key */
-        ret = nc_server_config_util_read_pubkey_libssh(pubkey_path, pubkey);
+        ret = nc_server_config_util_read_openssh_pubkey(pubkey_path, pubkey);
     }
     if (ret) {
         ERR(NULL, "Error getting public key from file \"%s\".", pubkey_path);
@@ -624,7 +624,7 @@ nc_server_config_util_get_spki_pubkey_file(const char *pubkey_path, char **pubke
         return 1;
     }
 
-    ret = nc_server_config_util_evp_pkey_to_spki_pubkey(pkey, pubkey);
+    ret = nc_server_config_util_pkey_to_spki_pubkey(pkey, pubkey);
     if (ret) {
         goto cleanup;
     }
@@ -635,45 +635,32 @@ cleanup:
 }
 
 static int
-nc_server_config_util_privkey_header_to_format(FILE *f_privkey, const char *privkey_path, NC_PRIVKEY_FORMAT *privkey_format)
+nc_server_config_util_get_privkey_format(const char *privkey, NC_PRIVKEY_FORMAT *privkey_format)
 {
-    char *privkey_header = NULL;
-    size_t len = 0;
+    NC_CHECK_ARG_RET(NULL, privkey, privkey_format, 1);
 
-    NC_CHECK_ARG_RET(NULL, f_privkey, privkey_path, privkey_format, 1);
-
-    /* read header */
-    if (getline(&privkey_header, &len, f_privkey) < 0) {
-        ERR(NULL, "Error reading header from file \"%s\".", privkey_path);
-        return 1;
-    }
-
-    if (!strncmp(privkey_header, NC_PKCS8_PRIVKEY_HEADER, strlen(NC_PKCS8_PRIVKEY_HEADER))) {
+    if (!strncmp(privkey, NC_PKCS8_PRIVKEY_HEADER, strlen(NC_PKCS8_PRIVKEY_HEADER))) {
         /* it's PKCS8 (X.509) private key */
         *privkey_format = NC_PRIVKEY_FORMAT_X509;
-    } else if (!strncmp(privkey_header, NC_OPENSSH_PRIVKEY_HEADER, strlen(NC_OPENSSH_PRIVKEY_HEADER))) {
+    } else if (!strncmp(privkey, NC_OPENSSH_PRIVKEY_HEADER, strlen(NC_OPENSSH_PRIVKEY_HEADER))) {
         /* it's OpenSSH private key */
         *privkey_format = NC_PRIVKEY_FORMAT_OPENSSH;
-    } else if (!strncmp(privkey_header, NC_PKCS1_RSA_PRIVKEY_HEADER, strlen(NC_PKCS1_RSA_PRIVKEY_HEADER))) {
+    } else if (!strncmp(privkey, NC_PKCS1_RSA_PRIVKEY_HEADER, strlen(NC_PKCS1_RSA_PRIVKEY_HEADER))) {
         /* it's RSA privkey in PKCS1 format */
         *privkey_format = NC_PRIVKEY_FORMAT_RSA;
-    } else if (!strncmp(privkey_header, NC_SEC1_EC_PRIVKEY_HEADER, strlen(NC_SEC1_EC_PRIVKEY_HEADER))) {
+    } else if (!strncmp(privkey, NC_SEC1_EC_PRIVKEY_HEADER, strlen(NC_SEC1_EC_PRIVKEY_HEADER))) {
         /* it's EC privkey in SEC1 format */
         *privkey_format = NC_PRIVKEY_FORMAT_EC;
     } else {
-        ERR(NULL, "Private key format (%s) not supported.", privkey_header);
-        free(privkey_header);
+        /* not supported */
         return 1;
     }
 
-    /* reset the reading head */
-    rewind(f_privkey);
-    free(privkey_header);
     return 0;
 }
 
 static int
-nc_server_config_util_get_privkey_openssl(const char *privkey_path, char **privkey, void **pkey)
+nc_server_config_util_get_privkey_libtls(const char *privkey_path, char **privkey, void **pkey)
 {
     void *pkey_tmp;
     char *privkey_tmp;
@@ -775,6 +762,8 @@ nc_server_config_util_get_privkey(const char *privkey_path, NC_PRIVKEY_FORMAT *p
     int ret = 0;
     FILE *f_privkey = NULL;
     char *priv = NULL;
+    char *privkey_header = NULL;
+    size_t header_len = 0;
 
     NC_CHECK_ARG_RET(NULL, privkey_path, privkey_format, privkey, pkey, 1);
 
@@ -785,20 +774,28 @@ nc_server_config_util_get_privkey(const char *privkey_path, NC_PRIVKEY_FORMAT *p
         goto cleanup;
     }
 
-    /* read the first line from the privkey to determine it's type */
-    ret = nc_server_config_util_privkey_header_to_format(f_privkey, privkey_path, privkey_format);
-    if (ret) {
-        ERR(NULL, "Getting private key format from file \"%s\" failed.", privkey_path);
+    /* read privkey header */
+    if (getline(&privkey_header, &header_len, f_privkey) < 0) {
+        ERR(NULL, "Error reading header from file \"%s\".", privkey_path);
+        ret = 1;
         goto cleanup;
     }
 
+    /* get privkey format */
+    ret = nc_server_config_util_get_privkey_format(privkey_header, privkey_format);
+    if (ret) {
+        ERR(NULL, "Private key format \"%s\" not supported.", privkey_header);
+        goto cleanup;
+    }
+
+    /* decide how to parse it based on the format */
     switch (*privkey_format) {
     /* fall-through */
     case NC_PRIVKEY_FORMAT_RSA:
     case NC_PRIVKEY_FORMAT_EC:
     case NC_PRIVKEY_FORMAT_X509:
-        /* OpenSSL solely can do this */
-        ret = nc_server_config_util_get_privkey_openssl(privkey_path, &priv, pkey);
+        /* the TLS lib can do this */
+        ret = nc_server_config_util_get_privkey_libtls(privkey_path, &priv, pkey);
         break;
     case NC_PRIVKEY_FORMAT_OPENSSH:
         /* need the help of libssh */
@@ -815,10 +812,17 @@ nc_server_config_util_get_privkey(const char *privkey_path, NC_PRIVKEY_FORMAT *p
         goto cleanup;
     }
 
+    /* parsing may have changed its type, get it again */
+    ret = nc_server_config_util_get_privkey_format(priv, privkey_format);
+    if (ret) {
+        ERR(NULL, "Getting private key format from file \"%s\" failed.", privkey_path);
+        goto cleanup;
+    }
+
     /* strip private key's header and footer */
     ret = nc_server_config_util_pem_strip_header_footer(priv, privkey);
     if (ret) {
-        ERR(NULL, "Stripping header and footer from private key failed.");
+        ERR(NULL, "Stripping header and footer from private key \"%s\" failed.", privkey_path);
         goto cleanup;
     }
 
@@ -827,6 +831,7 @@ cleanup:
         fclose(f_privkey);
     }
 
+    free(privkey_header);
     free(priv);
     return ret;
 }
@@ -853,9 +858,9 @@ nc_server_config_util_get_asym_key_pair(const char *privkey_path, const char *pu
     /* get public key, either from file or generate it from the EVP_PKEY */
     if (!pubkey_path) {
         if (wanted_pubkey_format == NC_PUBKEY_FORMAT_SSH) {
-            ret = nc_server_config_util_evp_pkey_to_ssh_pubkey(pkey, pubkey);
+            ret = nc_server_config_util_pkey_to_ssh_pubkey(pkey, pubkey);
         } else {
-            ret = nc_server_config_util_evp_pkey_to_spki_pubkey(pkey, pubkey);
+            ret = nc_server_config_util_pkey_to_spki_pubkey(pkey, pubkey);
         }
     } else {
         if (wanted_pubkey_format == NC_PUBKEY_FORMAT_SSH) {
