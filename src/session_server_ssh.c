@@ -1583,7 +1583,7 @@ nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, struct nc
         }
 
         usleep(NC_TIMEOUT_STEP);
-        if (opts->auth_timeout && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
+        if (timeout && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
             /* timeout */
             ERR(session, "Failed to start \"netconf\" SSH subsystem for too long, disconnecting.");
             break;
