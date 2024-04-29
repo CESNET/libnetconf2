@@ -18,9 +18,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <inttypes.h>
-#include <poll.h>
 #include <pwd.h>
-#include <signal.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -453,7 +451,6 @@ cleanup:
 static int
 nc_read_poll(struct nc_session *session, int io_timeout)
 {
-    sigset_t sigmask, origmask;
     int ret = -2;
     struct pollfd fds;
 
@@ -508,11 +505,7 @@ nc_read_poll(struct nc_session *session, int io_timeout)
         fds.events = POLLIN;
         fds.revents = 0;
 
-        sigfillset(&sigmask);
-        pthread_sigmask(SIG_SETMASK, &sigmask, &origmask);
-        ret = poll(&fds, 1, io_timeout);
-        pthread_sigmask(SIG_SETMASK, &origmask, NULL);
-
+        ret = nc_poll(&fds, 1, io_timeout);
         break;
 
     default:
@@ -612,11 +605,8 @@ nc_session_is_connected(const struct nc_session *session)
     fds.events = POLLIN;
     fds.revents = 0;
 
-    errno = 0;
-    while (((ret = poll(&fds, 1, 0)) == -1) && (errno == EINTR)) {}
-
+    ret = nc_poll(&fds, 1, 0);
     if (ret == -1) {
-        ERR(session, "poll failed (%s).", strerror(errno));
         return 0;
     } else if ((ret > 0) && (fds.revents & (POLLHUP | POLLERR))) {
         return 0;

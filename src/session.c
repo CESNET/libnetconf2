@@ -106,6 +106,39 @@ nc_realtime_get(struct timespec *ts)
     }
 }
 
+int
+nc_poll(struct pollfd *pfd, uint16_t pfd_count, int timeout_ms)
+{
+    int rc;
+    struct timespec start_ts;
+
+    if (timeout_ms > 0) {
+        /* get current time */
+        nc_timeouttime_get(&start_ts, 0);
+    }
+
+    do {
+        /* poll */
+        rc = poll(pfd, pfd_count, timeout_ms);
+
+        if (timeout_ms > 0) {
+            /* adjust the timeout by subtracting the elapsed time (relevant in case of EINTR) */
+            timeout_ms += nc_timeouttime_cur_diff(&start_ts);
+            if (timeout_ms < 0) {
+                /* manual timeout */
+                rc = 0;
+                errno = 0;
+                break;
+            }
+        }
+    } while ((rc == -1) && (errno == EINTR));
+
+    if (rc == -1) {
+        ERR(NULL, "Poll failed (%s).", strerror(errno));
+    }
+    return rc;
+}
+
 #ifdef NC_ENABLED_SSH_TLS
 
 const char *

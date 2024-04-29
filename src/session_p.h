@@ -19,6 +19,7 @@
 
 #define _GNU_SOURCE
 
+#include <poll.h>
 #include <pthread.h>
 #include <stdint.h>
 
@@ -814,6 +815,16 @@ int32_t nc_timeouttime_cur_diff(const struct timespec *ts);
  * @param[out] ts Current real time.
  */
 void nc_realtime_get(struct timespec *ts);
+
+/**
+ * @brief Perform poll(2) with signal support and timeout adjustment.
+ *
+ * @param[in] pfd Poll structure to use.
+ * @param[in] pfd_count Count of FD in @p pfd.
+ * @param[in] timeout_ms Timeout to use.
+ * @return poll(2) return.
+ */
+int nc_poll(struct pollfd *pfd, uint16_t pfd_count, int timeout);
 
 /**
  * @brief Enables/disables TCP keepalives.

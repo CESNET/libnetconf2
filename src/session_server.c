@@ -4,7 +4,7 @@
  * @brief libnetconf2 server session manipulation functions
  *
  * @copyright
- * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2024 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
  *     https://opensource.org/licenses/BSD-3-Clause
  */
 #define _QNX_SOURCE /* getpeereid */
-#define _GNU_SOURCE /* signals, threads, SO_PEERCRED */
+#define _GNU_SOURCE /* threads, SO_PEERCRED */
 
 #include <arpa/inet.h>
 #include <assert.h>
@@ -21,10 +21,8 @@
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <poll.h>
 #include <pthread.h>
 #include <pwd.h>
-#include <signal.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -520,7 +518,6 @@ int
 nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t *bind_lock, int timeout, char **host,
         uint16_t *port, uint16_t *idx)
 {
-    sigset_t sigmask, origmask;
     uint16_t i, j, pfd_count, client_port;
     char *client_address;
     struct pollfd *pfd;
@@ -554,23 +551,14 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t
 
     if (sock == -1) {
         /* poll for a new connection */
-        sigfillset(&sigmask);
-        pthread_sigmask(SIG_SETMASK, &sigmask, &origmask);
-        ret = poll(pfd, pfd_count, timeout);
-        pthread_sigmask(SIG_SETMASK, &origmask, NULL);
+        ret = nc_poll(pfd, pfd_count, timeout);
+        if (ret < 1) {
+            free(pfd);
 
-        if (!ret) {
-            /* we timeouted */
-            free(pfd);
             /* UNLOCK */
             pthread_mutex_unlock(bind_lock);
-            return 0;
-        } else if (ret == -1) {
-            ERR(NULL, "Poll failed (%s).", strerror(errno));
-            free(pfd);
-            /* UNLOCK */
-            pthread_mutex_unlock(bind_lock);
-            return -1;
+
+            return ret;
         }
 
         for (i = 0, j = 0; j < pfd_count; ++i, ++j) {
@@ -1681,9 +1669,9 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
             }
             pfd.events = POLLIN;
             pfd.revents = 0;
-            r = poll(&pfd, 1, 0);
+            r = nc_poll(&pfd, 1, 0);
 
-            if ((r < 0) && (errno != EINTR)) {
+            if (r < 0) {
                 sprintf(msg, "Poll failed (%s)", strerror(errno));
                 session->status = NC_STATUS_INVALID;
                 ret = NC_PSPOLL_ERROR;
@@ -1714,9 +1702,9 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
         pfd.fd = (session->ti_type == NC_TI_FD) ? session->ti.fd.in : session->ti.unixsock.sock;
         pfd.events = POLLIN;
         pfd.revents = 0;
-        r = poll(&pfd, 1, 0);
+        r = nc_poll(&pfd, 1, 0);
 
-        if ((r < 0) && (errno != EINTR)) {
+        if (r < 0) {
             sprintf(msg, "Poll failed (%s)", strerror(errno));
             session->status = NC_STATUS_INVALID;
             ret = NC_PSPOLL_ERROR;
