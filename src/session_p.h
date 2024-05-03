@@ -830,37 +830,10 @@ int nc_poll(struct pollfd *pfd, uint16_t pfd_count, int timeout);
  * @brief Enables/disables TCP keepalives.
  *
  * @param[in] sock Socket to set this option for.
- * @param[in] enabled 1 to enable, 0 to disable keepalives.
+ * @param[in] ka Keepalives to set.
  * @return 0 on success, -1 on fail.
  */
-int nc_sock_configure_ka(int sock, int enabled);
-
-/**
- * @brief Set TCP keepalives idle time.
- *
- * @param[in] sock Socket to set this option for.
- * @param[in] idle_time Time in seconds before keepalive packets are sent.
- * @return 0 on success, -1 on fail.
- */
-int nc_sock_configure_ka_idle_time(int sock, int idle_time);
-
-/**
- * @brief Set TCP keepalives max probes.
- *
- * @param[in] sock Socket to set this option for.
- * @param[in] max_probes Maximum number of probes sent before dropping the connection.
- * @return 0 on success, -1 on fail.
- */
-int nc_sock_configure_ka_max_probes(int sock, int max_probes);
-
-/**
- * @brief Set TCP keepalives probe interval.
- *
- * @param[in] sock Socket to set this option for.
- * @param[in] probe_interval Time in seconds between keepalive probes.
- * @return 0 on success, -1 on fail.
- */
-int nc_sock_configure_ka_probe_interval(int sock, int probe_interval);
+int nc_sock_configure_ka(int sock, const struct nc_keepalives *ka);
 
 struct nc_session *nc_new_session(NC_SIDE side, int shared_ti);
 
@@ -968,10 +941,9 @@ int nc_sock_accept(int sock, int timeout, char **peer_host, uint16_t *peer_port)
  *
  * @param[in] address IP address to listen on.
  * @param[in] port Port to listen on.
- * @param[in] ka Keepalives parameters.
  * @return Listening socket, -1 on error.
  */
-int nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives *ka);
+int nc_sock_listen_inet(const char *address, uint16_t port);
 
 /**
  * @brief Accept a new connection on a listening socket.
