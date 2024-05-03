@@ -1624,19 +1624,8 @@ sock_connect(int timeout_ms, int *sock_pending, struct addrinfo *res, const stru
     }
 
     /* configure keepalives */
-    if (nc_sock_configure_ka(sock, ka->enabled)) {
+    if (nc_sock_configure_ka(sock, ka)) {
         goto cleanup;
-    }
-    if (ka->enabled) {
-        if (nc_sock_configure_ka_idle_time(sock, ka->idle_time)) {
-            goto cleanup;
-        }
-        if (nc_sock_configure_ka_max_probes(sock, ka->max_probes)) {
-            goto cleanup;
-        }
-        if (nc_sock_configure_ka_probe_interval(sock, ka->probe_interval)) {
-            goto cleanup;
-        }
     }
 
     /* connected */
@@ -1748,7 +1737,7 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, const char *hos
 
     NC_CHECK_ARG_RET(NULL, address, port, -1);
 
-    sock = nc_sock_listen_inet(address, port, &client_opts.ka);
+    sock = nc_sock_listen_inet(address, port);
     if (sock == -1) {
         return -1;
     }
@@ -1850,6 +1839,13 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
     if (sock < 1) {
         free(host);
         return sock;
+    }
+
+    /* configure keepalives */
+    if (nc_sock_configure_ka(sock, &client_opts.ka)) {
+        free(host);
+        close(sock);
+        return -1;
     }
 
     if (client_opts.ch_binds_aux[idx].ti == NC_TI_LIBSSH) {

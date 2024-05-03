@@ -270,7 +270,7 @@ nc_server_ch_set_dispatch_data(nc_server_ch_session_acquire_ctx_cb acquire_ctx_c
 #endif
 
 int
-nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives *ka)
+nc_sock_listen_inet(const char *address, uint16_t port)
 {
     int opt;
     int is_ipv4, sock;
@@ -300,22 +300,6 @@ nc_sock_listen_inet(const char *address, uint16_t port, struct nc_keepalives *ka
     if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof opt) == -1) {
         ERR(NULL, "Could not set TCP_NODELAY socket option (%s).", strerror(errno));
         goto fail;
-    }
-
-    /* configure keepalives */
-    if (nc_sock_configure_ka(sock, ka->enabled)) {
-        goto fail;
-    }
-    if (ka->enabled) {
-        if (nc_sock_configure_ka_idle_time(sock, ka->idle_time)) {
-            goto fail;
-        }
-        if (nc_sock_configure_ka_max_probes(sock, ka->max_probes)) {
-            goto fail;
-        }
-        if (nc_sock_configure_ka_probe_interval(sock, ka->probe_interval)) {
-            goto fail;
-        }
     }
 
     memset(&saddr, 0, sizeof(struct sockaddr_storage));
@@ -1987,7 +1971,7 @@ nc_server_set_address_port(struct nc_endpt *endpt, struct nc_bind *bind, const c
         if (endpt->ti == NC_TI_UNIX) {
             sock = nc_sock_listen_unix(endpt->opts.unixsock);
         } else {
-            sock = nc_sock_listen_inet(address, port, &endpt->ka);
+            sock = nc_sock_listen_inet(address, port);
         }
 
         if (sock == -1) {
@@ -2281,6 +2265,12 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
         goto cleanup;
     }
     sock = ret;
+
+    /* configure keepalives */
+    if (nc_sock_configure_ka(sock, &server_opts.endpts[bind_idx].ka)) {
+        msgtype = NC_MSG_ERROR;
+        goto cleanup;
+    }
 
     *session = nc_new_session(NC_SERVER, 0);
     NC_CHECK_ERRMEM_GOTO(!(*session), msgtype = NC_MSG_ERROR, cleanup);

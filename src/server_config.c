@@ -1437,10 +1437,6 @@ nc_server_config_keepalives(const struct lyd_node *node, NC_OPERATION op)
         } else {
             endpt->ka.enabled = 0;
         }
-        ret = nc_sock_configure_ka(bind->sock, endpt->ka.enabled);
-        if (ret) {
-            goto cleanup;
-        }
     } else if (is_ch(node) && equal_parent_name(node, 1, "tcp-client-parameters")) {
         /* LOCK */
         if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
@@ -1491,10 +1487,6 @@ nc_server_config_idle_time(const struct lyd_node *node, NC_OPERATION op)
         } else {
             /* delete -> set to default */
             endpt->ka.idle_time = 7200;
-        }
-        ret = nc_sock_configure_ka_idle_time(bind->sock, endpt->ka.idle_time);
-        if (ret) {
-            goto cleanup;
         }
     } else if (is_ch(node) && equal_parent_name(node, 2, "tcp-client-parameters")) {
         /* LOCK */
@@ -1548,10 +1540,6 @@ nc_server_config_max_probes(const struct lyd_node *node, NC_OPERATION op)
             /* delete -> set to default */
             endpt->ka.max_probes = 9;
         }
-        ret = nc_sock_configure_ka_max_probes(bind->sock, endpt->ka.max_probes);
-        if (ret) {
-            goto cleanup;
-        }
     } else if (is_ch(node) && equal_parent_name(node, 2, "tcp-client-parameters")) {
         /* LOCK */
         if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
@@ -1603,10 +1591,6 @@ nc_server_config_probe_interval(const struct lyd_node *node, NC_OPERATION op)
         } else {
             /* delete -> set to default */
             endpt->ka.probe_interval = 75;
-        }
-        ret = nc_sock_configure_ka_probe_interval(bind->sock, endpt->ka.probe_interval);
-        if (ret) {
-            goto cleanup;
         }
     } else if (is_ch(node) && equal_parent_name(node, 2, "tcp-client-parameters")) {
         /* LOCK */
