@@ -39,6 +39,9 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#ifdef NC_ENABLED_SSH_TLS
+#include <libssh/libssh.h>
+#endif
 #include <libyang/libyang.h>
 
 #include "compat.h"
@@ -1917,6 +1920,13 @@ nc_client_init(void)
         return -1;
     }
 
+#ifdef NC_ENABLED_SSH_TLS
+    if (ssh_init()) {
+        ERR(NULL, "%s: failed to init libssh.", __func__);
+        return -1;
+    }
+#endif
+
     return 0;
 }
 
@@ -1929,6 +1939,7 @@ nc_client_destroy(void)
     nc_client_ch_del_bind(NULL, 0, 0);
     nc_client_ssh_destroy_opts();
     nc_client_tls_destroy_opts();
+    ssh_finalize();
 #endif /* NC_ENABLED_SSH_TLS */
 }
 
