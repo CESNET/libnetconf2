@@ -2252,7 +2252,7 @@ API NC_MSG_TYPE
 nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
 {
     NC_MSG_TYPE msgtype;
-    int sock, ret;
+    int sock = -1, ret;
     char *host = NULL;
     uint16_t port, bind_idx;
     struct timespec ts_cur;
@@ -2271,36 +2271,31 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
 
     if (!server_opts.endpt_count) {
         ERR(NULL, "No endpoints to accept sessions on.");
-        /* CONFIG UNLOCK */
-        pthread_rwlock_unlock(&server_opts.config_lock);
-        return NC_MSG_ERROR;
+        msgtype = NC_MSG_ERROR;
+        goto cleanup;
     }
 
     ret = nc_sock_accept_binds(server_opts.binds, server_opts.endpt_count, &server_opts.bind_lock, timeout, &host, &port, &bind_idx);
     if (ret < 1) {
-        free(host);
-        /* CONFIG UNLOCK */
-        pthread_rwlock_unlock(&server_opts.config_lock);
-        if (!ret) {
-            return NC_MSG_WOULDBLOCK;
-        }
-        return NC_MSG_ERROR;
+        msgtype = (!ret ? NC_MSG_WOULDBLOCK : NC_MSG_ERROR);
+        goto cleanup;
     }
-
     sock = ret;
 
     *session = nc_new_session(NC_SERVER, 0);
-    NC_CHECK_ERRMEM_GOTO(!(*session), close(sock); free(host); msgtype = NC_MSG_ERROR, cleanup);
+    NC_CHECK_ERRMEM_GOTO(!(*session), msgtype = NC_MSG_ERROR, cleanup);
     (*session)->status = NC_STATUS_STARTING;
     (*session)->ctx = (struct ly_ctx *)ctx;
     (*session)->flags = NC_SESSION_SHAREDCTX;
     (*session)->host = host;
+    host = NULL;
     (*session)->port = port;
 
     /* sock gets assigned to session or closed */
 #ifdef NC_ENABLED_SSH_TLS
     if (server_opts.endpts[bind_idx].ti == NC_TI_LIBSSH) {
         ret = nc_accept_ssh_session(*session, server_opts.endpts[bind_idx].opts.ssh, sock, NC_TRANSPORT_TIMEOUT);
+        sock = -1;
         if (ret < 0) {
             msgtype = NC_MSG_ERROR;
             goto cleanup;
@@ -2311,6 +2306,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
     } else if (server_opts.endpts[bind_idx].ti == NC_TI_OPENSSL) {
         (*session)->data = server_opts.endpts[bind_idx].opts.tls;
         ret = nc_accept_tls_session(*session, server_opts.endpts[bind_idx].opts.tls, sock, NC_TRANSPORT_TIMEOUT);
+        sock = -1;
         if (ret < 0) {
             msgtype = NC_MSG_ERROR;
             goto cleanup;
@@ -2323,13 +2319,13 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
     if (server_opts.endpts[bind_idx].ti == NC_TI_UNIX) {
         (*session)->data = server_opts.endpts[bind_idx].opts.unixsock;
         ret = nc_accept_unix(*session, sock);
+        sock = -1;
         if (ret < 0) {
             msgtype = NC_MSG_ERROR;
             goto cleanup;
         }
     } else {
         ERRINT;
-        close(sock);
         msgtype = NC_MSG_ERROR;
         goto cleanup;
     }
@@ -2362,6 +2358,10 @@ cleanup:
     /* CONFIG UNLOCK */
     pthread_rwlock_unlock(&server_opts.config_lock);
 
+    free(host);
+    if (sock > -1) {
+        close(sock);
+    }
     nc_session_free(*session, NULL);
     *session = NULL;
     return msgtype;
