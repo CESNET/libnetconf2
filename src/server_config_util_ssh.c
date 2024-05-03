@@ -488,7 +488,7 @@ nc_server_config_ch_del_ssh_user_authkey(const char *client_name, const char *en
 
     return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
             "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/users/user[name='%s']/"
-            "public-keys/libnetconf2-netconf-server:use-system-keys", endpt_name, user_name);
+            "public-keys/libnetconf2-netconf-server:use-system-keys", client_name, endpt_name, user_name);
 }
 
 static int
