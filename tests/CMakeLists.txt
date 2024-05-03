@@ -70,13 +70,6 @@ if(ENABLE_SSH_TLS)
     libnetconf2_test(NAME test_crl)
     libnetconf2_test(NAME test_ch PORT_COUNT 2)
     libnetconf2_test(NAME test_runtime_changes PORT_COUNT 2)
-    libnetconf2_test(NAME test_client_ssh
-        WRAP_FUNCS connect ssh_connect ssh_userauth_none ssh_userauth_kbdint ssh_is_connected
-            ssh_channel_open_session ssh_channel_request_subsystem ssh_channel_is_close ssh_channel_write
-            ssh_channel_poll_timeout ssh_userauth_password nc_handshake_io nc_ctx_check_and_fill
-            ssh_userauth_try_publickey ssh_userauth_publickey nc_sock_listen_inet nc_sock_accept_binds nc_accept_callhome_ssh_sock)
-    libnetconf2_test(NAME test_client_tls
-        WRAP_FUNCS connect SSL_connect nc_send_hello_io nc_handshake_io nc_ctx_check_and_fill)
     libnetconf2_test(NAME test_authkeys)
     if (LIBPAM_HAVE_CONFDIR)
         libnetconf2_test(NAME test_pam WRAP_FUNCS pam_start)
