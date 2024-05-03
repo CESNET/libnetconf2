@@ -1548,7 +1548,7 @@ nc_saddr2str(const struct sockaddr *saddr, char **str_ip, uint16_t *port)
  * @return Connected socket or -1 on error.
  */
 static int
-sock_connect(int timeout_ms, int *sock_pending, struct addrinfo *res, struct nc_keepalives *ka)
+sock_connect(int timeout_ms, int *sock_pending, struct addrinfo *res, const struct nc_keepalives *ka)
 {
     int flags, ret, error;
     int sock = -1;
