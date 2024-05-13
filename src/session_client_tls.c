@@ -460,7 +460,6 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     if (nc_client_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
         goto fail;
     }
-    ctx = session->ctx;
 
     /* NETCONF handshake */
     if (nc_handshake_io(session) != NC_MSG_HELLO) {
@@ -519,7 +518,6 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
     if (nc_client_session_new_ctx(session, ctx) != EXIT_SUCCESS) {
         goto fail;
     }
-    ctx = session->ctx;
 
     /* NETCONF handshake */
     if (nc_handshake_io(session) != NC_MSG_HELLO) {
