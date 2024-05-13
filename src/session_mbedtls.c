@@ -929,6 +929,7 @@ nc_client_tls_load_crl_wrap(void *crl_store, const char *file_path, const char *
                 if (errno == ENOENT) {
                     /* broken symbolic link, ignore */
                     free(path);
+                    path = NULL;
                     continue;
                 } else {
                     ERR(NULL, "Failed to get information about \"%s\" (%s).", path, strerror(errno));
@@ -940,6 +941,7 @@ nc_client_tls_load_crl_wrap(void *crl_store, const char *file_path, const char *
             if (!S_ISREG(st.st_mode)) {
                 /* not a regular file, ignore */
                 free(path);
+                path = NULL;
                 continue;
             }
 
@@ -955,7 +957,9 @@ nc_client_tls_load_crl_wrap(void *crl_store, const char *file_path, const char *
 
 cleanup:
     free(path);
-    closedir(dir);
+    if (dir) {
+        closedir(dir);
+    }
     return ret;
 }
 
