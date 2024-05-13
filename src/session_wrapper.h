@@ -100,7 +100,7 @@ void nc_tls_config_destroy_wrap(void *tls_cfg);
  *
  * @return New TLS certificate on success, NULL on fail.
  */
-void * nc_tls_cert_new_wrap();
+void * nc_tls_cert_new_wrap(void);
 
 /**
  * @brief Destroys a TLS certificate.
@@ -121,7 +121,7 @@ void nc_tls_privkey_destroy_wrap(void *pkey);
  *
  * @return New TLS certificate store on success, NULL on fail.
  */
-void * nc_tls_cert_store_new_wrap();
+void * nc_tls_cert_store_new_wrap(void);
 
 /**
  * @brief Destroys a TLS certificate store.
@@ -135,7 +135,7 @@ void nc_tls_cert_store_destroy_wrap(void *cert_store);
  *
  * @return New CRL store on success, NULL on fail.
  */
-void * nc_tls_crl_store_new_wrap();
+void * nc_tls_crl_store_new_wrap(void);
 
 /**
  * @brief Destroys a CRL store.

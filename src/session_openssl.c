@@ -90,7 +90,7 @@ nc_tls_config_destroy_wrap(void *tls_cfg)
 }
 
 void *
-nc_tls_cert_new_wrap()
+nc_tls_cert_new_wrap(void)
 {
     X509 *cert;
 
@@ -113,7 +113,7 @@ nc_tls_privkey_destroy_wrap(void *pkey)
 }
 
 void *
-nc_tls_cert_store_new_wrap()
+nc_tls_cert_store_new_wrap(void)
 {
     X509_STORE *store;
 
@@ -130,7 +130,7 @@ nc_tls_cert_store_destroy_wrap(void *cert_store)
 }
 
 void *
-nc_tls_crl_store_new_wrap()
+nc_tls_crl_store_new_wrap(void)
 {
     return nc_tls_cert_store_new_wrap();
 }
