@@ -1,3 +1,18 @@
+/**
+ * @file session_wrapper.h
+ * @author Roman Janota <janota@cesnet.cz>
+ * @brief libnetconf2 - header for wrapped TLS library function calls (currently OpenSSL and MbedTLS)
+ *
+ * @copyright
+ * Copyright (c) 2024 CESNET, z.s.p.o.
+ *
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://opensource.org/licenses/BSD-3-Clause
+ */
+
 #ifndef _SESSION_WRAPPER_H_
 #define _SESSION_WRAPPER_H_
 

@@ -1,3 +1,22 @@
+/**
+ * @file session_mbedtls.c
+ * @author Roman Janota <janota@cesnet.cz>
+ * @brief libnetconf2 - wrapped MbedTLS function calls for TLS/asymmetric cryptography support
+ *
+ * This file is a wrapper for MbedTLS function calls. The implementation is done
+ * in such a way that the original libnetconf2 code is not dependent on MbedTLS.
+ * This file is included in the build process only if MbedTLS is being used.
+ *
+ * @copyright
+ * Copyright (c) 2024 CESNET, z.s.p.o.
+ *
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://opensource.org/licenses/BSD-3-Clause
+ */
+
 #define _GNU_SOURCE
 
 #include <ctype.h>
