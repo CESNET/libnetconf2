@@ -605,6 +605,8 @@ int nc_server_config_del_tls_keystore_ref(const char *endpt_name, struct lyd_nod
 /**
  * @brief Creates new YANG configuration data nodes for a client's (end-entity) certificate.
  *
+ * A client certificate is authenticated if it is an exact match to a configured client certificate.
+ *
  * @param[in] ctx libyang context.
  * @param[in] endpt_name Arbitrary identifier of the endpoint.
  * If an endpoint with this identifier already exists, its contents will be changed.
@@ -654,6 +656,16 @@ int nc_server_config_del_tls_client_cert_truststore_ref(const char *endpt_name, 
 
 /**
  * @brief Creates new YANG configuration data nodes for a client certificate authority (trust-anchor) certificate.
+ *
+ * A client certificate is authenticated if it has a valid chain of trust to any configured CA cert.
+ * The configured CA cert, up to which the valid chain of trust can be built, does not have to be
+ * self-signed (the root CA). That means that the chain may be incomplete, yet the client will be authenticated.
+ *
+ * For example assume a certificate chain
+ * A <- B <- C,
+ * where A is the root CA, then the client certificate C will be authenticated either
+ * if solely B is configured, or if both A and B are configured. C will not be authenticated
+ * if just A is configured as a CA certificate.
  *
  * @param[in] ctx libyang context.
  * @param[in] endpt_name Arbitrary identifier of the endpoint.
