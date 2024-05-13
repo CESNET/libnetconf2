@@ -1,10 +1,11 @@
 /**
  * @file io.c
  * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @author Michal Vasko <mvasko@cesnet.cz>
  * @brief libnetconf2 - input/output functions
  *
  * @copyright
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2024 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -622,6 +623,15 @@ struct wclb_arg {
     size_t len;
 };
 
+/**
+ * @brief Write to a NETCONF session.
+ *
+ * @param[in] session Session to write to.
+ * @param[in] buf Buffer to write.
+ * @param[in] count Count of bytes from @p buf to write.
+ * @return Number of bytes written.
+ * @return -1 on error.
+ */
 static int
 nc_write(struct nc_session *session, const void *buf, size_t count)
 {
@@ -644,7 +654,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
         return -1;
     }
 
-    DBG(session, "Sending message:\n%.*s\n", count, buf);
+    DBG(session, "Sending message:\n%.*s\n", (int)count, buf);
 
     do {
         interrupted = 0;
@@ -659,7 +669,7 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
                 c = 0;
                 interrupted = 1;
             } else if (c < 0) {
-                ERR(session, "socket error (%s).", strerror(errno));
+                ERR(session, "Socket error (%s).", strerror(errno));
                 return -1;
             }
             break;
@@ -726,13 +736,21 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
     return written;
 }
 
+/**
+ * @brief Write the start tag and the message part of a chunked-framing NETCONF message.
+ *
+ * @param[in] session Session to write to.
+ * @param[in] buf Message buffer to write.
+ * @param[in] count Count of bytes from @p buf to write.
+ * @return Number of bytes written.
+ * @return -1 on error.
+ */
 static int
 nc_write_starttag_and_msg(struct nc_session *session, const void *buf, size_t count)
 {
     int ret = 0, c;
     char chunksize[24];
 
-    // warning: ‘%zu’ directive writing between 4 and 20 bytes into a region of size 18 [-Wformat-overflow=]
     if (session->version == NC_VERSION_11) {
         sprintf(chunksize, "\n#%zu\n", count);
         ret = nc_write(session, chunksize, strlen(chunksize));
@@ -750,6 +768,13 @@ nc_write_starttag_and_msg(struct nc_session *session, const void *buf, size_t co
     return ret;
 }
 
+/**
+ * @brief Write the end tag part of a chunked-framing NETCONF message.
+ *
+ * @param[in] session Session to write to.
+ * @return Number of bytes written.
+ * @return -1 on error.
+ */
 static int
 nc_write_endtag(struct nc_session *session)
 {
@@ -764,6 +789,13 @@ nc_write_endtag(struct nc_session *session)
     return ret;
 }
 
+/**
+ * @brief Flush all the data buffered for writing.
+ *
+ * @param[in] warg Write callback structure to flush.
+ * @return Number of written bytes.
+ * @return -1 on error.
+ */
 static int
 nc_write_clb_flush(struct wclb_arg *warg)
 {
@@ -778,6 +810,16 @@ nc_write_clb_flush(struct wclb_arg *warg)
     return ret;
 }
 
+/**
+ * @brief Write callback buffering the data in a write structure.
+ *
+ * @param[in] arg Write structure used for buffering.
+ * @param[in] buf Buffer to write.
+ * @param[in] count Count of bytes to write from @p buf.
+ * @param[in] xmlcontent Whether the data are actually printed as part of an XML in which case they need to be encoded.
+ * @return Number of written bytes.
+ * @return -1 on error.
+ */
 static ssize_t
 nc_write_clb(void *arg, const void *buf, size_t count, int xmlcontent)
 {
@@ -863,6 +905,9 @@ nc_write_clb(void *arg, const void *buf, size_t count, int xmlcontent)
     return ret;
 }
 
+/**
+ * @brief Write print callback used by libyang.
+ */
 static ssize_t
 nc_write_xmlclb(void *arg, const void *buf, size_t count)
 {
