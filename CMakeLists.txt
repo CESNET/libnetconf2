@@ -234,14 +234,14 @@ check_include_file("termios.h" HAVE_TERMIOS)
 
 if(ENABLE_SSH_TLS)
     # dependencies - mbedTLS (higher preference) or OpenSSL
-    find_package(LibMbedTLS 3.5.2)
-    if (LIBMBEDTLS_FOUND)
+    find_package(MbedTLS 3.5.2)
+    if (MBEDTLS_FOUND)
         # dependencies - mbedtls
-        set(HAVE_LIBMBEDTLS TRUE)
+        set(HAVE_MBEDTLS TRUE)
         list(APPEND libsrc src/session_mbedtls.c)
-        include_directories(${LIBMBEDTLS_INCLUDE_DIRS})
-        target_link_libraries(netconf2 ${LIBMBEDTLS_LIBRARIES})
-        list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBMBEDTLS_LIBRARIES})
+        include_directories(${MBEDTLS_INCLUDE_DIR})
+        target_link_libraries(netconf2 ${MBEDTLS_LIBRARIES})
+        list(APPEND CMAKE_REQUIRED_LIBRARIES ${MBEDTLS_LIBRARIES})
     else()
         # dependencies - openssl
         find_package(OpenSSL 3.0.0 REQUIRED)
