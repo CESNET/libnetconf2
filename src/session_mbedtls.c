@@ -436,7 +436,7 @@ nc_server_tls_verify_cb(void *cb_data, mbedtls_x509_crt *cert, int depth, uint32
 
     if (!*flags) {
         /* in-built verification was successful */
-        ret = nc_server_tls_verify_cert(cert, depth, 0, data);
+        ret = nc_server_tls_verify_cert(cert, depth, 1, data);
     } else {
         /* in-built verification failed, but the client still may be authenticated if:
          * 1) the peer cert matches any configured end-entity cert
@@ -445,13 +445,13 @@ nc_server_tls_verify_cb(void *cb_data, mbedtls_x509_crt *cert, int depth, uint32
          */
         if ((depth == 0) && (*flags == MBEDTLS_X509_BADCERT_NOT_TRUSTED)) {
             /* not trusted self-signed peer certificate, case 1) */
-            ret = nc_server_tls_verify_cert(cert, depth, 1, data);
+            ret = nc_server_tls_verify_cert(cert, depth, 0, data);
             if (!ret) {
                 *flags &= ~MBEDTLS_X509_BADCERT_NOT_TRUSTED;
             }
         } else if (*flags == MBEDTLS_X509_BADCERT_MISSING) {
             /* full chain of trust is invalid, but it may be valid partially, case 2) */
-            ret = nc_server_tls_verify_cert(cert, depth, 1, data);
+            ret = nc_server_tls_verify_cert(cert, depth, 0, data);
             if (!ret) {
                 *flags &= ~MBEDTLS_X509_BADCERT_MISSING;
             }
