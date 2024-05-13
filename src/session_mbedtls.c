@@ -868,9 +868,11 @@ nc_client_tls_load_cert_key_wrap(const char *cert_path, const char *key_path, vo
     }
 
     *cert = c;
+    c = NULL;
     *pkey = pk;
 
 cleanup:
+    nc_tls_cert_destroy_wrap(c);
     return ret;
 }
 
