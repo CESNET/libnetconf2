@@ -42,7 +42,6 @@
 #include <mbedtls/base64.h>
 #include <mbedtls/bignum.h>
 #include <mbedtls/ctr_drbg.h>
-#include <mbedtls/debug.h>
 #include <mbedtls/entropy.h>
 #include <mbedtls/error.h>
 #include <mbedtls/net_sockets.h>
@@ -52,7 +51,6 @@
 #include <mbedtls/x509.h>
 #include <mbedtls/x509_crl.h>
 #include <mbedtls/x509_crt.h>
-#include <mbedtls/x509_csr.h>
 
 /* some mbedTLS functions may return 'high' and some 'low' level errors, try to handle both cases this way */
 static const char *
