@@ -20,7 +20,7 @@
 
 #include "config.h"
 
-#ifdef HAVE_LIBMBEDTLS
+#ifdef HAVE_MBEDTLS
 
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>

@@ -47,7 +47,7 @@
 /*
  * Use MbedTLS as TLS back-end
  */
-#cmakedefine HAVE_LIBMBEDTLS
+#cmakedefine HAVE_MBEDTLS
 
 /*
  * Location of installed YANG modules on the system
