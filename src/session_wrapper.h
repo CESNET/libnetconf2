@@ -29,14 +29,17 @@
 #include <mbedtls/x509_crl.h>
 #include <mbedtls/x509_crt.h>
 
+/**
+ * @brief Context from which a TLS session may be created.
+ */
 struct nc_tls_ctx {
-    int *sock;
-    mbedtls_entropy_context *entropy;
-    mbedtls_ctr_drbg_context *ctr_drbg;
-    mbedtls_x509_crt *cert;
-    mbedtls_pk_context *pkey;
-    mbedtls_x509_crt *cert_store;
-    mbedtls_x509_crl *crl_store;
+    int *sock;                          /**< Socket FD. */
+    mbedtls_entropy_context *entropy;   /**< Entropy. */
+    mbedtls_ctr_drbg_context *ctr_drbg; /**< Random bit generator. */
+    mbedtls_x509_crt *cert;             /**< Certificate. */
+    mbedtls_pk_context *pkey;           /**< Private key. */
+    mbedtls_x509_crt *cert_store;       /**< CA certificates store. */
+    mbedtls_x509_crl *crl_store;        /**< CRL store. */
 };
 
 #else
@@ -45,23 +48,29 @@ struct nc_tls_ctx {
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 
+/**
+ * @brief Context from which a TLS session may be created.
+ */
 struct nc_tls_ctx {
-    X509 *cert;
-    EVP_PKEY *pkey;
-    X509_STORE *cert_store;
-    X509_STORE *crl_store;
+    X509 *cert;             /**< Certificate. */
+    EVP_PKEY *pkey;         /**< Private key. */
+    X509_STORE *cert_store; /**< CA certificate store. */
+    X509_STORE *crl_store;  /**< CRL store. */
 };
 
 #endif
 
+/**
+ * @brief Server side TLS verify callback data.
+ */
 struct nc_tls_verify_cb_data {
-    struct nc_session *session;
-    struct nc_server_tls_opts *opts;
+    struct nc_session *session;         /**< NETCONF session. */
+    struct nc_server_tls_opts *opts;    /**< TLS server options. */
     struct nc_ctn_data {
-        char *username;
-        int matched_ctns;
-        int matched_ctn_type[6];
-        int matched_ctn_count;
+        char *username;                 /**< Username. */
+        int matched_ctns;               /**< OR'd values of currently matched CTN types. */
+        int matched_ctn_type[6];        /**< Currently matched CTN types (order matters). */
+        int matched_ctn_count;          /**< Number of matched CTN types. */
     } ctn_data;
 };
 
