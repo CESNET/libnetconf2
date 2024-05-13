@@ -88,9 +88,9 @@ nc_ssl_error_get_reasons(void)
 #endif /* NC_ENABLED_SSH_TLS */
 
 static ssize_t
-nc_read(struct nc_session *session, char *buf, size_t count, uint32_t inact_timeout, struct timespec *ts_act_timeout)
+nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_timeout, struct timespec *ts_act_timeout)
 {
-    size_t readd = 0;
+    uint32_t readd = 0;
     ssize_t r = -1;
     int fd, interrupted;
     struct timespec ts_inact_timeout;
@@ -617,10 +617,10 @@ nc_session_is_connected(const struct nc_session *session)
 }
 
 #define WRITE_BUFSIZE (2 * BUFFERSIZE)
-struct wclb_arg {
+struct nc_wclb_arg {
     struct nc_session *session;
     char buf[WRITE_BUFSIZE];
-    size_t len;
+    uint32_t len;
 };
 
 /**
@@ -633,10 +633,10 @@ struct wclb_arg {
  * @return -1 on error.
  */
 static int
-nc_write(struct nc_session *session, const void *buf, size_t count)
+nc_write(struct nc_session *session, const void *buf, uint32_t count)
 {
     int c, fd, interrupted;
-    size_t written = 0;
+    uint32_t written = 0;
 
 #ifdef NC_ENABLED_SSH_TLS
     unsigned long e;
@@ -746,24 +746,26 @@ nc_write(struct nc_session *session, const void *buf, size_t count)
  * @return -1 on error.
  */
 static int
-nc_write_starttag_and_msg(struct nc_session *session, const void *buf, size_t count)
+nc_write_starttag_and_msg(struct nc_session *session, const void *buf, uint32_t count)
 {
-    int ret = 0, c;
+    int ret = 0, r;
     char chunksize[24];
 
     if (session->version == NC_VERSION_11) {
-        sprintf(chunksize, "\n#%zu\n", count);
-        ret = nc_write(session, chunksize, strlen(chunksize));
-        if (ret == -1) {
+        r = sprintf(chunksize, "\n#%" PRIu32 "\n", count);
+
+        r = nc_write(session, chunksize, r);
+        if (r == -1) {
             return -1;
         }
+        ret += r;
     }
 
-    c = nc_write(session, buf, count);
-    if (c == -1) {
+    r = nc_write(session, buf, count);
+    if (r == -1) {
         return -1;
     }
-    ret += c;
+    ret += r;
 
     return ret;
 }
@@ -797,7 +799,7 @@ nc_write_endtag(struct nc_session *session)
  * @return -1 on error.
  */
 static int
-nc_write_clb_flush(struct wclb_arg *warg)
+nc_write_clb_flush(struct nc_wclb_arg *warg)
 {
     int ret = 0;
 
@@ -821,11 +823,11 @@ nc_write_clb_flush(struct wclb_arg *warg)
  * @return -1 on error.
  */
 static ssize_t
-nc_write_clb(void *arg, const void *buf, size_t count, int xmlcontent)
+nc_write_clb(void *arg, const void *buf, uint32_t count, int xmlcontent)
 {
-    int ret = 0, c;
-    size_t l;
-    struct wclb_arg *warg = (struct wclb_arg *)arg;
+    ssize_t ret = 0, c;
+    uint32_t l;
+    struct nc_wclb_arg *warg = arg;
 
     if (!buf) {
         c = nc_write_clb_flush(warg);
@@ -934,7 +936,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
     struct nc_server_notif *notif;
     struct nc_server_reply *reply;
     char *buf;
-    struct wclb_arg arg;
+    struct nc_wclb_arg arg;
     const char **capabilities;
     uint32_t *sid = NULL, i, wd = 0;
     LY_ERR lyrc;
