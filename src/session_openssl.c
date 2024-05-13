@@ -333,9 +333,17 @@ nc_server_tls_verify_cb(int preverify_ok, X509_STORE_CTX *x509_ctx)
     SSL_CTX *ctx;
     X509 *cert;
 
-    /* retrieve callback data stored in the SSL struct */
+    /* retrieve callback data stored inside the SSL_CTX struct */
     ssl = X509_STORE_CTX_get_ex_data(x509_ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
+    if (!ssl) {
+        ERRINT;
+        return 0;
+    }
     ctx = SSL_get_SSL_CTX(ssl);
+    if (!ctx) {
+        ERRINT;
+        return 0;
+    }
     data = SSL_CTX_get_ex_data(ctx, 0);
 
     /* get current cert and its depth */
@@ -344,7 +352,7 @@ nc_server_tls_verify_cb(int preverify_ok, X509_STORE_CTX *x509_ctx)
 
     if (preverify_ok) {
         /* in-built verification was successful */
-        ret = nc_server_tls_verify_cert(cert, depth, 0, data);
+        ret = nc_server_tls_verify_cert(cert, depth, 1, data);
     } else {
         /* in-built verification failed, but the client still may be authenticated if:
          * 1) the peer cert matches any configured end-entity cert
@@ -352,9 +360,9 @@ nc_server_tls_verify_cb(int preverify_ok, X509_STORE_CTX *x509_ctx)
          * otherwise just continue until we reach the peer cert (depth = 0)
          */
         err = X509_STORE_CTX_get_error(x509_ctx);
-        if ((depth == 0) && (err == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT)) {
-            /* not trusted self-signed peer certificate, case 1) */
-            ret = nc_server_tls_verify_cert(cert, depth, 1, data);
+        if ((depth == 0) && ((err == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT) || (err == X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE))) {
+            /* not trusted (possibly self-signed) peer certificate, case 1) */
+            ret = nc_server_tls_verify_cert(cert, depth, 0, data);
         } else if ((err == X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT) || (err == X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY)) {
             /* full chain of trust is invalid, but it may be valid partially, case 2) */
             ret = nc_server_tls_verify_cert(cert, depth, 0, data);
@@ -367,8 +375,6 @@ nc_server_tls_verify_cb(int preverify_ok, X509_STORE_CTX *x509_ctx)
             if (ret) {
                 VRB(NULL, "Cert verify: fail (%s).", X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
                 ret = -1;
-            } else {
-                X509_STORE_CTX_set_error(x509_ctx, X509_V_OK);
             }
         } else {
             VRB(NULL, "Cert verify: fail (%s).", X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
@@ -681,7 +687,8 @@ int
 nc_client_tls_load_trusted_certs_wrap(void *cert_store, const char *file_path, const char *dir_path)
 {
     if (!X509_STORE_load_locations(cert_store, file_path, dir_path)) {
-        ERR(NULL, "Loading CA certs from file \"%s\" or directory \"%s\" failed (%s).", file_path, dir_path, ERR_reason_error_string(ERR_get_error()));
+        ERR(NULL, "Loading CA certs from file \"%s\" or directory \"%s\" failed (%s).",
+                file_path, dir_path, ERR_reason_error_string(ERR_get_error()));
         return 1;
     }
 
@@ -692,7 +699,8 @@ int
 nc_client_tls_load_crl_wrap(void *crl_store, const char *file_path, const char *dir_path)
 {
     if (!X509_STORE_load_locations(crl_store, file_path, dir_path)) {
-        ERR(NULL, "Loading CRLs from file \"%s\" or directory \"%s\" failed (%s).", file_path, dir_path, ERR_reason_error_string(ERR_get_error()));
+        ERR(NULL, "Loading CRLs from file \"%s\" or directory \"%s\" failed (%s).",
+                file_path, dir_path, ERR_reason_error_string(ERR_get_error()));
         return 1;
     }
 
@@ -762,7 +770,7 @@ nc_tls_move_crls_to_store(const X509_STORE *src, X509_STORE *dst)
 }
 
 int
-nc_tls_setup_config_from_ctx_wrap(struct nc_tls_ctx *tls_ctx, int UNUSED(side), void *tls_cfg)
+nc_tls_setup_config_from_ctx_wrap(struct nc_tls_ctx *tls_ctx, int side, void *tls_cfg)
 {
     if (SSL_CTX_use_certificate(tls_cfg, tls_ctx->cert) != 1) {
         return 1;
@@ -772,7 +780,10 @@ nc_tls_setup_config_from_ctx_wrap(struct nc_tls_ctx *tls_ctx, int UNUSED(side), 
         return 1;
     }
 
-    SSL_CTX_set_mode(tls_cfg, SSL_MODE_AUTO_RETRY);
+    /* disable server-side automatic chain building */
+    if (side == NC_SERVER) {
+        SSL_CTX_set_mode(tls_cfg, SSL_MODE_NO_AUTO_CHAIN);
+    }
 
     if (tls_ctx->crl_store) {
         /* move CRLs from crl_store to cert_store, because SSL_CTX can only have one store */

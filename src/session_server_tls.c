@@ -386,7 +386,7 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn_first, void *cert, struct nc_ctn_d
                 data->matched_ctns |= map_type;
                 data->matched_ctn_type[data->matched_ctn_count++] = map_type;
                 if (!data->username && (map_type == NC_TLS_CTN_SPECIFIED)) {
-                    data->username = ctn->name; // TODO make a copy?
+                    data->username = ctn->name;
                 }
             }
         }
@@ -555,13 +555,18 @@ nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_server_tls_opts *opts)
 }
 
 int
-nc_server_tls_verify_cert(void *cert, int depth, int self_signed, struct nc_tls_verify_cb_data *cb_data)
+nc_server_tls_verify_cert(void *cert, int depth, int trusted, struct nc_tls_verify_cb_data *cb_data)
 {
     int ret = 0, i;
     char *subject = NULL, *issuer = NULL;
     struct nc_server_tls_opts *opts = cb_data->opts;
     struct nc_session *session = cb_data->session;
     struct nc_endpt *referenced_endpt;
+
+    if (session->username) {
+        /* already verified */
+        return 0;
+    }
 
     subject = nc_server_tls_get_subject_wrap(cert);
     issuer = nc_server_tls_get_issuer_wrap(cert);
@@ -576,7 +581,7 @@ nc_server_tls_verify_cert(void *cert, int depth, int self_signed, struct nc_tls_
     VRB(session, "Cert verify: issuer: %s.", issuer);
 
     if (depth == 0) {
-        if (self_signed) {
+        if (!trusted) {
             /* peer cert is not trusted, so it must match any configured end-entity cert
              * on the given endpoint in order for the client to be authenticated */
             ret = nc_server_tls_verify_peer_cert(cert, opts);

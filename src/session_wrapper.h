@@ -227,11 +227,11 @@ void nc_client_tls_set_verify_wrap(void *tls_cfg);
  *
  * @param[in] cert Certificate to verify.
  * @param[in] depth Certificate depth.
- * @param[in] self_signed Boolean flag representing self-signedness of the certificate.
+ * @param[in] trusted Boolean flag representing whether the certificate is trusted.
  * @param[in] cb_data Data for the verify callback.
  * @return 0 on success, 1 on verify fail, -1 on fatal error.
  */
-int nc_server_tls_verify_cert(void *cert, int depth, int self_signed, struct nc_tls_verify_cb_data *cb_data);
+int nc_server_tls_verify_cert(void *cert, int depth, int trusted, struct nc_tls_verify_cb_data *cb_data);
 
 /**
  * @brief Check if the peer certificate matches any configured ee certs.
