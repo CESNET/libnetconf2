@@ -2,7 +2,7 @@
 # Once done this will define
 #
 #  MBEDTLS_FOUND - MbedTLS was found
-#  MBEDTLS_INCLUDE_DIR - MbedTLS include directories
+#  MBEDTLS_INCLUDE_DIRS - MbedTLS include directories
 #  MBEDTLS_LIBRARIES - link these to use MbedTLS
 #  MBEDTLS_VERSION - version of MbedTLS
 #
@@ -34,7 +34,7 @@
 #
 include(FindPackageHandleStandardArgs)
 
-if(MBEDTLS_LIBRARIES AND MBEDTLS_INCLUDE_DIR)
+if(MBEDTLS_LIBRARIES AND MBEDTLS_INCLUDE_DIRS)
     # in cache already
     set(MBEDTLS_FOUND TRUE)
 else()
@@ -98,13 +98,13 @@ else()
         endif()
     endif()
 
-    set(MBEDTLS_INCLUDE_DIR ${MBEDTLS_INCLUDE_DIR})
+    set(MBEDTLS_INCLUDE_DIRS ${MBEDTLS_INCLUDE_DIR})
     set(MBEDTLS_LIBRARIES ${MBEDTLS_LIBRARY} ${MBEDX509_LIBRARY} ${MBEDCRYPTO_LIBRARY})
 
     find_package_handle_standard_args(MbedTLS FOUND_VAR MBEDTLS_FOUND
-        REQUIRED_VARS MBEDTLS_INCLUDE_DIR MBEDTLS_LIBRARIES
+        REQUIRED_VARS MBEDTLS_INCLUDE_DIRS MBEDTLS_LIBRARIES
         VERSION_VAR MBEDTLS_VERSION)
 
     # show the MBEDTLS_INCLUDE_DIR and MBEDTLS_LIBRARIES variables only in the advanced view
-    mark_as_advanced(MBEDTLS_INCLUDE_DIR MBEDTLS_LIBRARIES)
+    mark_as_advanced(MBEDTLS_INCLUDE_DIRS MBEDTLS_LIBRARIES)
 endif()
