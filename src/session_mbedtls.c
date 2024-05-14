@@ -1585,6 +1585,121 @@ nc_tls_import_pubkey_file_wrap(const char *pubkey_path)
     return pk;
 }
 
+/**
+ * @brief Parse the CRL distribution points X509v3 extension and obtain the URIs.
+ *
+ * @param[in,out] p Pointer to the DER encoded extension. When the function gets called, this should
+ * point to the first byte in the value of CRLDistributionPoints.
+ * @param[in] len Length of the CRLDistributionPoints ASN.1 encoded value.
+ * @param[out] uris Array of URIs found in the extension.
+ * @param[out] uri_count Number of URIs found in the extension.
+ * @return 0 on success, non-zero on error.
+ */
+static int
+nc_server_tls_parse_crl_dist_points(unsigned char **p, size_t len, char ***uris, int *uri_count)
+{
+    int ret = 0;
+    unsigned char *end_crl_dist_points;
+    mbedtls_x509_sequence general_names = {0};
+    mbedtls_x509_sequence *iter = NULL;
+    mbedtls_x509_subject_alternative_name san = {0};
+    void *tmp;
+
+    /*
+     * parsing the value of CRLDistributionPoints
+     *
+     * CRLDistributionPoints ::= SEQUENCE SIZE (1..MAX) OF DistributionPoint
+     */
+    end_crl_dist_points = *p + len;
+    while (*p < end_crl_dist_points) {
+        /*
+         * DistributionPoint ::= SEQUENCE {
+         *      distributionPoint       [0]     DistributionPointName OPTIONAL,
+         *      reasons                 [1]     ReasonFlags OPTIONAL,
+         *      cRLIssuer               [2]     GeneralNames OPTIONAL }
+         */
+        ret = mbedtls_asn1_get_tag(p, end_crl_dist_points, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
+        if (ret) {
+            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+            goto cleanup;
+        }
+        if (!len) {
+            /* empty sequence */
+            continue;
+        }
+
+        /* parse distributionPoint */
+        ret = mbedtls_asn1_get_tag(p, end_crl_dist_points, &len, MBEDTLS_ASN1_CONTEXT_SPECIFIC | MBEDTLS_ASN1_CONSTRUCTED | 0);
+        if (!ret) {
+            /*
+             * DistributionPointName ::= CHOICE {
+             *      fullName                [0]     GeneralNames,
+             *      nameRelativeToCRLIssuer [1]     RelativeDistinguishedName }
+             */
+            ret = mbedtls_asn1_get_tag(p, end_crl_dist_points, &len, MBEDTLS_ASN1_CONTEXT_SPECIFIC | MBEDTLS_ASN1_CONSTRUCTED | 0);
+            if (ret) {
+                if ((ret == MBEDTLS_ERR_ASN1_UNEXPECTED_TAG) && (**p == (MBEDTLS_ASN1_CONTEXT_SPECIFIC | MBEDTLS_ASN1_CONSTRUCTED | 1))) {
+                    /* it's nameRelativeToCRLIssuer, but we don't support it */
+                    ERR(NULL, "Failed to parse CRL distribution points extension (nameRelativeToCRLIssuer not yet supported).");
+                    goto cleanup;
+                } else {
+                    ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+                    goto cleanup;
+                }
+            }
+
+            /* parse GeneralNames, but thankfully there is an api for this */
+            ret = mbedtls_x509_get_subject_alt_name_ext(p, *p + len, &general_names);
+            if (ret) {
+                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+                goto cleanup;
+            }
+
+            /* iterate over all the GeneralNames */
+            iter = &general_names;
+            while (iter) {
+                ret = mbedtls_x509_parse_subject_alt_name(&iter->buf, &san);
+                if (ret && (ret != MBEDTLS_ERR_X509_FEATURE_UNAVAILABLE)) {
+                    ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+                    goto cleanup;
+                }
+
+                if (san.type == MBEDTLS_X509_SAN_UNIFORM_RESOURCE_IDENTIFIER) {
+                    /* found an URI */
+                    tmp = realloc(*uris, (*uri_count + 1) * sizeof **uris);
+                    if (!tmp) {
+                        ERRMEM;
+                        ret = 1;
+                        mbedtls_x509_free_subject_alt_name(&san);
+                        goto cleanup;
+                    }
+                    *uris = tmp;
+
+                    *uris[*uri_count] = strndup((const char *)san.san.unstructured_name.p, san.san.unstructured_name.len);
+                    if (!*uris[*uri_count]) {
+                        ERRMEM;
+                        ret = 1;
+                        mbedtls_x509_free_subject_alt_name(&san);
+                        goto cleanup;
+                    }
+                    ++(*uri_count);
+                }
+
+                mbedtls_x509_free_subject_alt_name(&san);
+                iter = iter->next;
+            }
+
+        } else if (ret != MBEDTLS_ERR_ASN1_UNEXPECTED_TAG) {
+            /* failed to parse it, but not because it's optional */
+            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+            goto cleanup;
+        }
+    }
+
+cleanup:
+    return ret;
+}
+
 int
 nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *uri_count)
 {
@@ -1694,91 +1809,10 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
                 goto cleanup;
             }
 
-            end_crl_dist_points = p + len;
-
-            while (p < end_crl_dist_points) {
-                /*
-                 * DistributionPoint ::= SEQUENCE {
-                 *      distributionPoint       [0]     DistributionPointName OPTIONAL,
-                 *      reasons                 [1]     ReasonFlags OPTIONAL,
-                 *      cRLIssuer               [2]     GeneralNames OPTIONAL }
-                 */
-                ret = mbedtls_asn1_get_tag(&p, end_ext_octet, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
-                if (ret) {
-                    ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
-                    goto cleanup;
-                }
-                if (!len) {
-                    /* empty sequence */
-                    continue;
-                }
-
-                /* parse distributionPoint */
-                ret = mbedtls_asn1_get_tag(&p, end_ext_octet, &len, MBEDTLS_ASN1_CONTEXT_SPECIFIC | MBEDTLS_ASN1_CONSTRUCTED | 0);
-                if (!ret) {
-                    /*
-                     * DistributionPointName ::= CHOICE {
-                     *      fullName                [0]     GeneralNames,
-                     *      nameRelativeToCRLIssuer [1]     RelativeDistinguishedName }
-                     */
-                    ret = mbedtls_asn1_get_tag(&p, end_ext_octet, &len, MBEDTLS_ASN1_CONTEXT_SPECIFIC | MBEDTLS_ASN1_CONSTRUCTED | 0);
-                    if (ret) {
-                        if ((ret == MBEDTLS_ERR_ASN1_UNEXPECTED_TAG) && (*p == (MBEDTLS_ASN1_CONTEXT_SPECIFIC | MBEDTLS_ASN1_CONSTRUCTED | 1))) {
-                            /* it's nameRelativeToCRLIssuer, but we don't support it */
-                            ERR(NULL, "Failed to parse CRL distribution points extension (nameRelativeToCRLIssuer not yet supported).");
-                            goto cleanup;
-                        } else {
-                            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
-                            goto cleanup;
-                        }
-                    }
-
-                    /* parse GeneralNames, but thankfully there is an api for this */
-                    ret = mbedtls_x509_get_subject_alt_name_ext(&p, p + len, &general_names);
-                    if (ret) {
-                        ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
-                        goto cleanup;
-                    }
-
-                    /* iterate over all the GeneralNames */
-                    iter = &general_names;
-                    while (iter) {
-                        ret = mbedtls_x509_parse_subject_alt_name(&iter->buf, &san);
-                        if (ret && (ret != MBEDTLS_ERR_X509_FEATURE_UNAVAILABLE)) {
-                            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
-                            goto cleanup;
-                        }
-
-                        if (san.type == MBEDTLS_X509_SAN_UNIFORM_RESOURCE_IDENTIFIER) {
-                            /* found an URI */
-                            tmp = realloc(*uris, (*uri_count + 1) * sizeof **uris);
-                            if (!tmp) {
-                                ERRMEM;
-                                ret = 1;
-                                mbedtls_x509_free_subject_alt_name(&san);
-                                goto cleanup;
-                            }
-                            *uris = tmp;
-
-                            *uris[*uri_count] = strndup((const char *)san.san.unstructured_name.p, san.san.unstructured_name.len);
-                            if (!*uris[*uri_count]) {
-                                ERRMEM;
-                                ret = 1;
-                                mbedtls_x509_free_subject_alt_name(&san);
-                                goto cleanup;
-                            }
-                            ++(*uri_count);
-                        }
-
-                        mbedtls_x509_free_subject_alt_name(&san);
-                        iter = iter->next;
-                    }
-
-                } else if (ret != MBEDTLS_ERR_ASN1_UNEXPECTED_TAG) {
-                    /* failed to parse it, but not because it's optional */
-                    ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
-                    goto cleanup;
-                }
+            /* parse the distribution points and obtain the uris */
+            ret = nc_server_tls_parse_crl_dist_points(&p, len, uris, uri_count);
+            if (ret) {
+                goto cleanup;
             }
         }
         cert = cert->next;
