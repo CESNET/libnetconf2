@@ -387,6 +387,11 @@ nc_server_tls_verify_cb(int preverify_ok, X509_STORE_CTX *x509_ctx)
         return 0;
     } else if (!ret) {
         /* success */
+        if ((depth == 0) && (!data->session->opts.server.client_cert)) {
+            /* copy the client cert */
+            data->session->opts.server.client_cert = X509_dup(cert);
+            NC_CHECK_ERRMEM_RET(!data->session->opts.server.client_cert, 0);
+        }
         return 1;
     } else {
         if (depth > 0) {
