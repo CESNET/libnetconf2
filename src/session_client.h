@@ -22,7 +22,6 @@ extern "C" {
 
 #include <libyang/libyang.h>
 
-#include "config.h"
 #include "messages_client.h"
 #include "netconf.h"
 #include "session.h"
