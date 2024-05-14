@@ -324,6 +324,13 @@ nc_server_tls_set_tls_versions_wrap(void *tls_cfg, unsigned int tls_versions)
     return 0;
 }
 
+/**
+ * @brief Verify a certificate.
+ *
+ * @param[in] preverify_ok The result of the in-built verification.
+ * @param[in] x509_ctx Verification context.
+ * @return 1 on success, 0 on error.
+ */
 static int
 nc_server_tls_verify_cb(int preverify_ok, X509_STORE_CTX *x509_ctx)
 {
@@ -747,6 +754,13 @@ nc_tls_init_ctx_wrap(int UNUSED(sock), void *cert, void *pkey, void *cert_store,
     return 0;
 }
 
+/**
+ * @brief Move CRLs from one store to another.
+ *
+ * @param[in] src Source store.
+ * @param[in] dst Destination store.
+ * @return 0 on success, 1 on error.
+ */
 static int
 nc_tls_move_crls_to_store(const X509_STORE *src, X509_STORE *dst)
 {
@@ -918,6 +932,11 @@ nc_base64_encode_wrap(const unsigned char *bin, size_t len, char **base64)
     return 0;
 }
 
+/**
+ * @brief Get all OpenSSL error reasons.
+ *
+ * @return String with all OpenSSL error reasons or NULL.
+ */
 static char *
 nc_tls_get_err_reasons(void)
 {

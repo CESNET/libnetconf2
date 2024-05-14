@@ -52,7 +52,14 @@
 #include <mbedtls/x509_crl.h>
 #include <mbedtls/x509_crt.h>
 
-/* some mbedTLS functions may return 'high' and some 'low' level errors, try to handle both cases this way */
+/**
+ * @brief Converts mbedTLS error codes to a string.
+ *
+ * Some mbedTLS functions may return 'high' and some 'low' level errors, try to handle both cases this way.
+ *
+ * @param[in] err MbedTLS error code.
+ * @return Error string.
+ */
 static const char *
 nc_get_mbedtls_str_err(int err)
 {
@@ -101,7 +108,13 @@ nc_server_tls_dn2str(const mbedtls_x509_name *dn)
     return str;
 }
 
-/* creates a new rng context needed for PK operations and for ssl config */
+/**
+ * @brief Create a new random number generator context.
+ *
+ * @param[out] ctr_drbg Random bit generator context.
+ * @param[out] entropy Entropy context.
+ * @return 0 on success, 1 on failure.
+ */
 static int
 nc_tls_rng_new(mbedtls_ctr_drbg_context **ctr_drbg, mbedtls_entropy_context **entropy)
 {
@@ -138,6 +151,12 @@ fail:
     return 1;
 }
 
+/**
+ * @brief Destroy the random number generator context.
+ *
+ * @param[in] ctr_drbg Random bit generator context.
+ * @param[in] entropy Entropy context.
+ */
 static void
 nc_tls_rng_destroy(mbedtls_ctr_drbg_context *ctr_drbg, mbedtls_entropy_context *entropy)
 {
@@ -149,7 +168,12 @@ nc_tls_rng_destroy(mbedtls_ctr_drbg_context *ctr_drbg, mbedtls_entropy_context *
     }
 }
 
-/* get verify err string, caller is responsible for freeing it, 256B should be more than enough */
+/**
+ * @brief Get a string representation of the verification error.
+ *
+ * @param[in] err Verification error code.
+ * @return String representation of the error. Caller is responsible for freeing it.
+ */
 static char *
 nc_tls_get_verify_err_str(int err)
 {
@@ -242,6 +266,11 @@ nc_tls_cert_destroy_wrap(void *cert)
     free(cert);
 }
 
+/**
+ * @brief Create a new private key context.
+ *
+ * @return New private key context or NULL.
+ */
 static void *
 nc_tls_pkey_new_wrap(void)
 {
@@ -427,6 +456,12 @@ nc_server_tls_set_tls_versions_wrap(void *tls_cfg, unsigned int tls_versions)
     return 0;
 }
 
+/**
+ * @brief Duplicates a certificate.
+ *
+ * @param[in] cert Certificate to duplicate.
+ * @return Duplicated certificate or NULL.
+ */
 static mbedtls_x509_crt *
 nc_tls_cert_dup(const mbedtls_x509_crt *cert)
 {
@@ -445,6 +480,15 @@ nc_tls_cert_dup(const mbedtls_x509_crt *cert)
     return new_cert;
 }
 
+/**
+ * @brief Verify a certificate.
+ *
+ * @param[in] cb_data Callback data (session, opts, data for CTN).
+ * @param[in] cert Certificate to verify.
+ * @param[in] depth Certificate depth in the chain.
+ * @param[in,out] flags Verification flags. Used to propagate errors.
+ * @return 0 on success (verification result is based on the value of flags), non-zero on fatal-error.
+ */
 static int
 nc_server_tls_verify_cb(void *cb_data, mbedtls_x509_crt *cert, int depth, uint32_t *flags)
 {
@@ -734,6 +778,14 @@ nc_server_tls_sha512_wrap(void *cert, unsigned char *buf)
     return 0;
 }
 
+/**
+ * @brief Callback for sending data.
+ *
+ * @param[in] ctx Socket.
+ * @param[in] buf Data to send.
+ * @param[in] len Length of the data.
+ * @return Number of bytes sent or negative value on error.
+ */
 static int
 nc_server_tls_send(void *ctx, const unsigned char *buf, size_t len)
 {
@@ -757,6 +809,14 @@ nc_server_tls_send(void *ctx, const unsigned char *buf, size_t len)
     return ret;
 }
 
+/**
+ * @brief Callback for receiving data.
+ *
+ * @param[in] ctx Socket.
+ * @param[out] buf Buffer to store the received data.
+ * @param[in] len Length of the buffer.
+ * @return Number of bytes received or negative value on error.
+ */
 static int
 nc_server_tls_recv(void *ctx, unsigned char *buf, size_t len)
 {
@@ -1095,13 +1155,8 @@ nc_tls_is_der_subpubkey_wrap(unsigned char *der, long len)
 
     ret = mbedtls_pk_parse_subpubkey(&der, der + len, pkey);
     nc_tls_privkey_destroy_wrap(pkey);
-    if (!ret) {
-        /* success */
-        return 1;
-    } else {
-        /* fail */
-        return 0;
-    }
+
+    return !ret;
 }
 
 int
