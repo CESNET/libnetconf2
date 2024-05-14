@@ -1705,14 +1705,10 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
 {
     int ret = 0;
     mbedtls_x509_crt *cert;
-    unsigned char *p, *end_v3_ext, *end_ext, *end_ext_octet, *end_crl_dist_points;
+    unsigned char *p, *end_v3_ext, *end_ext, *end_ext_octet;
     size_t len;
     mbedtls_x509_buf ext_oid = {0};
     int is_critical = 0;
-    mbedtls_x509_sequence general_names = {0};
-    mbedtls_x509_sequence *iter = NULL;
-    mbedtls_x509_subject_alternative_name san = {0};
-    void *tmp;
 
     NC_CHECK_ARG_RET(NULL, cert_store, uris, uri_count, 1);
 
