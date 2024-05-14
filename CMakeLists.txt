@@ -239,7 +239,7 @@ if(ENABLE_SSH_TLS)
         # dependencies - mbedtls
         set(HAVE_MBEDTLS TRUE)
         list(APPEND libsrc src/session_mbedtls.c)
-        include_directories(${MBEDTLS_INCLUDE_DIR})
+        include_directories(${MBEDTLS_INCLUDE_DIRS})
         target_link_libraries(netconf2 ${MBEDTLS_LIBRARIES})
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${MBEDTLS_LIBRARIES})
     else()
