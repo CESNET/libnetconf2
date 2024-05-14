@@ -234,7 +234,7 @@ check_include_file("termios.h" HAVE_TERMIOS)
 
 if(ENABLE_SSH_TLS)
     # dependencies - mbedTLS (higher preference) or OpenSSL
-    find_package(MbedTLS 3.5.2)
+    find_package(MbedTLS 3.5.0)
     if (MBEDTLS_FOUND)
         # dependencies - mbedtls
         set(HAVE_MBEDTLS TRUE)
