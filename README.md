@@ -64,7 +64,7 @@ the `distro` directory.
 * crypt(3)
 * [libyang](https://github.com/CESNET/libyang)
 * libssh >= 0.9.5 (for SSH support)
-* OpenSSL >= 3.0.0 (for TLS support)
+* OpenSSL >= 3.0.0 or MbedTLS >= 3.5.0 (for TLS support)
 * curl >= 7.30.0
 
 #### Optional
