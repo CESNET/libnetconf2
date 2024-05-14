@@ -427,6 +427,24 @@ nc_server_tls_set_tls_versions_wrap(void *tls_cfg, unsigned int tls_versions)
     return 0;
 }
 
+static mbedtls_x509_crt *
+nc_tls_cert_dup(const mbedtls_x509_crt *cert)
+{
+    mbedtls_x509_crt *new_cert;
+
+    new_cert = nc_tls_cert_new_wrap();
+    if (!new_cert) {
+        return NULL;
+    }
+
+    if (mbedtls_x509_crt_parse_der(new_cert, cert->raw.p, cert->raw.len)) {
+        free(new_cert);
+        return NULL;
+    }
+
+    return new_cert;
+}
+
 static int
 nc_server_tls_verify_cb(void *cb_data, mbedtls_x509_crt *cert, int depth, uint32_t *flags)
 {
@@ -468,6 +486,13 @@ nc_server_tls_verify_cb(void *cb_data, mbedtls_x509_crt *cert, int depth, uint32
         return MBEDTLS_ERR_X509_ALLOC_FAILED;
     } else if (!ret) {
         /* success */
+        if ((depth == 0) && (!data->session->opts.server.client_cert)) {
+            /* copy the client cert */
+            data->session->opts.server.client_cert = nc_tls_cert_dup(cert);
+            if (!data->session->opts.server.client_cert) {
+                return MBEDTLS_ERR_X509_ALLOC_FAILED;
+            }
+        }
         return 0;
     } else {
         if (depth > 0) {

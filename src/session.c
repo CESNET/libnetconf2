@@ -809,7 +809,6 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
         session->ti.tls.config = NULL;
 
         if (session->side == NC_SERVER) {
-            // TODO
             nc_tls_cert_destroy_wrap(session->opts.server.client_cert);
         }
 
