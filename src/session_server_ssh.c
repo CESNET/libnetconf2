@@ -48,8 +48,15 @@
 
 extern struct nc_server_opts server_opts;
 
+/**
+ * @brief Stores the private key data as a temporary file.
+ *
+ * @param[in] in Private key data.
+ * @param[in] privkey_format String representation of the private key format.
+ * @return Path to the created temporary file or NULL on fail.
+ */
 static char *
-base64der_privkey_to_tmp_file(const char *in, const char *privkey_format)
+nc_server_ssh_privkey_data_to_tmp_file(const char *in, const char *privkey_format)
 {
     char path[12] = "/tmp/XXXXXX";
     int fd, written;
@@ -110,6 +117,13 @@ base64der_privkey_to_tmp_file(const char *in, const char *privkey_format)
     return strdup(path);
 }
 
+/**
+ * @brief Get asymmetric key from the keystore.
+ *
+ * @param[in] referenced_name Name of the asymmetric key in the keystore.
+ * @param[out] askey Referenced asymmetric key.
+ * @return 0 on success, 1 on error.
+ */
 static int
 nc_server_ssh_ks_ref_get_key(const char *referenced_name, struct nc_asymmetric_key **askey)
 {
@@ -142,6 +156,14 @@ nc_server_ssh_ks_ref_get_key(const char *referenced_name, struct nc_asymmetric_k
     return 0;
 }
 
+/**
+ * @brief Get public keys from the truststore.
+ *
+ * @param[in] referenced_name Name of the public key bag in the truststore.
+ * @param[out] pubkeys Referenced public keys.
+ * @param[out] pubkey_count Referenced public key count.
+ * @return 0 on success, 1 on error.
+ */
 static int
 nc_server_ssh_ts_ref_get_keys(const char *referenced_name, struct nc_public_key **pubkeys, uint16_t *pubkey_count)
 {
@@ -177,6 +199,12 @@ nc_server_ssh_ts_ref_get_keys(const char *referenced_name, struct nc_public_key 
     return 0;
 }
 
+/**
+ * @brief Convert UID to string.
+ *
+ * @param[in] uid UID to convert.
+ * @return UID converted to string or NULL on fail.
+ */
 static char *
 nc_server_ssh_uid_to_str(uid_t uid)
 {
@@ -194,6 +222,16 @@ nc_server_ssh_uid_to_str(uid_t uid)
     return uid_str;
 }
 
+/**
+ * @brief Append a character or a string to a string.
+ *
+ * @param[in] src_c Source character.
+ * @param[in] src_str Source string.
+ * @param[in,out] size Size of the destination string.
+ * @param[out] idx Index of the next character to write.
+ * @param[out] dst Destination string.
+ * @return 0 on success, 1 on error.
+ */
 static int
 nc_server_ssh_str_append(const char src_c, const char *src_str, int *size, int *idx, char **dst)
 {
@@ -230,6 +268,13 @@ nc_server_ssh_str_append(const char src_c, const char *src_str, int *size, int *
     return 0;
 }
 
+/**
+ * @brief Get the path to the system public keys from format set by an API.
+ *
+ * @param[in] username Username.
+ * @param[out] out_path Path to the system public keys.
+ * @return 0 on success, 1 on error.
+ */
 static int
 nc_server_ssh_get_system_keys_path(const char *username, char **out_path)
 {
@@ -305,11 +350,18 @@ cleanup:
     return ret;
 }
 
-/* reads public keys from authorized_keys-like file */
+/**
+ * @brief Read public keys from the authorized keys file.
+ *
+ * @param[in] path Path to the authorized keys file.
+ * @param[out] pubkeys Public keys.
+ * @param[out] pubkey_count Public key count.
+ * @return 0 on success, 1 on error.
+ */
 static int
 nc_server_ssh_read_authorized_keys_file(const char *path, struct nc_public_key **pubkeys, uint16_t *pubkey_count)
 {
-    int ret = 0, line_num = 0;
+    int ret = 0, rc, line_num = 0;
     FILE *f = NULL;
     char *line = NULL, *ptr, *ptr2;
     size_t n;
@@ -360,8 +412,8 @@ nc_server_ssh_read_authorized_keys_file(const char *path, struct nc_public_key *
         /* add the key */
         *pubkeys = nc_realloc(*pubkeys, (*pubkey_count + 1) * sizeof **pubkeys);
         NC_CHECK_ERRMEM_GOTO(!(*pubkeys), ret = 1, cleanup);
-        ret = asprintf(&(*pubkeys)[*pubkey_count].name, "authorized_key_%" PRIu16, *pubkey_count);
-        NC_CHECK_ERRMEM_GOTO(ret == -1, (*pubkeys)[*pubkey_count].name = NULL; ret = 1, cleanup);
+        rc = asprintf(&(*pubkeys)[*pubkey_count].name, "authorized_key_%" PRIu16, *pubkey_count);
+        NC_CHECK_ERRMEM_GOTO(rc == -1, (*pubkeys)[*pubkey_count].name = NULL; ret = 1, cleanup);
         (*pubkeys)[*pubkey_count].type = NC_PUBKEY_FORMAT_SSH;
         (*pubkeys)[*pubkey_count].data = strdup(ptr);
         NC_CHECK_ERRMEM_GOTO(!(*pubkeys)[*pubkey_count].data, ret = 1, cleanup);
@@ -378,6 +430,14 @@ cleanup:
     return ret;
 }
 
+/**
+ * @brief Get user's public keys from the system.
+ *
+ * @param[in] username Username.
+ * @param[out] pubkeys User's public keys.
+ * @param[out] pubkey_count Public key count.
+ * @return 0 on success, non-zero on error.
+ */
 static int
 nc_server_ssh_get_system_keys(const char *username, struct nc_public_key **pubkeys, uint16_t *pubkey_count)
 {
@@ -1003,10 +1063,13 @@ nc_server_ssh_set_authkey_path_format(const char *path)
     return ret;
 }
 
-/*
- *  Get the public key type from binary data stored in buffer.
- *  The data is in the form of: 4 bytes = data length, then data of data length
- *  and the data is in network byte order. The key has to be in the SSH2 format.
+/**
+ * @brief Get the public key type from binary data.
+ * 
+ * @param[in] buffer Binary key data, which is in the form of: 4 bytes = data length, then data of data length.
+ * Data is in network byte order. The key has to be in the SSH2 format.
+ * @param[out] len Length of the key type.
+ * @return Pointer to where the key type starts in the buffer and is of the length @p len .
  */
 static const char *
 nc_server_ssh_get_pubkey_type(const unsigned char *buffer, uint32_t *len)
