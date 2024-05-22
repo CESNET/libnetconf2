@@ -60,6 +60,10 @@ extern "C" {
  * iana-ssh-mac-algs, iana-ssh-public-key-algs, ietf-keystore, ietf-ssh-server, ietf-truststore,
  * ietf-tls-server and libnetconf2-netconf-server.
  *
+ * Note that the SSH authentication depends on the value of the 'local-users-supported' feature in the ietf-ssh-server module.
+ * If the feature, and its dependent if-features, are disabled, the SSH authentication will use the system users.
+ * Otherwise, the SSH authentication will use the local users from the configuration (the default).
+ *
  * @param[in, out] ctx Optional context in which the modules will be implemented. Created if *ctx is null.
  * @return 0 on success, 1 on error.
  */
