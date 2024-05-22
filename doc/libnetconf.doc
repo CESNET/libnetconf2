@@ -386,10 +386,16 @@
  * To successfully accept an SSH session you must configure at least one host key.
  * You may create this data yourself or by using ::nc_server_config_add_ssh_hostkey().
  *
- * On top of that, each SSH endpoint can define it's own authorized clients and their authentication methods.
+ * It is important to decide whether the users that can connect to the SSH server should be obtained from the configuration or from the system.
+ * If the YANG feature *local-users-supported* is enabled (the default), then the authorized users are derived from the configuration. 
+ * When a client connects to the server, he must be found in the configuration and he must authenticate to **all** of his configured authentication methods.
+ * If the feature is disabled, then the system will be used to try to authenticate the client via one of the three
+ * methods - publickey, keyboard-interactive or password (only one of them has to succeed).
+ *
+ * If the local users are supported then each SSH endpoint can define it's own authorized clients and their authentication methods.
  * For example if you wish to create an SSH user that can authenticate using a password, use ::nc_server_config_add_ssh_user_password().
  * Another option for authorized clients is to reference another endpoint's clients, however be careful not to create a cyclic reference
- * (see ::nc_server_config_add_ssh_endpoint_client_ref()). An authorized client MUST authenticate to all of it's configured authentication methods.
+ * (see ::nc_server_config_add_ssh_endpoint_client_ref()).
  *
  * \anchor ln2doc_pubkey
  * The Public Key authentication method is supported. If you wish to use this method, you need to specify the given user's
@@ -398,7 +404,8 @@
  * in the ietf-trustore module's YANG data and then reference them (truststore-reference). The final option is to set the global
  * path to file with public keys. This path may contain special tokens, see ::nc_server_ssh_set_authkey_path_format().
  * If the path is set and the use-system-keys container is present in the data for the client wishing to authenticate,
- * then the keys from the file will be used for authentication.
+ * then the keys from the file will be used for authentication. If the YANG feature *local-users-supported* is disabled,
+ * then it's neccessary to set the path format using ::nc_server_ssh_set_authkey_path_format().
  *
  * \anchor ln2doc_kbdint
  * The Keyboard Interactive authentication method is also supported. It can be done in three ways.
