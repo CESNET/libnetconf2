@@ -468,19 +468,166 @@ cleanup:
     return ret;
 }
 
+#ifdef HAVE_SHADOW
+
 /**
- * @brief Compare hashed password with a cleartext password for a match.
+ * @brief Get the user's /etc/passwd entry.
  *
- * @param[in] pass_hash Hashed password.
- * @param[in] pass_clear Cleartext password.
- * @return 0 on match.
- * @return non-zero if not a match.
+ * @param[in] username Username.
+ * @param[out] pwd_buf Buffer for the passwd structure.
+ * @param[out] buf Buffer for the pwd's strings.
+ * @param[out] buf_size Size of the buffer.
+ * @return User's passwd entry or NULL on error.
+ */
+static struct passwd *
+nc_server_ssh_getpwnam(const char *username, struct passwd *pwd_buf, char **buf, size_t *buf_size)
+{
+    struct passwd *pwd = NULL;
+    char *mem;
+    int r = 0;
+
+    do {
+        r = getpwnam_r(username, pwd_buf, *buf, *buf_size, &pwd);
+        if (pwd) {
+            /* entry found */
+            break;
+        }
+
+        if (r == ERANGE) {
+            /* small buffer, enlarge */
+            *buf_size <<= 2;
+            mem = realloc(*buf, *buf_size);
+            if (!mem) {
+                ERRMEM;
+                return NULL;
+            }
+            *buf = mem;
+        }
+    } while (r == ERANGE);
+
+    return pwd;
+}
+
+/**
+ * @brief Get the user's /etc/shadow entry.
+ *
+ * @param[in] username Username.
+ * @param[out] spwd_buf Buffer for the spwd structure.
+ * @param[out] buf Buffer for the spwd's strings.
+ * @param[out] buf_size Size of the buffer.
+ * @return User's shadow entry or NULL on error.
+ */
+static struct spwd *
+nc_server_ssh_getspnam(const char *username, struct spwd *spwd_buf, char **buf, size_t *buf_size)
+{
+    struct spwd *spwd = NULL;
+    char *mem;
+    int r = 0;
+
+    do {
+# ifndef __QNXNTO__
+        r = getspnam_r(username, spwd_buf, *buf, *buf_size, &spwd);
+# else
+        spwd = getspnam_r(username, spwd_buf, *buf, *buf_size);
+# endif
+        if (spwd) {
+            /* entry found */
+            break;
+        }
+
+        if (r == ERANGE) {
+            /* small buffer, enlarge */
+            *buf_size <<= 2;
+            mem = realloc(*buf, *buf_size);
+            if (!mem) {
+                ERRMEM;
+                return NULL;
+            }
+            *buf = mem;
+        }
+    } while (r == ERANGE);
+
+    return spwd;
+}
+
+/**
+ * @brief Get the user's hashed password from the system.
+ *
+ * @param[in] username Username.
+ * @return User's hashed password or NULL on error.
+ */
+static char *
+nc_server_ssh_get_pwd_hash(const char *username)
+{
+    struct passwd *pwd, pwd_buf;
+    struct spwd *spwd, spwd_buf;
+    char *pass_hash = NULL, *buf = NULL;
+    size_t buf_size = 256;
+
+    buf = malloc(buf_size);
+    NC_CHECK_ERRMEM_GOTO(!buf, , error);
+
+    pwd = nc_server_ssh_getpwnam(username, &pwd_buf, &buf, &buf_size);
+    if (!pwd) {
+        VRB(NULL, "User \"%s\" not found locally.", username);
+        goto error;
+    }
+
+    if (!strcmp(pwd->pw_passwd, "x")) {
+        spwd = nc_server_ssh_getspnam(username, &spwd_buf, &buf, &buf_size);
+        if (!spwd) {
+            VRB(NULL, "Failed to retrieve the shadow entry for \"%s\".", username);
+            goto error;
+        } else if ((spwd->sp_expire > -1) && (spwd->sp_expire <= (time(NULL) / (60 * 60 * 24)))) {
+            WRN(NULL, "User \"%s\" account has expired.", username);
+            goto error;
+        }
+
+        pass_hash = spwd->sp_pwdp;
+    } else {
+        pass_hash = pwd->pw_passwd;
+    }
+
+    if (!pass_hash) {
+        ERR(NULL, "No password could be retrieved for \"%s\".", username);
+        goto error;
+    }
+
+    /* check the hash structure for special meaning */
+    if (!strcmp(pass_hash, "*") || !strcmp(pass_hash, "!")) {
+        VRB(NULL, "User \"%s\" is not allowed to authenticate using a password.", username);
+        goto error;
+    }
+    if (!strcmp(pass_hash, "*NP*")) {
+        VRB(NULL, "Retrieving password for \"%s\" from a NIS+ server not supported.", username);
+        goto error;
+    }
+
+    pass_hash = strdup(pass_hash);
+    free(buf);
+    return pass_hash;
+
+error:
+    free(buf);
+    return NULL;
+}
+
+#endif
+
+/**
+ * @brief Compare stored hashed password with a cleartext received password.
+ *
+ * @param[in] stored_pw Hashed stored password.
+ * @param[in] received_pw Cleartext received password.
+ * @return 0 on match, non-zero otherwise.
  */
 static int
-auth_password_compare_pwd(const char *stored_pw, const char *received_pw)
+nc_server_ssh_compare_password(const char *stored_pw, const char *received_pw)
 {
     char *received_pw_hash = NULL;
     struct crypt_data cdata = {0};
+
+    NC_CHECK_ARG_RET(NULL, stored_pw, received_pw, 1);
 
     if (!stored_pw[0]) {
         if (!received_pw[0]) {
@@ -505,27 +652,6 @@ auth_password_compare_pwd(const char *stored_pw, const char *received_pw)
     }
 
     return strcmp(received_pw_hash, stored_pw);
-}
-
-static int
-nc_sshcb_auth_password(struct nc_session *session, struct nc_auth_client *auth_client, ssh_message msg)
-{
-    int auth_ret = 1;
-
-    if (!auth_client->password) {
-        VRB(session, "User \"%s\" does not have password method configured, but a request was received.", auth_client->username);
-    } else {
-        auth_ret = auth_password_compare_pwd(auth_client->password, ssh_message_auth_password(msg));
-    }
-
-    if (auth_ret) {
-        ++session->opts.server.ssh_auth_attempts;
-        VRB(session, "Failed user \"%s\" authentication attempt (#%d).", session->username,
-                session->opts.server.ssh_auth_attempts);
-        ssh_message_reply_default(msg);
-    }
-
-    return auth_ret;
 }
 
 API int
@@ -704,12 +830,13 @@ cleanup:
  * @brief Handles authentication via Linux PAM.
  *
  * @param[in] session NETCONF session.
+ * @param[in] username Username of the client to auhtenticate.
  * @param[in] ssh_msg SSH message with a keyboard-interactive authentication request.
  * @return PAM_SUCCESS on success;
  * @return PAM error otherwise.
  */
 static int
-nc_pam_auth(struct nc_session *session, struct nc_auth_client *client, ssh_message ssh_msg)
+nc_server_ssh_auth_kbdint_pam(struct nc_session *session, const char *username, ssh_message ssh_msg)
 {
     pam_handle_t *pam_h = NULL;
     int ret;
@@ -731,7 +858,7 @@ nc_pam_auth(struct nc_session *session, struct nc_auth_client *client, ssh_messa
     }
 
     /* initialize PAM and see if the given configuration file exists */
-    ret = pam_start(server_opts.pam_config_name, client->username, &conv, &pam_h);
+    ret = pam_start(server_opts.pam_config_name, username, &conv, &pam_h);
     if (ret != PAM_SUCCESS) {
         ERR(session, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
         goto cleanup;
@@ -761,7 +888,7 @@ nc_pam_auth(struct nc_session *session, struct nc_auth_client *client, ssh_messa
         VRB(session, "PAM warning occurred (%s).", pam_strerror(pam_h, ret));
         ret = pam_chauthtok(pam_h, PAM_CHANGE_EXPIRED_AUTHTOK);
         if (ret == PAM_SUCCESS) {
-            VRB(session, "The authentication token of user \"%s\" updated successfully.", client->username);
+            VRB(session, "The authentication token of user \"%s\" updated successfully.", username);
         } else {
             ERR(session, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
             goto cleanup;
@@ -778,135 +905,17 @@ cleanup:
 
 #elif defined (HAVE_SHADOW)
 
-static struct passwd *
-nc_server_ssh_getpwnam(const char *username, struct passwd *pwd_buf, char **buf, size_t *buf_size)
-{
-    struct passwd *pwd = NULL;
-    char *mem;
-    int r = 0;
-
-    do {
-        r = getpwnam_r(username, pwd_buf, *buf, *buf_size, &pwd);
-        if (pwd) {
-            /* entry found */
-            break;
-        }
-
-        if (r == ERANGE) {
-            /* small buffer, enlarge */
-            *buf_size <<= 2;
-            mem = realloc(*buf, *buf_size);
-            if (!mem) {
-                ERRMEM;
-                return NULL;
-            }
-            *buf = mem;
-        }
-    } while (r == ERANGE);
-
-    return pwd;
-}
-
-static struct spwd *
-nc_server_ssh_getspnam(const char *username, struct spwd *spwd_buf, char **buf, size_t *buf_size)
-{
-    struct spwd *spwd = NULL;
-    char *mem;
-    int r = 0;
-
-    do {
-# ifndef __QNXNTO__
-        r = getspnam_r(username, spwd_buf, *buf, *buf_size, &spwd);
-# else
-        spwd = getspnam_r(username, spwd_buf, *buf, *buf_size);
-# endif
-        if (spwd) {
-            /* entry found */
-            break;
-        }
-
-        if (r == ERANGE) {
-            /* small buffer, enlarge */
-            *buf_size <<= 2;
-            mem = realloc(*buf, *buf_size);
-            if (!mem) {
-                ERRMEM;
-                return NULL;
-            }
-            *buf = mem;
-        }
-    } while (r == ERANGE);
-
-    return spwd;
-}
-
-static char *
-nc_server_ssh_get_pwd_hash(const char *username)
-{
-    struct passwd *pwd, pwd_buf;
-    struct spwd *spwd, spwd_buf;
-    char *pass_hash = NULL, *buf = NULL;
-    size_t buf_size = 256;
-
-    buf = malloc(buf_size);
-    NC_CHECK_ERRMEM_GOTO(!buf, , error);
-
-    pwd = nc_server_ssh_getpwnam(username, &pwd_buf, &buf, &buf_size);
-    if (!pwd) {
-        VRB(NULL, "User \"%s\" not found locally.", username);
-        goto error;
-    }
-
-    if (!strcmp(pwd->pw_passwd, "x")) {
-        spwd = nc_server_ssh_getspnam(username, &spwd_buf, &buf, &buf_size);
-        if (!spwd) {
-            VRB(NULL, "Failed to retrieve the shadow entry for \"%s\".", username);
-            goto error;
-        } else if ((spwd->sp_expire > -1) && (spwd->sp_expire <= (time(NULL) / (60 * 60 * 24)))) {
-            WRN(NULL, "User \"%s\" account has expired.", username);
-            goto error;
-        }
-
-        pass_hash = spwd->sp_pwdp;
-    } else {
-        pass_hash = pwd->pw_passwd;
-    }
-
-    if (!pass_hash) {
-        ERR(NULL, "No password could be retrieved for \"%s\".", username);
-        goto error;
-    }
-
-    /* check the hash structure for special meaning */
-    if (!strcmp(pass_hash, "*") || !strcmp(pass_hash, "!")) {
-        VRB(NULL, "User \"%s\" is not allowed to authenticate using a password.", username);
-        goto error;
-    }
-    if (!strcmp(pass_hash, "*NP*")) {
-        VRB(NULL, "Retrieving password for \"%s\" from a NIS+ server not supported.", username);
-        goto error;
-    }
-
-    pass_hash = strdup(pass_hash);
-    free(buf);
-    return pass_hash;
-
-error:
-    free(buf);
-    return NULL;
-}
-
 /**
  * @brief Authenticate using locally stored credentials.
  *
  * @param[in] session Session to authenticate on.
- * @param[in] client Client to authenticate.
+ * @param[in] username Username of the client to authenticate.
  * @param[in] msg SSH message that originally requested kbdint authentication.
  *
  * @return 0 on success, non-zero otherwise.
  */
 static int
-nc_server_ssh_system_auth(struct nc_session *session, struct nc_auth_client *client, ssh_message msg)
+nc_server_ssh_auth_kbdint_system(struct nc_session *session, const char *username, ssh_message msg)
 {
     int ret = 0, n_answers;
     const char *name = "Keyboard-Interactive Authentication";
@@ -915,20 +924,20 @@ nc_server_ssh_system_auth(struct nc_session *session, struct nc_auth_client *cli
     char echo[] = {0};
 
     /* try to get the client's locally stored pw hash */
-    local_pw = nc_server_ssh_get_pwd_hash(client->username);
+    local_pw = nc_server_ssh_get_pwd_hash(username);
     if (!local_pw) {
-        ERR(session, "Unable to get %s's credentials.", client->username);
+        ERR(session, "Unable to get %s's credentials.", username);
         ret = 1;
         goto cleanup;
     }
 
-    ret = asprintf(&prompt, "%s's password:", client->username);
+    ret = asprintf(&prompt, "%s's password:", username);
     NC_CHECK_ERRMEM_GOTO(ret == -1, prompt = NULL; ret = 1, cleanup);
 
     /* send the password prompt to the client */
     ret = ssh_message_auth_interactive_request(msg, name, instruction, 1, (const char **) &prompt, echo);
     if (ret) {
-        ERR(session, "Failed to send an authentication request to client \"%s\".", client->username);
+        ERR(session, "Failed to send an authentication request to client \"%s\".", username);
         goto cleanup;
     }
 
@@ -947,8 +956,8 @@ nc_server_ssh_system_auth(struct nc_session *session, struct nc_auth_client *cli
     received_pw = strdup(ssh_userauth_kbdint_getanswer(session->ti.libssh.session, 0));
     NC_CHECK_ERRMEM_GOTO(!received_pw, ret = 1, cleanup);
 
-    /* cmp the pw hashes */
-    ret = auth_password_compare_pwd(local_pw, received_pw);
+    /* cmp the passwords */
+    ret = nc_server_ssh_compare_password(local_pw, received_pw);
 
 cleanup:
     free(local_pw);
@@ -958,42 +967,6 @@ cleanup:
 }
 
 #endif
-
-static int
-nc_sshcb_auth_kbdint(struct nc_session *session, struct nc_auth_client *client, ssh_message msg)
-{
-    int auth_ret = 1;
-
-    if (!client->kb_int_enabled) {
-        VRB(session, "User \"%s\" does not have Keyboard-interactive method configured, but a request was received.", client->username);
-    } else if (server_opts.interactive_auth_clb) {
-        auth_ret = server_opts.interactive_auth_clb(session, session->ti.libssh.session, msg, server_opts.interactive_auth_data);
-    } else {
-#ifdef HAVE_LIBPAM
-        /* authenticate using PAM */
-        if (!nc_pam_auth(session, client, msg)) {
-            auth_ret = 0;
-        }
-#elif defined (HAVE_SHADOW)
-        /* authenticate using locally configured users */
-        if (!nc_server_ssh_system_auth(session, client, msg)) {
-            auth_ret = 0;
-        }
-#else
-        ERR(NULL, "Keyboard-interactive method not supported.");
-#endif
-    }
-
-    /* Authenticate message based on outcome */
-    if (auth_ret) {
-        ++session->opts.server.ssh_auth_attempts;
-        VRB(session, "Failed user \"%s\" authentication attempt (#%d).", client->username,
-                session->opts.server.ssh_auth_attempts);
-        ssh_message_reply_default(msg);
-    }
-
-    return auth_ret;
-}
 
 API void
 nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg, void *user_data),
@@ -1070,7 +1043,7 @@ nc_server_ssh_set_authkey_path_format(const char *path)
 
 /**
  * @brief Get the public key type from binary data.
- * 
+ *
  * @param[in] buffer Binary key data, which is in the form of: 4 bytes = data length, then data of data length.
  * Data is in network byte order. The key has to be in the SSH2 format.
  * @param[out] len Length of the key type.
@@ -1157,27 +1130,139 @@ cleanup:
  * @return Authorized key username, NULL if no match was found.
  */
 static int
-auth_pubkey_compare_key(ssh_key key, struct nc_auth_client *auth_client)
+nc_server_ssh_auth_pubkey_compare_key(ssh_key key, struct nc_public_key *pubkeys, uint16_t pubkey_count)
 {
-    uint16_t i, pubkey_count = 0;
+    uint16_t i;
     int ret = 0;
     ssh_key new_key = NULL;
-    struct nc_public_key *pubkeys = NULL;
 
-    /* get the correct public key storage */
-    if (auth_client->store == NC_STORE_LOCAL) {
+    /* try to compare all of the client's keys with the key received in the SSH message */
+    for (i = 0; i < pubkey_count; i++) {
+        /* create the SSH key from the data */
+        if (nc_server_ssh_create_ssh_pubkey(pubkeys[i].data, &new_key)) {
+            /* skip */
+            ssh_key_free(new_key);
+            continue;
+        }
+
+        /* compare the keys */
+        ret = ssh_key_cmp(key, new_key, SSH_KEY_CMP_PUBLIC);
+        ssh_key_free(new_key);
+        if (!ret) {
+            /* found a match */
+            break;
+        }
+    }
+    if (i == pubkey_count) {
+        ret = 1;
+    }
+
+    return ret;
+}
+
+/**
+ * @brief Handle authentication request for the None method.
+ *
+ * @param[in] local_users_supported Whether the server supports local users.
+ * @param[in] auth_client Configured client's authentication data.
+ * @param[in] msg libssh message.
+ * @return 0 if the authentication was successful, -1 if not (@p msg already replied to).
+ */
+static int
+nc_server_ssh_auth_none(int local_users_supported, struct nc_auth_client *auth_client, ssh_message msg)
+{
+    assert(!local_users_supported || auth_client);
+
+    if (local_users_supported && auth_client->none_enabled) {
+        /* success */
+        return 0;
+    }
+
+    /* reply and return -1 so that this does not get counted as an usuccessful authentication attempt */
+    ssh_message_reply_default(msg);
+    return -1;
+}
+
+/**
+ * @brief Handle authentication request for the Password method.
+ *
+ * @param[in] session NETCONF session.
+ * @param[in] local_users_supported Whether the server supports local users.
+ * @param[in] auth_client Configured client's authentication data.
+ * @param[in] msg libssh message.
+ * @return 0 if the authentication was successful, 1 if not (@p msg not yet replied to).
+ */
+static int
+nc_server_ssh_auth_password(struct nc_session *session, int local_users_supported,
+        struct nc_auth_client *auth_client, ssh_message msg)
+{
+    int rc;
+    char *password = NULL;
+
+    assert(!local_users_supported || auth_client);
+
+    if (local_users_supported) {
+        /* obtain pw from config */
+        password = auth_client->password;
+        if (!password) {
+            VRB(session, "User \"%s\" does not have password method configured, but a request was received.", session->username);
+            return 1;
+        }
+    } else {
+#ifdef HAVE_SHADOW
+        /* obtain pw from system, this one needs to be free'd */
+        password = nc_server_ssh_get_pwd_hash(session->username);
+        if (!password) {
+            return 1;
+        }
+#else
+        ERR(session, "Obtaining password from system not supported.");
+        return 1;
+#endif
+    }
+
+    /* compare the passwords */
+    rc = nc_server_ssh_compare_password(password, ssh_message_auth_password(msg));
+
+    if (!local_users_supported) {
+        free(password);
+    }
+
+    return rc ? 1 : 0;
+}
+
+/**
+ * @brief Handle authentication request for the Publickey method.
+ *
+ * @param[in] session NETCONF session.
+ * @param[in] local_users_supported Whether the server supports local users.
+ * @param[in] auth_client Configured client's authentication data.
+ * @param[in] msg libssh message.
+ * @return 0 if the authentication was successful, 1 if not and the @p msg not yet replied to, -1 if not and @p msg was replied to.
+ */
+static int
+nc_server_ssh_auth_pubkey(struct nc_session *session, int local_users_supported,
+        struct nc_auth_client *auth_client, ssh_message msg)
+{
+    int signature_state, ret = 0;
+    struct nc_public_key *pubkeys = NULL;
+    uint16_t pubkey_count = 0, i;
+
+    assert(!local_users_supported || auth_client);
+
+    /* get the public keys */
+    if (!local_users_supported || (auth_client->store == NC_STORE_SYSTEM)) {
+        /* system user or the user has 'use system keys' configured, these need to be free'd */
+        ret = nc_server_ssh_get_system_keys(session->username, &pubkeys, &pubkey_count);
+        if (ret) {
+            goto cleanup;
+        }
+    } else if (auth_client->store == NC_STORE_LOCAL) {
         pubkeys = auth_client->pubkeys;
         pubkey_count = auth_client->pubkey_count;
     } else if (auth_client->store == NC_STORE_TRUSTSTORE) {
         ret = nc_server_ssh_ts_ref_get_keys(auth_client->ts_ref, &pubkeys, &pubkey_count);
         if (ret) {
-            ERR(NULL, "Error getting \"%s\"'s public keys from the truststore.", auth_client->username);
-            goto cleanup;
-        }
-    } else if (auth_client->store == NC_STORE_SYSTEM) {
-        ret = nc_server_ssh_get_system_keys(auth_client->username, &pubkeys, &pubkey_count);
-        if (ret) {
-            ERR(NULL, "Failed to retrieve public keys of user \"%s\" from the system.", auth_client->username);
             goto cleanup;
         }
     } else {
@@ -1185,88 +1270,67 @@ auth_pubkey_compare_key(ssh_key key, struct nc_auth_client *auth_client)
         return 1;
     }
 
-    /* try to compare all of the client's keys with the key received in the SSH message */
-    for (i = 0; i < pubkey_count; i++) {
-        /* create the SSH key from the data */
-        if (nc_server_ssh_create_ssh_pubkey(pubkeys[i].data, &new_key)) {
-            ssh_key_free(new_key);
-            continue;
-        }
-
-        /* compare the keys */
-        ret = ssh_key_cmp(key, new_key, SSH_KEY_CMP_PUBLIC);
-        if (!ret) {
-            break;
-        } else {
-            WRN(NULL, "User's \"%s\" public key doesn't match, trying another.", auth_client->username);
-            ssh_key_free(new_key);
-        }
-    }
-    if (i == pubkey_count) {
-        ret = 1;
-        goto cleanup;
-    }
-
-cleanup:
-    if (!ret) {
-        /* only free a key if everything was ok, it would have already been freed otherwise */
-        ssh_key_free(new_key);
-    }
-
-    if ((auth_client->store == NC_STORE_SYSTEM) && pubkeys) {
-        for (i = 0; i < pubkey_count; i++) {
-            free(pubkeys[i].name);
-            free(pubkeys[i].data);
-        }
-        free(pubkeys);
-    }
-    return ret;
-}
-
-static void
-nc_sshcb_auth_none(struct nc_session *session, struct nc_auth_client *auth_client, ssh_message msg)
-{
-    if (auth_client->none_enabled && !auth_client->password && !auth_client->pubkey_count && !auth_client->kb_int_enabled) {
-        /* only authenticate the client if he supports none and no other method */
-        session->flags |= NC_SESSION_SSH_AUTHENTICATED;
-        VRB(session, "User \"%s\" authenticated.", session->username);
-        ssh_message_auth_reply_success(msg, 0);
-    }
-
-    ssh_message_reply_default(msg);
-}
-
-static int
-nc_sshcb_auth_pubkey(struct nc_session *session, struct nc_auth_client *auth_client, ssh_message msg)
-{
-    int signature_state, ret = 0;
-
-    if (auth_pubkey_compare_key(ssh_message_auth_pubkey(msg), auth_client)) {
+    /* compare the received pubkey with the authorized ones */
+    if (nc_server_ssh_auth_pubkey_compare_key(ssh_message_auth_pubkey(msg), pubkeys, pubkey_count)) {
         VRB(session, "User \"%s\" tried to use an unknown (unauthorized) public key.", session->username);
         ret = 1;
-        goto fail;
+        goto cleanup;
     }
 
     signature_state = ssh_message_auth_publickey_state(msg);
     if (signature_state == SSH_PUBLICKEY_STATE_NONE) {
         /* accepting only the use of a public key */
         ssh_message_auth_reply_pk_ok_simple(msg);
-        ret = 1;
+        ret = -1;
     }
 
-    return ret;
-
-fail:
-    ++session->opts.server.ssh_auth_attempts;
-    VRB(session, "Failed user \"%s\" authentication attempt (#%d).", session->username,
-            session->opts.server.ssh_auth_attempts);
-    ssh_message_reply_default(msg);
+cleanup:
+    if (!local_users_supported || (auth_client->store == NC_STORE_SYSTEM)) {
+        for (i = 0; i < pubkey_count; i++) {
+            free(pubkeys[i].name);
+            free(pubkeys[i].data);
+        }
+        free(pubkeys);
+    }
 
     return ret;
 }
 
 static int
-nc_sshcb_channel_open(struct nc_session *session, ssh_message msg)
+nc_server_ssh_auth_kbdint(struct nc_session *session, int local_users_supported, struct nc_auth_client *auth_client, ssh_message msg)
+{
+    int rc;
+
+    assert(!local_users_supported || auth_client);
+
+    if (local_users_supported && !auth_client->kb_int_enabled) {
+        VRB(session, "User \"%s\" does not have Keyboard-interactive method configured, but a request was received.", session->username);
+    } else if (server_opts.interactive_auth_clb) {
+        rc = server_opts.interactive_auth_clb(session, session->ti.libssh.session, msg, server_opts.interactive_auth_data);
+    } else {
+#ifdef HAVE_LIBPAM
+        /* authenticate using PAM */
+        rc = nc_server_ssh_auth_kbdint_pam(session, session->username, msg);
+#elif defined (HAVE_SHADOW)
+        /* authenticate using locally configured users */
+        rc = nc_server_ssh_auth_kbdint_system(session, session->username, msg);
+#else
+        ERR(NULL, "Keyboard-interactive method not supported.");
+#endif
+    }
+
+    return rc ? 1 : 0;
+}
+
+/**
+ * @brief Handle SSH channel open request.
+ *
+ * @param[in] session NETCONF session.
+ * @param[in] msg libssh message.
+ * @return 0 on success, -1 on failure.
+ */
+static int
+nc_server_ssh_channel_open(struct nc_session *session, ssh_message msg)
 {
     ssh_channel chan;
 
@@ -1296,8 +1360,16 @@ nc_sshcb_channel_open(struct nc_session *session, ssh_message msg)
     return 0;
 }
 
+/**
+ * @brief Handle SSH channel request subsystem request.
+ *
+ * @param[in] session NETCONF session.
+ * @param[in] channel Requested SSH channel.
+ * @param[in] subsystem Name of the requested subsystem.
+ * @return 0 on success, -1 on failure.
+ */
 static int
-nc_sshcb_channel_subsystem(struct nc_session *session, ssh_channel channel, const char *subsystem)
+nc_server_ssh_channel_subsystem(struct nc_session *session, ssh_channel channel, const char *subsystem)
 {
     struct nc_session *new_session;
 
@@ -1346,14 +1418,154 @@ nc_sshcb_channel_subsystem(struct nc_session *session, ssh_channel channel, cons
     return 0;
 }
 
-int
-nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg, struct nc_auth_state *state)
+/**
+ * @brief Handle NETCONF SSH authentication.
+ *
+ * @param[in] session NETCONF session.
+ * @param[in] opts SSH server options.
+ * @param[in] msg libssh message.
+ * @param[in] method Type of the authentication method.
+ * @param[in] str_method String representation of the authentication method.
+ * @param[in] local_users_supported Whether the server supports local users.
+ * @param[in,out] state Authentication state.
+ * @return 1 in case of a fatal error, 0 otherwise.
+ */
+static int
+nc_server_ssh_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg,
+        int method, const char *str_method, int local_users_supported, struct nc_auth_state *state)
 {
-    const char *str_type, *str_subtype = NULL, *username;
-    int subtype, type, libssh_auth_methods = 0, ret = 0;
+    const char *username;
+    int libssh_auth_methods = 0, ret = 0;
     uint16_t i;
     struct nc_auth_client *auth_client = NULL;
     struct nc_endpt *referenced_endpt;
+
+    /* save the username, do not let the client change it */
+    username = ssh_message_auth_user(msg);
+    assert(username);
+
+    if (local_users_supported) {
+        /* get the locally configured user */
+        for (i = 0; i < opts->client_count; i++) {
+            if (!strcmp(opts->auth_clients[i].username, username)) {
+                auth_client = &opts->auth_clients[i];
+                break;
+            }
+        }
+
+        if (!auth_client) {
+            if (opts->referenced_endpt_name) {
+                /* client not known by the endpt, but it references another one so try it */
+                if (nc_server_get_referenced_endpt(opts->referenced_endpt_name, &referenced_endpt)) {
+                    ERRINT;
+                    return 1;
+                }
+
+                return nc_server_ssh_auth(session, referenced_endpt->opts.ssh, msg, method,
+                        str_method, local_users_supported, state);
+            }
+
+            /* user not known, set his authentication methods to public key only so that
+             * there is no interaction and it will simply be denied */
+            ERR(NULL, "User \"%s\" not known by the server.", username);
+            ssh_set_auth_methods(session->ti.libssh.session, SSH_AUTH_METHOD_PUBLICKEY);
+            ssh_message_reply_default(msg);
+            return 0;
+        }
+    }
+
+    if (!session->username) {
+        session->username = strdup(username);
+        NC_CHECK_ERRMEM_RET(!session->username, 1);
+
+        /* configure and count accepted auth methods */
+        if (local_users_supported) {
+            if (((auth_client->store == NC_STORE_LOCAL) && (auth_client->pubkey_count)) ||
+                    (auth_client->store == NC_STORE_TRUSTSTORE) || (auth_client->store == NC_STORE_SYSTEM)) {
+                /* either locally configured pubkeys, or truststore or system (need to check for
+                 * pubkey count, because NC_STORE_LOCAL is the default enum value) */
+                state->auth_method_count++;
+                libssh_auth_methods |= SSH_AUTH_METHOD_PUBLICKEY;
+            }
+            if (auth_client->password) {
+                state->auth_method_count++;
+                libssh_auth_methods |= SSH_AUTH_METHOD_PASSWORD;
+            }
+            if (auth_client->kb_int_enabled) {
+                state->auth_method_count++;
+                libssh_auth_methods |= SSH_AUTH_METHOD_INTERACTIVE;
+            }
+            if (auth_client->none_enabled) {
+                state->auth_method_count++;
+                libssh_auth_methods |= SSH_AUTH_METHOD_NONE;
+            }
+        } else {
+            /* no local users meaning pw, pubkey and kbdint methods are supported, method count is set to 1,
+             * because only one method is needed for successul auth */
+            state->auth_method_count = 1;
+            libssh_auth_methods = SSH_AUTH_METHOD_PUBLICKEY | SSH_AUTH_METHOD_PASSWORD | SSH_AUTH_METHOD_INTERACTIVE;
+        }
+
+        ssh_set_auth_methods(session->ti.libssh.session, libssh_auth_methods);
+    } else {
+        if (strcmp(username, session->username)) {
+            /* changing username not allowed */
+            ERR(session, "User \"%s\" changed its username to \"%s\".", session->username, username);
+            session->status = NC_STATUS_INVALID;
+            session->term_reason = NC_SESSION_TERM_OTHER;
+            return 1;
+        }
+    }
+
+    /* try authenticating, if local users are supported, then the configured user must authenticate via all of his
+     * configured auth methods, otherwise for system users just one is needed,
+     * 0 return indicates success, 1 fail (msg not yet replied to), -1 fail (msg was replied to) */
+    if (method == SSH_AUTH_METHOD_NONE) {
+        ret = nc_server_ssh_auth_none(local_users_supported, auth_client, msg);
+    } else if (method == SSH_AUTH_METHOD_PASSWORD) {
+        ret = nc_server_ssh_auth_password(session, local_users_supported, auth_client, msg);
+    } else if (method == SSH_AUTH_METHOD_PUBLICKEY) {
+        ret = nc_server_ssh_auth_pubkey(session, local_users_supported, auth_client, msg);
+    } else if (method == SSH_AUTH_METHOD_INTERACTIVE) {
+        ret = nc_server_ssh_auth_kbdint(session, local_users_supported, auth_client, msg);
+    } else {
+        ++session->opts.server.ssh_auth_attempts;
+        VRB(session, "Authentication method \"%s\" not supported.", str_method);
+        ssh_message_reply_default(msg);
+        return 0;
+    }
+
+    if (!ret) {
+        state->auth_success_count++;
+
+        if (state->auth_success_count < state->auth_method_count) {
+            /* success, but he needs to do another method */
+            VRB(session, "User \"%s\" partially authenticated, but still needs to authenticate via the rest of his configured methods.", username);
+            ssh_message_auth_reply_success(msg, 1);
+        } else {
+            /* authenticated */
+            ssh_message_auth_reply_success(msg, 0);
+            session->flags |= NC_SESSION_SSH_AUTHENTICATED;
+            VRB(session, "User \"%s\" authenticated.", username);
+        }
+    } else if (ret == 1) {
+        /* failed attempt, msg wasnt yet replied to */
+        ++session->opts.server.ssh_auth_attempts;
+        VRB(session, "Failed user \"%s\" authentication attempt (#%d).", session->username,
+                session->opts.server.ssh_auth_attempts);
+        ssh_message_reply_default(msg);
+    }
+
+    return 0;
+}
+
+int
+nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg, struct nc_auth_state *state)
+{
+    const char *str_type, *str_subtype = NULL;
+    int subtype, type, rc, local_users_supported;
+    const struct ly_ctx *ctx;
+    struct lys_module *mod;
 
     type = ssh_message_type(msg);
     subtype = ssh_message_subtype(msg);
@@ -1493,119 +1705,36 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
             return 1;
         }
 
-        /* save the username, do not let the client change it */
-        username = ssh_message_auth_user(msg);
-        assert(username);
-
-        for (i = 0; i < opts->client_count; i++) {
-            if (!strcmp(opts->auth_clients[i].username, username)) {
-                auth_client = &opts->auth_clients[i];
-                break;
-            }
+        /* get libyang ctx from session and ietf-ssh-server yang model from the ctx */
+        ctx = nc_session_get_ctx(session);
+        mod = ly_ctx_get_module_latest(ctx, "ietf-ssh-server");
+        if (!mod) {
+            ERRINT;
+            return 1;
         }
 
-        if (!auth_client) {
-            if (opts->referenced_endpt_name) {
-                /* client not known by the endpt, but it references another one so try it */
-                if (nc_server_get_referenced_endpt(opts->referenced_endpt_name, &referenced_endpt)) {
-                    ERRINT;
-                    return 1;
-                }
-
-                return nc_session_ssh_msg(session, referenced_endpt->opts.ssh, msg, state);
-            }
-
-            /* user not known, set his authentication methods to public key only so that
-             * there is no interaction and it will simply be denied */
-            ERR(NULL, "User \"%s\" not known by the server.", username);
-            ssh_set_auth_methods(session->ti.libssh.session, SSH_AUTH_METHOD_PUBLICKEY);
-            ssh_message_reply_default(msg);
-            return 0;
-        }
-
-        if (!session->username) {
-            session->username = strdup(username);
-
-            /* configure and count accepted auth methods */
-            if (auth_client->store == NC_STORE_LOCAL) {
-                if (auth_client->pubkey_count) {
-                    libssh_auth_methods |= SSH_AUTH_METHOD_PUBLICKEY;
-                }
-            } else if (auth_client->store == NC_STORE_TRUSTSTORE) {
-                if (auth_client->ts_ref) {
-                    libssh_auth_methods |= SSH_AUTH_METHOD_PUBLICKEY;
-                }
-            } else if (auth_client->store == NC_STORE_SYSTEM) {
-                libssh_auth_methods |= SSH_AUTH_METHOD_PUBLICKEY;
-            }
-            if (auth_client->password) {
-                state->auth_method_count++;
-                libssh_auth_methods |= SSH_AUTH_METHOD_PASSWORD;
-            }
-            if (auth_client->kb_int_enabled) {
-                state->auth_method_count++;
-                libssh_auth_methods |= SSH_AUTH_METHOD_INTERACTIVE;
-            }
-            if (auth_client->none_enabled) {
-                libssh_auth_methods |= SSH_AUTH_METHOD_NONE;
-            }
-
-            if (libssh_auth_methods & SSH_AUTH_METHOD_PUBLICKEY) {
-                state->auth_method_count++;
-            }
-
-            ssh_set_auth_methods(session->ti.libssh.session, libssh_auth_methods);
+        /* check if local-users-supported feature is enabled */
+        rc = lys_feature_value(mod, "local-users-supported");
+        if (!rc) {
+            local_users_supported = 1;
+        } else if (rc == LY_ENOT) {
+            local_users_supported = 0;
         } else {
-            if (strcmp(username, session->username)) {
-                /* changing username not allowed */
-                ERR(session, "User \"%s\" changed its username to \"%s\".", session->username, username);
-                session->status = NC_STATUS_INVALID;
-                session->term_reason = NC_SESSION_TERM_OTHER;
-                return 1;
-            }
+            ERRINT;
+            return 1;
         }
 
-        /* try authenticating, the user must authenticate via all of his configured auth methods */
-        if (subtype == SSH_AUTH_METHOD_NONE) {
-            nc_sshcb_auth_none(session, auth_client, msg);
-            ret = 1;
-        } else if (subtype == SSH_AUTH_METHOD_PASSWORD) {
-            ret = nc_sshcb_auth_password(session, auth_client, msg);
-        } else if (subtype == SSH_AUTH_METHOD_PUBLICKEY) {
-            ret = nc_sshcb_auth_pubkey(session, auth_client, msg);
-        } else if (subtype == SSH_AUTH_METHOD_INTERACTIVE) {
-            ret = nc_sshcb_auth_kbdint(session, auth_client, msg);
-        } else {
-            VRB(session, "Authentication method \"%s\" not supported.", str_subtype);
-            ssh_message_reply_default(msg);
-            return 0;
-        }
-
-        if (!ret) {
-            state->auth_success_count++;
-        }
-
-        if (!ret && (state->auth_success_count < state->auth_method_count)) {
-            /* success, but he needs to do another method */
-            VRB(session, "User \"%s\" partially authenticated, but still needs to authenticate via the rest of his configured methods.", username);
-            ssh_message_auth_reply_success(msg, 1);
-        } else if (!ret && (state->auth_success_count == state->auth_method_count)) {
-            /* authenticated */
-            ssh_message_auth_reply_success(msg, 0);
-            session->flags |= NC_SESSION_SSH_AUTHENTICATED;
-            VRB(session, "User \"%s\" authenticated.", username);
-        }
-
-        return 0;
+        /* authenticate */
+        return nc_server_ssh_auth(session, opts, msg, subtype, str_subtype, local_users_supported, state);
     } else if (session->flags & NC_SESSION_SSH_AUTHENTICATED) {
         if ((type == SSH_REQUEST_CHANNEL_OPEN) && ((enum ssh_channel_type_e)subtype == SSH_CHANNEL_SESSION)) {
-            if (nc_sshcb_channel_open(session, msg)) {
+            if (nc_server_ssh_channel_open(session, msg)) {
                 ssh_message_reply_default(msg);
             }
             return 0;
 
         } else if ((type == SSH_REQUEST_CHANNEL) && ((enum ssh_channel_requests_e)subtype == SSH_CHANNEL_REQUEST_SUBSYSTEM)) {
-            if (nc_sshcb_channel_subsystem(session, ssh_message_channel_request_channel(msg),
+            if (nc_server_ssh_channel_subsystem(session, ssh_message_channel_request_channel(msg),
                     ssh_message_channel_request_subsystem(msg))) {
                 ssh_message_reply_default(msg);
             } else {
@@ -1689,7 +1818,7 @@ nc_ssh_bind_add_hostkeys(ssh_bind sbind, struct nc_server_ssh_opts *opts, uint16
             }
         }
 
-        privkey_path = base64der_privkey_to_tmp_file(key->privkey_data, nc_privkey_format_to_str(key->privkey_type));
+        privkey_path = nc_server_ssh_privkey_data_to_tmp_file(key->privkey_data, nc_privkey_format_to_str(key->privkey_type));
         if (!privkey_path) {
             ERR(NULL, "Temporarily storing a host key into a file failed (%s).", strerror(errno));
             return -1;
