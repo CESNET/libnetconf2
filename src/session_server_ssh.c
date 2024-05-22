@@ -284,6 +284,11 @@ nc_server_ssh_get_system_keys_path(const char *username, char **out_path)
     struct passwd *pw, pw_buf;
     size_t buf_len = 0;
 
+    if (!path_fmt) {
+        ERR(NULL, "System public keys path format not set.");
+        return 1;
+    }
+
     /* check if the path format contains any tokens */
     if (strstr(path_fmt, "%h") || strstr(path_fmt, "%U") || strstr(path_fmt, "%u") || strstr(path_fmt, "%%")) {
         /* get pw */
