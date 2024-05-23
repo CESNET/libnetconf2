@@ -569,7 +569,7 @@ nc_server_ssh_get_pwd_hash(const char *username)
 
     pwd = nc_server_ssh_getpwnam(username, &pwd_buf, &buf, &buf_size);
     if (!pwd) {
-        VRB(NULL, "User \"%s\" not found locally.", username);
+        VRB(NULL, "User \"%s\" not found in the system.", username);
         goto error;
     }
 
@@ -906,7 +906,7 @@ cleanup:
 #elif defined (HAVE_SHADOW)
 
 /**
- * @brief Authenticate using locally stored credentials.
+ * @brief Authenticate using credentials stored in the system.
  *
  * @param[in] session Session to authenticate on.
  * @param[in] username Username of the client to authenticate.
@@ -920,13 +920,12 @@ nc_server_ssh_auth_kbdint_system(struct nc_session *session, const char *usernam
     int ret = 0, n_answers;
     const char *name = "Keyboard-Interactive Authentication";
     const char *instruction = "Please enter your authentication token";
-    char *prompt = NULL, *local_pw = NULL, *received_pw = NULL;
+    char *prompt = NULL, *pw = NULL, *received_pw = NULL;
     char echo[] = {0};
 
-    /* try to get the client's locally stored pw hash */
-    local_pw = nc_server_ssh_get_pwd_hash(username);
-    if (!local_pw) {
-        ERR(session, "Unable to get %s's credentials.", username);
+    /* try to get the client's pw hash from the system */
+    pw = nc_server_ssh_get_pwd_hash(username);
+    if (!pw) {
         ret = 1;
         goto cleanup;
     }
@@ -957,10 +956,10 @@ nc_server_ssh_auth_kbdint_system(struct nc_session *session, const char *usernam
     NC_CHECK_ERRMEM_GOTO(!received_pw, ret = 1, cleanup);
 
     /* cmp the passwords */
-    ret = nc_server_ssh_compare_password(local_pw, received_pw);
+    ret = nc_server_ssh_compare_password(pw, received_pw);
 
 cleanup:
-    free(local_pw);
+    free(pw);
     free(received_pw);
     free(prompt);
     return ret;
@@ -1178,7 +1177,7 @@ nc_server_ssh_auth_none(int local_users_supported, struct nc_auth_client *auth_c
         return 0;
     }
 
-    /* reply and return -1 so that this does not get counted as an usuccessful authentication attempt */
+    /* reply and return -1 so that this does not get counted as an unsuccessful authentication attempt */
     ssh_message_reply_default(msg);
     return -1;
 }
@@ -1312,7 +1311,7 @@ nc_server_ssh_auth_kbdint(struct nc_session *session, int local_users_supported,
         /* authenticate using PAM */
         rc = nc_server_ssh_auth_kbdint_pam(session, session->username, msg);
 #elif defined (HAVE_SHADOW)
-        /* authenticate using locally configured users */
+        /* authenticate using the system */
         rc = nc_server_ssh_auth_kbdint_system(session, session->username, msg);
 #else
         ERR(NULL, "Keyboard-interactive method not supported.");
@@ -1716,8 +1715,10 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
         /* check if local-users-supported feature is enabled */
         rc = lys_feature_value(mod, "local-users-supported");
         if (!rc) {
+            /* using users from the YANG data */
             local_users_supported = 1;
         } else if (rc == LY_ENOT) {
+            /* using users from the system */
             local_users_supported = 0;
         } else {
             ERRINT;
