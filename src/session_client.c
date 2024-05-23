@@ -2438,11 +2438,9 @@ nc_recv_notif_thread(void *arg)
             notif_clb(session, envp, op, user_data);
             if (!strcmp(op->schema->name, "notificationComplete") && !strcmp(op->schema->module->name, "nc-notifications")) {
                 lyd_free_tree(envp);
-                lyd_free_all(op);
                 break;
             }
             lyd_free_tree(envp);
-            lyd_free_all(op);
         } else if ((msgtype == NC_MSG_ERROR) && (session->status != NC_STATUS_RUNNING)) {
             /* quit this thread once the session is broken */
             break;
