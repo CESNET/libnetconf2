@@ -247,3 +247,38 @@ Tests can be run by the make's `test` target:
 $ make test
 ```
 
+## Supported YANG modules
+
+### Server
+
+The *libnetconf2* NETCONF server has two APIs that load YANG modules into the context. The first API is [nc_server_init_ctx](https://netopeer.liberouter.org/doc/libnetconf2/master/html/group__server__functions.html#ga35cccf2dbe9204abe01ccb4b93db7438), which loads the following YANG modules with their features:
+
+- **ietf-netconf**: writable-running, candidate, rollback-on-error, validate, startup, url, xpath, confirmed-commit,
+- **ietf-netconf-monitoring**: no features.
+
+The second API is [nc_server_config_load_modules](https://netopeer.liberouter.org/doc/libnetconf2/master/html/group__server__config__functions.html#ga3760b87e3ab4309514e9ad82c4c09cdb). Supported features (marked by ✔) are loaded into the context by this API. The only exception is the feature `local-users-supported`, which is by default loaded, but can be disabled, which will influence the behaviour of the SSH authentication (see the *libnetconf2* [documentation](https://netopeer.liberouter.org/doc/libnetconf2/master/html/howtoserver.html)).
+
+- **iana-crypt-hash**: crypt-hash-md5 ✔, crypt-hash-sha-256 ✔, crypt-hash-sha-512 ✔,
+- **ietf-netconf-server**: ssh-listen ✔, tls-listen ✔, ssh-call-home ✔, tls-call-home ✔, central-netconf-server-supported ✔,
+- **iana-ssh-encryption-algs**: no features,
+- **iana-ssh-key-exchange-algs**: no features,
+- **iana-ssh-mac-algs**: no features,
+- **iana-ssh-public-key-algs**: no features,
+- **iana-tls-cipher-suite-algs**: no features,
+- **ietf-crypto-types**: cleartext-passwords ✔, cleartext-private-keys ✔, private-key-encryption ✘, csr-generation ✘, p10-csr-format ✘, certificate-expiration-notification ✘, encrypted-passwords ✘, hidden-symmetric-keys ✘, encrypted-symmetric-keys ✘, hidden-private-keys ✘, encrypted-private-keys ✘, one-symmetric-key-format ✘, one-asymmetric-key-format ✘, symmetrically-encrypted-value-format ✘, asymmetrically-encrypted-value-format ✘, cms-enveloped-data-format ✘, cms-encrypted-data-format ✘, cleartext-symmetric-keys ✘,
+- **ietf-keystore**: central-keystore-supported ✔, inline-definitions-supported ✔, asymmetric-keys ✔, symmetric-keys ✘,
+- **ietf-netconf-server**: ssh-listen ✔, tls-listen ✔, ssh-call-home ✔, tls-call-home ✔, central-netconf-server-supported ✔,
+- **ietf-ssh-common**: transport-params ✔, ssh-x509-certs ✘, public-key-generation ✘,
+- **ietf-ssh-server**: local-users-supported **?**, local-user-auth-publickey ✔, local-user-auth-password ✔, local-user-auth-none ✔, ssh-server-keepalives ✘, local-user-auth-hostbased ✘,
+- **ietf-tcp-client**: tcp-client-keepalives ✔, proxy-connect ✘, socks5-gss-api ✘, socks5-username-password ✘, local-binding-supported ✘,
+- **ietf-tcp-common**: transport-params ✔, ssh-x509-certs ✘, public-key-generation ✘,
+- **ietf-tcp-server**: tcp-server-keepalives ✔,
+- **ietf-tls-common**: tls10 ✔, tls11 ✔, tls12 ✔, tls13 ✔, hello-params ✔, public-key-generation ✘,
+- **ietf-tls-server**: server-ident-x509-cert ✔, client-auth-supported ✔, client-auth-x509-cert ✔, tls-server-keepalives ✘, server-ident-raw-public-key ✘, server-ident-tls12-psk ✘, server-ident-tls13-epsk ✘, client-auth-raw-public-key ✘, client-auth-tls12-psk ✘, client-auth-tls13-epsk ✘,
+- **ietf-truststore**: central-truststore-supported ✔, inline-definitions-supported ✔, certificates ✔, public-keys ✔,
+- **ietf-x509-cert-to-name**: no features,
+- **libnetconf2-netconf-server**: no features.
+
+### Client
+
+Currently no client specific YANG modules are supported.
