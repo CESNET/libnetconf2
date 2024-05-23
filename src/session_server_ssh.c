@@ -1296,15 +1296,25 @@ cleanup:
     return ret;
 }
 
+/**
+ * @brief Handle authentication request for the Keyboard-interactive method.
+ *
+ * @param[in] session NETCONF session.
+ * @param[in] local_users_supported Whether the server supports local users.
+ * @param[in] auth_client Configured client's authentication data.
+ * @param[in] msg libssh message.
+ * @return 0 if the authentication was successful, 1 if not.
+ */
 static int
 nc_server_ssh_auth_kbdint(struct nc_session *session, int local_users_supported, struct nc_auth_client *auth_client, ssh_message msg)
 {
-    int rc;
+    int rc = 0;
 
     assert(!local_users_supported || auth_client);
 
     if (local_users_supported && !auth_client->kb_int_enabled) {
         VRB(session, "User \"%s\" does not have Keyboard-interactive method configured, but a request was received.", session->username);
+        return 1;
     } else if (server_opts.interactive_auth_clb) {
         rc = server_opts.interactive_auth_clb(session, session->ti.libssh.session, msg, server_opts.interactive_auth_data);
     } else {
@@ -1316,6 +1326,7 @@ nc_server_ssh_auth_kbdint(struct nc_session *session, int local_users_supported,
         rc = nc_server_ssh_auth_kbdint_system(session, session->username, msg);
 #else
         ERR(NULL, "Keyboard-interactive method not supported.");
+        return 1;
 #endif
     }
 
