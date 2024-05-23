@@ -529,6 +529,7 @@ nc_server_ssh_getspnam(const char *username, struct spwd *spwd_buf, char **buf, 
         r = getspnam_r(username, spwd_buf, *buf, *buf_size, &spwd);
 # else
         spwd = getspnam_r(username, spwd_buf, *buf, *buf_size);
+        r = errno;
 # endif
         if (spwd) {
             /* entry found */
