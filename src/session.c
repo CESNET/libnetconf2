@@ -1354,8 +1354,14 @@ nc_send_hello_io(struct nc_session *session)
     return ret;
 }
 
+/**
+ * @brief Receive server hello message on the client.
+ *
+ * @param[in] session Client session to use.
+ * @return Received message type.
+ */
 static NC_MSG_TYPE
-nc_recv_client_hello_io(struct nc_session *session)
+nc_client_recv_hello_io(struct nc_session *session)
 {
     struct ly_in *msg;
     struct lyd_node *hello = NULL, *iter;
@@ -1437,8 +1443,14 @@ cleanup:
     return rc;
 }
 
+/**
+ * @brief Receive client hello message on the server.
+ *
+ * @param[in] session Server session to use.
+ * @return Received message type.
+ */
 static NC_MSG_TYPE
-nc_recv_server_hello_io(struct nc_session *session)
+nc_server_recv_hello_io(struct nc_session *session)
 {
     struct ly_in *msg;
     struct lyd_node *hello = NULL, *iter;
@@ -1515,9 +1527,9 @@ nc_handshake_io(struct nc_session *session)
     }
 
     if (session->side == NC_CLIENT) {
-        type = nc_recv_client_hello_io(session);
+        type = nc_client_recv_hello_io(session);
     } else {
-        type = nc_recv_server_hello_io(session);
+        type = nc_server_recv_hello_io(session);
     }
 
     return type;
