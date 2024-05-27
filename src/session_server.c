@@ -2055,14 +2055,20 @@ nc_get_uid(int sock, uid_t *uid)
 
 #endif
 
+/**
+ * @brief Fully accept a session on a connected UNIX socket.
+ *
+ * @param[in] session Session to use.
+ * @param[in] sock Connected socket.
+ * @return 1 on success.
+ * @return -1 on error.
+ */
 static int
-nc_accept_unix(struct nc_session *session, int sock)
+nc_accept_unix_session(struct nc_session *session, int sock)
 {
 #if defined (SO_PEERCRED) || defined (HAVE_GETPEEREID)
     struct passwd *pw, pw_buf;
     char *username;
-
-    session->ti_type = NC_TI_UNIX;
     uid_t uid = 0;
     char *buf = NULL;
     size_t buf_len = 0;
@@ -2074,7 +2080,7 @@ nc_accept_unix(struct nc_session *session, int sock)
 
     pw = nc_getpw(uid, NULL, &pw_buf, &buf, &buf_len);
     if (pw == NULL) {
-        ERR(NULL, "Failed to find username for uid=%u (%s).\n", uid, strerror(errno));
+        ERR(session, "Failed to find username for uid=%u (%s).", uid, strerror(errno));
         close(sock);
         return -1;
     }
@@ -2086,8 +2092,9 @@ nc_accept_unix(struct nc_session *session, int sock)
         close(sock);
         return -1;
     }
-    session->username = username;
 
+    session->username = username;
+    session->ti_type = NC_TI_UNIX;
     session->ti.unixsock.sock = sock;
 
     return 1;
@@ -2095,6 +2102,7 @@ nc_accept_unix(struct nc_session *session, int sock)
     (void)session;
     (void)sock;
 
+    ERR(session, "Unable to learn the identity of the client connected to the UNIX socket, terminating.");
     return -1;
 #endif
 }
@@ -2317,7 +2325,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
 #endif /* NC_ENABLED_SSH_TLS */
     if (server_opts.endpts[bind_idx].ti == NC_TI_UNIX) {
         (*session)->data = server_opts.endpts[bind_idx].opts.unixsock;
-        ret = nc_accept_unix(*session, sock);
+        ret = nc_accept_unix_session(*session, sock);
         sock = -1;
         if (ret < 0) {
             msgtype = NC_MSG_ERROR;
