@@ -259,7 +259,13 @@ if(ENABLE_SSH_TLS)
 
     # dependencies - libcurl
     find_package(CURL 7.30.0 REQUIRED)
-    target_link_libraries(netconf2 CURL::libcurl)
+    if(TARGET CURL::libcurl)
+        target_link_libraries(netconf2 CURL::libcurl)
+    else()
+        target_link_libraries(netconf2 ${CURL_LIBRARIES})
+        list(APPEND CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARY})
+        include_directories(${CURL_INCLUDE_DIRS})
+    endif()
 
     # crypt (if not found, assume no library needs to be linked)
     if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
