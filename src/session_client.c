@@ -1261,14 +1261,12 @@ nc_ctx_check_and_fill(struct nc_session *session)
             yanglib_support = 1 + i;
         } else if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:netconf:capability:xpath:1.0", 44)) {
             xpath_support = 1 + i;
-        } else if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:xml:ns:yang:ietf-netconf-nmda", 45)) {
-            nmda_support = 1 + i;
         }
+        /* NMDA is YANG 1.1 module, which is not present in the capabilities */
     }
     VRB(session, "Capability for <get-schema> support%s found.", get_schema_support ? "" : " not");
     VRB(session, "Capability for yang-library support%s found.", yanglib_support ? "" : " not");
     VRB(session, "Capability for XPath filter support%s found.", xpath_support ? "" : " not");
-    VRB(session, "Capability for NMDA RPCs support%s found.", nmda_support ? "" : " not");
 
     /* get information about server's modules from capabilities list until we will have yang-library */
     if (build_module_info_cpblts(session->opts.client.cpblts, &server_modules) || !server_modules) {
@@ -1316,13 +1314,6 @@ nc_ctx_check_and_fill(struct nc_session *session)
         }
     }
 
-    /* ietf-netconf-nmda is needed to issue get-data */
-    if (nmda_support && nc_ctx_load_module(session, "ietf-netconf-nmda", NULL, NULL, server_modules, old_clb, old_data,
-            get_schema_support, &mod)) {
-        WRN(session, "Loading NMDA module failed, unable to use <get-data>.");
-        nmda_support = 0;
-    }
-
     /* prepare structured information about server's modules */
     if (yanglib_support) {
         if (build_module_info_yl(session, nmda_support, xpath_support, &sm)) {
@@ -1334,6 +1325,21 @@ nc_ctx_check_and_fill(struct nc_session *session)
              * yang-library module */
             free_module_info(server_modules);
             server_modules = sm;
+
+            /* check for NMDA support */
+            for (i = 0; server_modules[i].name; ++i) {
+                if (!strcmp(server_modules[i].name, "ietf-netconf-nmda") && server_modules[i].implemented) {
+                    nmda_support = 1;
+                    break;
+                }
+            }
+
+            /* ietf-netconf-nmda is needed to issue get-data */
+            if (nmda_support && nc_ctx_load_module(session, "ietf-netconf-nmda", NULL, NULL, server_modules, old_clb,
+                    old_data, get_schema_support, &mod)) {
+                WRN(session, "Loading NMDA module failed, unable to use <get-data>.");
+                nmda_support = 0;
+            }
         }
     }
 
