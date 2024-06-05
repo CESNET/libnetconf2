@@ -706,6 +706,7 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
     const char *module_data = NULL;
     struct ly_in *in;
     LYS_INFORMAT format;
+    uint32_t temp_lo = LY_LOSTORE, *prev_lo;
 
     void (*free_module_data)(void *, void *) = NULL;
     struct clb_data_s clb_data;
@@ -727,57 +728,56 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
         /* make the present module implemented and/or enable all its features */
         if (lys_set_implemented(*mod, features)) {
             ERR(session, "Failed to implement module \"%s\".", (*mod)->name);
-            ret = -1;
+            return -1;
         }
+        return 0;
+    }
+
+    /* missing implemented module, load it ... */
+    clb_data.has_get_schema = has_get_schema;
+    clb_data.modules = modules;
+    clb_data.session = session;
+    clb_data.user_clb = user_clb;
+    clb_data.user_data = user_data;
+
+    /* clear all the errors and just collect them for now */
+    ly_err_clean(session->ctx, NULL);
+    prev_lo = ly_temp_log_options(&temp_lo);
+
+    /* get module data */
+    if (!retrieve_module_data(name, revision, &clb_data, &format, &module_data, &free_module_data)) {
+        /* set import callback */
+        ly_ctx_set_module_imp_clb(session->ctx, retrieve_module_data_imp, &clb_data);
+
+        /* parse the module */
+        ly_in_new_memory(module_data, &in);
+        lys_parse(session->ctx, in, format, features, mod);
+        ly_in_free(in, 0);
+        if (free_module_data) {
+            free_module_data((char *)module_data, user_data);
+        }
+
+        ly_ctx_set_module_imp_clb(session->ctx, NULL, NULL);
+    }
+
+    /* restore logging options, then print errors on definite failure */
+    ly_temp_log_options(prev_lo);
+    if (!(*mod)) {
+        for (eitem = ly_err_first(session->ctx); eitem; eitem = eitem->next) {
+            ly_err_print(session->ctx, eitem);
+        }
+        ret = -1;
     } else {
-        /* missing implemented module, load it ... */
-        clb_data.has_get_schema = has_get_schema;
-        clb_data.modules = modules;
-        clb_data.session = session;
-        clb_data.user_clb = user_clb;
-        clb_data.user_data = user_data;
-
-        /* clear all the errors and just collect them for now */
-        ly_err_clean(session->ctx, NULL);
-        ly_log_options(LY_LOSTORE);
-
-        /* get module data */
-        retrieve_module_data(name, revision, &clb_data, &format, &module_data, &free_module_data);
-
-        if (module_data) {
-            /* set import callback */
-            ly_ctx_set_module_imp_clb(session->ctx, retrieve_module_data_imp, &clb_data);
-
-            /* parse the module */
-            ly_in_new_memory(module_data, &in);
-            lys_parse(session->ctx, in, format, features, mod);
-            ly_in_free(in, 0);
-            if (*free_module_data) {
-                (*free_module_data)((char *)module_data, user_data);
-            }
-
-            ly_ctx_set_module_imp_clb(session->ctx, NULL, NULL);
-        }
-
-        /* restore logging options, then print errors on definite failure */
-        ly_log_options(LY_LOLOG | LY_LOSTORE_LAST);
-        if (!(*mod)) {
-            for (eitem = ly_err_first(session->ctx); eitem; eitem = eitem->next) {
+        /* print only warnings */
+        for (eitem = ly_err_first(session->ctx); eitem; eitem = eitem->next) {
+            if (eitem->level == LY_LLWRN) {
                 ly_err_print(session->ctx, eitem);
             }
-            ret = -1;
-        } else {
-            /* print only warnings */
-            for (eitem = ly_err_first(session->ctx); eitem; eitem = eitem->next) {
-                if (eitem->level == LY_LLWRN) {
-                    ly_err_print(session->ctx, eitem);
-                }
-            }
         }
-
-        /* clean the errors */
-        ly_err_clean(session->ctx, NULL);
     }
+
+    /* clean the errors */
+    ly_err_clean(session->ctx, NULL);
 
     return ret;
 }
