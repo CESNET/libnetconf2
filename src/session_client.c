@@ -1172,33 +1172,42 @@ nc_ctx_fill_ietf_netconf(struct nc_session *session, struct module_info *modules
     return 0;
 }
 
-/**
- * @brief Set client session context to support schema-mount if possible.
- *
- * @param[in] session NC session with the context to modify.
- * @param[in] get_data_sup Whether get-data RPC is available or only get.
- * @param[in] xpath_sup Whether XPath filter is supported or only subtree filter.
- * @return 0 on success.
- * @return -1 on error.
- */
-static int
-nc_ctx_schema_mount(struct nc_session *session, int get_data_sup, int xpath_sup)
+API int
+nc_client_set_new_session_context_schema_mount(struct nc_session *session)
 {
-    int rc = 0;
+    int rc = 0, yanglib_support = 0, xpath_support = 0, nmda_support = 0;
     struct lyd_node *oper_data = NULL;
+    const struct lys_module *mod;
 
     if (session->flags & NC_SESSION_SHAREDCTX) {
         /* context is already fully set up */
         goto cleanup;
     }
 
+    /* check all useful capabilities */
+    if (ly_ctx_get_module_implemented(session->ctx, "ietf-yang-library")) {
+        yanglib_support = 1;
+    }
+    if ((mod = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf")) && !lys_feature_value(mod, "xpath")) {
+        xpath_support = 1;
+    }
+    if (ly_ctx_get_module_implemented(session->ctx, "ietf-netconf-nmda")) {
+        nmda_support = 1;
+    }
+
+    if (!yanglib_support) {
+        ERR(session, "Module \"ietf-yang-library\" missing to retrieve schema-mount data.");
+        rc = -1;
+        goto cleanup;
+    }
+
     /* get yang-library and schema-mounts operational data */
-    if (xpath_sup) {
-        if ((rc = get_oper_data(session, get_data_sup, "/ietf-yang-library:* | /ietf-yang-schema-mount:*", &oper_data))) {
+    if (xpath_support) {
+        if ((rc = get_oper_data(session, nmda_support, "/ietf-yang-library:* | /ietf-yang-schema-mount:*", &oper_data))) {
             goto cleanup;
         }
     } else {
-        if ((rc = get_oper_data(session, get_data_sup,
+        if ((rc = get_oper_data(session, nmda_support,
                 "<modules-state xmlns=\"urn:ietf:params:xml:ns:yang:ietf-yang-library\"/>"
                 "<schema-mounts xmlns=\"urn:ietf:params:xml:ns:yang:ietf-yang-schema-mount\"/>", &oper_data))) {
             goto cleanup;
@@ -1218,6 +1227,7 @@ nc_ctx_schema_mount(struct nc_session *session, int get_data_sup, int xpath_sup)
     }
 
     /* store the data in the session */
+    lyd_free_siblings(session->opts.client.ext_data);
     session->opts.client.ext_data = oper_data;
     oper_data = NULL;
 
@@ -1316,7 +1326,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
 
     /* prepare structured information about server's modules */
     if (yanglib_support) {
-        if (build_module_info_yl(session, nmda_support, xpath_support, &sm)) {
+        if (build_module_info_yl(session, 0, xpath_support, &sm)) {
             goto cleanup;
         } else if (!sm) {
             VRB(session, "Trying to use capabilities instead of ietf-yang-library data.");
@@ -1338,7 +1348,6 @@ nc_ctx_check_and_fill(struct nc_session *session)
             if (nmda_support && nc_ctx_load_module(session, "ietf-netconf-nmda", NULL, NULL, server_modules, old_clb,
                     old_data, get_schema_support, &mod)) {
                 WRN(session, "Loading NMDA module failed, unable to use <get-data>.");
-                nmda_support = 0;
             }
         }
     }
@@ -1357,7 +1366,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     }
 
     /* set support for schema-mount, if possible (requires ietf-yang-library support) */
-    if (yanglib_support && nc_ctx_schema_mount(session, nmda_support, xpath_support)) {
+    if (yanglib_support && nc_client_set_new_session_context_schema_mount(session)) {
         goto cleanup;
     }
 

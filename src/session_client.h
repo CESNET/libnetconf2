@@ -90,6 +90,16 @@ ly_module_imp_clb nc_client_get_schema_callback(void **user_data);
 void nc_client_set_new_session_context_autofill(int enabled);
 
 /**
+ * @brief Set client session context to support schema-mount, if possible.
+ *
+ * Performed automatically unless ::nc_client_set_new_session_context_autofill() was disabled.
+ *
+ * @param[in] session NETCONF session to update.
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_set_new_session_context_schema_mount(struct nc_session *session);
+
+/**
  * @brief Use the provided thread-specific client's context in the current thread.
  *
  * Note that from this point the context is shared with the thread from which the context was taken and any
