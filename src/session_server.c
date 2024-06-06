@@ -1729,13 +1729,80 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
     return ret;
 }
 
+/**
+ * @brief Poll a single pspoll session.
+ *
+ * @param[in] ps_session pspoll session to poll.
+ * @param[in] now_mono Current monotonic timestamp.
+ * @return NC_PSPOLL_RPC if some application data are available.
+ * @return NC_PSPOLL_TIMEOUT if a timeout elapsed.
+ * @return NC_PSPOLL_SSH_CHANNEL if a new SSH channel has been created.
+ * @return NC_PSPOLL_SSH_MSG if just an SSH message has been processed.
+ * @return NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR if session has been terminated.
+ * @return NC_PSPOLL_ERROR on other fatal errors.
+ */
+static int
+nc_ps_poll_sess(struct nc_ps_session *ps_session, time_t now_mono)
+{
+    int ret = NC_PSPOLL_ERROR;
+    char msg[256];
+
+    switch (ps_session->state) {
+    case NC_PS_STATE_NONE:
+        if (ps_session->session->status == NC_STATUS_RUNNING) {
+            /* session is fine, work with it */
+            ps_session->state = NC_PS_STATE_BUSY;
+
+            ret = nc_ps_poll_session_io(ps_session->session, NC_SESSION_LOCK_TIMEOUT, now_mono, msg);
+            switch (ret) {
+            case NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR:
+                ERR(ps_session->session, "%s.", msg);
+                ps_session->state = NC_PS_STATE_INVALID;
+                break;
+            case NC_PSPOLL_ERROR:
+                ERR(ps_session->session, "%s.", msg);
+                ps_session->state = NC_PS_STATE_NONE;
+                break;
+            case NC_PSPOLL_TIMEOUT:
+#ifdef NC_ENABLED_SSH_TLS
+            case NC_PSPOLL_SSH_CHANNEL:
+            case NC_PSPOLL_SSH_MSG:
+#endif /* NC_ENABLED_SSH_TLS */
+                ps_session->state = NC_PS_STATE_NONE;
+                break;
+            case NC_PSPOLL_RPC:
+                /* let's keep the state busy, we are not done with this session */
+                break;
+            }
+        } else {
+            /* session is not fine, let the caller know */
+            ret = NC_PSPOLL_SESSION_TERM;
+            if (ps_session->session->term_reason != NC_SESSION_TERM_CLOSED) {
+                ret |= NC_PSPOLL_SESSION_ERROR;
+            }
+            ps_session->state = NC_PS_STATE_INVALID;
+        }
+        break;
+    case NC_PS_STATE_BUSY:
+        /* it definitely should not be busy because we have the lock */
+        ERRINT;
+        ret = NC_PSPOLL_ERROR;
+        break;
+    case NC_PS_STATE_INVALID:
+        /* we got it locked, but it will be freed, let it be */
+        ret = NC_PSPOLL_TIMEOUT;
+        break;
+    }
+
+    return ret;
+}
+
 API int
 nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
 {
     int ret = NC_PSPOLL_ERROR, r;
     uint8_t q_id;
     uint16_t i, j;
-    char msg[256];
     struct timespec ts_timeout, ts_cur;
     struct nc_session *cur_session;
     struct nc_ps_session *cur_ps_session;
@@ -1777,52 +1844,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                 ret = NC_PSPOLL_ERROR;
             } else if (r == 1) {
                 /* no one else is currently working with the session, so we can, otherwise skip it */
-                switch (cur_ps_session->state) {
-                case NC_PS_STATE_NONE:
-                    if (cur_session->status == NC_STATUS_RUNNING) {
-                        /* session is fine, work with it */
-                        cur_ps_session->state = NC_PS_STATE_BUSY;
-
-                        ret = nc_ps_poll_session_io(cur_session, NC_SESSION_LOCK_TIMEOUT, ts_cur.tv_sec, msg);
-                        switch (ret) {
-                        case NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR:
-                            ERR(cur_session, "%s.", msg);
-                            cur_ps_session->state = NC_PS_STATE_INVALID;
-                            break;
-                        case NC_PSPOLL_ERROR:
-                            ERR(cur_session, "%s.", msg);
-                            cur_ps_session->state = NC_PS_STATE_NONE;
-                            break;
-                        case NC_PSPOLL_TIMEOUT:
-#ifdef NC_ENABLED_SSH_TLS
-                        case NC_PSPOLL_SSH_CHANNEL:
-                        case NC_PSPOLL_SSH_MSG:
-#endif /* NC_ENABLED_SSH_TLS */
-                            cur_ps_session->state = NC_PS_STATE_NONE;
-                            break;
-                        case NC_PSPOLL_RPC:
-                            /* let's keep the state busy, we are not done with this session */
-                            break;
-                        }
-                    } else {
-                        /* session is not fine, let the caller know */
-                        ret = NC_PSPOLL_SESSION_TERM;
-                        if (cur_session->term_reason != NC_SESSION_TERM_CLOSED) {
-                            ret |= NC_PSPOLL_SESSION_ERROR;
-                        }
-                        cur_ps_session->state = NC_PS_STATE_INVALID;
-                    }
-                    break;
-                case NC_PS_STATE_BUSY:
-                    /* it definitely should not be busy because we have the lock */
-                    ERRINT;
-                    ret = NC_PSPOLL_ERROR;
-                    break;
-                case NC_PS_STATE_INVALID:
-                    /* we got it locked, but it will be freed, let it be */
-                    ret = NC_PSPOLL_TIMEOUT;
-                    break;
-                }
+                ret = nc_ps_poll_sess(cur_ps_session, ts_timeout.tv_sec);
 
                 /* keep RPC lock in this one case */
                 if (ret != NC_PSPOLL_RPC) {
