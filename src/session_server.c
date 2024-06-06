@@ -1810,6 +1810,10 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
 
     NC_CHECK_ARG_RET(NULL, ps, NC_PSPOLL_ERROR);
 
+    if (session) {
+        *session = NULL;
+    }
+
     /* PS LOCK */
     if (nc_ps_lock(ps, &q_id, __func__)) {
         return NC_PSPOLL_ERROR;
