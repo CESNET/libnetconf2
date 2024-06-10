@@ -1400,6 +1400,40 @@ recv_rpc_check_msgid(struct nc_session *session, const struct lyd_node *envp)
     return NC_MSG_RPC;
 }
 
+/**
+ * @brief Prepare reply for rpc error.
+ *
+ * @param[in] session NETCONF session.
+ * @param[in] envp NETCONF-specific RPC envelope. Can be NULL.
+ * @return rpc-reply object or NULL.
+ */
+static struct nc_server_reply *
+nc_server_prepare_rpc_err(struct nc_session *session, struct lyd_node *envp)
+{
+    struct lyd_node *node;
+    const struct ly_err_item *ly_err;
+
+    if (!envp && (session->version != NC_VERSION_11)) {
+        return NULL;
+    }
+
+    ly_err = ly_err_last(session->ctx);
+    if (envp) {
+        /* at least the envelopes were parsed */
+        node = nc_err(session->ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+        nc_err_set_msg(node, ly_err->msg, "en");
+    } else if (!strcmp("Missing XML namespace.", ly_err->msg)) {
+        node = nc_err(session->ctx, NC_ERR_MISSING_ATTR, NC_ERR_TYPE_RPC, "xmlns", "rpc");
+        nc_err_set_msg(node, ly_err->msg, "en");
+    } else {
+        /* completely malformed message, NETCONF version 1.1 defines sending error reply from
+         * the server (RFC 6241 sec. 3) */
+        node = nc_err(session->ctx, NC_ERR_MALFORMED_MSG);
+    }
+
+    return nc_server_reply_err(node);
+}
+
 /* should be called holding the session RPC lock! IO lock will be acquired as needed
  * returns: NC_PSPOLL_ERROR,
  *          NC_PSPOLL_TIMEOUT,
@@ -1411,7 +1445,6 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
 {
     struct ly_in *msg;
     struct nc_server_reply *reply = NULL;
-    struct lyd_node *e;
     int r, ret = 0;
 
     NC_CHECK_ARG_RET(session, session, rpc, NC_PSPOLL_ERROR);
@@ -1448,22 +1481,12 @@ nc_server_recv_rpc_io(struct nc_session *session, int io_timeout, struct nc_serv
         } else {
             /* no message-id */
             reply = nc_server_reply_err(nc_err(session->ctx, NC_ERR_MISSING_ATTR, NC_ERR_TYPE_RPC, "message-id", "rpc"));
+            ret = NC_PSPOLL_BAD_RPC;
         }
     } else {
         /* bad RPC received */
-        if ((*rpc)->envp) {
-            /* at least the envelopes were parsed */
-            e = nc_err(session->ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
-            nc_err_set_msg(e, ly_err_last(session->ctx)->msg, "en");
-            reply = nc_server_reply_err(e);
-        } else if (session->version == NC_VERSION_11) {
-            /* completely malformed message, NETCONF version 1.1 defines sending error reply from
-             * the server (RFC 6241 sec. 3) */
-            reply = nc_server_reply_err(nc_err(session->ctx, NC_ERR_MALFORMED_MSG));
-        } else {
-            /* at least set the return value */
-            ret = NC_PSPOLL_BAD_RPC;
-        }
+        reply = nc_server_prepare_rpc_err(session, (*rpc)->envp);
+        ret = NC_PSPOLL_BAD_RPC;
     }
 
 cleanup:
@@ -1480,7 +1503,7 @@ cleanup:
         }
 
         /* bad RPC and an error reply sent */
-        ret = NC_PSPOLL_BAD_RPC | NC_PSPOLL_REPLY_ERROR;
+        ret |= NC_PSPOLL_REPLY_ERROR;
     }
 
     ly_in_free(msg, 1);
