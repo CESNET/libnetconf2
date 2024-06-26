@@ -913,6 +913,8 @@ build_module_info_yl(struct nc_session *session, int get_data_sup, int xpath_sup
     struct lyd_node *iter, *child, *oper_data = NULL;
     struct lys_module *mod;
     int ret = 0;
+    uint8_t notifications_found = 0;
+    uint8_t nc_notifications_found = 0;
 
     /* get yang-library operational data */
     if (xpath_sup) {
@@ -952,6 +954,11 @@ build_module_info_yl(struct nc_session *session, int get_data_sup, int xpath_sup
             }
             if (!strcmp(iter->schema->name, "name")) {
                 (*result)[u].name = strdup(lyd_get_value(iter));
+                if (!strcmp((*result)[u].name, "notifications")) {
+                    notifications_found = 1;
+                } else if (!strcmp((*result)[u].name, "nc-notifications")) {
+                    nc_notifications_found = 1;
+                }
             } else if (!strcmp(iter->schema->name, "revision")) {
                 (*result)[u].revision = strdup(lyd_get_value(iter));
             } else if (!strcmp(iter->schema->name, "conformance-type")) {
@@ -986,6 +993,26 @@ build_module_info_yl(struct nc_session *session, int get_data_sup, int xpath_sup
                 }
             }
         }
+    }
+
+    /* If NETCONF server supports RFC5277 notification capability and libnetconf2
+     * required notifications and nc-notifications are not present on the NETCONF
+     * server (which it is not obligated to support), then the libyang context
+     * needs to be initialized using client side local YANG schema files */
+    if (nc_session_cpblt(session, "urn:ietf:params:netconf:capability:notification:1.0") &&
+            !notifications_found && !nc_notifications_found) {
+
+        (*result) = nc_realloc(*result, (modules->count + 3) * sizeof **result);
+        NC_CHECK_ERRMEM_GOTO(!(*result), ret = -1, cleanup);
+
+        (*result)[u].name = strdup("notifications");
+        (*result)[u].revision = strdup("2008-07-14");
+        (*result)[u].implemented = 1;
+        u++;
+
+        (*result)[u].name = strdup("nc-notifications");
+        (*result)[u].revision = strdup("2008-07-14");
+        (*result)[u].implemented = 1;
     }
 
 cleanup:
