@@ -948,10 +948,13 @@ int nc_sock_listen_inet(const char *address, uint16_t port);
  * @param[out] host Host of the remote peer. Can be NULL.
  * @param[out] port Port of the new connection. Can be NULL.
  * @param[out] idx Index of the bind that was accepted. Can be NULL.
- * @return Accepted socket of the new connection, -1 on error.
+ * @param[out] sock Accepted socket, if any.
+ * @return -1 on error.
+ * @return 0 on timeout.
+ * @return 1 if a socket was accepted.
  */
 int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t *bind_lock, int timeout,
-        char **host, uint16_t *port, uint16_t *idx);
+        char **host, uint16_t *port, uint16_t *idx, int *sock);
 
 /**
  * @brief Gets an endpoint structure based on its name.

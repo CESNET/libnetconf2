@@ -502,14 +502,14 @@ sock_host_inet6(const struct sockaddr_in6 *addr, char **host, uint16_t *port)
 
 int
 nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t *bind_lock, int timeout, char **host,
-        uint16_t *port, uint16_t *idx)
+        uint16_t *port, uint16_t *idx, int *sock)
 {
     uint16_t i, j, pfd_count, client_port;
     char *client_address;
     struct pollfd *pfd;
     struct sockaddr_storage saddr;
     socklen_t saddr_len = sizeof(saddr);
-    int ret, client_sock, sock = -1, flags;
+    int ret, client_sock, server_sock = -1, flags;
 
     pfd = malloc(bind_count * sizeof *pfd);
     NC_CHECK_ERRMEM_RET(!pfd, -1);
@@ -525,7 +525,7 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t
         if (binds[i].pollin) {
             binds[i].pollin = 0;
             /* leftover pollin */
-            sock = binds[i].sock;
+            server_sock = binds[i].sock;
             break;
         }
         pfd[pfd_count].fd = binds[i].sock;
@@ -535,7 +535,7 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t
         ++pfd_count;
     }
 
-    if (sock == -1) {
+    if (server_sock == -1) {
         /* poll for a new connection */
         ret = nc_poll(pfd, pfd_count, timeout);
         if (ret < 1) {
@@ -558,7 +558,7 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t
 
                 if (!ret) {
                     /* the last socket with an event, use it */
-                    sock = pfd[j].fd;
+                    server_sock = pfd[j].fd;
                     break;
                 } else {
                     /* just remember the event for next time */
@@ -568,7 +568,7 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t
         }
     }
     free(pfd);
-    if (sock == -1) {
+    if (server_sock == -1) {
         ERRINT;
         /* UNLOCK */
         pthread_mutex_unlock(bind_lock);
@@ -576,7 +576,7 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t
     }
 
     /* accept connection */
-    client_sock = accept(sock, (struct sockaddr *)&saddr, &saddr_len);
+    client_sock = accept(server_sock, (struct sockaddr *)&saddr, &saddr_len);
     if (client_sock < 0) {
         ERR(NULL, "Accept failed (%s).", strerror(errno));
         /* UNLOCK */
@@ -628,7 +628,9 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t
     }
     /* UNLOCK */
     pthread_mutex_unlock(bind_lock);
-    return client_sock;
+
+    *sock = client_sock;
+    return 1;
 
 fail:
     close(client_sock);
@@ -2302,12 +2304,12 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
         goto cleanup;
     }
 
-    ret = nc_sock_accept_binds(server_opts.binds, server_opts.endpt_count, &server_opts.bind_lock, timeout, &host, &port, &bind_idx);
-    if (ret < 0) {
+    ret = nc_sock_accept_binds(server_opts.binds, server_opts.endpt_count, &server_opts.bind_lock, timeout, &host,
+            &port, &bind_idx, &sock);
+    if (ret < 1) {
         msgtype = (!ret ? NC_MSG_WOULDBLOCK : NC_MSG_ERROR);
         goto cleanup;
     }
-    sock = ret;
 
     /* configure keepalives */
     if (nc_sock_configure_ka(sock, &server_opts.endpts[bind_idx].ka)) {

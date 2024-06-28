@@ -1841,7 +1841,7 @@ nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
 API int
 nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
 {
-    int sock;
+    int ret, sock;
     char *host = NULL;
     uint16_t port, idx;
 
@@ -1852,11 +1852,11 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
         return -1;
     }
 
-    sock = nc_sock_accept_binds(client_opts.ch_binds, client_opts.ch_bind_count, &client_opts.ch_bind_lock, timeout,
-            &host, &port, &idx);
-    if (sock < 1) {
+    ret = nc_sock_accept_binds(client_opts.ch_binds, client_opts.ch_bind_count, &client_opts.ch_bind_lock, timeout,
+            &host, &port, &idx, &sock);
+    if (ret < 1) {
         free(host);
-        return sock;
+        return ret;
     }
 
     /* configure keepalives */
