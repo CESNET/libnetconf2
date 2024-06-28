@@ -2303,7 +2303,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
     }
 
     ret = nc_sock_accept_binds(server_opts.binds, server_opts.endpt_count, &server_opts.bind_lock, timeout, &host, &port, &bind_idx);
-    if (ret < 1) {
+    if (ret < 0) {
         msgtype = (!ret ? NC_MSG_WOULDBLOCK : NC_MSG_ERROR);
         goto cleanup;
     }
