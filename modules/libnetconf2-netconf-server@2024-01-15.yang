@@ -244,13 +244,6 @@ module libnetconf2-netconf-server {
     description
       "Grouping for SSH authentication parameters.";
 
-    leaf auth-attempts {
-      type uint16;
-      default 3;
-      description
-        "Represents the number of failed attempts before an authentication is deemed unsuccessful.";
-    }
-
     leaf auth-timeout {
       type uint16;
       default 30;

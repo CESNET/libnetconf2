@@ -1886,11 +1886,6 @@ nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts
             break;
         }
 
-        if (session->opts.server.ssh_auth_attempts >= opts->auth_attempts) {
-            ERR(session, "Too many failed authentication attempts of user \"%s\".", session->username);
-            return -1;
-        }
-
         usleep(NC_TIMEOUT_STEP);
         if (opts->auth_timeout && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
             /* timeout */
