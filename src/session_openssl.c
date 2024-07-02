@@ -792,10 +792,12 @@ int
 nc_tls_setup_config_from_ctx_wrap(struct nc_tls_ctx *tls_ctx, int side, void *tls_cfg)
 {
     if (SSL_CTX_use_certificate(tls_cfg, tls_ctx->cert) != 1) {
+        ERR(NULL, "Setting up TLS certificate failed (%s).", ERR_reason_error_string(ERR_get_error()));
         return 1;
     }
 
     if (SSL_CTX_use_PrivateKey(tls_cfg, tls_ctx->pkey) != 1) {
+        ERR(NULL, "Setting up TLS private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
         return 1;
     }
 
@@ -1333,7 +1335,7 @@ nc_tls_import_pubkey_file_wrap(const char *pubkey_path)
 }
 
 int
-nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *uri_count)
+nc_server_tls_get_crl_distpoint_uris_wrap(void *leaf_cert, void *cert_store, char ***uris, int *uri_count)
 {
     int ret = 0, i, j, k, gtype;
 
@@ -1350,9 +1352,6 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
 
     NC_CHECK_ARG_RET(NULL, cert_store, uris, uri_count, 1);
 
-    *uris = NULL;
-    *uri_count = 0;
-
     /* treat all entries in the cert_store as X509_OBJECTs */
     objs = X509_STORE_get0_objects(cert_store);
     if (!objs) {
@@ -1362,9 +1361,14 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
     }
 
     /* iterate over all the CAs */
-    for (i = 0; i < sk_X509_OBJECT_num(objs); i++) {
-        obj = sk_X509_OBJECT_value(objs, i);
-        cert = X509_OBJECT_get0_X509(obj);
+    for (i = -1; i < sk_X509_OBJECT_num(objs); i++) {
+        if (i == -1) {
+            cert = leaf_cert;
+        } else {
+            obj = sk_X509_OBJECT_value(objs, i);
+            cert = X509_OBJECT_get0_X509(obj);
+        }
+
         if (!cert) {
             /* the object on this index was not a certificate */
             continue;
@@ -1396,8 +1400,8 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
                 NC_CHECK_ERRMEM_GOTO(!tmp, ret = 1, cleanup);
                 *uris = tmp;
 
-                *uris[*uri_count] = strdup((const char *) ASN1_STRING_get0_data(asn_string_uri));
-                NC_CHECK_ERRMEM_GOTO(!*uris[*uri_count], ret = 1, cleanup);
+                (*uris)[*uri_count] = strdup((const char *) ASN1_STRING_get0_data(asn_string_uri));
+                NC_CHECK_ERRMEM_GOTO(!(*uris)[*uri_count], ret = 1, cleanup);
                 ++(*uri_count);
             }
         }

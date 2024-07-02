@@ -303,19 +303,12 @@ int nc_client_tls_ch_set_trusted_ca_paths(const char *ca_file, const char *ca_di
 void nc_client_tls_ch_get_trusted_ca_paths(const char **ca_file, const char **ca_dir);
 
 /**
- * @brief Set client Call Home Certificate Revocation Lists.
- *
- * @param[in] crl_file Location of the CRL certificate file used to check for revocated certificates.
- * @param[in] crl_dir Location of the CRL certificate directory used to check for revocated certificates.
- * @return 0 on success, -1 on error.
+ * @brief Deprecated.
  */
 int nc_client_tls_ch_set_crl_paths(const char *crl_file, const char *crl_dir);
 
 /**
- * @brief Get client Call Home Certificate Revocation Lists.
- *
- * @param[out] crl_file Location of the CRL certificate file used to check for revocated certificates. Can be NULL.
- * @param[out] crl_dir Location of the CRL certificate directory used to check for revocated certificates. Can be NULL.
+ * @brief Deprecated.
  */
 void nc_client_tls_ch_get_crl_paths(const char **crl_file, const char **crl_dir);
 

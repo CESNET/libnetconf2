@@ -1675,8 +1675,8 @@ nc_server_tls_parse_crl_dist_points(unsigned char **p, size_t len, char ***uris,
                     }
                     *uris = tmp;
 
-                    *uris[*uri_count] = strndup((const char *)san.san.unstructured_name.p, san.san.unstructured_name.len);
-                    if (!*uris[*uri_count]) {
+                    (*uris)[*uri_count] = strndup((const char *)san.san.unstructured_name.p, san.san.unstructured_name.len);
+                    if (!(*uris)[*uri_count]) {
                         ERRMEM;
                         ret = 1;
                         mbedtls_x509_free_subject_alt_name(&san);
@@ -1701,26 +1701,36 @@ cleanup:
 }
 
 int
-nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *uri_count)
+nc_server_tls_get_crl_distpoint_uris_wrap(void *leaf_cert, void *cert_store, char ***uris, int *uri_count)
 {
-    int ret = 0;
+    int ret = 0, is_critical = 0, cert_count, i;
     mbedtls_x509_crt *cert;
     unsigned char *p, *end_v3_ext, *end_ext, *end_ext_octet;
     size_t len;
     mbedtls_x509_buf ext_oid = {0};
-    int is_critical = 0;
 
     NC_CHECK_ARG_RET(NULL, cert_store, uris, uri_count, 1);
 
-    *uris = NULL;
-    *uri_count = 0;
-
-    /* iterate over all the CAs */
+    /* get the number of certs in the store */
     cert = cert_store;
+    cert_count = 0;
     while (cert) {
+        ++cert_count;
+        cert = cert->next;
+    }
+
+    /* iterate over all the certs */
+    for (i = -1; i < cert_count; i++) {
+        if (i == -1) {
+            cert = leaf_cert;
+        } else if (i == 0) {
+            cert = cert_store;
+        } else {
+            cert = cert->next;
+        }
+
         if (!cert->v3_ext.len) {
             /* no extensions, skip this cert */
-            cert = cert->next;
             continue;
         }
 
@@ -1811,7 +1821,6 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *u
                 goto cleanup;
             }
         }
-        cert = cert->next;
     }
 
 cleanup:

@@ -695,14 +695,15 @@ int nc_tls_mpi2bin_wrap(void *mpi, unsigned char **bin, int *bin_len);
 void * nc_tls_import_pubkey_file_wrap(const char *pubkey_path);
 
 /**
- * @brief Get all the URIs from a CRL distribution points.
+ * @brief Get all the URIs from the CRLDistributionPoints x509v3 extensions.
  *
+ * @param[in] leaf_cert Server/client certificate.
  * @param[in] cert_store Certificate store.
  * @param[out] uris URIs to download the CRLs from.
  * @param[out] uri_count Number of URIs found.
  * @return 0 on success, non-zero on fail.
  */
-int nc_server_tls_get_crl_distpoint_uris_wrap(void *cert_store, char ***uris, int *uri_count);
+int nc_server_tls_get_crl_distpoint_uris_wrap(void *leaf_cert, void *cert_store, char ***uris, int *uri_count);
 
 /**
  * @brief Process a cipher suite so that it can be set by the underlying TLS lib.
