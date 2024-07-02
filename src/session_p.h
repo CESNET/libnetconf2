@@ -54,6 +54,7 @@ typedef enum {
 
 #ifdef NC_ENABLED_SSH_TLS
 
+#include <curl/curl.h>
 #include <libssh/libssh.h>
 
 /* seconds */
@@ -1051,10 +1052,18 @@ struct nc_session *nc_accept_callhome_tls_sock(int sock, const char *host, uint1
  */
 int nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opts, int sock, int timeout);
 
-void nc_server_tls_clear_opts(struct nc_server_tls_opts *opts);
-
 void nc_client_tls_destroy_opts(void);
 void _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts);
+
+/**
+ * @brief Fetch CRLs from the x509v3 CRLDistributionPoints extension.
+ *
+ * @param[in] leaf_cert Server/client certificate.
+ * @param[in] cert_store CA/EE certificates store.
+ * @param[out] crl_store Created CRL store.
+ * @return 0 on success, 1 on error.
+ */
+int nc_session_tls_crl_from_cert_ext_fetch(void *leaf_cert, void *cert_store, void **crl_store);
 
 #endif /* NC_ENABLED_SSH_TLS */
 
