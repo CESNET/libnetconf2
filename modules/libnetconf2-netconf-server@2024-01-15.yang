@@ -329,48 +329,6 @@ module libnetconf2-netconf-server {
     }
   }
 
-  grouping certificate-revocation-list-grouping {
-    description
-      "A grouping for the Certificate Revocation List, which is used
-       to authenticate clients or to deny access for certain certificates.
-       The given Certificate Revocation List must be PEM or DER encoded.";
-
-    reference
-      "RFC 5280:
-         Internet X.509 Public Key Infrastructure Certificate
-         and Certificate Revocation List (CRL) Profile";
-
-    choice certificate-revocation-list {
-      leaf crl-url {
-        type string;
-        description
-          "An URL from which the Certificate Revocation List will be
-           downloaded and used. The HTTP protocol works, but other
-           protocols, such as FTP, may work as well.";
-      }
-
-      leaf crl-path {
-        type string;
-        description
-          "A path to a Certificate Revocation List file.";
-      }
-
-      leaf crl-cert-ext {
-        type empty;
-        description
-          "Indicates that the Certificate Revocation List
-           Distribution Points extension will be used to fetch
-           Certificate Revocation Lists from. This will be done
-           for all the configured Certificate Authority certificates.";
-
-        reference
-          "RFC 5280:
-             Internet X.509 Public Key Infrastructure Certificate
-             and Certificate Revocation List (CRL) Profile, Section 4.2.1.13";
-      }
-    }
-  }
-
   augment "/ncs:netconf-server/ncs:listen/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:ssh" +
           "/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
     uses ssh-authentication-params-grouping;
@@ -423,15 +381,5 @@ module libnetconf2-netconf-server {
   augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints" +
           "/ncs:endpoint/ncs:transport/ncs:tls/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
     uses endpoint-reference-grouping;
-  }
-
-  augment "/ncs:netconf-server/ncs:listen/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:tls" +
-          "/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
-    uses certificate-revocation-list-grouping;
-  }
-
-  augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints" +
-          "/ncs:endpoint/ncs:transport/ncs:tls/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
-    uses certificate-revocation-list-grouping;
   }
 }
