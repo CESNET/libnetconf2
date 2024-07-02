@@ -211,7 +211,6 @@ struct nc_server_ssh_opts {
     char *kex_algs;                         /**< Key exchange algorithms supported by the server. */
     char *mac_algs;                         /**< MAC algorithms supported by the server. */
 
-    uint16_t auth_attempts;                 /**< Number of allowed authentication attempts. */
     uint16_t auth_timeout;                  /**< Authentication timeout. */
 };
 
@@ -1026,8 +1025,6 @@ int nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts 
  * @return 0 if the message was handled, 1 if it is left up to libssh.
  */
 int nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg, struct nc_auth_state *state);
-
-void nc_server_ssh_clear_opts(struct nc_server_ssh_opts *opts);
 
 void nc_client_ssh_destroy_opts(void);
 void _nc_client_ssh_destroy_opts(struct nc_client_ssh_opts *opts);

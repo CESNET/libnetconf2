@@ -2109,38 +2109,6 @@ cleanup:
 }
 
 static int
-nc_server_config_auth_attempts(const struct lyd_node *node, NC_OPERATION op)
-{
-    int ret = 0;
-    struct nc_server_ssh_opts *opts;
-    struct nc_ch_client *ch_client = NULL;
-
-    assert(!strcmp(LYD_NAME(node), "auth-attempts"));
-
-    /* LOCK */
-    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
-        /* to avoid unlock on fail */
-        return 1;
-    }
-
-    if (nc_server_config_get_ssh_opts(node, ch_client, &opts)) {
-        ret = 1;
-        goto cleanup;
-    }
-
-    if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        opts->auth_attempts = ((struct lyd_node_term *)node)->value.uint16;
-    }
-
-cleanup:
-    if (is_ch(node)) {
-        /* UNLOCK */
-        nc_ch_client_unlock(ch_client);
-    }
-    return ret;
-}
-
-static int
 nc_server_config_auth_timeout(const struct lyd_node *node, NC_OPERATION op)
 {
     int ret = 0;
@@ -3706,8 +3674,6 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
         ret = nc_server_config_keystore_reference(node, op);
     } else if (!strcmp(name, "user")) {
         ret = nc_server_config_user(node, op);
-    } else if (!strcmp(name, "auth-attempts")) {
-        ret = nc_server_config_auth_attempts(node, op);
     } else if (!strcmp(name, "auth-timeout")) {
         ret = nc_server_config_auth_timeout(node, op);
     } else if (!strcmp(name, "central-truststore-reference")) {
