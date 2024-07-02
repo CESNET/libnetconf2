@@ -206,8 +206,6 @@
  * - ::nc_client_tls_get_cert_key_paths()
  * - ::nc_client_tls_set_trusted_ca_paths()
  * - ::nc_client_tls_get_trusted_ca_paths()
- * - ::nc_client_tls_set_crl_paths()
- * - ::nc_client_tls_get_crl_paths()
  *
  * - ::nc_connect_tls()
  * - ::nc_connect_libssl()
@@ -265,8 +263,6 @@
  * - ::nc_client_tls_ch_get_cert_key_paths()
  * - ::nc_client_tls_ch_set_trusted_ca_paths()
  * - ::nc_client_tls_ch_get_trusted_ca_paths()
- * - ::nc_client_tls_ch_set_crl_paths()
- * - ::nc_client_tls_ch_get_crl_paths()
  *
  * - ::nc_accept_callhome()
  *
@@ -467,8 +463,12 @@
  * _cert-to-name_ entry.
  *
  * There are some further options. For example you can configure the TLS
- * version and ciphers to be used. You may also choose to use a Certificate
- * Revocation List.
+ * version and ciphers to be used.
+ *
+ * You may also choose to use a Certificate Revocation List. These lists
+ * are downloaded from the URIs specified in the x509 CRLDistributionPoints extensions.
+ * Be mindful that if any CRL is successfully downloaded and set, then at least one of them has to belong
+ * to the peer (e.g. the client) certificate (in other words it has to be issued by peer's CA).
  *
  * Functions List
  * --------------
