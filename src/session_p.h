@@ -273,10 +273,6 @@ struct nc_server_tls_opts {
     struct nc_cert_grouping ca_certs;           /**< Client certificate authorities */
     struct nc_cert_grouping ee_certs;           /**< Client end-entity certificates */
 
-    char *crl_url;                              /**< URI to download the CRL from */
-    char *crl_path;                             /**< Path to a CRL file */
-    int crl_cert_ext;                           /**< Indicates to use CA's distribution points to obtain CRLs */
-
     char *referenced_endpt_name;                /**< Reference to another endpoint (used for client authentication). */
 
     unsigned int tls_versions;                  /**< TLS versions */
@@ -357,9 +353,6 @@ struct nc_client_tls_opts {
 
     char *ca_file;
     char *ca_dir;
-
-    char *crl_file;
-    char *crl_dir;
 };
 
 #endif /* NC_ENABLED_SSH_TLS */

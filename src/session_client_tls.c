@@ -47,8 +47,6 @@ _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts)
     free(opts->key_path);
     free(opts->ca_file);
     free(opts->ca_dir);
-    free(opts->crl_file);
-    free(opts->crl_dir);
     memset(opts, 0, sizeof *opts);
 }
 
@@ -188,72 +186,32 @@ nc_client_tls_ch_get_trusted_ca_paths(const char **ca_file, const char **ca_dir)
     _nc_client_tls_get_trusted_ca_paths(ca_file, ca_dir, &tls_ch_opts);
 }
 
-static int
-_nc_client_tls_set_crl_paths(const char *crl_file, const char *crl_dir, struct nc_client_tls_opts *opts)
+API int
+nc_client_tls_set_crl_paths(const char *UNUSED(crl_file), const char *UNUSED(crl_dir))
 {
-    if (!crl_file && !crl_dir) {
-        ERRARG(NULL, "crl_file and crl_dir");
-        return -1;
-    }
-
-    free(opts->crl_file);
-    free(opts->crl_dir);
-
-    if (crl_file) {
-        opts->crl_file = strdup(crl_file);
-        NC_CHECK_ERRMEM_RET(!opts->crl_file, -1);
-    } else {
-        opts->crl_file = NULL;
-    }
-
-    if (crl_dir) {
-        opts->crl_dir = strdup(crl_dir);
-        NC_CHECK_ERRMEM_RET(!opts->crl_dir, -1);
-    } else {
-        opts->crl_dir = NULL;
-    }
-
-    return 0;
+    ERR(NULL, "nc_client_tls_set_crl_paths() is deprecated, do not use it.");
+    return -1;
 }
 
 API int
-nc_client_tls_set_crl_paths(const char *crl_file, const char *crl_dir)
+nc_client_tls_ch_set_crl_paths(const char *UNUSED(crl_file), const char *UNUSED(crl_dir))
 {
-    return _nc_client_tls_set_crl_paths(crl_file, crl_dir, &tls_opts);
-}
-
-API int
-nc_client_tls_ch_set_crl_paths(const char *crl_file, const char *crl_dir)
-{
-    return _nc_client_tls_set_crl_paths(crl_file, crl_dir, &tls_ch_opts);
-}
-
-static void
-_nc_client_tls_get_crl_paths(const char **crl_file, const char **crl_dir, struct nc_client_tls_opts *opts)
-{
-    if (!crl_file && !crl_dir) {
-        ERRARG(NULL, "crl_file and crl_dir");
-        return;
-    }
-
-    if (crl_file) {
-        *crl_file = opts->crl_file;
-    }
-    if (crl_dir) {
-        *crl_dir = opts->crl_dir;
-    }
+    ERR(NULL, "nc_client_tls_ch_set_crl_paths() is deprecated, do not use it.");
+    return -1;
 }
 
 API void
-nc_client_tls_get_crl_paths(const char **crl_file, const char **crl_dir)
+nc_client_tls_get_crl_paths(const char **UNUSED(crl_file), const char **UNUSED(crl_dir))
 {
-    _nc_client_tls_get_crl_paths(crl_file, crl_dir, &tls_opts);
+    ERR(NULL, "nc_client_tls_get_crl_paths() is deprecated, do not use it.");
+    return;
 }
 
 API void
-nc_client_tls_ch_get_crl_paths(const char **crl_file, const char **crl_dir)
+nc_client_tls_ch_get_crl_paths(const char **UNUSED(crl_file), const char **UNUSED(crl_dir))
 {
-    _nc_client_tls_get_crl_paths(crl_file, crl_dir, &tls_ch_opts);
+    ERR(NULL, "nc_client_tls_ch_get_crl_paths() is deprecated, do not use it.");
+    return;
 }
 
 API int
@@ -329,17 +287,9 @@ nc_client_tls_session_new(int sock, const char *host, int timeout, struct nc_cli
         goto fail;
     }
 
-    if (opts->crl_file || opts->crl_dir) {
-        /* opaque CRL store */
-        crl_store = nc_tls_crl_store_new_wrap();
-        if (!crl_store) {
-            goto fail;
-        }
-
-        /* load CRLs into the crl store */
-        if (nc_client_tls_load_crl_wrap(crl_store, opts->crl_file, opts->crl_dir)) {
-            goto fail;
-        }
+    /* load CRLs from set certificates' extensions */
+    if (nc_session_tls_crl_from_cert_ext_fetch(cli_cert, cert_store, &crl_store)) {
+        goto fail;
     }
 
     /* set client's verify mode flags */

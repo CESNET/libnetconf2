@@ -37,6 +37,7 @@
 
 #ifdef NC_ENABLED_SSH_TLS
 
+#include <curl/curl.h>
 #include <libssh/libssh.h>
 #include "session_wrapper.h"
 
@@ -1534,3 +1535,168 @@ nc_handshake_io(struct nc_session *session)
 
     return type;
 }
+
+#ifdef NC_ENABLED_SSH_TLS
+
+/**
+ * @brief CURL callback for downloading data.
+ *
+ * @param[in] ptr Downloaded data.
+ * @param[in] size Size of one element.
+ * @param[in] nmemb Number of elements.
+ * @param[in,out] userdata Storage the downloaded data.
+ * @return Number of bytes processed.
+ */
+static size_t
+nc_session_curl_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
+{
+    struct nc_curl_data *data;
+
+    size = nmemb;
+
+    data = (struct nc_curl_data *)userdata;
+
+    data->data = nc_realloc(data->data, data->size + size);
+    NC_CHECK_ERRMEM_RET(!data->data, 0);
+
+    memcpy(&data->data[data->size], ptr, size);
+    data->size += size;
+
+    return size;
+}
+
+/**
+ * @brief Download data using CURL.
+ *
+ * @param[in] handle CURL handle.
+ * @param[in] url URL to download the data from.
+ * @return 0 on success, 1 on failure.
+ */
+static int
+nc_session_curl_fetch(CURL *handle, const char *url)
+{
+    char err_buf[CURL_ERROR_SIZE];
+
+    /* set uri */
+    if (curl_easy_setopt(handle, CURLOPT_URL, url)) {
+        ERR(NULL, "Setting URI \"%s\" to download CRL from failed.", url);
+        return 1;
+    }
+
+    /* set err buf */
+    if (curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, err_buf)) {
+        ERR(NULL, "Setting CURL error buffer option failed.");
+        return 1;
+    }
+
+    /* download */
+    if (curl_easy_perform(handle)) {
+        ERR(NULL, "Downloading CRL from \"%s\" failed (%s).", url, err_buf);
+        return 1;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief Initialize CURL handle for downloading CRL.
+ *
+ * @param[out] handle CURL handle.
+ * @param[out] data Stores the downloaded data.
+ * @return 0 on success, 1 on failure.
+ */
+static int
+nc_session_curl_init(CURL **handle, struct nc_curl_data *data)
+{
+    NC_CHECK_ARG_RET(NULL, handle, data, -1);
+
+    *handle = NULL;
+
+    *handle = curl_easy_init();
+    if (!*handle) {
+        ERR(NULL, "Initializing CURL failed.");
+        return 1;
+    }
+
+    if (curl_easy_setopt(*handle, CURLOPT_WRITEFUNCTION, nc_session_curl_cb)) {
+        ERR(NULL, "Setting curl callback failed.");
+        return 1;
+    }
+
+    if (curl_easy_setopt(*handle, CURLOPT_WRITEDATA, data)) {
+        ERR(NULL, "Setting curl callback data failed.");
+        return 1;
+    }
+
+    return 0;
+}
+
+int
+nc_session_tls_crl_from_cert_ext_fetch(void *leaf_cert, void *cert_store, void **crl_store)
+{
+    int ret = 0, uri_count = 0, i;
+    CURL *handle = NULL;
+    struct nc_curl_data downloaded = {0};
+    char **uris = NULL;
+    void *crl_store_aux = NULL;
+
+    *crl_store = NULL;
+
+    crl_store_aux = nc_tls_crl_store_new_wrap();
+    if (!crl_store_aux) {
+        goto cleanup;
+    }
+
+    /* init curl */
+    ret = nc_session_curl_init(&handle, &downloaded);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* get all the uris we can, even though some may point to the same CRL */
+    ret = nc_server_tls_get_crl_distpoint_uris_wrap(leaf_cert, cert_store, &uris, &uri_count);
+    if (ret) {
+        goto cleanup;
+    }
+
+    if (!uri_count) {
+        /* no CRL distribution points, nothing to download */
+        goto cleanup;
+    }
+
+    for (i = 0; i < uri_count; i++) {
+        VRB(NULL, "Downloading CRL from \"%s\".", uris[i]);
+        ret = nc_session_curl_fetch(handle, uris[i]);
+        if (ret) {
+            /* failed to download the CRL from this entry, try the next entry */
+            WRN(NULL, "Failed to fetch CRL from \"%s\".", uris[i]);
+            continue;
+        }
+
+        /* convert the downloaded data to CRL and add it to the store */
+        ret = nc_server_tls_add_crl_to_store_wrap(downloaded.data, downloaded.size, crl_store_aux);
+
+        /* free the downloaded data */
+        free(downloaded.data);
+        downloaded.data = NULL;
+        downloaded.size = 0;
+
+        if (ret) {
+            goto cleanup;
+        }
+    }
+
+    *crl_store = crl_store_aux;
+    crl_store_aux = NULL;
+
+cleanup:
+    for (i = 0; i < uri_count; i++) {
+        free(uris[i]);
+    }
+    free(uris);
+    curl_easy_cleanup(handle);
+    nc_tls_crl_store_destroy_wrap(crl_store_aux);
+    return ret;
+}
+
+#endif
