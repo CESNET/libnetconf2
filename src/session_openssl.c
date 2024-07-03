@@ -1295,6 +1295,9 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *leaf_cert, void *cert_store, cha
     ASN1_STRING *asn_string_uri;
     void *tmp;
 
+    *uris = NULL;
+    *uri_count = 0;
+
     NC_CHECK_ARG_RET(NULL, cert_store, uris, uri_count, 1);
 
     /* treat all entries in the cert_store as X509_OBJECTs */
