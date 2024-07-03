@@ -179,15 +179,6 @@ int nc_tls_add_cert_to_store_wrap(void *cert, void *cert_store);
 void * nc_tls_pem_to_privkey_wrap(const char *privkey_data);
 
 /**
- * @brief Imports CRL from a file.
- *
- * @param[in] path Path to the CRL file.
- * @param[in] crl_store CRL store to import the CRL to.
- * @return 0 on success, non-zero on fail.
- */
-int nc_tls_import_crl_path_wrap(const char *path, void *crl_store);
-
-/**
  * @brief Parses and adds a CRL to a CRL store.
  *
  * @param[in] crl_data CRL data.
@@ -412,16 +403,6 @@ int nc_client_tls_load_cert_key_wrap(const char *cert_path, const char *key_path
  * @return 0 on success, non-zero on fail.
  */
 int nc_client_tls_load_trusted_certs_wrap(void *cert_store, const char *file_path, const char *dir_path);
-
-/**
- * @brief Load client's CRLs.
- *
- * @param[in] crl_store CRL store.
- * @param[in] file_path Path to the file with CRLs.
- * @param[in] dir_path Path to the directory with CRLs.
- * @return 0 on success, non-zero on fail.
- */
-int nc_client_tls_load_crl_wrap(void *crl_store, const char *file_path, const char *dir_path);
 
 /**
  * @brief Set the hostname for the TLS session.

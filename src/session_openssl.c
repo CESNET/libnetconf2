@@ -198,49 +198,6 @@ nc_tls_pem_to_privkey_wrap(const char *privkey_data)
 }
 
 int
-nc_tls_import_crl_path_wrap(const char *path, void *crl_store)
-{
-    int ret = 0, rc;
-    X509_CRL *crl = NULL;
-    FILE *f;
-
-    f = fopen(path, "r");
-    if (!f) {
-        ERR(NULL, "Unable to open CRL file \"%s\".", path);
-        return 1;
-    }
-
-    /* try PEM first */
-    crl = PEM_read_X509_CRL(f, NULL, NULL, NULL);
-    if (crl) {
-        /* success */
-        goto ok;
-    }
-
-    /* PEM failed, try DER */
-    rewind(f);
-    crl = d2i_X509_CRL_fp(f, NULL);
-    if (!crl) {
-        ERR(NULL, "Reading CRL from file \"%s\" failed.", path);
-        ret = 1;
-        goto cleanup;
-    }
-
-ok:
-    rc = X509_STORE_add_crl(crl_store, crl);
-    if (!rc) {
-        ERR(NULL, "Error adding CRL to store (%s).", ERR_reason_error_string(ERR_get_error()));
-        ret = 1;
-        goto cleanup;
-    }
-
-cleanup:
-    fclose(f);
-    X509_CRL_free(crl);
-    return ret;
-}
-
-int
 nc_server_tls_add_crl_to_store_wrap(const unsigned char *crl_data, size_t size, void *crl_store)
 {
     int ret = 0;
@@ -700,18 +657,6 @@ nc_client_tls_load_trusted_certs_wrap(void *cert_store, const char *file_path, c
 {
     if (!X509_STORE_load_locations(cert_store, file_path, dir_path)) {
         ERR(NULL, "Loading CA certs from file \"%s\" or directory \"%s\" failed (%s).",
-                file_path, dir_path, ERR_reason_error_string(ERR_get_error()));
-        return 1;
-    }
-
-    return 0;
-}
-
-int
-nc_client_tls_load_crl_wrap(void *crl_store, const char *file_path, const char *dir_path)
-{
-    if (!X509_STORE_load_locations(crl_store, file_path, dir_path)) {
-        ERR(NULL, "Loading CRLs from file \"%s\" or directory \"%s\" failed (%s).",
                 file_path, dir_path, ERR_reason_error_string(ERR_get_error()));
         return 1;
     }
