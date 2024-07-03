@@ -1626,6 +1626,9 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *leaf_cert, void *cert_store, cha
 
     NC_CHECK_ARG_RET(NULL, cert_store, uris, uri_count, 1);
 
+    *uris = NULL;
+    *uri_count = 0;
+
     /* get the number of certs in the store */
     cert = cert_store;
     cert_count = 0;
