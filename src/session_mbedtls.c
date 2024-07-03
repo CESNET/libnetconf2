@@ -20,14 +20,12 @@
 #define _GNU_SOURCE
 
 #include <ctype.h>
-#include <dirent.h>
 #include <errno.h>
 #include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <unistd.h>
 
 #include <curl/curl.h>
@@ -391,20 +389,6 @@ cleanup:
     }
     nc_tls_rng_destroy(ctr_drbg, entropy);
     return pkey;
-}
-
-int
-nc_tls_import_crl_path_wrap(const char *path, void *crl_store)
-{
-    int rc;
-
-    rc = mbedtls_x509_crl_parse_file(crl_store, path);
-    if (rc) {
-        ERR(NULL, "Failed to import CRL from file \"%s\" (%s).", path, nc_get_mbedtls_str_err(rc));
-        return 1;
-    }
-
-    return 0;
 }
 
 int
@@ -977,75 +961,6 @@ nc_client_tls_load_trusted_certs_wrap(void *cert_store, const char *file_path, c
     }
 
     return 0;
-}
-
-int
-nc_client_tls_load_crl_wrap(void *crl_store, const char *file_path, const char *dir_path)
-{
-    int rc, ret = 0;
-    DIR *dir = NULL;
-    struct dirent *entry;
-    struct stat st = {0};
-    char *path = NULL;
-
-    if (file_path && (rc = mbedtls_x509_crl_parse_file(crl_store, file_path))) {
-        ERR(NULL, "Loading CRL from file \"%s\" failed (%s).", file_path, nc_get_mbedtls_str_err(rc));
-        return 1;
-    }
-
-    if (dir_path) {
-        /* parse the CRLs in the directory one by one */
-        dir = opendir(dir_path);
-        if (!dir) {
-            ERR(NULL, "Failed to open directory \"%s\" (%s).", dir_path, strerror(errno));
-            return 1;
-        }
-
-        while ((entry = readdir(dir))) {
-            if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) {
-                /* skip current and parent directory */
-                continue;
-            }
-
-            rc = asprintf(&path, "%s/%s", dir_path, entry->d_name);
-            NC_CHECK_ERRMEM_GOTO(rc == -1, ret = 1; path = NULL, cleanup);
-
-            if (stat(path, &st) == -1) {
-                if (errno == ENOENT) {
-                    /* broken symbolic link, ignore */
-                    free(path);
-                    path = NULL;
-                    continue;
-                } else {
-                    ERR(NULL, "Failed to get information about \"%s\" (%s).", path, strerror(errno));
-                    ret = 1;
-                    goto cleanup;
-                }
-            }
-
-            if (!S_ISREG(st.st_mode)) {
-                /* not a regular file, ignore */
-                free(path);
-                path = NULL;
-                continue;
-            }
-
-            rc = mbedtls_x509_crl_parse_file(crl_store, path);
-            if (rc) {
-                WRN(NULL, "Loading CRL from file \"%s\" failed (%s), skipping.", path, nc_get_mbedtls_str_err(rc));
-            }
-
-            free(path);
-            path = NULL;
-        }
-    }
-
-cleanup:
-    free(path);
-    if (dir) {
-        closedir(dir);
-    }
-    return ret;
 }
 
 int
