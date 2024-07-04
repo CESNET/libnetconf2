@@ -66,12 +66,7 @@ struct nc_tls_ctx {
 struct nc_tls_verify_cb_data {
     struct nc_session *session;         /**< NETCONF session. */
     struct nc_server_tls_opts *opts;    /**< TLS server options. */
-    struct nc_ctn_data {
-        char *username;                 /**< Username. */
-        int matched_ctns;               /**< OR'd values of currently matched CTN types. */
-        int matched_ctn_type[6];        /**< Currently matched CTN types (order matters). */
-        int matched_ctn_count;          /**< Number of matched CTN types. */
-    } ctn_data;
+    void *chain;                        /**< Certificate chain used to verify the client cert. */
 };
 
 /**
@@ -286,6 +281,23 @@ int nc_tls_get_num_sans_wrap(void *sans);
 int nc_tls_get_san_value_type_wrap(void *sans, int idx, char **san_value, NC_TLS_CTN_MAPTYPE *san_type);
 
 #endif
+
+/**
+ * @brief Get the number of certificates in a certificate chain.
+ *
+ * @param[in] chain Certificate chain.
+ * @return Number of certificates in the chain.
+ */
+int nc_tls_get_num_certs_wrap(void *chain);
+
+/**
+ * @brief Get a certificate from a certificate chain.
+ *
+ * @param[in] chain Certificate chain.
+ * @param[in] idx Index of the certificate to get.
+ * @param[out] cert Certificate.
+ */
+void nc_tls_get_cert_wrap(void *chain, int idx, void **cert);
 
 /**
  * @brief Compare two certificates.

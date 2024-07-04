@@ -465,6 +465,38 @@ nc_tls_cert_dup(const mbedtls_x509_crt *cert)
 }
 
 /**
+ * @brief Duplicate a certificate and append it to a chain.
+ *
+ * @param[in] cert Certificate to duplicate and append.
+ * @param[in,out] chain Chain to append the certificate to.
+ * @return 0 on success, -1 on error.
+ */
+static int
+nc_server_tls_append_cert_to_chain(mbedtls_x509_crt *cert, mbedtls_x509_crt **chain)
+{
+    mbedtls_x509_crt *iter, *copy;
+
+    copy = nc_tls_cert_dup(cert);
+    if (!copy) {
+        return -1;
+    }
+
+    if (!*chain) {
+        /* first in the list */
+        *chain = copy;
+    } else {
+        /* find the last cert */
+        iter = *chain;
+        while (iter->next) {
+            iter = iter->next;
+        }
+        iter->next = copy;
+    }
+
+    return 0;
+}
+
+/**
  * @brief Verify a certificate.
  *
  * @param[in] cb_data Callback data (session, opts, data for CTN).
@@ -479,6 +511,13 @@ nc_server_tls_verify_cb(void *cb_data, mbedtls_x509_crt *cert, int depth, uint32
     int ret = 0;
     struct nc_tls_verify_cb_data *data = cb_data;
     char *err;
+
+    /* append to the chain we're building */
+    ret = nc_server_tls_append_cert_to_chain(cert, (mbedtls_x509_crt **)&data->chain);
+    if (ret) {
+        nc_tls_cert_destroy_wrap(data->chain);
+        return MBEDTLS_ERR_X509_ALLOC_FAILED;
+    }
 
     if (!*flags) {
         /* in-built verification was successful */
@@ -507,6 +546,11 @@ nc_server_tls_verify_cb(void *cb_data, mbedtls_x509_crt *cert, int depth, uint32
             free(err);
             ret = 1;
         }
+    }
+
+    if ((ret == -1) || (depth == 0)) {
+        /* free the chain */
+        nc_tls_cert_destroy_wrap(data->chain);
     }
 
     if (ret == -1) {
@@ -651,6 +695,36 @@ nc_tls_get_san_value_type_wrap(void *sans, int idx, char **san_value, NC_TLS_CTN
 cleanup:
     mbedtls_x509_free_subject_alt_name(&san);
     return ret;
+}
+
+int
+nc_tls_get_num_certs_wrap(void *chain)
+{
+    mbedtls_x509_crt *iter;
+    int n = 0;
+
+    /* chain is a linked list */
+    iter = chain;
+    while (iter) {
+        ++n;
+        iter = iter->next;
+    }
+
+    return n;
+}
+
+void
+nc_tls_get_cert_wrap(void *chain, int idx, void **cert)
+{
+    int i;
+    mbedtls_x509_crt *iter;
+
+    iter = chain;
+    for (i = 0; i < idx; i++) {
+        iter = iter->next;
+    }
+
+    *cert = iter;
 }
 
 int
