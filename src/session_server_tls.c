@@ -256,154 +256,7 @@ nc_server_tls_sha512(void *cert)
 }
 
 static int
-nc_server_tls_cert_to_name(struct nc_ctn *ctn_first, void *cert, struct nc_ctn_data *data)
-{
-    int ret = 0;
-    char *digest_md5 = NULL, *digest_sha1 = NULL, *digest_sha224 = NULL;
-    char *digest_sha256 = NULL, *digest_sha384 = NULL, *digest_sha512 = NULL;
-    struct nc_ctn *ctn;
-    NC_TLS_CTN_MAPTYPE map_type;
-
-    for (ctn = ctn_first; ctn; ctn = ctn->next) {
-        /* reset map_type */
-        map_type = NC_TLS_CTN_UNKNOWN;
-
-        /* first make sure the entry is valid */
-        if (!ctn->map_type || ((ctn->map_type == NC_TLS_CTN_SPECIFIED) && !ctn->name)) {
-            VRB(NULL, "Cert verify CTN: entry with id %u not valid, skipping.", ctn->id);
-            continue;
-        }
-
-        /* if ctn has no fingerprint, it will match any certificate */
-        if (!ctn->fingerprint) {
-            map_type = ctn->map_type;
-
-            /* MD5 */
-        } else if (!strncmp(ctn->fingerprint, "01", 2)) {
-            if (!digest_md5) {
-                digest_md5 = nc_server_tls_md5(cert);
-                if (!digest_md5) {
-                    ret = -1;
-                    goto cleanup;
-                }
-            }
-
-            if (!strcasecmp(ctn->fingerprint + 3, digest_md5)) {
-                /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
-                map_type = ctn->map_type;
-            }
-
-            /* SHA-1 */
-        } else if (!strncmp(ctn->fingerprint, "02", 2)) {
-            if (!digest_sha1) {
-                digest_sha1 = nc_server_tls_sha1(cert);
-                if (!digest_sha1) {
-                    ret = -1;
-                    goto cleanup;
-                }
-            }
-
-            if (!strcasecmp(ctn->fingerprint + 3, digest_sha1)) {
-                /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
-                map_type = ctn->map_type;
-            }
-
-            /* SHA-224 */
-        } else if (!strncmp(ctn->fingerprint, "03", 2)) {
-            if (!digest_sha224) {
-                digest_sha224 = nc_server_tls_sha224(cert);
-                if (!digest_sha224) {
-                    ret = -1;
-                    goto cleanup;
-                }
-            }
-
-            if (!strcasecmp(ctn->fingerprint + 3, digest_sha224)) {
-                /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
-                map_type = ctn->map_type;
-            }
-
-            /* SHA-256 */
-        } else if (!strncmp(ctn->fingerprint, "04", 2)) {
-            if (!digest_sha256) {
-                digest_sha256 = nc_server_tls_sha256(cert);
-                if (!digest_sha256) {
-                    ret = -1;
-                    goto cleanup;
-                }
-            }
-
-            if (!strcasecmp(ctn->fingerprint + 3, digest_sha256)) {
-                /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
-                map_type = ctn->map_type;
-            }
-
-            /* SHA-384 */
-        } else if (!strncmp(ctn->fingerprint, "05", 2)) {
-            if (!digest_sha384) {
-                digest_sha384 = nc_server_tls_sha384(cert);
-                if (!digest_sha384) {
-                    ret = -1;
-                    goto cleanup;
-                }
-            }
-
-            if (!strcasecmp(ctn->fingerprint + 3, digest_sha384)) {
-                /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
-                map_type = ctn->map_type;
-            }
-
-            /* SHA-512 */
-        } else if (!strncmp(ctn->fingerprint, "06", 2)) {
-            if (!digest_sha512) {
-                digest_sha512 = nc_server_tls_sha512(cert);
-                if (!digest_sha512) {
-                    ret = -1;
-                    goto cleanup;
-                }
-            }
-
-            if (!strcasecmp(ctn->fingerprint + 3, digest_sha512)) {
-                /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
-                map_type = ctn->map_type;
-            }
-
-            /* unknown */
-        } else {
-            WRN(NULL, "Unknown fingerprint algorithm used (%s), skipping.", ctn->fingerprint);
-            continue;
-        }
-
-        if (map_type != NC_TLS_CTN_UNKNOWN) {
-            /* found a fingerprint match */
-            if (!(map_type & data->matched_ctns)) {
-                data->matched_ctns |= map_type;
-                data->matched_ctn_type[data->matched_ctn_count++] = map_type;
-                if (!data->username && (map_type == NC_TLS_CTN_SPECIFIED)) {
-                    data->username = ctn->name;
-                }
-            }
-        }
-    }
-
-cleanup:
-    free(digest_md5);
-    free(digest_sha1);
-    free(digest_sha224);
-    free(digest_sha256);
-    free(digest_sha384);
-    free(digest_sha512);
-    return ret;
-}
-
-int
-nc_server_tls_get_username_from_cert(void *cert, NC_TLS_CTN_MAPTYPE map_type, char **username)
+nc_server_tls_get_username(void *cert, struct nc_ctn *ctn, char **username)
 {
     char *subject, *cn, *san_value = NULL, rdn_separator;
     void *sans;
@@ -416,7 +269,10 @@ nc_server_tls_get_username_from_cert(void *cert, NC_TLS_CTN_MAPTYPE map_type, ch
     rdn_separator = '/';
 #endif
 
-    if (map_type == NC_TLS_CTN_COMMON_NAME) {
+    if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
+        *username = strdup(ctn->name);
+        NC_CHECK_ERRMEM_RET(!*username, -1);
+    } else if (ctn->map_type == NC_TLS_CTN_COMMON_NAME) {
         subject = nc_server_tls_get_subject_wrap(cert);
         if (!subject) {
             return -1;
@@ -457,7 +313,7 @@ nc_server_tls_get_username_from_cert(void *cert, NC_TLS_CTN_MAPTYPE map_type, ch
                 continue;
             }
 
-            if ((map_type == NC_TLS_CTN_SAN_ANY) || (map_type == san_type)) {
+            if ((ctn->map_type == NC_TLS_CTN_SAN_ANY) || (ctn->map_type == san_type)) {
                 /* found a match */
                 *username = san_value;
                 break;
@@ -468,7 +324,7 @@ nc_server_tls_get_username_from_cert(void *cert, NC_TLS_CTN_MAPTYPE map_type, ch
         nc_tls_sans_destroy_wrap(sans);
 
         if (i == nsans) {
-            switch (map_type) {
+            switch (ctn->map_type) {
             case NC_TLS_CTN_SAN_RFC822_NAME:
                 WRN(NULL, "Certificate does not include the SAN rfc822Name field.");
                 break;
@@ -489,6 +345,192 @@ nc_server_tls_get_username_from_cert(void *cert, NC_TLS_CTN_MAPTYPE map_type, ch
     }
 
     return 0;
+}
+
+static int
+nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username)
+{
+    int ret = 1, i, cert_count, fingerprint_match;
+    char *digest_md5 = NULL, *digest_sha1 = NULL, *digest_sha224 = NULL;
+    char *digest_sha256 = NULL, *digest_sha384 = NULL, *digest_sha512 = NULL;
+    void *cert;
+
+    /* first make sure the entry is valid */
+    if (!ctn->map_type || ((ctn->map_type == NC_TLS_CTN_SPECIFIED) && !ctn->name)) {
+        VRB(NULL, "Cert verify CTN: entry with id %u not valid, skipping.", ctn->id);
+        return 1;
+    }
+
+    cert_count = nc_tls_get_num_certs_wrap(cert_chain);
+    for (i = 0; i < cert_count; i++) {
+        /* reset the flag */
+        fingerprint_match = 0;
+
+        /*get next cert */
+        nc_tls_get_cert_wrap(cert_chain, i, &cert);
+        if (!cert) {
+            ERR(NULL, "Failed to get certificate from the chain.");
+            ret = -1;
+            goto cleanup;
+        }
+
+        if (!ctn->fingerprint) {
+            /* if ctn has no fingerprint, it will match any certificate */
+            fingerprint_match = 1;
+
+            /* MD5 */
+        } else if (!strncmp(ctn->fingerprint, "01", 2)) {
+            digest_md5 = nc_server_tls_md5(cert);
+            if (!digest_md5) {
+                ret = -1;
+                goto cleanup;
+            }
+
+            if (!strcasecmp(ctn->fingerprint + 3, digest_md5)) {
+                /* we got ourselves a potential winner! */
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                fingerprint_match = 1;
+            }
+            free(digest_md5);
+            digest_md5 = NULL;
+
+            /* SHA-1 */
+        } else if (!strncmp(ctn->fingerprint, "02", 2)) {
+            digest_sha1 = nc_server_tls_sha1(cert);
+            if (!digest_sha1) {
+                ret = -1;
+                goto cleanup;
+            }
+
+            if (!strcasecmp(ctn->fingerprint + 3, digest_sha1)) {
+                /* we got ourselves a potential winner! */
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                fingerprint_match = 1;
+            }
+            free(digest_sha1);
+            digest_sha1 = NULL;
+
+            /* SHA-224 */
+        } else if (!strncmp(ctn->fingerprint, "03", 2)) {
+            digest_sha224 = nc_server_tls_sha224(cert);
+            if (!digest_sha224) {
+                ret = -1;
+                goto cleanup;
+            }
+
+            if (!strcasecmp(ctn->fingerprint + 3, digest_sha224)) {
+                /* we got ourselves a potential winner! */
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                fingerprint_match = 1;
+            }
+            free(digest_sha224);
+            digest_sha224 = NULL;
+
+            /* SHA-256 */
+        } else if (!strncmp(ctn->fingerprint, "04", 2)) {
+            digest_sha256 = nc_server_tls_sha256(cert);
+            if (!digest_sha256) {
+                ret = -1;
+                goto cleanup;
+            }
+
+            if (!strcasecmp(ctn->fingerprint + 3, digest_sha256)) {
+                /* we got ourselves a potential winner! */
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                fingerprint_match = 1;
+            }
+            free(digest_sha256);
+            digest_sha256 = NULL;
+
+            /* SHA-384 */
+        } else if (!strncmp(ctn->fingerprint, "05", 2)) {
+            digest_sha384 = nc_server_tls_sha384(cert);
+            if (!digest_sha384) {
+                ret = -1;
+                goto cleanup;
+            }
+
+            if (!strcasecmp(ctn->fingerprint + 3, digest_sha384)) {
+                /* we got ourselves a potential winner! */
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                fingerprint_match = 1;
+            }
+            free(digest_sha384);
+            digest_sha384 = NULL;
+
+            /* SHA-512 */
+        } else if (!strncmp(ctn->fingerprint, "06", 2)) {
+            digest_sha512 = nc_server_tls_sha512(cert);
+            if (!digest_sha512) {
+                ret = -1;
+                goto cleanup;
+            }
+
+            if (!strcasecmp(ctn->fingerprint + 3, digest_sha512)) {
+                /* we got ourselves a potential winner! */
+                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+                fingerprint_match = 1;
+            }
+            free(digest_sha512);
+            digest_sha512 = NULL;
+
+            /* unknown */
+        } else {
+            WRN(NULL, "Unknown fingerprint algorithm used (%s), skipping.", ctn->fingerprint);
+            continue;
+        }
+
+        if (fingerprint_match) {
+            /* found a fingerprint match, try to obtain the username */
+            ret = nc_server_tls_get_username(cert, ctn, username);
+            if (ret == -1) {
+                /* fatal error */
+                goto cleanup;
+            } else if (!ret) {
+                /* username found */
+                goto cleanup;
+            }
+        }
+    }
+
+cleanup:
+    return ret;
+}
+
+static int
+_nc_server_tls_cert_to_name(struct nc_server_tls_opts *opts, void *cert_chain, char **username)
+{
+    int ret = 1;
+    struct nc_endpt *referenced_endpt;
+    struct nc_ctn *ctn;
+
+    for (ctn = opts->ctn; ctn; ctn = ctn->next) {
+        ret = nc_server_tls_cert_to_name(ctn, cert_chain, username);
+        if (ret != 1) {
+            /* fatal error or success */
+            goto cleanup;
+        }
+    }
+
+    /* do the same for referenced endpoint's ctn entries */
+    if (opts->referenced_endpt_name) {
+        if (nc_server_get_referenced_endpt(opts->referenced_endpt_name, &referenced_endpt)) {
+            ERRINT;
+            ret = -1;
+            goto cleanup;
+        }
+
+        for (ctn = referenced_endpt->opts.tls->ctn; ctn; ctn = ctn->next) {
+            ret = nc_server_tls_cert_to_name(ctn, cert_chain, username);
+            if (ret != 1) {
+                /* fatal error or success */
+                goto cleanup;
+            }
+        }
+    }
+
+cleanup:
+    return ret;
 }
 
 static int
@@ -557,11 +599,11 @@ nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_server_tls_opts *opts)
 int
 nc_server_tls_verify_cert(void *cert, int depth, int trusted, struct nc_tls_verify_cb_data *cb_data)
 {
-    int ret = 0, i;
+    int ret = 0;
     char *subject = NULL, *issuer = NULL;
     struct nc_server_tls_opts *opts = cb_data->opts;
     struct nc_session *session = cb_data->session;
-    struct nc_endpt *referenced_endpt;
+    void *cert_chain = cb_data->chain;
 
     if (session->username) {
         /* already verified */
@@ -590,47 +632,17 @@ nc_server_tls_verify_cert(void *cert, int depth, int trusted, struct nc_tls_veri
                 goto cleanup;
             }
         }
-    }
 
-    /* get matching ctn entries */
-    ret = nc_server_tls_cert_to_name(opts->ctn, cert, &cb_data->ctn_data);
-    if (ret == -1) {
-        /* fatal error */
-        goto cleanup;
-    }
-
-    /* check the referenced endpoint's ctn entries */
-    if (opts->referenced_endpt_name) {
-        if (nc_server_get_referenced_endpt(opts->referenced_endpt_name, &referenced_endpt)) {
-            ERRINT;
-            ret = -1;
-            goto cleanup;
-        }
-
-        ret = nc_server_tls_cert_to_name(referenced_endpt->opts.tls->ctn, cert, &cb_data->ctn_data);
+        /* get username since we are at depth 0 and have the whole cert chain,
+         * the whole chain is needed in order to comply with the following issue:
+         * https://github.com/CESNET/netopeer2/issues/1596
+         */
+        ret = _nc_server_tls_cert_to_name(opts, cert_chain, &session->username);
         if (ret == -1) {
             /* fatal error */
             goto cleanup;
         }
-    }
 
-    /* obtain username from matched ctn entries */
-    if (depth == 0) {
-        for (i = 0; i < cb_data->ctn_data.matched_ctn_count; i++) {
-            if (cb_data->ctn_data.matched_ctn_type[i] == NC_TLS_CTN_SPECIFIED) {
-                session->username = strdup(cb_data->ctn_data.username);
-                NC_CHECK_ERRMEM_GOTO(!session->username, ret = -1, cleanup);
-            } else {
-                ret = nc_server_tls_get_username_from_cert(cert, cb_data->ctn_data.matched_ctn_type[i], &session->username);
-                if (ret == -1) {
-                    /* fatal error */
-                    goto cleanup;
-                } else if (!ret) {
-                    /* username obtained */
-                    break;
-                }
-            }
-        }
         if (session->username) {
             VRB(NULL, "Cert verify CTN: new client username recognized as \"%s\".", session->username);
         } else {
@@ -638,12 +650,12 @@ nc_server_tls_verify_cert(void *cert, int depth, int trusted, struct nc_tls_veri
             ret = 1;
             goto cleanup;
         }
-    }
 
-    if (session->username && server_opts.user_verify_clb && !server_opts.user_verify_clb(session)) {
-        VRB(session, "Cert verify: user verify callback revoked authorization.");
-        ret = 1;
-        goto cleanup;
+        if (server_opts.user_verify_clb && !server_opts.user_verify_clb(session)) {
+            VRB(session, "Cert verify: user verify callback revoked authorization.");
+            ret = 1;
+            goto cleanup;
+        }
     }
 
 cleanup:

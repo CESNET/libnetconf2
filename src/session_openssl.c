@@ -309,6 +309,19 @@ nc_server_tls_verify_cb(int preverify_ok, X509_STORE_CTX *x509_ctx)
         return 0;
     }
     data = SSL_CTX_get_ex_data(ctx, 0);
+    if (!data) {
+        ERRINT;
+        return 0;
+    }
+
+    /* get the cert chain once */
+    if (!data->chain) {
+        data->chain = X509_STORE_CTX_get0_chain(x509_ctx);
+        if (!data->chain) {
+            ERRINT;
+            return 0;
+        }
+    }
 
     /* get current cert and its depth */
     cert = X509_STORE_CTX_get_current_cert(x509_ctx);
@@ -471,6 +484,18 @@ nc_tls_get_san_value_type_wrap(void *sans, int idx, char **san_value, NC_TLS_CTN
     }
 
     return ret;
+}
+
+int
+nc_tls_get_num_certs_wrap(void *chain)
+{
+    return sk_X509_num(chain);
+}
+
+void
+nc_tls_get_cert_wrap(void *chain, int idx, void **cert)
+{
+    *cert = sk_X509_value(chain, idx);
 }
 
 int
