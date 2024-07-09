@@ -77,6 +77,7 @@
 #cmakedefine HAVE_STRCHRNUL
 #cmakedefine HAVE_GET_CURRENT_DIR_NAME
 #cmakedefine HAVE_CRYPT_R
+#cmakedefine HAVE_TIMEGM
 
 #ifndef bswap64
 #define bswap64(val) \
@@ -220,6 +221,10 @@ struct crypt_data {
 };
 
 char *crypt_r(const char *phrase, const char *setting, struct crypt_data *data);
+#endif
+
+#ifndef HAVE_TIMEGM
+time_t timegm(struct tm *tm);
 #endif
 
 #endif /* _COMPAT_H_ */
