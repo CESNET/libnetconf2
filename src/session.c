@@ -917,7 +917,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 #ifdef NC_ENABLED_SSH_TLS
         struct nc_session *siter;
 
-        if ((session->flags & NC_SESSION_SHAREDCTX) && session->ti.libssh.next) {
+        if ((session->flags & NC_SESSION_SHAREDCTX) && (session->ti_type == NC_TI_SSH) && session->ti.libssh.next) {
             for (siter = session->ti.libssh.next; siter != session; siter = siter->ti.libssh.next) {
                 if (siter->status != NC_STATUS_STARTING) {
                     /* move LY ext data to this session */
