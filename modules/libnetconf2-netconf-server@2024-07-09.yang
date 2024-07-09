@@ -31,11 +31,13 @@ module libnetconf2-netconf-server {
     prefix tlss;
   }
 
-  revision "2024-01-15" {
-    description "Initial revision.";
+  revision "2024-07-09" {
+    description "Second revision.";
   }
 
-  /*
+  // Identities
+
+/*
   identity ed25519-private-key-format {
     base ct:private-key-format;
     description
@@ -240,6 +242,20 @@ module libnetconf2-netconf-server {
         https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL?annotate=HEAD";
   }
 
+  // Typedefs
+
+  typedef certificate-expiration-time {
+    type string {
+      pattern '(1[0-2]|[1-9])m|[1-4]w|[1-7]d|(2[0-4]|1[0-9]|[1-9])h';
+    }
+
+    description
+      "The certificate-expiration-time type allows to specify time in either months, weeks, days, or hours.
+       Its purpose is to create time intervals for the certificate expiration notifications.";
+  }
+
+  // Groupings
+
   grouping ssh-authentication-params-grouping {
     description
       "Grouping for SSH authentication parameters.";
@@ -322,6 +338,8 @@ module libnetconf2-netconf-server {
     }
   }
 
+  // Augments
+
   augment "/ncs:netconf-server/ncs:listen/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:ssh" +
           "/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
     uses ssh-authentication-params-grouping;
@@ -374,5 +392,57 @@ module libnetconf2-netconf-server {
   augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints" +
           "/ncs:endpoint/ncs:transport/ncs:tls/ncs:tls/ncs:tls-server-parameters/ncs:client-authentication" {
     uses endpoint-reference-grouping;
+  }
+
+  // Protocol-accessible Nodes
+
+  container ln2-netconf-server {
+    container certificate-expiration-notif-intervals {
+      if-feature "ct:certificate-expiration-notification";
+
+      description
+        "Container for the certificate expiration notification intervals.
+         Its child nodes describe the ability to set the time intervals for the certificate
+         expiration notifications. These intervals are given in the form of an anchor and a period.
+         By default, these notifications are generated 3, 2, and 1 month; 2 weeks; 7, 6, 5, 4, 3, 2 and 1 day before a certificate expires.
+         Additionally, notifications are generated on the day of expiration and every day thereafter.
+
+         Simplified example of YANG data that describe the default intervals:
+
+         Anchor         Period
+           3m     ...     1m
+           2w     ...     1w
+           7d     ...     1d
+        ";
+
+      list interval {
+        key "anchor period";
+
+        leaf anchor {
+          type certificate-expiration-time;
+
+          description
+            "The time anchor for the notification. The anchor is the time
+             before the certificate expiration when a notification will be sent.
+             It is essentially the lower bound of the given interval.";
+        }
+        leaf period {
+          type certificate-expiration-time;
+
+          // Require the period to be smaller than the anchor (only units are checked for simplicity)
+          must "(contains(., 'm') and contains(../anchor, 'm')) or
+                (contains(., 'w') and (contains(../anchor, 'm') or contains(../anchor, 'w'))) or
+                (contains(., 'd') and (contains(../anchor, 'm') or contains(../anchor, 'w') or contains(../anchor, 'd'))) or
+                contains(., 'h')" {
+                  error-message
+                    "Certificate expiration notification period must be smaller than the anchor.";
+                }
+
+          description
+            "The period of the notification. The period is the time
+             between two notifications within the given time interval.";
+        }
+      }
+    }
   }
 }
