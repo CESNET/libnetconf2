@@ -22,8 +22,11 @@
 #define MODULES_DIR "@CMAKE_SOURCE_DIR@/modules"
 #define BUILD_DIR "@CMAKE_BINARY_DIR@"
 
+#cmakedefine HAVE_MBEDTLS
+
 @SSH_MACRO@
 @TLS_MACRO@
+
 
 /* nc_server.h local includes (not to use the installed ones) */
 #include "netconf.h"
