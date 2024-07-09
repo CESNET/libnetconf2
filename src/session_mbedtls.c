@@ -1883,3 +1883,25 @@ nc_server_tls_set_cipher_suites_wrap(void *tls_cfg, void *cipher_suites)
 {
     mbedtls_ssl_conf_ciphersuites(tls_cfg, cipher_suites);
 }
+
+time_t
+nc_tls_get_cert_exp_time_wrap(void *cert)
+{
+    struct tm t = {0};
+    mbedtls_x509_time *valid_to;
+
+    valid_to = &((mbedtls_x509_crt *)cert)->valid_to;
+
+    t.tm_sec = valid_to->sec;
+    t.tm_min = valid_to->min;
+    t.tm_hour = valid_to->hour;
+
+    t.tm_mday = valid_to->day;
+    t.tm_mon = valid_to->mon - 1;
+    t.tm_year = valid_to->year - 1900;
+
+    /* let system figure out the DST */
+    t.tm_isdst = -1;
+
+    return timegm(&t);
+}
