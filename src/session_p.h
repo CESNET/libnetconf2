@@ -756,6 +756,14 @@ const char *nc_privkey_format_to_str(NC_PRIVKEY_FORMAT format);
  */
 int nc_is_pk_subject_public_key_info(const char *b64);
 
+/**
+ * @brief Import a Base64 DER encoded certificate data.
+ *
+ * @param[in] data Base64 DER encoded certificate data.
+ * @return Imported certificate on success, NULL on error.
+ */
+void * nc_base64der_to_cert(const char *data);
+
 #endif /* NC_ENABLED_SSH_TLS */
 
 void *nc_realloc(void *ptr, size_t size);
