@@ -38,6 +38,7 @@
 #include "log_p.h"
 #include "messages_p.h"
 #include "messages_server.h"
+#include "server_config.h"
 #include "server_config_p.h"
 #include "session.h"
 #include "session_p.h"
@@ -848,6 +849,17 @@ nc_server_init(void)
         goto error;
     }
 
+#ifdef NC_ENABLED_SSH_TLS
+    if ((r = pthread_mutex_init(&server_opts.cert_exp_notif_thread_lock, NULL))) {
+        ERR(NULL, "%s: failed to init certificate expiration notification thread lock(%s).", __func__, strerror(r));
+        goto error;
+    }
+    if ((r = pthread_cond_init(&server_opts.cert_exp_notif_thread_cond, NULL))) {
+        ERR(NULL, "%s: failed to init certificate expiration notification thread condition(%s).", __func__, strerror(r));
+        goto error;
+    }
+#endif
+
     return 0;
 
 error:
@@ -871,6 +883,12 @@ nc_server_destroy(void)
     if (server_opts.content_id_data && server_opts.content_id_data_free) {
         server_opts.content_id_data_free(server_opts.content_id_data);
     }
+
+#ifdef NC_ENABLED_SSH_TLS
+    /* destroy the certificate expiration notification thread */
+    nc_server_notif_cert_expiration_thread_stop(1);
+    nc_server_config_ln2_netconf_server(NULL, NC_OP_DELETE);
+#endif /* NC_ENABLED_SSH_TLS */
 
     nc_server_config_listen(NULL, NC_OP_DELETE);
     nc_server_config_ch(NULL, NC_OP_DELETE);
@@ -3103,3 +3121,754 @@ nc_session_get_notif_status(const struct nc_session *session)
 
     return ntf_status;
 }
+
+#ifdef NC_ENABLED_SSH_TLS
+
+/**
+ * @brief Get the XPath for the certificate expiration notification.
+ *
+ * @param[in] cp Keys of lists for the given certificate that are needed to create the XPath.
+ * @return XPath for the certificate expiration notification or NULL on error.
+ */
+static char *
+nc_server_notif_cert_exp_xpath_get(struct nc_cert_path_aux *cp)
+{
+    int rc;
+    char *xpath = NULL, *tmp = NULL;
+
+    if (cp->ks_cert_name) {
+        /* ietf-keystore */
+        rc = asprintf(&xpath, "/ietf-keystore:keystore/asymmetric-keys/asymmetric-key[name='%s']/certificates/"
+                "certificate[name='%s']/certificate-expiration/expiration-date", cp->ks_askey_name, cp->ks_cert_name);
+        NC_CHECK_ERRMEM_RET(rc == -1, NULL);
+        return xpath;
+    } else if (cp->ts_cert_name) {
+        /* ietf-truststore */
+        rc = asprintf(&xpath, "/ietf-truststore:truststore/certificate-bags/certificate-bag[name='%s']/"
+                "certificate[name='%s']/certificate-expiration/expiration-date", cp->ts_cbag_name, cp->ts_cert_name);
+        NC_CHECK_ERRMEM_RET(rc == -1, NULL);
+        return xpath;
+    }
+
+    /* ietf-netconf-server */
+    if (cp->ch_client_name) {
+        /* call-home */
+        rc = asprintf(&tmp, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
+                "endpoint[name='%s']/tls/tls-server-parameters", cp->ch_client_name, cp->endpt_name);
+    } else {
+        /* listen */
+        rc = asprintf(&tmp, "/ietf-netconf-server:netconf-server/listen/endpoints/"
+                "endpoint[name='%s']/tls/tls-server-parameters", cp->endpt_name);
+    }
+    NC_CHECK_ERRMEM_RET(rc == -1, NULL);
+
+    if (cp->ee_cert_name) {
+        /* end entity */
+        rc = asprintf(&xpath, "%s/client-authentication/ee-certs/inline-definition/certificate[name='%s']/"
+                "certificate-expiration/expiration-date", tmp, cp->ee_cert_name);
+    } else if (cp->ca_cert_name) {
+        /* certificate authority */
+        rc = asprintf(&xpath, "%s/client-authentication/ca-certs/inline-definition/certificate[name='%s']/"
+                "certificate-expiration/expiration-date", tmp, cp->ca_cert_name);
+    } else {
+        /* server cert */
+        rc = asprintf(&xpath, "%s/server-identity/certificate/inline-definition/certificate-expiration/expiration-date", tmp);
+    }
+    free(tmp);
+    NC_CHECK_ERRMEM_RET(rc == -1, NULL);
+
+    return xpath;
+}
+
+/**
+ * @brief Add months, weeks, days and hours to a calendar time.
+ *
+ * @param[in] orig_time Original calendar time.
+ * @param[in] add_time Months, weeks, days and hours to add.
+ * @return Calendar time of the new time or -1 on error.
+ */
+static time_t
+nc_server_notif_cert_exp_time_add(time_t orig_time, struct nc_cert_exp_time *add_time)
+{
+    struct tm *tm;
+    struct tm tm_aux;
+
+    tm = localtime_r(&orig_time, &tm_aux);
+    if (!tm) {
+        ERR(NULL, "Failed to get localtime (%s).", strerror(errno));
+        return -1;
+    }
+
+    tm->tm_mon += add_time->months;
+    tm->tm_mday += 7 * add_time->weeks;
+    tm->tm_mday += add_time->days;
+    tm->tm_hour += add_time->hours;
+
+    return mktime(tm);
+}
+
+/**
+ * @brief Subtract months, weeks, days and hours from a calendar time.
+ *
+ * @param[in] orig_time Original calendar time.
+ * @param[in] sub_time Months, weeks, days and hours to subtract.
+ * @return Calendar time of the new time or -1 on error.
+ */
+static time_t
+nc_server_notif_cert_exp_time_sub(time_t orig_time, struct nc_cert_exp_time *sub_time)
+{
+    struct tm *tm;
+    struct tm tm_aux;
+
+    tm = localtime_r(&orig_time, &tm_aux);
+    if (!tm) {
+        ERR(NULL, "Failed to get localtime (%s).", strerror(errno));
+        return -1;
+    }
+
+    tm->tm_mon -= sub_time->months;
+    tm->tm_mday -= 7 * sub_time->weeks;
+    tm->tm_mday -= sub_time->days;
+    tm->tm_hour -= sub_time->hours;
+
+    return mktime(tm);
+}
+
+/**
+ * @brief Get the next notification time for the certificate expiration.
+ *
+ * @param[in] intervals Certificate expiration time intervals.
+ * @param[in] interval_count Interval count.
+ * @param[in,out] exp Expiration date structure.
+ * @return Calendar time of the next notification or -1 on error.
+ */
+static time_t
+nc_server_notif_cert_exp_next_notif_time_get(struct nc_interval *intervals, int interval_count, struct nc_cert_expiration *exp)
+{
+    time_t new_notif_time, now;
+    double diff;
+    struct nc_cert_exp_time day_period = {.days = 1};
+
+    now = time(NULL);
+
+    /* check if the certificate already expired */
+    diff = difftime(exp->expiration_time, now);
+    if (diff < 0) {
+        /* it did, so the next notif shall happen on the next day regardless of set intervals */
+        return nc_server_notif_cert_exp_time_add(exp->notif_time, &day_period);
+    }
+
+    /* otherwise just add the current period and check for overflow into the next interval */
+    new_notif_time = nc_server_notif_cert_exp_time_add(exp->notif_time, &intervals[exp->current_interval].period);
+    if (new_notif_time == -1) {
+        return -1;
+    }
+
+    if (exp->current_interval == (interval_count - 1)) {
+        /* we are in the last interval, so we cant overflow */
+        return new_notif_time;
+    }
+
+    diff = difftime(exp->starts_of_intervals[exp->current_interval + 1], new_notif_time);
+    if (diff > 0) {
+        /* no overflow */
+        return new_notif_time;
+    } else {
+        /* overflowed, move to the next interval */
+        ++exp->current_interval;
+        return exp->starts_of_intervals[exp->current_interval];
+    }
+}
+
+/**
+ * @brief Initialize the start times of the intervals for the specific certificate expiration.
+ *
+ * @param[in] intervals Certificate expiration time intervals.
+ * @param[in] interval_count Interval count.
+ * @param[in,out] exp Certificate expiration structure.
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_server_notif_cert_exp_init_intervals(struct nc_interval *intervals, int interval_count, struct nc_cert_expiration *exp)
+{
+    int i;
+
+    exp->starts_of_intervals = malloc(interval_count * sizeof *exp->starts_of_intervals);
+    NC_CHECK_ERRMEM_RET(!exp->starts_of_intervals, 1);
+
+    /* find the start time of each interval */
+    for (i = 0; i < interval_count; i++) {
+        exp->starts_of_intervals[i] = nc_server_notif_cert_exp_time_sub(exp->expiration_time, &intervals[i].anchor);
+        if (exp->starts_of_intervals[i] == -1) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * @brief Get the first notification time and the given interval for the certificate expiration.
+ *
+ * @param[in] intervals Certificate expiration time intervals.
+ * @param[in] interval_count Interval count.
+ * @param[in,out] exp Certificate expiration structure.
+ * @return 0 on success.
+ */
+static int
+nc_server_notif_cert_exp_first_notif_time_get(struct nc_interval *intervals, int interval_count, struct nc_cert_expiration *exp)
+{
+    int i;
+    time_t now, notif_time;
+    double diff;
+
+    now = time(NULL);
+
+    /* check if the start of the first interval is in the future, since they are sorted by calendar time (ascending) */
+    diff = difftime(exp->starts_of_intervals[0], now);
+    if (diff > 0) {
+        /* it is, so the first notif shall happen at the start of the first interval */
+        exp->notif_time = exp->starts_of_intervals[0];
+        exp->current_interval = 0;
+        return 0;
+    }
+
+    /* check if the certificate already expired */
+    diff = difftime(exp->expiration_time, now);
+    if (diff < 0) {
+        /* it did, so the first notif shall happen immediately */
+        exp->notif_time = now;
+        exp->current_interval = interval_count - 1;
+        return 0;
+    }
+
+    /* otherwise we have to find the correct interval */
+    for (i = 0; i < interval_count - 1; i++) {
+        if ((difftime(now, exp->starts_of_intervals[i]) >= 0) && (difftime(now, exp->starts_of_intervals[i + 1]) < 0)) {
+            /* found it (now is at or after i, but before i + 1) */
+            break;
+        }
+    }
+
+    /* now we have to find the exact notification time based on the interval and its period */
+    notif_time = exp->starts_of_intervals[i];
+    while (difftime(notif_time, now) < 0) {
+        /* the notif_time is still in the past, so we add the given period and check for overflow into the next interval */
+        notif_time = nc_server_notif_cert_exp_time_add(notif_time, &intervals[i].period);
+        if (notif_time == -1) {
+            return 1;
+        }
+
+        if ((i != (interval_count - 1)) && (difftime(notif_time, exp->starts_of_intervals[i + 1]) >= 0)) {
+            /* overflowed into the next interval */
+            notif_time = exp->starts_of_intervals[i + 1];
+            ++i;
+            break;
+        }
+    }
+
+    exp->notif_time = notif_time;
+    exp->current_interval = i;
+    return 0;
+}
+
+/**
+ * @brief Initialize and append the certificate expiration date to an array.
+ *
+ * @param[in] cert_data Base64 encoded certificate data.
+ * @param[in] cp Keys of lists required to create the XPath to the certificate expiration date.
+ * @param[in] intervals Certificate expiration time intervals.
+ * @param[in] interval_count Interval count.
+ * @param[out] exp_dates Expiration dates.
+ * @param[out] exp_date_count Expiration date count.
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_server_notif_cert_exp_date_append(const char *cert_data, struct nc_cert_path_aux *cp,
+        struct nc_interval *intervals, int interval_count, struct nc_cert_expiration **exp_dates, int *exp_date_count)
+{
+    int ret = 0;
+    void *cert = NULL;
+    time_t exp_time;
+
+    cert = nc_base64der_to_cert(cert_data);
+    if (!cert) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* get expiration date */
+    exp_time = nc_tls_get_cert_exp_time_wrap(cert);
+    if (exp_time == -1) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    *exp_dates = nc_realloc(*exp_dates, (*exp_date_count + 1) * sizeof **exp_dates);
+    NC_CHECK_ERRMEM_GOTO(!*exp_dates, ret = 1, cleanup);
+
+    (*exp_dates)[*exp_date_count].expiration_time = exp_time;
+
+    /* init the time intervals for this specific cert */
+    ret = nc_server_notif_cert_exp_init_intervals(intervals, interval_count, &(*exp_dates)[*exp_date_count]);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* get the time of the first notif */
+    ret = nc_server_notif_cert_exp_first_notif_time_get(intervals, interval_count, &(*exp_dates)[*exp_date_count]);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* get the XPath to this specific cert */
+    (*exp_dates)[*exp_date_count].xpath = nc_server_notif_cert_exp_xpath_get(cp);
+    if (!(*exp_dates)[*exp_date_count].xpath) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    ++(*exp_date_count);
+
+cleanup:
+    nc_tls_cert_destroy_wrap(cert);
+    return ret;
+}
+
+/**
+ * @brief Get the certificate expiration dates for all the certificates in the given endpoint.
+ *
+ * @param[in] ch_client_name Call Home client name.
+ * @param[in] endpt_name Endpoint name.
+ * @param[in] opts TLS server options.
+ * @param[in] intervals Certificate expiration time intervals.
+ * @param[in] interval_count Interval count.
+ * @param[out] exp_dates Expiration dates.
+ * @param[out] exp_date_count Expiration date count.
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_server_notif_cert_exp_dates_endpt_get(const char *ch_client_name, const char *endpt_name, struct nc_server_tls_opts *opts,
+        struct nc_interval *intervals, int interval_count, struct nc_cert_expiration **exp_dates, int *exp_date_count)
+{
+    int ret = 0, i;
+    struct nc_certificate *certs;
+    uint16_t ncerts;
+    struct nc_cert_path_aux cp = {0};
+
+    /* append server cert first */
+    if (opts->store == NC_STORE_LOCAL) {
+        NC_CERT_EXP_UPDATE_CERT_PATH(&cp, ch_client_name, endpt_name, NULL, NULL, NULL, NULL, NULL, NULL);
+        ret = nc_server_notif_cert_exp_date_append(opts->cert_data, &cp, intervals, interval_count, exp_dates, exp_date_count);
+        if (ret) {
+            goto cleanup;
+        }
+    }
+
+    /* append CA certs */
+    if (opts->ca_certs.store == NC_STORE_LOCAL) {
+        certs = opts->ca_certs.certs;
+        ncerts = opts->ca_certs.cert_count;
+
+        for (i = 0; i < ncerts; i++) {
+            NC_CERT_EXP_UPDATE_CERT_PATH(&cp, ch_client_name, endpt_name, certs[i].name, NULL, NULL, NULL, NULL, NULL);
+            ret = nc_server_notif_cert_exp_date_append(certs[i].data, &cp, intervals, interval_count, exp_dates, exp_date_count);
+            if (ret) {
+                goto cleanup;
+            }
+        }
+    }
+
+    /* append end entity certs */
+    if (opts->ee_certs.store == NC_STORE_LOCAL) {
+        certs = opts->ee_certs.certs;
+        ncerts = opts->ee_certs.cert_count;
+
+        for (i = 0; i < ncerts; i++) {
+            NC_CERT_EXP_UPDATE_CERT_PATH(&cp, ch_client_name, endpt_name, NULL, certs[i].name, NULL, NULL, NULL, NULL);
+            ret = nc_server_notif_cert_exp_date_append(certs[i].data, &cp, intervals, interval_count, exp_dates, exp_date_count);
+            if (ret) {
+                goto cleanup;
+            }
+        }
+    }
+
+cleanup:
+    return ret;
+}
+
+/**
+ * @brief Get the certificate expiration dates for all the certificates in the server configuration.
+ *
+ * @param[in] intervals Certificate expiration time intervals.
+ * @param[in] interval_count Interval count.
+ * @param[out] exp_dates Expiration dates.
+ * @param[out] exp_date_count Expiration date count.
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_server_notif_cert_exp_dates_get(struct nc_interval *intervals, int interval_count, struct nc_cert_expiration **exp_dates, int *exp_date_count)
+{
+    int ret = 0;
+    uint16_t i, j;
+    struct nc_keystore *ks = &server_opts.keystore;
+    struct nc_truststore *ts = &server_opts.truststore;
+    struct nc_cert_path_aux cp = {0};
+
+    NC_CHECK_ARG_RET(NULL, intervals, interval_count, exp_dates, exp_date_count, 1);
+
+    *exp_dates = NULL;
+    *exp_date_count = 0;
+
+    /* CONFIG LOCK */
+    pthread_rwlock_rdlock(&server_opts.config_lock);
+
+    /* first go through listen certs */
+    for (i = 0; i < server_opts.endpt_count; ++i) {
+        if (server_opts.endpts[i].ti == NC_TI_TLS) {
+            ret = nc_server_notif_cert_exp_dates_endpt_get(NULL, server_opts.endpts[i].name,
+                    server_opts.endpts[i].opts.tls, intervals, interval_count, exp_dates, exp_date_count);
+            if (ret) {
+                goto cleanup;
+            }
+        }
+    }
+
+    /* then go through all the ch clients and their endpts */
+    /* CH CLIENT LOCK */
+    pthread_rwlock_rdlock(&server_opts.ch_client_lock);
+    for (i = 0; i < server_opts.ch_client_count; ++i) {
+        /* CH LOCK */
+        pthread_mutex_lock(&server_opts.ch_clients[i].lock);
+        for (j = 0; j < server_opts.ch_clients[i].ch_endpt_count; ++j) {
+            if (server_opts.ch_clients[i].ch_endpts[j].ti == NC_TI_TLS) {
+                ret = nc_server_notif_cert_exp_dates_endpt_get(server_opts.ch_clients[i].name,
+                        server_opts.ch_clients[i].ch_endpts[j].name, server_opts.ch_clients[i].ch_endpts[j].opts.tls,
+                        intervals, interval_count, exp_dates, exp_date_count);
+                if (ret) {
+                    /* CH UNLOCK */
+                    pthread_mutex_unlock(&server_opts.ch_clients[i].lock);
+                    /* CH CLIENT UNLOCK */
+                    pthread_rwlock_unlock(&server_opts.ch_client_lock);
+                    goto cleanup;
+                }
+            }
+        }
+        /* CH UNLOCK */
+        pthread_mutex_unlock(&server_opts.ch_clients[i].lock);
+    }
+    /* CH CLIENT UNLOCK */
+    pthread_rwlock_unlock(&server_opts.ch_client_lock);
+
+    /* keystore certs */
+    for (i = 0; i < ks->asym_key_count; i++) {
+        for (j = 0; j < ks->asym_keys[i].cert_count; j++) {
+            NC_CERT_EXP_UPDATE_CERT_PATH(&cp, NULL, NULL, NULL, NULL, ks->asym_keys[i].name, ks->asym_keys[i].certs[j].name, NULL, NULL);
+            ret = nc_server_notif_cert_exp_date_append(ks->asym_keys[i].certs[j].data, &cp, intervals, interval_count, exp_dates, exp_date_count);
+            if (ret) {
+                goto cleanup;
+            }
+        }
+    }
+
+    /* truststore certs */
+    for (i = 0; i < ts->cert_bag_count; i++) {
+        for (j = 0; j < ts->cert_bags[i].cert_count; j++) {
+            NC_CERT_EXP_UPDATE_CERT_PATH(&cp, NULL, NULL, NULL, NULL, NULL, NULL, ts->cert_bags[i].name, ts->cert_bags[i].certs[j].name);
+            ret = nc_server_notif_cert_exp_date_append(ts->cert_bags[i].certs[j].data, &cp, intervals, interval_count, exp_dates, exp_date_count);
+            if (ret) {
+                goto cleanup;
+            }
+        }
+    }
+
+cleanup:
+    /* CONFIG UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
+    return ret;
+}
+
+/**
+ * @brief Get the time when the certificate expiration notification thread should wake up.
+ *
+ * @param[in] exp_dates Expiration dates.
+ * @param[in] exp_date_count Expiration date count.
+ * @param[out] next Certificate that the notification thread should notify about.
+ * @return 0 if the thread should wake up immediately, otherwise a calendar time in the future.
+ */
+static time_t
+nc_server_notif_cert_exp_wakeup_time_get(struct nc_cert_expiration *exp_dates, int exp_date_count, struct nc_cert_expiration **next)
+{
+    time_t min_time = LONG_MAX;
+    int i;
+    double diff;
+    time_t now, wakeup_time;
+
+    *next = NULL;
+
+    now = time(NULL);
+    if (!exp_date_count) {
+        /* no certificates, set a "very long timeout" for the thread, it shall wake up on the change of config */
+        wakeup_time = now + 365 * 24 * 60 * 60;
+        return wakeup_time;
+    }
+
+    /* find the minimum wait time */
+    for (i = 0; i < exp_date_count; i++) {
+        diff = difftime(exp_dates[i].notif_time, now);
+        if (diff <= 0) {
+            /* already expired, notify immediately */
+            *next = &exp_dates[i];
+            return 0;
+        }
+
+        if (diff < min_time) {
+            min_time = diff;
+            wakeup_time = exp_dates[i].notif_time;
+            *next = &exp_dates[i];
+        }
+    }
+
+    return wakeup_time;
+}
+
+/**
+ * @brief Destroy the certificate expiration notification data.
+ *
+ * @param[in] exp_dates Expiration dates.
+ * @param[in] exp_date_count Expiration date count.
+ */
+static void
+nc_server_notif_cert_exp_dates_destroy(struct nc_cert_expiration *exp_dates, int exp_date_count)
+{
+    int i;
+
+    for (i = 0; i < exp_date_count; i++) {
+        free(exp_dates[i].starts_of_intervals);
+        free(exp_dates[i].xpath);
+    }
+    free(exp_dates);
+}
+
+/**
+ * @brief Check if the certificate expiration notification thread is running.
+ *
+ * @return 1 if the thread is running, 0 otherwise.
+ */
+static int
+nc_server_notif_cert_exp_thread_is_running()
+{
+    int ret = 0;
+
+    /* LOCK */
+    pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
+
+    if (server_opts.cert_exp_notif_thread_running) {
+        ret = 1;
+    }
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+
+    return ret;
+}
+
+/**
+ * @brief Get the certificate expiration notification time intervals either from the config or the default ones.
+ *
+ * @param[in] default_intervals Default intervals.
+ * @param[in] default_interval_count Default interval count.
+ * @param[out] intervals Actual intervals to be used.
+ * @param[out] interval_count Used interval count.
+ */
+static void
+nc_server_notif_cert_exp_intervals_get(struct nc_interval *default_intervals, int default_interval_count,
+        struct nc_interval **intervals, int *interval_count)
+{
+    /* LOCK */
+    pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
+
+    if (!server_opts.intervals) {
+        /* using the default intervals */
+        *intervals = default_intervals;
+        *interval_count = default_interval_count;
+    } else {
+        /* using configured intervals */
+        *intervals = server_opts.intervals;
+        *interval_count = server_opts.interval_count;
+    }
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+}
+
+/**
+ * @brief Certificate expiration notification thread.
+ *
+ * @param[in] arg Thread argument.
+ *
+ * @return NULL.
+ */
+static void *
+nc_server_notif_cert_exp_thread(void *arg)
+{
+    int r = 0, exp_date_count = 0;
+    struct nc_cert_exp_notif_thread_arg *targ = arg;
+    struct nc_cert_expiration *exp_dates = NULL, *curr_cert = NULL;
+    struct timespec wakeup_time = {0};
+    char *exp_time = NULL;
+    struct nc_interval default_intervals[3] = {
+        {.anchor = {.months = 3}, .period = {.months = 1}},
+        {.anchor = {.weeks = 2}, .period = {.weeks = 1}},
+        {.anchor = {.days = 7}, .period = {.days = 1}}
+    };
+    struct nc_interval *intervals;
+    int interval_count;
+
+    /* get certificate expiration time intervals */
+    nc_server_notif_cert_exp_intervals_get(default_intervals, 3, &intervals, &interval_count);
+
+    /* get the expiration dates */
+    r = nc_server_notif_cert_exp_dates_get(intervals, interval_count, &exp_dates, &exp_date_count);
+    if (r) {
+        goto cleanup;
+    }
+
+    while (nc_server_notif_cert_exp_thread_is_running()) {
+        /* get the next notification time and the cert to send it for */
+        wakeup_time.tv_sec = nc_server_notif_cert_exp_wakeup_time_get(exp_dates, exp_date_count, &curr_cert);
+
+        /* sleep until the next notification time or until the thread is woken up */
+        pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
+        r = pthread_cond_clockwait(&server_opts.cert_exp_notif_thread_cond,
+                &server_opts.cert_exp_notif_thread_lock, CLOCK_REALTIME, &wakeup_time);
+        pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+
+        if (!r) {
+            /* we were woken up */
+            if (!nc_server_notif_cert_exp_thread_is_running()) {
+                /* end the thread */
+                break;
+            }
+
+            /* config changed, reload the certificates and intervals */
+            nc_server_notif_cert_exp_dates_destroy(exp_dates, exp_date_count);
+
+            nc_server_notif_cert_exp_intervals_get(default_intervals, 3, &intervals, &interval_count);
+
+            r = nc_server_notif_cert_exp_dates_get(intervals, interval_count, &exp_dates, &exp_date_count);
+            if (r) {
+                break;
+            }
+        } else if (r == ETIMEDOUT) {
+            /* time to send the notification */
+            if (!curr_cert) {
+                /* no certificates to notify about */
+                continue;
+            }
+
+            /* convert the expiration time to string */
+            r = ly_time_time2str(curr_cert->expiration_time, NULL, &exp_time);
+            if (r) {
+                break;
+            }
+
+            /* call the callback */
+            targ->clb(exp_time, curr_cert->xpath, targ->clb_data);
+            free(exp_time);
+
+            /* update the next notification time */
+            curr_cert->notif_time = nc_server_notif_cert_exp_next_notif_time_get(intervals, interval_count, curr_cert);
+            if (curr_cert->notif_time == -1) {
+                break;
+            }
+        } else {
+            ERR(NULL, "Pthread condition timedwait failed (%s).", strerror(r));
+            break;
+        }
+    }
+
+cleanup:
+    VRB(NULL, "Certificate expiration notification thread exit.");
+    if (targ->clb_free_data) {
+        targ->clb_free_data(targ->clb_data);
+    }
+    nc_server_notif_cert_exp_dates_destroy(exp_dates, exp_date_count);
+    free(targ);
+    return NULL;
+}
+
+API int
+nc_server_notif_cert_expiration_thread_start(nc_cert_exp_notif_clb cert_exp_notif_clb,
+        void *user_data, void (*free_data)(void *))
+{
+    int r, ret = 0;
+    pthread_t tid;
+    struct nc_cert_exp_notif_thread_arg *arg;
+
+    NC_CHECK_ARG_RET(NULL, cert_exp_notif_clb, 1);
+
+    /* set the user callback and its data */
+    arg = malloc(sizeof *arg);
+    NC_CHECK_ERRMEM_RET(!arg, 1);
+    arg->clb = cert_exp_notif_clb;
+    arg->clb_data = user_data;
+    arg->clb_free_data = free_data;
+
+    /* LOCK */
+    pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
+
+    /* check if the thread is already running */
+    if (server_opts.cert_exp_notif_thread_running) {
+        ERR(NULL, "Certificate expiration notification thread is already running.");
+        ret = 1;
+        goto cleanup;
+    } else {
+        server_opts.cert_exp_notif_thread_running = 1;
+    }
+
+    if ((r = pthread_create(&tid, NULL, nc_server_notif_cert_exp_thread, arg))) {
+        ERR(NULL, "Creating the certificate expiration notification thread failed (%s).", strerror(r));
+        ret = 1;
+        goto cleanup;
+    }
+
+    server_opts.cert_exp_notif_thread_tid = tid;
+
+cleanup:
+    /* UNLOCK */
+    pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+    if (ret) {
+        free(arg);
+    }
+    return ret;
+}
+
+API void
+nc_server_notif_cert_expiration_thread_stop(int wait)
+{
+    int r;
+
+    /* LOCK */
+    pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
+    if (server_opts.cert_exp_notif_thread_running) {
+        /* set the running flag to 0, signal the thread and unlock its mutex */
+        server_opts.cert_exp_notif_thread_running = 0;
+        pthread_cond_signal(&server_opts.cert_exp_notif_thread_cond);
+
+        /* UNLOCK */
+        pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+        if (wait) {
+            r = pthread_join(server_opts.cert_exp_notif_thread_tid, NULL);
+            if (r) {
+                ERR(NULL, "Joining the certificate expiration notification thread failed (%s).", strerror(r));
+            }
+        }
+    } else {
+        /* thread is not running */
+        /* UNLOCK */
+        pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+    }
+}
+
+#endif /* NC_ENABLED_SSH_TLS */
