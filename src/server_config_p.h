@@ -28,7 +28,8 @@
 typedef enum {
     NC_MODULE_NETCONF_SERVER,
     NC_MODULE_KEYSTORE,
-    NC_MODULE_TRUSTSTORE
+    NC_MODULE_TRUSTSTORE,
+    NC_MODULE_LIBNETCONF2_NETCONF_SERVER
 } NC_MODULE;
 
 #ifdef NC_ENABLED_SSH_TLS
@@ -151,6 +152,17 @@ int nc_server_config_parse_truststore(const struct lyd_node *node, NC_OPERATION 
  * @return 0.
  */
 int nc_server_config_ts_truststore(const struct lyd_node *node, NC_OPERATION op);
+
+/** LIBNETCONF2-NETCONF-SERVER **/
+
+/**
+ * @brief Configures the ln2-netconf-server subtree in the libnetconf2-netconf-server module.
+ *
+ * @param[in] node Optional ln2-netconf-server YANG data node.
+ * @param[in] op Operation to be done on the subtree. Only does something if the operation is NC_OP_DELETE.
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_config_ln2_netconf_server(const struct lyd_node *node, NC_OPERATION op);
 
 #endif /* NC_ENABLED_SSH_TLS */
 
