@@ -28,6 +28,7 @@
 #include "compat.h"
 #include "config.h"
 #include "session_client.h"
+#include "session_server.h"
 #include "session_server_ch.h"
 #include "session_wrapper.h"
 
@@ -388,6 +389,70 @@ struct nc_client_context {
 #endif /* NC_ENABLED_SSH_TLS */
 };
 
+#ifdef NC_ENABLED_SSH_TLS
+
+/**
+ * @brief Stores time information used for creating certificate expiration intervals.
+ */
+struct nc_cert_exp_time {
+    int months;
+    int weeks;
+    int days;
+    int hours;
+};
+
+/**
+ * @brief Stores information about a certificate expiration notification.
+ */
+struct nc_cert_expiration {
+    time_t *starts_of_intervals;    /**< Array of the starting times of the certificate expiration notification intervals. */
+    int current_interval;           /**< Index of the current interval. */
+
+    time_t expiration_time;         /**< Time of the certificate expiration. */
+    time_t notif_time;              /**< Time of the next notification. */
+
+    char *xpath;                    /**< XPath to the certificate. */
+};
+
+/**
+ * @brief Certificate expiration notification thread data.
+ */
+struct nc_cert_exp_notif_thread_arg {
+    nc_cert_exp_notif_clb clb;      /**< Callback called when a certificate expiration notification is ready to be sent. */
+    void *clb_data;                 /**< Data passed to the callback. */
+    void (*clb_free_data)(void *);  /**< Callback to free the user data. */
+};
+
+/**
+ * @brief Auxiliary structure used for creating the XPaths to the certificates.
+ */
+struct nc_cert_path_aux {
+    const char *ch_client_name;
+    const char *endpt_name;
+    const char *ca_cert_name;
+    const char *ee_cert_name;
+    const char *ks_askey_name;
+    const char *ks_cert_name;
+    const char *ts_cbag_name;
+    const char *ts_cert_name;
+};
+
+/**
+ * @brief Update the values of the nc_cert_path_aux members.
+ */
+#define NC_CERT_EXP_UPDATE_CERT_PATH(cp, ch_client, endpt, ca_cert, \
+                ee_cert, ks_askey, ks_cert, ts_cbag, ts_cert) \
+    (cp)->ch_client_name = (ch_client); \
+    (cp)->endpt_name = (endpt); \
+    (cp)->ca_cert_name = (ca_cert); \
+    (cp)->ee_cert_name = (ee_cert); \
+    (cp)->ks_askey_name = (ks_askey); \
+    (cp)->ks_cert_name = (ks_cert); \
+    (cp)->ts_cbag_name = (ts_cbag); \
+    (cp)->ts_cert_name = (ts_cert)
+
+#endif /* NC_ENABLED_SSH_TLS */
+
 /**
  * @brief Call Home client thread data.
  */
@@ -518,6 +583,22 @@ struct nc_server_opts {
     /* Atomic IDs */
     ATOMIC_T new_session_id;
     ATOMIC_T new_client_id;
+
+#ifdef NC_ENABLED_SSH_TLS
+    pthread_t cert_exp_notif_thread_tid;        /**< Thread ID of the certificate expiration notification thread. */
+    int cert_exp_notif_thread_running;          /**< Flag representing the runningness of the cert exp notification thread. */
+    pthread_mutex_t cert_exp_notif_thread_lock; /**< Certificate expiration notification thread's data and cond lock. */
+    pthread_cond_t cert_exp_notif_thread_cond;  /**< Condition for the certificate expiration notification thread. */
+
+    /**
+     * @brief Intervals for certificate expiration notifications.
+     */
+    struct nc_interval {
+        struct nc_cert_exp_time anchor;     /**< Lower bound of the given interval. */
+        struct nc_cert_exp_time period;     /**< Period of the given interval. */
+    } *intervals;
+    int interval_count;                     /**< Number of intervals. */
+#endif
 };
 
 /**
