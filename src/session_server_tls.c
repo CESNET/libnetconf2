@@ -100,24 +100,6 @@ nc_server_tls_ts_ref_get_certs(const char *referenced_name, struct nc_certificat
 }
 
 static void *
-nc_base64der_to_cert(const char *in)
-{
-    char *buf = NULL;
-    void *cert;
-
-    NC_CHECK_ARG_RET(NULL, in, NULL);
-
-    if (asprintf(&buf, "%s%s%s", "-----BEGIN CERTIFICATE-----\n", in, "\n-----END CERTIFICATE-----") == -1) {
-        ERRMEM;
-        return NULL;
-    }
-
-    cert = nc_tls_pem_to_cert_wrap(buf);
-    free(buf);
-    return cert;
-}
-
-static void *
 nc_base64der_to_privkey(const char *in, const char *key_str)
 {
     char *buf = NULL;
