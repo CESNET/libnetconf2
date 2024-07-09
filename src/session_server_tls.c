@@ -74,7 +74,7 @@ nc_server_tls_ks_ref_get_cert_key(const char *referenced_key_name, const char *r
 }
 
 static int
-nc_server_tls_ts_ref_get_certs(const char *referenced_name, struct nc_certificate **certs, uint16_t *cert_count)
+nc_server_tls_truststore_ref_get_certs(const char *referenced_name, struct nc_certificate **certs, uint16_t *cert_count)
 {
     uint16_t i;
     struct nc_truststore *ts = &server_opts.truststore;
@@ -529,7 +529,7 @@ _nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_cert_grouping *ee_cer
         cert_count = ee_certs->cert_count;
     } else {
         /* truststore reference */
-        if (nc_server_tls_ts_ref_get_certs(ee_certs->ts_ref, &certs, &cert_count)) {
+        if (nc_server_tls_truststore_ref_get_certs(ee_certs->ts_ref, &certs, &cert_count)) {
             ERR(NULL, "Error getting end-entity certificates from the truststore reference \"%s\".", ee_certs->ts_ref);
             return -1;
         }
@@ -720,7 +720,7 @@ nc_server_tls_load_trusted_certs(struct nc_cert_grouping *ca_certs, void *cert_s
         cert_count = ca_certs->cert_count;
     } else {
         /* truststore */
-        if (nc_server_tls_ts_ref_get_certs(ca_certs->ts_ref, &certs, &cert_count)) {
+        if (nc_server_tls_truststore_ref_get_certs(ca_certs->ts_ref, &certs, &cert_count)) {
             ERR(NULL, "Error getting certificate-authority certificates from the truststore reference \"%s\".", ca_certs->ts_ref);
             return 1;
         }
