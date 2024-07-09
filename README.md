@@ -256,7 +256,7 @@ The *libnetconf2* NETCONF server has two APIs that load YANG modules into the co
 - **ietf-netconf**: writable-running, candidate, rollback-on-error, validate, startup, url, xpath, confirmed-commit,
 - **ietf-netconf-monitoring**: no features.
 
-The second API is [nc_server_config_load_modules](https://netopeer.liberouter.org/doc/libnetconf2/master/html/group__server__config__functions.html#ga3760b87e3ab4309514e9ad82c4c09cdb). Supported features (marked by ✔) are loaded into the context by this API. The only exception is the feature `local-users-supported`, which is by default loaded, but can be disabled, which will influence the behaviour of the SSH authentication (see the *libnetconf2* [documentation](https://netopeer.liberouter.org/doc/libnetconf2/master/html/howtoserver.html)).
+The second API is [nc_server_config_load_modules](https://netopeer.liberouter.org/doc/libnetconf2/master/html/group__server__config__functions.html#ga3760b87e3ab4309514e9ad82c4c09cdb). Supported features (marked by ✔) are loaded into the context by this API.
 
 - **iana-crypt-hash**: crypt-hash-md5 ✔, crypt-hash-sha-256 ✔, crypt-hash-sha-512 ✔,
 - **ietf-netconf-server**: ssh-listen ✔, tls-listen ✔, ssh-call-home ✔, tls-call-home ✔, central-netconf-server-supported ✔,
@@ -265,7 +265,7 @@ The second API is [nc_server_config_load_modules](https://netopeer.liberouter.or
 - **iana-ssh-mac-algs**: no features,
 - **iana-ssh-public-key-algs**: no features,
 - **iana-tls-cipher-suite-algs**: no features,
-- **ietf-crypto-types**: cleartext-passwords ✔, cleartext-private-keys ✔, private-key-encryption ✘, csr-generation ✘, p10-csr-format ✘, certificate-expiration-notification ✘, encrypted-passwords ✘, hidden-symmetric-keys ✘, encrypted-symmetric-keys ✘, hidden-private-keys ✘, encrypted-private-keys ✘, one-symmetric-key-format ✘, one-asymmetric-key-format ✘, symmetrically-encrypted-value-format ✘, asymmetrically-encrypted-value-format ✘, cms-enveloped-data-format ✘, cms-encrypted-data-format ✘, cleartext-symmetric-keys ✘,
+- **ietf-crypto-types**: cleartext-passwords ✔, cleartext-private-keys ✔, private-key-encryption ✘, csr-generation ✘, p10-csr-format ✘, certificate-expiration-notification **?**, encrypted-passwords ✘, hidden-symmetric-keys ✘, encrypted-symmetric-keys ✘, hidden-private-keys ✘, encrypted-private-keys ✘, one-symmetric-key-format ✘, one-asymmetric-key-format ✘, symmetrically-encrypted-value-format ✘, asymmetrically-encrypted-value-format ✘, cms-enveloped-data-format ✘, cms-encrypted-data-format ✘, cleartext-symmetric-keys ✘,
 - **ietf-keystore**: central-keystore-supported ✔, inline-definitions-supported ✔, asymmetric-keys ✔, symmetric-keys ✘,
 - **ietf-netconf-server**: ssh-listen ✔, tls-listen ✔, ssh-call-home ✔, tls-call-home ✔, central-netconf-server-supported ✔,
 - **ietf-ssh-common**: transport-params ✔, ssh-x509-certs ✘, public-key-generation ✘,
@@ -278,6 +278,11 @@ The second API is [nc_server_config_load_modules](https://netopeer.liberouter.or
 - **ietf-truststore**: central-truststore-supported ✔, inline-definitions-supported ✔, certificates ✔, public-keys ✔,
 - **ietf-x509-cert-to-name**: no features,
 - **libnetconf2-netconf-server**: no features.
+
+The following features can be enabled/disabled to influence the behaviour of the `libnetconf2` NETCONF server:
+
+- `local-users-supported` - enabled by default, disable to change the behaviour of the SSH authentication (see the *libnetconf2* [documentation](https://netopeer.liberouter.org/doc/libnetconf2/master/html/howtoserver.html)).
+- `certificate-expiration-notification` - disabled by default, but certificate expiration notifications are supported and you can enable this feature to create such YANG data (see the *libnetconf2* documentation).
 
 ### Client
 
