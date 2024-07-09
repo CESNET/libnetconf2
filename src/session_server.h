@@ -56,6 +56,21 @@ extern "C" {
 typedef struct nc_server_reply *(*nc_rpc_clb)(struct lyd_node *rpc, struct nc_session *session);
 
 /**
+ * @brief Callback for certificate expiration notification.
+ *
+ * This callback is called when a certificate expiration notification is generated.
+ * It is up to the user to decide what to do with the notification.
+ *
+ * In case an error occurs and you wish to terminate the notification thread,
+ * call nc_server_notif_cert_expiration_thread_stop().
+ *
+ * @param[in] expiration_time Expiration time of the certificate obtained via ly_time_time2str().
+ * @param[in] xpath Xpath of the certificate. Can be used to create the notification data.
+ * @param[in] user_data Arbitrary user data.
+ */
+typedef void (*nc_cert_exp_notif_clb)(const char *expiration_time, const char *xpath, void *user_data);
+
+/**
  * @brief Set the termination reason for a session. Use only in #nc_rpc_clb callbacks.
  *
  * @param[in] session Session to modify.
@@ -606,6 +621,35 @@ void nc_session_dec_notif_status(struct nc_session *session);
  * @return 0 for no active subscription, non-zero for an active subscription.
  */
 int nc_session_get_notif_status(const struct nc_session *session);
+
+#ifdef NC_ENABLED_SSH_TLS
+
+/**
+ * @brief Start the certificate expiration notification thread.
+ *
+ * The thread will periodically check the expiration time of all certificates in the configuration.
+ * When a notification is about to be generated, the callback @p cert_exp_notif_clb is called.
+ * The times of when these notifications are generated are based on the expiration times of certificates
+ * in the configuration and on the values of intervals set in the configuration. For more information,
+ * see the libnetconf2-netconf-server YANG module.
+ *
+ * @param[in] cert_exp_notif_clb The callback to be called when a notification is generated.
+ * @param[in] user_data Arbitrary user data to pass to the callback.
+ * @param[in] free_data Optional callback to free the user data.
+ *
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_notif_cert_expiration_thread_start(nc_cert_exp_notif_clb cert_exp_notif_clb,
+        void *user_data, void (*free_data)(void *));
+
+/**
+ * @brief Stop the certificate expiration notification thread.
+ *
+ * @param[in] wait Boolean representing whether to block and wait for the thread to finish.
+ */
+void nc_server_notif_cert_expiration_thread_stop(int wait);
+
+#endif /* NC_ENABLED_SSH_TLS */
 
 /** @} Server Session */
 
