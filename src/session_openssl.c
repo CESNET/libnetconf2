@@ -1432,3 +1432,20 @@ nc_server_tls_set_cipher_suites_wrap(void *tls_cfg, void *cipher_suites)
     /* set for TLS1.3 */
     SSL_CTX_set_ciphersuites(tls_cfg, cipher_suites);
 }
+
+time_t
+nc_tls_get_cert_exp_time_wrap(void *cert)
+{
+    int r;
+    struct tm t = {0};
+
+    r = ASN1_TIME_to_tm(X509_get0_notAfter(cert), &t);
+    if (!r) {
+        return -1;
+    }
+
+    /* let system figure out the DST */
+    t.tm_isdst = -1;
+
+    return timegm(&t);
+}
