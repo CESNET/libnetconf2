@@ -3802,6 +3802,175 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
 }
 
 int
+nc_server_config_ln2_netconf_server(const struct lyd_node *node, NC_OPERATION op)
+{
+    (void) node;
+
+    assert((op == NC_OP_CREATE) || (op == NC_OP_DELETE));
+
+    if (op == NC_OP_DELETE) {
+
+#ifdef NC_ENABLED_SSH_TLS
+        /* delete the intervals */
+        pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
+        free(server_opts.intervals);
+        server_opts.intervals = NULL;
+        server_opts.interval_count = 0;
+        pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+#endif /* NC_ENABLED_SSH_TLS */
+
+    }
+
+    return 0;
+}
+
+#ifdef NC_ENABLED_SSH_TLS
+
+static int
+nc_server_config_yang_value2cert_exp_time(const char *value, struct nc_cert_exp_time *cert_exp_time)
+{
+    char unit;
+    long val;
+
+    unit = value[strlen(value) - 1];
+    val = strtol(value, NULL, 10);
+    switch (unit) {
+    case 'm':
+        cert_exp_time->months = val;
+        break;
+    case 'w':
+        cert_exp_time->weeks = val;
+        break;
+    case 'd':
+        cert_exp_time->days = val;
+        break;
+    case 'h':
+        cert_exp_time->hours = val;
+        break;
+    default:
+        ERR(NULL, "Unexpected unit in the certificate expiration time \"%s\".", value);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int
+nc_server_config_create_interval(const char *anchor, const char *period)
+{
+    int ret = 0;
+    struct nc_cert_exp_time cert_exp_time = {0};
+
+    server_opts.intervals = nc_realloc(server_opts.intervals, (server_opts.interval_count + 1) * sizeof *server_opts.intervals);
+    NC_CHECK_ERRMEM_RET(!server_opts.intervals, 1);
+
+    ret = nc_server_config_yang_value2cert_exp_time(anchor, &cert_exp_time);
+    if (ret) {
+        goto cleanup;
+    }
+    memcpy(&server_opts.intervals[server_opts.interval_count].anchor, &cert_exp_time, sizeof cert_exp_time);
+
+    ret = nc_server_config_yang_value2cert_exp_time(period, &cert_exp_time);
+    if (ret) {
+        goto cleanup;
+    }
+    memcpy(&server_opts.intervals[server_opts.interval_count].period, &cert_exp_time, sizeof cert_exp_time);
+
+    ++server_opts.interval_count;
+
+cleanup:
+    return ret;
+}
+
+static void
+nc_server_config_del_interval(const char *anchor, const char *period)
+{
+    int i;
+    struct nc_cert_exp_time anchor_time = {0}, period_time = {0};
+
+    if (nc_server_config_yang_value2cert_exp_time(anchor, &anchor_time)) {
+        return;
+    }
+    if (nc_server_config_yang_value2cert_exp_time(period, &period_time)) {
+        return;
+    }
+
+    for (i = 0; i < server_opts.interval_count; ++i) {
+        if (!memcmp(&server_opts.intervals[i].anchor, &anchor_time, sizeof anchor_time) &&
+                !memcmp(&server_opts.intervals[i].period, &period_time, sizeof period_time)) {
+            break;
+        }
+    }
+    if (i == server_opts.interval_count) {
+        ERR(NULL, "Interval \"%s %s\" not found.", anchor, period);
+        return;
+    }
+
+    server_opts.interval_count--;
+    if (!server_opts.interval_count) {
+        free(server_opts.intervals);
+        server_opts.intervals = NULL;
+    } else if (i != server_opts.interval_count) {
+        memcpy(&server_opts.intervals[i], &server_opts.intervals[server_opts.interval_count], sizeof *server_opts.intervals);
+    }
+}
+
+static int
+nc_server_config_interval(const struct lyd_node *node, NC_OPERATION op)
+{
+    int ret = 0;
+    struct lyd_node *anchor, *period;
+
+    assert(!strcmp(LYD_NAME(node), "interval"));
+
+    anchor = lyd_child(node);
+    assert(anchor);
+    period = anchor->next;
+    assert(period);
+
+    /* LOCK */
+    pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
+
+    if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+        ret = nc_server_config_create_interval(lyd_get_value(anchor), lyd_get_value(period));
+        if (ret) {
+            goto cleanup;
+        }
+    } else {
+        nc_server_config_del_interval(lyd_get_value(anchor), lyd_get_value(period));
+    }
+
+cleanup:
+    pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+    return ret;
+}
+
+#endif /* NC_ENABLED_SSH_TLS */
+
+static int
+nc_server_config_parse_libnetconf2_netconf_server(const struct lyd_node *node, NC_OPERATION op)
+{
+    const char *name = LYD_NAME(node);
+    int ret = 0;
+
+    if (!strcmp(name, "ln2-netconf-server")) {
+        ret = nc_server_config_ln2_netconf_server(node, op);
+    }
+#ifdef NC_ENABLED_SSH_TLS
+    else if (!strcmp(name, "interval")) {
+        ret = nc_server_config_interval(node, op);
+    }
+#endif /* NC_ENABLED_SSH_TLS */
+
+    if (ret) {
+        ERR(NULL, "Configuring node \"%s\" failed.", LYD_NAME(node));
+        return 1;
+    }
+
+    return 0;
+}
+
+int
 nc_server_config_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op, NC_MODULE module)
 {
     struct lyd_node *child;
@@ -3847,8 +4016,13 @@ nc_server_config_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op,
             ret = nc_server_config_parse_truststore(node, current_op);
         } else
 #endif /* NC_ENABLED_SSH_TLS */
-        {
+        if (module == NC_MODULE_LIBNETCONF2_NETCONF_SERVER) {
+            ret = nc_server_config_parse_libnetconf2_netconf_server(node, current_op);
+        } else if (module == NC_MODULE_NETCONF_SERVER) {
             ret = nc_server_config_parse_netconf_server(node, current_op);
+        } else {
+            ERRINT;
+            ret = 1;
         }
         if (ret) {
             return ret;
@@ -3994,6 +4168,34 @@ cleanup:
     return ret;
 }
 
+static int
+nc_server_config_fill_libnetconf2_netconf_server(const struct lyd_node *data, NC_OPERATION op)
+{
+    int ret = 0;
+    struct lyd_node *tree;
+    uint32_t log_options = 0;
+
+    /* silently search for ln2-netconf-server, it may not be present */
+    ly_temp_log_options(&log_options);
+
+    ret = lyd_find_path(data, "/libnetconf2-netconf-server:ln2-netconf-server", 0, &tree);
+    if (ret || (tree->flags & LYD_DEFAULT)) {
+        /* not found */
+        ret = 0;
+        goto cleanup;
+    }
+
+    if (nc_server_config_parse_tree(tree, op, NC_MODULE_LIBNETCONF2_NETCONF_SERVER)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+cleanup:
+    /* reset the logging options back to what they were */
+    ly_temp_log_options(NULL);
+    return ret;
+}
+
 API int
 nc_server_config_setup_diff(const struct lyd_node *data)
 {
@@ -4008,14 +4210,14 @@ nc_server_config_setup_diff(const struct lyd_node *data)
     /* configure keystore */
     ret = nc_server_config_fill_keystore(data, NC_OP_UNKNOWN);
     if (ret) {
-        ERR(NULL, "Filling keystore failed.");
+        ERR(NULL, "Applying ietf-keystore configuration failed.");
         goto cleanup;
     }
 
     /* configure truststore */
     ret = nc_server_config_fill_truststore(data, NC_OP_UNKNOWN);
     if (ret) {
-        ERR(NULL, "Filling truststore failed.");
+        ERR(NULL, "Applying ietf-truststore configuration failed.");
         goto cleanup;
     }
 #endif /* NC_ENABLED_SSH_TLS */
@@ -4023,9 +4225,25 @@ nc_server_config_setup_diff(const struct lyd_node *data)
     /* configure netconf-server */
     ret = nc_server_config_fill_netconf_server(data, NC_OP_UNKNOWN);
     if (ret) {
-        ERR(NULL, "Filling netconf-server failed.");
+        ERR(NULL, "Applying ietf-netconf-server configuration failed.");
         goto cleanup;
     }
+
+    /* configure libnetconf2-netconf-server */
+    ret = nc_server_config_fill_libnetconf2_netconf_server(data, NC_OP_UNKNOWN);
+    if (ret) {
+        ERR(NULL, "Applying libnetconf2-netconf-server configuration failed.");
+        goto cleanup;
+    }
+
+#ifdef NC_ENABLED_SSH_TLS
+    /* wake up the cert expiration notif thread if it's running */
+    pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
+    if (server_opts.cert_exp_notif_thread_running) {
+        pthread_cond_signal(&server_opts.cert_exp_notif_thread_cond);
+    }
+    pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+#endif /* NC_ENABLED_SSH_TLS */
 
 cleanup:
     /* UNLOCK */
@@ -4073,14 +4291,14 @@ nc_server_config_setup_data(const struct lyd_node *data)
     /* configure keystore */
     ret = nc_server_config_fill_keystore(data, NC_OP_CREATE);
     if (ret) {
-        ERR(NULL, "Filling keystore failed.");
+        ERR(NULL, "Applying ietf-keystore configuration failed.");
         goto cleanup;
     }
 
     /* configure truststore */
     ret = nc_server_config_fill_truststore(data, NC_OP_CREATE);
     if (ret) {
-        ERR(NULL, "Filling truststore failed.");
+        ERR(NULL, "Applying ietf-truststore configuration failed.");
         goto cleanup;
     }
 #endif /* NC_ENABLED_SSH_TLS */
@@ -4088,9 +4306,25 @@ nc_server_config_setup_data(const struct lyd_node *data)
     /* configure netconf-server */
     ret = nc_server_config_fill_netconf_server(data, NC_OP_CREATE);
     if (ret) {
-        ERR(NULL, "Filling netconf-server failed.");
+        ERR(NULL, "Applying ietf-netconf-server configuration failed.");
         goto cleanup;
     }
+
+    /* configure libnetconf2-netconf-server */
+    ret = nc_server_config_fill_libnetconf2_netconf_server(data, NC_OP_CREATE);
+    if (ret) {
+        ERR(NULL, "Applying libnetconf2-netconf-server configuration failed.");
+        goto cleanup;
+    }
+
+#ifdef NC_ENABLED_SSH_TLS
+    /* wake up the cert expiration notif thread if it's running */
+    pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
+    if (server_opts.cert_exp_notif_thread_running) {
+        pthread_cond_signal(&server_opts.cert_exp_notif_thread_cond);
+    }
+    pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+#endif /* NC_ENABLED_SSH_TLS */
 
 cleanup:
     /* UNLOCK */
