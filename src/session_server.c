@@ -850,11 +850,11 @@ nc_server_init(void)
     }
 
 #ifdef NC_ENABLED_SSH_TLS
-    if ((r = pthread_mutex_init(&server_opts.cert_exp_notif_thread_lock, NULL))) {
+    if ((r = pthread_mutex_init(&server_opts.cert_exp_notif.lock, NULL))) {
         ERR(NULL, "%s: failed to init certificate expiration notification thread lock(%s).", __func__, strerror(r));
         goto error;
     }
-    if ((r = pthread_cond_init(&server_opts.cert_exp_notif_thread_cond, NULL))) {
+    if ((r = pthread_cond_init(&server_opts.cert_exp_notif.cond, NULL))) {
         ERR(NULL, "%s: failed to init certificate expiration notification thread condition(%s).", __func__, strerror(r));
         goto error;
     }
@@ -3661,14 +3661,14 @@ nc_server_notif_cert_exp_thread_is_running()
     int ret = 0;
 
     /* LOCK */
-    pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
+    pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
 
-    if (server_opts.cert_exp_notif_thread_running) {
+    if (server_opts.cert_exp_notif.thread_running) {
         ret = 1;
     }
 
     /* UNLOCK */
-    pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+    pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
 
     return ret;
 }
@@ -3686,20 +3686,20 @@ nc_server_notif_cert_exp_intervals_get(struct nc_interval *default_intervals, in
         struct nc_interval **intervals, int *interval_count)
 {
     /* LOCK */
-    pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
+    pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
 
-    if (!server_opts.intervals) {
+    if (!server_opts.cert_exp_notif.intervals) {
         /* using the default intervals */
         *intervals = default_intervals;
         *interval_count = default_interval_count;
     } else {
         /* using configured intervals */
-        *intervals = server_opts.intervals;
-        *interval_count = server_opts.interval_count;
+        *intervals = server_opts.cert_exp_notif.intervals;
+        *interval_count = server_opts.cert_exp_notif.interval_count;
     }
 
     /* UNLOCK */
-    pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+    pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
 }
 
 /**
@@ -3739,10 +3739,10 @@ nc_server_notif_cert_exp_thread(void *arg)
         wakeup_time.tv_sec = nc_server_notif_cert_exp_wakeup_time_get(exp_dates, exp_date_count, &curr_cert);
 
         /* sleep until the next notification time or until the thread is woken up */
-        pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
-        r = pthread_cond_clockwait(&server_opts.cert_exp_notif_thread_cond,
-                &server_opts.cert_exp_notif_thread_lock, CLOCK_REALTIME, &wakeup_time);
-        pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+        pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
+        r = pthread_cond_clockwait(&server_opts.cert_exp_notif.cond,
+                &server_opts.cert_exp_notif.lock, CLOCK_REALTIME, &wakeup_time);
+        pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
 
         if (!r) {
             /* we were woken up */
@@ -3816,15 +3816,15 @@ nc_server_notif_cert_expiration_thread_start(nc_cert_exp_notif_clb cert_exp_noti
     arg->clb_free_data = free_data;
 
     /* LOCK */
-    pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
+    pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
 
     /* check if the thread is already running */
-    if (server_opts.cert_exp_notif_thread_running) {
+    if (server_opts.cert_exp_notif.thread_running) {
         ERR(NULL, "Certificate expiration notification thread is already running.");
         ret = 1;
         goto cleanup;
     } else {
-        server_opts.cert_exp_notif_thread_running = 1;
+        server_opts.cert_exp_notif.thread_running = 1;
     }
 
     if ((r = pthread_create(&tid, NULL, nc_server_notif_cert_exp_thread, arg))) {
@@ -3833,11 +3833,11 @@ nc_server_notif_cert_expiration_thread_start(nc_cert_exp_notif_clb cert_exp_noti
         goto cleanup;
     }
 
-    server_opts.cert_exp_notif_thread_tid = tid;
+    server_opts.cert_exp_notif.tid = tid;
 
 cleanup:
     /* UNLOCK */
-    pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+    pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
     if (ret) {
         free(arg);
     }
@@ -3850,16 +3850,16 @@ nc_server_notif_cert_expiration_thread_stop(int wait)
     int r;
 
     /* LOCK */
-    pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
-    if (server_opts.cert_exp_notif_thread_running) {
+    pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
+    if (server_opts.cert_exp_notif.thread_running) {
         /* set the running flag to 0, signal the thread and unlock its mutex */
-        server_opts.cert_exp_notif_thread_running = 0;
-        pthread_cond_signal(&server_opts.cert_exp_notif_thread_cond);
+        server_opts.cert_exp_notif.thread_running = 0;
+        pthread_cond_signal(&server_opts.cert_exp_notif.cond);
 
         /* UNLOCK */
-        pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+        pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
         if (wait) {
-            r = pthread_join(server_opts.cert_exp_notif_thread_tid, NULL);
+            r = pthread_join(server_opts.cert_exp_notif.tid, NULL);
             if (r) {
                 ERR(NULL, "Joining the certificate expiration notification thread failed (%s).", strerror(r));
             }
@@ -3867,7 +3867,7 @@ nc_server_notif_cert_expiration_thread_stop(int wait)
     } else {
         /* thread is not running */
         /* UNLOCK */
-        pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+        pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
     }
 }
 

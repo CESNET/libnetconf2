@@ -585,19 +585,21 @@ struct nc_server_opts {
     ATOMIC_T new_client_id;
 
 #ifdef NC_ENABLED_SSH_TLS
-    pthread_t cert_exp_notif_thread_tid;        /**< Thread ID of the certificate expiration notification thread. */
-    int cert_exp_notif_thread_running;          /**< Flag representing the runningness of the cert exp notification thread. */
-    pthread_mutex_t cert_exp_notif_thread_lock; /**< Certificate expiration notification thread's data and cond lock. */
-    pthread_cond_t cert_exp_notif_thread_cond;  /**< Condition for the certificate expiration notification thread. */
+    struct {
+        pthread_t tid;                      /**< Thread ID of the certificate expiration notification thread. */
+        int thread_running;                 /**< Flag representing the runningness of the cert exp notification thread. */
+        pthread_mutex_t lock;               /**< Certificate expiration notification thread's data and cond lock. */
+        pthread_cond_t cond;                /**< Condition for the certificate expiration notification thread. */
 
-    /**
-     * @brief Intervals for certificate expiration notifications.
-     */
-    struct nc_interval {
-        struct nc_cert_exp_time anchor;     /**< Lower bound of the given interval. */
-        struct nc_cert_exp_time period;     /**< Period of the given interval. */
-    } *intervals;
-    int interval_count;                     /**< Number of intervals. */
+        /**
+         * @brief Intervals for certificate expiration notifications.
+         */
+        struct nc_interval {
+            struct nc_cert_exp_time anchor; /**< Lower bound of the given interval. */
+            struct nc_cert_exp_time period; /**< Period of the given interval. */
+        } *intervals;
+        int interval_count;                 /**< Number of intervals. */
+    } cert_exp_notif;
 #endif
 };
 

@@ -3812,11 +3812,11 @@ nc_server_config_ln2_netconf_server(const struct lyd_node *node, NC_OPERATION op
 
 #ifdef NC_ENABLED_SSH_TLS
         /* delete the intervals */
-        pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
-        free(server_opts.intervals);
-        server_opts.intervals = NULL;
-        server_opts.interval_count = 0;
-        pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+        pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
+        free(server_opts.cert_exp_notif.intervals);
+        server_opts.cert_exp_notif.intervals = NULL;
+        server_opts.cert_exp_notif.interval_count = 0;
+        pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
 #endif /* NC_ENABLED_SSH_TLS */
 
     }
@@ -3861,22 +3861,27 @@ nc_server_config_create_interval(const char *anchor, const char *period)
     int ret = 0;
     struct nc_cert_exp_time cert_exp_time = {0};
 
-    server_opts.intervals = nc_realloc(server_opts.intervals, (server_opts.interval_count + 1) * sizeof *server_opts.intervals);
-    NC_CHECK_ERRMEM_RET(!server_opts.intervals, 1);
+    server_opts.cert_exp_notif.intervals = nc_realloc(server_opts.cert_exp_notif.intervals,
+            (server_opts.cert_exp_notif.interval_count + 1) * sizeof *server_opts.cert_exp_notif.intervals);
+    NC_CHECK_ERRMEM_RET(!server_opts.cert_exp_notif.intervals, 1);
 
+    /* convert and set the anchor */
     ret = nc_server_config_yang_value2cert_exp_time(anchor, &cert_exp_time);
     if (ret) {
         goto cleanup;
     }
-    memcpy(&server_opts.intervals[server_opts.interval_count].anchor, &cert_exp_time, sizeof cert_exp_time);
+    memcpy(&server_opts.cert_exp_notif.intervals[server_opts.cert_exp_notif.interval_count].anchor,
+            &cert_exp_time, sizeof cert_exp_time);
 
+    /* convert and set the period */
     ret = nc_server_config_yang_value2cert_exp_time(period, &cert_exp_time);
     if (ret) {
         goto cleanup;
     }
-    memcpy(&server_opts.intervals[server_opts.interval_count].period, &cert_exp_time, sizeof cert_exp_time);
+    memcpy(&server_opts.cert_exp_notif.intervals[server_opts.cert_exp_notif.interval_count].period,
+            &cert_exp_time, sizeof cert_exp_time);
 
-    ++server_opts.interval_count;
+    ++server_opts.cert_exp_notif.interval_count;
 
 cleanup:
     return ret;
@@ -3895,23 +3900,25 @@ nc_server_config_del_interval(const char *anchor, const char *period)
         return;
     }
 
-    for (i = 0; i < server_opts.interval_count; ++i) {
-        if (!memcmp(&server_opts.intervals[i].anchor, &anchor_time, sizeof anchor_time) &&
-                !memcmp(&server_opts.intervals[i].period, &period_time, sizeof period_time)) {
+    for (i = 0; i < server_opts.cert_exp_notif.interval_count; ++i) {
+        if (!memcmp(&server_opts.cert_exp_notif.intervals[i].anchor, &anchor_time, sizeof anchor_time) &&
+                !memcmp(&server_opts.cert_exp_notif.intervals[i].period, &period_time, sizeof period_time)) {
             break;
         }
     }
-    if (i == server_opts.interval_count) {
+    if (i == server_opts.cert_exp_notif.interval_count) {
         ERR(NULL, "Interval \"%s %s\" not found.", anchor, period);
         return;
     }
 
-    server_opts.interval_count--;
-    if (!server_opts.interval_count) {
-        free(server_opts.intervals);
-        server_opts.intervals = NULL;
-    } else if (i != server_opts.interval_count) {
-        memcpy(&server_opts.intervals[i], &server_opts.intervals[server_opts.interval_count], sizeof *server_opts.intervals);
+    server_opts.cert_exp_notif.interval_count--;
+    if (!server_opts.cert_exp_notif.interval_count) {
+        free(server_opts.cert_exp_notif.intervals);
+        server_opts.cert_exp_notif.intervals = NULL;
+    } else if (i != server_opts.cert_exp_notif.interval_count) {
+        memcpy(&server_opts.cert_exp_notif.intervals[i],
+                &server_opts.cert_exp_notif.intervals[server_opts.cert_exp_notif.interval_count],
+                sizeof *server_opts.cert_exp_notif.intervals);
     }
 }
 
@@ -3929,7 +3936,7 @@ nc_server_config_interval(const struct lyd_node *node, NC_OPERATION op)
     assert(period);
 
     /* LOCK */
-    pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
+    pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
         ret = nc_server_config_create_interval(lyd_get_value(anchor), lyd_get_value(period));
@@ -3941,7 +3948,7 @@ nc_server_config_interval(const struct lyd_node *node, NC_OPERATION op)
     }
 
 cleanup:
-    pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+    pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
     return ret;
 }
 
@@ -4238,11 +4245,11 @@ nc_server_config_setup_diff(const struct lyd_node *data)
 
 #ifdef NC_ENABLED_SSH_TLS
     /* wake up the cert expiration notif thread if it's running */
-    pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
-    if (server_opts.cert_exp_notif_thread_running) {
-        pthread_cond_signal(&server_opts.cert_exp_notif_thread_cond);
+    pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
+    if (server_opts.cert_exp_notif.thread_running) {
+        pthread_cond_signal(&server_opts.cert_exp_notif.cond);
     }
-    pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+    pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
 #endif /* NC_ENABLED_SSH_TLS */
 
 cleanup:
@@ -4319,11 +4326,11 @@ nc_server_config_setup_data(const struct lyd_node *data)
 
 #ifdef NC_ENABLED_SSH_TLS
     /* wake up the cert expiration notif thread if it's running */
-    pthread_mutex_lock(&server_opts.cert_exp_notif_thread_lock);
-    if (server_opts.cert_exp_notif_thread_running) {
-        pthread_cond_signal(&server_opts.cert_exp_notif_thread_cond);
+    pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
+    if (server_opts.cert_exp_notif.thread_running) {
+        pthread_cond_signal(&server_opts.cert_exp_notif.cond);
     }
-    pthread_mutex_unlock(&server_opts.cert_exp_notif_thread_lock);
+    pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
 #endif /* NC_ENABLED_SSH_TLS */
 
 cleanup:
