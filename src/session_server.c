@@ -3848,18 +3848,22 @@ API void
 nc_server_notif_cert_expiration_thread_stop(int wait)
 {
     int r;
+    pthread_t tid;
 
     /* LOCK */
     pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
+    tid = server_opts.cert_exp_notif.tid;
+
     if (server_opts.cert_exp_notif.thread_running) {
-        /* set the running flag to 0, signal the thread and unlock its mutex */
+        /* set the tid and running flag to 0, signal the thread and unlock its mutex */
         server_opts.cert_exp_notif.thread_running = 0;
+        server_opts.cert_exp_notif.tid = 0;
         pthread_cond_signal(&server_opts.cert_exp_notif.cond);
 
         /* UNLOCK */
         pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
         if (wait) {
-            r = pthread_join(server_opts.cert_exp_notif.tid, NULL);
+            r = pthread_join(tid, NULL);
             if (r) {
                 ERR(NULL, "Joining the certificate expiration notification thread failed (%s).", strerror(r));
             }
