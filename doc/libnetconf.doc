@@ -650,6 +650,13 @@
  * this request with ::nc_ps_accept_ssh_channel() or ::nc_session_accept_ssh_channel()
  * depending on the structure you want to use as the argument.
  *
+ * The server-side notifications are also supported. You can create a new notification
+ * with ::nc_server_notif_new() and send it via ::nc_server_notif_send() to subscribed clients.
+ * Keep in mind that the session you wish to send a notification on has to have at least one
+ * subscriber, see ::nc_session_inc_notif_status().
+ * Currently, only notifications about certificate expiration are implemented,
+ * see ::nc_server_notif_cert_expiration_thread_start().
+ *
  * Functions List
  * --------------
  *
@@ -665,6 +672,18 @@
  * - ::nc_ps_clear()
  * - ::nc_ps_accept_ssh_channel()
  * - ::nc_session_accept_ssh_channel()
+ *
+ * - ::nc_server_notif_new()
+ * - ::nc_server_notif_send()
+ * - ::nc_server_notif_free()
+ * - ::nc_server_notif_get_time()
+
+ * - ::nc_session_inc_notif_status()
+ * - ::nc_session_dec_notif_status()
+ * - ::nc_session_get_notif_status()
+
+ * - ::nc_server_notif_cert_expiration_thread_start()
+ * - ::nc_server_notif_cert_expiration_thread_stop()
  */
 
 /**
