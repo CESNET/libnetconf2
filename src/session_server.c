@@ -1401,6 +1401,96 @@ recv_rpc_check_msgid(struct nc_session *session, const struct lyd_node *envp)
 }
 
 /**
+ * @brief Find lysc node mentioned in schema_path.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] ly_err last libyang error.
+ * @return lysc node.
+ */
+static const struct lysc_node *
+nc_rpc_err_find_lysc_node(const struct ly_ctx *ctx, const struct ly_err_item *ly_err)
+{
+    char *str, *last;
+    const struct lysc_node *cn;
+
+    if (!ly_err->schema_path) {
+        return NULL;
+    }
+
+    str = strdup(ly_err->schema_path);
+    if (!str) {
+        return NULL;
+    }
+    last = strrchr(str, '/');
+    if (strchr(last, '@')) {
+        /* ignore attribute part */
+        *last = '\0';
+    }
+    cn = lys_find_path(ctx, NULL, str, 0);
+    free(str);
+
+    return cn;
+}
+
+/**
+ * @brief Find the nth substring delimited by quotes.
+ *
+ * For example: abcd"ef"ghij"kl"mn -> index 0 is "ef", index 1 is "kl".
+ *
+ * @param[in] msg Input string with quoted substring.
+ * @param[in] index Number starting from 0 specifying the nth substring.
+ * @return Copied nth substring without quotes.
+ */
+static char *
+nc_rpc_err_get_quoted_string(const char *msg, uint32_t index)
+{
+    char *ret;
+    const char *start = NULL, *end = NULL, *iter, *tmp;
+    uint32_t quote_cnt = 0, last_quote;
+
+    assert(msg);
+
+    last_quote = (index + 1) * 2;
+    for (iter = msg; *iter; ++iter) {
+        if (*iter != '\"') {
+            continue;
+        }
+        /* updating the start and end pointers - swap */
+        tmp = end;
+        end = iter;
+        start = tmp;
+        if (++quote_cnt == last_quote) {
+            /* nth substring found */
+            break;
+        }
+    }
+
+    if (!start) {
+        return NULL;
+    }
+
+    /* Skip first quote */
+    ++start;
+    /* Copy substring */
+    ret = strndup(start, end - start);
+
+    return ret;
+}
+
+/**
+ * @brief Check that the @p str starts with the @p prefix.
+ *
+ * @param[in] prefix Required prefix.
+ * @param[in] str Input string to check.
+ * @return True if @p str start with @p prefix otherwise False.
+ */
+static ly_bool
+nc_strstarts(const char *prefix, const char *str)
+{
+    return strncmp(str, prefix, strlen(prefix)) == 0;
+}
+
+/**
  * @brief Prepare reply for rpc error.
  *
  * @param[in] session NETCONF session.
@@ -1410,28 +1500,84 @@ recv_rpc_check_msgid(struct nc_session *session, const struct lyd_node *envp)
 static struct nc_server_reply *
 nc_server_prepare_rpc_err(struct nc_session *session, struct lyd_node *envp)
 {
-    struct lyd_node *node;
+    struct lyd_node *reply = NULL;
+    const struct lysc_node *cn;
     const struct ly_err_item *ly_err;
+    NC_ERR_TYPE errtype;
+    const char *attr;
+    char *str = NULL, *errmsg = NULL, *schema_path = NULL;
+    LY_ERR errcode;
 
+    /* envelope was not parsed */
     if (!envp && (session->version != NC_VERSION_11)) {
         return NULL;
     }
-
     ly_err = ly_err_last(session->ctx);
-    if (envp) {
-        /* at least the envelopes were parsed */
-        node = nc_err(session->ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
-        nc_err_set_msg(node, ly_err->msg, "en");
-    } else if (!strcmp("Missing XML namespace.", ly_err->msg)) {
-        node = nc_err(session->ctx, NC_ERR_MISSING_ATTR, NC_ERR_TYPE_RPC, "xmlns", "rpc");
-        nc_err_set_msg(node, ly_err->msg, "en");
-    } else {
+    if (!envp && !strcmp("Missing XML namespace.", ly_err->msg)) {
+        reply = nc_err(session->ctx, NC_ERR_MISSING_ATTR, NC_ERR_TYPE_RPC, "xmlns", "rpc");
+        goto cleanup;
+    } else if (!envp) {
         /* completely malformed message, NETCONF version 1.1 defines sending error reply from
          * the server (RFC 6241 sec. 3) */
-        node = nc_err(session->ctx, NC_ERR_MALFORMED_MSG);
+        reply = nc_err(session->ctx, NC_ERR_MALFORMED_MSG);
+        return nc_server_reply_err(reply);
+    }
+    /* at least the envelopes were parsed */
+    assert(envp);
+
+    /* store strings, to avoid overwriting ly_err */
+    errmsg = strdup(ly_err->msg);
+    if (!errmsg) {
+        reply = nc_err(session->ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+        goto cleanup;
+    }
+    if (ly_err->schema_path) {
+        schema_path = strdup(ly_err->schema_path);
+        if (!schema_path) {
+            reply = nc_err(session->ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+            goto cleanup;
+        }
+    }
+    errcode = ly_err->err;
+
+    /* find out in which layer the error occurred */
+    cn = nc_rpc_err_find_lysc_node(session->ctx, ly_err);
+    if (cn && ((cn->nodetype & LYS_RPC) || (cn->nodetype & LYS_INPUT))) {
+        errtype = NC_ERR_TYPE_PROT;
+    } else {
+        errtype = NC_ERR_TYPE_APP;
     }
 
-    return nc_server_reply_err(node);
+    /* deciding which error to prepare */
+    if (cn && (nc_strstarts("Missing mandatory prefix", errmsg) ||
+            nc_strstarts("Unknown XML prefix", errmsg))) {
+        str = nc_rpc_err_get_quoted_string(errmsg, 1);
+        reply = str ? nc_err(session->ctx, NC_ERR_UNKNOWN_ATTR, errtype, str, cn->name) :
+                nc_err(session->ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+    } else if (cn && nc_strstarts("Annotation definition for attribute", errmsg)) {
+        attr = strrchr(schema_path, ':') + 1;
+        reply = nc_err(session->ctx, NC_ERR_UNKNOWN_ATTR, errtype, attr, cn->name);
+    } else if (nc_strstarts("Invalid character sequence", errmsg)) {
+        reply = nc_err(session->ctx, NC_ERR_MALFORMED_MSG);
+    } else if (errcode == LY_EMEM) {
+        /* <error-tag>resource-denied</error-tag> */
+        reply = nc_err(session->ctx, NC_ERR_RES_DENIED, errtype);
+    } else {
+        /* prepare some generic error */
+        reply = nc_err(session->ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
+    }
+
+cleanup:
+    nc_err_set_msg(reply, errmsg, "en");
+
+    /* clear for other errors */
+    ly_err_clean(session->ctx, NULL);
+
+    free(errmsg);
+    free(schema_path);
+    free(str);
+
+    return nc_server_reply_err(reply);
 }
 
 /* should be called holding the session RPC lock! IO lock will be acquired as needed
