@@ -167,9 +167,24 @@ jobs:
             make-prepend: "",
             make-target: "abi-check"
           }
+          - {
+            name: "DEB Package",
+            os: "ubuntu-22.04",
+            build-type: "Release",
+            dep-build-type: "Release",
+            cc: "gcc",
+            options: "",
+            tls-lib: "OpenSSL",
+            packages: "cmake debhelper valgrind python3-pip",
+            snaps: "",
+            make-prepend: "",
+            make-target: ""
+          }
 
     steps:
       - uses: actions/checkout@main
+        with:
+          fetch-depth: 100
 
       - name: Deps-packages
         shell: bash
@@ -178,6 +193,10 @@ jobs:
           sudo apt-get install $DEFAULT_PACKAGES ${{ matrix.config.packages }}
           if ${{ matrix.config.snaps != '' }}
             then sudo snap refresh; sudo snap install ${{ matrix.config.snaps }}
+          fi
+          if ${{ matrix.config.name == 'DEB Package' }}; then
+            pip install apkg
+            apkg system-setup
           fi
 
       - name: Deps-uncrustify
@@ -198,11 +217,24 @@ jobs:
         run: |
           git clone -b ${{ needs.git-branch.outputs.branch-name }} https://github.com/CESNET/libyang.git
           cd libyang
-          mkdir build
-          cd build
-          CC=${{ matrix.config.cc }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.config.dep-build-type }} -DENABLE_TESTS=OFF ..
-          make -j2
-          sudo make install
+          if ${{ matrix.config.name == 'DEB Package' }}; then
+            apkg build
+            apkg install
+          else
+            mkdir build
+            cd build
+            CC=${{ matrix.config.cc }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.config.dep-build-type }} -DENABLE_TESTS=OFF ..
+            make -j2
+            sudo make install
+          fi
+
+      - name: Build-and-install-package
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          apkg build
+          apkg install
+        if: ${{ matrix.config.name == 'DEB Package' }}
 
       - name: Deps-libval
         shell: bash
@@ -212,6 +244,7 @@ jobs:
           ./configure
           make -j2
           sudo make install
+        if: ${{ matrix.config.name != 'DEB Package' }}
 
       - name: Deps-MbedTLS
         shell: bash
@@ -232,6 +265,7 @@ jobs:
           mkdir build
           cd build
           CC=${{ matrix.config.cc }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.config.build-type }} ${{ matrix.config.options }} ..
+        if: ${{ matrix.config.name != 'DEB Package' }}
 
       - name: Build
         shell: bash
@@ -240,6 +274,7 @@ jobs:
           export LC_ALL=C.UTF-8
           export PATH=/snap/bin:${{ github.workspace }}/coverity-tools/bin:$PATH
           ${{ matrix.config.make-prepend }} make ${{ matrix.config.make-target }}
+        if: ${{ matrix.config.name != 'DEB Package' }}
 
       - name: Test
         shell: bash
@@ -247,3 +282,4 @@ jobs:
         run: |
           export LSAN_OPTIONS=suppressions=${{ github.workspace }}/tests/library_lsan.supp
           ctest -j4 --output-on-failure
+        if: ${{ matrix.config.name != 'DEB Package' }}
