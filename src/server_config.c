@@ -3859,27 +3859,25 @@ static int
 nc_server_config_create_interval(const char *anchor, const char *period)
 {
     int ret = 0;
-    struct nc_cert_exp_time cert_exp_time = {0};
+    struct nc_cert_exp_time anchor_time = {0}, period_time = {0};
 
     server_opts.cert_exp_notif.intervals = nc_realloc(server_opts.cert_exp_notif.intervals,
             (server_opts.cert_exp_notif.interval_count + 1) * sizeof *server_opts.cert_exp_notif.intervals);
     NC_CHECK_ERRMEM_RET(!server_opts.cert_exp_notif.intervals, 1);
 
     /* convert and set the anchor */
-    ret = nc_server_config_yang_value2cert_exp_time(anchor, &cert_exp_time);
+    ret = nc_server_config_yang_value2cert_exp_time(anchor, &anchor_time);
     if (ret) {
         goto cleanup;
     }
-    memcpy(&server_opts.cert_exp_notif.intervals[server_opts.cert_exp_notif.interval_count].anchor,
-            &cert_exp_time, sizeof cert_exp_time);
+    server_opts.cert_exp_notif.intervals[server_opts.cert_exp_notif.interval_count].anchor = anchor_time;
 
     /* convert and set the period */
-    ret = nc_server_config_yang_value2cert_exp_time(period, &cert_exp_time);
+    ret = nc_server_config_yang_value2cert_exp_time(period, &period_time);
     if (ret) {
         goto cleanup;
     }
-    memcpy(&server_opts.cert_exp_notif.intervals[server_opts.cert_exp_notif.interval_count].period,
-            &cert_exp_time, sizeof cert_exp_time);
+    server_opts.cert_exp_notif.intervals[server_opts.cert_exp_notif.interval_count].period = period_time;
 
     ++server_opts.cert_exp_notif.interval_count;
 
@@ -3916,9 +3914,8 @@ nc_server_config_del_interval(const char *anchor, const char *period)
         free(server_opts.cert_exp_notif.intervals);
         server_opts.cert_exp_notif.intervals = NULL;
     } else if (i != server_opts.cert_exp_notif.interval_count) {
-        memcpy(&server_opts.cert_exp_notif.intervals[i],
-                &server_opts.cert_exp_notif.intervals[server_opts.cert_exp_notif.interval_count],
-                sizeof *server_opts.cert_exp_notif.intervals);
+        server_opts.cert_exp_notif.intervals[i] =
+                server_opts.cert_exp_notif.intervals[server_opts.cert_exp_notif.interval_count];
     }
 }
 
