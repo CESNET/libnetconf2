@@ -3864,9 +3864,11 @@ nc_server_notif_cert_expiration_thread_stop(int wait)
         pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
         if (wait) {
             r = pthread_join(tid, NULL);
-            if (r) {
-                ERR(NULL, "Joining the certificate expiration notification thread failed (%s).", strerror(r));
-            }
+        } else {
+            r = pthread_detach(tid);
+        }
+        if (r) {
+            ERR(NULL, "Stopping the certificate expiration notification thread failed (%s).", strerror(r));
         }
     } else {
         /* thread is not running */
