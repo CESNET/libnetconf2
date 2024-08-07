@@ -62,6 +62,8 @@ macro(USE_COMPAT)
 
     check_symbol_exists(get_current_dir_name "unistd.h" HAVE_GET_CURRENT_DIR_NAME)
 
+    check_function_exists(timegm HAVE_TIMEGM)
+
     # crypt
     check_include_file("crypt.h" HAVE_CRYPT_H)
 

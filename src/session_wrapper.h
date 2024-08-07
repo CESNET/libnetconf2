@@ -724,4 +724,13 @@ int nc_tls_append_cipher_suite_wrap(struct nc_server_tls_opts *opts, const char 
  */
 void nc_server_tls_set_cipher_suites_wrap(void *tls_cfg, void *cipher_suites);
 
+/**
+ * @brief Get the certificate's expiration time.
+ *
+ * @param[in] cert Certificate.
+ *
+ * @return Calendar time of the expiration (it is in GMT) or -1 on error.
+ */
+time_t nc_tls_get_cert_exp_time_wrap(void *cert);
+
 #endif

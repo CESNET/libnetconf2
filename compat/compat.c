@@ -391,3 +391,37 @@ crypt_r(const char *phrase, const char *setting, struct crypt_data *data)
 }
 
 #endif
+
+#ifndef HAVE_TIMEGM
+time_t
+timegm(struct tm *tm)
+{
+    pthread_mutex_t tz_lock = PTHREAD_MUTEX_INITIALIZER;
+    time_t ret;
+    char *tz;
+
+    pthread_mutex_lock(&tz_lock);
+
+    tz = getenv("TZ");
+    if (tz) {
+        tz = strdup(tz);
+    }
+    setenv("TZ", "", 1);
+    tzset();
+
+    ret = mktime(tm);
+
+    if (tz) {
+        setenv("TZ", tz, 1);
+        free(tz);
+    } else {
+        unsetenv("TZ");
+    }
+    tzset();
+
+    pthread_mutex_unlock(&tz_lock);
+
+    return ret;
+}
+
+#endif

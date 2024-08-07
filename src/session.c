@@ -138,6 +138,24 @@ nc_poll(struct pollfd *pfd, uint16_t pfd_count, int timeout_ms)
 
 #ifdef NC_ENABLED_SSH_TLS
 
+void *
+nc_base64der_to_cert(const char *data)
+{
+    char *buf = NULL;
+    void *cert;
+
+    NC_CHECK_ARG_RET(NULL, data, NULL);
+
+    if (asprintf(&buf, "%s%s%s", "-----BEGIN CERTIFICATE-----\n", data, "\n-----END CERTIFICATE-----") == -1) {
+        ERRMEM;
+        return NULL;
+    }
+
+    cert = nc_tls_pem_to_cert_wrap(buf);
+    free(buf);
+    return cert;
+}
+
 const char *
 nc_privkey_format_to_str(NC_PRIVKEY_FORMAT format)
 {
@@ -917,7 +935,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 #ifdef NC_ENABLED_SSH_TLS
         struct nc_session *siter;
 
-        if ((session->flags & NC_SESSION_SHAREDCTX) && session->ti.libssh.next) {
+        if ((session->flags & NC_SESSION_SHAREDCTX) && (session->ti_type == NC_TI_SSH) && session->ti.libssh.next) {
             for (siter = session->ti.libssh.next; siter != session; siter = siter->ti.libssh.next) {
                 if (siter->status != NC_STATUS_STARTING) {
                     /* move LY ext data to this session */
