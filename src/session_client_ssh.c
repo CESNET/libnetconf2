@@ -1606,7 +1606,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
         }
 
         /* create and connect socket */
-        sock = nc_sock_connect(host, port, -1, ka, NULL, &ip_host);
+        sock = nc_sock_connect(NULL, 0, host, port, -1, ka, NULL, &ip_host);
         if (sock == -1) {
             ERR(NULL, "Unable to connect to %s:%u (%s).", host, port, strerror(errno));
             free(host);
@@ -1762,7 +1762,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     }
 
     /* create and assign communication socket */
-    sock = nc_sock_connect(host, port, -1, &client_opts.ka, NULL, &ip_host);
+    sock = nc_sock_connect(NULL, 0, host, port, -1, &client_opts.ka, NULL, &ip_host);
     if (sock == -1) {
         ERR(session, "Unable to connect to %s:%u (%s).", host, port, strerror(errno));
         goto fail;
