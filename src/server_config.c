@@ -867,7 +867,8 @@ nc_server_config_ch_del_endpt(struct nc_ch_client *ch_client, struct nc_ch_endpt
     free(ch_endpt->name);
 
 #ifdef NC_ENABLED_SSH_TLS
-    free(ch_endpt->address);
+    free(ch_endpt->src_addr);
+    free(ch_endpt->dst_addr);
     if (ch_endpt->sock_pending > -1) {
         close(ch_endpt->sock_pending);
         ch_endpt->sock_pending = -1;
@@ -1338,19 +1339,19 @@ cleanup:
     return ret;
 }
 
-/* mandatory leaf */
+/* leaf */
 static int
 nc_server_config_local_address(const struct lyd_node *node, NC_OPERATION op)
 {
+    int ret = 0;
     struct nc_endpt *endpt;
     struct nc_bind *bind;
-    int ret = 0;
-
-    (void) op;
+    struct nc_ch_client *ch_client = NULL;
+    struct nc_ch_endpt *ch_endpt;
 
     assert(!strcmp(LYD_NAME(node), "local-address"));
 
-    if (equal_parent_name(node, 5, "listen")) {
+    if (is_listen(node) && equal_parent_name(node, 1, "tcp-server-parameters")) {
         if (nc_server_config_get_endpt(node, &endpt, &bind)) {
             ret = 1;
             goto cleanup;
@@ -1364,9 +1365,33 @@ nc_server_config_local_address(const struct lyd_node *node, NC_OPERATION op)
         if (ret) {
             goto cleanup;
         }
+    } else if (is_ch(node) && equal_parent_name(node, 1, "tcp-client-parameters")) {
+        /* LOCK */
+        if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+            /* to avoid unlock on fail */
+            return 1;
+        }
+
+        if (nc_server_config_get_ch_endpt(node, ch_client, &ch_endpt)) {
+            ret = 1;
+            goto cleanup;
+        }
+
+        if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+            free(ch_endpt->src_addr);
+            ch_endpt->src_addr = strdup(lyd_get_value(node));
+            NC_CHECK_ERRMEM_GOTO(!ch_endpt->src_addr, ret = 1, cleanup);
+        } else if (op == NC_OP_DELETE) {
+            free(ch_endpt->src_addr);
+            ch_endpt->src_addr = NULL;
+        }
     }
 
 cleanup:
+    if (is_ch(node) && equal_parent_name(node, 1, "tcp-client-parameters")) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -1374,13 +1399,15 @@ cleanup:
 static int
 nc_server_config_local_port(const struct lyd_node *node, NC_OPERATION op)
 {
+    int ret = 0;
     struct nc_endpt *endpt;
     struct nc_bind *bind;
-    int ret = 0;
+    struct nc_ch_client *ch_client = NULL;
+    struct nc_ch_endpt *ch_endpt;
 
     assert(!strcmp(LYD_NAME(node), "local-port"));
 
-    if (equal_parent_name(node, 5, "listen")) {
+    if (is_listen(node) && equal_parent_name(node, 1, "tcp-server-parameters")) {
         if (nc_server_config_get_endpt(node, &endpt, &bind)) {
             ret = 1;
             goto cleanup;
@@ -1397,9 +1424,31 @@ nc_server_config_local_port(const struct lyd_node *node, NC_OPERATION op)
         if (ret) {
             goto cleanup;
         }
+    } else if (is_ch(node) && equal_parent_name(node, 1, "tcp-client-parameters")) {
+        /* LOCK */
+        if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+            /* to avoid unlock on fail */
+            return 1;
+        }
+
+        if (nc_server_config_get_ch_endpt(node, ch_client, &ch_endpt)) {
+            ret = 1;
+            goto cleanup;
+        }
+
+        if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+            ch_endpt->src_port = ((struct lyd_node_term *)node)->value.uint16;
+        } else if (op == NC_OP_DELETE) {
+            /* delete -> set to default */
+            ch_endpt->src_port = 0;
+        }
     }
 
 cleanup:
+    if (is_ch(node) && equal_parent_name(node, 1, "tcp-client-parameters")) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
     return ret;
 }
 
@@ -3359,12 +3408,12 @@ nc_server_config_remote_address(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        free(ch_endpt->address);
-        ch_endpt->address = strdup(lyd_get_value(node));
-        NC_CHECK_ERRMEM_GOTO(!ch_endpt->address, ret = 1, cleanup);
+        free(ch_endpt->dst_addr);
+        ch_endpt->dst_addr = strdup(lyd_get_value(node));
+        NC_CHECK_ERRMEM_GOTO(!ch_endpt->dst_addr, ret = 1, cleanup);
     } else {
-        free(ch_endpt->address);
-        ch_endpt->address = NULL;
+        free(ch_endpt->dst_addr);
+        ch_endpt->dst_addr = NULL;
     }
 
 cleanup:
@@ -3394,9 +3443,9 @@ nc_server_config_remote_port(const struct lyd_node *node, NC_OPERATION op)
     }
 
     if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        ch_endpt->port = ((struct lyd_node_term *)node)->value.uint16;
+        ch_endpt->dst_port = ((struct lyd_node_term *)node)->value.uint16;
     } else {
-        ch_endpt->port = 0;
+        ch_endpt->dst_port = 0;
     }
 
 cleanup:
@@ -3846,8 +3895,8 @@ nc_server_config_load_modules(struct ly_ctx **ctx)
     const char *ietf_tcp_common[] = {"keepalives-supported", NULL};
     /* all features */
     const char *ietf_tcp_server[] = {"tcp-server-keepalives", NULL};
-    /* no proxy-connect, socks5-gss-api, socks5-username-password, local-binding-supported ? */
-    const char *ietf_tcp_client[] = {"tcp-client-keepalives", NULL};
+    /* no proxy-connect, socks5-gss-api, socks5-username-password */
+    const char *ietf_tcp_client[] = {"local-binding-supported", "tcp-client-keepalives", NULL};
     /* no ssh-x509-certs, public-key-generation */
     const char *ietf_ssh_common[] = {"transport-params", NULL};
     /* no ssh-server-keepalives and local-user-auth-hostbased */
