@@ -1593,9 +1593,10 @@ nc_saddr2str(const struct sockaddr *saddr, char **str_ip, uint16_t *port)
  * @return Connected socket or -1 on error.
  */
 static int
-sock_connect(int timeout_ms, int *sock_pending, struct addrinfo *res, const struct nc_keepalives *ka)
+sock_connect(const char *src_addr, uint16_t src_port, int timeout_ms, int *sock_pending, struct addrinfo *res,
+        const struct nc_keepalives *ka)
 {
-    int flags, ret, error;
+    int flags, ret, error, opt;
     int sock = -1;
     struct pollfd fds = {0};
     socklen_t len = sizeof(int);
@@ -1624,6 +1625,21 @@ sock_connect(int timeout_ms, int *sock_pending, struct addrinfo *res, const stru
             ERR(NULL, "fcntl() failed (%s).", strerror(errno));
             goto cleanup;
         }
+
+        /* bind the socket to a specific address/port to make the connection from (CH only) */
+        if (src_addr || src_port) {
+            /* enable address reuse, so that we're able to bind this address again when the CH conn is dropped and retried */
+            opt = 1;
+            if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof opt) == -1) {
+                ERR(NULL, "Could not set SO_REUSEADDR socket option (%s).", strerror(errno));
+                goto cleanup;
+            }
+
+            if (nc_sock_bind_inet(sock, src_addr, src_port, (res->ai_family == AF_INET) ? 1 : 0)) {
+                goto cleanup;
+            }
+        }
+
         /* non-blocking connect! */
         if (connect(sock, res->ai_addr, res->ai_addrlen) < 0) {
             if (errno != EINPROGRESS) {
@@ -1688,35 +1704,36 @@ cleanup:
 }
 
 int
-nc_sock_connect(const char *host, uint16_t port, int timeout_ms, struct nc_keepalives *ka, int *sock_pending, char **ip_host)
+nc_sock_connect(const char *src_addr, uint16_t src_port, const char *dst_addr, uint16_t dst_port, int timeout_ms,
+        struct nc_keepalives *ka, int *sock_pending, char **ip_host)
 {
     int i, opt;
     int sock = sock_pending ? *sock_pending : -1;
     struct addrinfo hints, *res_list = NULL, *res;
-    char port_s[6]; /* length of string representation of short int */
+    char dst_port_str[6]; /* length of string representation of short int */
     struct sockaddr_storage saddr;
     socklen_t addr_len = sizeof saddr;
 
     *ip_host = NULL;
 
-    DBG(NULL, "nc_sock_connect(%s, %u, %d, %d)", host, port, timeout_ms, sock);
+    DBG(NULL, "nc_sock_connect(%s, %u, %s, %u, %d, %d)", src_addr, src_port, dst_addr, dst_port, timeout_ms, sock);
 
     /* no pending socket */
     if (sock == -1) {
         /* connect to a server */
-        snprintf(port_s, 6, "%u", port);
+        snprintf(dst_port_str, 6, "%u", dst_port);
         memset(&hints, 0, sizeof hints);
         hints.ai_family = AF_UNSPEC;
         hints.ai_socktype = SOCK_STREAM;
         hints.ai_protocol = IPPROTO_TCP;
-        i = getaddrinfo(host, port_s, &hints, &res_list);
+        i = getaddrinfo(dst_addr, dst_port_str, &hints, &res_list);
         if (i != 0) {
             ERR(NULL, "Unable to translate the host address (%s).", gai_strerror(i));
             goto error;
         }
 
         for (res = res_list; res != NULL; res = res->ai_next) {
-            sock = sock_connect(timeout_ms, sock_pending, res, ka);
+            sock = sock_connect(src_addr, src_port, timeout_ms, sock_pending, res, ka);
             if (sock == -1) {
                 if (!sock_pending || (*sock_pending == -1)) {
                     /* try the next resource */
@@ -1726,7 +1743,12 @@ nc_sock_connect(const char *host, uint16_t port, int timeout_ms, struct nc_keepa
                     break;
                 }
             }
-            VRB(NULL, "Successfully connected to %s:%s over %s.", host, port_s, (res->ai_family == AF_INET6) ? "IPv6" : "IPv4");
+
+            if (res->ai_family == AF_INET) {
+                VRB(NULL, "Successfully connected to %s:%s over IPv4.", dst_addr, dst_port_str);
+            } else {
+                VRB(NULL, "Successfully connected to [%s]:%s over IPv6.", dst_addr, dst_port_str);
+            }
 
             opt = 1;
             if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof opt) == -1) {
@@ -1744,7 +1766,7 @@ nc_sock_connect(const char *host, uint16_t port, int timeout_ms, struct nc_keepa
     } else {
         /* try to get a connection with the pending socket */
         assert(sock_pending);
-        sock = sock_connect(timeout_ms, sock_pending, NULL, ka);
+        sock = sock_connect(src_addr, src_port, timeout_ms, sock_pending, NULL, ka);
 
         if (sock > 0) {
             if (getpeername(sock, (struct sockaddr *)&saddr, &addr_len)) {

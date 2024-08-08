@@ -272,14 +272,65 @@ nc_server_ch_set_dispatch_data(nc_server_ch_session_acquire_ctx_cb acquire_ctx_c
 #endif
 
 int
+nc_sock_bind_inet(int sock, const char *address, uint16_t port, int is_ipv4)
+{
+    struct sockaddr_storage saddr;
+    struct sockaddr_in *saddr4;
+    struct sockaddr_in6 *saddr6;
+
+    memset(&saddr, 0, sizeof(struct sockaddr_storage));
+
+    if (is_ipv4) {
+        saddr4 = (struct sockaddr_in *)&saddr;
+
+        saddr4->sin_family = AF_INET;
+        saddr4->sin_port = htons(port);
+
+        /* determine the address */
+        if (!address) {
+            /* set the implicit default IPv4 address */
+            address = "0.0.0.0";
+        }
+        if (inet_pton(AF_INET, address, &saddr4->sin_addr) != 1) {
+            ERR(NULL, "Failed to convert IPv4 address \"%s\".", address);
+            return -1;
+        }
+
+        if (bind(sock, (struct sockaddr *)saddr4, sizeof(struct sockaddr_in)) == -1) {
+            ERR(NULL, "Could not bind %s:%" PRIu16 " (%s).", address, port, strerror(errno));
+            return -1;
+        }
+
+    } else {
+        saddr6 = (struct sockaddr_in6 *)&saddr;
+
+        saddr6->sin6_family = AF_INET6;
+        saddr6->sin6_port = htons(port);
+
+        /* determine the address */
+        if (!address) {
+            /* set the implicit default IPv6 address */
+            address = "::";
+        }
+        if (inet_pton(AF_INET6, address, &saddr6->sin6_addr) != 1) {
+            ERR(NULL, "Failed to convert IPv6 address \"%s\".", address);
+            return -1;
+        }
+
+        if (bind(sock, (struct sockaddr *)saddr6, sizeof(struct sockaddr_in6)) == -1) {
+            ERR(NULL, "Could not bind [%s]:%" PRIu16 " (%s).", address, port, strerror(errno));
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+int
 nc_sock_listen_inet(const char *address, uint16_t port)
 {
     int opt;
     int is_ipv4, sock;
-    struct sockaddr_storage saddr;
-
-    struct sockaddr_in *saddr4;
-    struct sockaddr_in6 *saddr6;
 
     if (!strchr(address, ':')) {
         is_ipv4 = 1;
@@ -304,38 +355,9 @@ nc_sock_listen_inet(const char *address, uint16_t port)
         goto fail;
     }
 
-    memset(&saddr, 0, sizeof(struct sockaddr_storage));
-    if (is_ipv4) {
-        saddr4 = (struct sockaddr_in *)&saddr;
-
-        saddr4->sin_family = AF_INET;
-        saddr4->sin_port = htons(port);
-
-        if (inet_pton(AF_INET, address, &saddr4->sin_addr) != 1) {
-            ERR(NULL, "Failed to convert IPv4 address \"%s\".", address);
-            goto fail;
-        }
-
-        if (bind(sock, (struct sockaddr *)saddr4, sizeof(struct sockaddr_in)) == -1) {
-            ERR(NULL, "Could not bind \"%s\" port %d (%s).", address, port, strerror(errno));
-            goto fail;
-        }
-
-    } else {
-        saddr6 = (struct sockaddr_in6 *)&saddr;
-
-        saddr6->sin6_family = AF_INET6;
-        saddr6->sin6_port = htons(port);
-
-        if (inet_pton(AF_INET6, address, &saddr6->sin6_addr) != 1) {
-            ERR(NULL, "Failed to convert IPv6 address \"%s\".", address);
-            goto fail;
-        }
-
-        if (bind(sock, (struct sockaddr *)saddr6, sizeof(struct sockaddr_in6)) == -1) {
-            ERR(NULL, "Could not bind \"%s\" port %d (%s).", address, port, strerror(errno));
-            goto fail;
-        }
+    /* bind the socket */
+    if (nc_sock_bind_inet(sock, address, port, is_ipv4)) {
+        goto fail;
     }
 
     if (listen(sock, NC_REVERSE_QUEUE) == -1) {
@@ -2491,7 +2513,8 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
     struct timespec ts_cur;
     char *ip_host;
 
-    sock = nc_sock_connect(endpt->address, endpt->port, NC_CH_CONNECT_TIMEOUT, &endpt->ka, &endpt->sock_pending, &ip_host);
+    sock = nc_sock_connect(endpt->src_addr, endpt->src_port, endpt->dst_addr, endpt->dst_port,
+            NC_CH_CONNECT_TIMEOUT, &endpt->ka, &endpt->sock_pending, &ip_host);
     if (sock < 0) {
         return NC_MSG_ERROR;
     }
@@ -2515,7 +2538,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
     (*session)->ctx = (struct ly_ctx *)ctx;
     (*session)->flags = NC_SESSION_SHAREDCTX | NC_SESSION_CALLHOME;
     (*session)->host = ip_host;
-    (*session)->port = endpt->port;
+    (*session)->port = endpt->dst_port;
 
     /* sock gets assigned to session or closed */
     if (endpt->ti == NC_TI_SSH) {

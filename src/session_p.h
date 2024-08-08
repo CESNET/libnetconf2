@@ -470,8 +470,12 @@ struct nc_server_opts {
             char *referenced_endpt_name;
 #endif /* NC_ENABLED_SSH_TLS */
             NC_TRANSPORT_IMPL ti;
-            char *address;
-            uint16_t port;
+
+            char *src_addr;                             /**< IP address to bind to when connecting to a Call Home client. */
+            uint16_t src_port;                          /**< Port to bind to when connecting to a Call Home client. */
+            char *dst_addr;                             /**< IP address of the Call Home client. */
+            uint16_t dst_port;                          /**< Port of the Call Home client. */
+
             int sock_pending;
             struct nc_keepalives ka;
 
@@ -897,10 +901,23 @@ int nc_ctx_check_and_fill(struct nc_session *session);
 NC_MSG_TYPE nc_handshake_io(struct nc_session *session);
 
 /**
+ * @brief Bind a socket to an address and a port.
+ *
+ * @param[in] sock Socket to bind.
+ * @param[in] address Address to bind to.
+ * @param[in] port Port to bind to.
+ * @param[in] is_ipv4 Whether the address is IPv4 or IPv6.
+ * @return 0 on success, -1 on error.
+ */
+int nc_sock_bind_inet(int sock, const char *address, uint16_t port, int is_ipv4);
+
+/**
  * @brief Create a socket connection.
  *
- * @param[in] host Hostname to connect to.
- * @param[in] port Port to connect on.
+ * @param[in] src_addr Address to connect from.
+ * @param[in] src_port Port to connect from.
+ * @param[in] dst_addr Address to connect to.
+ * @param[in] dst_port Port to connect to.
  * @param[in] timeout_ms Timeout in ms for blocking the connect + select call (-1 for infinite).
  * @param[in] ka Keepalives parameters.
  * @param[in,out] sock_pending Previous pending socket. If set, equal to -1, and the connection is still in progress
@@ -908,8 +925,8 @@ NC_MSG_TYPE nc_handshake_io(struct nc_session *session);
  * @param[out] ip_host Optional parameter with string IP address of the connected host.
  * @return Connected socket or -1 on error.
  */
-int nc_sock_connect(const char *host, uint16_t port, int timeout_ms, struct nc_keepalives *ka, int *sock_pending,
-        char **ip_host);
+int nc_sock_connect(const char *src_addr, uint16_t src_port, const char *dst_addr, uint16_t dst_port, int timeout_ms,
+        struct nc_keepalives *ka, int *sock_pending, char **ip_host);
 
 /**
  * @brief Accept a new socket connection.

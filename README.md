@@ -270,7 +270,7 @@ The second API is [nc_server_config_load_modules](https://netopeer.liberouter.or
 - **ietf-netconf-server**: ssh-listen ✔, tls-listen ✔, ssh-call-home ✔, tls-call-home ✔, central-netconf-server-supported ✔,
 - **ietf-ssh-common**: transport-params ✔, ssh-x509-certs ✘, public-key-generation ✘,
 - **ietf-ssh-server**: local-users-supported **?**, local-user-auth-publickey ✔, local-user-auth-password ✔, local-user-auth-none ✔, ssh-server-keepalives ✘, local-user-auth-hostbased ✘,
-- **ietf-tcp-client**: tcp-client-keepalives ✔, proxy-connect ✘, socks5-gss-api ✘, socks5-username-password ✘, local-binding-supported ✘,
+- **ietf-tcp-client**: tcp-client-keepalives ✔, proxy-connect ✘, socks5-gss-api ✘, socks5-username-password ✘, local-binding-supported ✔,
 - **ietf-tcp-common**: transport-params ✔, ssh-x509-certs ✘, public-key-generation ✘,
 - **ietf-tcp-server**: tcp-server-keepalives ✔,
 - **ietf-tls-common**: tls10 ✔, tls11 ✔, tls12 ✔, tls13 ✔, hello-params ✔, public-key-generation ✘,
