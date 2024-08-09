@@ -919,27 +919,21 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         rpc_envp = va_arg(ap, struct lyd_node_opaq *);
         reply = va_arg(ap, struct nc_server_reply *);
 
-        if (!rpc_envp) {
-            /* can be NULL if replying with a malformed-message error */
-            nc_write_clb((void *)&arg, "<rpc-reply xmlns=\"" NC_NS_BASE "\">", 18 + strlen(NC_NS_BASE) + 2, 0);
-
-            assert(reply->type == NC_RPL_ERROR);
-            if (lyd_print_clb(nc_write_xmlclb, (void *)&arg, ((struct nc_server_reply_error *)reply)->err, LYD_XML,
-                    LYD_PRINT_SHRINK | LYD_PRINT_WITHSIBLINGS)) {
+        /* build a rpc-reply opaque node that can be simply printed */
+        if (rpc_envp) {
+            if (lyd_new_opaq2(NULL, session->ctx, "rpc-reply", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns,
+                    &reply_envp)) {
+                ERRINT;
                 ret = NC_MSG_ERROR;
                 goto cleanup;
             }
-
-            nc_write_clb((void *)&arg, "</rpc-reply>", 12, 0);
-            break;
-        }
-
-        /* build a rpc-reply opaque node that can be simply printed */
-        if (lyd_new_opaq2(NULL, session->ctx, "rpc-reply", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns,
-                &reply_envp)) {
-            ERRINT;
-            ret = NC_MSG_ERROR;
-            goto cleanup;
+        } else {
+            if (lyd_new_opaq2(NULL, session->ctx, "rpc-reply", NULL, NULL, NC_NS_BASE,
+                    &reply_envp)) {
+                ERRINT;
+                ret = NC_MSG_ERROR;
+                goto cleanup;
+            }
         }
 
         switch (reply->type) {
@@ -988,7 +982,9 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         }
 
         /* temporary */
-        ((struct lyd_node_opaq *)reply_envp)->attr = rpc_envp->attr;
+        if (rpc_envp) {
+            ((struct lyd_node_opaq *)reply_envp)->attr = rpc_envp->attr;
+        }
 
         /* print */
         lyrc = lyd_print_clb(nc_write_xmlclb, (void *)&arg, reply_envp, LYD_XML, LYD_PRINT_SHRINK | wd);
