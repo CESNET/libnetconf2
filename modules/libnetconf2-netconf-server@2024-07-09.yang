@@ -244,13 +244,13 @@ module libnetconf2-netconf-server {
 
   // Typedefs
 
-  typedef certificate-expiration-time {
+  typedef time-period {
     type string {
       pattern '(1[0-2]|[1-9])m|[1-4]w|[1-7]d|(2[0-4]|1[0-9]|[1-9])h';
     }
 
     description
-      "The certificate-expiration-time type allows to specify time in either months, weeks, days, or hours.
+      "The time-period type allows to specify time in either months, weeks, days, or hours.
        Its purpose is to create time intervals for the certificate expiration notifications.";
   }
 
@@ -419,7 +419,7 @@ module libnetconf2-netconf-server {
         key "anchor period";
 
         leaf anchor {
-          type certificate-expiration-time;
+          type time-period;
 
           description
             "The time anchor for the notification. The anchor is the time
@@ -427,7 +427,7 @@ module libnetconf2-netconf-server {
              It is essentially the lower bound of the given interval.";
         }
         leaf period {
-          type certificate-expiration-time;
+          type time-period;
 
           // Require the period to be smaller than the anchor (only units are checked for simplicity)
           must "(contains(., 'm') and contains(../anchor, 'm')) or
