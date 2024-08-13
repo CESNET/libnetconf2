@@ -25,6 +25,7 @@
 
 #include <cmocka.h>
 
+#include "ln2_test.h"
 #include "tests/config.h"
 
 #define NC_ACCEPT_TIMEOUT 2000
@@ -35,6 +36,9 @@ struct ly_ctx *ctx;
 struct test_state {
     pthread_barrier_t barrier;
 };
+
+int TEST_PORT = 10050, TEST_PORT_2 = 10051, TEST_PORT_3 = 10052, TEST_PORT_4 = 10053;
+const char *TEST_PORT_STR = "10050", *TEST_PORT_2_STR = "10051", *TEST_PORT_3_STR = "10052", *TEST_PORT_4_STR = "10053";
 
 static void *
 server_thread(void *arg)
@@ -332,6 +336,12 @@ main(void)
         cmocka_unit_test_setup_teardown(nc_test_endpt_share_clients_ssh, setup_ssh, teardown_f),
         cmocka_unit_test_setup_teardown(nc_test_endpt_share_clients_tls, setup_tls, teardown_f),
     };
+
+    /* try to get ports from the environment, otherwise use the default */
+    if (ln2_glob_test_get_ports(4, &TEST_PORT, &TEST_PORT_STR, &TEST_PORT_2, &TEST_PORT_2_STR,
+            &TEST_PORT_3, &TEST_PORT_3_STR, &TEST_PORT_4, &TEST_PORT_4_STR)) {
+        return 1;
+    }
 
     setenv("CMOCKA_TEST_ABORT", "1", 1);
     return cmocka_run_group_tests(tests, NULL, NULL);

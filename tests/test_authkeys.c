@@ -25,6 +25,7 @@
 
 #include <cmocka.h>
 
+#include "ln2_test.h"
 #include "tests/config.h"
 
 #define NC_ACCEPT_TIMEOUT 2000
@@ -38,6 +39,9 @@ struct test_state {
     const char *privkey_path;
     int expect_ok;
 };
+
+int TEST_PORT = 10050;
+const char *TEST_PORT_STR = "10050";
 
 static void *
 server_thread(void *arg)
@@ -301,6 +305,11 @@ main(void)
         cmocka_unit_test_setup_teardown(test_nc_authkey_bad_key, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_nc_authkey_bad_path, setup_f, teardown_f),
     };
+
+    /* try to get ports from the environment, otherwise use the default */
+    if (ln2_glob_test_get_ports(1, &TEST_PORT, &TEST_PORT_STR)) {
+        return 1;
+    }
 
     setenv("CMOCKA_TEST_ABORT", "1", 1);
     return cmocka_run_group_tests(tests, NULL, NULL);
