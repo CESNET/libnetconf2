@@ -25,6 +25,7 @@
 
 #include <cmocka.h>
 
+#include "ln2_test.h"
 #include "tests/config.h"
 
 #define NC_PS_POLL_TIMEOUT 2000
@@ -41,6 +42,9 @@ struct test_state {
 
 char buffer[512];
 char expected[512];
+
+int TEST_PORT = 10050, TEST_PORT_2 = 10051;
+const char *TEST_PORT_STR = "10050", *TEST_PORT_2_STR = "10051";
 
 static void
 test_msg_callback(const struct nc_session *session, NC_VERB_LEVEL level, const char *msg)
@@ -464,6 +468,11 @@ main(void)
         cmocka_unit_test_setup_teardown(test_nc_ch_ssh, setup_ssh, teardown_ssh),
         cmocka_unit_test_setup_teardown(test_nc_ch_tls, setup_tls, teardown_tls),
     };
+
+    /* try to get ports from the environment, otherwise use the default */
+    if (ln2_glob_test_get_ports(2, &TEST_PORT, &TEST_PORT_STR, &TEST_PORT_2, &TEST_PORT_2_STR)) {
+        return 1;
+    }
 
     setenv("CMOCKA_TEST_ABORT", "1", 1);
     return cmocka_run_group_tests(tests, NULL, NULL);
