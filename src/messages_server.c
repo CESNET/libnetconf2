@@ -581,12 +581,13 @@ nc_err_set_msg(struct lyd_node *err, const char *error_message, const char *lang
 
     NC_CHECK_ARG_RET(NULL, err, error_message, -1);
 
-    /* remove previous message */
     lyd_find_sibling_opaq_next(lyd_child(err), "error-message", &match);
     if (match) {
-        lyd_free_tree(match);
+        /* Change the value of error-message and keep order of elements to comply with appendix-B in RFC 6241. */
+        lydict_remove(LYD_CTX(err), ((struct lyd_node_opaq *)match)->value);
+        lydict_insert(LYD_CTX(err), error_message, 0, &(((struct lyd_node_opaq *)match)->value));
+        return 0;
     }
-
     if (lyd_new_opaq2(err, NULL, "error-message", error_message, NULL, NC_NS_BASE, &match)) {
         return -1;
     }
