@@ -19,6 +19,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <pwd.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -398,6 +399,11 @@ nc_read_poll(struct nc_session *session, int io_timeout)
     switch (session->ti_type) {
 #ifdef NC_ENABLED_SSH_TLS
     case NC_TI_SSH:
+        if (io_timeout == -1) {
+            /* BUG libssh 0.11.0 replaces timeout -1 with 0 for non-blocking sessions */
+            io_timeout = INT_MAX;
+        }
+
         /* EINTR is handled, it resumes waiting */
         ret = ssh_channel_poll_timeout(session->ti.libssh.channel, io_timeout, 0);
         if (ret == SSH_ERROR) {
