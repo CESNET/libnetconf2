@@ -97,12 +97,9 @@ int
 ln2_glob_test_setup(struct ln2_test_ctx **test_ctx)
 {
     int ret;
-    struct ln2_test_ctx *tmp_ctx;
 
-    *test_ctx = NULL;
-
-    tmp_ctx = calloc(1, sizeof *tmp_ctx);
-    if (!tmp_ctx) {
+    *test_ctx = calloc(1, sizeof **test_ctx);
+    if (!*test_ctx) {
         ret = 1;
         goto cleanup;
     }
@@ -123,28 +120,26 @@ ln2_glob_test_setup(struct ln2_test_ctx **test_ctx)
     }
 
     /* init barrier */
-    ret = pthread_barrier_init(&tmp_ctx->barrier, NULL, 2);
+    ret = pthread_barrier_init(&(*test_ctx)->barrier, NULL, 2);
     if (ret) {
         goto cleanup;
     }
 
     /* create libyang context */
-    ret = ly_ctx_new(MODULES_DIR, 0, &tmp_ctx->ctx);
+    ret = ly_ctx_new(MODULES_DIR, 0, &(*test_ctx)->ctx);
     if (ret) {
         goto cleanup;
     }
 
     /* load default yang modules */
-    ret = nc_server_init_ctx(&tmp_ctx->ctx);
+    ret = nc_server_init_ctx(&(*test_ctx)->ctx);
     if (ret) {
         goto cleanup;
     }
-    ret = nc_server_config_load_modules(&tmp_ctx->ctx);
+    ret = nc_server_config_load_modules(&(*test_ctx)->ctx);
     if (ret) {
         goto cleanup;
     }
-
-    *test_ctx = tmp_ctx;
 
 cleanup:
     return ret;
