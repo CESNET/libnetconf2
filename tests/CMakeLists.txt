@@ -69,11 +69,9 @@ libnetconf2_test(NAME test_unix_socket)
 
 # tests depending on SSH/TLS
 if(ENABLE_SSH_TLS)
-    libnetconf2_test(NAME test_auth)
+    libnetconf2_test(NAME test_auth_ssh)
     libnetconf2_test(NAME test_authkeys)
     libnetconf2_test(NAME test_ch PORT_COUNT 2)
-    libnetconf2_test(NAME test_ec)
-    libnetconf2_test(NAME test_ed25519)
     libnetconf2_test(NAME test_endpt_share_clients PORT_COUNT 4)
     libnetconf2_test(NAME test_ks_ts)
     if (LIBPAM_HAVE_CONFDIR)
