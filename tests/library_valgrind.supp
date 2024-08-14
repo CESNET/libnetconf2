@@ -14,8 +14,8 @@
    match-leak-kinds: definite
    fun:malloc
    ...
-   fun:server_thread
-   fun:start_thread
+   fun:ln2_glob_test_server_thread
+   fun:ln2_glob_test_server_thread
 }
 {
    test_pam:__wrap_pam_start
@@ -23,5 +23,5 @@
    match-leak-kinds: definite
    fun:malloc
    ...
-   fun:server_thread
+   fun:ln2_glob_test_server_thread
 }
