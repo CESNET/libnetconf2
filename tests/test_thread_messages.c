@@ -25,17 +25,8 @@
 
 #include <libyang/libyang.h>
 
-#include <log.h>
-#include <messages_p.h>
-#include <messages_server.h>
-#include <session_client.h>
-#include <session_server.h>
-#include "tests/config.h"
+#include "ln2_test.h"
 
-/* millisec */
-#define NC_ACCEPT_TIMEOUT 5000
-/* millisec */
-#define NC_PS_POLL_TIMEOUT 5000
 /* sec */
 #define CLIENT_SSH_AUTH_TIMEOUT 10
 

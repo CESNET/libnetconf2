@@ -4,7 +4,7 @@
  * @brief libnetconf2 Runtime changes test.
  *
  * @copyright
- * Copyright (c) 2023 CESNET, z.s.p.o.
+ * Copyright (c) 2023 - 2024 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -24,10 +24,6 @@
 #include <cmocka.h>
 
 #include "ln2_test.h"
-#include "tests/config.h"
-
-#define NC_ACCEPT_TIMEOUT 2000
-#define NC_PS_POLL_TIMEOUT 2000
 
 struct test_state {
     pthread_barrier_t start_barrier;

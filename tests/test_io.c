@@ -30,9 +30,9 @@
 #include <libyang/libyang.h>
 
 #include <messages_p.h>
-#include <session_client.h>
 #include <session_p.h>
-#include "tests/config.h"
+
+#include "ln2_test.h"
 
 struct wr {
     struct nc_session *session;
