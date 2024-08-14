@@ -24,8 +24,7 @@
 
 #include <libyang/libyang.h>
 
-#include <session_client.h>
-#include "tests/config.h"
+#include "ln2_test.h"
 
 #define nc_assert(cond) if (!(cond)) { fprintf(stderr, "assert failed (%s:%d)\n", __FILE__, __LINE__); exit(1); }
 

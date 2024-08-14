@@ -1,10 +1,10 @@
 /**
  * @file test_two_channels.c
- * @author Roman Janota <xjanot04@fit.vutbr.cz>
+ * @author Roman Janota <janota@cesnet.cz>
  * @brief libnetconf2 Openning a new session on an established SSH channel test.
  *
  * @copyright
- * Copyright (c) 2023 CESNET, z.s.p.o.
+ * Copyright (c) 2023 - 2024 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -26,13 +26,8 @@
 #include <cmocka.h>
 
 #include "ln2_test.h"
-#include "tests/config.h"
 
-#define NC_ACCEPT_TIMEOUT 2000
-#define NC_PS_POLL_TIMEOUT 2000
 #define BACKOFF_TIMEOUT_USECS 100
-
-struct ly_ctx *ctx;
 
 int TEST_PORT = 10050;
 const char *TEST_PORT_STR = "10050";
@@ -44,14 +39,13 @@ server_thread(void *arg)
     NC_MSG_TYPE msgtype;
     struct nc_session *session, *new_session;
     struct nc_pollsession *ps;
-
-    (void) arg;
+    struct ln2_test_ctx *test_ctx = arg;
 
     ps = nc_ps_new();
     assert_non_null(ps);
 
     while (del_session_count < 2) {
-        msgtype = nc_accept(0, ctx, &new_session);
+        msgtype = nc_accept(0, test_ctx->ctx, &new_session);
 
         if (msgtype == NC_MSG_HELLO) {
             ret = nc_ps_add_session(ps, new_session);
@@ -84,9 +78,10 @@ server_thread(void *arg)
 static void *
 client_thread(void *arg)
 {
-    (void) arg;
     int ret;
     struct nc_session *session_cl1, *session_cl2;
+
+    (void) arg;
 
     /* skip all hostkey and known_hosts checks */
     nc_client_ssh_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_SKIP);
@@ -115,7 +110,6 @@ client_thread(void *arg)
     session_cl2 = nc_connect_ssh_channel(session_cl1, NULL);
     assert_non_null(session_cl2);
 
-    nc_client_destroy();
     nc_session_free(session_cl1, NULL);
     nc_session_free(session_cl2, NULL);
     return NULL;
@@ -127,11 +121,9 @@ test_nc_two_channels(void **state)
     int ret, i;
     pthread_t tids[2];
 
-    (void) state;
-
-    ret = pthread_create(&tids[0], NULL, client_thread, NULL);
+    ret = pthread_create(&tids[0], NULL, client_thread, *state);
     assert_int_equal(ret, 0);
-    ret = pthread_create(&tids[1], NULL, server_thread, NULL);
+    ret = pthread_create(&tids[1], NULL, server_thread, *state);
     assert_int_equal(ret, 0);
 
     for (i = 0; i < 2; i++) {
@@ -144,54 +136,29 @@ setup_f(void **state)
 {
     int ret;
     struct lyd_node *tree = NULL;
+    struct ln2_test_ctx *test_ctx;
 
-    (void) state;
-
-    nc_verbosity(NC_VERB_VERBOSE);
-
-    ret = ly_ctx_new(MODULES_DIR, 0, &ctx);
+    ret = ln2_glob_test_setup(&test_ctx);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_init_ctx(&ctx);
+    *state = test_ctx;
+
+    ret = nc_server_config_add_address_port(test_ctx->ctx, "endpt", NC_TI_SSH, "127.0.0.1", TEST_PORT, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_load_modules(&ctx);
+    ret = nc_server_config_add_ssh_hostkey(test_ctx->ctx, "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa", NULL, &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_address_port(ctx, "endpt", NC_TI_SSH, "127.0.0.1", TEST_PORT, &tree);
+    ret = nc_server_config_add_ssh_user_pubkey(test_ctx->ctx, "endpt", "client_1", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_config_add_ssh_hostkey(ctx, "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa", NULL, &tree);
-    assert_int_equal(ret, 0);
-
-    ret = nc_server_config_add_ssh_user_pubkey(ctx, "endpt", "client_1", "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);
-    assert_int_equal(ret, 0);
-
-    ret = nc_server_config_add_ssh_user_pubkey(ctx, "endpt", "client_2", "pubkey", TESTS_DIR "/data/id_ecdsa521.pub", &tree);
+    ret = nc_server_config_add_ssh_user_pubkey(test_ctx->ctx, "endpt", "client_2", "pubkey", TESTS_DIR "/data/id_ecdsa521.pub", &tree);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_setup_data(tree);
     assert_int_equal(ret, 0);
 
-    ret = nc_server_init();
-    assert_int_equal(ret, 0);
-
-    /* initialize client */
-    ret = nc_client_init();
-    assert_int_equal(ret, 0);
-
     lyd_free_all(tree);
-
-    return 0;
-}
-
-static int
-teardown_f(void **state)
-{
-    (void) state;
-
-    nc_server_destroy();
-    ly_ctx_destroy(ctx);
 
     return 0;
 }
@@ -200,7 +167,7 @@ int
 main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup_teardown(test_nc_two_channels, setup_f, teardown_f),
+        cmocka_unit_test_setup_teardown(test_nc_two_channels, setup_f, ln2_glob_test_teardown),
     };
 
     /* try to get ports from the environment, otherwise use the default */

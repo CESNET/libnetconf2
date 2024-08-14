@@ -23,12 +23,9 @@
 #include <sys/types.h>
 
 #include <cmocka.h>
-#include <config.h>
-#include <libyang/libyang.h>
-#include <log.h>
 #include <messages_p.h>
-#include <session_client.h>
-#include "tests/config.h"
+
+#include "ln2_test.h"
 
 static int
 setup_f(void **state)
