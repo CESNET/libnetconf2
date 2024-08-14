@@ -100,6 +100,7 @@ ln2_glob_test_setup(struct ln2_test_ctx **test_ctx)
 
     *test_ctx = calloc(1, sizeof **test_ctx);
     if (!*test_ctx) {
+        SETUP_FAIL_LOG;
         ret = 1;
         goto cleanup;
     }
@@ -110,34 +111,40 @@ ln2_glob_test_setup(struct ln2_test_ctx **test_ctx)
     /* initialize server */
     ret = nc_server_init();
     if (ret) {
+        SETUP_FAIL_LOG;
         goto cleanup;
     }
 
     /* initialize client */
     ret = nc_client_init();
     if (ret) {
+        SETUP_FAIL_LOG;
         goto cleanup;
     }
 
     /* init barrier */
     ret = pthread_barrier_init(&(*test_ctx)->barrier, NULL, 2);
     if (ret) {
+        SETUP_FAIL_LOG;
         goto cleanup;
     }
 
     /* create libyang context */
     ret = ly_ctx_new(MODULES_DIR, 0, &(*test_ctx)->ctx);
     if (ret) {
+        SETUP_FAIL_LOG;
         goto cleanup;
     }
 
     /* load default yang modules */
     ret = nc_server_init_ctx(&(*test_ctx)->ctx);
     if (ret) {
+        SETUP_FAIL_LOG;
         goto cleanup;
     }
     ret = nc_server_config_load_modules(&(*test_ctx)->ctx);
     if (ret) {
+        SETUP_FAIL_LOG;
         goto cleanup;
     }
 

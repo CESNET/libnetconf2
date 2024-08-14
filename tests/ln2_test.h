@@ -24,6 +24,9 @@
 #define NC_ACCEPT_TIMEOUT 2000
 #define NC_PS_POLL_TIMEOUT 2000
 
+#define SETUP_FAIL_LOG \
+    fprintf(stderr, "Setup fail in %s:%d.\n", __FILE__, __LINE__)
+
 /**
  * @brief Test context used for sharing data between the test and the server/client threads.
  */
