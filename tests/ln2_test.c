@@ -15,6 +15,8 @@
 
 #define _GNU_SOURCE
 
+#include <assert.h>
+#include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,8 +28,7 @@ int
 ln2_glob_test_get_ports(int port_count, ...)
 {
     va_list ap;
-    int i, ret = 0;
-    int *port_ptr;
+    int i, ret = 0, *port_ptr;
     const char **port_str_ptr, *env;
     char *env_name = NULL;
 
@@ -46,6 +47,7 @@ ln2_glob_test_get_ports(int port_count, ...)
         env = getenv(env_name);
         free(env_name);
         if (!env) {
+            /* the default value will be used instead */
             continue;
         }
 
@@ -56,4 +58,119 @@ ln2_glob_test_get_ports(int port_count, ...)
 cleanup:
     va_end(ap);
     return ret;
+}
+
+void *
+ln2_glob_test_server_thread(void *arg)
+{
+    int ret;
+    NC_MSG_TYPE msgtype;
+    struct nc_session *session = NULL;
+    struct nc_pollsession *ps = NULL;
+    struct ln2_test_ctx *test_ctx = arg;
+
+    ps = nc_ps_new();
+    assert(ps);
+
+    /* wait for the client to be ready to connect */
+    pthread_barrier_wait(&test_ctx->barrier);
+
+    /* accept a session and add it to the poll session structure */
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
+    assert(msgtype == NC_MSG_HELLO);
+
+    ret = nc_ps_add_session(ps, session);
+    assert(!ret);
+
+    /* poll until the session is terminated by the client */
+    do {
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
+        assert(ret & NC_PSPOLL_RPC);
+    } while (!(ret & NC_PSPOLL_SESSION_TERM));
+
+    nc_ps_clear(ps, 1, NULL);
+    nc_ps_free(ps);
+    return NULL;
+}
+
+int
+ln2_glob_test_setup(struct ln2_test_ctx **test_ctx)
+{
+    int ret;
+    struct ln2_test_ctx *tmp_ctx;
+
+    *test_ctx = NULL;
+
+    tmp_ctx = calloc(1, sizeof *tmp_ctx);
+    if (!tmp_ctx) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* set verbosity */
+    nc_verbosity(NC_VERB_VERBOSE);
+
+    /* initialize server */
+    ret = nc_server_init();
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* initialize client */
+    ret = nc_client_init();
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* init barrier */
+    ret = pthread_barrier_init(&tmp_ctx->barrier, NULL, 2);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* create libyang context */
+    ret = ly_ctx_new(MODULES_DIR, 0, &tmp_ctx->ctx);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* load default yang modules */
+    ret = nc_server_init_ctx(&tmp_ctx->ctx);
+    if (ret) {
+        goto cleanup;
+    }
+    ret = nc_server_config_load_modules(&tmp_ctx->ctx);
+    if (ret) {
+        goto cleanup;
+    }
+
+    *test_ctx = tmp_ctx;
+
+cleanup:
+    return ret;
+}
+
+int
+ln2_glob_test_teardown(void **state)
+{
+    struct ln2_test_ctx *test_ctx = *state;
+
+    nc_client_destroy();
+    nc_server_destroy();
+
+    if (test_ctx->free_test_data) {
+        test_ctx->free_test_data(test_ctx->test_data);
+    }
+
+    pthread_barrier_destroy(&test_ctx->barrier);
+    ly_ctx_destroy(test_ctx->ctx);
+    free(test_ctx);
+
+    return 0;
+}
+
+void
+ln2_glob_test_free_test_data(void *test_data)
+{
+    free(test_data);
 }
