@@ -23,15 +23,18 @@ endif()
 
 macro(USE_COMPAT)
     # compatibility checks
-    set(CMAKE_REQUIRED_DEFINITIONS -D_POSIX_C_SOURCE=200809L)
+    list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_POSIX_C_SOURCE=200809L)
     list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
     list(APPEND CMAKE_REQUIRED_DEFINITIONS -D__BSD_VISIBLE=1)
-    set(CMAKE_REQUIRED_LIBRARIES pthread)
 
     check_symbol_exists(_POSIX_TIMERS "unistd.h" HAVE_CLOCK)
     if(NOT HAVE_CLOCK)
         message(FATAL_ERROR "Missing support for clock_gettime() and similar functions!")
     endif()
+
+    set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+    find_package(Threads)
+    list(APPEND CMAKE_REQUIRED_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
 
     check_symbol_exists(pthread_mutex_timedlock "pthread.h" HAVE_PTHREAD_MUTEX_TIMEDLOCK)
     check_symbol_exists(pthread_mutex_clocklock "pthread.h" HAVE_PTHREAD_MUTEX_CLOCKLOCK)
@@ -74,12 +77,14 @@ macro(USE_COMPAT)
     endif()
     check_symbol_exists(crypt_r "crypt.h" HAVE_CRYPT_R)
 
-    TEST_BIG_ENDIAN(IS_BIG_ENDIAN)
+    test_big_endian(IS_BIG_ENDIAN)
 
     check_include_file("stdatomic.h" HAVE_STDATOMIC)
 
-    unset(CMAKE_REQUIRED_DEFINITIONS)
-    unset(CMAKE_REQUIRED_LIBRARIES)
+    list(REMOVE_ITEM CMAKE_REQUIRED_DEFINITIONS -D_POSIX_C_SOURCE=200809L)
+    list(REMOVE_ITEM CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
+    list(REMOVE_ITEM CMAKE_REQUIRED_DEFINITIONS -D__BSD_VISIBLE=1)
+    list(REMOVE_ITEM CMAKE_REQUIRED_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
 
     # header and source file (adding the source directly allows for hiding its symbols)
     configure_file(${PROJECT_SOURCE_DIR}/compat/compat.h.in ${PROJECT_BINARY_DIR}/compat/compat.h @ONLY)
