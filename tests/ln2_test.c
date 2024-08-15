@@ -77,7 +77,10 @@ ln2_glob_test_server_thread(void *arg)
 
     /* accept a session and add it to the poll session structure */
     msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
-    assert(msgtype == NC_MSG_HELLO);
+    if (msgtype != NC_MSG_HELLO) {
+        SETUP_FAIL_LOG;
+        return NULL;
+    }
 
     ret = nc_ps_add_session(ps, session);
     assert(!ret);

@@ -3602,7 +3602,7 @@ nc_server_notif_cert_exp_wakeup_time_get(struct nc_cert_expiration *exp_dates, i
     time_t min_time = LONG_MAX;
     int i;
     double diff;
-    time_t now, wakeup_time;
+    time_t now, wakeup_time = 0;
 
     *next = NULL;
 
