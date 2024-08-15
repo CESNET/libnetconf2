@@ -79,6 +79,7 @@ ln2_glob_test_server_thread(void *arg)
     msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
     if (msgtype != NC_MSG_HELLO) {
         SETUP_FAIL_LOG;
+        nc_ps_free(ps);
         return NULL;
     }
 
