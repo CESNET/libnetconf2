@@ -32,7 +32,7 @@ servers. NETCONF is the NETwork CONFiguration protocol introduced by IETF.
 %autosetup -p1
 
 %build
-%cmake -DCMAKE_BUILD_TYPE=RELWITHDEBINFO
+%cmake -DCMAKE_BUILD_TYPE=RELWITHDEBINFO -DENABLE_TESTS=OFF
 %cmake_build
 
 %install
