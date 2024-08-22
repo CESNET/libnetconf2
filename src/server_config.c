@@ -763,11 +763,16 @@ nc_server_config_del_certs(struct nc_cert_grouping *certs_grp)
             free(certs_grp->certs[i].name);
             free(certs_grp->certs[i].data);
         }
+        certs_grp->cert_count = 0;
         free(certs_grp->certs);
         certs_grp->certs = NULL;
     } else if (certs_grp->store == NC_STORE_TRUSTSTORE) {
         free(certs_grp->ts_ref);
+        certs_grp->ts_ref = NULL;
     }
+
+    /* reset to the default */
+    certs_grp->store = NC_STORE_LOCAL;
 }
 
 static void
@@ -2966,6 +2971,115 @@ cleanup:
 }
 
 static int
+nc_server_config_client_authentication(const struct lyd_node *node, NC_OPERATION op)
+{
+    int ret = 0;
+    struct nc_server_tls_opts *opts;
+    struct nc_ch_client *ch_client = NULL;
+
+    assert(!strcmp(LYD_NAME(node), "client-authentication"));
+
+    /* only do something on delete and if we're in the TLS subtree,
+     * because this is a presence container unlike its SSH counterpart */
+    if (!is_tls(node) || (op != NC_OP_DELETE)) {
+        return 0;
+    }
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
+        return 1;
+    }
+
+    if (nc_server_config_get_tls_opts(node, ch_client, &opts)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    nc_server_config_del_certs(&opts->ca_certs);
+    nc_server_config_del_certs(&opts->ee_certs);
+
+cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
+    return ret;
+}
+
+static int
+nc_server_config_ca_certs(const struct lyd_node *node, NC_OPERATION op)
+{
+    int ret = 0;
+    struct nc_server_tls_opts *opts;
+    struct nc_ch_client *ch_client = NULL;
+
+    assert(!strcmp(LYD_NAME(node), "ca-certs"));
+
+    /* only do something on delete and if we're in the TLS subtree,
+     * because SSH certs are not yet supported */
+    if (!is_tls(node) || (op != NC_OP_DELETE)) {
+        return 0;
+    }
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
+        return 1;
+    }
+
+    if (nc_server_config_get_tls_opts(node, ch_client, &opts)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    nc_server_config_del_certs(&opts->ca_certs);
+
+cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
+    return ret;
+}
+
+static int
+nc_server_config_ee_certs(const struct lyd_node *node, NC_OPERATION op)
+{
+    int ret = 0;
+    struct nc_server_tls_opts *opts;
+    struct nc_ch_client *ch_client = NULL;
+
+    assert(!strcmp(LYD_NAME(node), "ee-certs"));
+
+    /* only do something on delete and if we're in the TLS subtree,
+     * because SSH certs are not yet supported */
+    if (!is_tls(node) || (op != NC_OP_DELETE)) {
+        return 0;
+    }
+
+    /* LOCK */
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
+        return 1;
+    }
+
+    if (nc_server_config_get_tls_opts(node, ch_client, &opts)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    nc_server_config_del_certs(&opts->ee_certs);
+
+cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
+    return ret;
+}
+
+static int
 nc_server_config_create_ca_certs_certificate(const struct lyd_node *node, struct nc_server_tls_opts *opts)
 {
     assert(!strcmp(LYD_NAME(node), "certificate"));
@@ -3795,6 +3909,12 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
         ret = nc_server_config_cert_data(node, op);
     } else if (!strcmp(name, "asymmetric-key")) {
         ret = nc_server_config_asymmetric_key(node, op);
+    } else if (!strcmp(name, "client-authentication")) {
+        ret = nc_server_config_client_authentication(node, op);
+    } else if (!strcmp(name, "ca-certs")) {
+        ret = nc_server_config_ca_certs(node, op);
+    } else if (!strcmp(name, "ee-certs")) {
+        ret = nc_server_config_ee_certs(node, op);
     } else if (!strcmp(name, "certificate")) {
         ret = nc_server_config_certificate(node, op);
     } else if (!strcmp(name, "cert-to-name")) {
