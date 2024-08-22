@@ -1438,15 +1438,15 @@ nc_server_ssh_channel_subsystem(struct nc_session *session, ssh_channel channel,
  * @param[in] method Type of the authentication method.
  * @param[in] str_method String representation of the authentication method.
  * @param[in] local_users_supported Whether the server supports local users.
- * @param[in,out] state Authentication state.
+ * @param[in,out] auth_state Authentication state.
  * @return 1 in case of a fatal error, 0 otherwise.
  */
 static int
 nc_server_ssh_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg,
-        int method, const char *str_method, int local_users_supported, struct nc_auth_state *state)
+        int method, const char *str_method, int local_users_supported, struct nc_auth_state *auth_state)
 {
     const char *username;
-    int libssh_auth_methods = 0, ret = 0;
+    int ret = 0;
     uint16_t i;
     struct nc_auth_client *auth_client = NULL;
     struct nc_endpt *referenced_endpt;
@@ -1473,7 +1473,7 @@ nc_server_ssh_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, 
                 }
 
                 return nc_server_ssh_auth(session, referenced_endpt->opts.ssh, msg, method,
-                        str_method, local_users_supported, state);
+                        str_method, local_users_supported, auth_state);
             }
 
             /* user not known, set his authentication methods to public key only so that
@@ -1495,29 +1495,29 @@ nc_server_ssh_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, 
                     (auth_client->store == NC_STORE_TRUSTSTORE) || (auth_client->store == NC_STORE_SYSTEM)) {
                 /* either locally configured pubkeys, or truststore or system (need to check for
                  * pubkey count, because NC_STORE_LOCAL is the default enum value) */
-                state->auth_method_count++;
-                libssh_auth_methods |= SSH_AUTH_METHOD_PUBLICKEY;
+                auth_state->methods |= SSH_AUTH_METHOD_PUBLICKEY;
+                auth_state->method_count++;
             }
             if (auth_client->password) {
-                state->auth_method_count++;
-                libssh_auth_methods |= SSH_AUTH_METHOD_PASSWORD;
+                auth_state->methods |= SSH_AUTH_METHOD_PASSWORD;
+                auth_state->method_count++;
             }
             if (auth_client->kb_int_enabled) {
-                state->auth_method_count++;
-                libssh_auth_methods |= SSH_AUTH_METHOD_INTERACTIVE;
+                auth_state->methods |= SSH_AUTH_METHOD_INTERACTIVE;
+                auth_state->method_count++;
             }
             if (auth_client->none_enabled) {
-                state->auth_method_count++;
-                libssh_auth_methods |= SSH_AUTH_METHOD_NONE;
+                auth_state->methods |= SSH_AUTH_METHOD_NONE;
+                auth_state->method_count++;
             }
         } else {
             /* no local users meaning pw, pubkey and kbdint methods are supported, method count is set to 1,
-             * because only one method is needed for successul auth */
-            state->auth_method_count = 1;
-            libssh_auth_methods = SSH_AUTH_METHOD_PUBLICKEY | SSH_AUTH_METHOD_PASSWORD | SSH_AUTH_METHOD_INTERACTIVE;
+             * because only one method is needed for successful auth */
+            auth_state->methods = SSH_AUTH_METHOD_PUBLICKEY | SSH_AUTH_METHOD_PASSWORD | SSH_AUTH_METHOD_INTERACTIVE;
+            auth_state->method_count = 1;
         }
 
-        ssh_set_auth_methods(session->ti.libssh.session, libssh_auth_methods);
+        ssh_set_auth_methods(session->ti.libssh.session, auth_state->methods);
     } else {
         if (strcmp(username, session->username)) {
             /* changing username not allowed */
@@ -1547,11 +1547,13 @@ nc_server_ssh_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, 
     }
 
     if (!ret) {
-        state->auth_success_count++;
+        auth_state->success_methods |= method;
+        auth_state->success_count++;
 
-        if (state->auth_success_count < state->auth_method_count) {
+        if (auth_state->success_count < auth_state->method_count) {
             /* success, but he needs to do another method */
             VRB(session, "User \"%s\" partially authenticated, but still needs to authenticate via the rest of his configured methods.", username);
+            ssh_set_auth_methods(session->ti.libssh.session, auth_state->methods & ~auth_state->success_methods);
             ssh_message_auth_reply_success(msg, 1);
         } else {
             /* authenticated */
@@ -1571,7 +1573,7 @@ nc_server_ssh_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, 
 }
 
 int
-nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg, struct nc_auth_state *state)
+nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg, struct nc_auth_state *auth_state)
 {
     const char *str_type, *str_subtype = NULL;
     int subtype, type, rc, local_users_supported;
@@ -1707,7 +1709,7 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
             ERR(session, "User \"%s\" authenticated, but requested another authentication.", session->username);
             ssh_message_reply_default(msg);
             return 0;
-        } else if (!state || !opts) {
+        } else if (!auth_state || !opts) {
             /* these two parameters should always be set during an authentication,
              * however do a check just in case something goes really wrong, since they
              * are not needed for other types of messages
@@ -1738,7 +1740,7 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
         }
 
         /* authenticate */
-        return nc_server_ssh_auth(session, opts, msg, subtype, str_subtype, local_users_supported, state);
+        return nc_server_ssh_auth(session, opts, msg, subtype, str_subtype, local_users_supported, auth_state);
     } else if (session->flags & NC_SESSION_SSH_AUTHENTICATED) {
         if ((type == SSH_REQUEST_CHANNEL_OPEN) && ((enum ssh_channel_type_e)subtype == SSH_CHANNEL_SESSION)) {
             if (nc_server_ssh_channel_open(session, msg)) {
@@ -1862,7 +1864,7 @@ nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts
 {
     struct timespec ts_timeout;
     ssh_message msg;
-    struct nc_auth_state state = {0};
+    struct nc_auth_state auth_state = {0};
 
     /* authenticate */
     if (opts->auth_timeout) {
@@ -1876,7 +1878,7 @@ nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts
 
         msg = ssh_message_get(session->ti.libssh.session);
         if (msg) {
-            if (nc_session_ssh_msg(session, opts, msg, &state)) {
+            if (nc_session_ssh_msg(session, opts, msg, &auth_state)) {
                 ssh_message_reply_default(msg);
             }
             ssh_message_free(msg);

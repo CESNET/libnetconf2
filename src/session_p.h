@@ -158,8 +158,10 @@ struct nc_keystore {
  * @brief Tracks the state of a client's authentication.
  */
 struct nc_auth_state {
-    int auth_method_count;  /**< The number of auth. methods that the user supports. */
-    int auth_success_count; /**< The number of auth. methods that ended successfully. */
+    int methods;            /**< Bit field of authentication methods that the user supports. */
+    int method_count;       /**< Number of authentication methods that the user supports. */
+    int success_methods;    /**< Bit field of authentication methods that the user successfully authenticated with. */
+    int success_count;      /**< Number of authentication methods that the user successfully authenticated with. */
 };
 
 /**
@@ -1129,10 +1131,10 @@ int nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts 
  * @param[in] session Session structure of the connection.
  * @param[in] opts Endpoint SSH options on which the session was created.
  * @param[in] msg SSH message itself.
- * @param[in] state State of the authentication.
+ * @param[in] auth_state State of the authentication.
  * @return 0 if the message was handled, 1 if it is left up to libssh.
  */
-int nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg, struct nc_auth_state *state);
+int nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg, struct nc_auth_state *auth_state);
 
 void nc_client_ssh_destroy_opts(void);
 void _nc_client_ssh_destroy_opts(struct nc_client_ssh_opts *opts);
