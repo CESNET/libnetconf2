@@ -766,6 +766,30 @@ nc_server_tls_accept_check(int accept_ret, void *tls_session)
     return accept_ret;
 }
 
+/**
+ * @brief Get the number of certificates in a certificate grouping.
+ *
+ * @param[in] certs_grp Certificate grouping to get the number of certificates from.
+ * @return Number of certificates in the grouping, or -1 on error.
+ */
+static uint16_t
+nc_server_tls_get_num_certs(struct nc_cert_grouping *certs_grp)
+{
+    uint16_t count = 0;
+    struct nc_certificate *certs;
+
+    if (certs_grp->store == NC_STORE_LOCAL) {
+        count = certs_grp->cert_count;
+    } else if (certs_grp->store == NC_STORE_TRUSTSTORE) {
+        if (nc_server_tls_truststore_ref_get_certs(certs_grp->ts_ref, &certs, &count)) {
+            ERR(NULL, "Getting CA certificates from the truststore reference \"%s\" failed.", certs_grp->ts_ref);
+            return -1;
+        }
+    }
+
+    return count;
+}
+
 int
 nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opts, int sock, int timeout)
 {
@@ -774,6 +798,7 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     struct nc_tls_verify_cb_data cb_data = {0};
     struct nc_endpt *referenced_endpt;
     void *tls_cfg, *srv_cert, *srv_pkey, *cert_store, *crl_store;
+    uint32_t cert_count = 0;
 
     tls_cfg = srv_cert = srv_pkey = cert_store = crl_store = NULL;
 
@@ -816,6 +841,20 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
             ERR(session, "Loading server CA certs from referenced endpoint failed.");
             goto fail;
         }
+    }
+
+    /* Check if there are no CA/end entity certs configured, which is a valid config.
+     * However, that would imply not using TLS for auth, which is not (yet) supported */
+    if (!opts->referenced_endpt_name) {
+        cert_count = nc_server_tls_get_num_certs(&opts->ca_certs) + nc_server_tls_get_num_certs(&opts->ee_certs);
+    } else {
+        cert_count = nc_server_tls_get_num_certs(&opts->ca_certs) + nc_server_tls_get_num_certs(&opts->ee_certs) +
+                nc_server_tls_get_num_certs(&referenced_endpt->opts.tls->ca_certs) +
+                nc_server_tls_get_num_certs(&referenced_endpt->opts.tls->ee_certs);
+    }
+    if (cert_count <= 0) {
+        ERR(session, "Neither CA nor end-entity certificates configured.");
+        goto fail;
     }
 
     if (nc_session_tls_crl_from_cert_ext_fetch(srv_cert, cert_store, &crl_store)) {
