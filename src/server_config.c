@@ -3620,7 +3620,10 @@ nc_server_config_persistent(const struct lyd_node *node, NC_OPERATION op)
 
     assert(!strcmp(LYD_NAME(node), "persistent"));
 
-    (void) op;
+    /* switch to periodic, don't do anything */
+    if (op == NC_OP_DELETE) {
+        return 0;
+    }
 
     /* LOCK */
     if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
@@ -3644,7 +3647,10 @@ nc_server_config_periodic(const struct lyd_node *node, NC_OPERATION op)
 
     assert(!strcmp(LYD_NAME(node), "periodic"));
 
-    (void) op;
+    /* switch to persistent, don't do anything */
+    if (op == NC_OP_DELETE) {
+        return 0;
+    }
 
     /* LOCK */
     if (nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
