@@ -3849,119 +3849,114 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
     const char *name = LYD_NAME(node);
     int ret = 0;
 
-    if (!strcmp(name, "listen")) {
-        ret = nc_server_config_listen(node, op);
+    if (!strcmp(name, "anchor-time")) {
+        ret = nc_server_config_anchor_time(node, op);
     } else if (!strcmp(name, "call-home")) {
         ret = nc_server_config_ch(node, op);
     } else if (!strcmp(name, "endpoint")) {
         ret = nc_server_config_endpoint(node, op);
-    }
-#ifdef NC_ENABLED_SSH_TLS
-    else if (!strcmp(name, "ssh")) {
-        ret = nc_server_config_ssh(node, op);
-    } else if (!strcmp(name, "local-address")) {
-        ret = nc_server_config_local_address(node, op);
-    } else if (!strcmp(name, "local-port")) {
-        ret = nc_server_config_local_port(node, op);
-    } else if (!strcmp(name, "keepalives")) {
-        ret = nc_server_config_keepalives(node, op);
-    } else if (!strcmp(name, "idle-time")) {
-        ret = nc_server_config_idle_time(node, op);
-    } else if (!strcmp(name, "max-probes")) {
-        ret = nc_server_config_max_probes(node, op);
-    } else if (!strcmp(name, "probe-interval")) {
-        ret = nc_server_config_probe_interval(node, op);
-    } else if (!strcmp(name, "host-key")) {
-        ret = nc_server_config_host_key(node, op);
-    } else if (!strcmp(name, "public-key-format")) {
-        ret = nc_server_config_public_key_format(node, op);
-    } else if (!strcmp(name, "public-key")) {
-        ret = nc_server_config_public_key(node, op);
-    } else if (!strcmp(name, "private-key-format")) {
-        ret = nc_server_config_private_key_format(node, op);
-    } else if (!strcmp(name, "cleartext-private-key")) {
-        ret = nc_server_config_cleartext_private_key(node, op);
-    } else if (!strcmp(name, "central-keystore-reference")) {
-        ret = nc_server_config_keystore_reference(node, op);
-    } else if (!strcmp(name, "user")) {
-        ret = nc_server_config_user(node, op);
-    } else if (!strcmp(name, "auth-timeout")) {
-        ret = nc_server_config_auth_timeout(node, op);
-    } else if (!strcmp(name, "central-truststore-reference")) {
-        ret = nc_server_config_truststore_reference(node, op);
-    } else if (!strcmp(name, "use-system-keys")) {
-        ret = nc_server_config_use_system_keys(node, op);
-    } else if (!strcmp(name, "public-keys")) {
-        ret = nc_server_config_public_keys(node, op);
-    } else if (!strcmp(name, "password")) {
-        ret = nc_server_config_password(node, op);
-    } else if (!strcmp(name, "use-system-auth")) {
-        ret = nc_server_config_use_system_auth(node, op);
-    } else if (!strcmp(name, "none")) {
-        ret = nc_server_config_none(node, op);
-    } else if (!strcmp(name, "host-key-alg")) {
-        ret = nc_server_config_host_key_alg(node, op);
-    } else if (!strcmp(name, "key-exchange-alg")) {
-        ret = nc_server_config_kex_alg(node, op);
-    } else if (!strcmp(name, "encryption-alg")) {
-        ret = nc_server_config_encryption_alg(node, op);
-    } else if (!strcmp(name, "mac-alg")) {
-        ret = nc_server_config_mac_alg(node, op);
-    } else if (!strcmp(name, "endpoint-reference")) {
-        ret = nc_server_config_endpoint_reference(node, op);
-    } else if (!strcmp(name, "tls")) {
-        ret = nc_server_config_tls(node, op);
-    } else if (!strcmp(name, "cert-data")) {
-        ret = nc_server_config_cert_data(node, op);
-    } else if (!strcmp(name, "asymmetric-key")) {
-        ret = nc_server_config_asymmetric_key(node, op);
-    } else if (!strcmp(name, "client-authentication")) {
-        ret = nc_server_config_client_authentication(node, op);
-    } else if (!strcmp(name, "ca-certs")) {
-        ret = nc_server_config_ca_certs(node, op);
-    } else if (!strcmp(name, "ee-certs")) {
-        ret = nc_server_config_ee_certs(node, op);
-    } else if (!strcmp(name, "certificate")) {
-        ret = nc_server_config_certificate(node, op);
-    } else if (!strcmp(name, "cert-to-name")) {
-        ret = nc_server_config_cert_to_name(node, op);
-    } else if (!strcmp(name, "fingerprint")) {
-        ret = nc_server_config_fingerprint(node, op);
-    } else if (!strcmp(name, "tls-version")) {
-        ret = nc_server_config_tls_version(node, op);
-    } else if (!strcmp(name, "cipher-suite")) {
-        ret = nc_server_config_cipher_suite(node, op);
-    }
-#endif /* NC_ENABLED_SSH_TLS */
-    else if (!strcmp(name, "netconf-client")) {
-        ret = nc_server_config_netconf_client(node, op);
-    }
-#ifdef NC_ENABLED_SSH_TLS
-    else if (!strcmp(name, "remote-address")) {
-        ret = nc_server_config_remote_address(node, op);
-    } else if (!strcmp(name, "remote-port")) {
-        ret = nc_server_config_remote_port(node, op);
-    }
-#endif /* NC_ENABLED_SSH_TLS */
-    else if (!strcmp(name, "persistent")) {
-        ret = nc_server_config_persistent(node, op);
-    } else if (!strcmp(name, "periodic")) {
-        ret = nc_server_config_periodic(node, op);
-    } else if (!strcmp(name, "period")) {
-        ret = nc_server_config_period(node, op);
-    } else if (!strcmp(name, "anchor-time")) {
-        ret = nc_server_config_anchor_time(node, op);
     } else if (!strcmp(name, "idle-timeout")) {
         ret = nc_server_config_idle_timeout(node, op);
+    } else if (!strcmp(name, "listen")) {
+        ret = nc_server_config_listen(node, op);
+    } else if (!strcmp(name, "max-attempts")) {
+        ret = nc_server_config_max_attempts(node, op);
+    } else if (!strcmp(name, "max-wait")) {
+        ret = nc_server_config_max_wait(node, op);
+    } else if (!strcmp(name, "netconf-client")) {
+        ret = nc_server_config_netconf_client(node, op);
+    } else if (!strcmp(name, "period")) {
+        ret = nc_server_config_period(node, op);
+    } else if (!strcmp(name, "periodic")) {
+        ret = nc_server_config_periodic(node, op);
+    } else if (!strcmp(name, "persistent")) {
+        ret = nc_server_config_persistent(node, op);
     } else if (!strcmp(name, "reconnect-strategy")) {
         ret = nc_server_config_reconnect_strategy(node, op);
     } else if (!strcmp(name, "start-with")) {
         ret = nc_server_config_start_with(node, op);
-    } else if (!strcmp(name, "max-wait")) {
-        ret = nc_server_config_max_wait(node, op);
-    } else if (!strcmp(name, "max-attempts")) {
-        ret = nc_server_config_max_attempts(node, op);
     }
+#ifdef NC_ENABLED_SSH_TLS
+    else if (!strcmp(name, "auth-timeout")) {
+        ret = nc_server_config_auth_timeout(node, op);
+    } else if (!strcmp(name, "asymmetric-key")) {
+        ret = nc_server_config_asymmetric_key(node, op);
+    } else if (!strcmp(name, "ca-certs")) {
+        ret = nc_server_config_ca_certs(node, op);
+    } else if (!strcmp(name, "central-keystore-reference")) {
+        ret = nc_server_config_keystore_reference(node, op);
+    } else if (!strcmp(name, "central-truststore-reference")) {
+        ret = nc_server_config_truststore_reference(node, op);
+    } else if (!strcmp(name, "cert-data")) {
+        ret = nc_server_config_cert_data(node, op);
+    } else if (!strcmp(name, "certificate")) {
+        ret = nc_server_config_certificate(node, op);
+    } else if (!strcmp(name, "cert-to-name")) {
+        ret = nc_server_config_cert_to_name(node, op);
+    } else if (!strcmp(name, "cipher-suite")) {
+        ret = nc_server_config_cipher_suite(node, op);
+    } else if (!strcmp(name, "cleartext-private-key")) {
+        ret = nc_server_config_cleartext_private_key(node, op);
+    } else if (!strcmp(name, "client-authentication")) {
+        ret = nc_server_config_client_authentication(node, op);
+    } else if (!strcmp(name, "ee-certs")) {
+        ret = nc_server_config_ee_certs(node, op);
+    } else if (!strcmp(name, "encryption-alg")) {
+        ret = nc_server_config_encryption_alg(node, op);
+    } else if (!strcmp(name, "endpoint-reference")) {
+        ret = nc_server_config_endpoint_reference(node, op);
+    } else if (!strcmp(name, "fingerprint")) {
+        ret = nc_server_config_fingerprint(node, op);
+    } else if (!strcmp(name, "host-key")) {
+        ret = nc_server_config_host_key(node, op);
+    } else if (!strcmp(name, "host-key-alg")) {
+        ret = nc_server_config_host_key_alg(node, op);
+    } else if (!strcmp(name, "idle-time")) {
+        ret = nc_server_config_idle_time(node, op);
+    } else if (!strcmp(name, "keepalives")) {
+        ret = nc_server_config_keepalives(node, op);
+    } else if (!strcmp(name, "key-exchange-alg")) {
+        ret = nc_server_config_kex_alg(node, op);
+    } else if (!strcmp(name, "local-address")) {
+        ret = nc_server_config_local_address(node, op);
+    } else if (!strcmp(name, "local-port")) {
+        ret = nc_server_config_local_port(node, op);
+    } else if (!strcmp(name, "mac-alg")) {
+        ret = nc_server_config_mac_alg(node, op);
+    } else if (!strcmp(name, "max-probes")) {
+        ret = nc_server_config_max_probes(node, op);
+    } else if (!strcmp(name, "none")) {
+        ret = nc_server_config_none(node, op);
+    } else if (!strcmp(name, "password")) {
+        ret = nc_server_config_password(node, op);
+    } else if (!strcmp(name, "private-key-format")) {
+        ret = nc_server_config_private_key_format(node, op);
+    } else if (!strcmp(name, "probe-interval")) {
+        ret = nc_server_config_probe_interval(node, op);
+    } else if (!strcmp(name, "public-key")) {
+        ret = nc_server_config_public_key(node, op);
+    } else if (!strcmp(name, "public-key-format")) {
+        ret = nc_server_config_public_key_format(node, op);
+    } else if (!strcmp(name, "public-keys")) {
+        ret = nc_server_config_public_keys(node, op);
+    } else if (!strcmp(name, "remote-address")) {
+        ret = nc_server_config_remote_address(node, op);
+    } else if (!strcmp(name, "remote-port")) {
+        ret = nc_server_config_remote_port(node, op);
+    } else if (!strcmp(name, "ssh")) {
+        ret = nc_server_config_ssh(node, op);
+    } else if (!strcmp(name, "tls")) {
+        ret = nc_server_config_tls(node, op);
+    } else if (!strcmp(name, "tls-version")) {
+        ret = nc_server_config_tls_version(node, op);
+    } else if (!strcmp(name, "user")) {
+        ret = nc_server_config_user(node, op);
+    } else if (!strcmp(name, "use-system-auth")) {
+        ret = nc_server_config_use_system_auth(node, op);
+    } else if (!strcmp(name, "use-system-keys")) {
+        ret = nc_server_config_use_system_keys(node, op);
+    }
+#endif /* NC_ENABLED_SSH_TLS */
 
     if (ret) {
         ERR(NULL, "Configuring node \"%s\" failed.", LYD_NAME(node));
