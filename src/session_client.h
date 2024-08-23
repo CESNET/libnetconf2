@@ -190,6 +190,8 @@ struct nc_session *nc_connect_unix(const char *address, struct ly_ctx *ctx);
 /**
  * @brief Set the behaviour of checking the host key and adding/reading entries to/from the known_hosts file.
  *
+ * The default mode is ::NC_SSH_KNOWNHOSTS_ASK.
+ *
  * @param[in] mode Server host key checking mode.
  */
 void nc_client_ssh_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_MODE mode);

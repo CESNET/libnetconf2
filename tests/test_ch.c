@@ -132,7 +132,7 @@ client_thread_ssh(void *arg)
     struct ln2_test_ctx *test_ctx = arg;
 
     /* skip all hostkey and known_hosts checks */
-    nc_client_ssh_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_SKIP);
+    nc_client_ssh_ch_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_SKIP);
 
     /* set directory where to search for modules */
     ret = nc_client_set_schema_searchpath(MODULES_DIR);
