@@ -401,12 +401,56 @@ nc_client_ssh_do_dnssec_sshfp_check(ssh_session session, enum ssh_keytypes_e srv
 
 #endif
 
+/**
+ * @brief Convert knownhosts mode to string.
+ *
+ * @param[in] knownhosts_mode Knownhosts mode.
+ * @return Knownhosts mode string.
+ */
+static const char *
+nc_client_ssh_knownhosts_mode2str(NC_SSH_KNOWNHOSTS_MODE knownhosts_mode)
+{
+    const char *mode_str;
+
+    switch (knownhosts_mode) {
+    case NC_SSH_KNOWNHOSTS_ASK:
+        mode_str = "ask";
+        break;
+    case NC_SSH_KNOWNHOSTS_STRICT:
+        mode_str = "strict";
+        break;
+    case NC_SSH_KNOWNHOSTS_ACCEPT_NEW:
+        mode_str = "accept-new";
+        break;
+    case NC_SSH_KNOWNHOSTS_ACCEPT:
+        mode_str = "accept";
+        break;
+    case NC_SSH_KNOWNHOSTS_SKIP:
+        mode_str = "skip";
+        break;
+    default:
+        mode_str = "unknown";
+        break;
+    }
+
+    return mode_str;
+}
+
+/**
+ * @brief Perform the hostkey check.
+ *
+ * @param[in] hostname Expected hostname.
+ * @param[in] port Expected port.
+ * @param[in] knownhosts_mode Knownhosts mode.
+ * @param[in] session libssh session.
+ * @return 0 on success, -1 on error.
+ */
 static int
-nc_client_ssh_auth_hostkey_check(const char *hostname, uint16_t port, ssh_session session)
+nc_client_ssh_auth_hostkey_check(const char *hostname, uint16_t port,
+        NC_SSH_KNOWNHOSTS_MODE knownhosts_mode, ssh_session session)
 {
     char *hexa = NULL;
     unsigned char *hash_sha1 = NULL;
-    NC_SSH_KNOWNHOSTS_MODE knownhosts_mode = ssh_opts.knownhosts_mode;
     enum ssh_keytypes_e srv_pubkey_type;
     int state;
 
@@ -419,6 +463,8 @@ nc_client_ssh_auth_hostkey_check(const char *hostname, uint16_t port, ssh_sessio
 #ifdef ENABLE_DNSSEC
     int dnssec_ret;
 #endif
+
+    VRB(NULL, "Server hostkey check mode: %s.", nc_client_ssh_knownhosts_mode2str(knownhosts_mode));
 
     if (knownhosts_mode == NC_SSH_KNOWNHOSTS_SKIP) {
         /* skip all hostkey checks */
@@ -744,26 +790,44 @@ error:
 #endif
 }
 
-API int
-nc_client_ssh_set_knownhosts_path(const char *path)
+static int
+_nc_client_ssh_set_knownhosts_path(const char *path, struct nc_client_ssh_opts *opts)
 {
-    free(ssh_opts.knownhosts_path);
+    free(opts->knownhosts_path);
 
     if (!path) {
-        ssh_opts.knownhosts_path = NULL;
+        opts->knownhosts_path = NULL;
         return 0;
     }
 
-    ssh_opts.knownhosts_path = strdup(path);
-    NC_CHECK_ERRMEM_RET(!ssh_opts.knownhosts_path, 1);
+    opts->knownhosts_path = strdup(path);
+    NC_CHECK_ERRMEM_RET(!opts->knownhosts_path, 1);
 
     return 0;
+}
+
+API int
+nc_client_ssh_set_knownhosts_path(const char *path)
+{
+    return _nc_client_ssh_set_knownhosts_path(path, &ssh_opts);
+}
+
+API int
+nc_client_ssh_ch_set_knownhosts_path(const char *path)
+{
+    return _nc_client_ssh_set_knownhosts_path(path, &ssh_ch_opts);
 }
 
 API void
 nc_client_ssh_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_MODE mode)
 {
     ssh_opts.knownhosts_mode = mode;
+}
+
+API void
+nc_client_ssh_ch_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_MODE mode)
+{
+    ssh_ch_opts.knownhosts_mode = mode;
 }
 
 static void
@@ -1254,7 +1318,7 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
         return -1;
     }
 
-    if (nc_client_ssh_auth_hostkey_check(session->host, session->port, ssh_sess)) {
+    if (nc_client_ssh_auth_hostkey_check(session->host, session->port, opts->knownhosts_mode, ssh_sess)) {
         ERR(session, "Checking the host key failed.");
         return -1;
     }
@@ -1701,7 +1765,6 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     struct nc_session *session = NULL;
     char *buf = NULL;
     size_t buf_len = 0;
-    char *known_hosts_path = NULL;
 
     /* process parameters */
     if (!host || (host[0] == '\0')) {
@@ -1727,15 +1790,6 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
         pw = nc_getpw(0, username, &pw_buf, &buf, &buf_len);
     }
 
-    if (ssh_opts.knownhosts_path) {
-        /* known_hosts file path was set so use it */
-        known_hosts_path = strdup(ssh_opts.knownhosts_path);
-        NC_CHECK_ERRMEM_GOTO(!known_hosts_path, , fail);
-    } else if (pw) {
-        /* path not set explicitly, but current user's username found in /etc/passwd, so create the path */
-        NC_CHECK_ERRMEM_GOTO(asprintf(&known_hosts_path, "%s/.ssh/known_hosts", pw->pw_dir) == -1, , fail);
-    }
-
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
     NC_CHECK_ERRMEM_GOTO(!session, , fail);
@@ -1757,8 +1811,8 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_PORT, &port_uint);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_TIMEOUT, &timeout);
-    if (known_hosts_path) {
-        ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_KNOWNHOSTS, known_hosts_path);
+    if (ssh_opts.knownhosts_path) {
+        ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_KNOWNHOSTS, ssh_opts.knownhosts_path);
     }
 
     /* create and assign communication socket */
@@ -1800,12 +1854,10 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     session->port = port;
 
     free(buf);
-    free(known_hosts_path);
     return session;
 
 fail:
     free(buf);
-    free(known_hosts_path);
     free(ip_host);
     nc_session_free(session, NULL);
     return NULL;
@@ -1920,6 +1972,10 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
         free(buf);
     } else {
         ssh_options_set(sess, SSH_OPTIONS_USER, ssh_ch_opts.username);
+    }
+
+    if (ssh_ch_opts.knownhosts_path) {
+        ssh_options_set(sess, SSH_OPTIONS_KNOWNHOSTS, ssh_ch_opts.knownhosts_path);
     }
 
     ssh_options_set(sess, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519,ecdsa-sha2-nistp256,"

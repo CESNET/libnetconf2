@@ -78,13 +78,15 @@ static struct nc_client_context context_main = {
         .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}},
         .auth_password = sshauth_password,
         .auth_interactive = sshauth_interactive,
-        .auth_privkey_passphrase = sshauth_privkey_passphrase
+        .auth_privkey_passphrase = sshauth_privkey_passphrase,
+        .knownhosts_mode = NC_SSH_KNOWNHOSTS_ASK
     },
     .ssh_ch_opts = {
         .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}},
         .auth_password = sshauth_password,
         .auth_interactive = sshauth_interactive,
-        .auth_privkey_passphrase = sshauth_privkey_passphrase
+        .auth_privkey_passphrase = sshauth_privkey_passphrase,
+        .knownhosts_mode = NC_SSH_KNOWNHOSTS_ASK
     },
 #endif /* NC_ENABLED_SSH_TLS */
     /* .tls_ structures zeroed */

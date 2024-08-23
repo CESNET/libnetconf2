@@ -64,6 +64,27 @@ int nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **sess
  */
 
 /**
+ * @brief Set SSH Call Home behaviour of checking the host key and adding/reading entries to/from the known_hosts file.
+ *
+ * The default mode is ::NC_SSH_KNOWNHOSTS_ASK.
+ *
+ * @param[in] mode Server host key checking mode.
+ */
+void nc_client_ssh_ch_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_MODE mode);
+
+/**
+ * @brief Set SSH Call Home path to the known_hosts file for connections.
+ *
+ * Repetetive calling replaces the value. If the given file doesn't exist and the process has sufficient
+ * rights, it gets created whenever the file is needed, otherwise an error occurs. If NULL is passed or the
+ * path isn't set, the default known_hosts file will be used.
+ *
+ * @param[in] path Path to the known_hosts file.
+ * @return 0 on success, 1 on error.
+ */
+int nc_client_ssh_ch_set_knownhosts_path(const char *path);
+
+/**
  * @brief Set SSH Call Home password authentication callback.
  *
  * Repetitive calling causes replacing of the previous callback and its private data. Caller is responsible for
