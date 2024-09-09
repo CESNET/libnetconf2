@@ -1815,7 +1815,9 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
     case NC_TI_SSH:
         ssh_msg = ssh_message_get(session->ti.libssh.session);
         if (ssh_msg) {
-            nc_session_ssh_msg(session, NULL, ssh_msg, NULL);
+            if (nc_session_ssh_msg(session, NULL, ssh_msg, NULL)) {
+                ssh_message_reply_default(ssh_msg);
+            }
             if (session->ti.libssh.next) {
                 for (new = session->ti.libssh.next; new != session; new = new->ti.libssh.next) {
                     if ((new->status == NC_STATUS_STARTING) && new->ti.libssh.channel &&
