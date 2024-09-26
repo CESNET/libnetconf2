@@ -1587,12 +1587,10 @@ nc_tls_import_pubkey_file_wrap(const char *pubkey_path)
 static int
 nc_server_tls_parse_crl_dist_points(unsigned char **p, size_t len, char ***uris, int *uri_count)
 {
+    char **tmp_uris, *uri;
     int ret = 0;
-    unsigned char *end_crl_dist_points;
-    mbedtls_x509_sequence general_names = {0};
-    mbedtls_x509_sequence *iter = NULL;
-    mbedtls_x509_subject_alternative_name san = {0};
-    void *tmp;
+    size_t name_len;
+    unsigned char *end_crl_dist_points, *end_general_names, *end_names, tag, tag_class, tag_value;
 
     /*
      * parsing the value of CRLDistributionPoints
@@ -1637,45 +1635,65 @@ nc_server_tls_parse_crl_dist_points(unsigned char **p, size_t len, char ***uris,
                 }
             }
 
-            /* parse GeneralNames, but thankfully there is an api for this */
-            ret = mbedtls_x509_get_subject_alt_name_ext(p, *p + len, &general_names);
+            /* GeneralNames ::= SEQUENCE SIZE (1..MAX) OF GeneralName */
+            end_general_names = *p + len;
+            ret = mbedtls_asn1_get_tag(p, end_general_names, &name_len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
             if (ret) {
-                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+                ERR(NULL, "Failed to parse GeneralNames in CRL distribution points extension (%s)", nc_get_mbedtls_str_err(ret));
                 goto cleanup;
             }
 
-            /* iterate over all the GeneralNames */
-            iter = &general_names;
-            while (iter) {
-                ret = mbedtls_x509_parse_subject_alt_name(&iter->buf, &san);
-                if (ret && (ret != MBEDTLS_ERR_X509_FEATURE_UNAVAILABLE)) {
-                    ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+            end_names = *p + name_len;
+            while (*p < end_names) {
+                tag = **p;
+                tag_class = tag & MBEDTLS_ASN1_TAG_CLASS_MASK;
+                tag_value = tag & MBEDTLS_ASN1_TAG_VALUE_MASK;
+                /*
+                 * read the GeneralName tag and length
+                 *
+                 * GeneralName ::= CHOICE {
+                 *      otherName                 [0]  AnotherName,
+                 *      rfc822Name                [1]  IA5String,
+                 *      dNSName                   [2]  IA5String,
+                 *      x400Address               [3]  ORAddress,
+                 *      directoryName             [4]  Name,
+                 *      ediPartyName              [5]  EDIPartyName,
+                 *      uniformResourceIdentifier [6]  IA5String,
+                 *      iPAddress                 [7]  OCTET STRING,
+                 *      registeredID              [8]  OBJECT IDENTIFIER }
+                 */
+                ret = mbedtls_asn1_get_tag(p, end_names, &name_len, MBEDTLS_ASN1_CONTEXT_SPECIFIC | (tag & MBEDTLS_ASN1_CONSTRUCTED) | tag_value);
+                if (ret) {
+                    ERR(NULL, "Failed to parse GeneralName in CRL distribution points extension (%s).",
+                            nc_get_mbedtls_str_err(ret));
                     goto cleanup;
                 }
 
-                if (san.type == MBEDTLS_X509_SAN_UNIFORM_RESOURCE_IDENTIFIER) {
-                    /* found an URI */
-                    tmp = realloc(*uris, (*uri_count + 1) * sizeof **uris);
-                    if (!tmp) {
+                /* uniformResourceIdentifier [6] IA5String */
+                if ((tag_class == MBEDTLS_ASN1_CONTEXT_SPECIFIC) &&
+                        (tag_value == MBEDTLS_X509_SAN_UNIFORM_RESOURCE_IDENTIFIER)) {
+                    uri = strndup((char *)*p, name_len);
+                    if (!uri) {
                         ERRMEM;
                         ret = 1;
-                        mbedtls_x509_free_subject_alt_name(&san);
                         goto cleanup;
                     }
-                    *uris = tmp;
 
-                    (*uris)[*uri_count] = strndup((const char *)san.san.unstructured_name.p, san.san.unstructured_name.len);
-                    if (!(*uris)[*uri_count]) {
+                    tmp_uris = realloc(*uris, (*uri_count + 1) * sizeof **uris);
+                    if (!tmp_uris) {
                         ERRMEM;
+                        free(uri);
                         ret = 1;
-                        mbedtls_x509_free_subject_alt_name(&san);
                         goto cleanup;
                     }
+                    *uris = tmp_uris;
+
+                    (*uris)[*uri_count] = uri;
                     ++(*uri_count);
                 }
 
-                mbedtls_x509_free_subject_alt_name(&san);
-                iter = iter->next;
+                /* Move to the next GeneralName */
+                *p += name_len;
             }
 
         } else if (ret != MBEDTLS_ERR_ASN1_UNEXPECTED_TAG) {
