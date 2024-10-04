@@ -617,6 +617,27 @@ NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int time
  */
 void nc_client_session_set_not_strict(struct nc_session *session);
 
+/**
+ * @brief Enable or disable TCP keepalives. Only affects new sessions.
+ *
+ * Client-side TCP keepalives have the following default values:
+ * - idle time: 1 second
+ * - max probes: 10
+ * - probe interval: 5 seconds
+ *
+ * @param[in] enable Whether to enable or disable TCP keepalives.
+ */
+void nc_client_enable_tcp_keepalives(int enable);
+
+/**
+ * @brief Set TCP keepalive options.
+ *
+ * @param[in] idle_time Time in seconds before the first keepalive probe is sent. If 0, the default value 1 is used.
+ * @param[in] max_probes Maximum number of keepalive probes to send before considering the connection dead. If 0, the default value 10 is used.
+ * @param[in] probe_interval Time in seconds between individual keepalive probes. If 0, the default value 5 is used.
+ */
+void nc_client_set_tcp_keepalives(uint16_t idle_time, uint16_t max_probes, uint16_t probe_interval);
+
 /** @} Client Session */
 
 #ifdef __cplusplus

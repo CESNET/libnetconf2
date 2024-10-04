@@ -3217,3 +3217,34 @@ nc_client_session_set_not_strict(struct nc_session *session)
 
     session->flags |= NC_SESSION_CLIENT_NOT_STRICT;
 }
+
+API void
+nc_client_enable_tcp_keepalives(int enable)
+{
+    client_opts.ka.enabled = enable;
+}
+
+API void
+nc_client_set_tcp_keepalives(uint16_t idle_time, uint16_t max_probes, uint16_t probe_interval)
+{
+    if (!idle_time) {
+        /* default */
+        client_opts.ka.idle_time = 1;
+    } else {
+        client_opts.ka.idle_time = idle_time;
+    }
+
+    if (!max_probes) {
+        /* default */
+        client_opts.ka.max_probes = 10;
+    } else {
+        client_opts.ka.max_probes = max_probes;
+    }
+
+    if (!probe_interval) {
+        /* default */
+        client_opts.ka.probe_interval = 5;
+    } else {
+        client_opts.ka.probe_interval = probe_interval;
+    }
+}
