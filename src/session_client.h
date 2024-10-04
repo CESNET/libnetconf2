@@ -618,6 +618,37 @@ NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int time
 void nc_client_session_set_not_strict(struct nc_session *session);
 
 /**
+ * @brief Callback for monitoring client sessions.
+ *
+ * This callback is called whenever the client finds out that a session was terminated by the server.
+ *
+ * @param[in] session Terminated session, which will be freed after the callback finishes executing.
+ * @param[in] user_data Arbitrary user data passed to the callback.
+ */
+typedef void (*nc_client_monitoring_clb)(struct nc_session *session, void *user_data);
+
+/**
+ * @brief Start a thread that monitors client sessions.
+ *
+ * If the thread is running, new sessions will be monitored automatically.
+ *
+ * Note that once you start the monitoring thread, any other client thread that
+ * calls ::nc_session_free() needs to share the same thread context (or be the same thread)
+ * as the thread that called this function (see ::nc_client_set_thread_context()).
+ *
+ * @param[in] monitoring_clb Callback called whenever a session is terminated.
+ * @param[in] user_data Arbitrary user data passed to the callback.
+ * @param[in] free_data Callback for freeing the user data after monitoring thread exits.
+ * @return 0 on success, 1 on error.
+ */
+int nc_client_monitoring_thread_start(nc_client_monitoring_clb monitoring_clb, void *user_data, void (*free_data)(void *));
+
+/**
+ * @brief Stop the client session monitoring thread.
+ */
+void nc_client_monitoring_thread_stop(void);
+
+/**
  * @brief Enable or disable TCP keepalives. Only affects new sessions.
  *
  * Client-side TCP keepalives have the following default values:
