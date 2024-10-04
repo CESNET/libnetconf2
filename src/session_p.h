@@ -359,6 +359,25 @@ struct nc_client_tls_opts {
 
 #endif /* NC_ENABLED_SSH_TLS */
 
+/**
+ * @brief Stores data for the client monitoring thread.
+ */
+struct nc_client_monitoring_thread_arg {
+    struct nc_session **sessions;   /**< Array of monitored sessions. */
+    uint16_t session_count;         /**< Number of monitored sessions. */
+
+    struct pollfd *pfds;            /**< Array of poll file descriptors corresponding to the monitored sessions. */
+    nfds_t pfd_count;               /**< Number of poll file descriptors. */
+
+    pthread_t tid;                  /**< Thread ID of the monitoring thread. */
+    int thread_running;             /**< Flag representing the runningness of the monitoring thread. */
+    pthread_mutex_t lock;           /**< Monitoring thread data lock. */
+
+    nc_client_monitoring_clb clb;   /**< Callback called when a monitored session is terminated by the server. */
+    void *clb_data;                 /**< Data passed to the callback. */
+    void (*clb_free_data)(void *);  /**< Callback to free the user data. */
+};
+
 /* ACCESS unlocked */
 struct nc_client_opts {
     char *schema_searchpath;
@@ -375,6 +394,8 @@ struct nc_client_opts {
         char *hostname;
     } *ch_binds_aux;
     uint16_t ch_bind_count;
+
+    struct nc_client_monitoring_thread_arg *monitoring_thread_data; /**< Data of the monitoring thread. */
 };
 
 /* ACCESS unlocked */
@@ -653,6 +674,11 @@ struct nc_server_opts {
 #define NC_REVERSE_QUEUE 5
 
 /**
+ * Time slept in msec in each cycle of the client monitoring thread.
+ */
+#define NC_CLIENT_MONITORING_BACKOFF 200
+
+/**
  * @brief Type of the session
  */
 typedef enum {
@@ -749,6 +775,7 @@ struct nc_session {
             /* client flags */
             /* some server modules failed to load so the data from them will be ignored - not use strict flag for parsing */
 #           define NC_SESSION_CLIENT_NOT_STRICT 0x08
+#           define NC_SESSION_CLIENT_MONITORED 0x40     /**< session is being monitored by the client monitoring thread */
         } client;
         struct {
             /* server side only data */
@@ -850,6 +877,23 @@ int nc_is_pk_subject_public_key_info(const char *b64);
 void * nc_base64der_to_cert(const char *data);
 
 #endif /* NC_ENABLED_SSH_TLS */
+
+/**
+ * @brief Start monitoring a session.
+ *
+ * @param[in] session Session to start monitoring.
+ *
+ * @return 0 on success, 1 on error.
+ */
+int nc_client_monitoring_session_start(struct nc_session *session);
+
+/**
+ * @brief Stop monitoring a session.
+ *
+ * @param[in] session Session to stop monitoring.
+ * @param[in] lock Whether to lock the thread data while removing the session from the list.
+ */
+void nc_client_monitoring_session_stop(struct nc_session *session, int lock);
 
 void *nc_realloc(void *ptr, size_t size);
 

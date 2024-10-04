@@ -857,6 +857,13 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         return;
     }
 
+    if (session->side == NC_CLIENT) {
+        if (session->flags & NC_SESSION_CLIENT_MONITORED) {
+            /* remove the session from the monitored list */
+            nc_client_monitoring_session_stop(session, 1);
+        }
+    }
+
     /* stop notification threads if any */
     if ((session->side == NC_CLIENT) && ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread_running)) {
         /* let the threads know they should quit */
