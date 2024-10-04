@@ -296,7 +296,7 @@ nc_client_tls_session_new(int sock, const char *host, int timeout, struct nc_cli
     nc_client_tls_set_verify_wrap(tls_cfg);
 
     /* init TLS context and store data which may be needed later in it */
-    if (nc_tls_init_ctx_wrap(sock, cli_cert, cli_pkey, cert_store, crl_store, tls_ctx)) {
+    if (nc_tls_init_ctx_wrap(cli_cert, cli_pkey, cert_store, crl_store, tls_ctx)) {
         goto fail;
     }
 
@@ -315,7 +315,7 @@ nc_client_tls_session_new(int sock, const char *host, int timeout, struct nc_cli
     }
 
     /* set session fd */
-    nc_server_tls_set_fd_wrap(tls_session, sock, tls_ctx);
+    nc_tls_set_fd_wrap(tls_session, sock, tls_ctx);
 
     sock = -1;
 
