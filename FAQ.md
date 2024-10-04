@@ -65,3 +65,13 @@ __A:__ No, it is not possible. There are currently 2 main types of certificates 
    which is extracted from the certificate, is sent to the server instead of the whole certificate.
    This means that the `cert-to-name` process required by *NETCONF* can not take place. Specifically,
    OpenSSH certificates are missing important fields such as `Common Name`, `Subject Alternative Name` and so on.
+
+__Q: I have client-side keepalives and monitoring enabled, but it takes a long time for the client to detect that the connection was terminated:__
+__A:__ Assuming that the network connection is fine or is loopback, then this is the standard TCP behavior.
+   The client will not immediately detect that the connection was terminated unless
+   it tries to send some data or unless a specific timeout occurs.
+
+   Even though the server was terminated, its socket remains in a lingering state for some time and continues to reply to incoming
+   TCP keepalive packets. In particular, this timeout you're encountering is most likely affected by the `tcp_fin_timeout` kernel parameter,
+   which controls how long the TCP stack waits before timing out a half-closed connection after receiving a FIN packet.
+   The default value is typically 60 seconds, but it can be configured based on your needs.
