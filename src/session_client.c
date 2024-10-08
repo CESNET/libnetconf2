@@ -1681,7 +1681,7 @@ sock_connect(const char *src_addr, uint16_t src_port, int timeout_ms, int *sock_
     }
     if (error) {
         /* network connection failed, try another resource */
-        VRB(NULL, "getsockopt() error (%s).", strerror(error));
+        VRB(NULL, "Connection error (%s).", strerror(error));
         errno = error;
         goto cleanup;
     }
