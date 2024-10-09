@@ -296,7 +296,7 @@ nc_client_tls_session_new(int sock, const char *host, int timeout, struct nc_cli
     nc_client_tls_set_verify_wrap(tls_cfg);
 
     /* init TLS context and store data which may be needed later in it */
-    if (nc_tls_init_ctx_wrap(sock, cli_cert, cli_pkey, cert_store, crl_store, tls_ctx)) {
+    if (nc_tls_init_ctx_wrap(cli_cert, cli_pkey, cert_store, crl_store, tls_ctx)) {
         goto fail;
     }
 
@@ -315,7 +315,7 @@ nc_client_tls_session_new(int sock, const char *host, int timeout, struct nc_cli
     }
 
     /* set session fd */
-    nc_server_tls_set_fd_wrap(tls_session, sock, tls_ctx);
+    nc_tls_set_fd_wrap(tls_session, sock, tls_ctx);
 
     sock = -1;
 
@@ -421,6 +421,13 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
         goto fail;
     }
 
+    /* start monitoring the session */
+    if (client_opts.monitoring_thread_data) {
+        if (nc_client_monitoring_session_start(session)) {
+            goto fail;
+        }
+    }
+
     /* store information into session */
     session->host = ip_host;
     session->port = port;
@@ -480,6 +487,13 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
     }
 
     session->flags |= NC_SESSION_CALLHOME;
+
+    /* start monitoring the session */
+    if (client_opts.monitoring_thread_data) {
+        if (nc_client_monitoring_session_start(session)) {
+            goto fail;
+        }
+    }
 
     /* store information into session */
     session->host = strdup(host);

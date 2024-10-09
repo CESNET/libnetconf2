@@ -879,7 +879,7 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     nc_server_tls_set_verify_wrap(tls_cfg, &cb_data);
 
     /* init TLS context and store data which may be needed later in it */
-    if (nc_tls_init_ctx_wrap(sock, srv_cert, srv_pkey, cert_store, crl_store, &session->ti.tls.ctx)) {
+    if (nc_tls_init_ctx_wrap(srv_cert, srv_pkey, cert_store, crl_store, &session->ti.tls.ctx)) {
         goto fail;
     }
 
@@ -900,7 +900,7 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     }
 
     /* set session fd */
-    nc_server_tls_set_fd_wrap(session->ti.tls.session, sock, &session->ti.tls.ctx);
+    nc_tls_set_fd_wrap(session->ti.tls.session, sock, &session->ti.tls.ctx);
 
     sock = -1;
 

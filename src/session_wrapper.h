@@ -369,7 +369,7 @@ int nc_server_tls_sha512_wrap(void *cert, unsigned char *buf);
  * @param[in] sock Socket FD.
  * @param[in] tls_ctx TLS context.
  */
-void nc_server_tls_set_fd_wrap(void *tls_session, int sock, struct nc_tls_ctx *tls_ctx);
+void nc_tls_set_fd_wrap(void *tls_session, int sock, struct nc_tls_ctx *tls_ctx);
 
 /**
  * @brief Perform a server-side step of the TLS handshake.
@@ -428,7 +428,6 @@ int nc_client_tls_set_hostname_wrap(void *tls_session, const char *hostname);
 /**
  * @brief Initialize a TLS context.
  *
- * @param[in] sock Socket FD.
  * @param[in] cert Certificate.
  * @param[in] pkey Private key.
  * @param[in] cert_store Certificate store.
@@ -436,7 +435,7 @@ int nc_client_tls_set_hostname_wrap(void *tls_session, const char *hostname);
  * @param[in,out] tls_ctx TLS context.
  * @return 0 on success, non-zero on fail.
  */
-int nc_tls_init_ctx_wrap(int sock, void *cert, void *pkey, void *cert_store, void *crl_store, struct nc_tls_ctx *tls_ctx);
+int nc_tls_init_ctx_wrap(void *cert, void *pkey, void *cert_store, void *crl_store, struct nc_tls_ctx *tls_ctx);
 
 /**
  * @brief Setup a TLS configuration from a TLS context.

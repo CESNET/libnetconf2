@@ -589,7 +589,7 @@ nc_server_tls_sha512_wrap(void *cert, unsigned char *buf)
 }
 
 void
-nc_server_tls_set_fd_wrap(void *tls_session, int sock, struct nc_tls_ctx *UNUSED(tls_ctx))
+nc_tls_set_fd_wrap(void *tls_session, int sock, struct nc_tls_ctx *UNUSED(tls_ctx))
 {
     SSL_set_fd(tls_session, sock);
 }
@@ -715,7 +715,7 @@ cleanup:
 }
 
 int
-nc_tls_init_ctx_wrap(int UNUSED(sock), void *cert, void *pkey, void *cert_store, void *crl_store, struct nc_tls_ctx *tls_ctx)
+nc_tls_init_ctx_wrap(void *cert, void *pkey, void *cert_store, void *crl_store, struct nc_tls_ctx *tls_ctx)
 {
     tls_ctx->cert = cert;
     tls_ctx->pkey = pkey;

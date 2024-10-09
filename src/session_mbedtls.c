@@ -899,9 +899,10 @@ nc_server_tls_recv(void *ctx, unsigned char *buf, size_t len)
 }
 
 void
-nc_server_tls_set_fd_wrap(void *tls_session, int UNUSED(sock), struct nc_tls_ctx *tls_ctx)
+nc_tls_set_fd_wrap(void *tls_session, int sock, struct nc_tls_ctx *tls_ctx)
 {
     /* mbedtls sets a pointer to the sock, which is stored in tls_ctx */
+    *tls_ctx->sock = sock;
     mbedtls_ssl_set_bio(tls_session, tls_ctx->sock, nc_server_tls_send, nc_server_tls_recv, NULL);
 }
 
@@ -1052,7 +1053,7 @@ nc_client_tls_set_hostname_wrap(void *tls_session, const char *hostname)
 }
 
 int
-nc_tls_init_ctx_wrap(int sock, void *cert, void *pkey, void *cert_store, void *crl_store, struct nc_tls_ctx *tls_ctx)
+nc_tls_init_ctx_wrap(void *cert, void *pkey, void *cert_store, void *crl_store, struct nc_tls_ctx *tls_ctx)
 {
     /* setup rng */
     if (nc_tls_rng_new(&tls_ctx->ctr_drbg, &tls_ctx->entropy)) {
@@ -1062,7 +1063,6 @@ nc_tls_init_ctx_wrap(int sock, void *cert, void *pkey, void *cert_store, void *c
     /* fill the context */
     tls_ctx->sock = malloc(sizeof *tls_ctx->sock);
     NC_CHECK_ERRMEM_RET(!tls_ctx->sock, 1);
-    *tls_ctx->sock = sock;
     tls_ctx->cert = cert;
     tls_ctx->pkey = pkey;
     tls_ctx->cert_store = cert_store;

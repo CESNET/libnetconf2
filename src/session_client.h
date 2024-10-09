@@ -617,6 +617,55 @@ NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int time
  */
 void nc_client_session_set_not_strict(struct nc_session *session);
 
+/**
+ * @brief Callback for monitoring client sessions.
+ *
+ * This callback is called whenever the client finds out that a session was terminated by the server.
+ * The underlying session will be freed after the callback finishes executing.
+ *
+ * @param[in] session Terminated session.
+ * @param[in] user_data Arbitrary user data passed to the callback.
+ */
+typedef void (*nc_client_monitoring_clb)(const struct nc_session *session, void *user_data);
+
+/**
+ * @brief Start a thread that monitors client sessions.
+ *
+ * If the thread is running, new sessions will be monitored automatically.
+ *
+ * @param[in] monitoring_clb Callback called whenever a session is terminated.
+ * @param[in] user_data Arbitrary user data passed to the callback.
+ * @param[in] free_data Callback for freeing the user data after monitoring thread exits.
+ * @return 0 on success, 1 on error.
+ */
+int nc_client_monitoring_thread_start(nc_client_monitoring_clb monitoring_clb, void *user_data, void (*free_data)(void *));
+
+/**
+ * @brief Stop the client session monitoring thread.
+ */
+void nc_client_monitoring_thread_stop(void);
+
+/**
+ * @brief Enable or disable TCP keepalives. Only affects new sessions.
+ *
+ * Client-side TCP keepalives have the following default values:
+ * - idle time: 1 second
+ * - max probes: 10
+ * - probe interval: 5 seconds
+ *
+ * @param[in] enable Whether to enable or disable TCP keepalives.
+ */
+void nc_client_enable_tcp_keepalives(int enable);
+
+/**
+ * @brief Set TCP keepalive options.
+ *
+ * @param[in] idle_time Time in seconds before the first keepalive probe is sent. If 0, the default value 1 is used.
+ * @param[in] max_probes Maximum number of keepalive probes to send before considering the connection dead. If 0, the default value 10 is used.
+ * @param[in] probe_interval Time in seconds between individual keepalive probes. If 0, the default value 5 is used.
+ */
+void nc_client_set_tcp_keepalives(uint16_t idle_time, uint16_t max_probes, uint16_t probe_interval);
+
 /** @} Client Session */
 
 #ifdef __cplusplus
