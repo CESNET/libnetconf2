@@ -757,9 +757,22 @@ struct nc_session {
     struct ly_ctx *ctx;            /**< libyang context of the session */
     void *data;                    /**< arbitrary user data */
     uint8_t flags;                 /**< various flags of the session */
-#define NC_SESSION_SHAREDCTX 0x01
+
+/* shared flags */
+#define NC_SESSION_SHAREDCTX 0x01   /**< context is shared */
 #define NC_SESSION_CALLHOME 0x02    /**< session is Call Home and ch_lock is initialized */
 #define NC_SESSION_CH_THREAD 0x04   /**< protected by ch_lock */
+
+/* client flags */
+#define NC_SESSION_CLIENT_NOT_STRICT 0x08   /**< some server modules failed to load so the data from
+                                                 them will be ignored - not use strict flag for parsing */
+#define NC_SESSION_CLIENT_MONITORED 0x40    /**< session is being monitored by the client monitoring thread */
+
+/* server flags */
+#ifdef NC_ENABLED_SSH_TLS
+#define NC_SESSION_SSH_AUTHENTICATED 0x10   /**< SSH session authenticated */
+#define NC_SESSION_SSH_SUBSYS_NETCONF 0x20  /**< netconf subsystem requested */
+#endif
 
     union {
         struct {
@@ -771,11 +784,6 @@ struct nc_session {
             ATOMIC_T ntf_thread_count;     /**< number of running notification threads */
             ATOMIC_T ntf_thread_running;   /**< flag whether there are notification threads for this session running or not */
             struct lyd_node *ext_data;     /**< LY ext data used in the context callback */
-
-            /* client flags */
-            /* some server modules failed to load so the data from them will be ignored - not use strict flag for parsing */
-#           define NC_SESSION_CLIENT_NOT_STRICT 0x08
-#           define NC_SESSION_CLIENT_MONITORED 0x40     /**< session is being monitored by the client monitoring thread */
         } client;
         struct {
             /* server side only data */
@@ -793,14 +801,8 @@ struct nc_session {
             pthread_mutex_t ch_lock;       /**< Call Home thread lock */
             pthread_cond_t ch_cond;        /**< Call Home thread condition */
 
-            /* server flags */
 #ifdef NC_ENABLED_SSH_TLS
-            /* SSH session authenticated */
-#           define NC_SESSION_SSH_AUTHENTICATED 0x10
-            /* netconf subsystem requested */
-#           define NC_SESSION_SSH_SUBSYS_NETCONF 0x20
             uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
-
             void *client_cert;                /**< TLS client certificate if used for authentication */
 #endif /* NC_ENABLED_SSH_TLS */
         } server;
