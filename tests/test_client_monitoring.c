@@ -41,6 +41,7 @@ monitoring_clb(struct nc_session *sess, void *user_data)
     /* signal the main thread that the monitoring callback was called */
     pthread_barrier_wait(barrier);
     printf("Session with ID %d disconnected by the server.\n", nc_session_get_id(sess));
+    nc_session_free(sess, NULL);
 }
 
 static void *

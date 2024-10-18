@@ -3336,6 +3336,11 @@ nc_client_monitoring_session_stop(struct nc_session *session, int lock)
         pthread_mutex_lock(&mtarg->lock);
     }
 
+    /* session is no longer monitored (is being freed) */
+    if (!(session->flags & NC_SESSION_CLIENT_MONITORED)) {
+        goto cleanup;
+    }
+
     /* find the session */
     for (i = 0; i < mtarg->session_count; i++) {
         if (mtarg->sessions[i] == session) {
@@ -3344,7 +3349,7 @@ nc_client_monitoring_session_stop(struct nc_session *session, int lock)
     }
     if (i == mtarg->session_count) {
         /* not found */
-        ERR(session, "Session is not being monitored.");
+        ERRINT;
         goto cleanup;
     }
 
@@ -3382,7 +3387,7 @@ nc_client_monitoring_thread(void *arg)
     int r;
     struct nc_client_monitoring_thread_arg *mtarg;
     nfds_t i;
-    struct nc_session *session;
+    struct nc_session *session = NULL;
 
     /* set this thread's context to the one from the thread that started the monitoring thread */
     nc_client_set_thread_context(arg);
@@ -3416,27 +3421,26 @@ nc_client_monitoring_thread(void *arg)
             goto next_iter;
         }
 
-        /* check the events */
-        i = 0;
-        while (i < mtarg->pfd_count) {
+        for (i = 0; i < mtarg->pfd_count; i++) {
             if (mtarg->pfds[i].revents & (POLLHUP | POLLNVAL)) {
-                /* call the callback and free the session */
+                /* save the session and stop monitoring it, callback will be called outside of the lock */
                 session = mtarg->sessions[i];
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_DROPPED;
-                mtarg->clb(session, mtarg->clb_data);
-
-                /* session will be removed from the list, continue from the same index */
                 nc_client_monitoring_session_stop(session, 0);
-                nc_session_free(session, NULL);
-            } else {
-                i++;
+                break;
             }
         }
 
 next_iter:
         /* UNLOCK */
         pthread_mutex_unlock(&mtarg->lock);
+
+        /* if an event occurred, call the callback */
+        if (session) {
+            mtarg->clb(session, mtarg->clb_data);
+        }
+        session = NULL;
 
         usleep(NC_CLIENT_MONITORING_BACKOFF * 1000);
 
@@ -3445,23 +3449,8 @@ next_iter:
     }
 
 cleanup:
-    client_opts.monitoring_thread_data = NULL;
-
     /* UNLOCK */
     pthread_mutex_unlock(&mtarg->lock);
-
-    if (mtarg->clb_free_data) {
-        mtarg->clb_free_data(mtarg->clb_data);
-    }
-    for (i = 0; i < mtarg->session_count; i++) {
-        mtarg->sessions[i]->flags &= ~NC_SESSION_CLIENT_MONITORED;
-    }
-    free(mtarg->sessions);
-    free(mtarg->pfds);
-    pthread_mutex_destroy(&mtarg->lock);
-
-    free(mtarg);
-
     VRB(NULL, "Client monitoring thread exit.");
     return NULL;
 }
@@ -3518,7 +3507,7 @@ cleanup:
 API void
 nc_client_monitoring_thread_stop(void)
 {
-    int r;
+    int r, i;
     pthread_t tid;
     struct nc_client_monitoring_thread_arg *mtarg;
 
@@ -3534,6 +3523,12 @@ nc_client_monitoring_thread_stop(void)
 
     mtarg->thread_running = 0;
     tid = mtarg->tid;
+    client_opts.monitoring_thread_data = NULL;
+
+    /* remove the flag from the session while the lock is held */
+    for (i = 0; i < mtarg->session_count; i++) {
+        mtarg->sessions[i]->flags &= ~NC_SESSION_CLIENT_MONITORED;
+    }
 
     /* UNLOCK */
     pthread_mutex_unlock(&mtarg->lock);
@@ -3542,6 +3537,15 @@ nc_client_monitoring_thread_stop(void)
     if (r) {
         ERR(NULL, "Failed to join the client monitoring thread (%s).", strerror(r));
     }
+
+    if (mtarg->clb_free_data) {
+        mtarg->clb_free_data(mtarg->clb_data);
+    }
+    free(mtarg->sessions);
+    free(mtarg->pfds);
+    pthread_mutex_destroy(&mtarg->lock);
+
+    free(mtarg);
 }
 
 API void

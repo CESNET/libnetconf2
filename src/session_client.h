@@ -620,9 +620,9 @@ void nc_client_session_set_not_strict(struct nc_session *session);
 /**
  * @brief Callback for monitoring client sessions.
  *
- * This callback is called whenever the client finds out that a session was terminated by the server.
+ * This callback is called whenever the client finds out that a session was disconnected by the server.
  *
- * @param[in] session Terminated session, which will be freed after the callback finishes executing.
+ * @param[in] session Disconnected session. The session will not be freed, so it is safe to call nc_session_free() on it.
  * @param[in] user_data Arbitrary user data passed to the callback.
  */
 typedef void (*nc_client_monitoring_clb)(struct nc_session *session, void *user_data);
