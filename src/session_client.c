@@ -165,6 +165,10 @@ nc_client_context_location(void)
             e = calloc(1, sizeof *e);
             /* set default values */
             e->refcount = 1;
+            e->opts.ka.enabled = 1;
+            e->opts.ka.idle_time = 1;
+            e->opts.ka.max_probes = 10;
+            e->opts.ka.probe_interval = 5;
 #ifdef NC_ENABLED_SSH_TLS
 # ifdef HAVE_TERMIOS
             e->ssh_opts.knownhosts_mode = NC_SSH_KNOWNHOSTS_ASK;
