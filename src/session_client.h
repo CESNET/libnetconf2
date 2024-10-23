@@ -630,7 +630,7 @@ typedef void (*nc_client_monitoring_clb)(struct nc_session *session, void *user_
 /**
  * @brief Start a thread that monitors client sessions.
  *
- * If the thread is running, new sessions will be monitored automatically.
+ * Once the thread is running, new sessions will be monitored automatically.
  *
  * Note that once you start the monitoring thread, any other client thread that
  * calls ::nc_session_free() needs to share the same thread context (or be the same thread)

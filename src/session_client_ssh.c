@@ -1742,11 +1742,9 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
         goto fail;
     }
 
-    /* start monitoring the session */
-    if (client_opts.monitoring_thread_data) {
-        if (nc_client_monitoring_session_start(session)) {
-            goto fail;
-        }
+    /* start monitoring the session if the monitoring thread is running */
+    if (nc_client_monitoring_session_start(session)) {
+        goto fail;
     }
 
     /* store information if not previously */
@@ -1855,11 +1853,9 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
         goto fail;
     }
 
-    /* start monitoring the session */
-    if (client_opts.monitoring_thread_data) {
-        if (nc_client_monitoring_session_start(session)) {
-            goto fail;
-        }
+    /* start monitoring the session if the monitoring thread is running */
+    if (nc_client_monitoring_session_start(session)) {
+        goto fail;
     }
 
     /* update information */
@@ -1934,11 +1930,9 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
         goto fail;
     }
 
-    /* start monitoring the session */
-    if (client_opts.monitoring_thread_data) {
-        if (nc_client_monitoring_session_start(session)) {
-            goto fail;
-        }
+    /* start monitoring the session if the monitoring thread is running */
+    if (nc_client_monitoring_session_start(session)) {
+        goto fail;
     }
 
     /* store information into session */

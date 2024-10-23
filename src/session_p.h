@@ -395,7 +395,7 @@ struct nc_client_opts {
     } *ch_binds_aux;
     uint16_t ch_bind_count;
 
-    struct nc_client_monitoring_thread_arg *monitoring_thread_data; /**< Data of the monitoring thread. */
+    struct nc_client_monitoring_thread_arg monitoring_thread_data; /**< Data of the monitoring thread. */
 };
 
 /* ACCESS unlocked */
