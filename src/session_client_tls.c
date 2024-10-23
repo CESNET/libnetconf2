@@ -421,11 +421,9 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
         goto fail;
     }
 
-    /* start monitoring the session */
-    if (client_opts.monitoring_thread_data) {
-        if (nc_client_monitoring_session_start(session)) {
-            goto fail;
-        }
+    /* start monitoring the session if the monitoring thread is running */
+    if (nc_client_monitoring_session_start(session)) {
+        goto fail;
     }
 
     /* store information into session */
@@ -488,11 +486,9 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
 
     session->flags |= NC_SESSION_CALLHOME;
 
-    /* start monitoring the session */
-    if (client_opts.monitoring_thread_data) {
-        if (nc_client_monitoring_session_start(session)) {
-            goto fail;
-        }
+    /* start monitoring the session if the monitoring thread is running */
+    if (nc_client_monitoring_session_start(session)) {
+        goto fail;
     }
 
     /* store information into session */

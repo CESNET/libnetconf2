@@ -73,6 +73,7 @@ static struct nc_client_context context_main = {
         .max_probes = 10,
         .probe_interval = 5
     },
+    .opts.monitoring_thread_data.lock = PTHREAD_MUTEX_INITIALIZER,
 #ifdef NC_ENABLED_SSH_TLS
     .ssh_opts = {
         .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}},
@@ -192,6 +193,10 @@ nc_client_context_location(void)
             e->ssh_ch_opts.auth_pref[2].value = 3;
 #endif /* NC_ENABLED_SSH_TLS */
         }
+
+        /* init the monitoring thread data lock */
+        pthread_mutex_init(&e->opts.monitoring_thread_data.lock, NULL);
+
         pthread_setspecific(nc_client_context_key, e);
     }
 
@@ -1460,11 +1465,9 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
         goto fail;
     }
 
-    /* start monitoring the session */
-    if (client_opts.monitoring_thread_data) {
-        if (nc_client_monitoring_session_start(session)) {
-            goto fail;
-        }
+    /* start monitoring the session if the monitoring thread is running */
+    if (nc_client_monitoring_session_start(session)) {
+        goto fail;
     }
 
     return session;
@@ -1544,11 +1547,9 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
         goto fail;
     }
 
-    /* start monitoring the session */
-    if (client_opts.monitoring_thread_data) {
-        if (nc_client_monitoring_session_start(session)) {
-            goto fail;
-        }
+    /* start monitoring the session if the monitoring thread is running */
+    if (nc_client_monitoring_session_start(session)) {
+        goto fail;
     }
 
     return session;
@@ -3248,7 +3249,7 @@ nc_client_monitoring_get_session_fd(struct nc_session *session)
 {
     int fd = -1;
 
-    switch ((session->ti_type)) {
+    switch (session->ti_type) {
     case NC_TI_FD:
         fd = session->ti.fd.in;
         break;
@@ -3263,8 +3264,8 @@ nc_client_monitoring_get_session_fd(struct nc_session *session)
         fd = nc_tls_get_fd_wrap(session);
         break;
 #endif /* NC_ENABLED_SSH_TLS */
-    default:
-        ERR(session, "Unknown transport type.");
+    case NC_TI_NONE:
+        /* invalid */
         break;
     }
 
@@ -3278,21 +3279,19 @@ nc_client_monitoring_session_start(struct nc_session *session)
     struct nc_client_monitoring_thread_arg *mtarg;
     void *tmp, *tmp2;
 
-    mtarg = client_opts.monitoring_thread_data;
-    if (!mtarg) {
-        ERRINT;
-        return 1;
+    /* LOCK */
+    pthread_mutex_lock(&client_opts.monitoring_thread_data.lock);
+
+    /* check if the monitoring thread is running */
+    if (!client_opts.monitoring_thread_data.thread_running) {
+        goto cleanup;
     }
+
+    mtarg = &client_opts.monitoring_thread_data;
 
     /* get the session's file descriptor */
     fd = nc_client_monitoring_get_session_fd(session);
-    if (fd == -1) {
-        ERR(session, "Unable to monitor an invalid file descriptor.");
-        return 1;
-    }
-
-    /* LOCK */
-    pthread_mutex_lock(&mtarg->lock);
+    assert(fd != -1);
 
     /* if realloc fails, keep the original sessions without adding the new one */
     tmp = realloc(mtarg->sessions, (mtarg->session_count + 1) * sizeof *mtarg->sessions);
@@ -3325,16 +3324,12 @@ nc_client_monitoring_session_stop(struct nc_session *session, int lock)
     int i;
     struct nc_client_monitoring_thread_arg *mtarg;
 
-    mtarg = client_opts.monitoring_thread_data;
-    if (!mtarg) {
-        ERRINT;
-        return;
-    }
-
     if (lock) {
         /* LOCK */
-        pthread_mutex_lock(&mtarg->lock);
+        pthread_mutex_lock(&client_opts.monitoring_thread_data.lock);
     }
+
+    mtarg = &client_opts.monitoring_thread_data;
 
     /* session is no longer monitored (is being freed) */
     if (!(session->flags & NC_SESSION_CLIENT_MONITORED)) {
@@ -3392,15 +3387,10 @@ nc_client_monitoring_thread(void *arg)
     /* set this thread's context to the one from the thread that started the monitoring thread */
     nc_client_set_thread_context(arg);
 
-    /* so that both threads share the same opts */
-    mtarg = client_opts.monitoring_thread_data;
-    if (!mtarg) {
-        ERRINT;
-        return NULL;
-    }
-
     /* LOCK */
-    pthread_mutex_lock(&mtarg->lock);
+    pthread_mutex_lock(&client_opts.monitoring_thread_data.lock);
+
+    mtarg = &client_opts.monitoring_thread_data;
 
     while (mtarg->thread_running) {
         if (!mtarg->session_count) {
@@ -3463,19 +3453,17 @@ nc_client_monitoring_thread_start(nc_client_monitoring_clb monitoring_clb, void 
 
     NC_CHECK_ARG_RET(NULL, monitoring_clb, 1);
 
-    if (client_opts.monitoring_thread_data) {
+    /* LOCK */
+    pthread_mutex_lock(&client_opts.monitoring_thread_data.lock);
+    if (client_opts.monitoring_thread_data.thread_running) {
         ERR(NULL, "Client monitoring thread is already running.");
-        return 1;
+        ret = 1;
+        goto cleanup;
     }
 
-    client_opts.monitoring_thread_data = calloc(1, sizeof *client_opts.monitoring_thread_data);
-    NC_CHECK_ERRMEM_RET(!client_opts.monitoring_thread_data, 1);
-
-    client_opts.monitoring_thread_data->clb = monitoring_clb;
-    client_opts.monitoring_thread_data->clb_data = user_data;
-    client_opts.monitoring_thread_data->clb_free_data = free_data;
-
-    pthread_mutex_init(&client_opts.monitoring_thread_data->lock, NULL);
+    client_opts.monitoring_thread_data.clb = monitoring_clb;
+    client_opts.monitoring_thread_data.clb_data = user_data;
+    client_opts.monitoring_thread_data.clb_free_data = free_data;
 
     /* get the current thread context, so that the monitoring thread can use it */
     ctx = nc_client_get_thread_context();
@@ -3485,9 +3473,9 @@ nc_client_monitoring_thread_start(nc_client_monitoring_clb monitoring_clb, void 
         goto cleanup;
     }
 
-    client_opts.monitoring_thread_data->thread_running = 1;
+    client_opts.monitoring_thread_data.thread_running = 1;
 
-    r = pthread_create(&client_opts.monitoring_thread_data->tid, NULL,
+    r = pthread_create(&client_opts.monitoring_thread_data.tid, NULL,
             nc_client_monitoring_thread, ctx);
     if (r) {
         ERR(NULL, "Failed to create the client monitoring thread (%s).", strerror(r));
@@ -3496,11 +3484,8 @@ nc_client_monitoring_thread_start(nc_client_monitoring_clb monitoring_clb, void 
     }
 
 cleanup:
-    if (ret) {
-        pthread_mutex_destroy(&client_opts.monitoring_thread_data->lock);
-        free(client_opts.monitoring_thread_data);
-    }
-
+    /* UNLOCK */
+    pthread_mutex_unlock(&client_opts.monitoring_thread_data.lock);
     return ret;
 }
 
@@ -3511,19 +3496,20 @@ nc_client_monitoring_thread_stop(void)
     pthread_t tid;
     struct nc_client_monitoring_thread_arg *mtarg;
 
-    if (!client_opts.monitoring_thread_data) {
+    /* LOCK */
+    pthread_mutex_lock(&client_opts.monitoring_thread_data.lock);
+    if (!client_opts.monitoring_thread_data.thread_running) {
         ERR(NULL, "Client monitoring thread is not running.");
+
+        /* UNLOCK */
+        pthread_mutex_unlock(&client_opts.monitoring_thread_data.lock);
         return;
     }
 
-    mtarg = client_opts.monitoring_thread_data;
-
-    /* LOCK */
-    pthread_mutex_lock(&mtarg->lock);
+    mtarg = &client_opts.monitoring_thread_data;
 
     mtarg->thread_running = 0;
     tid = mtarg->tid;
-    client_opts.monitoring_thread_data = NULL;
 
     /* remove the flag from the session while the lock is held */
     for (i = 0; i < mtarg->session_count; i++) {
@@ -3538,14 +3524,24 @@ nc_client_monitoring_thread_stop(void)
         ERR(NULL, "Failed to join the client monitoring thread (%s).", strerror(r));
     }
 
+    /* LOCK */
+    pthread_mutex_lock(&mtarg->lock);
+
     if (mtarg->clb_free_data) {
         mtarg->clb_free_data(mtarg->clb_data);
     }
-    free(mtarg->sessions);
-    free(mtarg->pfds);
-    pthread_mutex_destroy(&mtarg->lock);
+    mtarg->clb = NULL;
+    mtarg->clb_data = NULL;
+    mtarg->clb_free_data = NULL;
 
-    free(mtarg);
+    free(mtarg->sessions);
+    mtarg->sessions = NULL;
+
+    free(mtarg->pfds);
+    mtarg->pfds = NULL;
+
+    /* UNLOCK */
+    pthread_mutex_unlock(&mtarg->lock);
 }
 
 API void
