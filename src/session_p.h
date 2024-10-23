@@ -679,6 +679,11 @@ struct nc_server_opts {
 #define NC_CLIENT_MONITORING_BACKOFF 200
 
 /**
+ * Timeout in msec for acquiring a lock of a client monitoring thread.
+ */
+#define NC_CLIENT_MONITORING_LOCK_TIMEOUT 500
+
+/**
  * @brief Type of the session
  */
 typedef enum {
