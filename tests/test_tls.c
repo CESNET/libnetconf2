@@ -27,6 +27,7 @@
 
 int TEST_PORT = 10050;
 const char *TEST_PORT_STR = "10050";
+const char *KEYLOG_FILE = "keylog.txt";
 
 static void *
 client_thread(void *arg)
@@ -54,6 +55,50 @@ client_thread(void *arg)
     return NULL;
 }
 
+#ifndef HAVE_MBEDTLS
+
+/** test keylog.txt file */
+static void
+assert_keylog_file()
+{
+    FILE *file;
+    char line[256];
+    const char *lines_types[] = {
+        "SERVER_HANDSHAKE_TRAFFIC_SECRET",
+        "CLIENT_HANDSHAKE_TRAFFIC_SECRET",
+        "EXPORTER_SECRET",
+        "SERVER_TRAFFIC_SECRET_0",
+        "CLIENT_TRAFFIC_SECRET_0"
+    };
+    int lines_types_count[] = {0, 0, 0, 0, 0};
+
+    fprintf(stderr, "Checking keylog file\n");
+
+    if (!getenv("SSLKEYLOGFILE")) {
+        return;
+    }
+
+    file = fopen(KEYLOG_FILE, "r");
+    assert_non_null(file);
+
+    while (fgets(line, sizeof(line), file)) {
+        assert_true(strlen(line) > 32);
+        for (int i = 0; i < 5; i++) {
+            if (strncmp(line, lines_types[i], strlen(lines_types[i])) == 0) {
+                lines_types_count[i]++;
+            }
+        }
+    }
+    for (int i = 0; i < 5; i++) {
+        assert_int_equal(lines_types_count[i], 2);
+    }
+
+    fclose(file);
+    remove(KEYLOG_FILE);
+}
+
+#endif
+
 static void
 test_nc_tls(void **state)
 {
@@ -70,6 +115,10 @@ test_nc_tls(void **state)
     for (i = 0; i < 2; i++) {
         pthread_join(tids[i], NULL);
     }
+
+#ifndef HAVE_MBEDTLS
+    assert_keylog_file();
+#endif
 }
 
 static int
@@ -115,11 +164,25 @@ setup_f(void **state)
     return 0;
 }
 
+static int
+setup_f_with_keylog(void **state)
+{
+    setenv("SSLKEYLOGFILE", KEYLOG_FILE, 1);
+    return setup_f(state);
+}
+
+static void
+test_nc_tls_with_keylog(void **state)
+{
+    test_nc_tls(state);
+}
+
 int
 main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_nc_tls, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_nc_tls_with_keylog, setup_f_with_keylog, ln2_glob_test_teardown)
     };
 
     /* try to get ports from the environment, otherwise use the default */
@@ -128,5 +191,6 @@ main(void)
     }
 
     setenv("CMOCKA_TEST_ABORT", "1", 1);
+    setenv("SSLKEYLOGFILE", KEYLOG_FILE, 1);
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

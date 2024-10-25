@@ -21,6 +21,7 @@
 
 #include <ctype.h>
 #include <poll.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,6 +44,83 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
+#define SSLKEYLOGFILE_ENV "SSLKEYLOGFILE"
+/* The fp for the open SSLKEYLOGFILE, or NULL if not open */
+static volatile FILE *keylog_file_fp = NULL;
+static volatile uint32_t keylog_tls_sessions = 0;
+static pthread_mutex_t keylog_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static int
+nc_tls_keylog_open(void)
+{
+    char *keylog_file_name;
+
+    keylog_file_name = getenv(SSLKEYLOGFILE_ENV);
+
+    if (keylog_file_name) {
+        pthread_mutex_lock(&keylog_mutex);
+        keylog_tls_sessions++;
+        DBL(NULL, "TID %lu create tls session: number %d", (long unsigned int)pthread_self(), keylog_tls_sessions);
+        if (!keylog_file_fp) {
+            keylog_file_fp = fopen(keylog_file_name, "a");
+            DBL(NULL, "TID %lu open keylog file %s", (long unsigned int)pthread_self(), keylog_file_name);
+            if (keylog_file_fp) {
+                if (setvbuf((FILE *) keylog_file_fp, NULL, _IOLBF, 4096)) {
+                    fclose((FILE *) keylog_file_fp);
+                    keylog_file_fp = NULL;
+                }
+            }
+        }
+        pthread_mutex_unlock(&keylog_mutex);
+    }
+    return keylog_file_fp != NULL;
+}
+
+static void
+nc_tls_keylog_close(void)
+{
+    if (keylog_file_fp) {
+        pthread_mutex_lock(&keylog_mutex);
+        keylog_tls_sessions--;
+        DBL(NULL, "TID %lu remove tls session: number %d", (long unsigned int)pthread_self(), keylog_tls_sessions);
+        if (keylog_tls_sessions == 0) {
+            DBL(NULL, "TID %lu close keylog file", (long unsigned int)pthread_self());
+            fclose((FILE *) keylog_file_fp);
+            keylog_file_fp = NULL;
+        }
+        pthread_mutex_unlock(&keylog_mutex);
+    }
+}
+
+static void
+nc_tls_keylog_write_line(const SSL *UNUSED(ssl), const char *line)
+{
+    /* The current maximum valid keylog line length LF and NUL is 195. */
+    size_t linelen;
+    char buf[256];
+
+    if (!keylog_file_fp || !line) {
+        return;
+    }
+
+    linelen = strlen(line);
+    if ((linelen == 0) || (linelen > sizeof(buf) - 2)) {
+        /* Empty line or too big to fit in a LF and NUL. */
+        return;
+    }
+
+    memcpy(buf, line, linelen);
+    if (line[linelen - 1] != '\n') {
+        buf[linelen++] = '\n';
+    }
+    buf[linelen] = '\0';
+
+    /* Using fputs here instead of fprintf since libcurl's fprintf replacement
+       may not be thread-safe. */
+    fputs(buf, (FILE *)keylog_file_fp);
+    return;
+}
+
 void *
 nc_tls_session_new_wrap(void *tls_cfg)
 {
@@ -54,6 +132,10 @@ nc_tls_session_new_wrap(void *tls_cfg)
         return NULL;
     }
 
+    if (nc_tls_keylog_open()) {
+        SSL_CTX_set_keylog_callback(tls_cfg, nc_tls_keylog_write_line);
+    }
+
     return session;
 }
 
@@ -61,6 +143,8 @@ void
 nc_tls_session_destroy_wrap(void *tls_session)
 {
     SSL_free(tls_session);
+
+    nc_tls_keylog_close();
 }
 
 void *
