@@ -1770,6 +1770,8 @@ nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, struct nc
     struct timespec ts_timeout;
     ssh_message msg;
 
+    DBG(session, "Waiting for \"netconf\" SSH subsystem request...");
+
     if (timeout) {
         nc_timeouttime_get(&ts_timeout, timeout * 1000);
     }
@@ -1865,6 +1867,8 @@ nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts
     struct timespec ts_timeout;
     ssh_message msg;
     struct nc_auth_state auth_state = {0};
+
+    DBG(session, "SSH authentication...");
 
     /* authenticate */
     if (opts->auth_timeout) {
@@ -1967,6 +1971,7 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
     /* set to non-blocking */
     ssh_set_blocking(session->ti.libssh.session, 0);
 
+    DBG(session, "Performing SSH key exchange...");
     if (timeout > -1) {
         nc_timeouttime_get(&ts_timeout, timeout);
     }
