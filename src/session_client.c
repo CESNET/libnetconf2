@@ -1606,6 +1606,8 @@ nc_saddr2str(const struct sockaddr *saddr, char **str_ip, uint16_t *port)
 /**
  * @brief Try to connect a socket, optionally a pending one from a previous attempt.
  *
+ * @param[in] src_addr Specific source address to bind to, used only for CH.
+ * @param[in] src_port Specific source port to bind to, used only for CH.
  * @param[in] timeout_ms Timeout in ms to wait for the connection to be fully established, -1 to block.
  * @param[in,out] sock_pending Optional previously created socked that was not fully connected yet. If provided and
  * connected, is set to -1.
@@ -1736,8 +1738,6 @@ nc_sock_connect(const char *src_addr, uint16_t src_port, const char *dst_addr, u
     socklen_t addr_len = sizeof saddr;
 
     *ip_host = NULL;
-
-    DBG(NULL, "nc_sock_connect(%s, %u, %s, %u, %d, %d)", src_addr, src_port, dst_addr, dst_port, timeout_ms, sock);
 
     /* no pending socket */
     if (sock == -1) {
