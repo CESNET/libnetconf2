@@ -1,10 +1,11 @@
 /**
- * @file log.h
+ * @file log_p.h
  * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @author Michal Vasko <mvasko@cesnet.cz>
  * @brief libnetconf2 logger
  *
  * @copyright
- * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2024 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -32,7 +33,7 @@
  * @param[in] level Verbose level
  * @param[in] format Formatting string
  */
-void prv_printf(const struct nc_session *session, NC_VERB_LEVEL level, const char *format, ...);
+void nc_log_printf(const struct nc_session *session, NC_VERB_LEVEL level, const char *format, ...);
 
 /**
  * @brief Verbose level variable
@@ -42,11 +43,11 @@ extern ATOMIC_T verbose_level;
 /*
  * Verbose printing macros
  */
-#define ERR(session, ...) prv_printf(session, NC_VERB_ERROR, __VA_ARGS__)
-#define WRN(session, ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_WARNING){prv_printf(session, NC_VERB_WARNING, __VA_ARGS__);}
-#define VRB(session, ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_VERBOSE){prv_printf(session, NC_VERB_VERBOSE, __VA_ARGS__);}
-#define DBG(session, ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_DEBUG){prv_printf(session, NC_VERB_DEBUG, __VA_ARGS__);}
-#define DBL(session, ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_DEBUG_LOWLVL){prv_printf(session, NC_VERB_DEBUG_LOWLVL, __VA_ARGS__);}
+#define ERR(session, ...) nc_log_printf(session, NC_VERB_ERROR, __VA_ARGS__)
+#define WRN(session, ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_WARNING){nc_log_printf(session, NC_VERB_WARNING, __VA_ARGS__);}
+#define VRB(session, ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_VERBOSE){nc_log_printf(session, NC_VERB_VERBOSE, __VA_ARGS__);}
+#define DBG(session, ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_DEBUG){nc_log_printf(session, NC_VERB_DEBUG, __VA_ARGS__);}
+#define DBL(session, ...) if(ATOMIC_LOAD_RELAXED(verbose_level)>=NC_VERB_DEBUG_LOWLVL){nc_log_printf(session, NC_VERB_DEBUG_LOWLVL, __VA_ARGS__);}
 
 #define ERRMEM ERR(NULL, "%s: memory reallocation failed (%s:%d).", __func__, __FILE__, __LINE__)
 #define ERRINITSRV ERR(NULL, "%s: server not initialized.", __func__)

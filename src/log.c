@@ -1,10 +1,11 @@
 /**
  * @file log.c
  * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @author Michal Vasko <mvasko@cesnet.cz>
  * @brief libnetconf2 - log functions
  *
  * @copyright
- * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2024 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -14,6 +15,8 @@
  */
 
 #define _GNU_SOURCE /* pthread_rwlock_t */
+
+#include "log_p.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -68,21 +71,20 @@ nc_libssh_log_cb(int priority, const char *UNUSED(function), const char *buffer,
     /* check for repeated messages and do not print them */
     if (!strncmp(last_msg, buffer, NC_MSG_SIZE - 1)) {
         nc_realtime_get(&cur_time);
-        if (!last_print.tv_sec || (nc_time_diff(&cur_time, &last_print) >= 1000)) {
-            /* print another repeated message every 1s */
-            fprintf(stderr, "%s: SSH: -||-\n", verb[priority].label);
+        if (last_print.tv_sec && (nc_time_diff(&cur_time, &last_print) < 1000)) {
+            /* print another repeated message only after 1s */
+            return;
         }
 
         last_print = cur_time;
-        return;
+    } else {
+        /* store the last message */
+        strncpy(last_msg, buffer, NC_MSG_SIZE - 1);
+        memset(&last_print, 0, sizeof last_print);
     }
 
-    /* store the last message */
-    strncpy(last_msg, buffer, NC_MSG_SIZE - 1);
-    memset(&last_print, 0, sizeof last_print);
-
     /* print the message */
-    fprintf(stderr, "%s: SSH: %s\n", verb[priority].label, buffer);
+    nc_log_printf(NULL, priority, "SSH: %s", buffer);
 }
 
 API void
@@ -95,58 +97,58 @@ nc_libssh_thread_verbosity(int level)
 #endif /* NC_ENABLED_SSH_TLS */
 
 static void
-prv_vprintf(const struct nc_session *session, NC_VERB_LEVEL level, const char *format, va_list args)
+nc_log_vprintf(const struct nc_session *session, NC_VERB_LEVEL level, const char *format, va_list args)
 {
     va_list args2;
-    char *prv_msg;
+    char *msg;
     void *mem;
     int req_len;
 
-    prv_msg = malloc(NC_MSG_SIZE);
-    if (!prv_msg) {
+    msg = malloc(NC_MSG_SIZE);
+    if (!msg) {
         return;
     }
 
     va_copy(args2, args);
 
-    req_len = vsnprintf(prv_msg, NC_MSG_SIZE - 1, format, args);
+    req_len = vsnprintf(msg, NC_MSG_SIZE - 1, format, args);
     if (req_len == -1) {
         goto cleanup;
     } else if (req_len >= NC_MSG_SIZE - 1) {
         /* the length is not enough */
         ++req_len;
-        mem = realloc(prv_msg, req_len);
+        mem = realloc(msg, req_len);
         if (!mem) {
             goto cleanup;
         }
-        prv_msg = mem;
+        msg = mem;
 
         /* now print the full message */
-        req_len = vsnprintf(prv_msg, req_len, format, args2);
+        req_len = vsnprintf(msg, req_len, format, args2);
         if (req_len == -1) {
             goto cleanup;
         }
     }
 
     if (print_clb) {
-        print_clb(session, level, prv_msg);
+        print_clb(session, level, msg);
     } else if (session && session->id) {
-        fprintf(stderr, "Session %" PRIu32 " %s: %s\n", session->id, verb[level].label, prv_msg);
+        fprintf(stderr, "Session %" PRIu32 " %s: %s\n", session->id, verb[level].label, msg);
     } else {
-        fprintf(stderr, "%s: %s\n", verb[level].label, prv_msg);
+        fprintf(stderr, "%s: %s\n", verb[level].label, msg);
     }
 
 cleanup:
-    free(prv_msg);
+    free(msg);
 }
 
 void
-prv_printf(const struct nc_session *session, NC_VERB_LEVEL level, const char *format, ...)
+nc_log_printf(const struct nc_session *session, NC_VERB_LEVEL level, const char *format, ...)
 {
     va_list ap;
 
     va_start(ap, format);
-    prv_vprintf(session, level, format, ap);
+    nc_log_vprintf(session, level, format, ap);
     va_end(ap);
 }
 
