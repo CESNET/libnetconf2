@@ -81,17 +81,24 @@ nc_timeouttime_get(struct timespec *ts, uint32_t add_ms)
 }
 
 int32_t
+nc_time_diff(const struct timespec *ts1, const struct timespec *ts2)
+{
+    int64_t nsec_diff = 0;
+
+    nsec_diff += (((int64_t)ts1->tv_sec) - ((int64_t)ts2->tv_sec)) * 1000000000L;
+    nsec_diff += ((int64_t)ts1->tv_nsec) - ((int64_t)ts2->tv_nsec);
+
+    return nsec_diff / 1000000L;
+}
+
+int32_t
 nc_timeouttime_cur_diff(const struct timespec *ts)
 {
     struct timespec cur;
-    int64_t nsec_diff = 0;
 
     nc_timeouttime_get(&cur, 0);
 
-    nsec_diff += (((int64_t)ts->tv_sec) - ((int64_t)cur.tv_sec)) * 1000000000L;
-    nsec_diff += ((int64_t)ts->tv_nsec) - ((int64_t)cur.tv_nsec);
-
-    return nsec_diff / 1000000L;
+    return nc_time_diff(ts, &cur);
 }
 
 void

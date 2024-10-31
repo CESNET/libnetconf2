@@ -936,6 +936,15 @@ NC_MSG_TYPE nc_send_msg_io(struct nc_session *session, int io_timeout, struct ly
 void nc_timeouttime_get(struct timespec *ts, uint32_t add_ms);
 
 /**
+ * @brief Get the time difference.
+ *
+ * @param[in] ts1 First timespec structure to compare.
+ * @param[in] ts2 Second timespec structure to compare.
+ * @return Time difference in milliseconds, positive if @p ts1 > @p ts2, negative if @p ts1 < @p ts2.
+ */
+int32_t nc_time_diff(const struct timespec *ts1, const struct timespec *ts2);
+
+/**
  * @brief Get time difference based on the current time (uses COMPAT_CLOCK_ID).
  *
  * @param[in] ts Timespec structure holding real time from which the current time is going to be subtracted.

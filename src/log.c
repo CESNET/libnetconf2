@@ -30,6 +30,8 @@
 #include "log.h"
 #include "session_p.h"
 
+#define NC_MSG_SIZE 256
+
 /**
  * @brief libnetconf verbose level variable
  */
@@ -57,9 +59,36 @@ struct {
 
 #ifdef NC_ENABLED_SSH_TLS
 
+static void
+nc_libssh_log_cb(int priority, const char *UNUSED(function), const char *buffer, void *UNUSED(userdata))
+{
+    static char last_msg[NC_MSG_SIZE] = {0};
+    static struct timespec last_print = {0}, cur_time;
+
+    /* check for repeated messages and do not print them */
+    if (!strncmp(last_msg, buffer, NC_MSG_SIZE - 1)) {
+        nc_realtime_get(&cur_time);
+        if (!last_print.tv_sec || (nc_time_diff(&cur_time, &last_print) >= 1000)) {
+            /* print another repeated message every 1s */
+            fprintf(stderr, "%s: SSH: -||-\n", verb[priority].label);
+        }
+
+        last_print = cur_time;
+        return;
+    }
+
+    /* store the last message */
+    strncpy(last_msg, buffer, NC_MSG_SIZE - 1);
+    memset(&last_print, 0, sizeof last_print);
+
+    /* print the message */
+    fprintf(stderr, "%s: SSH: %s\n", verb[priority].label, buffer);
+}
+
 API void
 nc_libssh_thread_verbosity(int level)
 {
+    ssh_set_log_callback(nc_libssh_log_cb);
     ssh_set_log_level(level);
 }
 
@@ -68,23 +97,22 @@ nc_libssh_thread_verbosity(int level)
 static void
 prv_vprintf(const struct nc_session *session, NC_VERB_LEVEL level, const char *format, va_list args)
 {
-#define PRV_MSG_INIT_SIZE 256
     va_list args2;
     char *prv_msg;
     void *mem;
     int req_len;
 
-    prv_msg = malloc(PRV_MSG_INIT_SIZE);
+    prv_msg = malloc(NC_MSG_SIZE);
     if (!prv_msg) {
         return;
     }
 
     va_copy(args2, args);
 
-    req_len = vsnprintf(prv_msg, PRV_MSG_INIT_SIZE - 1, format, args);
+    req_len = vsnprintf(prv_msg, NC_MSG_SIZE - 1, format, args);
     if (req_len == -1) {
         goto cleanup;
-    } else if (req_len >= PRV_MSG_INIT_SIZE - 1) {
+    } else if (req_len >= NC_MSG_SIZE - 1) {
         /* the length is not enough */
         ++req_len;
         mem = realloc(prv_msg, req_len);
@@ -110,7 +138,6 @@ prv_vprintf(const struct nc_session *session, NC_VERB_LEVEL level, const char *f
 
 cleanup:
     free(prv_msg);
-#undef PRV_MSG_INIT_SIZE
 }
 
 void
