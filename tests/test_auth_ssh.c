@@ -31,6 +31,7 @@ struct test_auth_ssh_data {
     const char *username;
     const char *pubkey_path;
     const char *privkey_path;
+    int check_banner;
 };
 
 int TEST_PORT = 10050;
@@ -48,6 +49,17 @@ auth_password(const char *username, const char *hostname, void *priv)
     } else {
         return NULL;
     }
+}
+
+static void
+check_banner(const struct nc_session *session)
+{
+    const char *banner;
+
+    banner = nc_session_ssh_get_banner(session);
+    assert_non_null(banner);
+
+    assert_string_equal(banner, "SSH-2.0-test-banner");
 }
 
 static void *
@@ -77,6 +89,10 @@ client_thread_ssh(void *arg)
     pthread_barrier_wait(&test_ctx->barrier);
     session = nc_connect_ssh("127.0.0.1", TEST_PORT, NULL);
     assert_non_null(session);
+
+    if (test_data->check_banner) {
+        check_banner(session);
+    }
 
     nc_session_free(session, NULL);
     return NULL;
@@ -232,6 +248,29 @@ test_nc_auth_ssh_ed25519_pubkey(void **state)
     }
 }
 
+static void
+test_nc_auth_ssh_banner(void **state)
+{
+    int ret, i;
+    pthread_t tids[2];
+    struct ln2_test_ctx *test_ctx = *state;
+    struct test_auth_ssh_data *test_data = test_ctx->test_data;
+
+    test_data->username = "test_ed25519";
+    test_data->pubkey_path = TESTS_DIR "/data/id_ed25519.pub";
+    test_data->privkey_path = TESTS_DIR "/data/id_ed25519";
+    test_data->check_banner = 1;
+
+    ret = pthread_create(&tids[0], NULL, client_thread_ssh, *state);
+    assert_int_equal(ret, 0);
+    ret = pthread_create(&tids[1], NULL, ln2_glob_test_server_thread, *state);
+    assert_int_equal(ret, 0);
+
+    for (i = 0; i < 2; i++) {
+        pthread_join(tids[i], NULL);
+    }
+}
+
 static int
 setup_ssh(void **state)
 {
@@ -275,6 +314,10 @@ setup_ssh(void **state)
     assert_int_equal(ret, 0);
 
     ret = lyd_new_path(tree, test_ctx->ctx, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='endpt']/ssh/"
+            "ssh-server-parameters/server-identity/libnetconf2-netconf-server:banner", "test-banner", 0, NULL);
+    assert_int_equal(ret, 0);
+
+    ret = lyd_new_path(tree, test_ctx->ctx, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='endpt']/ssh/"
             "ssh-server-parameters/client-authentication/users/user[name='test_none']/none", NULL, 0, NULL);
     assert_int_equal(ret, 0);
 
@@ -297,7 +340,8 @@ main(void)
         cmocka_unit_test_setup_teardown(test_nc_auth_ssh_ec256_pubkey, setup_ssh, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_nc_auth_ssh_ec384_pubkey, setup_ssh, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_nc_auth_ssh_ec521_pubkey, setup_ssh, ln2_glob_test_teardown),
-        cmocka_unit_test_setup_teardown(test_nc_auth_ssh_ed25519_pubkey, setup_ssh, ln2_glob_test_teardown)
+        cmocka_unit_test_setup_teardown(test_nc_auth_ssh_ed25519_pubkey, setup_ssh, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_nc_auth_ssh_banner, setup_ssh, ln2_glob_test_teardown)
     };
 
     /* try to get ports from the environment, otherwise use the default */
