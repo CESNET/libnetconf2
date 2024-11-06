@@ -40,7 +40,7 @@ typedef enum {
  * @param[in] format Value of the YANG identityref.
  * @return Private key format on success, NC_PRIVKEY_FORMAT_UNKNOWN otherwise.
  */
-NC_PRIVKEY_FORMAT nc_server_config_get_private_key_type(const char *format);
+enum nc_privkey_format nc_server_config_get_private_key_type(const char *format);
 
 #endif /* NC_ENABLED_SSH_TLS */
 
@@ -73,7 +73,7 @@ int nc_server_config_realloc(const char *key_value, void **ptr, size_t size, uin
  * @param[in] module Module for which to parse the data - either ietf-netconf-server, ietf-keystore or ietf-truststore
  * @return 0 on success, 1 on error.
  */
-int nc_server_config_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op, NC_MODULE module);
+int nc_server_config_parse_tree(const struct lyd_node *node, enum nc_operation parent_op, NC_MODULE module);
 
 /**
  * @brief Configures the listen subtree in the ietf-netconf-server module.
@@ -82,7 +82,7 @@ int nc_server_config_parse_tree(const struct lyd_node *node, NC_OPERATION parent
  * @param[in] op Operation to be done on the subtree. Only does something if the operation is NC_OP_DELETE.
  * @return 0 on success, 1 on error.
  */
-int nc_server_config_listen(const struct lyd_node *node, NC_OPERATION op);
+int nc_server_config_listen(const struct lyd_node *node, enum nc_operation op);
 
 /**
  * @brief Configures the Call Home subtree in the ietf-netconf-server module.
@@ -91,7 +91,7 @@ int nc_server_config_listen(const struct lyd_node *node, NC_OPERATION op);
  * @param[in] op Operation to be done on the subtree. Only does something if the operation is NC_OP_DELETE.
  * @return 0 on success, 1 on error.
  */
-int nc_server_config_ch(const struct lyd_node *node, NC_OPERATION op);
+int nc_server_config_ch(const struct lyd_node *node, enum nc_operation op);
 
 #ifdef NC_ENABLED_SSH_TLS
 
@@ -104,7 +104,7 @@ int nc_server_config_ch(const struct lyd_node *node, NC_OPERATION op);
  * @param[in] op Operation saying what to do with the top-level node.
  * @return 0 either if keystore is not present or if it is and application was successful, 1 on error.
  */
-int nc_server_config_fill_keystore(const struct lyd_node *data, NC_OPERATION op);
+int nc_server_config_fill_keystore(const struct lyd_node *data, enum nc_operation op);
 
 /**
  * @brief Parse the given node, which belongs to the ietf-keystore subtree, and apply it's data to the server's configuration.
@@ -113,7 +113,7 @@ int nc_server_config_fill_keystore(const struct lyd_node *data, NC_OPERATION op)
  * @param[in] op Operation saying what to do with the node.
  * @return 0 on success, 1 on error.
  */
-int nc_server_config_parse_keystore(const struct lyd_node *node, NC_OPERATION op);
+int nc_server_config_parse_keystore(const struct lyd_node *node, enum nc_operation op);
 
 /**
  * @brief Configures the keystore subtree in the ietf-keystore module.
@@ -122,7 +122,7 @@ int nc_server_config_parse_keystore(const struct lyd_node *node, NC_OPERATION op
  * @param[in] op Operation to be done on the subtree. Only does something if the operation is NC_OP_DELETE.
  * @return 0.
  */
-int nc_server_config_ks_keystore(const struct lyd_node *node, NC_OPERATION op);
+int nc_server_config_ks_keystore(const struct lyd_node *node, enum nc_operation op);
 
 /** TRUSTSTORE **/
 
@@ -133,7 +133,7 @@ int nc_server_config_ks_keystore(const struct lyd_node *node, NC_OPERATION op);
  * @param[in] op Operation saying what to do with the top-level node.
  * @return 0 either if truststore is not present or if it is and application was successful, 1 on error.
  */
-int nc_server_config_fill_truststore(const struct lyd_node *data, NC_OPERATION op);
+int nc_server_config_fill_truststore(const struct lyd_node *data, enum nc_operation op);
 
 /**
  * @brief Parse the given node, which belongs to the ietf-truststore subtree, and apply it's data to the server's configuration.
@@ -142,7 +142,7 @@ int nc_server_config_fill_truststore(const struct lyd_node *data, NC_OPERATION o
  * @param[in] op Operation saying what to do with the node.
  * @return 0 on success, 1 on error.
  */
-int nc_server_config_parse_truststore(const struct lyd_node *node, NC_OPERATION op);
+int nc_server_config_parse_truststore(const struct lyd_node *node, enum nc_operation op);
 
 /**
  * @brief Configures the truststore subtree in the ietf-truststore module.
@@ -151,7 +151,7 @@ int nc_server_config_parse_truststore(const struct lyd_node *node, NC_OPERATION 
  * @param[in] op Operation to be done on the subtree. Only does something if the operation is NC_OP_DELETE.
  * @return 0.
  */
-int nc_server_config_ts_truststore(const struct lyd_node *node, NC_OPERATION op);
+int nc_server_config_ts_truststore(const struct lyd_node *node, enum nc_operation op);
 
 /** LIBNETCONF2-NETCONF-SERVER **/
 
@@ -162,7 +162,7 @@ int nc_server_config_ts_truststore(const struct lyd_node *node, NC_OPERATION op)
  * @param[in] op Operation to be done on the subtree. Only does something if the operation is NC_OP_DELETE.
  * @return 0 on success, 1 on error.
  */
-int nc_server_config_ln2_netconf_server(const struct lyd_node *node, NC_OPERATION op);
+int nc_server_config_ln2_netconf_server(const struct lyd_node *node, enum nc_operation op);
 
 #endif /* NC_ENABLED_SSH_TLS */
 

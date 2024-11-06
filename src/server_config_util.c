@@ -201,7 +201,7 @@ cleanup:
 #ifdef NC_ENABLED_SSH_TLS
 
 const char *
-nc_server_config_util_privkey_format_to_identityref(NC_PRIVKEY_FORMAT format)
+nc_server_config_util_privkey_format_to_identityref(enum nc_privkey_format format)
 {
     switch (format) {
     case NC_PRIVKEY_FORMAT_RSA:
@@ -635,7 +635,7 @@ cleanup:
 }
 
 static int
-nc_server_config_util_get_privkey_format(const char *privkey, NC_PRIVKEY_FORMAT *privkey_format)
+nc_server_config_util_get_privkey_format(const char *privkey, enum nc_privkey_format *privkey_format)
 {
     NC_CHECK_ARG_RET(NULL, privkey, privkey_format, 1);
 
@@ -757,7 +757,7 @@ nc_server_config_util_pem_strip_header_footer(const char *pem, char **privkey)
 }
 
 static int
-nc_server_config_util_get_privkey(const char *privkey_path, NC_PRIVKEY_FORMAT *privkey_format, char **privkey, void **pkey)
+nc_server_config_util_get_privkey(const char *privkey_path, enum nc_privkey_format *privkey_format, char **privkey, void **pkey)
 {
     int ret = 0;
     FILE *f_privkey = NULL;
@@ -837,8 +837,8 @@ cleanup:
 }
 
 int
-nc_server_config_util_get_asym_key_pair(const char *privkey_path, const char *pubkey_path, NC_PUBKEY_FORMAT wanted_pubkey_format,
-        char **privkey, NC_PRIVKEY_FORMAT *privkey_type, char **pubkey)
+nc_server_config_util_get_asym_key_pair(const char *privkey_path, const char *pubkey_path, enum nc_pubkey_format wanted_pubkey_format,
+        char **privkey, enum nc_privkey_format *privkey_type, char **pubkey)
 {
     int ret = 0;
     void *pkey = NULL;
@@ -1003,7 +1003,7 @@ nc_server_config_add_keystore_asym_key(const struct ly_ctx *ctx, NC_TRANSPORT_IM
 {
     int ret = 0;
     char *privkey = NULL, *pubkey = NULL;
-    NC_PRIVKEY_FORMAT privkey_type;
+    enum nc_privkey_format privkey_type;
     const char *privkey_format, *pubkey_format;
 
     NC_CHECK_ARG_RET(NULL, ctx, asym_key_name, privkey_path, config, 1);

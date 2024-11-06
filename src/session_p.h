@@ -35,23 +35,23 @@
 /**
  * Enumeration of diff operation types.
  */
-typedef enum {
+enum nc_operation {
     NC_OP_UNKNOWN = 0,
     NC_OP_NONE,
     NC_OP_CREATE,
     NC_OP_DELETE,
     NC_OP_REPLACE
-} NC_OPERATION;
+};
 
 /**
  * Enumeration of key or certificate store type.
  */
-typedef enum {
+enum nc_store_type {
     NC_STORE_LOCAL,     /**< key/certificate is stored locally in the ietf-netconf-server YANG data */
     NC_STORE_KEYSTORE,  /**< key/certificate is stored externally in a keystore module YANG data */
     NC_STORE_TRUSTSTORE, /**< key/certificate is stored externally in a truststore module YANG data */
     NC_STORE_SYSTEM     /**< key/certificate is managed by the system */
-} NC_STORE_TYPE;
+};
 
 #ifdef NC_ENABLED_SSH_TLS
 
@@ -67,21 +67,21 @@ typedef enum {
 /**
  * Enumeration of SSH public key formats.
  */
-typedef enum {
+enum nc_pubkey_format {
     NC_PUBKEY_FORMAT_SSH, /**< see RFC 4253, section 6.6 */
     NC_PUBKEY_FORMAT_X509 /**< see RFC 5280 sec. 4.1.2.7 */
-} NC_PUBKEY_FORMAT;
+};
 
 /**
  * Enumeration of private key file formats.
  */
-typedef enum {
+enum nc_privkey_format {
     NC_PRIVKEY_FORMAT_RSA,      /**< PKCS1 RSA format */
     NC_PRIVKEY_FORMAT_EC,       /**< SEC1 EC format */
     NC_PRIVKEY_FORMAT_X509,     /**< X509 (PKCS8) format */
     NC_PRIVKEY_FORMAT_OPENSSH,  /**< OpenSSH format */
     NC_PRIVKEY_FORMAT_UNKNOWN   /**< Unknown format */
-} NC_PRIVKEY_FORMAT;
+};
 
 /**
  * @brief A basic certificate.
@@ -101,15 +101,15 @@ struct nc_certificate_bag {
  * @brief An asymmetric key.
  */
 struct nc_asymmetric_key {
-    char *name;                     /**< Arbitrary name of the key. */
+    char *name;                             /**< Arbitrary name of the key. */
 
-    NC_PUBKEY_FORMAT pubkey_type;   /**< Type of the public key. */
-    char *pubkey_data;              /**< Base-64 encoded public key. */
-    NC_PRIVKEY_FORMAT privkey_type; /**< Type of the private key. */
-    char *privkey_data;             /**< Base-64 encoded private key. */
+    enum nc_pubkey_format pubkey_type;      /**< Type of the public key. */
+    char *pubkey_data;                      /**< Base-64 encoded public key. */
+    enum nc_privkey_format privkey_type;    /**< Type of the private key. */
+    char *privkey_data;                     /**< Base-64 encoded private key. */
 
-    struct nc_certificate *certs;   /**< The certificates associated with this key. */
-    uint16_t cert_count;            /**< Number of certificates associated with this key. */
+    struct nc_certificate *certs;           /**< The certificates associated with this key. */
+    uint16_t cert_count;                    /**< Number of certificates associated with this key. */
 };
 
 /**
@@ -124,9 +124,9 @@ struct nc_symmetric_key {
  * @brief A public key.
  */
 struct nc_public_key {
-    char *name;             /**< Arbitrary name of the public key. */
-    NC_PUBKEY_FORMAT type;  /**< Type of the public key. */
-    char *data;             /**< Base-64 encoded public key. */
+    char *name;                     /**< Arbitrary name of the public key. */
+    enum nc_pubkey_format type;     /**< Type of the public key. */
+    char *data;                     /**< Base-64 encoded public key. */
 };
 
 struct nc_public_key_bag {
@@ -170,7 +170,7 @@ struct nc_auth_state {
 struct nc_auth_client {
     char *username;                         /**< Arbitrary username. */
 
-    NC_STORE_TYPE store;                    /**< Specifies how/where the client's public key is stored. */
+    enum nc_store_type store;                    /**< Specifies how/where the client's public key is stored. */
     union {
         struct {
             struct nc_public_key *pubkeys;  /**< The client's public keys. */
@@ -190,7 +190,7 @@ struct nc_auth_client {
 struct nc_hostkey {
     char *name;                         /**<  Arbitrary name of the host key. */
 
-    NC_STORE_TYPE store;                /**< Specifies how/where the key is stored. */
+    enum nc_store_type store;                /**< Specifies how/where the key is stored. */
     union {
         struct nc_asymmetric_key key;   /**< The server's hostkey. */
         char *ks_ref;                   /**< Name of the referenced key. */
@@ -221,7 +221,7 @@ struct nc_server_ssh_opts {
  * @brief Certificate grouping (either local-definition or truststore reference).
  */
 struct nc_cert_grouping {
-    NC_STORE_TYPE store;                    /**< Specifies how/where the certificates are stored. */
+    enum nc_store_type store;                    /**< Specifies how/where the certificates are stored. */
     union {
         struct {
             struct nc_certificate *certs;   /**< Local-defined certificates. */
@@ -254,13 +254,13 @@ struct nc_ctn {
  * @brief Server options for configuring the TLS transport protocol.
  */
 struct nc_server_tls_opts {
-    NC_STORE_TYPE store;                        /**< Specifies how/where the server identity is stored. */
+    enum nc_store_type store;                        /**< Specifies how/where the server identity is stored. */
     union {
         struct {
-            NC_PUBKEY_FORMAT pubkey_type;       /**< Server public key type */
+            enum nc_pubkey_format pubkey_type;       /**< Server public key type */
             char *pubkey_data;                  /**< Server's public key */
 
-            NC_PRIVKEY_FORMAT privkey_type;     /**< Server private key type */
+            enum nc_privkey_format privkey_type;     /**< Server private key type */
             char *privkey_data;                 /**< Server's private key */
 
             char *cert_data;                    /**< Server's certificate */
@@ -694,10 +694,10 @@ typedef enum {
 /**
  * @brief Enumeration of the supported NETCONF protocol versions
  */
-typedef enum {
+enum nc_version {
     NC_VERSION_10 = 0,  /**< NETCONF 1.0 - RFC 4741, 4742 */
     NC_VERSION_11 = 1   /**< NETCONF 1.1 - RFC 6241, 6242 */
-} NC_VERSION;
+};
 
 #define NC_VERSION_10_ENDTAG "]]>]]>"
 #define NC_VERSION_10_ENDTAG_LEN 6
@@ -722,7 +722,7 @@ struct nc_session {
 
     /* NETCONF data */
     uint32_t id;                 /**< NETCONF session ID (session-id-type) */
-    NC_VERSION version;          /**< NETCONF protocol version */
+    enum nc_version version;          /**< NETCONF protocol version */
 
     /* Transport implementation */
     NC_TRANSPORT_IMPL ti_type;   /**< transport implementation type to select items from ti union */
@@ -864,7 +864,7 @@ struct nc_pam_thread_arg {
  * @param[in] format Private key format.
  * @return String representing the private key or NULL.
  */
-const char *nc_privkey_format_to_str(NC_PRIVKEY_FORMAT format);
+const char *nc_privkey_format_to_str(enum nc_privkey_format format);
 
 /**
  * @brief Checks if the given base64 belongs to a public key in the SubjectPublicKeyInfo format.

@@ -294,7 +294,7 @@ nc_server_config_ts_del_public_key_bag(struct nc_public_key_bag *pbag)
 }
 
 static int
-nc_server_config_ts_certificate_bags(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ts_certificate_bags(const struct lyd_node *node, enum nc_operation op)
 {
     uint16_t i, cert_bag_count;
     struct nc_truststore *ts = &server_opts.truststore;
@@ -312,7 +312,7 @@ nc_server_config_ts_certificate_bags(const struct lyd_node *node, NC_OPERATION o
 }
 
 static int
-nc_server_config_ts_public_key_bags(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ts_public_key_bags(const struct lyd_node *node, enum nc_operation op)
 {
     uint16_t i, pub_bag_count;
     struct nc_truststore *ts = &server_opts.truststore;
@@ -330,7 +330,7 @@ nc_server_config_ts_public_key_bags(const struct lyd_node *node, NC_OPERATION op
 }
 
 int
-nc_server_config_ts_truststore(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ts_truststore(const struct lyd_node *node, enum nc_operation op)
 {
     (void) node;
 
@@ -354,7 +354,7 @@ nc_server_config_ts_create_certificate_bag(const struct lyd_node *node)
 }
 
 static int
-nc_server_config_ts_certificate_bag(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ts_certificate_bag(const struct lyd_node *node, enum nc_operation op)
 {
     struct nc_certificate_bag *bag;
 
@@ -385,7 +385,7 @@ nc_server_config_ts_create_certificate(const struct lyd_node *node, struct nc_ce
 }
 
 static int
-nc_server_config_ts_certificate(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ts_certificate(const struct lyd_node *node, enum nc_operation op)
 {
     struct nc_certificate_bag *bag;
     struct nc_certificate *cert;
@@ -412,7 +412,7 @@ nc_server_config_ts_certificate(const struct lyd_node *node, NC_OPERATION op)
 }
 
 static int
-nc_server_config_ts_cert_data(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ts_cert_data(const struct lyd_node *node, enum nc_operation op)
 {
     struct nc_certificate *cert;
 
@@ -441,7 +441,7 @@ nc_server_config_ts_create_public_key_bag(const struct lyd_node *node)
 }
 
 static int
-nc_server_config_ts_public_key_bag(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ts_public_key_bag(const struct lyd_node *node, enum nc_operation op)
 {
     struct nc_public_key_bag *pbag;
 
@@ -472,7 +472,7 @@ nc_server_config_ts_create_public_key(const struct lyd_node *node, struct nc_pub
 }
 
 static int
-nc_server_config_ts_public_key(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ts_public_key(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_public_key_bag *bag;
@@ -516,7 +516,7 @@ cleanup:
 }
 
 static int
-nc_server_config_ts_public_key_format(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ts_public_key_format(const struct lyd_node *node, enum nc_operation op)
 {
     const char *format;
     struct nc_public_key *pkey;
@@ -540,7 +540,7 @@ nc_server_config_ts_public_key_format(const struct lyd_node *node, NC_OPERATION 
 }
 
 int
-nc_server_config_parse_truststore(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_parse_truststore(const struct lyd_node *node, enum nc_operation op)
 {
     const char *name = LYD_NAME(node);
     int ret = 0;
@@ -574,7 +574,7 @@ nc_server_config_parse_truststore(const struct lyd_node *node, NC_OPERATION op)
 }
 
 int
-nc_server_config_fill_truststore(const struct lyd_node *data, NC_OPERATION op)
+nc_server_config_fill_truststore(const struct lyd_node *data, enum nc_operation op)
 {
     int ret = 0;
     uint32_t prev_lo;

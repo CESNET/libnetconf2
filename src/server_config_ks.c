@@ -162,7 +162,7 @@ nc_server_config_ks_del_asymmetric_key(struct nc_asymmetric_key *key)
 }
 
 static int
-nc_server_config_ks_asymmetric_keys(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ks_asymmetric_keys(const struct lyd_node *node, enum nc_operation op)
 {
     struct nc_keystore *ks = &server_opts.keystore;
     uint16_t i, asym_key_count;
@@ -180,7 +180,7 @@ nc_server_config_ks_asymmetric_keys(const struct lyd_node *node, NC_OPERATION op
 }
 
 int
-nc_server_config_ks_keystore(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ks_keystore(const struct lyd_node *node, enum nc_operation op)
 {
     (void) node;
 
@@ -203,7 +203,7 @@ nc_server_config_ks_create_asymmetric_key(const struct lyd_node *node)
 }
 
 static int
-nc_server_config_ks_asymmetric_key(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ks_asymmetric_key(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_asymmetric_key *key;
@@ -226,7 +226,7 @@ cleanup:
 }
 
 static int
-nc_server_config_ks_public_key_format(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ks_public_key_format(const struct lyd_node *node, enum nc_operation op)
 {
     struct nc_asymmetric_key *key;
     const char *format;
@@ -252,7 +252,7 @@ nc_server_config_ks_public_key_format(const struct lyd_node *node, NC_OPERATION 
 }
 
 static int
-nc_server_config_ks_public_key(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ks_public_key(const struct lyd_node *node, enum nc_operation op)
 {
     struct nc_asymmetric_key *key;
 
@@ -273,11 +273,11 @@ nc_server_config_ks_public_key(const struct lyd_node *node, NC_OPERATION op)
 }
 
 static int
-nc_server_config_ks_private_key_format(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ks_private_key_format(const struct lyd_node *node, enum nc_operation op)
 {
     struct nc_asymmetric_key *key;
     const char *format;
-    NC_PRIVKEY_FORMAT privkey_type;
+    enum nc_privkey_format privkey_type;
 
     (void) op;
 
@@ -302,7 +302,7 @@ nc_server_config_ks_private_key_format(const struct lyd_node *node, NC_OPERATION
 }
 
 static int
-nc_server_config_ks_cleartext_private_key(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ks_cleartext_private_key(const struct lyd_node *node, enum nc_operation op)
 {
     struct nc_asymmetric_key *key;
 
@@ -335,7 +335,7 @@ nc_server_config_ks_create_certificate(const struct lyd_node *node, struct nc_as
 }
 
 static int
-nc_server_config_ks_certificate(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ks_certificate(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_asymmetric_key *key;
@@ -364,7 +364,7 @@ cleanup:
 }
 
 static int
-nc_server_config_ks_cert_data(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ks_cert_data(const struct lyd_node *node, enum nc_operation op)
 {
     struct nc_certificate *cert;
 
@@ -385,7 +385,7 @@ nc_server_config_ks_cert_data(const struct lyd_node *node, NC_OPERATION op)
 }
 
 int
-nc_server_config_parse_keystore(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_parse_keystore(const struct lyd_node *node, enum nc_operation op)
 {
     const char *name = LYD_NAME(node);
     int ret = 0;
@@ -419,7 +419,7 @@ nc_server_config_parse_keystore(const struct lyd_node *node, NC_OPERATION op)
 }
 
 int
-nc_server_config_fill_keystore(const struct lyd_node *data, NC_OPERATION op)
+nc_server_config_fill_keystore(const struct lyd_node *data, enum nc_operation op)
 {
     int ret = 0;
     uint32_t prev_lo;
