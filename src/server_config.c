@@ -663,6 +663,8 @@ nc_server_config_del_ssh_opts(struct nc_bind *bind, struct nc_server_ssh_opts *o
     free(opts->encryption_algs);
     free(opts->mac_algs);
 
+    free(opts->banner);
+
     free(opts);
 }
 
@@ -2971,6 +2973,43 @@ cleanup:
 }
 
 static int
+nc_server_config_banner(const struct lyd_node *node, enum nc_operation op)
+{
+    int ret = 0;
+    struct nc_server_ssh_opts *opts;
+    struct nc_ch_client *ch_client = NULL;
+
+    assert(!strcmp(LYD_NAME(node), "banner"));
+
+    if (is_ch(node) && nc_server_config_get_ch_client_with_lock(node, &ch_client)) {
+        /* to avoid unlock on fail */
+        return 1;
+    }
+
+    if (nc_server_config_get_ssh_opts(node, ch_client, &opts)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+        free(opts->banner);
+        opts->banner = strdup(lyd_get_value(node));
+        NC_CHECK_ERRMEM_GOTO(!opts->banner, ret = 1, cleanup);
+    } else {
+        free(opts->banner);
+        opts->banner = NULL;
+    }
+
+cleanup:
+    if (is_ch(node)) {
+        /* UNLOCK */
+        nc_ch_client_unlock(ch_client);
+    }
+
+    return ret;
+}
+
+static int
 nc_server_config_client_authentication(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
@@ -3881,6 +3920,8 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, enum nc_opera
         ret = nc_server_config_auth_timeout(node, op);
     } else if (!strcmp(name, "asymmetric-key")) {
         ret = nc_server_config_asymmetric_key(node, op);
+    } else if (!strcmp(name, "banner")) {
+        ret = nc_server_config_banner(node, op);
     } else if (!strcmp(name, "ca-certs")) {
         ret = nc_server_config_ca_certs(node, op);
     } else if (!strcmp(name, "central-keystore-reference")) {

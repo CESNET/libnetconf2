@@ -42,6 +42,7 @@
 
 #include "compat.h"
 #include "log_p.h"
+#include "nc_version.h"
 #include "session.h"
 #include "session_p.h"
 #include "session_wrapper.h"
@@ -1918,7 +1919,7 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
     ssh_bind sbind = NULL;
     int rc = 1, r;
     struct timespec ts_timeout;
-    const char *err_msg;
+    const char *err_msg, *banner;
 
     /* other transport-specific data */
     session->ti_type = NC_TI_SSH;
@@ -1956,6 +1957,17 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
         goto cleanup;
     }
     if (opts->mac_algs && ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HMAC_S_C, opts->mac_algs)) {
+        rc = -1;
+        goto cleanup;
+    }
+
+    /* configure the ssh banner */
+    if (opts->banner) {
+        banner = opts->banner;
+    } else {
+        banner = "libnetconf2-" NC_VERSION;
+    }
+    if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_BANNER, banner)) {
         rc = -1;
         goto cleanup;
     }

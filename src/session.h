@@ -191,6 +191,18 @@ const char *nc_session_get_host(const struct nc_session *session);
  */
 uint16_t nc_session_get_port(const struct nc_session *session);
 
+#ifdef NC_ENABLED_SSH_TLS
+
+/**
+ * @brief Get the SSH banner sent by the peer.
+ *
+ * @param[in] session Session to get the banner from.
+ * @return SSH banner on success, NULL on error.
+ */
+const char *nc_session_ssh_get_banner(const struct nc_session *session);
+
+#endif
+
 /**
  * @brief Get session path (unix socket only).
  *
