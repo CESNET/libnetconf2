@@ -62,7 +62,7 @@ set(LIBNETCONF2_MICRO_VERSION 3)
 set(LIBNETCONF2_VERSION ${LIBNETCONF2_MAJOR_VERSION}.${LIBNETCONF2_MINOR_VERSION}.${LIBNETCONF2_MICRO_VERSION})
 
 # Version of the library
-# Major version is changed with every backward non-compatible API/ABI change in libyang, minor version changes
+# Major version is changed with every backward non-compatible API/ABI change in the library, minor version changes
 # with backward compatible change and micro version is connected with any internal change of the library.
 set(LIBNETCONF2_MAJOR_SOVERSION 4)
 set(LIBNETCONF2_MINOR_SOVERSION 4)
