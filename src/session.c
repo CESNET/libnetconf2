@@ -164,7 +164,7 @@ nc_base64der_to_cert(const char *data)
 }
 
 const char *
-nc_privkey_format_to_str(NC_PRIVKEY_FORMAT format)
+nc_privkey_format_to_str(enum nc_privkey_format format)
 {
     switch (format) {
     case NC_PRIVKEY_FORMAT_RSA:

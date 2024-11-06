@@ -38,7 +38,7 @@ _nc_server_config_add_tls_server_cert(const struct ly_ctx *ctx, const char *tree
 {
     int ret = 0;
     char *privkey = NULL, *pubkey = NULL, *cert = NULL;
-    NC_PRIVKEY_FORMAT privkey_type;
+    enum nc_privkey_format privkey_type;
     const char *privkey_format, *pubkey_format = "ietf-crypto-types:subject-public-key-info-format";
 
     NC_CHECK_ARG_RET(NULL, ctx, tree_path, privkey_path, cert_path, config, 1);

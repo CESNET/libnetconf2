@@ -457,7 +457,7 @@ nc_server_config_get_ctn(const struct lyd_node *node, const struct nc_ch_client 
     return 1;
 }
 
-NC_PRIVKEY_FORMAT
+enum nc_privkey_format
 nc_server_config_get_private_key_type(const char *format)
 {
     if (!strcmp(format, "rsa-private-key-format")) {
@@ -977,7 +977,7 @@ nc_server_config_ch_del_client(const struct lyd_node *node)
 
 /* presence container */
 int
-nc_server_config_listen(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_listen(const struct lyd_node *node, enum nc_operation op)
 {
     uint16_t i, endpt_count;
 
@@ -1011,7 +1011,7 @@ nc_server_config_listen(const struct lyd_node *node, NC_OPERATION op)
 }
 
 int
-nc_server_config_ch(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ch(const struct lyd_node *node, enum nc_operation op)
 {
     uint16_t i, ch_client_count;
     struct nc_ch_client *ch_clients;
@@ -1047,7 +1047,7 @@ nc_server_config_ch(const struct lyd_node *node, NC_OPERATION op)
 
 /* default leaf */
 static int
-nc_server_config_idle_timeout(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_idle_timeout(const struct lyd_node *node, enum nc_operation op)
 {
     struct nc_ch_client *ch_client = NULL;
 
@@ -1123,7 +1123,7 @@ nc_server_config_ch_create_endpoint(const struct lyd_node *node, struct nc_ch_cl
 
 /* list */
 static int
-nc_server_config_endpoint(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_endpoint(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_endpt *endpt;
@@ -1222,7 +1222,7 @@ nc_server_config_ch_create_ssh(struct nc_ch_endpt *ch_endpt)
 
 /* NP container */
 static int
-nc_server_config_ssh(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ssh(const struct lyd_node *node, enum nc_operation op)
 {
     struct nc_endpt *endpt;
     struct nc_bind *bind;
@@ -1297,7 +1297,7 @@ nc_server_config_ch_create_tls(struct nc_ch_endpt *ch_endpt)
 }
 
 static int
-nc_server_config_tls(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_tls(const struct lyd_node *node, enum nc_operation op)
 {
     struct nc_endpt *endpt;
     struct nc_bind *bind;
@@ -1353,7 +1353,7 @@ cleanup:
 
 /* leaf */
 static int
-nc_server_config_local_address(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_local_address(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_endpt *endpt;
@@ -1409,7 +1409,7 @@ cleanup:
 
 /* leaf with default value */
 static int
-nc_server_config_local_port(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_local_port(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_endpt *endpt;
@@ -1466,7 +1466,7 @@ cleanup:
 
 /* NP container */
 static int
-nc_server_config_keepalives(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_keepalives(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_endpt *endpt;
@@ -1516,7 +1516,7 @@ cleanup:
 
 /* leaf with default value */
 static int
-nc_server_config_idle_time(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_idle_time(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_endpt *endpt;
@@ -1568,7 +1568,7 @@ cleanup:
 
 /* leaf with default value */
 static int
-nc_server_config_max_probes(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_max_probes(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_endpt *endpt;
@@ -1620,7 +1620,7 @@ cleanup:
 
 /* leaf with default value */
 static int
-nc_server_config_probe_interval(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_probe_interval(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_endpt *endpt;
@@ -1681,7 +1681,7 @@ nc_server_config_create_host_key(const struct lyd_node *node, struct nc_server_s
 
 /* list */
 static int
-nc_server_config_host_key(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_host_key(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_hostkey *hostkey;
@@ -1726,11 +1726,11 @@ cleanup:
 
 /* mandatory leaf */
 static int
-nc_server_config_public_key_format(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_public_key_format(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     const char *format;
-    NC_PUBKEY_FORMAT pubkey_type;
+    enum nc_pubkey_format pubkey_type;
     struct nc_public_key *pubkey;
     struct nc_hostkey *hostkey;
     struct nc_server_tls_opts *opts;
@@ -1838,7 +1838,7 @@ nc_server_config_tls_replace_server_public_key(const struct lyd_node *node, stru
 }
 
 static int
-nc_server_config_public_key(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_public_key(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_hostkey *hostkey;
@@ -1959,11 +1959,11 @@ cleanup:
 
 /* leaf */
 static int
-nc_server_config_private_key_format(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_private_key_format(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     const char *format;
-    NC_PRIVKEY_FORMAT privkey_type;
+    enum nc_privkey_format privkey_type;
     struct nc_hostkey *hostkey;
     struct nc_server_tls_opts *opts;
     struct nc_ch_client *ch_client = NULL;
@@ -2018,7 +2018,7 @@ cleanup:
 }
 
 static int
-nc_server_config_cleartext_private_key(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_cleartext_private_key(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_hostkey *hostkey;
@@ -2075,7 +2075,7 @@ cleanup:
 
 /* leaf */
 static int
-nc_server_config_keystore_reference(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_keystore_reference(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_hostkey *hostkey;
@@ -2127,7 +2127,7 @@ nc_server_config_create_auth_client(const struct lyd_node *node, struct nc_serve
 
 /* list */
 static int
-nc_server_config_user(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_user(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_auth_client *auth_client;
@@ -2170,7 +2170,7 @@ cleanup:
 }
 
 static int
-nc_server_config_auth_timeout(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_auth_timeout(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_server_ssh_opts *opts;
@@ -2203,7 +2203,7 @@ cleanup:
 
 /* leaf */
 static int
-nc_server_config_truststore_reference(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_truststore_reference(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_auth_client *auth_client;
@@ -2271,7 +2271,7 @@ cleanup:
 }
 
 static int
-nc_server_config_use_system_keys(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_use_system_keys(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_auth_client *auth_client;
@@ -2303,7 +2303,7 @@ cleanup:
 }
 
 static int
-nc_server_config_public_keys(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_public_keys(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_auth_client *auth_client;
@@ -2339,7 +2339,7 @@ cleanup:
 
 /* leaf */
 static int
-nc_server_config_password(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_password(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_auth_client *auth_client;
@@ -2376,7 +2376,7 @@ cleanup:
 }
 
 static int
-nc_server_config_use_system_auth(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_use_system_auth(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_auth_client *auth_client;
@@ -2411,7 +2411,7 @@ cleanup:
 
 /* leaf */
 static int
-nc_server_config_none(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_none(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_auth_client *auth_client;
@@ -2475,7 +2475,7 @@ nc_server_config_delete_substring(const char *haystack, const char *needle, cons
 }
 
 static int
-nc_server_config_transport_params(const char *algorithm, char **alg_store, NC_OPERATION op)
+nc_server_config_transport_params(const char *algorithm, char **alg_store, enum nc_operation op)
 {
     int ret = 0;
     char *alg = NULL;
@@ -2521,7 +2521,7 @@ cleanup:
 
 /* leaf-list */
 static int
-nc_server_config_host_key_alg(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_host_key_alg(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     const char *alg;
@@ -2558,7 +2558,7 @@ cleanup:
 
 /* leaf-list */
 static int
-nc_server_config_kex_alg(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_kex_alg(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     const char *alg;
@@ -2595,7 +2595,7 @@ cleanup:
 
 /* leaf-list */
 static int
-nc_server_config_encryption_alg(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_encryption_alg(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     const char *alg;
@@ -2632,7 +2632,7 @@ cleanup:
 
 /* leaf-list */
 static int
-nc_server_config_mac_alg(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_mac_alg(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     const char *alg;
@@ -2802,7 +2802,7 @@ ch_fail:
 }
 
 static int
-nc_server_config_endpoint_reference(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_endpoint_reference(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_endpt *endpt = NULL;
@@ -2880,7 +2880,7 @@ cleanup:
 }
 
 static int
-nc_server_config_cert_data(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_cert_data(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_certificate *cert;
@@ -2931,7 +2931,7 @@ cleanup:
 }
 
 static int
-nc_server_config_asymmetric_key(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_asymmetric_key(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_server_tls_opts *opts;
@@ -2971,7 +2971,7 @@ cleanup:
 }
 
 static int
-nc_server_config_client_authentication(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_client_authentication(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_server_tls_opts *opts;
@@ -3008,7 +3008,7 @@ cleanup:
 }
 
 static int
-nc_server_config_ca_certs(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ca_certs(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_server_tls_opts *opts;
@@ -3044,7 +3044,7 @@ cleanup:
 }
 
 static int
-nc_server_config_ee_certs(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ee_certs(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_server_tls_opts *opts;
@@ -3104,7 +3104,7 @@ nc_server_config_create_ee_certs_certificate(const struct lyd_node *node, struct
 }
 
 static int
-nc_server_config_certificate(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_certificate(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_server_tls_opts *opts;
@@ -3265,7 +3265,7 @@ cleanup:
 }
 
 static int
-nc_server_config_cert_to_name(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_cert_to_name(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_server_tls_opts *opts;
@@ -3308,7 +3308,7 @@ cleanup:
 }
 
 static int
-nc_server_config_fingerprint(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_fingerprint(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_ctn *ctn;
@@ -3345,7 +3345,7 @@ cleanup:
 }
 
 static int
-nc_server_config_tls_version(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_tls_version(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_server_tls_opts *opts;
@@ -3436,7 +3436,7 @@ nc_server_config_del_cipher_suite(struct nc_server_tls_opts *opts, const char *c
 }
 
 static int
-nc_server_config_cipher_suite(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_cipher_suite(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_server_tls_opts *opts;
@@ -3508,7 +3508,7 @@ cleanup:
 }
 
 static int
-nc_server_config_netconf_client(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_netconf_client(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
 
@@ -3544,7 +3544,7 @@ cleanup:
 #ifdef NC_ENABLED_SSH_TLS
 
 static int
-nc_server_config_remote_address(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_remote_address(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_ch_endpt *ch_endpt;
@@ -3579,7 +3579,7 @@ cleanup:
 }
 
 static int
-nc_server_config_remote_port(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_remote_port(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_ch_endpt *ch_endpt;
@@ -3613,7 +3613,7 @@ cleanup:
 #endif /* NC_ENABLED_SSH_TLS */
 
 static int
-nc_server_config_persistent(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_persistent(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_ch_client *ch_client = NULL;
@@ -3640,7 +3640,7 @@ nc_server_config_persistent(const struct lyd_node *node, NC_OPERATION op)
 }
 
 static int
-nc_server_config_periodic(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_periodic(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_ch_client *ch_client = NULL;
@@ -3671,7 +3671,7 @@ nc_server_config_periodic(const struct lyd_node *node, NC_OPERATION op)
 }
 
 static int
-nc_server_config_period(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_period(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_ch_client *ch_client = NULL;
@@ -3697,7 +3697,7 @@ nc_server_config_period(const struct lyd_node *node, NC_OPERATION op)
 }
 
 static int
-nc_server_config_anchor_time(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_anchor_time(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_ch_client *ch_client = NULL;
@@ -3726,7 +3726,7 @@ nc_server_config_anchor_time(const struct lyd_node *node, NC_OPERATION op)
 }
 
 static int
-nc_server_config_reconnect_strategy(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_reconnect_strategy(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_ch_client *ch_client = NULL;
@@ -3753,7 +3753,7 @@ nc_server_config_reconnect_strategy(const struct lyd_node *node, NC_OPERATION op
 }
 
 static int
-nc_server_config_start_with(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_start_with(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_ch_client *ch_client = NULL;
@@ -3792,7 +3792,7 @@ cleanup:
 }
 
 static int
-nc_server_config_max_wait(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_max_wait(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_ch_client *ch_client = NULL;
@@ -3818,7 +3818,7 @@ nc_server_config_max_wait(const struct lyd_node *node, NC_OPERATION op)
 }
 
 static int
-nc_server_config_max_attempts(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_max_attempts(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct nc_ch_client *ch_client = NULL;
@@ -3844,7 +3844,7 @@ nc_server_config_max_attempts(const struct lyd_node *node, NC_OPERATION op)
 }
 
 static int
-nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_parse_netconf_server(const struct lyd_node *node, enum nc_operation op)
 {
     const char *name = LYD_NAME(node);
     int ret = 0;
@@ -3967,7 +3967,7 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, NC_OPERATION 
 }
 
 int
-nc_server_config_ln2_netconf_server(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_ln2_netconf_server(const struct lyd_node *node, enum nc_operation op)
 {
     (void) node;
 
@@ -4085,7 +4085,7 @@ nc_server_config_del_interval(const char *anchor, const char *period)
 }
 
 static int
-nc_server_config_interval(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_interval(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
     struct lyd_node *anchor, *period;
@@ -4117,7 +4117,7 @@ cleanup:
 #endif /* NC_ENABLED_SSH_TLS */
 
 static int
-nc_server_config_parse_libnetconf2_netconf_server(const struct lyd_node *node, NC_OPERATION op)
+nc_server_config_parse_libnetconf2_netconf_server(const struct lyd_node *node, enum nc_operation op)
 {
     const char *name = LYD_NAME(node);
     int ret = 0;
@@ -4140,11 +4140,11 @@ nc_server_config_parse_libnetconf2_netconf_server(const struct lyd_node *node, N
 }
 
 int
-nc_server_config_parse_tree(const struct lyd_node *node, NC_OPERATION parent_op, NC_MODULE module)
+nc_server_config_parse_tree(const struct lyd_node *node, enum nc_operation parent_op, NC_MODULE module)
 {
     struct lyd_node *child;
     struct lyd_meta *m;
-    NC_OPERATION current_op = NC_OP_UNKNOWN;
+    enum nc_operation current_op = NC_OP_UNKNOWN;
     int ret;
 
     assert(node);
@@ -4302,7 +4302,7 @@ error:
 }
 
 static int
-nc_server_config_fill_netconf_server(const struct lyd_node *data, NC_OPERATION op)
+nc_server_config_fill_netconf_server(const struct lyd_node *data, enum nc_operation op)
 {
     int ret = 0;
     uint32_t log_options = 0;
@@ -4338,7 +4338,7 @@ cleanup:
 }
 
 static int
-nc_server_config_fill_libnetconf2_netconf_server(const struct lyd_node *data, NC_OPERATION op)
+nc_server_config_fill_libnetconf2_netconf_server(const struct lyd_node *data, enum nc_operation op)
 {
     int ret = 0;
     struct lyd_node *tree;

@@ -38,7 +38,7 @@ _nc_server_config_add_ssh_hostkey(const struct ly_ctx *ctx, const char *tree_pat
 {
     int ret = 0;
     char *pubkey = NULL, *privkey = NULL;
-    NC_PRIVKEY_FORMAT privkey_type;
+    enum nc_privkey_format privkey_type;
     const char *privkey_format, *pubkey_format = "ietf-crypto-types:ssh-public-key-format";
 
     NC_CHECK_ARG_RET(NULL, ctx, tree_path, privkey_path, config, 1);

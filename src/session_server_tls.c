@@ -37,7 +37,7 @@ extern struct nc_server_opts server_opts;
 
 static int
 nc_server_tls_ks_ref_get_cert_key(const char *referenced_key_name, const char *referenced_cert_name,
-        char **privkey_data, NC_PRIVKEY_FORMAT *privkey_type, char **cert_data)
+        char **privkey_data, enum nc_privkey_format *privkey_type, char **cert_data)
 {
     uint16_t i, j;
     struct nc_keystore *ks = &server_opts.keystore;
@@ -667,7 +667,7 @@ int
 nc_server_tls_load_server_cert_key(struct nc_server_tls_opts *opts, void **srv_cert, void **srv_pkey)
 {
     char *privkey_data = NULL, *cert_data = NULL;
-    NC_PRIVKEY_FORMAT privkey_type;
+    enum nc_privkey_format privkey_type;
     void *cert = NULL;
     void *pkey = NULL;
 

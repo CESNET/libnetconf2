@@ -85,8 +85,8 @@ typedef enum {
  * @param[out] pubkey Base64 encoded public key.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_util_get_asym_key_pair(const char *privkey_path, const char *pubkey_path, NC_PUBKEY_FORMAT wanted_pubkey_type,
-        char **privkey, NC_PRIVKEY_FORMAT *privkey_type, char **pubkey);
+int nc_server_config_util_get_asym_key_pair(const char *privkey_path, const char *pubkey_path, enum nc_pubkey_format wanted_pubkey_type,
+        char **privkey, enum nc_privkey_format *privkey_type, char **pubkey);
 
 /**
  * @brief Gets public key from a file and converts it to the SSH format if need be.
@@ -115,7 +115,7 @@ int nc_server_config_util_read_certificate(const char *cert_path, char **cert);
  *
  * @return Identityref on success, NULL on failure.
  */
-const char *nc_server_config_util_privkey_format_to_identityref(NC_PRIVKEY_FORMAT format);
+const char *nc_server_config_util_privkey_format_to_identityref(enum nc_privkey_format format);
 
 #endif /* NC_ENABLED_SSH_TLS */
 
