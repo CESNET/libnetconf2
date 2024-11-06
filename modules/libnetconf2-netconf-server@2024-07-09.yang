@@ -269,6 +269,23 @@ module libnetconf2-netconf-server {
     }
   }
 
+  grouping ssh-server-banner-grouping {
+    description
+      "Grouping for the SSH server banner.";
+
+    leaf banner {
+      type string {
+        length "1..247";
+      }
+      description
+        "The banner that will be sent to the client when connecting to the server.
+         If not set, the libnetconf2 default with its version will be used.";
+
+      reference
+        "RFC 4253: The Secure Shell (SSH) Transport Layer Protocol, section 4.2.";
+    }
+  }
+
   grouping system-auth-public-keys-grouping {
     description
       "Grouping for using the system configured keys in the SSH public key authentication method.";
@@ -347,6 +364,16 @@ module libnetconf2-netconf-server {
 
   augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints" +
           "/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:client-authentication" {
+    uses ssh-authentication-params-grouping;
+  }
+
+  augment "/ncs:netconf-server/ncs:listen/ncs:endpoints/ncs:endpoint/ncs:transport/ncs:ssh" +
+          "/ncs:ssh/ncs:ssh-server-parameters/ncs:server-identity" {
+    uses ssh-server-banner-grouping;
+  }
+
+  augment "/ncs:netconf-server/ncs:call-home/ncs:netconf-client/ncs:endpoints" +
+          "/ncs:endpoint/ncs:transport/ncs:ssh/ncs:ssh/ncs:ssh-server-parameters/ncs:server-identity" {
     uses ssh-authentication-params-grouping;
   }
 

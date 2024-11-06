@@ -615,6 +615,29 @@ nc_session_get_port(const struct nc_session *session)
     return session->port;
 }
 
+#ifdef NC_ENABLED_SSH_TLS
+
+API const char *
+nc_session_ssh_get_banner(const struct nc_session *session)
+{
+    NC_CHECK_ARG_RET(NULL, session, NULL);
+
+    if (session->ti_type != NC_TI_SSH) {
+        ERR(NULL, "Cannot get the SSH banner of a non-SSH session.");
+        return NULL;
+    }
+
+    if (session->side == NC_SERVER) {
+        /* get the banner sent by the client */
+        return ssh_get_clientbanner(session->ti.libssh.session);
+    } else {
+        /* get the banner received from the server */
+        return ssh_get_serverbanner(session->ti.libssh.session);
+    }
+}
+
+#endif
+
 API const struct ly_ctx *
 nc_session_get_ctx(const struct nc_session *session)
 {

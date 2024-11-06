@@ -214,6 +214,8 @@ struct nc_server_ssh_opts {
     char *kex_algs;                         /**< Key exchange algorithms supported by the server. */
     char *mac_algs;                         /**< MAC algorithms supported by the server. */
 
+    char *banner;                           /**< SSH banner message. */
+
     uint16_t auth_timeout;                  /**< Authentication timeout. */
 };
 
