@@ -72,6 +72,39 @@ test_nc_tls(void **state)
     }
 }
 
+static void
+test_nc_tls_ec_key(void **state)
+{
+    int ret, i;
+    pthread_t tids[2];
+    struct ln2_test_ctx *test_ctx;
+
+    assert_non_null(state);
+    test_ctx = *state;
+
+    ret = nc_server_config_add_tls_server_cert(test_ctx->ctx, "endpt", TESTS_DIR "/data/ec_server.key",
+            NULL, TESTS_DIR "/data/ec_server.crt", (struct lyd_node **)&test_ctx->test_data);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_data(test_ctx->test_data);
+    assert_int_equal(ret, 0);
+
+    ret = pthread_create(&tids[0], NULL, client_thread, *state);
+    assert_int_equal(ret, 0);
+    ret = pthread_create(&tids[1], NULL, ln2_glob_test_server_thread, *state);
+    assert_int_equal(ret, 0);
+
+    for (i = 0; i < 2; i++) {
+        pthread_join(tids[i], NULL);
+    }
+}
+
+static void
+test_nc_tls_free_test_data(void *test_data)
+{
+    lyd_free_all(test_data);
+}
+
 static int
 setup_f(void **state)
 {
@@ -110,7 +143,8 @@ setup_f(void **state)
     ret = nc_server_config_setup_data(tree);
     assert_int_equal(ret, 0);
 
-    lyd_free_all(tree);
+    test_ctx->test_data = tree;
+    test_ctx->free_test_data = test_nc_tls_free_test_data;
 
     return 0;
 }
@@ -120,6 +154,7 @@ main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_nc_tls, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_nc_tls_ec_key, setup_f, ln2_glob_test_teardown)
     };
 
     /* try to get ports from the environment, otherwise use the default */

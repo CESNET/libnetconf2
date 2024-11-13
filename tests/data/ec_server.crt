@@ -1,0 +1,53 @@
+Certificate:
+    Data:
+        Version: 1 (0x0)
+        Serial Number: 3 (0x3)
+        Signature Algorithm: sha256WithRSAEncryption
+        Issuer: C=CZ, ST=Some-State, O=CESNET, OU=TMC, CN=clientca
+        Validity
+            Not Before: Nov 13 09:26:01 2024 GMT
+            Not After : Nov 11 09:26:01 2034 GMT
+        Subject: C=CZ, ST=Some-State, O=CESNET, OU=TMC, CN=127.0.0.1
+        Subject Public Key Info:
+            Public Key Algorithm: id-ecPublicKey
+                Public-Key: (256 bit)
+                pub:
+                    04:21:8f:4c:09:ed:6c:ef:8e:17:09:f6:71:15:df:
+                    6b:bc:55:ee:62:b8:06:66:b0:83:d0:31:6a:58:eb:
+                    ca:1d:ed:3a:d7:a5:35:f9:c1:83:e7:2a:e7:3a:0b:
+                    a8:0d:8e:d8:48:91:44:f0:33:70:a2:a4:fa:14:b7:
+                    6e:74:cf:e3:13
+                ASN1 OID: prime256v1
+                NIST CURVE: P-256
+    Signature Algorithm: sha256WithRSAEncryption
+    Signature Value:
+        c1:b3:2c:22:63:44:7e:ed:bc:59:0b:88:36:a6:a3:b5:9c:13:
+        25:e9:35:17:a8:ed:51:a6:54:98:46:fa:68:cf:82:af:85:1e:
+        66:ff:86:64:f6:b7:cb:2f:2a:7d:f1:f0:f0:5c:85:40:86:99:
+        0f:12:2f:7c:14:9b:27:25:ed:6b:5a:a7:80:8b:8e:e0:17:7b:
+        d0:a0:45:aa:d3:6d:b8:8b:cc:46:c7:b7:01:8b:fa:bc:2e:5d:
+        18:77:c0:87:9b:37:16:a1:b0:3c:cc:72:44:4a:3e:c3:0f:6f:
+        60:5e:ae:a1:0d:08:54:49:96:f0:aa:84:9a:00:da:63:bd:0a:
+        fb:d7:93:3e:8a:e5:c0:64:31:01:c7:14:47:0f:94:d4:4e:c9:
+        c2:3d:28:7b:18:60:64:c7:d1:1f:f8:47:86:f5:68:ea:bf:e6:
+        b5:f1:43:19:e1:55:c1:20:73:7e:71:9f:9e:08:9b:7c:4c:5c:
+        61:62:6f:3f:64:1d:d6:f2:52:42:fe:a6:c9:5d:ce:24:8a:f8:
+        d7:2b:a6:0f:ca:ec:4a:92:da:31:f3:d3:fd:01:5f:ea:2a:c5:
+        d6:0e:b0:04:43:f9:60:71:e4:42:6d:43:34:d2:9b:31:59:9e:
+        c8:b9:6b:b2:67:0a:ff:fb:f4:a7:27:ec:c0:2d:83:b0:1e:03:
+        9d:a0:05:f8
+-----BEGIN CERTIFICATE-----
+MIICUjCCAToCAQMwDQYJKoZIhvcNAQELBQAwVDELMAkGA1UEBhMCQ1oxEzARBgNV
+BAgMClNvbWUtU3RhdGUxDzANBgNVBAoMBkNFU05FVDEMMAoGA1UECwwDVE1DMREw
+DwYDVQQDDAhjbGllbnRjYTAeFw0yNDExMTMwOTI2MDFaFw0zNDExMTEwOTI2MDFa
+MFUxCzAJBgNVBAYTAkNaMRMwEQYDVQQIDApTb21lLVN0YXRlMQ8wDQYDVQQKDAZD
+RVNORVQxDDAKBgNVBAsMA1RNQzESMBAGA1UEAwwJMTI3LjAuMC4xMFkwEwYHKoZI
+zj0CAQYIKoZIzj0DAQcDQgAEIY9MCe1s744XCfZxFd9rvFXuYrgGZrCD0DFqWOvK
+He0616U1+cGD5yrnOguoDY7YSJFE8DNwoqT6FLdudM/jEzANBgkqhkiG9w0BAQsF
+AAOCAQEAwbMsImNEfu28WQuINqajtZwTJek1F6jtUaZUmEb6aM+Cr4UeZv+GZPa3
+yy8qffHw8FyFQIaZDxIvfBSbJyXta1qngIuO4Bd70KBFqtNtuIvMRse3AYv6vC5d
+GHfAh5s3FqGwPMxyREo+ww9vYF6uoQ0IVEmW8KqEmgDaY70K+9eTPorlwGQxAccU
+Rw+U1E7Jwj0oexhgZMfRH/hHhvVo6r/mtfFDGeFVwSBzfnGfngibfExcYWJvP2Qd
+1vJSQv6myV3OJIr41yumD8rsSpLaMfPT/QFf6irF1g6wBEP5YHHkQm1DNNKbMVme
+yLlrsmcK//v0pyfswC2DsB4DnaAF+A==
+-----END CERTIFICATE-----
