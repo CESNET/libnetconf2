@@ -16,6 +16,7 @@
 
 #define _GNU_SOURCE
 
+#include <errno.h>
 #include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -32,7 +33,6 @@
 #include "session_p.h"
 #include "session_wrapper.h"
 
-struct nc_server_tls_opts tls_ch_opts;
 extern struct nc_server_opts server_opts;
 
 static int
@@ -897,6 +897,11 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     session->ti_type = NC_TI_TLS;
     if (!(session->ti.tls.session = nc_tls_session_new_wrap(session->ti.tls.config))) {
         goto fail;
+    }
+
+    /* if keylog file is set, log the tls secrets there */
+    if (server_opts.tls_keylog_file) {
+        nc_tls_keylog_session_wrap(session->ti.tls.session);
     }
 
     /* set session fd */
