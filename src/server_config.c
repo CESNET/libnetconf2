@@ -33,8 +33,6 @@
 #include "server_config_p.h"
 #include "session_p.h"
 
-extern struct nc_server_opts server_opts;
-
 /* returns a parent node of 'node' that matches the name 'name' */
 static const struct lyd_node *
 nc_server_config_get_parent(const struct lyd_node *node, const char *name)

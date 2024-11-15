@@ -33,8 +33,6 @@
 #include "session_p.h"
 #include "session_wrapper.h"
 
-extern struct nc_server_opts server_opts;
-
 static int
 nc_server_tls_ks_ref_get_cert_key(const char *referenced_key_name, const char *referenced_cert_name,
         char **privkey_data, enum nc_privkey_format *privkey_type, char **cert_data)

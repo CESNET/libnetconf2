@@ -32,6 +32,8 @@
 #include "session_server_ch.h"
 #include "session_wrapper.h"
 
+extern struct nc_server_opts server_opts;
+
 /**
  * Enumeration of diff operation types.
  */

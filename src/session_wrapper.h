@@ -69,8 +69,6 @@ struct nc_tls_verify_cb_data {
     void *chain;                        /**< Certificate chain used to verify the client cert. */
 };
 
-extern struct nc_server_opts server_opts;
-
 /**
  * @brief Creates a new TLS session from the given configuration.
  *
