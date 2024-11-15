@@ -25,6 +25,8 @@
 
 #include "ln2_test.h"
 
+#define KEYLOG_FILENAME "ln2_test_tls_keylog.txt"
+
 int TEST_PORT = 10050;
 const char *TEST_PORT_STR = "10050";
 
@@ -100,6 +102,64 @@ test_nc_tls_ec_key(void **state)
 }
 
 static void
+check_keylog_file(const char *filename)
+{
+    char buf[256];
+    FILE *f;
+    int cli_random, cli_hs, cli_traffic, srv_hs, srv_traffic;
+
+    cli_random = cli_hs = cli_traffic = srv_hs = srv_traffic = 0;
+
+    f = fopen(filename, "r");
+    assert_non_null(f);
+
+    while (fgets(buf, sizeof(buf), f)) {
+        if (!strncmp(buf, "CLIENT_RANDOM", 13)) {
+            cli_random++;
+        } else if (!strncmp(buf, "CLIENT_HANDSHAKE_TRAFFIC_SECRET", 31)) {
+            cli_hs++;
+        } else if (!strncmp(buf, "CLIENT_TRAFFIC_SECRET_0", 23)) {
+            cli_traffic++;
+        } else if (!strncmp(buf, "SERVER_HANDSHAKE_TRAFFIC_SECRET", 31)) {
+            srv_hs++;
+        } else if (!strncmp(buf, "SERVER_TRAFFIC_SECRET_0", 23)) {
+            srv_traffic++;
+        }
+    }
+
+    fclose(f);
+
+    if (cli_random) {
+        /* tls 1.2 */
+        assert_int_equal(cli_random, 1);
+        assert_int_equal(cli_hs + cli_traffic + srv_hs + srv_traffic, 0);
+    } else {
+        /* tls 1.3 */
+        assert_int_equal(cli_hs + cli_traffic + srv_hs + srv_traffic, 4);
+    }
+}
+
+static void
+test_nc_tls_keylog(void **state)
+{
+    int ret, i;
+    pthread_t tids[2];
+
+    assert_non_null(state);
+
+    ret = pthread_create(&tids[0], NULL, client_thread, *state);
+    assert_int_equal(ret, 0);
+    ret = pthread_create(&tids[1], NULL, ln2_glob_test_server_thread, *state);
+    assert_int_equal(ret, 0);
+
+    for (i = 0; i < 2; i++) {
+        pthread_join(tids[i], NULL);
+    }
+
+    check_keylog_file(KEYLOG_FILENAME);
+}
+
+static void
 test_nc_tls_free_test_data(void *test_data)
 {
     lyd_free_all(test_data);
@@ -149,12 +209,22 @@ setup_f(void **state)
     return 0;
 }
 
+static int
+keylog_setup_f(void **state)
+{
+    unlink(KEYLOG_FILENAME);
+    setenv("SSLKEYLOGFILE", KEYLOG_FILENAME, 1);
+
+    return setup_f(state);
+}
+
 int
 main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_nc_tls, setup_f, ln2_glob_test_teardown),
-        cmocka_unit_test_setup_teardown(test_nc_tls_ec_key, setup_f, ln2_glob_test_teardown)
+        cmocka_unit_test_setup_teardown(test_nc_tls_ec_key, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_nc_tls_keylog, keylog_setup_f, ln2_glob_test_teardown)
     };
 
     /* try to get ports from the environment, otherwise use the default */
