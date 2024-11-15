@@ -625,6 +625,8 @@ struct nc_server_opts {
         } *intervals;
         int interval_count;                 /**< Number of intervals. */
     } cert_exp_notif;
+
+    FILE *tls_keylog_file;                      /**< File to log TLS secrets to. */
 #endif
 };
 
@@ -684,6 +686,11 @@ struct nc_server_opts {
  * Timeout in msec for acquiring a lock of a client monitoring thread.
  */
 #define NC_CLIENT_MONITORING_LOCK_TIMEOUT 500
+
+/**
+ * TLS key log file environment variable name.
+ */
+#define NC_TLS_KEYLOGFILE_ENV "SSLKEYLOGFILE"
 
 /**
  * @brief Type of the session

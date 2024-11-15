@@ -69,6 +69,8 @@ struct nc_tls_verify_cb_data {
     void *chain;                        /**< Certificate chain used to verify the client cert. */
 };
 
+extern struct nc_server_opts server_opts;
+
 /**
  * @brief Creates a new TLS session from the given configuration.
  *
@@ -731,5 +733,12 @@ void nc_server_tls_set_cipher_suites_wrap(void *tls_cfg, void *cipher_suites);
  * @return Calendar time of the expiration (it is in GMT) or -1 on error.
  */
 time_t nc_tls_get_cert_exp_time_wrap(void *cert);
+
+/**
+ * @brief Set the session to log TLS secrets for.
+ *
+ * @param[in] session Session to log secrets for.
+ */
+void nc_tls_keylog_session_wrap(void *session);
 
 #endif

@@ -21,6 +21,7 @@
 
 #include <ctype.h>
 #include <poll.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1448,4 +1449,46 @@ nc_tls_get_cert_exp_time_wrap(void *cert)
     t.tm_isdst = -1;
 
     return timegm(&t);
+}
+
+/**
+ * @brief Callback for writing a line in the keylog file.
+ */
+static void
+nc_tls_keylog_write_line(const SSL *UNUSED(ssl), const char *line)
+{
+    size_t linelen;
+    char buf[256];
+
+    if (!server_opts.tls_keylog_file || !line) {
+        return;
+    }
+
+    /* linelen should not exceed 196 bytes, so 256 should be enough */
+    linelen = strlen(line);
+    if (!linelen || (linelen > sizeof(buf) - 2)) {
+        return;
+    }
+
+    memcpy(buf, line, linelen);
+    if (line[linelen - 1] != '\n') {
+        buf[linelen++] = '\n';
+    }
+    buf[linelen] = '\0';
+
+    fputs(buf, server_opts.tls_keylog_file);
+    fflush(server_opts.tls_keylog_file);
+}
+
+void
+nc_tls_keylog_session_wrap(void *session)
+{
+    SSL_CTX *ctx;
+
+    ctx = SSL_get_SSL_CTX(session);
+    if (!ctx) {
+        return;
+    }
+
+    SSL_CTX_set_keylog_callback(ctx, nc_tls_keylog_write_line);
 }

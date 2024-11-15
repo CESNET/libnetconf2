@@ -22,6 +22,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <poll.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1922,4 +1923,92 @@ nc_tls_get_cert_exp_time_wrap(void *cert)
     t.tm_isdst = -1;
 
     return timegm(&t);
+}
+
+/**
+ * @brief Convert the MbedTLS key export type to a label for the keylog file.
+ *
+ * @param[in] type MbedTLS key export type.
+ * @return Label for the keylog file or NULL if the type is not supported.
+ */
+static const char *
+nc_tls_keylog_type2label(mbedtls_ssl_key_export_type type)
+{
+    switch (type) {
+    case MBEDTLS_SSL_KEY_EXPORT_TLS12_MASTER_SECRET:
+        return "CLIENT_RANDOM";
+#ifdef MBEDTLS_SSL_PROTO_TLS1_3
+    case MBEDTLS_SSL_KEY_EXPORT_TLS1_3_CLIENT_HANDSHAKE_TRAFFIC_SECRET:
+        return "CLIENT_HANDSHAKE_TRAFFIC_SECRET";
+    case MBEDTLS_SSL_KEY_EXPORT_TLS1_3_SERVER_HANDSHAKE_TRAFFIC_SECRET:
+        return "SERVER_HANDSHAKE_TRAFFIC_SECRET";
+    case MBEDTLS_SSL_KEY_EXPORT_TLS1_3_CLIENT_APPLICATION_TRAFFIC_SECRET:
+        return "CLIENT_TRAFFIC_SECRET_0";
+    case MBEDTLS_SSL_KEY_EXPORT_TLS1_3_SERVER_APPLICATION_TRAFFIC_SECRET:
+        return "SERVER_TRAFFIC_SECRET_0";
+#endif
+    default:
+        return NULL;
+    }
+}
+
+/**
+ * @brief Callback for writing a line in the keylog file.
+ */
+static void
+nc_tls_keylog_write_line(void *UNUSED(p_expkey), mbedtls_ssl_key_export_type type, const unsigned char *secret,
+        size_t secret_len, const unsigned char client_random[32],
+        const unsigned char UNUSED(server_random[32]), mbedtls_tls_prf_types UNUSED(tls_prf_type))
+{
+    size_t linelen, len = 0, i, client_random_len;
+    char buf[256];
+    const char *label;
+
+    if (!server_opts.tls_keylog_file) {
+        return;
+    }
+
+    label = nc_tls_keylog_type2label(type);
+    if (!label) {
+        /* type not supported */
+        return;
+    }
+
+    /* <Label> <space> 0x<ClientRandom> <space> 0x<Secret> */
+    linelen = strlen(label) + 1 + 2 * 32 + 1 + 2 * secret_len + 1;
+    if (linelen > sizeof(buf)) {
+        /* sanity check, should not happen since the max len should be 196 bytes */
+        return;
+    }
+
+    /* write the label */
+    len += sprintf(buf + len, "%s ", label);
+
+    /* write the client random */
+    client_random_len = 32;
+    for (i = 0; i < client_random_len; i++) {
+        len += sprintf(buf + len, "%02x", client_random[i]);
+    }
+    len += sprintf(buf + len, " ");
+
+    /* write the secret */
+    for (i = 0; i < secret_len; i++) {
+        len += sprintf(buf + len, "%02x", secret[i]);
+    }
+
+    len += sprintf(buf + len, "\n");
+    buf[len] = '\0';
+
+    if (len != linelen) {
+        return;
+    }
+
+    fputs(buf, server_opts.tls_keylog_file);
+    fflush(server_opts.tls_keylog_file);
+}
+
+void
+nc_tls_keylog_session_wrap(void *session)
+{
+    mbedtls_ssl_set_export_keys_cb(session, nc_tls_keylog_write_line, NULL);
 }

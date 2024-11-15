@@ -795,6 +795,29 @@ nc_server_init_cb_ctx(const struct ly_ctx *ctx)
     }
 }
 
+#ifdef NC_ENABLED_SSH_TLS
+
+/**
+ * @brief Open the keylog file for writing TLS secrets.
+ */
+static void
+nc_server_keylog_file_open(void)
+{
+    char *keylog_file_name;
+
+    keylog_file_name = getenv(NC_TLS_KEYLOGFILE_ENV);
+    if (!keylog_file_name) {
+        return;
+    }
+
+    server_opts.tls_keylog_file = fopen(keylog_file_name, "a");
+    if (!server_opts.tls_keylog_file) {
+        WRN(NULL, "Failed to open keylog file \"%s\".", keylog_file_name);
+    }
+}
+
+#endif
+
 API int
 nc_server_init(void)
 {
@@ -858,6 +881,9 @@ nc_server_init(void)
         ERR(NULL, "%s: failed to init certificate expiration notification thread condition(%s).", __func__, strerror(r));
         goto error;
     }
+
+    /* try to open the keylog file for writing TLS secrets */
+    nc_server_keylog_file_open();
 #endif
 
     return 0;
@@ -917,6 +943,11 @@ nc_server_destroy(void)
     nc_server_config_ts_truststore(NULL, NC_OP_DELETE);
     curl_global_cleanup();
     ssh_finalize();
+
+    /* close the TLS keylog file */
+    if (server_opts.tls_keylog_file) {
+        fclose(server_opts.tls_keylog_file);
+    }
 #endif /* NC_ENABLED_SSH_TLS */
 }
 
