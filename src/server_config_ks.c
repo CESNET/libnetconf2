@@ -27,8 +27,6 @@
 #include "server_config_p.h"
 #include "session_p.h"
 
-extern struct nc_server_opts server_opts;
-
 /**
  * @brief Get the pointer to an asymmetric key structure based on node's location in the YANG data.
  *

@@ -47,8 +47,6 @@
 #include "session_p.h"
 #include "session_wrapper.h"
 
-extern struct nc_server_opts server_opts;
-
 /**
  * @brief Stores the private key data as a temporary file.
  *

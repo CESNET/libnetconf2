@@ -30,8 +30,6 @@
 #include "messages_server.h"
 #include "netconf.h"
 
-extern struct nc_server_opts server_opts;
-
 API struct nc_server_reply *
 nc_server_reply_ok(void)
 {

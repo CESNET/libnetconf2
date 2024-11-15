@@ -50,8 +50,6 @@
 /* in milliseconds */
 #define NC_CLOSE_REPLY_TIMEOUT 200
 
-extern struct nc_server_opts server_opts;
-
 void
 nc_timeouttime_get(struct timespec *ts, uint32_t add_ms)
 {
