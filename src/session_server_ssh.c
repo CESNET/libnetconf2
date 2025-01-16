@@ -1946,17 +1946,29 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
         rc = -1;
         goto cleanup;
     }
-    if (opts->encryption_algs && ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_CIPHERS_S_C, opts->encryption_algs)) {
-        rc = -1;
-        goto cleanup;
+    if (opts->encryption_algs) {
+        if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_CIPHERS_S_C, opts->encryption_algs)) {
+            rc = -1;
+            goto cleanup;
+        }
+        if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_CIPHERS_C_S, opts->encryption_algs)) {
+            rc = -1;
+            goto cleanup;
+        }
     }
     if (opts->kex_algs && ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_KEY_EXCHANGE, opts->kex_algs)) {
         rc = -1;
         goto cleanup;
     }
-    if (opts->mac_algs && ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HMAC_S_C, opts->mac_algs)) {
-        rc = -1;
-        goto cleanup;
+    if (opts->mac_algs) {
+        if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HMAC_S_C, opts->mac_algs)) {
+            rc = -1;
+            goto cleanup;
+        }
+        if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HMAC_C_S, opts->mac_algs)) {
+            rc = -1;
+            goto cleanup;
+        }
     }
 
     /* configure the ssh banner */
