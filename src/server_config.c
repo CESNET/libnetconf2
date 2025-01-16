@@ -2617,6 +2617,14 @@ nc_server_config_encryption_alg(const struct lyd_node *node, enum nc_operation o
 
     /* get the algorithm name and append it to supported algs */
     alg = ((struct lyd_node_term *)node)->value.ident->name;
+
+    /* YANG IDs cannot begin with a number, need to convert them to the correct form */
+    if (!strcmp(alg, "triple-des-cbc")) {
+        alg = "3des-cbc";
+    } else if (!strcmp(alg, "triple-des-ctr")) {
+        alg = "3des-ctr";
+    }
+
     if (nc_server_config_transport_params(alg, &opts->encryption_algs, op)) {
         ret = 1;
         goto cleanup;
