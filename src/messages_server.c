@@ -766,7 +766,7 @@ nc_server_reply_free(struct nc_server_reply *reply)
 API struct nc_server_notif *
 nc_server_notif_new(struct lyd_node *event, char *eventtime, NC_PARAMTYPE paramtype)
 {
-    struct nc_server_notif *ntf;
+    struct nc_server_notif *ntf = NULL;
     struct lyd_node *elem;
     int found;
 
@@ -791,9 +791,10 @@ nc_server_notif_new(struct lyd_node *event, char *eventtime, NC_PARAMTYPE paramt
 
     if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
         ntf->eventtime = strdup(eventtime);
+        NC_CHECK_ERRMEM_GOTO(!ntf->eventtime, , error);
+
         if (lyd_dup_single(event, NULL, LYD_DUP_RECURSIVE, &ntf->ntf)) {
-            free(ntf);
-            return NULL;
+            goto error;
         }
     } else {
         ntf->eventtime = eventtime;
@@ -802,6 +803,11 @@ nc_server_notif_new(struct lyd_node *event, char *eventtime, NC_PARAMTYPE paramt
     ntf->free = (paramtype == NC_PARAMTYPE_CONST ? 0 : 1);
 
     return ntf;
+
+error:
+    free(ntf->eventtime);
+    free(ntf);
+    return NULL;
 }
 
 API void
