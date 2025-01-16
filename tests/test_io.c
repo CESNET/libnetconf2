@@ -53,6 +53,7 @@ setup_write(void **state)
     /* ietf-netconf */
     fd = open(TESTS_DIR "/data/modules/ietf-netconf.yin", O_RDONLY);
     if (fd == -1) {
+        free(w->session);
         free(w);
         return -1;
     }
