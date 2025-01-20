@@ -105,7 +105,7 @@ test_nc_rpc_act_generic(void **state)
 
 /* function to check if values of getconfig rpc are set correctly */
 void
-check_getconfig(struct nc_rpc *rpc, enum NC_DATASTORE_TYPE source, char *filter, NC_WD_MODE wd_mode)
+check_getconfig(struct nc_rpc *rpc, NC_DATASTORE source, char *filter, NC_WD_MODE wd_mode)
 {
     assert_int_equal(nc_rpc_get_type(rpc), NC_RPC_GETCONFIG);
     struct nc_rpc_getconfig *getconfig_rpc = (struct nc_rpc_getconfig *)rpc;

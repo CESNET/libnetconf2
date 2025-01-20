@@ -1,10 +1,11 @@
 /**
  * @file netconf.h
  * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @author Michal Vasko <mvasko@cesnet.cz>
  * @brief libnetconf2's general public functions and structures definitions.
  *
  * @copyright
- * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2025 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -51,7 +52,7 @@ extern "C" {
 /**
  * @brief Enumeration of reasons of the NETCONF session termination as defined in RFC 6470.
  */
-typedef enum NC_SESSION_TERM_REASON {
+typedef enum {
     NC_SESSION_TERM_ERR = -1,     /**< error return code for function getting the session termination reason */
     NC_SESSION_TERM_NONE = 0,     /**< session still running */
     NC_SESSION_TERM_CLOSED,       /**< closed by client in a normal fashion */
@@ -65,7 +66,7 @@ typedef enum NC_SESSION_TERM_REASON {
 /**
  * @brief Enumeration of NETCONF message types.
  */
-typedef enum NC_MSG_TYPE {
+typedef enum {
     NC_MSG_ERROR,           /**< error return value */
     NC_MSG_WOULDBLOCK,      /**< timeout return value */
     NC_MSG_NONE,            /**< no message at input or message was processed internally */
@@ -85,7 +86,7 @@ extern const char *nc_msgtype2str[];
 /**
  * @brief Enumeration of the supported types of datastores defined by NETCONF
  */
-typedef enum NC_DATASTORE_TYPE {
+typedef enum {
     NC_DATASTORE_ERROR = 0, /**< error state of functions returning the datastore type */
     NC_DATASTORE_CONFIG,    /**< value describing that the datastore is set as config */
     NC_DATASTORE_URL,       /**< value describing that the datastore data should be given from the URL */
@@ -97,7 +98,7 @@ typedef enum NC_DATASTORE_TYPE {
 /**
  * @brief Enumeration of NETCONF with-defaults capability modes.
  */
-typedef enum NC_WITHDEFAULTS_MODE {
+typedef enum {
     NC_WD_UNKNOWN = 0,    /**< invalid mode */
     NC_WD_ALL,            /**< report-all mode */
     NC_WD_ALL_TAG,        /**< report-all-tagged mode */
@@ -108,7 +109,7 @@ typedef enum NC_WITHDEFAULTS_MODE {
 /**
  * @brief Enumeration of NETCONF (both server and client) rpc-reply types.
  */
-typedef enum NC_REPLY {
+typedef enum {
     NC_RPL_OK,    /**< OK rpc-reply */
     NC_RPL_DATA,  /**< DATA rpc-reply */
     NC_RPL_ERROR, /**< ERROR rpc-reply */
@@ -118,7 +119,7 @@ typedef enum NC_REPLY {
 /**
  * @brief Enumeration of function parameter treatments.
  */
-typedef enum NC_PARAMTYPE {
+typedef enum {
     NC_PARAMTYPE_CONST,       /**< use the parameter directly, do not free */
     NC_PARAMTYPE_FREE,        /**< use the parameter directly, free afterwards */
     NC_PARAMTYPE_DUP_AND_FREE /**< make a copy of the argument, free afterwards */

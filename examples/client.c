@@ -47,7 +47,7 @@ help_print()
             "    get-config [datastore] [xpath-filter]\t\t send a <get-config> RPC with optional XPath filter and datastore, the default datastore is \"running\" \n\n");
 }
 
-static enum NC_DATASTORE_TYPE
+static NC_DATASTORE
 string2datastore(const char *str)
 {
     if (!str) {
@@ -68,7 +68,7 @@ string2datastore(const char *str)
 static int
 send_rpc(struct nc_session *session, NC_RPC_TYPE rpc_type, const char *param1, const char *param2)
 {
-    enum NC_DATASTORE_TYPE datastore;
+    NC_DATASTORE datastore;
     int r = 0, rc = 0;
     uint64_t msg_id = 0;
     struct lyd_node *envp = NULL, *op = NULL;
