@@ -504,7 +504,7 @@ nc_err_get_tag(const struct lyd_node *err)
 API int
 nc_err_set_app_tag(struct lyd_node *err, const char *error_app_tag)
 {
-    struct lyd_node *match;
+    struct lyd_node *match, *prev_anchor;
 
     NC_CHECK_ARG_RET(NULL, err, error_app_tag, -1);
 
@@ -514,8 +514,15 @@ nc_err_set_app_tag(struct lyd_node *err, const char *error_app_tag)
         lyd_free_tree(match);
     }
 
-    if (lyd_new_opaq2(err, NULL, "error-app-tag", error_app_tag, NULL, NC_NS_BASE, NULL)) {
+    /* find the previous node anchor */
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-severity", &prev_anchor);
+
+    /* create the node at the right place */
+    if (lyd_new_opaq2(err, NULL, "error-app-tag", error_app_tag, NULL, NC_NS_BASE, &match)) {
         return -1;
+    }
+    if (prev_anchor) {
+        lyd_insert_after(prev_anchor, match);
     }
 
     return 0;
@@ -539,7 +546,7 @@ nc_err_get_app_tag(const struct lyd_node *err)
 API int
 nc_err_set_path(struct lyd_node *err, const char *error_path)
 {
-    struct lyd_node *match;
+    struct lyd_node *match, *prev_anchor;
 
     NC_CHECK_ARG_RET(NULL, err, error_path, -1);
 
@@ -549,8 +556,18 @@ nc_err_set_path(struct lyd_node *err, const char *error_path)
         lyd_free_tree(match);
     }
 
+    /* find the previous node anchor */
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-app-tag", &prev_anchor);
+    if (!prev_anchor) {
+        lyd_find_sibling_opaq_next(lyd_child(err), "error-severity", &prev_anchor);
+    }
+
+    /* create the node at the right place */
     if (lyd_new_opaq2(err, NULL, "error-path", error_path, NULL, NC_NS_BASE, NULL)) {
         return -1;
+    }
+    if (prev_anchor) {
+        lyd_insert_after(prev_anchor, match);
     }
 
     return 0;
@@ -574,21 +591,34 @@ nc_err_get_path(const struct lyd_node *err)
 API int
 nc_err_set_msg(struct lyd_node *err, const char *error_message, const char *lang)
 {
-    struct lyd_node *match;
+    struct lyd_node *match, *prev_anchor;
     struct lyd_attr *attr;
 
     NC_CHECK_ARG_RET(NULL, err, error_message, -1);
 
+    /* remove previous node */
     lyd_find_sibling_opaq_next(lyd_child(err), "error-message", &match);
     if (match) {
-        /* Change the value of error-message and keep order of elements to comply with appendix-B in RFC 6241. */
-        lydict_remove(LYD_CTX(err), ((struct lyd_node_opaq *)match)->value);
-        lydict_insert(LYD_CTX(err), error_message, 0, &(((struct lyd_node_opaq *)match)->value));
-        return 0;
+        lyd_free_tree(match);
     }
+
+    /* find the previous node anchor */
+    lyd_find_sibling_opaq_next(lyd_child(err), "error-path", &prev_anchor);
+    if (!prev_anchor) {
+        lyd_find_sibling_opaq_next(lyd_child(err), "error-app-tag", &prev_anchor);
+    }
+    if (!prev_anchor) {
+        lyd_find_sibling_opaq_next(lyd_child(err), "error-severity", &prev_anchor);
+    }
+
+    /* create the node at the right place */
     if (lyd_new_opaq2(err, NULL, "error-message", error_message, NULL, NC_NS_BASE, &match)) {
         return -1;
     }
+    if (prev_anchor) {
+        lyd_insert_after(prev_anchor, match);
+    }
+
     if (lang && lyd_new_attr(match, NULL, "xml:lang", lang, &attr)) {
         lyd_free_tree(match);
         return -1;
