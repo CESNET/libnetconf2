@@ -4,7 +4,7 @@
  * @brief libnetconf2 - server NETCONF messages functions
  *
  * @copyright
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2025 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -731,6 +731,16 @@ nc_server_rpc_free(struct nc_server_rpc *rpc)
     lyd_free_all(rpc->rpc);
 
     free(rpc);
+}
+
+API NC_RPL
+nc_server_reply_type(struct nc_server_reply *reply)
+{
+    if (!reply) {
+        return 0;
+    }
+
+    return reply->type;
 }
 
 API void

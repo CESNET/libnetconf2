@@ -287,6 +287,14 @@ int nc_err_add_bad_ns(struct lyd_node *err, const char *ns_name);
 int nc_err_add_info_other(struct lyd_node *err, struct lyd_node *other);
 
 /**
+ * @brief Get server reply message type.
+ *
+ * @param[in] reply Server rpc-reply object to analyze.
+ * @return Reply type.
+ */
+NC_RPL nc_server_reply_type(struct nc_server_reply *reply);
+
+/**
  * @brief Free a server rpc-reply object.
  *
  * @param[in] reply Server rpc-reply object to free.
