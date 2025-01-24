@@ -52,6 +52,7 @@
 #endif
 
 struct nc_server_opts server_opts = {
+    .hello_lock = PTHREAD_RWLOCK_INITIALIZER,
     .config_lock = PTHREAD_RWLOCK_INITIALIZER,
     .ch_client_lock = PTHREAD_RWLOCK_INITIALIZER,
     .idle_timeout = 180,    /**< default idle timeout (not in config for UNIX socket) */
@@ -962,8 +963,15 @@ nc_server_set_capab_withdefaults(NC_WD_MODE basic_mode, int also_supported)
         return -1;
     }
 
-    ATOMIC_STORE_RELAXED(server_opts.wd_basic_mode, basic_mode);
-    ATOMIC_STORE_RELAXED(server_opts.wd_also_supported, also_supported);
+    /* HELLO LOCK */
+    pthread_rwlock_wrlock(&server_opts.hello_lock);
+
+    server_opts.wd_basic_mode = basic_mode;
+    server_opts.wd_also_supported = also_supported;
+
+    /* HELLO UNLOCK */
+    pthread_rwlock_unlock(&server_opts.hello_lock);
+
     return 0;
 }
 
@@ -975,12 +983,18 @@ nc_server_get_capab_withdefaults(NC_WD_MODE *basic_mode, int *also_supported)
         return;
     }
 
+    /* HELLO LOCK */
+    pthread_rwlock_wrlock(&server_opts.hello_lock);
+
     if (basic_mode) {
-        *basic_mode = ATOMIC_LOAD_RELAXED(server_opts.wd_basic_mode);
+        *basic_mode = server_opts.wd_basic_mode;
     }
     if (also_supported) {
-        *also_supported = ATOMIC_LOAD_RELAXED(server_opts.wd_also_supported);
+        *also_supported = server_opts.wd_also_supported;
     }
+
+    /* HELLO UNLOCK */
+    pthread_rwlock_unlock(&server_opts.hello_lock);
 }
 
 API int
@@ -993,12 +1007,18 @@ nc_server_set_capability(const char *value)
         return EXIT_FAILURE;
     }
 
+    /* HELLO LOCK */
+    pthread_rwlock_wrlock(&server_opts.hello_lock);
+
     mem = realloc(server_opts.capabilities, (server_opts.capabilities_count + 1) * sizeof *server_opts.capabilities);
     NC_CHECK_ERRMEM_RET(!mem, EXIT_FAILURE);
     server_opts.capabilities = mem;
 
     server_opts.capabilities[server_opts.capabilities_count] = strdup(value);
     server_opts.capabilities_count++;
+
+    /* HELLO UNLOCK */
+    pthread_rwlock_unlock(&server_opts.hello_lock);
 
     return EXIT_SUCCESS;
 }
@@ -1007,9 +1027,15 @@ API void
 nc_server_set_content_id_clb(char *(*content_id_clb)(void *user_data), void *user_data,
         void (*free_user_data)(void *user_data))
 {
+    /* HELLO LOCK */
+    pthread_rwlock_wrlock(&server_opts.hello_lock);
+
     server_opts.content_id_clb = content_id_clb;
     server_opts.content_id_data = user_data;
     server_opts.content_id_data_free = free_user_data;
+
+    /* HELLO UNLOCK */
+    pthread_rwlock_unlock(&server_opts.hello_lock);
 }
 
 API NC_MSG_TYPE

@@ -1117,8 +1117,6 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
     cpblts[1] = strdup("urn:ietf:params:netconf:base:1.1");
     count = 2;
 
-    /* capabilities */
-
     mod = ly_ctx_get_module_implemented(ctx, "ietf-netconf");
     if (mod) {
         if (lys_feature_value(mod, "writable-running") == LY_SUCCESS) {
@@ -1153,11 +1151,15 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
         }
     }
 
+    /* HELLO LOCK */
+    pthread_rwlock_rdlock(&server_opts.hello_lock);
+
     mod = ly_ctx_get_module_implemented(ctx, "ietf-netconf-with-defaults");
     if (mod) {
-        wd_basic_mode = ATOMIC_LOAD_RELAXED(server_opts.wd_basic_mode);
+        wd_basic_mode = server_opts.wd_basic_mode;
         if (!wd_basic_mode) {
-            VRB(NULL, "with-defaults capability will not be advertised even though \"ietf-netconf-with-defaults\" model is present, unknown basic-mode.");
+            VRB(NULL, "with-defaults capability will not be advertised even though \"ietf-netconf-with-defaults\" "
+                    "model is present, unknown basic-mode.");
         } else {
             strcpy(str, "urn:ietf:params:netconf:capability:with-defaults:1.0");
             switch (wd_basic_mode) {
@@ -1172,7 +1174,7 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
                 break;
             default:
                 ERRINT;
-                break;
+                goto unlock_error;
             }
 
             wd_also_supported = ATOMIC_LOAD_RELAXED(server_opts.wd_also_supported);
@@ -1213,7 +1215,7 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
         if (!strcmp(mod->name, "ietf-yang-library")) {
             if (!mod->revision || (strcmp(mod->revision, "2016-06-21") && strcmp(mod->revision, "2019-01-04"))) {
                 ERR(NULL, "Unknown \"ietf-yang-library\" revision, only 2016-06-21 and 2019-01-04 are supported.");
-                goto error;
+                goto unlock_error;
             }
 
             /* get content-id */
@@ -1298,10 +1300,17 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
         add_cpblt(str, &cpblts, &size, &count);
     }
 
+    /* HELLO UNLOCK */
+    pthread_rwlock_unlock(&server_opts.hello_lock);
+
     /* ending NULL capability */
     add_cpblt(NULL, &cpblts, &size, &count);
 
     return cpblts;
+
+unlock_error:
+    /* HELLO UNLOCK */
+    pthread_rwlock_unlock(&server_opts.hello_lock);
 
 error:
     free(cpblts);

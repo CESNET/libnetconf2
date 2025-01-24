@@ -658,7 +658,13 @@ nc_session_get_client_cert(const struct nc_session *session)
 API void
 nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *session))
 {
+    /* CONFIG LOCK */
+    pthread_rwlock_wrlock(&server_opts.config_lock);
+
     server_opts.user_verify_clb = verify_clb;
+
+    /* CONFIG UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
 }
 
 int

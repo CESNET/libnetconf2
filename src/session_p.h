@@ -498,18 +498,26 @@ struct nc_ch_client_thread_arg {
 };
 
 struct nc_server_opts {
-    /* ACCESS unlocked */
-    ATOMIC_T wd_basic_mode;
-    ATOMIC_T wd_also_supported;
-    uint32_t capabilities_count;
+    /* ACCESS locked - hello lock - separate lock to not always hold config_lock */
+    char **ignored_modules;         /**< Names of YANG modules that are not reported in the server <hello> message. */
+    uint16_t ignored_mod_count;
+    NC_WD_MODE wd_basic_mode;       /**< With-defaults basic mode of the server. */
+    int wd_also_supported;          /**< Bitmap of with-defaults modes that are also supported by the server. */
     char **capabilities;
+    uint32_t capabilities_count;
 
-    char *(*content_id_clb)(void *user_data);
+    char *(*content_id_clb)(void *user_data);   /**< Callback for generating content_id for ietf-yang-library data. */
     void *content_id_data;
-
     void (*content_id_data_free)(void *data);
 
+    pthread_rwlock_t hello_lock;    /**< Needs to be held while the server <hello> message is being generated. */
+
+    /* ACCESS unlocked */
     uint16_t idle_timeout;
+
+    /* ACCESS locked - options modified by YANG data/API - WRITE lock
+     *               - options read when accepting sessions - READ lock */
+    pthread_rwlock_t config_lock;
 
 #ifdef NC_ENABLED_SSH_TLS
     char *authkey_path_fmt;             /**< Path to users' public keys that may contain tokens with special meaning. */
@@ -521,13 +529,12 @@ struct nc_server_opts {
     int (*user_verify_clb)(const struct nc_session *session);
 #endif /* NC_ENABLED_SSH_TLS */
 
-    pthread_rwlock_t config_lock;
-
 #ifdef NC_ENABLED_SSH_TLS
-    struct nc_keystore keystore;        /**< store for server's keys/certificates */
-    struct nc_truststore truststore;    /**< store for server client's keys/certificates */
+    struct nc_keystore keystore;        /**< Server's keys/certificates. */
+    struct nc_truststore truststore;    /**< Server client's keys/certificates. */
 #endif /* NC_ENABLED_SSH_TLS */
 
+    /* ACCESS locked */
     struct nc_bind *binds;
     pthread_mutex_t bind_lock;          /**< To avoid concurrent calls of poll and accept on the bound sockets **/
     struct nc_endpt {
@@ -607,11 +614,12 @@ struct nc_server_opts {
     } ch_dispatch_data;
 #endif /* NC_ENABLED_SSH_TLS */
 
-    /* Atomic IDs */
+    /* ACCESS unlocked */
     ATOMIC_T new_session_id;
     ATOMIC_T new_client_id;
 
 #ifdef NC_ENABLED_SSH_TLS
+    /* ACCESS locked */
     struct {
         pthread_t tid;                      /**< Thread ID of the certificate expiration notification thread. */
         int thread_running;                 /**< Flag representing the runningness of the cert exp notification thread. */
@@ -628,7 +636,8 @@ struct nc_server_opts {
         int interval_count;                 /**< Number of intervals. */
     } cert_exp_notif;
 
-    FILE *tls_keylog_file;                      /**< File to log TLS secrets to. */
+    /* ACCESS unlocked */
+    FILE *tls_keylog_file;                  /**< File to log TLS secrets to. */
 #endif
 };
 
