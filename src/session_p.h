@@ -1239,6 +1239,14 @@ int nc_session_tls_crl_from_cert_ext_fetch(void *leaf_cert, void *cert_store, vo
 #endif /* NC_ENABLED_SSH_TLS */
 
 /**
+ * @brief Check whether a module is not ignored by the server.
+ *
+ * @param[in] mod_name Module name to check.
+ * @return Whether the module is ignored.
+ */
+int nc_server_is_mod_ignored(const char *mod_name);
+
+/**
  * Functions
  * - io.c
  */

@@ -4080,3 +4080,17 @@ nc_server_notif_cert_expiration_thread_stop(int wait)
 }
 
 #endif /* NC_ENABLED_SSH_TLS */
+
+int
+nc_server_is_mod_ignored(const char *mod_name)
+{
+    uint16_t i;
+
+    for (i = 0; i < server_opts.ignored_mod_count; ++i) {
+        if (!strcmp(server_opts.ignored_modules[i], mod_name)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}

@@ -1205,6 +1205,11 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
     /* models */
     u = 0;
     while ((mod = ly_ctx_get_module_iter(ctx, &u))) {
+        if (nc_server_is_mod_ignored(mod->name)) {
+            /* ignored, not part of the cababilities */
+            continue;
+        }
+
         if (!strcmp(mod->name, "ietf-yang-library")) {
             if (!mod->revision || (strcmp(mod->revision, "2016-06-21") && strcmp(mod->revision, "2019-01-04"))) {
                 ERR(NULL, "Unknown \"ietf-yang-library\" revision, only 2016-06-21 and 2019-01-04 are supported.");

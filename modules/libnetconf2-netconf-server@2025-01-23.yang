@@ -31,6 +31,10 @@ module libnetconf2-netconf-server {
     prefix tlss;
   }
 
+  revision "2025-01-23" {
+    description "Added a list of YANG modules skipped in the server <hello> message.";
+  }
+
   revision "2024-07-09" {
     description "Second revision.";
   }
@@ -428,11 +432,11 @@ module libnetconf2-netconf-server {
       if-feature "ct:certificate-expiration-notification";
 
       description
-        "Container for the certificate expiration notification intervals.
-         Its child nodes describe the ability to set the time intervals for the certificate
-         expiration notifications. These intervals are given in the form of an anchor and a period.
-         By default, these notifications are generated 3, 2, and 1 month; 2 weeks; 7, 6, 5, 4, 3, 2 and 1 day before a certificate expires.
-         Additionally, notifications are generated on the day of expiration and every day thereafter.
+        "Container for the certificate expiration notification intervals. Its child nodes describe the ability to set
+         the time intervals for the certificate expiration notifications. These intervals are given in the form of an
+         anchor and a period. By default, these notifications are generated 3, 2, and 1 month; 2 weeks; 7, 6, 5, 4, 3,
+         2 and 1 day before a certificate expires. Additionally, notifications are generated on the day of expiration
+         and every day thereafter.
 
          Simplified example of YANG data that describe the default intervals:
 
@@ -470,6 +474,13 @@ module libnetconf2-netconf-server {
              between two notifications within the given time interval.";
         }
       }
+    }
+
+    leaf-list ignored-hello-module {
+      type string;
+
+      description
+        "List of implemented sysrepo YANG modules that will not be reported the NETCONF server in its <hello> messages.";
     }
   }
 }

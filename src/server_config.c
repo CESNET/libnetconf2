@@ -4014,13 +4014,20 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, enum nc_opera
 }
 
 int
-nc_server_config_ln2_netconf_server(const struct lyd_node *node, enum nc_operation op)
+nc_server_config_ln2_netconf_server(const struct lyd_node *UNUSED(node), enum nc_operation op)
 {
-    (void) node;
+    uint32_t i;
 
     assert((op == NC_OP_CREATE) || (op == NC_OP_DELETE));
 
     if (op == NC_OP_DELETE) {
+        /* delete ignored modules */
+        for (i = 0; i < server_opts.ignored_mod_count; ++i) {
+            free(server_opts.ignored_modules[i]);
+        }
+        free(server_opts.ignored_modules);
+        server_opts.ignored_modules = NULL;
+        server_opts.ignored_mod_count = 0;
 
 #ifdef NC_ENABLED_SSH_TLS
         /* delete the intervals */
@@ -4164,6 +4171,45 @@ cleanup:
 #endif /* NC_ENABLED_SSH_TLS */
 
 static int
+nc_server_config_ignored_module(const struct lyd_node *node, enum nc_operation op)
+{
+    int ret = 0;
+    const char *mod_name;
+    uint16_t i;
+
+    assert(!strcmp(LYD_NAME(node), "ignored-hello-module"));
+
+    mod_name = lyd_get_value(node);
+
+    if (op == NC_OP_CREATE) {
+        /* add the module */
+        ret = nc_server_config_realloc(mod_name, (void **)&server_opts.ignored_modules,
+                sizeof *server_opts.ignored_modules, &server_opts.ignored_mod_count);
+    } else {
+        /* find the module */
+        for (i = 0; i < server_opts.ignored_mod_count; ++i) {
+            if (!strcmp(server_opts.ignored_modules[i], mod_name)) {
+                break;
+            }
+        }
+        assert(i < server_opts.ignored_mod_count);
+
+        /* remove the module by replacing it with the last */
+        free(server_opts.ignored_modules[i]);
+        if (i < server_opts.ignored_mod_count - 1) {
+            server_opts.ignored_modules[i] = server_opts.ignored_modules[server_opts.ignored_mod_count - 1];
+        }
+        --server_opts.ignored_mod_count;
+        if (!server_opts.ignored_mod_count) {
+            free(server_opts.ignored_modules);
+            server_opts.ignored_modules = NULL;
+        }
+    }
+
+    return ret;
+}
+
+static int
 nc_server_config_parse_libnetconf2_netconf_server(const struct lyd_node *node, enum nc_operation op)
 {
     const char *name = LYD_NAME(node);
@@ -4177,6 +4223,9 @@ nc_server_config_parse_libnetconf2_netconf_server(const struct lyd_node *node, e
         ret = nc_server_config_interval(node, op);
     }
 #endif /* NC_ENABLED_SSH_TLS */
+    else if (!strcmp(name, "ignored-hello-module")) {
+        ret = nc_server_config_ignored_module(node, op);
+    }
 
     if (ret) {
         ERR(NULL, "Configuring node \"%s\" failed.", LYD_NAME(node));
