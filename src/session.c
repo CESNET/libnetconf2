@@ -1177,7 +1177,7 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
                 goto unlock_error;
             }
 
-            wd_also_supported = ATOMIC_LOAD_RELAXED(server_opts.wd_also_supported);
+            wd_also_supported = server_opts.wd_also_supported;
             if (wd_also_supported) {
                 strcat(str, "&also-supported=");
                 if (wd_also_supported & NC_WD_ALL) {
