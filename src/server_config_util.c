@@ -29,7 +29,12 @@
 #include "log_p.h"
 #include "session.h"
 #include "session_p.h"
+
+#ifdef NC_ENABLED_SSH_TLS
+
 #include "session_wrapper.h"
+
+#endif /* NC_ENABLED_SSH_TLS */
 
 int
 nc_server_config_create(const struct ly_ctx *ctx, struct lyd_node **tree, const char *value, const char *path_fmt, ...)

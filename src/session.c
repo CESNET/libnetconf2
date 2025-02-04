@@ -37,9 +37,10 @@
 
 #ifdef NC_ENABLED_SSH_TLS
 
+#include "session_wrapper.h"
+
 #include <curl/curl.h>
 #include <libssh/libssh.h>
-#include "session_wrapper.h"
 
 #endif /* NC_ENABLED_SSH_TLS */
 

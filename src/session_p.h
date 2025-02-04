@@ -30,7 +30,12 @@
 #include "session_client.h"
 #include "session_server.h"
 #include "session_server_ch.h"
+
+#ifdef NC_ENABLED_SSH_TLS
+
 #include "session_wrapper.h"
+
+#endif /* NC_ENABLED_SSH_TLS */
 
 extern struct nc_server_opts server_opts;
 

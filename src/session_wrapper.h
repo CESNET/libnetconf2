@@ -267,8 +267,6 @@ void nc_tls_sans_destroy_wrap(void *sans);
  */
 int nc_tls_get_num_sans_wrap(void *sans);
 
-#ifdef NC_ENABLED_SSH_TLS
-
 /**
  * @brief Get the SAN value and type in the context of CTN.
  *
@@ -279,8 +277,6 @@ int nc_tls_get_num_sans_wrap(void *sans);
  * @return 0 on success, non-zero on fail.
  */
 int nc_tls_get_san_value_type_wrap(void *sans, int idx, char **san_value, NC_TLS_CTN_MAPTYPE *san_type);
-
-#endif
 
 /**
  * @brief Get the number of certificates in a certificate chain.

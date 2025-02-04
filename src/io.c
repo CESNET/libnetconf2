@@ -38,7 +38,12 @@
 #include "netconf.h"
 #include "session.h"
 #include "session_p.h"
+
+#ifdef NC_ENABLED_SSH_TLS
+
 #include "session_wrapper.h"
+
+#endif /* NC_ENABLED_SSH_TLS */
 
 const char *nc_msgtype2str[] = {
     "error",

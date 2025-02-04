@@ -44,12 +44,15 @@
 #include "session_p.h"
 #include "session_server.h"
 #include "session_server_ch.h"
-#include "session_wrapper.h"
 
 #ifdef NC_ENABLED_SSH_TLS
+
+#include "session_wrapper.h"
+
 #include <curl/curl.h>
 #include <libssh/libssh.h>
-#endif
+
+#endif /* NC_ENABLED_SSH_TLS */
 
 struct nc_server_opts server_opts = {
     .hello_lock = PTHREAD_RWLOCK_INITIALIZER,
