@@ -1749,7 +1749,7 @@ nc_sock_connect(const char *src_addr, uint16_t src_port, const char *dst_addr, u
         hints.ai_protocol = IPPROTO_TCP;
         i = getaddrinfo(dst_addr, dst_port_str, &hints, &res_list);
         if (i != 0) {
-            ERR(NULL, "Unable to translate the host address (%s).", gai_strerror(i));
+            ERR(NULL, "Unable to translate the host address \"%s\" (%s).", dst_addr, gai_strerror(i));
             goto error;
         }
 
