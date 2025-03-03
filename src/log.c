@@ -140,6 +140,7 @@ nc_log_vprintf(const struct nc_session *session, NC_VERB_LEVEL level, const char
 
 cleanup:
     free(msg);
+    va_end(args2);
 }
 
 void
