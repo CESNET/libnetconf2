@@ -968,8 +968,10 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
 
         switch (reply->type) {
         case NC_RPL_OK:
-            if (lyd_new_opaq2(reply_envp, NULL, "ok", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns, NULL)) {
-                lyd_free_tree(reply_envp);
+            if ((reply_envp == NULL) || (rpc_envp == NULL) || lyd_new_opaq2(reply_envp, NULL, "ok", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns, NULL)) {
+                if (reply_envp != NULL) {
+                    lyd_free_tree(reply_envp);
+                }
 
                 ERRINT;
                 ret = NC_MSG_ERROR;
