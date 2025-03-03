@@ -498,9 +498,11 @@ _nc_server_config_add_ssh_user_password(const struct ly_ctx *ctx, const char *tr
     int ret = 0;
     char *hashed_pw = NULL;
     const char *salt = "$6$idsizuippipk$";
-    struct crypt_data cdata = {0};
+    static struct crypt_data cdata;
 
     NC_CHECK_ARG_RET(NULL, ctx, tree_path, password, config, 1);
+
+    memset(&cdata, 0, sizeof(struct crypt_data));
 
     hashed_pw = crypt_r(password, salt, &cdata);
     if (!hashed_pw) {
