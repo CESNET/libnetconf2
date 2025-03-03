@@ -625,9 +625,11 @@ static int
 nc_server_ssh_compare_password(const char *stored_pw, const char *received_pw)
 {
     char *received_pw_hash = NULL;
-    struct crypt_data cdata = {0};
+    static struct crypt_data cdata;
 
     NC_CHECK_ARG_RET(NULL, stored_pw, received_pw, 1);
+
+    memset(&cdata, 0, sizeof(struct crypt_data));
 
     if (!stored_pw[0]) {
         if (!received_pw[0]) {
