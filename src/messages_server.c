@@ -563,7 +563,7 @@ nc_err_set_path(struct lyd_node *err, const char *error_path)
     }
 
     /* create the node at the right place */
-    if (lyd_new_opaq2(err, NULL, "error-path", error_path, NULL, NC_NS_BASE, NULL)) {
+    if (lyd_new_opaq2(err, NULL, "error-path", error_path, NULL, NC_NS_BASE, &match)) {
         return -1;
     }
     if (prev_anchor) {
