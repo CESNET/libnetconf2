@@ -1,10 +1,11 @@
 /**
  * @file messages_p.h
  * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @author Michal Vasko <mvasko@cesnet.cz>
  * @brief libnetconf2's private functions and structures of NETCONF messages.
  *
  * @copyright
- * Copyright (c) 2021 CESNET, z.s.p.o.
+ * Copyright (c) 2021 - 2025 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -34,7 +35,7 @@ struct nc_server_reply {
 
 struct nc_server_reply_data {
     NC_RPL type;
-    struct lyd_node *data;
+    struct lyd_node *data;  /**< always points to the operation, for both RPCs and actions */
     int free;
     NC_WD_MODE wd;
 };

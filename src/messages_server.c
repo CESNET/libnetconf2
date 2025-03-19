@@ -787,7 +787,7 @@ nc_server_reply_free(struct nc_server_reply *reply)
     case NC_RPL_DATA:
         data_rpl = (struct nc_server_reply_data *)reply;
         if (data_rpl->free) {
-            lyd_free_siblings(data_rpl->data);
+            lyd_free_all(data_rpl->data);
         }
         break;
     case NC_RPL_OK:
