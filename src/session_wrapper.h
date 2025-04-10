@@ -70,6 +70,20 @@ struct nc_tls_verify_cb_data {
 };
 
 /**
+ * @brief Initializes the TLS backend.
+ *
+ * Does nothing for OpenSSL, required for MbedTLS version 3.6.0 and later.
+ */
+int nc_tls_backend_init_wrap(void);
+
+/**
+ * @brief Destroys the TLS backend.
+ *
+ * Does nothing for OpenSSL, required for MbedTLS version 3.6.0 and later.
+ */
+void nc_tls_backend_destroy_wrap(void);
+
+/**
  * @brief Creates a new TLS session from the given configuration.
  *
  * @param[in] tls_cfg TLS configuration.

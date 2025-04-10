@@ -44,6 +44,20 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
+int
+nc_tls_backend_init_wrap(void)
+{
+    /* nothing to do */
+    return 0;
+}
+
+void
+nc_tls_backend_destroy_wrap(void)
+{
+    /* nothing to do */
+    return;
+}
+
 void *
 nc_tls_session_new_wrap(void *tls_cfg)
 {

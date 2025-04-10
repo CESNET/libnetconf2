@@ -194,6 +194,27 @@ nc_tls_get_verify_err_str(int err)
     return err_buf;
 }
 
+int
+nc_tls_backend_init_wrap(void)
+{
+    int r;
+
+    r = psa_crypto_init();
+
+    if (r) {
+        ERR(NULL, "Failed to initialize PSA crypto (%s).", nc_get_mbedtls_str_err(r));
+        return -1;
+    }
+
+    return 0;
+}
+
+void
+nc_tls_backend_destroy_wrap(void)
+{
+    mbedtls_psa_crypto_free();
+}
+
 void *
 nc_tls_session_new_wrap(void *tls_cfg)
 {

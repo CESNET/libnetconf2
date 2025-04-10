@@ -864,6 +864,11 @@ nc_server_init(void)
         goto error;
     }
 
+    if (nc_tls_backend_init_wrap()) {
+        ERR(NULL, "%s: failed to init the SSL library backend.", __func__);
+        return -1;
+    }
+
     /* optional for dynamic library, mandatory for static */
     if (ssh_init()) {
         ERR(NULL, "%s: failed to init libssh.", __func__);
@@ -946,6 +951,7 @@ nc_server_destroy(void)
     nc_server_config_ks_keystore(NULL, NC_OP_DELETE);
     nc_server_config_ts_truststore(NULL, NC_OP_DELETE);
     curl_global_cleanup();
+    nc_tls_backend_destroy_wrap();
     ssh_finalize();
 
     /* close the TLS keylog file */
