@@ -36,6 +36,16 @@
 void nc_log_printf(const struct nc_session *session, NC_VERB_LEVEL level, const char *format, ...);
 
 /**
+ * @brief Internal printing function with va_list
+ *
+ * @param[in] session Optional NETCONF session that generated the message
+ * @param[in] level Verbose level
+ * @param[in] format Formatting string
+ * @param[in] args va_list with arguments
+ */
+void nc_log_vprintf(const struct nc_session *session, NC_VERB_LEVEL level, const char *format, va_list args);
+
+/**
  * @brief Verbose level variable
  */
 extern ATOMIC_T verbose_level;

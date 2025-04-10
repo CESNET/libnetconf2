@@ -96,7 +96,7 @@ nc_libssh_thread_verbosity(int level)
 
 #endif /* NC_ENABLED_SSH_TLS */
 
-static void
+void
 nc_log_vprintf(const struct nc_session *session, NC_VERB_LEVEL level, const char *format, va_list args)
 {
     va_list args2;
