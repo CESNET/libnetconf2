@@ -52,29 +52,79 @@
 #include <mbedtls/x509_crt.h>
 
 /**
- * @brief Converts mbedTLS error codes to a string.
+ * @brief Converts MbedTLS error code to a string and merges it with an arbitrary error message.
  *
- * Some mbedTLS functions may return 'high' and some 'low' level errors, try to handle both cases this way.
- *
- * @param[in] err MbedTLS error code.
- * @return Error string.
+ * @param[in] session NETCONF session.
+ * @param[in] mbedtls_err_code MbedTLS error code.
+ * @param[in] orig_err_msg_fmt Original error message format string.
+ * @param[in] ... Additional arguments for the original error message.
  */
-static const char *
-nc_get_mbedtls_str_err(int err)
+static void
+nc_mbedtls_strerr(const struct nc_session *session, int mbedtls_err_code, const char *orig_err_msg_fmt, ...)
 {
-    const char *err_str;
+    va_list args;
+    char *err_buf = NULL, *err_msg_fmt = NULL;
+    size_t err_buf_len = 0, err_msg_fmt_len = 0;
+    const char *high_err_str, *low_err_str;
 
-    err_str = mbedtls_high_level_strerr(err);
-    if (err_str) {
-        return err_str;
+    va_start(args, orig_err_msg_fmt);
+
+    /* get the length of the error strings */
+    high_err_str = mbedtls_high_level_strerr(mbedtls_err_code);
+    low_err_str = mbedtls_low_level_strerr(mbedtls_err_code);
+    if (high_err_str) {
+        err_buf_len += strlen(high_err_str);
+    }
+    if (low_err_str) {
+        err_buf_len += strlen(low_err_str);
+    }
+    if (!err_buf_len) {
+        /* just print the original error message */
+        nc_log_vprintf(session, NC_VERB_ERROR, orig_err_msg_fmt, args);
+        goto cleanup;
     }
 
-    err_str = mbedtls_low_level_strerr(err);
-    if (err_str) {
-        return err_str;
+    if (high_err_str && low_err_str) {
+        /* for a colon and 2 spaces */
+        err_buf_len += 3;
     }
 
-    return "unknown error";
+    /* allocate the mbedtls error buffer */
+    err_buf = malloc(err_buf_len + 1);
+    if (!err_buf) {
+        /* just print the original error message */
+        nc_log_vprintf(session, NC_VERB_ERROR, orig_err_msg_fmt, args);
+        goto cleanup;
+    }
+
+    /* fill the error buffer and print it */
+    if (high_err_str && low_err_str) {
+        snprintf(err_buf, err_buf_len + 1, "%s : %s", high_err_str, low_err_str);
+    } else if (high_err_str) {
+        snprintf(err_buf, err_buf_len + 1, "%s", high_err_str);
+    } else {
+        snprintf(err_buf, err_buf_len + 1, "%s", low_err_str);
+    }
+
+    /* allocate the new error format string buffer, err_msg = "orig_err_msg (MbedTLS err)." */
+    err_msg_fmt_len = strlen(orig_err_msg_fmt) + strlen(" (") + strlen(err_buf) + strlen(").");
+    err_msg_fmt = malloc(err_msg_fmt_len + 1);
+    if (!err_msg_fmt) {
+        /* just print the original error message */
+        nc_log_vprintf(session, NC_VERB_ERROR, orig_err_msg_fmt, args);
+        goto cleanup;
+    }
+
+    /* fill the new error format string */
+    snprintf(err_msg_fmt, err_msg_fmt_len + 1, "%s (%s).", orig_err_msg_fmt, err_buf);
+
+    /* print the error message */
+    nc_log_vprintf(session, NC_VERB_ERROR, err_msg_fmt, args);
+
+cleanup:
+    va_end(args);
+    free(err_msg_fmt);
+    free(err_buf);
 }
 
 /**
@@ -100,7 +150,7 @@ nc_server_tls_dn2str(const mbedtls_x509_name *dn)
     }
     if (r < 1) {
         free(str);
-        ERR(NULL, "Failed to convert DN to string (%s).", nc_get_mbedtls_str_err(r));
+        nc_mbedtls_strerr(NULL, r, "Failed to convert DN to string");
         return NULL;
     }
 
@@ -132,7 +182,7 @@ nc_tls_rng_new(mbedtls_ctr_drbg_context **ctr_drbg, mbedtls_entropy_context **en
 
     rc = mbedtls_ctr_drbg_seed(*ctr_drbg, mbedtls_entropy_func, *entropy, NULL, 0);
     if (rc) {
-        ERR(NULL, "Seeding ctr_drbg failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Seeding ctr_drbg failed");
         goto fail;
     }
 
@@ -202,7 +252,7 @@ nc_tls_backend_init_wrap(void)
     r = psa_crypto_init();
 
     if (r) {
-        ERR(NULL, "Failed to initialize PSA crypto (%s).", nc_get_mbedtls_str_err(r));
+        nc_mbedtls_strerr(NULL, r, "Failed to initialize PSA crypto");
         return -1;
     }
 
@@ -228,7 +278,7 @@ nc_tls_session_new_wrap(void *tls_cfg)
 
     rc = mbedtls_ssl_setup(session, tls_cfg);
     if (rc) {
-        ERR(NULL, "Setting up TLS session failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Setting up TLS session failed");
         mbedtls_ssl_free(session);
         free(session);
         return NULL;
@@ -356,7 +406,7 @@ nc_tls_pem_to_cert_wrap(const char *cert_data)
 
     rc = mbedtls_x509_crt_parse(cert, (const unsigned char *)cert_data, strlen(cert_data) + 1);
     if (rc) {
-        ERR(NULL, "Parsing certificate data failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Parsing certificate data failed");
         nc_tls_cert_destroy_wrap(cert);
         return NULL;
     }
@@ -400,7 +450,7 @@ nc_tls_pem_to_privkey_wrap(const char *privkey_data)
 
     rc = mbedtls_pk_parse_key(pkey, (const unsigned char *)privkey_data, strlen(privkey_data) + 1, NULL, 0, mbedtls_ctr_drbg_random, ctr_drbg);
     if (rc) {
-        ERR(NULL, "Parsing private key data failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Parsing private key data failed");
         goto cleanup;
     }
 
@@ -776,7 +826,7 @@ nc_server_tls_md5_wrap(void *cert, unsigned char *buf)
 
     rc = mbedtls_md5(c->raw.p, c->raw.len, buf);
     if (rc) {
-        ERR(NULL, "Calculating MD5 digest failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Calculating MD5 digest failed");
         return 1;
     }
 
@@ -791,7 +841,7 @@ nc_server_tls_sha1_wrap(void *cert, unsigned char *buf)
 
     rc = mbedtls_sha1(c->raw.p, c->raw.len, buf);
     if (rc) {
-        ERR(NULL, "Calculating SHA-1 digest failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Calculating SHA-1 digest failed");
         return 1;
     }
 
@@ -806,7 +856,7 @@ nc_server_tls_sha224_wrap(void *cert, unsigned char *buf)
 
     rc = mbedtls_sha256(c->raw.p, c->raw.len, buf, 1);
     if (rc) {
-        ERR(NULL, "Calculating SHA-224 digest failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Calculating SHA-224 digest failed");
         return 1;
     }
 
@@ -821,7 +871,7 @@ nc_server_tls_sha256_wrap(void *cert, unsigned char *buf)
 
     rc = mbedtls_sha256(c->raw.p, c->raw.len, buf, 0);
     if (rc) {
-        ERR(NULL, "Calculating SHA-256 digest failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Calculating SHA-256 digest failed");
         return 1;
     }
 
@@ -836,7 +886,7 @@ nc_server_tls_sha384_wrap(void *cert, unsigned char *buf)
 
     rc = mbedtls_sha512(c->raw.p, c->raw.len, buf, 1);
     if (rc) {
-        ERR(NULL, "Calculating SHA-384 digest failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Calculating SHA-384 digest failed");
         return 1;
     }
 
@@ -851,7 +901,7 @@ nc_server_tls_sha512_wrap(void *cert, unsigned char *buf)
 
     rc = mbedtls_sha512(c->raw.p, c->raw.len, buf, 0);
     if (rc) {
-        ERR(NULL, "Calculating SHA-512 digest failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Calculating SHA-512 digest failed");
         return 1;
     }
 
@@ -1000,7 +1050,7 @@ nc_tls_import_privkey_file_wrap(const char *privkey_path)
     rc = mbedtls_pk_parse_keyfile(pkey, privkey_path, NULL, mbedtls_ctr_drbg_random, ctr_drbg);
     nc_tls_rng_destroy(ctr_drbg, entropy);
     if (rc) {
-        ERR(NULL, "Parsing private key from file \"%s\" failed (%s).", privkey_path, nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Parsing private key from file \"%s\" failed", privkey_path);
         nc_tls_privkey_destroy_wrap(pkey);
         return NULL;
     }
@@ -1023,7 +1073,7 @@ nc_client_tls_load_cert_key_wrap(const char *cert_path, const char *key_path, vo
 
     ret = mbedtls_x509_crt_parse_file(c, cert_path);
     if (ret) {
-        ERR(NULL, "Parsing certificate from file \"%s\" failed (%s).", cert_path, nc_get_mbedtls_str_err(ret));
+        nc_mbedtls_strerr(NULL, ret, "Parsing certificate from file \"%s\" failed", cert_path);
         goto cleanup;
     }
 
@@ -1048,12 +1098,12 @@ nc_client_tls_load_trusted_certs_wrap(void *cert_store, const char *file_path, c
     int rc;
 
     if (file_path && ((rc = mbedtls_x509_crt_parse_file(cert_store, file_path)) < 0)) {
-        ERR(NULL, "Loading CA certificate from file \"%s\" failed (%s).", file_path, nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Loading CA certificate from file \"%s\" failed", file_path);
         return 1;
     }
 
     if (dir_path && ((rc = mbedtls_x509_crt_parse_path(cert_store, dir_path)) < 0)) {
-        ERR(NULL, "Loading CA certificate from directory \"%s\" failed (%s).", dir_path, nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Loading CA certificate from directory \"%s\" failed", dir_path);
         return 1;
     }
 
@@ -1067,7 +1117,7 @@ nc_client_tls_set_hostname_wrap(void *tls_session, const char *hostname)
 
     rc = mbedtls_ssl_set_hostname(tls_session, hostname);
     if (rc) {
-        ERR(NULL, "Setting hostname failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Setting hostname failed");
         return 1;
     }
 
@@ -1104,7 +1154,7 @@ nc_tls_setup_config_from_ctx_wrap(struct nc_tls_ctx *tls_ctx, int side, void *tl
         rc = mbedtls_ssl_config_defaults(tls_cfg, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
     }
     if (rc) {
-        ERR(NULL, "Setting default TLS config failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Setting default TLS config failed");
         return 1;
     }
 
@@ -1132,25 +1182,17 @@ nc_tls_verify_error_string_wrap(uint32_t err_code)
 void
 nc_client_tls_print_connect_err_wrap(int connect_ret, const char *peername, void *UNUSED(tls_session))
 {
-    const char *err = nc_get_mbedtls_str_err(connect_ret);
-
-    if (err) {
-        ERR(NULL, "TLS connection to \"%s\" failed (%s).", peername, err);
+    if (peername) {
+        nc_mbedtls_strerr(NULL, connect_ret, "TLS connect to host \"%s\" failed", peername);
     } else {
-        ERR(NULL, "TLS connection to \"%s\" failed.", peername);
+        nc_mbedtls_strerr(NULL, connect_ret, "TLS connect to an unknown host failed");
     }
 }
 
 void
 nc_server_tls_print_accept_err_wrap(int accept_ret, void *UNUSED(tls_session))
 {
-    const char *err = nc_get_mbedtls_str_err(accept_ret);
-
-    if (err) {
-        ERR(NULL, "TLS accept failed (%s).", err);
-    } else {
-        ERR(NULL, "TLS accept failed.");
-    }
+    nc_mbedtls_strerr(NULL, accept_ret, "TLS accept failed");
 }
 
 int
@@ -1179,7 +1221,7 @@ nc_base64_decode_wrap(const char *base64, unsigned char **bin)
     /* get the size of the decoded data */
     rc = mbedtls_base64_decode(NULL, 0, &size, (const unsigned char *)base64, strlen(base64));
     if (rc != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
-        ERR(NULL, "Base64 decoding failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Base64 decoding failed");
         return -1;
     }
 
@@ -1189,7 +1231,7 @@ nc_base64_decode_wrap(const char *base64, unsigned char **bin)
     /* decode */
     rc = mbedtls_base64_decode(*bin, size, &size, (const unsigned char *)base64, strlen(base64));
     if (rc) {
-        ERR(NULL, "Base64 decoding failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Base64 decoding failed");
         free(*bin);
         *bin = NULL;
         return -1;
@@ -1206,7 +1248,7 @@ nc_base64_encode_wrap(const unsigned char *bin, size_t len, char **base64)
 
     rc = mbedtls_base64_encode(NULL, 0, &size, bin, len);
     if (rc != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
-        ERR(NULL, "Base64 encoding failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Base64 encoding failed");
         return -1;
     }
 
@@ -1215,7 +1257,7 @@ nc_base64_encode_wrap(const unsigned char *bin, size_t len, char **base64)
 
     rc = mbedtls_base64_encode((unsigned char *)*base64, size, &size, bin, len);
     if (rc) {
-        ERR(NULL, "Base64 encoding failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Base64 encoding failed");
         free(*base64);
         *base64 = NULL;
         return -1;
@@ -1238,13 +1280,13 @@ nc_tls_read_wrap(struct nc_session *session, unsigned char *buf, size_t size)
             rc = 0;
             break;
         case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-            ERR(session, "Communication socket unexpectedly closed (MbedTLS).");
+            nc_mbedtls_strerr(session, rc, "Communication socket unexpectedly closed");
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_DROPPED;
             rc = -1;
             break;
         default:
-            ERR(session, "TLS communication error occurred (%s).", nc_get_mbedtls_str_err(rc));
+            nc_mbedtls_strerr(session, rc, "TLS communication error occurred");
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_OTHER;
             rc = -1;
@@ -1269,11 +1311,11 @@ nc_tls_write_wrap(struct nc_session *session, const unsigned char *buf, size_t s
             rc = 0;
             break;
         case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-            ERR(session, "TLS connection was properly closed.");
+            nc_mbedtls_strerr(session, rc, "TLS connection was properly closed.");
             rc = -1;
             break;
         default:
-            ERR(session, "TLS communication error occurred (%s).", nc_get_mbedtls_str_err(rc));
+            nc_mbedtls_strerr(session, rc, "TLS communication error occurred");
             rc = -1;
             break;
         }
@@ -1302,7 +1344,7 @@ nc_tls_close_notify_wrap(void *tls_session)
     while ((rc = mbedtls_ssl_close_notify(tls_session))) {
         if ((rc != MBEDTLS_ERR_SSL_WANT_READ) && (rc != MBEDTLS_ERR_SSL_WANT_WRITE)) {
             /* some error occurred */
-            ERR(NULL, "Sending TLS close notify failed (%s).", nc_get_mbedtls_str_err(rc));
+            nc_mbedtls_strerr(NULL, rc, "Sending TLS close notify failed");
             return;
         }
     }
@@ -1321,7 +1363,7 @@ nc_tls_import_cert_file_wrap(const char *cert_path)
 
     rc = mbedtls_x509_crt_parse_file(c, cert_path);
     if (rc) {
-        ERR(NULL, "Parsing certificate from file \"%s\" failed (%s).", cert_path, nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Parsing certificate from file \"%s\" failed", cert_path);
         nc_tls_cert_destroy_wrap(c);
         return NULL;
     }
@@ -1345,7 +1387,7 @@ nc_tls_export_privkey_pem_wrap(void *pkey)
         NC_CHECK_ERRMEM_RET(!pem, NULL);
     }
     if (rc < 0) {
-        ERR(NULL, "Exporting private key to PEM format failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Exporting private key to PEM format failed");
         free(pem);
         return NULL;
     }
@@ -1390,7 +1432,7 @@ nc_tls_export_pubkey_pem_wrap(void *pkey)
         NC_CHECK_ERRMEM_RET(!pem, NULL);
     }
     if (rc < 0) {
-        ERR(NULL, "Exporting public key to PEM format failed (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Exporting public key to PEM format failed");
         free(pem);
         return NULL;
     }
@@ -1420,7 +1462,7 @@ nc_tls_get_rsa_pubkey_params_wrap(void *pkey, void **e, void **n)
     mbedtls_mpi_init(mod);
 
     if ((rc = mbedtls_rsa_export(mbedtls_pk_rsa(*(mbedtls_pk_context *)pkey), mod, NULL, NULL, NULL, exp))) {
-        ERR(NULL, "Failed to export RSA public key parameters (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Failed to export RSA public key parameters");
         goto fail;
     }
 
@@ -1489,7 +1531,7 @@ nc_tls_get_ec_pubkey_params_wrap(void *pkey, void **q, void **q_grp)
     /* get the group and public key */
     ret = mbedtls_ecp_export(mbedtls_pk_ec(*(mbedtls_pk_context *)pkey), grp, d, p);
     if (ret) {
-        ERR(NULL, "Failed to export EC public key parameters (%s).", nc_get_mbedtls_str_err(ret));
+        nc_mbedtls_strerr(NULL, ret, "Failed to export EC private key parameters");
         ret = 1;
         goto cleanup;
     }
@@ -1528,7 +1570,7 @@ nc_tls_ec_point_to_bin_wrap(void *q, void *q_grp, unsigned char **bin, int *bin_
         NC_CHECK_ERRMEM_RET(!buf, 1);
     }
     if (rc) {
-        ERR(NULL, "Failed to write EC public key binary (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Failed to write EC public key binary");
         free(buf);
         return 1;
     }
@@ -1565,7 +1607,7 @@ nc_tls_mpi2bin_wrap(void *mpi, unsigned char **bin, int *bin_len)
 
     rc = mbedtls_mpi_write_binary(mpi, buf, buf_len);
     if (rc) {
-        ERR(NULL, "Failed to convert MPI to binary (%s).", nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Failed to convert MPI to binary");
         free(buf);
         return 1;
     }
@@ -1588,7 +1630,7 @@ nc_tls_import_pubkey_file_wrap(const char *pubkey_path)
 
     rc = mbedtls_pk_parse_public_keyfile(pk, pubkey_path);
     if (rc) {
-        ERR(NULL, "Parsing public key from file \"%s\" failed (%s).", pubkey_path, nc_get_mbedtls_str_err(rc));
+        nc_mbedtls_strerr(NULL, rc, "Parsing public key from file \"%s\" failed", pubkey_path);
         nc_tls_privkey_destroy_wrap(pk);
         return NULL;
     }
@@ -1629,7 +1671,7 @@ nc_server_tls_parse_crl_dist_points(unsigned char **p, size_t len, char ***uris,
          */
         ret = mbedtls_asn1_get_tag(p, end_crl_dist_points, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
         if (ret) {
-            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+            nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
             goto cleanup;
         }
         if (!len) {
@@ -1652,7 +1694,7 @@ nc_server_tls_parse_crl_dist_points(unsigned char **p, size_t len, char ***uris,
                     ERR(NULL, "Failed to parse CRL distribution points extension (nameRelativeToCRLIssuer not yet supported).");
                     goto cleanup;
                 } else {
-                    ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+                    nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
                     goto cleanup;
                 }
             }
@@ -1661,7 +1703,7 @@ nc_server_tls_parse_crl_dist_points(unsigned char **p, size_t len, char ***uris,
             end_general_names = *p + len;
             ret = mbedtls_asn1_get_tag(p, end_general_names, &name_len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
             if (ret) {
-                ERR(NULL, "Failed to parse GeneralNames in CRL distribution points extension (%s)", nc_get_mbedtls_str_err(ret));
+                nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
                 goto cleanup;
             }
 
@@ -1686,8 +1728,7 @@ nc_server_tls_parse_crl_dist_points(unsigned char **p, size_t len, char ***uris,
                  */
                 ret = mbedtls_asn1_get_tag(p, end_names, &name_len, MBEDTLS_ASN1_CONTEXT_SPECIFIC | (tag & MBEDTLS_ASN1_CONSTRUCTED) | tag_value);
                 if (ret) {
-                    ERR(NULL, "Failed to parse GeneralName in CRL distribution points extension (%s).",
-                            nc_get_mbedtls_str_err(ret));
+                    nc_mbedtls_strerr(NULL, ret, "Failed to parse GeneralName in CRL distribution points extension");
                     goto cleanup;
                 }
 
@@ -1720,7 +1761,7 @@ nc_server_tls_parse_crl_dist_points(unsigned char **p, size_t len, char ***uris,
 
         } else if (ret != MBEDTLS_ERR_ASN1_UNEXPECTED_TAG) {
             /* failed to parse it, but not because it's optional */
-            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+            nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
             goto cleanup;
         }
     }
@@ -1775,7 +1816,7 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *leaf_cert, void *cert_store, cha
          */
         ret = mbedtls_asn1_get_tag(&p, end_v3_ext, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
         if (ret) {
-            ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+            nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
             goto cleanup;
         }
 
@@ -1788,7 +1829,7 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *leaf_cert, void *cert_store, cha
              */
             ret = mbedtls_asn1_get_tag(&p, end_v3_ext, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
             if (ret) {
-                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+                nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
                 goto cleanup;
             }
 
@@ -1797,7 +1838,7 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *leaf_cert, void *cert_store, cha
             /* parse extnID */
             ret = mbedtls_asn1_get_tag(&p, end_ext, &ext_oid.len, MBEDTLS_ASN1_OID);
             if (ret) {
-                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+                nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
                 goto cleanup;
             }
             ext_oid.tag = MBEDTLS_ASN1_OID;
@@ -1814,14 +1855,14 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *leaf_cert, void *cert_store, cha
             /* parse optional critical */
             ret = mbedtls_asn1_get_bool(&p, end_ext, &is_critical);
             if (ret && (ret != MBEDTLS_ERR_ASN1_UNEXPECTED_TAG)) {
-                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+                nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
                 goto cleanup;
             }
 
             /* parse extnValue */
             ret = mbedtls_asn1_get_tag(&p, end_ext, &len, MBEDTLS_ASN1_OCTET_STRING);
             if (ret) {
-                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+                nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
                 goto cleanup;
             }
 
@@ -1834,12 +1875,12 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *leaf_cert, void *cert_store, cha
              */
             ret = mbedtls_asn1_get_tag(&p, end_ext_octet, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
             if (ret) {
-                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+                nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
                 goto cleanup;
             }
             if (p + len != end_ext_octet) {
                 /* length mismatch */
-                ERR(NULL, "Failed to parse CRL distribution points extension (%s).", nc_get_mbedtls_str_err(ret));
+                ERR(NULL, "Failed to parse CRL distribution points extension (length mismatch).");
                 goto cleanup;
             } else if (!len) {
                 /* empty sequence, but size is 1..max */
