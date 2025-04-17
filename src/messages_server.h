@@ -210,7 +210,7 @@ const char *nc_err_get_app_tag(const struct lyd_node *err);
  * @brief Set the \<error-path\> element of an error. Any previous value will be overwritten.
  *
  * @param[in] err Error opaque data node tree to modify.
- * @param[in] error_path New value of \<error-path\>.
+ * @param[in] error_path New value of \<error-path\> in JSON format.
  * @return 0 on success, -1 on error.
  */
 int nc_err_set_path(struct lyd_node *err, const char *error_path);

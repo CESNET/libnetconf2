@@ -240,6 +240,7 @@ test_send_recv_error(void)
     NC_MSG_TYPE msgtype;
     struct nc_rpc *rpc;
     struct lyd_node *envp, *op, *node;
+    const struct lysc_node *schema;
     struct nc_pollsession *ps;
 
     /* client RPC */
@@ -266,9 +267,10 @@ test_send_recv_error(void)
 
     nc_rpc_free(rpc);
     assert_string_equal(LYD_NAME(lyd_child(envp)), "rpc-error");
-    lyd_find_sibling_opaq_next(lyd_child(lyd_child(envp)), "error-tag", &node);
+    schema = lys_find_path(LYD_CTX(envp), NULL, "/ietf-netconf:rpc-error/error-tag", 0);
+    lyd_find_sibling_val(lyd_child(lyd_child(envp)), schema, NULL, 0, &node);
     assert_non_null(node);
-    assert_string_equal(((struct lyd_node_opaq *)node)->value, "operation-not-supported");
+    assert_string_equal(lyd_get_value(node), "operation-not-supported");
     lyd_free_tree(envp);
     assert_null(op);
 }
@@ -508,6 +510,7 @@ test_send_recv_malformed_10(void **state)
     struct nc_pollsession *ps;
     struct nc_rpc *rpc;
     struct lyd_node *envp, *op, *node;
+    const struct lysc_node *schema;
     NC_MSG_TYPE msgtype;
     const char *msg;
 
@@ -543,9 +546,10 @@ test_send_recv_malformed_10(void **state)
 
     nc_rpc_free(rpc);
     assert_string_equal(LYD_NAME(lyd_child(envp)), "rpc-error");
-    lyd_find_sibling_opaq_next(lyd_child(lyd_child(envp)), "error-tag", &node);
+    schema = lys_find_path(LYD_CTX(envp), NULL, "/ietf-netconf:rpc-error/error-tag", 0);
+    lyd_find_sibling_val(lyd_child(lyd_child(envp)), schema, NULL, 0, &node);
     assert_non_null(node);
-    assert_string_equal(((struct lyd_node_opaq *)node)->value, "missing-attribute");
+    assert_string_equal(lyd_get_value(node), "missing-attribute");
     lyd_free_tree(envp);
     assert_null(op);
 }

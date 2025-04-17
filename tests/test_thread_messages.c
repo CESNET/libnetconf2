@@ -46,8 +46,19 @@ typedef struct arg {
 struct nc_server_reply *
 rpc_clb(struct lyd_node *rpc, struct nc_session *session)
 {
-    (void)rpc; (void)session;
-    return nc_server_reply_ok();
+    struct lyd_node *e;
+
+    (void)session;
+
+    if (!strcmp(LYD_NAME(rpc), "get") || !strcmp(LYD_NAME(rpc), "delete-config")) {
+        return nc_server_reply_ok();
+    } else if (!strcmp(LYD_NAME(rpc), "commit")) {
+        e = nc_err(LYD_CTX(rpc), NC_ERR_RES_DENIED, NC_ERR_TYPE_APP);
+        nc_err_set_path(e, "/module-a:top/name");
+        return nc_server_reply_err(e);
+    } else {
+        nc_assert(0);
+    }
 }
 
 static void *
@@ -92,10 +103,14 @@ server_thread(void *arg)
 
     nc_server_notif_send(sess, notif, 1000);
 
+    /* commit in test */
+    poll = nc_ps_poll(ps, 1000, &sess);
+    nc_assert(poll == (NC_PSPOLL_RPC | NC_PSPOLL_REPLY_ERROR));
+
     nc_ps_clear(ps, 1, NULL);
     nc_ps_free(ps);
 
-    /* Waiting for end of test */
+    /* waiting for end of test */
     pthread_barrier_wait(&barrier);
 
     nc_server_notif_free(notif);
@@ -110,7 +125,7 @@ notif_thread(void *arg)
     struct lyd_node *op;
     NC_MSG_TYPE msgtype;
 
-    /* Sync threads for receiving message to increase chance of datarace */
+    /* sync threads for receiving message to increase chance of datarace */
     pthread_barrier_wait(&barrier_msg);
     do {
         msgtype = nc_recv_notif(sess, 1000, &envp, &op);
@@ -131,44 +146,47 @@ main(void)
     struct nc_rpc *rpc;
     uint64_t msgid;
     NC_MSG_TYPE msgtype;
-    const char *features[] = {"startup", NULL};
+    const char *features[] = {"startup", "candidate", NULL};
     arg_t thread_arg;
     pthread_t t[2];
+    char *str;
 
     pthread_barrier_init(&barrier, NULL, 2);
     pthread_barrier_init(&barrier_msg, NULL, 2);
 
-    /* Create a two pipes */
+    /* create a two pipes */
     nc_assert(pipe(pipes) != -1);
     nc_assert(pipe(pipes + 2) != -1);
     thread_arg.in = pipes[0];
     thread_arg.out = pipes[3];
 
-    /* Create both contexts */
+    /* create both contexts */
     nc_assert(ly_ctx_new(TESTS_DIR "/data/modules", 0, &server_ctx) == LY_SUCCESS);
     nc_assert(ly_ctx_load_module(server_ctx, "ietf-netconf", NULL, features));
     nc_assert(ly_ctx_load_module(server_ctx, "notif1", NULL, NULL));
+    nc_assert(ly_ctx_load_module(server_ctx, "module-a", NULL, NULL));
     thread_arg.ctx = server_ctx;
     nc_set_global_rpc_clb(rpc_clb);
 
     nc_assert(ly_ctx_new(TESTS_DIR "/data/modules", 0, &client_ctx) == LY_SUCCESS);
     nc_assert(ly_ctx_load_module(client_ctx, "ietf-netconf", NULL, features));
     nc_assert(ly_ctx_load_module(client_ctx, "notif1", NULL, NULL));
+    nc_assert(ly_ctx_load_module(client_ctx, "module-a", NULL, NULL));
 
-    /* Start server thread */
+    /* start server thread */
     pthread_create(&t[0], NULL, server_thread, &thread_arg);
     nc_client_init();
 
-    /* Listen for notifications */
+    /* listen for notifications */
     sess = nc_connect_inout(pipes[2], pipes[1], client_ctx);
     nc_assert(sess);
     pthread_create(&t[1], NULL, notif_thread, sess);
 
-    /* Send rpc */
+    /* send delete-config rpc */
     rpc = nc_rpc_delete(NC_DATASTORE_STARTUP, NULL, NC_PARAMTYPE_CONST);
     nc_assert(nc_send_rpc(sess, rpc, 1000, &msgid) == NC_MSG_RPC);
 
-    /* Sync threads for receiving message to increase chance of datarace */
+    /* sync threads for receiving message to increase chance of datarace */
     pthread_barrier_wait(&barrier_msg);
     do {
         msgtype = nc_recv_reply(sess, rpc, msgid, 1000, &envp, &op);
@@ -177,12 +195,33 @@ main(void)
     nc_rpc_free(rpc);
     lyd_free_tree(envp);
 
-    /* Waiting of end of test */
+    /* send commit rpc */
+    rpc = nc_rpc_commit(0, 0, NULL, NULL, NC_PARAMTYPE_CONST);
+    nc_assert(nc_send_rpc(sess, rpc, 1000, &msgid) == NC_MSG_RPC);
+    do {
+        msgtype = nc_recv_reply(sess, rpc, msgid, 1000, &envp, &op);
+    } while (msgtype == NC_MSG_NOTIF);
+    nc_assert(msgtype == NC_MSG_REPLY);
+    nc_rpc_free(rpc);
+
+    lyd_print_mem(&str, envp, LYD_XML, LYD_PRINT_SHRINK);
+    nc_assert(!strcmp(str,
+            "<rpc-reply xmlns=\"urn:ietf:params:xml:ns:netconf:base:1.0\" message-id=\"3\"><rpc-error>"
+            "<error-type>application</error-type>"
+            "<error-tag>resource-denied</error-tag>"
+            "<error-severity>error</error-severity>"
+            "<error-path xmlns:a=\"urn:jmu:params:xml:ns:yang:module-a\">/a:top/a:name</error-path>"
+            "<error-message xml:lang=\"en\">Request could not be completed because of insufficient resources.</error-message>"
+            "</rpc-error></rpc-reply>"));
+    free(str);
+    lyd_free_tree(envp);
+
+    /* waiting of end of test */
     pthread_barrier_wait(&barrier);
     pthread_join(t[0], NULL);
     pthread_join(t[1], NULL);
 
-    /* Cleanup */
+    /* cleanup */
     nc_session_free(sess, NULL);
     ly_ctx_destroy(server_ctx);
     ly_ctx_destroy(client_ctx);

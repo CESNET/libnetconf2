@@ -261,14 +261,21 @@ nc_err(const struct ly_ctx *ctx, NC_ERR tag, ...)
 {
     va_list ap;
     struct lyd_node *err = NULL;
+    const struct lys_module *nc_mod;
     NC_ERR_TYPE type;
     const char *arg1, *arg2;
     uint32_t sid;
 
-    NC_CHECK_ARG_RET(NULL, tag, NULL);
+    NC_CHECK_ARG_RET(NULL, tag, ctx, NULL);
+
+    nc_mod = ly_ctx_get_module_implemented(ctx, "ietf-netconf");
+    if (!nc_mod) {
+        ERR(NULL, "Module \"ietf-netconf\" missing in the context.");
+        return NULL;
+    }
 
     /* rpc-error */
-    if (lyd_new_opaq2(NULL, ctx, "rpc-error", NULL, NULL, NC_NS_BASE, &err)) {
+    if (lyd_new_inner(NULL, nc_mod, "rpc-error", 0, &err)) {
         return NULL;
     }
 
@@ -337,17 +344,17 @@ nc_err(const struct ly_ctx *ctx, NC_ERR tag, ...)
         ERRARG(NULL, "tag");
         goto fail;
     }
-    if (lyd_new_opaq2(err, NULL, "error-type", nc_err_type2str(type), NULL, NC_NS_BASE, NULL)) {
+    if (lyd_new_term(err, NULL, "error-type", nc_err_type2str(type), 0, NULL)) {
         goto fail;
     }
 
     /* error-tag */
-    if (lyd_new_opaq2(err, NULL, "error-tag", nc_err_tag2str(tag), NULL, NC_NS_BASE, NULL)) {
+    if (lyd_new_term(err, NULL, "error-tag", nc_err_tag2str(tag), 0, NULL)) {
         goto fail;
     }
 
     /* error-severity */
-    if (lyd_new_opaq2(err, NULL, "error-severity", "error", NULL, NC_NS_BASE, NULL)) {
+    if (lyd_new_term(err, NULL, "error-severity", "error", 0, NULL)) {
         goto fail;
     }
 
@@ -474,13 +481,17 @@ fail:
 API NC_ERR_TYPE
 nc_err_get_type(const struct lyd_node *err)
 {
-    struct lyd_node *match;
+    const struct lysc_node *schema;
+    struct lyd_node *match = NULL;
 
     NC_CHECK_ARG_RET(NULL, err, 0);
 
-    lyd_find_sibling_opaq_next(lyd_child(err), "error-type", &match);
+    schema = lys_find_path(NULL, err->schema, "error-type", 0);
+    if (schema) {
+        lyd_find_sibling_val(lyd_child(err), schema, NULL, 0, &match);
+    }
     if (match) {
-        return nc_err_str2type(((struct lyd_node_opaq *)match)->value);
+        return nc_err_str2type(lyd_get_value(match));
     }
 
     return 0;
@@ -489,13 +500,17 @@ nc_err_get_type(const struct lyd_node *err)
 API NC_ERR
 nc_err_get_tag(const struct lyd_node *err)
 {
-    struct lyd_node *match;
+    const struct lysc_node *schema;
+    struct lyd_node *match = NULL;
 
     NC_CHECK_ARG_RET(NULL, err, 0);
 
-    lyd_find_sibling_opaq_next(lyd_child(err), "error-tag", &match);
+    schema = lys_find_path(NULL, err->schema, "error-tag", 0);
+    if (schema) {
+        lyd_find_sibling_val(lyd_child(err), schema, NULL, 0, &match);
+    }
     if (match) {
-        return nc_err_str2tag(((struct lyd_node_opaq *)match)->value);
+        return nc_err_str2tag(lyd_get_value(match));
     }
 
     return 0;
@@ -504,25 +519,26 @@ nc_err_get_tag(const struct lyd_node *err)
 API int
 nc_err_set_app_tag(struct lyd_node *err, const char *error_app_tag)
 {
-    struct lyd_node *match, *prev_anchor;
+    const struct lysc_node *schema;
+    struct lyd_node *match;
 
     NC_CHECK_ARG_RET(NULL, err, error_app_tag, -1);
 
+    /* find the schema node */
+    schema = lys_find_path(NULL, err->schema, "error-app-tag", 0);
+    if (!schema) {
+        return -1;
+    }
+
     /* remove previous node */
-    lyd_find_sibling_opaq_next(lyd_child(err), "error-app-tag", &match);
+    lyd_find_sibling_val(lyd_child(err), schema, NULL, 0, &match);
     if (match) {
         lyd_free_tree(match);
     }
 
-    /* find the previous node anchor */
-    lyd_find_sibling_opaq_next(lyd_child(err), "error-severity", &prev_anchor);
-
-    /* create the node at the right place */
-    if (lyd_new_opaq2(err, NULL, "error-app-tag", error_app_tag, NULL, NC_NS_BASE, &match)) {
+    /* create the node */
+    if (lyd_new_term(err, NULL, "error-app-tag", error_app_tag, 0, &match)) {
         return -1;
-    }
-    if (prev_anchor) {
-        lyd_insert_after(prev_anchor, match);
     }
 
     return 0;
@@ -531,13 +547,17 @@ nc_err_set_app_tag(struct lyd_node *err, const char *error_app_tag)
 API const char *
 nc_err_get_app_tag(const struct lyd_node *err)
 {
-    struct lyd_node *match;
+    const struct lysc_node *schema;
+    struct lyd_node *match = NULL;
 
     NC_CHECK_ARG_RET(NULL, err, NULL);
 
-    lyd_find_sibling_opaq_next(lyd_child(err), "error-app-tag", &match);
+    schema = lys_find_path(NULL, err->schema, "error-tag", 0);
+    if (schema) {
+        lyd_find_sibling_val(lyd_child(err), schema, NULL, 0, &match);
+    }
     if (match) {
-        return ((struct lyd_node_opaq *)match)->value;
+        return lyd_get_value(match);
     }
 
     return NULL;
@@ -546,28 +566,26 @@ nc_err_get_app_tag(const struct lyd_node *err)
 API int
 nc_err_set_path(struct lyd_node *err, const char *error_path)
 {
-    struct lyd_node *match, *prev_anchor;
+    const struct lysc_node *schema;
+    struct lyd_node *match;
 
     NC_CHECK_ARG_RET(NULL, err, error_path, -1);
 
+    /* find the schema node */
+    schema = lys_find_path(NULL, err->schema, "error-path", 0);
+    if (!schema) {
+        return -1;
+    }
+
     /* remove previous node */
-    lyd_find_sibling_opaq_next(lyd_child(err), "error-path", &match);
+    lyd_find_sibling_val(lyd_child(err), schema, NULL, 0, &match);
     if (match) {
         lyd_free_tree(match);
     }
 
-    /* find the previous node anchor */
-    lyd_find_sibling_opaq_next(lyd_child(err), "error-app-tag", &prev_anchor);
-    if (!prev_anchor) {
-        lyd_find_sibling_opaq_next(lyd_child(err), "error-severity", &prev_anchor);
-    }
-
-    /* create the node at the right place */
-    if (lyd_new_opaq2(err, NULL, "error-path", error_path, NULL, NC_NS_BASE, &match)) {
+    /* create the node */
+    if (lyd_new_term(err, NULL, "error-path", error_path, 0, &match)) {
         return -1;
-    }
-    if (prev_anchor) {
-        lyd_insert_after(prev_anchor, match);
     }
 
     return 0;
@@ -576,13 +594,17 @@ nc_err_set_path(struct lyd_node *err, const char *error_path)
 API const char *
 nc_err_get_path(const struct lyd_node *err)
 {
-    struct lyd_node *match;
+    const struct lysc_node *schema;
+    struct lyd_node *match = NULL;
 
     NC_CHECK_ARG_RET(NULL, err, NULL);
 
-    lyd_find_sibling_opaq_next(lyd_child(err), "error-path", &match);
+    schema = lys_find_path(NULL, err->schema, "error-path", 0);
+    if (schema) {
+        lyd_find_sibling_val(lyd_child(err), schema, NULL, 0, &match);
+    }
     if (match) {
-        return ((struct lyd_node_opaq *)match)->value;
+        return lyd_get_value(match);
     }
 
     return NULL;
@@ -602,13 +624,13 @@ nc_err_set_msg(struct lyd_node *err, const char *error_message, const char *lang
         lyd_free_tree(match);
     }
 
-    /* find the previous node anchor */
-    lyd_find_sibling_opaq_next(lyd_child(err), "error-path", &prev_anchor);
-    if (!prev_anchor) {
-        lyd_find_sibling_opaq_next(lyd_child(err), "error-app-tag", &prev_anchor);
+    /* find the previous node anchor (last non-opaque node) */
+    prev_anchor = lyd_child(err);
+    while (prev_anchor && prev_anchor->next && prev_anchor->next->schema) {
+        prev_anchor = prev_anchor->next;
     }
-    if (!prev_anchor) {
-        lyd_find_sibling_opaq_next(lyd_child(err), "error-severity", &prev_anchor);
+    if (!prev_anchor->schema) {
+        prev_anchor = NULL;
     }
 
     /* create the node at the right place */
@@ -617,6 +639,9 @@ nc_err_set_msg(struct lyd_node *err, const char *error_message, const char *lang
     }
     if (prev_anchor) {
         lyd_insert_after(prev_anchor, match);
+    } else if (match->prev != match) {
+        /* some opaque nodes existed, this must be the first */
+        lyd_insert_before(lyd_child(err), match);
     }
 
     if (lang && lyd_new_attr(match, NULL, "xml:lang", lang, &attr)) {
