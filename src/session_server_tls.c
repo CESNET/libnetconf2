@@ -331,8 +331,8 @@ static int
 nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username)
 {
     int ret = 1, i, cert_count, fingerprint_match;
-    char *digest_md5 = NULL, *digest_sha1 = NULL, *digest_sha224 = NULL;
-    char *digest_sha256 = NULL, *digest_sha384 = NULL, *digest_sha512 = NULL;
+    char *digest_md5, *digest_sha1, *digest_sha224;
+    char *digest_sha256, *digest_sha384, *digest_sha512;
     void *cert;
 
     /* first make sure the entry is valid */
