@@ -109,11 +109,6 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_DROPPED;
                 return -1;
-            } else if (r > (count - readd)) {
-                ERR(session, "Invalid number of bytes read (%ld > %u)", r, (count - readd));
-                session->status = NC_STATUS_INVALID;
-                session->term_reason = NC_SESSION_TERM_DROPPED;
-                return -1;
             }
             break;
 
@@ -138,8 +133,6 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
                     return -1;
                 }
                 break;
-            } else if ((uint32_t) res > (count - readd)) {
-                return -1;
             } else {
                 r = (ssize_t) res;
             }
@@ -632,9 +625,6 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
             } else if (c < 0) {
                 ERR(session, "Socket error (%s).", strerror(errno));
                 return -1;
-            } else if (c > (count - written)) {
-                ERR(session, "invalid number of bytes written (%ld > %u).", c, (count - written));
-                return -1;
             }
             break;
 
@@ -968,10 +958,9 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
 
         switch (reply->type) {
         case NC_RPL_OK:
-            if ((reply_envp == NULL) || (rpc_envp == NULL) || lyd_new_opaq2(reply_envp, NULL, "ok", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns, NULL)) {
-                if (reply_envp != NULL) {
-                    lyd_free_tree(reply_envp);
-                }
+            assert(rpc_envp != NULL);
+            if (lyd_new_opaq2(reply_envp, NULL, "ok", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns, NULL)) {
+                lyd_free_tree(reply_envp);
 
                 ERRINT;
                 ret = NC_MSG_ERROR;
