@@ -854,11 +854,9 @@ nc_server_init(void)
         goto error;
     }
 
-#ifdef HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP
     if (attr_p) {
         pthread_rwlockattr_destroy(attr_p);
     }
-#endif
 
 #ifdef NC_ENABLED_SSH_TLS
     if (curl_global_init(CURL_GLOBAL_SSL | CURL_GLOBAL_ACK_EINTR)) {
@@ -900,11 +898,9 @@ nc_server_init(void)
     return 0;
 
 error:
-#ifdef HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP
     if (attr_p) {
         pthread_rwlockattr_destroy(attr_p);
     }
-#endif
     return -1;
 }
 
@@ -2775,9 +2771,6 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
     sock = nc_sock_connect(endpt->src_addr, endpt->src_port, endpt->dst_addr, endpt->dst_port,
             NC_CH_CONNECT_TIMEOUT, &endpt->ka, &endpt->sock_pending, &ip_host);
     if (sock < 0) {
-        if (ip_host) {
-            free(ip_host);
-        }
         return NC_MSG_ERROR;
     }
 
@@ -3997,7 +3990,6 @@ nc_server_notif_cert_exp_thread(void *arg)
 
             /* config changed, reload the certificates and intervals */
             nc_server_notif_cert_exp_dates_destroy(exp_dates, exp_date_count);
-            exp_dates = NULL;
 
             nc_server_notif_cert_exp_intervals_get(default_intervals, 3, &intervals, &interval_count);
 
