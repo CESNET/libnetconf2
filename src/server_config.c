@@ -2841,7 +2841,7 @@ nc_server_config_endpoint_reference(const struct lyd_node *node, enum nc_operati
             /* listen */
             free(endpt->referenced_endpt_name);
             endpt->referenced_endpt_name = NULL;
-        } else if (ch_endpt) {
+        } else {
             /* call home */
             free(ch_endpt->referenced_endpt_name);
             ch_endpt->referenced_endpt_name = NULL;
@@ -2869,7 +2869,7 @@ nc_server_config_endpoint_reference(const struct lyd_node *node, enum nc_operati
             free(endpt->referenced_endpt_name);
             endpt->referenced_endpt_name = strdup(lyd_get_value(node));
             NC_CHECK_ERRMEM_GOTO(!endpt->referenced_endpt_name, ret = 1, cleanup);
-        } else if (ch_endpt) {
+        } else {
             free(ch_endpt->referenced_endpt_name);
             ch_endpt->referenced_endpt_name = strdup(lyd_get_value(node));
             NC_CHECK_ERRMEM_GOTO(!ch_endpt->referenced_endpt_name, ret = 1, cleanup);
@@ -3232,12 +3232,8 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
 
     assert(!strcmp(LYD_NAME(node), "cert-to-name"));
 
-    /* find the list's key */
-    if (lyd_find_path(node, "id", 0, &n)) {
-        ERR(NULL, "Missing CTN id.");
-        ret = 1;
-        goto cleanup;
-    }
+    /* find the list's key - ignore result using assert of reference argument instead */
+    lyd_find_path(node, "id", 0, &n);
     assert(n);
     id = ((struct lyd_node_term *)n)->value.uint32;
 
