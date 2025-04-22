@@ -64,7 +64,7 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
 {
     uint32_t readd = 0;
     ssize_t r = -1;
-    int fd, interrupted, res;
+    int fd, interrupted;
     struct timespec ts_inact_timeout;
 
     assert(session);
@@ -115,17 +115,16 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
 #ifdef NC_ENABLED_SSH_TLS
         case NC_TI_SSH:
             /* read via libssh */
-            res = ssh_channel_read(session->ti.libssh.channel, buf + readd, count - readd, 0);
-            if (res == SSH_AGAIN) {
+            r = ssh_channel_read(session->ti.libssh.channel, buf + readd, count - readd, 0);
+            if (r == SSH_AGAIN) {
                 r = 0;
                 break;
-            } else if (res == SSH_ERROR) {
+            } else if (r == SSH_ERROR) {
                 ERR(session, "Reading from the SSH channel failed (%s).", ssh_get_error(session->ti.libssh.session));
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_OTHER;
                 return -1;
-            } else if (res == 0) {
-                r = 0;
+            } else if (r == 0) {
                 if (ssh_channel_is_eof(session->ti.libssh.channel)) {
                     ERR(session, "SSH channel unexpected EOF.");
                     session->status = NC_STATUS_INVALID;
@@ -133,20 +132,14 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
                     return -1;
                 }
                 break;
-            } else {
-                r = (ssize_t) res;
             }
             break;
 
         case NC_TI_TLS:
-            res = nc_tls_read_wrap(session, (unsigned char *)buf + readd, count - readd);
-            if (res < 0) {
+            r = nc_tls_read_wrap(session, (unsigned char *)buf + readd, count - readd);
+            if (r < 0) {
                 /* non-recoverable error */
-                return -1;
-            } else if ((uint32_t) res > (count - readd)) {
-                return -1;
-            } else {
-                r = (ssize_t) res;
+                return r;
             }
             break;
 #endif /* NC_ENABLED_SSH_TLS */
@@ -167,13 +160,9 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
                 session->term_reason = NC_SESSION_TERM_OTHER;
                 return -1;
             }
-        } else if ((r < 0) || (r > (UINT32_MAX - readd))) {
-            session->status = NC_STATUS_INVALID;
-            session->term_reason = NC_SESSION_TERM_OTHER;
-            return -1;
         } else {
             /* something read */
-            readd += (uint32_t) r;
+            readd += r;
 
             /* reset inactive timeout */
             nc_timeouttime_get(&ts_inact_timeout, inact_timeout);
@@ -592,8 +581,7 @@ struct nc_wclb_arg {
 static int
 nc_write(struct nc_session *session, const void *buf, uint32_t count)
 {
-    ssize_t c;
-    int fd, interrupted, res;
+    int c, fd, interrupted;
     uint32_t written = 0;
 
     if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
@@ -617,9 +605,9 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
         case NC_TI_UNIX:
             fd = session->ti_type == NC_TI_FD ? session->ti.fd.out : session->ti.unixsock.sock;
             c = write(fd, (char *)(buf + written), count - written);
-            if ((c == -1) && (errno == EAGAIN)) {
+            if ((c < 0) && (errno == EAGAIN)) {
                 c = 0;
-            } else if ((c == -1) && (errno == EINTR)) {
+            } else if ((c < 0) && (errno == EINTR)) {
                 c = 0;
                 interrupted = 1;
             } else if (c < 0) {
@@ -640,20 +628,18 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
                 session->term_reason = NC_SESSION_TERM_DROPPED;
                 return -1;
             }
-            res = ssh_channel_write(session->ti.libssh.channel, (char *)(buf + written), count - written);
-            if ((res == SSH_ERROR) || (res == -1) || ((uint32_t) res > (count - written))) {
+            c = ssh_channel_write(session->ti.libssh.channel, (char *)(buf + written), count - written);
+            if ((c == SSH_ERROR) || (c == -1)) {
                 ERR(session, "SSH channel write failed.");
                 return -1;
             }
-            c = (ssize_t) res;
             break;
         case NC_TI_TLS:
-            res = nc_tls_write_wrap(session, (const unsigned char *)(buf + written), count - written);
-            if ((res < 0) || ((uint32_t) res > (count - written))) {
+            c = nc_tls_write_wrap(session, (const unsigned char *)(buf + written), count - written);
+            if (c < 0) {
                 /* possible client dc, or some socket/TLS communication error */
                 return -1;
             }
-            c = (ssize_t) res;
             break;
 #endif /* NC_ENABLED_SSH_TLS */
         default:
@@ -666,10 +652,10 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
             usleep(NC_TIMEOUT_STEP);
         }
 
-        written += (uint32_t) c;
+        written += c;
     } while (written < count);
 
-    return (written > INT_MAX) ? -1 : (int) written;
+    return written;
 }
 
 /**
@@ -684,21 +670,21 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
 static int
 nc_write_starttag_and_msg(struct nc_session *session, const void *buf, uint32_t count)
 {
-    int ret = 0, r, bufsize;
+    int ret = 0, r;
     char chunksize[24];
 
     if (session->version == NC_VERSION_11) {
-        bufsize = sprintf(chunksize, "\n#%" PRIu32 "\n", count);
+        r = sprintf(chunksize, "\n#%" PRIu32 "\n", count);
 
-        r = nc_write(session, chunksize, bufsize);
-        if ((r < 0) || (r > bufsize)) {
+        r = nc_write(session, chunksize, r);
+        if (r == -1) {
             return -1;
         }
         ret += r;
     }
 
     r = nc_write(session, buf, count);
-    if ((r < 0) || ((uint32_t) r > (UINT32_MAX - ret))) {
+    if (r == -1) {
         return -1;
     }
     ret += r;
@@ -761,24 +747,23 @@ nc_write_clb_flush(struct nc_wclb_arg *warg)
 static ssize_t
 nc_write_clb(void *arg, const void *buf, uint32_t count, int xmlcontent)
 {
-    ssize_t ret = 0;
-    int c;
+    ssize_t ret = 0, c;
     uint32_t l;
     struct nc_wclb_arg *warg = arg;
 
     if (!buf) {
         c = nc_write_clb_flush(warg);
-        if (c < 0) {
+        if (c == -1) {
             return -1;
         }
-        ret += (ssize_t) c;
+        ret += c;
 
         /* endtag */
         c = nc_write_endtag(warg->session);
-        if ((c < 0) || ((ssize_t) c > (SSIZE_MAX - ret))) {
+        if (c == -1) {
             return -1;
         }
-        ret += (ssize_t) c;
+        ret += c;
 
         return ret;
     }
@@ -786,19 +771,19 @@ nc_write_clb(void *arg, const void *buf, uint32_t count, int xmlcontent)
     if (warg->len && (warg->len + count > WRITE_BUFSIZE)) {
         /* dump current buffer */
         c = nc_write_clb_flush(warg);
-        if (c < 0) {
+        if (c == -1) {
             return -1;
         }
-        ret += (ssize_t) c;
+        ret += c;
     }
 
     if (!xmlcontent && (count > WRITE_BUFSIZE)) {
         /* write directly */
         c = nc_write_starttag_and_msg(warg->session, buf, count);
-        if (c < 0) {
+        if (c == -1) {
             return -1;
         }
-        ret += (ssize_t) c;
+        ret += c;
     } else {
         /* keep in buffer and write later */
         if (xmlcontent) {
@@ -806,7 +791,7 @@ nc_write_clb(void *arg, const void *buf, uint32_t count, int xmlcontent)
                 if (warg->len + 5 >= WRITE_BUFSIZE) {
                     /* buffer is full */
                     c = nc_write_clb_flush(warg);
-                    if (c < 0) {
+                    if (c == -1) {
                         return -1;
                     }
                 }
