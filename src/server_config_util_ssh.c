@@ -498,13 +498,18 @@ _nc_server_config_add_ssh_user_password(const struct ly_ctx *ctx, const char *tr
     int ret = 0;
     char *hashed_pw = NULL;
     const char *salt = "$6$idsizuippipk$";
-    static struct crypt_data cdata;
+    struct crypt_data *cdata = NULL;
 
     NC_CHECK_ARG_RET(NULL, ctx, tree_path, password, config, 1);
 
-    memset(&cdata, 0, sizeof(struct crypt_data));
+    cdata = (struct crypt_data *) calloc(sizeof(struct crypt_data), 1);
+    if (cdata == NULL) {
+        ERR(NULL, "Allocation of crypt_data struct failed.");
+        ret = 1;
+        goto cleanup;
+    }
 
-    hashed_pw = crypt_r(password, salt, &cdata);
+    hashed_pw = crypt_r(password, salt, cdata);
     if (!hashed_pw) {
         ERR(NULL, "Hashing password failed (%s).", strerror(errno));
         ret = 1;
@@ -517,6 +522,7 @@ _nc_server_config_add_ssh_user_password(const struct ly_ctx *ctx, const char *tr
     }
 
 cleanup:
+    free(cdata);
     return ret;
 }
 
