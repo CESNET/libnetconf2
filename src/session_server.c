@@ -822,40 +822,61 @@ nc_server_keylog_file_open(void)
 
 #endif
 
+/**
+ * @brief Initialize a rwlock.
+ *
+ * @param[in] rwlock RW lock to initialize.
+ * @return errno.
+ */
+static int
+nc_server_init_rwlock(pthread_rwlock_t *rwlock)
+{
+#ifdef HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP
+    int rc = 0;
+    pthread_rwlockattr_t attr;
+
+    if ((rc = pthread_rwlockattr_init(&attr))) {
+        ERR(NULL, "%s: failed to init attribute (%s).", __func__, strerror(rc));
+        return rc;
+    }
+
+    if ((rc = pthread_rwlockattr_setkind_np(&attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP))) {
+        ERR(NULL, "%s: failed to set attribute (%s).", __func__, strerror(rc));
+        goto cleanup;
+    }
+
+    if ((rc = pthread_rwlock_init(rwlock, &attr))) {
+        ERR(NULL, "%s: failed to init rwlock (%s).", __func__, strerror(rc));
+        goto cleanup;
+    }
+
+cleanup:
+    pthread_rwlockattr_destroy(&attr);
+    return rc;
+#else
+    int rc = 0;
+
+    if ((rc = pthread_rwlock_init(rwlock, NULL))) {
+        ERR(NULL, "%s: failed to init rwlock (%s).", __func__, strerror(rc));
+    }
+
+    return rc;
+#endif
+}
+
 API int
 nc_server_init(void)
 {
-    pthread_rwlockattr_t *attr_p = NULL;
     int r;
 
     ATOMIC_STORE_RELAXED(server_opts.new_session_id, 1);
     ATOMIC_STORE_RELAXED(server_opts.new_client_id, 1);
 
-#ifdef HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP
-    pthread_rwlockattr_t attr;
-
-    if ((r = pthread_rwlockattr_init(&attr))) {
-        ERR(NULL, "%s: failed init attribute (%s).", __func__, strerror(r));
+    if (nc_server_init_rwlock(&server_opts.config_lock)) {
         goto error;
     }
-    attr_p = &attr;
-    if ((r = pthread_rwlockattr_setkind_np(&attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP))) {
-        ERR(NULL, "%s: failed set attribute (%s).", __func__, strerror(r));
+    if (nc_server_init_rwlock(&server_opts.ch_client_lock)) {
         goto error;
-    }
-#endif
-
-    if ((r = pthread_rwlock_init(&server_opts.config_lock, attr_p))) {
-        ERR(NULL, "%s: failed to init rwlock(%s).", __func__, strerror(r));
-        goto error;
-    }
-    if ((r = pthread_rwlock_init(&server_opts.ch_client_lock, attr_p))) {
-        ERR(NULL, "%s: failed to init rwlock(%s).", __func__, strerror(r));
-        goto error;
-    }
-
-    if (attr_p) {
-        pthread_rwlockattr_destroy(attr_p);
     }
 
 #ifdef NC_ENABLED_SSH_TLS
@@ -898,9 +919,6 @@ nc_server_init(void)
     return 0;
 
 error:
-    if (attr_p) {
-        pthread_rwlockattr_destroy(attr_p);
-    }
     return -1;
 }
 
