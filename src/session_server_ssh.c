@@ -625,7 +625,8 @@ static int
 nc_server_ssh_compare_password(const char *stored_pw, const char *received_pw)
 {
     char *received_pw_hash = NULL;
-    struct crypt_data cdata = {0};
+    struct crypt_data *cdata;
+    int ret;
 
     NC_CHECK_ARG_RET(NULL, stored_pw, received_pw, 1);
 
@@ -645,13 +646,23 @@ nc_server_ssh_compare_password(const char *stored_pw, const char *received_pw)
         return strcmp(stored_pw + 3, received_pw);
     }
 
-    received_pw_hash = crypt_r(received_pw, stored_pw, &cdata);
-    if (!received_pw_hash) {
-        ERR(NULL, "Hashing the password failed (%s).", strerror(errno));
+    cdata = (struct crypt_data *) calloc(sizeof(struct crypt_data), 1);
+    if (cdata == NULL) {
+        ERR(NULL, "Allocation of crypt_data struct failed.");
         return 1;
     }
 
-    return strcmp(received_pw_hash, stored_pw);
+    received_pw_hash = crypt_r(received_pw, stored_pw, cdata);
+    if (!received_pw_hash) {
+        ERR(NULL, "Hashing the password failed (%s).", strerror(errno));
+        free(cdata);
+        return 1;
+    }
+
+    ret = strcmp(received_pw_hash, stored_pw);
+    free(cdata);
+
+    return ret;
 }
 
 API int

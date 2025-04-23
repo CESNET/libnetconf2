@@ -331,8 +331,8 @@ static int
 nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username)
 {
     int ret = 1, i, cert_count, fingerprint_match;
-    char *digest_md5 = NULL, *digest_sha1 = NULL, *digest_sha224 = NULL;
-    char *digest_sha256 = NULL, *digest_sha384 = NULL, *digest_sha512 = NULL;
+    char *digest_md5, *digest_sha1, *digest_sha224;
+    char *digest_sha256, *digest_sha384, *digest_sha512;
     void *cert;
 
     /* first make sure the entry is valid */
@@ -372,7 +372,6 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username
                 fingerprint_match = 1;
             }
             free(digest_md5);
-            digest_md5 = NULL;
 
             /* SHA-1 */
         } else if (!strncmp(ctn->fingerprint, "02", 2)) {
@@ -388,7 +387,6 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username
                 fingerprint_match = 1;
             }
             free(digest_sha1);
-            digest_sha1 = NULL;
 
             /* SHA-224 */
         } else if (!strncmp(ctn->fingerprint, "03", 2)) {
@@ -404,7 +402,6 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username
                 fingerprint_match = 1;
             }
             free(digest_sha224);
-            digest_sha224 = NULL;
 
             /* SHA-256 */
         } else if (!strncmp(ctn->fingerprint, "04", 2)) {
@@ -420,7 +417,6 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username
                 fingerprint_match = 1;
             }
             free(digest_sha256);
-            digest_sha256 = NULL;
 
             /* SHA-384 */
         } else if (!strncmp(ctn->fingerprint, "05", 2)) {
@@ -436,7 +432,6 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username
                 fingerprint_match = 1;
             }
             free(digest_sha384);
-            digest_sha384 = NULL;
 
             /* SHA-512 */
         } else if (!strncmp(ctn->fingerprint, "06", 2)) {
@@ -452,7 +447,6 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username
                 fingerprint_match = 1;
             }
             free(digest_sha512);
-            digest_sha512 = NULL;
 
             /* unknown */
         } else {

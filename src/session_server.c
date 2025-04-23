@@ -2766,7 +2766,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
     const struct ly_ctx *ctx = NULL;
     int sock, ret;
     struct timespec ts_cur;
-    char *ip_host;
+    char *ip_host = NULL;
 
     sock = nc_sock_connect(endpt->src_addr, endpt->src_port, endpt->dst_addr, endpt->dst_port,
             NC_CH_CONNECT_TIMEOUT, &endpt->ka, &endpt->sock_pending, &ip_host);

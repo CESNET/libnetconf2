@@ -943,6 +943,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
 
         switch (reply->type) {
         case NC_RPL_OK:
+            assert(rpc_envp != NULL);
             if (lyd_new_opaq2(reply_envp, NULL, "ok", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns, NULL)) {
                 lyd_free_tree(reply_envp);
 

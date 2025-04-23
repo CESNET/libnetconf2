@@ -3232,7 +3232,7 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
 
     assert(!strcmp(LYD_NAME(node), "cert-to-name"));
 
-    /* find the list's key */
+    /* find the list's key - ignore result using assert of reference argument instead */
     lyd_find_path(node, "id", 0, &n);
     assert(n);
     id = ((struct lyd_node_term *)n)->value.uint32;

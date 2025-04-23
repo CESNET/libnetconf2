@@ -881,8 +881,25 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     struct ly_in *msg;
     struct timespec ts;
     void *p;
+    NC_STATUS status;
 
-    if (!session || (session->status == NC_STATUS_CLOSING)) {
+    if (!session) {
+        return;
+    }
+
+    if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
+        /* CH LOCK */
+        pthread_mutex_lock(&session->opts.server.ch_lock);
+    }
+
+    status = session->status;
+
+    if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
+        /* CH UNLOCK */
+        pthread_mutex_unlock(&session->opts.server.ch_lock);
+    }
+
+    if (status == NC_STATUS_CLOSING) {
         return;
     }
 
