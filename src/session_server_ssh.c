@@ -923,7 +923,7 @@ cleanup:
  * @return 0 on success, non-zero otherwise.
  */
 static int
-nc_server_ssh_auth_kbdint_system(struct nc_session *session, const char *username, ssh_message msg)
+nc_server_ssh_auth_kbdint_passwd(struct nc_session *session, const char *username, ssh_message msg)
 {
     int ret = 0, n_answers;
     const char *name = "Keyboard-Interactive Authentication";
@@ -974,6 +974,32 @@ cleanup:
 }
 
 #endif
+
+/**
+ * @brief Keyboard-interactive authentication method using the system's authentication methods.
+ *
+ * @param[in] session NETCONF session.
+ * @param[in] msg SSH message with a keyboard-interactive authentication request.
+ * @return 0 on success, non-zero otherwise.
+ */
+static int
+nc_server_ssh_auth_kbdint_system(struct nc_session *session, ssh_message msg)
+{
+    int rc;
+
+#ifdef HAVE_LIBPAM
+    /* authenticate using PAM */
+    rc = nc_server_ssh_auth_kbdint_pam(session, session->username, msg);
+#elif defined (HAVE_SHADOW)
+    /* authenticate using /etc/passwd and /etc/shadow */
+    rc = nc_server_ssh_auth_kbdint_passwd(session, session->username, msg);
+#else
+    ERR(NULL, "Keyboard-interactive method not supported.");
+    rc = 1;
+#endif
+
+    return rc;
+}
 
 API void
 nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg, void *user_data),
@@ -1319,22 +1345,19 @@ nc_server_ssh_auth_kbdint(struct nc_session *session, int local_users_supported,
 
     assert(!local_users_supported || auth_client);
 
-    if (local_users_supported && !auth_client->kb_int_enabled) {
+    if (local_users_supported && !auth_client->kbdint_method) {
         VRB(session, "User \"%s\" does not have Keyboard-interactive method configured, but a request was received.", session->username);
         return 1;
     } else if (server_opts.interactive_auth_clb) {
         rc = server_opts.interactive_auth_clb(session, session->ti.libssh.session, msg, server_opts.interactive_auth_data);
     } else {
-#ifdef HAVE_LIBPAM
-        /* authenticate using PAM */
-        rc = nc_server_ssh_auth_kbdint_pam(session, session->username, msg);
-#elif defined (HAVE_SHADOW)
-        /* authenticate using the system */
-        rc = nc_server_ssh_auth_kbdint_system(session, session->username, msg);
-#else
-        ERR(NULL, "Keyboard-interactive method not supported.");
-        return 1;
-#endif
+        /* perform the authentication based on the configured method */
+        if (auth_client->kbdint_method == NC_KBDINT_AUTH_METHOD_SYSTEM) {
+            rc = nc_server_ssh_auth_kbdint_system(session, msg);
+        } else {
+            ERR(session, "Keyboard-interactive authentication method not supported.");
+            rc = 1;
+        }
     }
 
     return rc ? 1 : 0;
@@ -1509,7 +1532,7 @@ nc_server_ssh_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, 
                 auth_state->methods |= SSH_AUTH_METHOD_PASSWORD;
                 auth_state->method_count++;
             }
-            if (auth_client->kb_int_enabled) {
+            if (auth_client->kbdint_method) {
                 auth_state->methods |= SSH_AUTH_METHOD_INTERACTIVE;
                 auth_state->method_count++;
             }

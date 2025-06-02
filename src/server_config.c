@@ -2189,6 +2189,33 @@ cleanup:
 }
 
 static int
+nc_server_config_keyboard_interactive(const struct lyd_node *node, enum nc_operation op)
+{
+    struct nc_auth_client *auth_client;
+    struct nc_ch_client *ch_client = NULL;
+
+    assert(!strcmp(LYD_NAME(node), "keyboard-interactive"));
+
+    if (op != NC_OP_DELETE) {
+        /* only do something on delete */
+        return 0;
+    }
+
+    if (is_ch(node) && nc_server_config_get_ch_client(node, &ch_client)) {
+        return 1;
+    }
+
+    if (nc_server_config_get_auth_client(node, ch_client, &auth_client)) {
+        return 1;
+    }
+
+    /* delete the keyboard-interactive authentication method */
+    auth_client->kbdint_method = NC_KBDINT_AUTH_METHOD_NONE;
+
+    return 0;
+}
+
+static int
 nc_server_config_use_system_auth(const struct lyd_node *node, enum nc_operation op)
 {
     int ret = 0;
@@ -2207,9 +2234,9 @@ nc_server_config_use_system_auth(const struct lyd_node *node, enum nc_operation 
     }
 
     if (op == NC_OP_CREATE) {
-        auth_client->kb_int_enabled = 1;
+        auth_client->kbdint_method = NC_KBDINT_AUTH_METHOD_SYSTEM;
     } else {
-        auth_client->kb_int_enabled = 0;
+        auth_client->kbdint_method = NC_KBDINT_AUTH_METHOD_NONE;
     }
 
 cleanup:
@@ -3598,6 +3625,8 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, enum nc_opera
         ret = nc_server_config_idle_time(node, op);
     } else if (!strcmp(name, "keepalives")) {
         ret = nc_server_config_keepalives(node, op);
+    } else if (!strcmp(name, "keyboard-interactive")) {
+        ret = nc_server_config_keyboard_interactive(node, op);
     } else if (!strcmp(name, "key-exchange-alg")) {
         ret = nc_server_config_kex_alg(node, op);
     } else if (!strcmp(name, "local-address")) {

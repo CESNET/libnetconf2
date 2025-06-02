@@ -91,6 +91,14 @@ enum nc_privkey_format {
 };
 
 /**
+ * @brief Enumeration of SSH keyboard-interactive authentication methods.
+ */
+enum nc_kbdint_auth_method {
+    NC_KBDINT_AUTH_METHOD_NONE = 0,     /**< Keyboard-interactive authentication disabled. */
+    NC_KBDINT_AUTH_METHOD_SYSTEM        /**< Keyboard-interactive authentication is left to the system (PAM, shadow, etc.). */
+};
+
+/**
  * @brief A basic certificate.
  */
 struct nc_certificate {
@@ -175,20 +183,20 @@ struct nc_auth_state {
  * @brief A server's authorized client.
  */
 struct nc_auth_client {
-    char *username;                         /**< Arbitrary username. */
+    char *username;                             /**< Arbitrary username. */
 
-    enum nc_store_type store;                    /**< Specifies how/where the client's public key is stored. */
+    enum nc_store_type store;                   /**< Specifies how/where the client's public key is stored. */
     union {
         struct {
-            struct nc_public_key *pubkeys;  /**< The client's public keys. */
-            uint16_t pubkey_count;          /**< The number of client's public keys. */
+            struct nc_public_key *pubkeys;      /**< The client's public keys. */
+            uint16_t pubkey_count;              /**< The number of client's public keys. */
         };
-        char *ts_ref;                       /**< Name of the referenced truststore key. */
+        char *ts_ref;                           /**< Name of the referenced truststore key. */
     };
 
-    char *password;                         /**< Client's password */
-    int kb_int_enabled;                     /**< Indicates that the client supports keyboard-interactive authentication. */
-    int none_enabled;                       /**< Implies that the client supports the none authentication method. */
+    char *password;                             /**< Client's password */
+    enum nc_kbdint_auth_method kbdint_method;   /**< Keyboard-interactive authentication method. */
+    int none_enabled;                           /**< Implies that the client supports the none authentication method. */
 };
 
 /**

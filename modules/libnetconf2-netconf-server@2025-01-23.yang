@@ -312,7 +312,6 @@ module libnetconf2-netconf-server {
       "Grouping for the SSH Keyboard interactive authentication method.";
 
     container keyboard-interactive {
-      presence "Indicates that the given client supports the SSH Keyboard Interactive authentication method.";
       description
         "Keyboard interactive SSH authentication method.";
 
@@ -322,7 +321,6 @@ module libnetconf2-netconf-server {
             the Secure Shell Protocol (SSH)";
 
       choice method {
-        mandatory true;
         description
           "Method to perform the authentication with.";
 
