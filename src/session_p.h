@@ -195,7 +195,8 @@ struct nc_auth_client {
     };
 
     char *password;                             /**< Client's password */
-    enum nc_kbdint_auth_method kbdint_method;   /**< Keyboard-interactive authentication method. */
+    enum nc_kbdint_auth_method kbdint_method;   /**< Keyboard-interactive authentication method,
+                                                  *  may be extended by e.g. a union for each method when needed. */
     int none_enabled;                           /**< Implies that the client supports the none authentication method. */
 };
 
