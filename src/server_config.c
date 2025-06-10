@@ -3140,11 +3140,7 @@ nc_server_config_tls_version(const struct lyd_node *node, enum nc_operation op)
 
     /* str to tls_version */
     version = ((struct lyd_node_term *)node)->value.ident->name;
-    if (!strcmp(version, "tls10")) {
-        tls_version = NC_TLS_VERSION_10;
-    } else if (!strcmp(version, "tls11")) {
-        tls_version = NC_TLS_VERSION_11;
-    } else if (!strcmp(version, "tls12")) {
+    if (!strcmp(version, "tls12")) {
         tls_version = NC_TLS_VERSION_12;
     } else if (!strcmp(version, "tls13")) {
         tls_version = NC_TLS_VERSION_13;
@@ -4020,7 +4016,7 @@ nc_server_config_load_modules(struct ly_ctx **ctx)
     /* all features */
     const char *ietf_truststore[] = {"central-truststore-supported", "inline-definitions-supported", "certificates", "public-keys", NULL};
     /* no public-key-generation */
-    const char *ietf_tls_common[] = {"tls10", "tls11", "tls12", "tls13", "hello-params", NULL};
+    const char *ietf_tls_common[] = {"tls12", "tls13", "hello-params", NULL};
     /* no tls-server-keepalives, server-ident-raw-public-key, server-ident-tls12-psk, server-ident-tls13-epsk,
      * client-auth-raw-public-key, client-auth-tls12-psk, client-auth-tls13-epsk */
     const char *ietf_tls_server[] = {"server-ident-x509-cert", "client-auth-supported", "client-auth-x509-cert", NULL};

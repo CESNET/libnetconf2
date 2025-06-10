@@ -6,19 +6,19 @@ module ietf-tls-common {
   import iana-tls-cipher-suite-algs {
     prefix tlscsa;
     reference
-      "RFC FFFF: YANG Groupings for TLS Clients and SSH Servers";
+      "RFC 9645: YANG Groupings for TLS Clients and TLS Servers";
   }
 
   import ietf-crypto-types {
     prefix ct;
     reference
-      "RFC AAAA: YANG Data Types and Groupings for Cryptography";
+      "RFC 9640: YANG Data Types and Groupings for Cryptography";
   }
 
   import ietf-keystore {
     prefix ks;
     reference
-      "RFC CCCC: A YANG Data Model for a Keystore";
+      "RFC 9642: A YANG Data Model for a Keystore";
   }
 
   organization
@@ -28,14 +28,21 @@ module ietf-tls-common {
     "WG List:  NETCONF WG list <mailto:netconf@ietf.org>
      WG Web:   https://datatracker.ietf.org/wg/netconf
      Author:   Kent Watsen <mailto:kent+ietf@watsen.net>
-     Author:   Jeff Hartley <mailto:jeff.hartley@commscope.com>
+     Author:   Jeff Hartley <mailto:intensifysecurity@gmail.com>
      Author:   Gary Wu <mailto:garywu@cisco.com>";
 
    description
-    "This module defines a common features and groupings for
+    "This module defines common features and groupings for
      Transport Layer Security (TLS).
 
-     Copyright (c) 2023 IETF Trust and the persons identified
+     The key words 'MUST', 'MUST NOT', 'REQUIRED', 'SHALL',
+     'SHALL NOT', 'SHOULD', 'SHOULD NOT', 'RECOMMENDED',
+     'NOT RECOMMENDED', 'MAY', and 'OPTIONAL' in this document
+     are to be interpreted as described in BCP 14 (RFC 2119)
+     (RFC 8174) when, and only when, they appear in all
+     capitals, as shown here.
+
+     Copyright (c) 2024 IETF Trust and the persons identified
      as authors of the code. All rights reserved.
 
      Redistribution and use in source and binary forms, with
@@ -45,49 +52,22 @@ module ietf-tls-common {
      Legal Provisions Relating to IETF Documents
      (https://trustee.ietf.org/license-info).
 
-     This version of this YANG module is part of RFC FFFF
-     (https://www.rfc-editor.org/info/rfcFFFF); see the RFC
-     itself for full legal notices.
+     This version of this YANG module is part of RFC 9645
+     (https://www.rfc-editor.org/info/rfc9645); see the RFC
+     itself for full legal notices.";
 
-     The key words 'MUST', 'MUST NOT', 'REQUIRED', 'SHALL',
-     'SHALL NOT', 'SHOULD', 'SHOULD NOT', 'RECOMMENDED',
-     'NOT RECOMMENDED', 'MAY', and 'OPTIONAL' in this document
-     are to be interpreted as described in BCP 14 (RFC 2119)
-     (RFC 8174) when, and only when, they appear in all
-     capitals, as shown here.";
-
-  revision 2023-12-28 {
+  revision 2024-10-10 {
     description
-      "Initial version";
+      "Initial version.";
     reference
-      "RFC FFFF: YANG Groupings for TLS Clients and TLS Servers";
+      "RFC 9645: YANG Groupings for TLS Clients and TLS Servers";
   }
 
   // Features
 
-  feature tls10 {
-    status "obsolete";
-    description
-      "TLS Protocol Version 1.0 is supported.  TLS 1.0 is obsolete
-       and thus it is NOT RECOMMENDED to enable this feature.";
-    reference
-      "RFC 2246: The TLS Protocol Version 1.0";
-  }
-
-  feature tls11 {
-    status "obsolete";
-    description
-      "TLS Protocol Version 1.1 is supported.  TLS 1.1 is obsolete
-       and thus it is NOT RECOMMENDED to enable this feature.";
-    reference
-      "RFC 4346: The Transport Layer Security (TLS) Protocol
-                 Version 1.1";
-  }
-
   feature tls12 {
-    status "deprecated";
     description
-      "TLS Protocol Version 1.2 is supported. TLS 1.2 is obsolete
+      "TLS Protocol Version 1.2 is supported. TLS 1.2 is obsolete,
        and thus it is NOT RECOMMENDED to enable this feature.";
     reference
       "RFC 5246: The Transport Layer Security (TLS) Protocol
@@ -107,10 +87,16 @@ module ietf-tls-common {
       "TLS hello message parameters are configurable.";
   }
 
-  feature public-key-generation {
+  feature algorithm-discovery {
     description
       "Indicates that the server implements the
-       'generate-public-key' RPC.";
+       'supported-algorithms' container.";
+  }
+
+  feature asymmetric-key-pair-generation {
+    description
+      "Indicates that the server implements the
+       'generate-asymmetric-key-pair' RPC.";
   }
 
   // Identities
@@ -120,31 +106,9 @@ module ietf-tls-common {
       "Base identity used to identify TLS protocol versions.";
   }
 
-  identity tls10 {
-    if-feature "tls10";
-    base tls-version-base;
-    status "obsolete";
-    description
-      "TLS Protocol Version 1.0.";
-    reference
-      "RFC 2246: The TLS Protocol Version 1.0";
-  }
-
-  identity tls11 {
-    if-feature "tls11";
-    base tls-version-base;
-    status "obsolete";
-    description
-      "TLS Protocol Version 1.1.";
-    reference
-      "RFC 4346: The Transport Layer Security (TLS) Protocol
-                 Version 1.1";
-  }
-
   identity tls12 {
     if-feature "tls12";
     base tls-version-base;
-    status "deprecated";
     description
       "TLS Protocol Version 1.2.";
     reference
@@ -168,11 +132,11 @@ module ietf-tls-common {
     type enumeration {
       enum sha-256 {
         description
-          "The SHA-256 Hash.";
+          "The SHA-256 hash.";
       }
       enum sha-384 {
         description
-          "The SHA-384 Hash.";
+          "The SHA-384 hash.";
       }
     }
     description
@@ -183,7 +147,6 @@ module ietf-tls-common {
       "RFC 8446: The Transport Layer Security (TLS)
                  Protocol Version 1.3";
   }
-
 
   // Groupings
 
@@ -197,74 +160,94 @@ module ietf-tls-common {
                  Version 1.3";
     container tls-versions {
       description
-        "Parameters regarding TLS versions.";
-      leaf-list tls-version {
+        "Parameters limiting which TLS versions, amongst
+         those enabled by 'features', are presented during
+         the TLS handshake.";
+      leaf min {
         type identityref {
           base tls-version-base;
         }
-        ordered-by user;
         description
-          "Acceptable TLS protocol versions.
-
-           If this leaf-list is not configured (has zero elements)
-           the acceptable TLS protocol versions are implementation-
-           defined.";
+          "If not specified, then there is no configured
+           minimum version.";
+      }
+      leaf max {
+        type identityref {
+          base tls-version-base;
+        }
+        description
+          "If not specified, then there is no configured
+           maximum version.";
       }
     }
     container cipher-suites {
       description
         "Parameters regarding cipher suites.";
       leaf-list cipher-suite {
-        type identityref {
-          base tlscsa:cipher-suite-alg-base;
-        }
+        type tlscsa:tls-cipher-suite-algorithm;
         ordered-by user;
         description
           "Acceptable cipher suites in order of descending
            preference.  The configured host key algorithms should
            be compatible with the algorithm used by the configured
-           private key.  Please see Section 5 of RFC FFFF for
+           private key.  Please see Section 5 of RFC 9645 for
            valid combinations.
 
-           If this leaf-list is not configured (has zero elements)
+           If this leaf-list is not configured (has zero elements),
            the acceptable cipher suites are implementation-
            defined.";
         reference
-          "RFC FFFF: YANG Groupings for TLS Clients and TLS Servers";
+          "RFC 9645: YANG Groupings for TLS Clients and TLS Servers";
       }
     }
   } // hello-params-grouping
 
-  rpc generate-public-key {
-    if-feature "public-key-generation";
+  // Protocol-accessible Nodes
+
+  container supported-algorithms {
+    if-feature "algorithm-discovery";
+    config false;
     description
-      "Requests the device to generate an public key using
-       the specified key algorithm.";
+      "A container for a list of cipher suite algorithms supported
+       by the server.";
+    leaf-list supported-algorithm {
+      type tlscsa:tls-cipher-suite-algorithm;
+      description
+        "A cipher suite algorithm supported by the server.";
+    }
+  }
+
+  rpc generate-asymmetric-key-pair {
+    if-feature "asymmetric-key-pair-generation";
+    description
+      "Requests the device to generate an 'asymmetric-key-pair'
+       key using the specified key algorithm.";
     input {
       leaf algorithm {
-        type tlscsa:cipher-suite-algorithm-ref;
+        type tlscsa:tls-cipher-suite-algorithm;
         mandatory true;
         description
-          "The cipher suite algorithm that the generated key is
-           to work with.  Implementations derive the public key
-           algorithm from the cipher suite algorithm.  Example:
-           cipher suite 'tls-rsa-with-aes-256-cbc-sha256' maps
-           to the RSA public key.";
+          "The cipher suite algorithm that the generated key
+           works with.  Implementations derive the public key
+           algorithm from the cipher suite algorithm.  For
+           example, cipher suite
+           'tls-rsa-with-aes-256-cbc-sha256' maps to the RSA
+           public key.";
       }
       leaf num-bits {
         type uint16;
         description
-          "Specifies the number of bits in the key to create.
-           For RSA keys, the minimum size is 1024 bits and
-           the default is 3072 bits. Generally, 3072 bits is
-           considered sufficient. DSA keys must be exactly 1024
-           bits as specified by FIPS 186-2.  For elliptical
-           keys, the 'num-bits' value determines the key length
-           of the curve (e.g., 256, 384 or 521), where valid
-           values supported by the server are conveyed via an
-           unspecified mechanism.  For some public algorithms,
-           the keys have a fixed length and thus the 'num-bits'
-           value is not specified.";
+          "Specifies the number of bits to create in the key.
+           For RSA keys, the minimum size is 1024 bits, and
+           the default is 3072 bits.  Generally, 3072 bits is
+           considered sufficient.  DSA keys must be exactly
+           1024 bits as specified by FIPS 186-2.  For
+           elliptical keys, the 'num-bits' value determines
+           the key length of the curve (e.g., 256, 384, or 521),
+           where valid values supported by the server are
+           conveyed via an unspecified mechanism.  For some
+           public algorithms, the keys have a fixed length, and
+           thus the 'num-bits' value is not specified.";
       }
       container private-key-encoding {
         description
@@ -286,8 +269,8 @@ module ietf-tls-common {
             if-feature "ct:encrypted-private-keys";
             container encrypted {
               description
-                 "Indicates that the key is to be encrypted using
-                  the specified symmetric or asymmetric key.";
+                "Indicates that the key is to be encrypted using
+                 the specified symmetric or asymmetric key.";
               uses ks:encrypted-by-grouping;
             }
           }
@@ -300,8 +283,8 @@ module ietf-tls-common {
 
                  Unlike the 'cleartext' and 'encrypt' options, the
                  key returned is a placeholder for an internally
-                 stored key.  See the 'Support for Built-in Keys'
-                 section in RFC CCCC for information about hidden
+                 stored key.  See Section 3 of RFC 9642 ('Support
+                 for Built-In Keys') for information about hidden
                  keys.";
             }
           }
@@ -309,8 +292,23 @@ module ietf-tls-common {
       }
     }
     output {
-      uses ct:asymmetric-key-pair-grouping;
+      choice key-or-hidden {
+        case key {
+          uses ct:asymmetric-key-pair-grouping;
+        }
+        case hidden {
+          leaf location {
+            type instance-identifier;
+            description
+              "The location to where a hidden key was created.";
+          }
+        }
+        description
+          "The output can be either a key (for cleartext and
+           encrypted keys) or the location to where the key
+           was created (for hidden keys).";
+      }
     }
-  } // end generate-public-key
+  } // end generate-asymmetric-key-pair
 
 }
