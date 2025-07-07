@@ -2967,9 +2967,7 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
     int ret = 0;
     struct lyd_node *n;
     struct nc_ctn *new, *iter;
-    const char *map_type, *name = NULL;
     uint32_t id;
-    NC_TLS_CTN_MAPTYPE m_type;
 
     assert(!strcmp(LYD_NAME(node), "cert-to-name"));
 
@@ -2977,39 +2975,6 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
     lyd_find_path(node, "id", 0, &n);
     assert(n);
     id = ((struct lyd_node_term *)n)->value.uint32;
-
-    /* get CTN map-type */
-    if (lyd_find_path(node, "map-type", 0, &n)) {
-        ERR(NULL, "Missing CTN map-type.");
-        ret = 1;
-        goto cleanup;
-    }
-    map_type = ((struct lyd_node_term *)n)->value.ident->name;
-    if (!strcmp(map_type, "specified")) {
-        m_type = NC_TLS_CTN_SPECIFIED;
-
-        /* get CTN name */
-        if (lyd_find_path(node, "name", 0, &n)) {
-            ERR(NULL, "Missing CTN \"specified\" user name.");
-            ret = 1;
-            goto cleanup;
-        }
-        name = lyd_get_value(n);
-    } else if (!strcmp(map_type, "san-rfc822-name")) {
-        m_type = NC_TLS_CTN_SAN_RFC822_NAME;
-    } else if (!strcmp(map_type, "san-dns-name")) {
-        m_type = NC_TLS_CTN_SAN_DNS_NAME;
-    } else if (!strcmp(map_type, "san-ip-address")) {
-        m_type = NC_TLS_CTN_SAN_IP_ADDRESS;
-    } else if (!strcmp(map_type, "san-any")) {
-        m_type = NC_TLS_CTN_SAN_ANY;
-    } else if (!strcmp(map_type, "common-name")) {
-        m_type = NC_TLS_CTN_COMMON_NAME;
-    } else {
-        ERR(NULL, "CTN map-type \"%s\" not supported.", map_type);
-        ret = 1;
-        goto cleanup;
-    }
 
     /* create new ctn */
     new = calloc(1, sizeof *new);
@@ -3038,13 +3003,8 @@ nc_server_config_create_cert_to_name(const struct lyd_node *node, struct nc_serv
         }
     }
 
-    /* insert the right data */
+    /* set the id, the other members will be filled later */
     new->id = id;
-    if (name) {
-        new->name = strdup(name);
-        NC_CHECK_ERRMEM_GOTO(!new->name, ret = 1, cleanup);
-    }
-    new->map_type = m_type;
 
 cleanup:
     return ret;
@@ -3088,7 +3048,7 @@ cleanup:
 }
 
 static int
-nc_server_config_fingerprint(const struct lyd_node *node, enum nc_operation op)
+nc_server_config_fingerprint(const struct lyd_node *node, enum nc_operation UNUSED(op))
 {
     int ret = 0;
     struct nc_ctn *ctn;
@@ -3105,13 +3065,63 @@ nc_server_config_fingerprint(const struct lyd_node *node, enum nc_operation op)
         goto cleanup;
     }
 
-    if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
-        free(ctn->fingerprint);
-        ctn->fingerprint = strdup(lyd_get_value(node));
-        NC_CHECK_ERRMEM_GOTO(!ctn->fingerprint, ret = 1, cleanup);
+    /* mandatory node, no need to check the op */
+    free(ctn->fingerprint);
+    ctn->fingerprint = strdup(lyd_get_value(node));
+    NC_CHECK_ERRMEM_GOTO(!ctn->fingerprint, ret = 1, cleanup);
+
+cleanup:
+    return ret;
+}
+
+static int
+nc_server_config_map_type(const struct lyd_node *node, enum nc_operation UNUSED(op))
+{
+    int ret = 0;
+    struct nc_ctn *ctn;
+    struct nc_ch_client *ch_client = NULL;
+    const char *map_type, *name = NULL;
+    NC_TLS_CTN_MAPTYPE m_type;
+
+    assert(!strcmp(LYD_NAME(node), "map-type"));
+
+    if (is_ch(node) && nc_server_config_get_ch_client(node, &ch_client)) {
+        return 1;
+    }
+
+    if (nc_server_config_get_ctn(node, ch_client, &ctn)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    map_type = ((struct lyd_node_term *)node)->value.ident->name;
+    if (!strcmp(map_type, "specified")) {
+        m_type = NC_TLS_CTN_SPECIFIED;
+
+        /* get CTN name */
+        assert(!strcmp(LYD_NAME(node->next), "name"));
+        name = lyd_get_value(node->next);
+    } else if (!strcmp(map_type, "san-rfc822-name")) {
+        m_type = NC_TLS_CTN_SAN_RFC822_NAME;
+    } else if (!strcmp(map_type, "san-dns-name")) {
+        m_type = NC_TLS_CTN_SAN_DNS_NAME;
+    } else if (!strcmp(map_type, "san-ip-address")) {
+        m_type = NC_TLS_CTN_SAN_IP_ADDRESS;
+    } else if (!strcmp(map_type, "san-any")) {
+        m_type = NC_TLS_CTN_SAN_ANY;
+    } else if (!strcmp(map_type, "common-name")) {
+        m_type = NC_TLS_CTN_COMMON_NAME;
     } else {
-        free(ctn->fingerprint);
-        ctn->fingerprint = NULL;
+        ERR(NULL, "CTN map-type \"%s\" not supported.", map_type);
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* mandatory node, no need to check the op */
+    ctn->map_type = m_type;
+    if (name) {
+        ctn->name = strdup(name);
+        NC_CHECK_ERRMEM_GOTO(!ctn->name, ret = 1, cleanup);
     }
 
 cleanup:
@@ -3635,6 +3645,8 @@ nc_server_config_parse_netconf_server(const struct lyd_node *node, enum nc_opera
         ret = nc_server_config_local_port(node, op);
     } else if (!strcmp(name, "mac-alg")) {
         ret = nc_server_config_mac_alg(node, op);
+    } else if (!strcmp(name, "map-type")) {
+        ret = nc_server_config_map_type(node, op);
     } else if (!strcmp(name, "max-probes")) {
         ret = nc_server_config_max_probes(node, op);
     } else if (!strcmp(name, "none")) {
