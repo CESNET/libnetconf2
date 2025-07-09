@@ -343,6 +343,8 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username
 
     cert_count = nc_tls_get_num_certs_wrap(cert_chain);
     for (i = 0; i < cert_count; i++) {
+        DBG(NULL, "Cert verify CTN: checking entry with id %"PRIu32".", ctn->id);
+
         /* reset the flag */
         fingerprint_match = 0;
 
@@ -367,8 +369,6 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username
             }
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_md5)) {
-                /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
                 fingerprint_match = 1;
             }
             free(digest_md5);
@@ -382,8 +382,6 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username
             }
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha1)) {
-                /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
                 fingerprint_match = 1;
             }
             free(digest_sha1);
@@ -397,8 +395,6 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username
             }
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha224)) {
-                /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
                 fingerprint_match = 1;
             }
             free(digest_sha224);
@@ -412,8 +408,6 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username
             }
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha256)) {
-                /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
                 fingerprint_match = 1;
             }
             free(digest_sha256);
@@ -427,8 +421,6 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username
             }
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha384)) {
-                /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
                 fingerprint_match = 1;
             }
             free(digest_sha384);
@@ -442,8 +434,6 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username
             }
 
             if (!strcasecmp(ctn->fingerprint + 3, digest_sha512)) {
-                /* we got ourselves a potential winner! */
-                VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
                 fingerprint_match = 1;
             }
             free(digest_sha512);
@@ -456,6 +446,8 @@ nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username
 
         if (fingerprint_match) {
             /* found a fingerprint match, try to obtain the username */
+            VRB(NULL, "Cert verify CTN: entry with a matching fingerprint found.");
+            DBG(NULL, "Cert verify CTN: matched fingerprint: %s (id %"PRIu32").", ctn->fingerprint, ctn->id);
             ret = nc_server_tls_get_username(cert, ctn, username);
             if (ret == -1) {
                 /* fatal error */
