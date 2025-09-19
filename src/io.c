@@ -484,12 +484,15 @@ nc_read_msg_poll_io(struct nc_session *session, int io_timeout, struct ly_in **m
 
     /* read msg */
     ret = nc_read_msg_io(session, io_timeout, 1, &buf, &buf_len);
-    if (ret > 0) {
-        ret = 1;
-    }
 
     /* SESSION IO UNLOCK */
     nc_session_io_unlock(session, __func__);
+
+    if (ret > 0) {
+        ret = 1;
+    } else {
+        return ret;
+    }
 
     /* create input */
     if (ly_in_new_memory(buf, msg)) {
