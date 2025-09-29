@@ -4303,6 +4303,7 @@ nc_server_config_listen_all_endpoints(const struct lyd_node *node)
     struct lyd_node *n, *iter;
     struct nc_endpt *endpt;
     struct nc_bind *bind;
+    struct lyd_meta *m;
 
     NC_CHECK_ERR_RET(strcmp(LYD_NAME(node), "netconf-server"),
             ERR(NULL, "Unexpected node \"%s\" encountered, expected \"netconf-server\".", LYD_NAME(node)), 1);
@@ -4314,6 +4315,11 @@ nc_server_config_listen_all_endpoints(const struct lyd_node *node)
     if (n) {
         /* go over all the endpoints */
         LY_LIST_FOR(lyd_child(n), iter) {
+            if ((m = lyd_find_meta(iter->meta, NULL, "yang:operation"))) {
+                if (!strcmp(lyd_get_meta_value(m), "delete")) {
+                    continue;
+                }
+            }
             /* get the endpoint and bind structs from the node */
             NC_CHECK_RET(nc_server_config_get_endpt(iter, &endpt, &bind));
 
