@@ -1274,7 +1274,7 @@ struct nc_session *nc_accept_callhome_ssh_sock(int sock, const char *host, uint1
  * @brief Establish SSH transport on a socket.
  *
  * @param[in] session Session structure of the new connection.
- * @param[in] sock Socket of the new connection.
+ * @param[in] sock Socket of the new connection, closed if not set to the session.
  * @param[in] timeout Transport operations timeout in msec (not SSH authentication one).
  * @return 1 on success, 0 on timeout, -1 on error.
  */
