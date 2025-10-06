@@ -2020,8 +2020,25 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
     if (ssh_bind_accept_fd(sbind, session->ti.libssh.session, sock) == SSH_ERROR) {
         ERR(session, "SSH failed to accept a new connection (%s).", ssh_get_error(sbind));
         rc = -1;
+
+        /* Avoid closing the socket on failure to prevent a possible double close.
+         * On failure, sock may or not be set to the session. In theory, we should
+         * be able to compare sock with ssh_get_fd() and close it only if it was
+         * not set, for example:
+         *
+         *     if (ssh_get_fd(session) == sock)
+         *         sock = -1;
+         *
+         * However, if ssh_bind_accept_fd() fails to allocate the socket structure
+         * internally, calling ssh_get_fd() will dereference a NULL pointer due to
+         * a buggy behavior in libssh.
+         */
+        sock = -1;
         goto cleanup;
     }
+
+    /* use SSH_OPTIONS_FD so libssh won't close the socket in ssh_disconnect() */
+    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_FD, &sock);
     sock = -1;
 
     /* set to non-blocking */

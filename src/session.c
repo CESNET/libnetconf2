@@ -816,12 +816,18 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
                     free(siter);
                 } while (session->ti.libssh.next != session);
             }
-            /* remember sock so we can close it */
-            sock = ssh_get_fd(session->ti.libssh.session);
             if (connected) {
-                /* does not close sock */
+                /* remember sock so we can close it */
+                sock = ssh_get_fd(session->ti.libssh.session);
+
+                /* clears sock but does not close it if passed via options (libssh >= 0.10) */
                 ssh_disconnect(session->ti.libssh.session);
+#if (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR < 10)
+                sock = -1;
+#endif
             }
+
+            /* closes sock if set */
             ssh_free(session->ti.libssh.session);
         } else {
             /* remove the session from the list */
