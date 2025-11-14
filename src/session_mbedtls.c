@@ -52,6 +52,44 @@
 #include <mbedtls/x509_crt.h>
 
 /**
+ * @brief List of supported cipher suites for MbedTLS.
+ *
+ * This list is used to populate the operational data for supported cipher suites.
+ * Obtained from <mbedtls/cipher_suites.h> v4.0.0.
+ */
+const char *nc_tls_supported_cipher_suites[] = {
+    "TLS_PSK_WITH_NULL_SHA", "TLS_PSK_WITH_AES_128_CBC_SHA", "TLS_PSK_WITH_AES_256_CBC_SHA",
+    "TLS_PSK_WITH_AES_128_GCM_SHA256", "TLS_PSK_WITH_AES_256_GCM_SHA384", "TLS_PSK_WITH_AES_128_CBC_SHA256",
+    "TLS_PSK_WITH_AES_256_CBC_SHA384", "TLS_PSK_WITH_NULL_SHA256", "TLS_PSK_WITH_NULL_SHA384",
+    "TLS_ECDHE_ECDSA_WITH_NULL_SHA", "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA", "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA",
+    "TLS_ECDHE_RSA_WITH_NULL_SHA", "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA", "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+    "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256", "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384",
+    "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256", "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
+    "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA", "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA", "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256",
+    "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384", "TLS_ECDHE_PSK_WITH_NULL_SHA", "TLS_ECDHE_PSK_WITH_NULL_SHA256",
+    "TLS_ECDHE_PSK_WITH_NULL_SHA384", "TLS_ECDHE_ECDSA_WITH_ARIA_128_CBC_SHA256",
+    "TLS_ECDHE_ECDSA_WITH_ARIA_256_CBC_SHA384", "TLS_ECDHE_RSA_WITH_ARIA_128_CBC_SHA256",
+    "TLS_ECDHE_RSA_WITH_ARIA_256_CBC_SHA384", "TLS_ECDHE_ECDSA_WITH_ARIA_128_GCM_SHA256",
+    "TLS_ECDHE_ECDSA_WITH_ARIA_256_GCM_SHA384", "TLS_ECDHE_RSA_WITH_ARIA_128_GCM_SHA256",
+    "TLS_ECDHE_RSA_WITH_ARIA_256_GCM_SHA384", "TLS_PSK_WITH_ARIA_128_CBC_SHA256", "TLS_PSK_WITH_ARIA_256_CBC_SHA384",
+    "TLS_PSK_WITH_ARIA_128_GCM_SHA256", "TLS_PSK_WITH_ARIA_256_GCM_SHA384", "TLS_ECDHE_PSK_WITH_ARIA_128_CBC_SHA256",
+    "TLS_ECDHE_PSK_WITH_ARIA_256_CBC_SHA384", "TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384", "TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384", "TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_GCM_SHA256",
+    "TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_GCM_SHA384", "TLS_ECDHE_RSA_WITH_CAMELLIA_128_GCM_SHA256",
+    "TLS_ECDHE_RSA_WITH_CAMELLIA_256_GCM_SHA384", "TLS_PSK_WITH_CAMELLIA_128_GCM_SHA256",
+    "TLS_PSK_WITH_CAMELLIA_256_GCM_SHA384", "TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384", "TLS_ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384", "TLS_PSK_WITH_AES_128_CCM", "TLS_PSK_WITH_AES_256_CCM",
+    "TLS_PSK_WITH_AES_128_CCM_8", "TLS_PSK_WITH_AES_256_CCM_8", "TLS_ECDHE_ECDSA_WITH_AES_128_CCM",
+    "TLS_ECDHE_ECDSA_WITH_AES_256_CCM", "TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8", "TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8",
+    "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256", "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+    "TLS_PSK_WITH_CHACHA20_POLY1305_SHA256", "TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256", NULL
+};
+
+/**
  * @brief Converts MbedTLS error code to a string and merges it with an arbitrary error message.
  *
  * @param[in] session NETCONF session.
@@ -503,24 +541,19 @@ nc_server_tls_add_crl_to_store_wrap(const unsigned char *crl_data, size_t size, 
 }
 
 int
-nc_server_tls_set_tls_versions_wrap(void *tls_cfg, unsigned int tls_versions)
+nc_server_tls_set_tls_versions_wrap(void *tls_cfg, enum nc_tls_version min, enum nc_tls_version max)
 {
-    if ((tls_versions & NC_TLS_VERSION_10) || ((tls_versions & NC_TLS_VERSION_11))) {
-        /* skip TLS versions 1.0 and 1.1 */
-        WRN(NULL, "mbedTLS does not support TLS1.0 and TLS1.1");
-    }
-
-    /* first set the minimum version */
-    if (tls_versions & NC_TLS_VERSION_12) {
+    /* set the minimum version if any, otherwise leave it to MbedTLS default */
+    if (min & NC_TLS_VERSION_1_2) {
         mbedtls_ssl_conf_min_tls_version(tls_cfg, MBEDTLS_SSL_VERSION_TLS1_2);
-    } else if (tls_versions & NC_TLS_VERSION_13) {
+    } else if (min & NC_TLS_VERSION_1_3) {
         mbedtls_ssl_conf_min_tls_version(tls_cfg, MBEDTLS_SSL_VERSION_TLS1_3);
     }
 
-    /* then set the maximum version */
-    if (tls_versions & NC_TLS_VERSION_13) {
+    /* set the maximum version if any, otherwise leave it to MbedTLS default */
+    if (max & NC_TLS_VERSION_1_3) {
         mbedtls_ssl_conf_max_tls_version(tls_cfg, MBEDTLS_SSL_VERSION_TLS1_3);
-    } else if (tls_versions & NC_TLS_VERSION_12) {
+    } else if (max & NC_TLS_VERSION_1_2) {
         mbedtls_ssl_conf_max_tls_version(tls_cfg, MBEDTLS_SSL_VERSION_TLS1_2);
     }
 
@@ -1043,6 +1076,7 @@ nc_tls_ctx_destroy_wrap(struct nc_tls_ctx *tls_ctx)
     nc_tls_cert_store_destroy_wrap(tls_ctx->cert_store);
     nc_tls_crl_store_destroy_wrap(tls_ctx->crl_store);
     free(tls_ctx->sock);
+    free(tls_ctx->cipher_suites);
 }
 
 void *
@@ -1141,7 +1175,8 @@ nc_client_tls_set_hostname_wrap(void *tls_session, const char *hostname)
 }
 
 int
-nc_tls_init_ctx_wrap(void *cert, void *pkey, void *cert_store, void *crl_store, struct nc_tls_ctx *tls_ctx)
+nc_tls_init_ctx_wrap(void *cert, void *pkey, void *cert_store,
+        void *crl_store, void *cipher_suites, struct nc_tls_ctx *tls_ctx)
 {
     /* setup rng */
     if (nc_tls_rng_new(&tls_ctx->ctr_drbg, &tls_ctx->entropy)) {
@@ -1149,6 +1184,7 @@ nc_tls_init_ctx_wrap(void *cert, void *pkey, void *cert_store, void *crl_store, 
     }
 
     /* fill the context */
+    tls_ctx->cipher_suites = cipher_suites;
     tls_ctx->sock = malloc(sizeof *tls_ctx->sock);
     NC_CHECK_ERRMEM_RET(!tls_ctx->sock, 1);
     tls_ctx->cert = cert;
@@ -1904,69 +1940,433 @@ cleanup:
     return ret;
 }
 
-int
-nc_tls_process_cipher_suite_wrap(const char *cipher, char **out)
+const char *
+nc_server_tls_cipher_suite_name_to_internal_wrap(const char *iana_name)
 {
-    const char *begin, *ptr;
-
-    /* check if it's a TLS 1.3 cipher suite */
-    if (!strcmp(cipher, "tls-aes-256-gcm-sha384") || !strcmp(cipher, "tls-aes-128-gcm-sha256") ||
-            !strcmp(cipher, "tls-chacha20-poly1305-sha256") || !strcmp(cipher, "tls-aes-128-ccm-sha256") ||
-            !strcmp(cipher, "tls-aes-128-ccm-8-sha256")) {
-        /* + 3 because mbedtls has "TLS1-3" prefix for 1.3 suites */
-        *out = malloc(strlen(cipher) + 3 + 1);
-        NC_CHECK_ERRMEM_RET(!*out, 1);
-        sprintf(*out, "TLS1-3");
-        begin = cipher + 4;
-    } else {
-        *out = malloc(strlen(cipher) + 1);
-        NC_CHECK_ERRMEM_RET(!*out, 1);
-        begin = cipher;
+    if (!strcmp(iana_name, "TLS_AES_128_GCM_SHA256")) {
+        return "TLS1-3-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_AES_256_GCM_SHA384")) {
+        return "TLS1-3-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_CHACHA20_POLY1305_SHA256")) {
+        return "TLS1-3-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_AES_128_CCM_SHA256")) {
+        return "TLS1-3-AES-128-CCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_AES_128_CCM_8_SHA256")) {
+        return "TLS1-3-AES-128-CCM-8-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-ECDHE-RSA-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-DHE-RSA-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-PSK-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-ECDHE-PSK-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-DHE-PSK-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-RSA-PSK-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_256_CCM")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-256-CCM";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-256-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_128_CCM")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-128-CCM";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-128-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-ECDHE-ECDSA-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-ECDHE-ECDSA-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_NULL_SHA")) {
+        return "TLS-ECDHE-ECDSA-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA")) {
+        return "TLS-ECDHE-RSA-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA")) {
+        return "TLS-ECDHE-RSA-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-ECDHE-RSA-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-ECDHE-RSA-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-ECDHE-RSA-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-ECDHE-RSA-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-ECDHE-RSA-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-ECDHE-RSA-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-ECDHE-RSA-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-ECDHE-RSA-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_NULL_SHA")) {
+        return "TLS-ECDHE-RSA-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-DHE-RSA-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-DHE-RSA-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-DHE-RSA-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_256_CBC_SHA256")) {
+        return "TLS-DHE-RSA-WITH-AES-256-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_128_CBC_SHA")) {
+        return "TLS-DHE-RSA-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_256_CBC_SHA")) {
+        return "TLS-DHE-RSA-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_256_CCM")) {
+        return "TLS-DHE-RSA-WITH-AES-256-CCM";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_256_CCM_8")) {
+        return "TLS-DHE-RSA-WITH-AES-256-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_128_CCM")) {
+        return "TLS-DHE-RSA-WITH-AES-128-CCM";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_128_CCM_8")) {
+        return "TLS-DHE-RSA-WITH-AES-128-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-DHE-RSA-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256")) {
+        return "TLS-DHE-RSA-WITH-CAMELLIA-256-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA")) {
+        return "TLS-DHE-RSA-WITH-CAMELLIA-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA")) {
+        return "TLS-DHE-RSA-WITH-CAMELLIA-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-DHE-RSA-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-DHE-RSA-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-RSA-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-RSA-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-RSA-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_256_CBC_SHA256")) {
+        return "TLS-RSA-WITH-AES-256-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_128_CBC_SHA")) {
+        return "TLS-RSA-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_256_CBC_SHA")) {
+        return "TLS-RSA-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_256_CCM")) {
+        return "TLS-RSA-WITH-AES-256-CCM";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_256_CCM_8")) {
+        return "TLS-RSA-WITH-AES-256-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_128_CCM")) {
+        return "TLS-RSA-WITH-AES-128-CCM";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_128_CCM_8")) {
+        return "TLS-RSA-WITH-AES-128-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-RSA-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256")) {
+        return "TLS-RSA-WITH-CAMELLIA-256-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA")) {
+        return "TLS-RSA-WITH-CAMELLIA-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_CAMELLIA_256_CBC_SHA")) {
+        return "TLS-RSA-WITH-CAMELLIA-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-RSA-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-RSA-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA")) {
+        return "TLS-ECDH-RSA-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA")) {
+        return "TLS-ECDH-RSA-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-ECDH-RSA-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-ECDH-RSA-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-ECDH-RSA-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-ECDH-RSA-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-ECDH-RSA-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-ECDH-RSA-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-ECDH-RSA-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-ECDH-RSA-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_NULL_SHA")) {
+        return "TLS-ECDH-RSA-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA")) {
+        return "TLS-ECDH-ECDSA-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA")) {
+        return "TLS-ECDH-ECDSA-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-ECDH-ECDSA-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-ECDH-ECDSA-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-ECDH-ECDSA-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-ECDH-ECDSA-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-ECDH-ECDSA-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-ECDH-ECDSA-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-ECDH-ECDSA-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-ECDH-ECDSA-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_NULL_SHA")) {
+        return "TLS-ECDH-ECDSA-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-PSK-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-PSK-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-PSK-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-PSK-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_128_CBC_SHA")) {
+        return "TLS-PSK-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_256_CBC_SHA")) {
+        return "TLS-PSK-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_256_CCM")) {
+        return "TLS-PSK-WITH-AES-256-CCM";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_256_CCM_8")) {
+        return "TLS-PSK-WITH-AES-256-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_128_CCM")) {
+        return "TLS-PSK-WITH-AES-128-CCM";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_128_CCM_8")) {
+        return "TLS-PSK-WITH-AES-128-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-PSK-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-PSK-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-PSK-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-PSK-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-DHE-PSK-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-DHE-PSK-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-DHE-PSK-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-DHE-PSK-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_128_CBC_SHA")) {
+        return "TLS-DHE-PSK-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_256_CBC_SHA")) {
+        return "TLS-DHE-PSK-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_256_CCM")) {
+        return "TLS-DHE-PSK-WITH-AES-256-CCM";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_128_CCM")) {
+        return "TLS-DHE-PSK-WITH-AES-128-CCM";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-DHE-PSK-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-DHE-PSK-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-DHE-PSK-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-DHE-PSK-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-ECDHE-PSK-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-ECDHE-PSK-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA")) {
+        return "TLS-ECDHE-PSK-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA")) {
+        return "TLS-ECDHE-PSK-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-ECDHE-PSK-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-ECDHE-PSK-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-RSA-PSK-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-RSA-PSK-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-RSA-PSK-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-RSA-PSK-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_AES_128_CBC_SHA")) {
+        return "TLS-RSA-PSK-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_AES_256_CBC_SHA")) {
+        return "TLS-RSA-PSK-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-RSA-PSK-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-RSA-PSK-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-RSA-PSK-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-RSA-PSK-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_NULL_MD5")) {
+        return "TLS-RSA-WITH-NULL-MD5";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_NULL_SHA")) {
+        return "TLS-RSA-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_NULL_SHA256")) {
+        return "TLS-RSA-WITH-NULL-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_NULL_SHA")) {
+        return "TLS-PSK-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_NULL_SHA256")) {
+        return "TLS-PSK-WITH-NULL-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_NULL_SHA384")) {
+        return "TLS-PSK-WITH-NULL-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_NULL_SHA")) {
+        return "TLS-DHE-PSK-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_NULL_SHA256")) {
+        return "TLS-DHE-PSK-WITH-NULL-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_NULL_SHA384")) {
+        return "TLS-DHE-PSK-WITH-NULL-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_NULL_SHA")) {
+        return "TLS-ECDHE-PSK-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_NULL_SHA256")) {
+        return "TLS-ECDHE-PSK-WITH-NULL-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_NULL_SHA384")) {
+        return "TLS-ECDHE-PSK-WITH-NULL-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_NULL_SHA")) {
+        return "TLS-RSA-PSK-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_NULL_SHA256")) {
+        return "TLS-RSA-PSK-WITH-NULL-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_NULL_SHA384")) {
+        return "TLS-RSA-PSK-WITH-NULL-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-RSA-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-RSA-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-RSA-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-RSA-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-RSA-PSK-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-RSA-PSK-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-RSA-PSK-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-RSA-PSK-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-PSK-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-PSK-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-PSK-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-PSK-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-ECDH-RSA-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-ECDH-RSA-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-ECDH-RSA-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-ECDH-RSA-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-ECDHE-RSA-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-ECDHE-RSA-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-ECDHE-RSA-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-ECDHE-RSA-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-ECDHE-PSK-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-ECDHE-PSK-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-ECDHE-ECDSA-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-ECDHE-ECDSA-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-ECDH-ECDSA-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-ECDH-ECDSA-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-ECDH-ECDSA-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-ECDH-ECDSA-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-DHE-RSA-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-DHE-RSA-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-DHE-RSA-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-DHE-RSA-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-DHE-PSK-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-DHE-PSK-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-DHE-PSK-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-DHE-PSK-WITH-ARIA-128-CBC-SHA256";
     }
 
-    /* convert to uppercase */
-    for (ptr = begin; *ptr; ptr++) {
-        (*out)[ptr - begin] = toupper(*ptr);
-    }
-
-    (*out)[ptr - begin] = '\0';
-    return 0;
+    /* not found */
+    WRN(NULL, "Cipher suite name \"%s\" not supported by MbedTLS.", iana_name);
+    return NULL;
 }
 
 int
-nc_tls_append_cipher_suite_wrap(struct nc_server_tls_opts *opts, const char *cipher_suite)
+nc_server_tls_set_cipher_suites_wrap(void *tls_cfg, const char *cipher_suites, void **cipher_suites_out)
 {
-    int cipher_id;
+    int rc = 0, *mbedtls_ciphersuites, i;
+    size_t count;
+    const char *p;
+    char *suites_copy, *suite, *saveptr;
 
-    cipher_id = mbedtls_ssl_get_ciphersuite_id(cipher_suite);
-    if (!cipher_id) {
-        return 1;
+    /* copy the suites for strtok_r */
+    suites_copy = strdup(cipher_suites);
+    NC_CHECK_ERRMEM_RET(!suites_copy, 1);
+
+    /* count the amount of cipher suites in the colon-separated list, we always have at least one */
+    count = 1;
+    for (p = cipher_suites; *p; p++) {
+        if (*p == ':') {
+            count++;
+        }
     }
 
-    /* append the cipher suite to a zero terminated array */
-    if (!opts->ciphers) {
-        /* first entry, account for terminating 0 */
-        opts->ciphers = malloc(2 * sizeof cipher_id);
-        NC_CHECK_ERRMEM_RET(!opts->ciphers, 1);
-        ((int *)opts->ciphers)[0] = cipher_id;
-        opts->cipher_count = 1;
-    } else {
-        /* +2 because of terminating 0 */
-        opts->ciphers = nc_realloc(opts->ciphers, (opts->cipher_count + 2) * sizeof cipher_id);
-        NC_CHECK_ERRMEM_RET(!opts->ciphers, 1);
-        ((int *)opts->ciphers)[opts->cipher_count] = cipher_id;
-        opts->cipher_count++;
+    /* allocate this many mbedtls ciphersuites + 1 for terminating 0 */
+    mbedtls_ciphersuites = malloc((count + 1) * sizeof *mbedtls_ciphersuites);
+    NC_CHECK_ERRMEM_GOTO(!mbedtls_ciphersuites, rc = 1, cleanup);
+
+    /* convert each cipher suite name to mbedtls internal ID */
+    i = 0;
+    while ((suite = strtok_r(i ? NULL : suites_copy, ":", &saveptr))) {
+        mbedtls_ciphersuites[i] = mbedtls_ssl_get_ciphersuite_id(suite);
+        i++;
     }
+    mbedtls_ciphersuites[i] = 0;
 
-    /* terminate the array */
-    ((int *)opts->ciphers)[opts->cipher_count] = 0;
-    return 0;
-}
+    mbedtls_ssl_conf_ciphersuites(tls_cfg, mbedtls_ciphersuites);
 
-void
-nc_server_tls_set_cipher_suites_wrap(void *tls_cfg, void *cipher_suites)
-{
-    mbedtls_ssl_conf_ciphersuites(tls_cfg, cipher_suites);
+    *cipher_suites_out = mbedtls_ciphersuites;
+
+cleanup:
+    free(suites_copy);
+    return rc;
 }
 
 time_t

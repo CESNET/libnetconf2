@@ -97,6 +97,24 @@ ln2_glob_test_server_thread(void *arg)
     return NULL;
 }
 
+void *
+ln2_glob_test_server_thread_fail(void *arg)
+{
+    NC_MSG_TYPE msgtype;
+    struct nc_session *session = NULL;
+    struct ln2_test_ctx *test_ctx = arg;
+
+    /* wait for the client to be ready to connect */
+    pthread_barrier_wait(&test_ctx->barrier);
+
+    /* try to accept a session, but we expect it to fail */
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
+    assert(msgtype == NC_MSG_ERROR);
+    assert(!session);
+
+    return NULL;
+}
+
 int
 ln2_glob_test_setup(struct ln2_test_ctx **test_ctx)
 {

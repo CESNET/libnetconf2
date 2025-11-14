@@ -149,7 +149,7 @@ int nc_server_config_append(const struct ly_ctx *ctx, const char *parent_path, c
 /**
  * @brief Deletes a subtree from the YANG data.
  *
- * @param tree YANG data from which the subtree will be deleted.
+ * @param[in,out] tree YANG data from which the subtree will be deleted.
  * @param[in] path_fmt Format of the path. The last node will be the top level node of the deleted tree.
  * @param[in] ... Parameters for the path format, essentially representing the lists' keys.
  * @return 0 on success, non-zero otherwise.
@@ -159,7 +159,7 @@ int nc_server_config_delete(struct lyd_node **tree, const char *path_fmt, ...);
 /**
  * @brief Deletes a subtree from the YANG data, but doesn't return an error if the node doesn't exist.
  *
- * @param tree YANG data from which the subtree will be deleted.
+ * @param[in,out] tree YANG data from which the subtree will be deleted.
  * @param[in] path_fmt Format of the path. The last node will be the top level node of the deleted tree.
  * @param[in] ... Parameters for the path format, essentially representing the lists' keys.
  * @return 0 on success, non-zero otherwise.

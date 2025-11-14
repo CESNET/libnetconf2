@@ -19,6 +19,7 @@
 #include <stdlib.h>
 
 #include "config.h"
+#include "session_p.h"
 
 #ifdef HAVE_MBEDTLS
 
@@ -34,6 +35,7 @@
  */
 struct nc_tls_ctx {
     int *sock;                          /**< Socket FD. */
+    int *cipher_suites;                 /**< List of allowed cipher suite IDs. */
     mbedtls_entropy_context *entropy;   /**< Entropy. */
     mbedtls_ctr_drbg_context *ctr_drbg; /**< Random bit generator. */
     mbedtls_x509_crt *cert;             /**< Certificate. */
@@ -61,6 +63,11 @@ struct nc_tls_ctx {
 #endif
 
 /**
+ * @brief List of supported cipher suites.
+ */
+extern const char *nc_tls_supported_cipher_suites[];
+
+/**
  * @brief Server side TLS verify callback data.
  */
 struct nc_tls_verify_cb_data {
@@ -68,6 +75,9 @@ struct nc_tls_verify_cb_data {
     struct nc_server_tls_opts *opts;    /**< TLS server options. */
     void *chain;                        /**< Certificate chain used to verify the client cert. */
 };
+
+/* forward declaration */
+enum nc_tls_version;
 
 /**
  * @brief Initializes the TLS backend.
@@ -201,11 +211,12 @@ int nc_server_tls_add_crl_to_store_wrap(const unsigned char *crl_data, size_t si
  * @brief Sets the TLS version.
  *
  * @param[in] tls_cfg TLS configuration.
- * @param[in] tls_versions Bit-field of supported TLS versions.
+ * @param[in] min Optional minimum TLS version.
+ * @param[in] max Optional maximum TLS version.
  *
  * @return 0 on success, non-zero on fail.
  */
-int nc_server_tls_set_tls_versions_wrap(void *tls_cfg, unsigned int tls_versions);
+int nc_server_tls_set_tls_versions_wrap(void *tls_cfg, enum nc_tls_version min, enum nc_tls_version max);
 
 /**
  * @brief Set TLS server's verify flags, verify cb and its data.
@@ -443,10 +454,12 @@ int nc_client_tls_set_hostname_wrap(void *tls_session, const char *hostname);
  * @param[in] pkey Private key.
  * @param[in] cert_store Certificate store.
  * @param[in] crl_store CRL store.
+ * @param[in] cipher_suites List of cipher suites.
  * @param[in,out] tls_ctx TLS context.
  * @return 0 on success, non-zero on fail.
  */
-int nc_tls_init_ctx_wrap(void *cert, void *pkey, void *cert_store, void *crl_store, struct nc_tls_ctx *tls_ctx);
+int nc_tls_init_ctx_wrap(void *cert, void *pkey, void *cert_store,
+        void *crl_store, void *cipher_suites, struct nc_tls_ctx *tls_ctx);
 
 /**
  * @brief Setup a TLS configuration from a TLS context.
@@ -708,30 +721,25 @@ void * nc_tls_import_pubkey_file_wrap(const char *pubkey_path);
 int nc_server_tls_get_crl_distpoint_uris_wrap(void *leaf_cert, void *cert_store, char ***uris, int *uri_count);
 
 /**
- * @brief Process a cipher suite so that it can be set by the underlying TLS lib.
+ * @brief Convert IANA cipher suite name to internal TLS library name.
  *
- * @param[in] cipher Cipher suite identity value.
- * @param[out] out Processed cipher suite.
- * @return 0 on success, 1 on fail.
- */
-int nc_tls_process_cipher_suite_wrap(const char *cipher, char **out);
-
-/**
- * @brief Append a cipher suite to the list of cipher suites.
+ * @note For MbedTLS, all cipher suites up to v4.0.0 are supported.
+ *       For OpenSSL, the list was obtained from: https://testssl.sh/openssl-iana.mapping.html
  *
- * @param[in] opts TLS options.
- * @param[in] cipher_suite Cipher suite to append.
- * @return 0 on success, 1 on fail.
+ * @param[in] iana_name IANA cipher suite name.
+ * @return Internal TLS library cipher suite name, NULL if not found.
  */
-int nc_tls_append_cipher_suite_wrap(struct nc_server_tls_opts *opts, const char *cipher_suite);
+const char *nc_server_tls_cipher_suite_name_to_internal_wrap(const char *iana_name);
 
 /**
  * @brief Set the list of cipher suites for the TLS configuration.
  *
  * @param[in] tls_cfg TLS configuration.
- * @param[in] cipher_suites List of cipher suites.
+ * @param[in] cipher_suites List of colon-separated cipher suites.
+ * @param[out] cipher_suites_out Parsed cipher suites object (for MbedTLS), ignored for OpenSSL.
+ * @return 0 on success, non-zero on fail.
  */
-void nc_server_tls_set_cipher_suites_wrap(void *tls_cfg, void *cipher_suites);
+int nc_server_tls_set_cipher_suites_wrap(void *tls_cfg, const char *cipher_suites, void **cipher_suites_out);
 
 /**
  * @brief Get the certificate's expiration time.

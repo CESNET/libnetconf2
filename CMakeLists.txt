@@ -123,9 +123,7 @@ if(ENABLE_SSH_TLS)
         src/server_config_util_ssh.c
         src/session_client_tls.c
         src/session_server_tls.c
-        src/server_config_util_tls.c
-        src/server_config_ks.c
-        src/server_config_ts.c)
+        src/server_config_util_tls.c)
     set(SSH_TLS_MACRO "#ifndef NC_ENABLED_SSH_TLS\n#define NC_ENABLED_SSH_TLS\n#endif")
 endif()
 

@@ -44,6 +44,88 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
+/**
+ * @brief List of supported cipher suites for OpenSSL.
+ *
+ * This list is used to populate the operational data for supported cipher suites.
+ * Obtained from: https://testssl.sh/openssl-iana.mapping.html
+ */
+const char *nc_tls_supported_cipher_suites[] = {
+    "TLS_RSA_WITH_NULL_MD5", "TLS_RSA_WITH_NULL_SHA", "TLS_RSA_EXPORT_WITH_RC4_40_MD5", "TLS_RSA_WITH_RC4_128_MD5",
+    "TLS_RSA_WITH_RC4_128_SHA", "TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5", "TLS_RSA_WITH_IDEA_CBC_SHA",
+    "TLS_RSA_EXPORT_WITH_DES40_CBC_SHA", "TLS_RSA_WITH_DES_CBC_SHA", "TLS_RSA_WITH_3DES_EDE_CBC_SHA",
+    "TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA", "TLS_DH_DSS_WITH_DES_CBC_SHA", "TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA",
+    "TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA", "TLS_DH_RSA_WITH_DES_CBC_SHA", "TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA",
+    "TLS_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA", "TLS_DHE_DSS_WITH_DES_CBC_SHA", "TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA",
+    "TLS_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA", "TLS_DHE_RSA_WITH_DES_CBC_SHA", "TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA",
+    "TLS_KRB5_WITH_DES_CBC_SHA", "TLS_KRB5_WITH_3DES_EDE_CBC_SHA", "TLS_KRB5_WITH_RC4_128_SHA",
+    "TLS_KRB5_WITH_IDEA_CBC_SHA", "TLS_KRB5_WITH_DES_CBC_MD5", "TLS_KRB5_WITH_3DES_EDE_CBC_MD5",
+    "TLS_KRB5_WITH_RC4_128_MD5", "TLS_KRB5_WITH_IDEA_CBC_MD5", "TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA",
+    "TLS_KRB5_EXPORT_WITH_RC2_CBC_40_SHA", "TLS_KRB5_EXPORT_WITH_RC4_40_SHA", "TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5",
+    "TLS_KRB5_EXPORT_WITH_RC2_CBC_40_MD5", "TLS_KRB5_EXPORT_WITH_RC4_40_MD5", "TLS_PSK_WITH_NULL_SHA",
+    "TLS_DHE_PSK_WITH_NULL_SHA", "TLS_RSA_PSK_WITH_NULL_SHA", "TLS_RSA_WITH_AES_128_CBC_SHA",
+    "TLS_DH_DSS_WITH_AES_128_CBC_SHA", "TLS_DH_RSA_WITH_AES_128_CBC_SHA", "TLS_DHE_DSS_WITH_AES_128_CBC_SHA",
+    "TLS_DHE_RSA_WITH_AES_128_CBC_SHA", "TLS_RSA_WITH_AES_256_CBC_SHA", "TLS_DH_DSS_WITH_AES_256_CBC_SHA",
+    "TLS_DH_RSA_WITH_AES_256_CBC_SHA", "TLS_DHE_DSS_WITH_AES_256_CBC_SHA", "TLS_DHE_RSA_WITH_AES_256_CBC_SHA",
+    "TLS_RSA_WITH_NULL_SHA256", "TLS_RSA_WITH_AES_128_CBC_SHA256", "TLS_RSA_WITH_AES_256_CBC_SHA256",
+    "TLS_DH_DSS_WITH_AES_128_CBC_SHA256", "TLS_DH_RSA_WITH_AES_128_CBC_SHA256", "TLS_DHE_DSS_WITH_AES_128_CBC_SHA256",
+    "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA", "TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA", "TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA",
+    "TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA", "TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA",
+    "TLS_DHE_RSA_WITH_AES_128_CBC_SHA256", "TLS_DH_DSS_WITH_AES_256_CBC_SHA256", "TLS_DH_RSA_WITH_AES_256_CBC_SHA256",
+    "TLS_DHE_DSS_WITH_AES_256_CBC_SHA256", "TLS_DHE_RSA_WITH_AES_256_CBC_SHA256", "TLS_RSA_WITH_CAMELLIA_256_CBC_SHA",
+    "TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA", "TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA",
+    "TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA", "TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA", "TLS_PSK_WITH_RC4_128_SHA",
+    "TLS_PSK_WITH_3DES_EDE_CBC_SHA", "TLS_PSK_WITH_AES_128_CBC_SHA", "TLS_PSK_WITH_AES_256_CBC_SHA",
+    "TLS_RSA_WITH_SEED_CBC_SHA", "TLS_DH_DSS_WITH_SEED_CBC_SHA", "TLS_DH_RSA_WITH_SEED_CBC_SHA",
+    "TLS_DHE_DSS_WITH_SEED_CBC_SHA", "TLS_DHE_RSA_WITH_SEED_CBC_SHA", "TLS_RSA_WITH_AES_128_GCM_SHA256",
+    "TLS_RSA_WITH_AES_256_GCM_SHA384", "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256", "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384",
+    "TLS_DH_RSA_WITH_AES_128_GCM_SHA256", "TLS_DH_RSA_WITH_AES_256_GCM_SHA384", "TLS_DHE_DSS_WITH_AES_128_GCM_SHA256",
+    "TLS_DHE_DSS_WITH_AES_256_GCM_SHA384", "TLS_DH_DSS_WITH_AES_128_GCM_SHA256", "TLS_DH_DSS_WITH_AES_256_GCM_SHA384",
+    "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256", "TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA256", "TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256", "TLS_EMPTY_RENEGOTIATION_INFO_SCSV", "TLS_AES_128_GCM_SHA256",
+    "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256", "TLS_AES_128_CCM_SHA256", "TLS_AES_128_CCM_8_SHA256",
+    "TLS_ECDH_ECDSA_WITH_NULL_SHA", "TLS_ECDH_ECDSA_WITH_RC4_128_SHA", "TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA",
+    "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA", "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA", "TLS_ECDHE_ECDSA_WITH_NULL_SHA",
+    "TLS_ECDHE_ECDSA_WITH_RC4_128_SHA", "TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA", "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA",
+    "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA", "TLS_ECDH_RSA_WITH_NULL_SHA", "TLS_ECDH_RSA_WITH_RC4_128_SHA",
+    "TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA", "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA", "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA",
+    "TLS_ECDHE_RSA_WITH_NULL_SHA", "TLS_ECDHE_RSA_WITH_RC4_128_SHA", "TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA",
+    "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA", "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA", "TLS_SRP_SHA_WITH_3DES_EDE_CBC_SHA",
+    "TLS_SRP_SHA_RSA_WITH_3DES_EDE_CBC_SHA", "TLS_SRP_SHA_DSS_WITH_3DES_EDE_CBC_SHA",
+    "TLS_SRP_SHA_WITH_AES_128_CBC_SHA", "TLS_SRP_SHA_RSA_WITH_AES_128_CBC_SHA", "TLS_SRP_SHA_DSS_WITH_AES_128_CBC_SHA",
+    "TLS_SRP_SHA_WITH_AES_256_CBC_SHA", "TLS_SRP_SHA_RSA_WITH_AES_256_CBC_SHA", "TLS_SRP_SHA_DSS_WITH_AES_256_CBC_SHA",
+    "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256", "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384",
+    "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256", "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384",
+    "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256", "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
+    "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256", "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384",
+    "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256", "TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256", "TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384", "TLS_ECDHE_PSK_WITH_RC4_128_SHA",
+    "TLS_ECDHE_PSK_WITH_3DES_EDE_CBC_SHA", "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA", "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA",
+    "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256", "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384", "TLS_ECDHE_PSK_WITH_NULL_SHA",
+    "TLS_ECDHE_PSK_WITH_NULL_SHA256", "TLS_ECDHE_PSK_WITH_NULL_SHA384", "TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384", "TLS_ECDH_ECDSA_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_ECDH_ECDSA_WITH_CAMELLIA_256_CBC_SHA384", "TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384", "TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384", "TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384", "TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384", "TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384", "TLS_ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384", "TLS_RSA_WITH_AES_128_CCM", "TLS_RSA_WITH_AES_256_CCM",
+    "TLS_DHE_RSA_WITH_AES_128_CCM", "TLS_DHE_RSA_WITH_AES_256_CCM", "TLS_RSA_WITH_AES_128_CCM_8",
+    "TLS_RSA_WITH_AES_256_CCM_8", "TLS_DHE_RSA_WITH_AES_128_CCM_8", "TLS_DHE_RSA_WITH_AES_256_CCM_8",
+    "TLS_PSK_WITH_AES_128_CCM", "TLS_PSK_WITH_AES_256_CCM", "TLS_DHE_PSK_WITH_AES_128_CCM",
+    "TLS_DHE_PSK_WITH_AES_256_CCM", "TLS_PSK_WITH_AES_128_CCM_8", "TLS_PSK_WITH_AES_256_CCM_8",
+    "TLS_PSK_DHE_WITH_AES_128_CCM_8", "TLS_PSK_DHE_WITH_AES_256_CCM_8", "TLS_ECDHE_ECDSA_WITH_AES_128_CCM",
+    "TLS_ECDHE_ECDSA_WITH_AES_256_CCM", "TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8", "TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8",
+    "TLS_SHA256_SHA256", "TLS_SHA384_SHA384", "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+    "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256", "TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+    "TLS_PSK_WITH_CHACHA20_POLY1305_SHA256", "TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256",
+    "TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256", "TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256", NULL
+};
+
 int
 nc_tls_backend_init_wrap(void)
 {
@@ -259,18 +341,14 @@ cleanup:
 }
 
 int
-nc_server_tls_set_tls_versions_wrap(void *tls_cfg, unsigned int tls_versions)
+nc_server_tls_set_tls_versions_wrap(void *tls_cfg, enum nc_tls_version min, enum nc_tls_version max)
 {
     int rc = 1;
 
-    /* first set the minimum version */
-    if (tls_versions & NC_TLS_VERSION_10) {
-        rc = SSL_CTX_set_min_proto_version(tls_cfg, TLS1_VERSION);
-    } else if (tls_versions & NC_TLS_VERSION_11) {
-        rc = SSL_CTX_set_min_proto_version(tls_cfg, TLS1_1_VERSION);
-    } else if (tls_versions & NC_TLS_VERSION_12) {
+    /* set the minimum version if any, otherwise leave it to OpenSSL default */
+    if (min & NC_TLS_VERSION_1_2) {
         rc = SSL_CTX_set_min_proto_version(tls_cfg, TLS1_2_VERSION);
-    } else if (tls_versions & NC_TLS_VERSION_13) {
+    } else if (min & NC_TLS_VERSION_1_3) {
         rc = SSL_CTX_set_min_proto_version(tls_cfg, TLS1_3_VERSION);
     }
     if (!rc) {
@@ -278,15 +356,11 @@ nc_server_tls_set_tls_versions_wrap(void *tls_cfg, unsigned int tls_versions)
         return 1;
     }
 
-    /* then set the maximum version */
-    if (tls_versions & NC_TLS_VERSION_13) {
+    /* set the maximum version if any, otherwise leave it to OpenSSL default */
+    if (max & NC_TLS_VERSION_1_3) {
         rc = SSL_CTX_set_max_proto_version(tls_cfg, TLS1_3_VERSION);
-    } else if (tls_versions & NC_TLS_VERSION_12) {
+    } else if (max & NC_TLS_VERSION_1_2) {
         rc = SSL_CTX_set_max_proto_version(tls_cfg, TLS1_2_VERSION);
-    } else if (tls_versions & NC_TLS_VERSION_11) {
-        rc = SSL_CTX_set_max_proto_version(tls_cfg, TLS1_1_VERSION);
-    } else if (tls_versions & NC_TLS_VERSION_10) {
-        rc = SSL_CTX_set_max_proto_version(tls_cfg, TLS1_VERSION);
     }
     if (!rc) {
         ERR(NULL, "Setting TLS max version failed (%s).", ERR_reason_error_string(ERR_get_error()));
@@ -761,7 +835,8 @@ cleanup:
 }
 
 int
-nc_tls_init_ctx_wrap(void *cert, void *pkey, void *cert_store, void *crl_store, struct nc_tls_ctx *tls_ctx)
+nc_tls_init_ctx_wrap(void *cert, void *pkey, void *cert_store,
+        void *crl_store, void *UNUSED(cipher_suites), struct nc_tls_ctx *tls_ctx)
 {
     tls_ctx->cert = cert;
     tls_ctx->pkey = pkey;
@@ -1425,53 +1500,421 @@ cleanup:
     return ret;
 }
 
-int
-nc_tls_process_cipher_suite_wrap(const char *cipher, char **out)
+const char *
+nc_server_tls_cipher_suite_name_to_internal_wrap(const char *iana_name)
 {
-    int i;
-
-    *out = malloc(strlen(cipher) + 1);
-    NC_CHECK_ERRMEM_RET(!*out, 1);
-
-    /* convert to uppercase */
-    for (i = 0; cipher[i]; i++) {
-        if (cipher[i] == '-') {
-            /* OpenSSL requires _ instead of - in cipher names */
-            (*out)[i] = '_';
-        } else {
-            (*out)[i] = toupper(cipher[i]);
-        }
+    if (!strcmp(iana_name, "TLS_RSA_WITH_NULL_MD5")) {
+        return "NULL-MD5";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_NULL_SHA")) {
+        return "NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_EXPORT_WITH_RC4_40_MD5")) {
+        return "EXP-RC4-MD5";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_RC4_128_MD5")) {
+        return "RC4-MD5";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_RC4_128_SHA")) {
+        return "RC4-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5")) {
+        return "EXP-RC2-CBC-MD5";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_IDEA_CBC_SHA")) {
+        return "IDEA-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_EXPORT_WITH_DES40_CBC_SHA")) {
+        return "EXP-DES-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_DES_CBC_SHA")) {
+        return "DES-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_3DES_EDE_CBC_SHA")) {
+        return "DES-CBC3-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA")) {
+        return "EXP-DH-DSS-DES-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_DSS_WITH_DES_CBC_SHA")) {
+        return "DH-DSS-DES-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA")) {
+        return "DH-DSS-DES-CBC3-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA")) {
+        return "EXP-DH-RSA-DES-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_RSA_WITH_DES_CBC_SHA")) {
+        return "DH-RSA-DES-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA")) {
+        return "DH-RSA-DES-CBC3-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA")) {
+        return "EXP-EDH-DSS-DES-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_DSS_WITH_DES_CBC_SHA")) {
+        return "EDH-DSS-DES-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA")) {
+        return "EDH-DSS-DES-CBC3-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA")) {
+        return "EXP-EDH-RSA-DES-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_DES_CBC_SHA")) {
+        return "EDH-RSA-DES-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA")) {
+        return "EDH-RSA-DES-CBC3-SHA";
+    } else if (!strcmp(iana_name, "TLS_KRB5_WITH_DES_CBC_SHA")) {
+        return "KRB5-DES-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_KRB5_WITH_3DES_EDE_CBC_SHA")) {
+        return "KRB5-DES-CBC3-SHA";
+    } else if (!strcmp(iana_name, "TLS_KRB5_WITH_RC4_128_SHA")) {
+        return "KRB5-RC4-SHA";
+    } else if (!strcmp(iana_name, "TLS_KRB5_WITH_IDEA_CBC_SHA")) {
+        return "KRB5-IDEA-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_KRB5_WITH_DES_CBC_MD5")) {
+        return "KRB5-DES-CBC-MD5";
+    } else if (!strcmp(iana_name, "TLS_KRB5_WITH_3DES_EDE_CBC_MD5")) {
+        return "KRB5-DES-CBC3-MD5";
+    } else if (!strcmp(iana_name, "TLS_KRB5_WITH_RC4_128_MD5")) {
+        return "KRB5-RC4-MD5";
+    } else if (!strcmp(iana_name, "TLS_KRB5_WITH_IDEA_CBC_MD5")) {
+        return "KRB5-IDEA-CBC-MD5";
+    } else if (!strcmp(iana_name, "TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA")) {
+        return "EXP-KRB5-DES-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_KRB5_EXPORT_WITH_RC2_CBC_40_SHA")) {
+        return "EXP-KRB5-RC2-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_KRB5_EXPORT_WITH_RC4_40_SHA")) {
+        return "EXP-KRB5-RC4-SHA";
+    } else if (!strcmp(iana_name, "TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5")) {
+        return "EXP-KRB5-DES-CBC-MD5";
+    } else if (!strcmp(iana_name, "TLS_KRB5_EXPORT_WITH_RC2_CBC_40_MD5")) {
+        return "EXP-KRB5-RC2-CBC-MD5";
+    } else if (!strcmp(iana_name, "TLS_KRB5_EXPORT_WITH_RC4_40_MD5")) {
+        return "EXP-KRB5-RC4-MD5";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_NULL_SHA")) {
+        return "PSK-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_NULL_SHA")) {
+        return "DHE-PSK-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_NULL_SHA")) {
+        return "RSA-PSK-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_128_CBC_SHA")) {
+        return "AES128-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_DSS_WITH_AES_128_CBC_SHA")) {
+        return "DH-DSS-AES128-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_RSA_WITH_AES_128_CBC_SHA")) {
+        return "DH-RSA-AES128-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_DSS_WITH_AES_128_CBC_SHA")) {
+        return "DHE-DSS-AES128-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_128_CBC_SHA")) {
+        return "DHE-RSA-AES128-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_256_CBC_SHA")) {
+        return "AES256-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_DSS_WITH_AES_256_CBC_SHA")) {
+        return "DH-DSS-AES256-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_RSA_WITH_AES_256_CBC_SHA")) {
+        return "DH-RSA-AES256-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_DSS_WITH_AES_256_CBC_SHA")) {
+        return "DHE-DSS-AES256-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_256_CBC_SHA")) {
+        return "DHE-RSA-AES256-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_NULL_SHA256")) {
+        return "NULL-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_128_CBC_SHA256")) {
+        return "AES128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_256_CBC_SHA256")) {
+        return "AES256-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DH_DSS_WITH_AES_128_CBC_SHA256")) {
+        return "DH-DSS-AES128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DH_RSA_WITH_AES_128_CBC_SHA256")) {
+        return "DH-RSA-AES128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_DSS_WITH_AES_128_CBC_SHA256")) {
+        return "DHE-DSS-AES128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA")) {
+        return "CAMELLIA128-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA")) {
+        return "DH-DSS-CAMELLIA128-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA")) {
+        return "DH-RSA-CAMELLIA128-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA")) {
+        return "DHE-DSS-CAMELLIA128-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA")) {
+        return "DHE-RSA-CAMELLIA128-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_128_CBC_SHA256")) {
+        return "DHE-RSA-AES128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DH_DSS_WITH_AES_256_CBC_SHA256")) {
+        return "DH-DSS-AES256-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DH_RSA_WITH_AES_256_CBC_SHA256")) {
+        return "DH-RSA-AES256-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_DSS_WITH_AES_256_CBC_SHA256")) {
+        return "DHE-DSS-AES256-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_256_CBC_SHA256")) {
+        return "DHE-RSA-AES256-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_CAMELLIA_256_CBC_SHA")) {
+        return "CAMELLIA256-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA")) {
+        return "DH-DSS-CAMELLIA256-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA")) {
+        return "DH-RSA-CAMELLIA256-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA")) {
+        return "DHE-DSS-CAMELLIA256-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA")) {
+        return "DHE-RSA-CAMELLIA256-SHA";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_RC4_128_SHA")) {
+        return "PSK-RC4-SHA";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_3DES_EDE_CBC_SHA")) {
+        return "PSK-3DES-EDE-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_128_CBC_SHA")) {
+        return "PSK-AES128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_256_CBC_SHA")) {
+        return "PSK-AES256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_SEED_CBC_SHA")) {
+        return "SEED-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_DSS_WITH_SEED_CBC_SHA")) {
+        return "DH-DSS-SEED-SHA";
+    } else if (!strcmp(iana_name, "TLS_DH_RSA_WITH_SEED_CBC_SHA")) {
+        return "DH-RSA-SEED-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_DSS_WITH_SEED_CBC_SHA")) {
+        return "DHE-DSS-SEED-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_SEED_CBC_SHA")) {
+        return "DHE-RSA-SEED-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_128_GCM_SHA256")) {
+        return "AES128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_256_GCM_SHA384")) {
+        return "AES256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256")) {
+        return "DHE-RSA-AES128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384")) {
+        return "DHE-RSA-AES256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DH_RSA_WITH_AES_128_GCM_SHA256")) {
+        return "DH-RSA-AES128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DH_RSA_WITH_AES_256_GCM_SHA384")) {
+        return "DH-RSA-AES256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_DSS_WITH_AES_128_GCM_SHA256")) {
+        return "DHE-DSS-AES128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_DSS_WITH_AES_256_GCM_SHA384")) {
+        return "DHE-DSS-AES256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DH_DSS_WITH_AES_128_GCM_SHA256")) {
+        return "DH-DSS-AES128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DH_DSS_WITH_AES_256_GCM_SHA384")) {
+        return "DH-DSS-AES256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "CAMELLIA128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "DH-DSS-CAMELLIA128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "DH-RSA-CAMELLIA128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "DHE-DSS-CAMELLIA128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "DHE-RSA-CAMELLIA128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_EMPTY_RENEGOTIATION_INFO_SCSV")) {
+        return "TLS_FALLBACK_SCSV";
+    } else if (!strcmp(iana_name, "TLS_AES_128_GCM_SHA256")) {
+        return "TLS_AES_128_GCM_SHA256";
+    } else if (!strcmp(iana_name, "TLS_AES_256_GCM_SHA384")) {
+        return "TLS_AES_256_GCM_SHA384";
+    } else if (!strcmp(iana_name, "TLS_CHACHA20_POLY1305_SHA256")) {
+        return "TLS_CHACHA20_POLY1305_SHA256";
+    } else if (!strcmp(iana_name, "TLS_AES_128_CCM_SHA256")) {
+        return "TLS_AES_128_CCM_SHA256";
+    } else if (!strcmp(iana_name, "TLS_AES_128_CCM_8_SHA256")) {
+        return "TLS_AES_128_CCM_8_SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_NULL_SHA")) {
+        return "ECDH-ECDSA-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_RC4_128_SHA")) {
+        return "ECDH-ECDSA-RC4-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA")) {
+        return "ECDH-ECDSA-DES-CBC3-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA")) {
+        return "ECDH-ECDSA-AES128-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA")) {
+        return "ECDH-ECDSA-AES256-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_NULL_SHA")) {
+        return "ECDHE-ECDSA-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_RC4_128_SHA")) {
+        return "ECDHE-ECDSA-RC4-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA")) {
+        return "ECDHE-ECDSA-DES-CBC3-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA")) {
+        return "ECDHE-ECDSA-AES128-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA")) {
+        return "ECDHE-ECDSA-AES256-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_NULL_SHA")) {
+        return "ECDH-RSA-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_RC4_128_SHA")) {
+        return "ECDH-RSA-RC4-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA")) {
+        return "ECDH-RSA-DES-CBC3-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA")) {
+        return "ECDH-RSA-AES128-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA")) {
+        return "ECDH-RSA-AES256-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_NULL_SHA")) {
+        return "ECDHE-RSA-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_RC4_128_SHA")) {
+        return "ECDHE-RSA-RC4-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA")) {
+        return "ECDHE-RSA-DES-CBC3-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA")) {
+        return "ECDHE-RSA-AES128-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA")) {
+        return "ECDHE-RSA-AES256-SHA";
+    } else if (!strcmp(iana_name, "TLS_SRP_SHA_WITH_3DES_EDE_CBC_SHA")) {
+        return "SRP-3DES-EDE-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_SRP_SHA_RSA_WITH_3DES_EDE_CBC_SHA")) {
+        return "SRP-RSA-3DES-EDE-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_SRP_SHA_DSS_WITH_3DES_EDE_CBC_SHA")) {
+        return "SRP-DSS-3DES-EDE-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_SRP_SHA_WITH_AES_128_CBC_SHA")) {
+        return "SRP-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_SRP_SHA_RSA_WITH_AES_128_CBC_SHA")) {
+        return "SRP-RSA-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_SRP_SHA_DSS_WITH_AES_128_CBC_SHA")) {
+        return "SRP-DSS-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_SRP_SHA_WITH_AES_256_CBC_SHA")) {
+        return "SRP-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_SRP_SHA_RSA_WITH_AES_256_CBC_SHA")) {
+        return "SRP-RSA-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_SRP_SHA_DSS_WITH_AES_256_CBC_SHA")) {
+        return "SRP-DSS-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256")) {
+        return "ECDHE-ECDSA-AES128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384")) {
+        return "ECDHE-ECDSA-AES256-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256")) {
+        return "ECDH-ECDSA-AES128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384")) {
+        return "ECDH-ECDSA-AES256-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256")) {
+        return "ECDHE-RSA-AES128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384")) {
+        return "ECDHE-RSA-AES256-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256")) {
+        return "ECDH-RSA-AES128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384")) {
+        return "ECDH-RSA-AES256-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256")) {
+        return "ECDHE-ECDSA-AES128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384")) {
+        return "ECDHE-ECDSA-AES256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256")) {
+        return "ECDH-ECDSA-AES128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384")) {
+        return "ECDH-ECDSA-AES256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")) {
+        return "ECDHE-RSA-AES128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384")) {
+        return "ECDHE-RSA-AES256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256")) {
+        return "ECDH-RSA-AES128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384")) {
+        return "ECDH-RSA-AES256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_RC4_128_SHA")) {
+        return "ECDHE-PSK-RC4-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_3DES_EDE_CBC_SHA")) {
+        return "ECDHE-PSK-3DES-EDE-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA")) {
+        return "ECDHE-PSK-AES128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA")) {
+        return "ECDHE-PSK-AES256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256")) {
+        return "ECDHE-PSK-AES128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384")) {
+        return "ECDHE-PSK-AES256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_NULL_SHA")) {
+        return "ECDHE-PSK-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_NULL_SHA256")) {
+        return "ECDHE-PSK-NULL-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_NULL_SHA384")) {
+        return "ECDHE-PSK-NULL-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "ECDHE-ECDSA-CAMELLIA128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "ECDHE-ECDSA-CAMELLIA256-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "ECDH-ECDSA-CAMELLIA128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "ECDH-ECDSA-CAMELLIA256-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "ECDHE-RSA-CAMELLIA128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "ECDHE-RSA-CAMELLIA256-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "ECDH-RSA-CAMELLIA128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "ECDH-RSA-CAMELLIA256-SHA384";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "PSK-CAMELLIA128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "PSK-CAMELLIA256-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "DHE-PSK-CAMELLIA128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "DHE-PSK-CAMELLIA256-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "RSA-PSK-CAMELLIA128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "RSA-PSK-CAMELLIA256-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "ECDHE-PSK-CAMELLIA128-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "ECDHE-PSK-CAMELLIA256-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_128_CCM")) {
+        return "AES128-CCM";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_256_CCM")) {
+        return "AES256-CCM";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_128_CCM")) {
+        return "DHE-RSA-AES128-CCM";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_256_CCM")) {
+        return "DHE-RSA-AES256-CCM";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_128_CCM_8")) {
+        return "AES128-CCM8";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_256_CCM_8")) {
+        return "AES256-CCM8";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_128_CCM_8")) {
+        return "DHE-RSA-AES128-CCM8";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_256_CCM_8")) {
+        return "DHE-RSA-AES256-CCM8";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_128_CCM")) {
+        return "PSK-AES128-CCM";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_256_CCM")) {
+        return "PSK-AES256-CCM";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_128_CCM")) {
+        return "DHE-PSK-AES128-CCM";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_256_CCM")) {
+        return "DHE-PSK-AES256-CCM";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_128_CCM_8")) {
+        return "PSK-AES128-CCM8";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_256_CCM_8")) {
+        return "PSK-AES256-CCM8";
+    } else if (!strcmp(iana_name, "TLS_PSK_DHE_WITH_AES_128_CCM_8")) {
+        return "DHE-PSK-AES128-CCM8";
+    } else if (!strcmp(iana_name, "TLS_PSK_DHE_WITH_AES_256_CCM_8")) {
+        return "DHE-PSK-AES256-CCM8";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_128_CCM")) {
+        return "ECDHE-ECDSA-AES128-CCM";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_256_CCM")) {
+        return "ECDHE-ECDSA-AES256-CCM";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8")) {
+        return "ECDHE-ECDSA-AES128-CCM8";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8")) {
+        return "ECDHE-ECDSA-AES256-CCM8";
+    } else if (!strcmp(iana_name, "TLS_SHA256_SHA256")) {
+        return "TLS_SHA256_SHA256";
+    } else if (!strcmp(iana_name, "TLS_SHA384_SHA384")) {
+        return "TLS_SHA384_SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "ECDHE-RSA-CHACHA20-POLY1305";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "ECDHE-ECDSA-CHACHA20-POLY1305";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "DHE-RSA-CHACHA20-POLY1305";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "PSK-CHACHA20-POLY1305";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "ECDHE-PSK-CHACHA20-POLY1305";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "DHE-PSK-CHACHA20-POLY1305";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "RSA-PSK-CHACHA20-POLY1305";
     }
 
-    (*out)[i] = '\0';
-    return 0;
+    return NULL;
 }
 
 int
-nc_tls_append_cipher_suite_wrap(struct nc_server_tls_opts *opts, const char *cipher_suite)
-{
-    if (!opts->ciphers) {
-        /* first entry */
-        opts->ciphers = strdup(cipher_suite);
-        NC_CHECK_ERRMEM_RET(!opts->ciphers, 1);
-    } else {
-        /* + 1 because of : between entries */
-        opts->ciphers = nc_realloc(opts->ciphers, strlen(opts->ciphers) + strlen(cipher_suite) + 1 + 1);
-        NC_CHECK_ERRMEM_RET(!opts->ciphers, 1);
-        strcat(opts->ciphers, ":");
-        strcat(opts->ciphers, cipher_suite);
-    }
-
-    return 0;
-}
-
-void
-nc_server_tls_set_cipher_suites_wrap(void *tls_cfg, void *cipher_suites)
+nc_server_tls_set_cipher_suites_wrap(void *tls_cfg, const char *cipher_suites, void **UNUSED(cipher_suites_out))
 {
     /* set for TLS1.2 and lower */
     SSL_CTX_set_cipher_list(tls_cfg, cipher_suites);
     /* set for TLS1.3 */
     SSL_CTX_set_ciphersuites(tls_cfg, cipher_suites);
+
+    return 0;
 }
 
 time_t

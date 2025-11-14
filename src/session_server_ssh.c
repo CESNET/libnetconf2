@@ -126,27 +126,26 @@ nc_server_ssh_privkey_data_to_tmp_file(const char *in, const char *privkey_forma
 static int
 nc_server_ssh_ks_ref_get_key(const char *referenced_name, struct nc_asymmetric_key **askey)
 {
-    uint16_t i;
-    struct nc_keystore *ks = &server_opts.keystore;
+    LY_ARRAY_COUNT_TYPE i;
+    struct nc_keystore *ks = &server_opts.config.keystore;
 
     *askey = NULL;
 
     /* lookup name */
-    for (i = 0; i < ks->asym_key_count; i++) {
-        if (!strcmp(referenced_name, ks->asym_keys[i].name)) {
+    LY_ARRAY_FOR(ks->entries, i) {
+        if (!strcmp(referenced_name, ks->entries[i].asym_key.name)) {
             break;
         }
     }
-
-    if (i == ks->asym_key_count) {
+    if (i == LY_ARRAY_COUNT(ks->entries)) {
         ERR(NULL, "Keystore entry \"%s\" not found.", referenced_name);
         return 1;
     }
 
-    *askey = &ks->asym_keys[i];
+    *askey = &ks->entries[i].asym_key;
 
     /* check if the referenced public key is SubjectPublicKeyInfo */
-    if ((*askey)->pubkey_data && nc_is_pk_subject_public_key_info((*askey)->pubkey_data)) {
+    if ((*askey)->pubkey.data && nc_is_pk_subject_public_key_info((*askey)->pubkey.data)) {
         ERR(NULL, "The public key of the referenced hostkey \"%s\" is in the SubjectPublicKeyInfo format, "
                 "which is not allowed in the SSH!", referenced_name);
         return 1;
@@ -164,37 +163,37 @@ nc_server_ssh_ks_ref_get_key(const char *referenced_name, struct nc_asymmetric_k
  * @return 0 on success, 1 on error.
  */
 static int
-nc_server_ssh_ts_ref_get_keys(const char *referenced_name, struct nc_public_key **pubkeys, uint16_t *pubkey_count)
+nc_server_ssh_ts_ref_get_keys(const char *referenced_name, struct nc_public_key **pubkeys, uint32_t *pubkey_count)
 {
-    uint16_t i, j;
-    struct nc_truststore *ts = &server_opts.truststore;
+    LY_ARRAY_COUNT_TYPE i;
+    struct nc_public_key *pubkey;
+    struct nc_truststore *ts = &server_opts.config.truststore;
 
     *pubkeys = NULL;
     *pubkey_count = 0;
 
     /* lookup name */
-    for (i = 0; i < ts->pub_bag_count; i++) {
-        if (!strcmp(referenced_name, ts->pub_bags[i].name)) {
+    LY_ARRAY_FOR(ts->pubkey_bags, i) {
+        if (!strcmp(referenced_name, ts->pubkey_bags[i].name)) {
             break;
         }
     }
-
-    if (i == ts->pub_bag_count) {
+    if (i == LY_ARRAY_COUNT(ts->pubkey_bags)) {
         ERR(NULL, "Truststore entry \"%s\" not found.", referenced_name);
         return 1;
     }
 
     /* check if any of the referenced public keys is SubjectPublicKeyInfo */
-    for (j = 0; j < ts->pub_bags[i].pubkey_count; j++) {
-        if (nc_is_pk_subject_public_key_info(ts->pub_bags[i].pubkeys[j].data)) {
+    LY_ARRAY_FOR(ts->pubkey_bags[i].pubkeys, struct nc_public_key, pubkey) {
+        if (nc_is_pk_subject_public_key_info(pubkey->data)) {
             ERR(NULL, "A public key of the referenced public key bag \"%s\" is in the SubjectPublicKeyInfo format, "
-                    "which is not allowed in the SSH!", referenced_name);
+                    "which is not allowed in SSH!", referenced_name);
             return 1;
         }
     }
 
-    *pubkeys = ts->pub_bags[i].pubkeys;
-    *pubkey_count = ts->pub_bags[i].pubkey_count;
+    *pubkeys = ts->pubkey_bags[i].pubkeys;
+    *pubkey_count = LY_ARRAY_COUNT(ts->pubkey_bags[i].pubkeys);
     return 0;
 }
 
@@ -363,7 +362,7 @@ cleanup:
  * @return 0 on success, 1 on error.
  */
 static int
-nc_server_ssh_read_authorized_keys_file(const char *path, struct nc_public_key **pubkeys, uint16_t *pubkey_count)
+nc_server_ssh_read_authorized_keys_file(const char *path, struct nc_public_key **pubkeys, uint32_t *pubkey_count)
 {
     int ret = 0, rc, line_num = 0;
     FILE *f = NULL;
@@ -443,7 +442,7 @@ cleanup:
  * @return 0 on success, non-zero on error.
  */
 static int
-nc_server_ssh_get_system_keys(const char *username, struct nc_public_key **pubkeys, uint16_t *pubkey_count)
+nc_server_ssh_get_system_keys(const char *username, struct nc_public_key **pubkeys, uint32_t *pubkey_count)
 {
     int ret = 0;
     char *path = NULL;
@@ -1282,21 +1281,21 @@ nc_server_ssh_auth_pubkey(struct nc_session *session, int local_users_supported,
 {
     int signature_state, ret = 0;
     struct nc_public_key *pubkeys = NULL;
-    uint16_t pubkey_count = 0, i;
+    uint32_t pubkey_count = 0, i;
 
     assert(!local_users_supported || auth_client);
 
     /* get the public keys */
-    if (!local_users_supported || (auth_client->store == NC_STORE_SYSTEM)) {
+    if (!local_users_supported || (auth_client->pubkey_store == NC_STORE_SYSTEM)) {
         /* system user or the user has 'use system keys' configured, these need to be free'd */
         ret = nc_server_ssh_get_system_keys(session->username, &pubkeys, &pubkey_count);
         if (ret) {
             goto cleanup;
         }
-    } else if (auth_client->store == NC_STORE_LOCAL) {
+    } else if (auth_client->pubkey_store == NC_STORE_LOCAL) {
         pubkeys = auth_client->pubkeys;
-        pubkey_count = auth_client->pubkey_count;
-    } else if (auth_client->store == NC_STORE_TRUSTSTORE) {
+        pubkey_count = LY_ARRAY_COUNT(auth_client->pubkeys);
+    } else if (auth_client->pubkey_store == NC_STORE_TRUSTSTORE) {
         ret = nc_server_ssh_ts_ref_get_keys(auth_client->ts_ref, &pubkeys, &pubkey_count);
         if (ret) {
             goto cleanup;
@@ -1321,7 +1320,7 @@ nc_server_ssh_auth_pubkey(struct nc_session *session, int local_users_supported,
     }
 
 cleanup:
-    if (!local_users_supported || (auth_client->store == NC_STORE_SYSTEM)) {
+    if (!local_users_supported || (auth_client->pubkey_store == NC_STORE_SYSTEM)) {
         for (i = 0; i < pubkey_count; i++) {
             free(pubkeys[i].name);
             free(pubkeys[i].data);
@@ -1483,7 +1482,7 @@ nc_server_ssh_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, 
 {
     const char *username;
     int ret = 0;
-    uint16_t i;
+    LY_ARRAY_COUNT_TYPE u;
     struct nc_auth_client *auth_client = NULL;
     struct nc_endpt *referenced_endpt;
 
@@ -1493,9 +1492,9 @@ nc_server_ssh_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, 
 
     if (local_users_supported) {
         /* get the locally configured user */
-        for (i = 0; i < opts->client_count; i++) {
-            if (!strcmp(opts->auth_clients[i].username, username)) {
-                auth_client = &opts->auth_clients[i];
+        LY_ARRAY_FOR(opts->auth_clients, u) {
+            if (!strcmp(opts->auth_clients[u].username, username)) {
+                auth_client = &opts->auth_clients[u];
                 break;
             }
         }
@@ -1503,7 +1502,7 @@ nc_server_ssh_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, 
         if (!auth_client) {
             if (opts->referenced_endpt_name) {
                 /* client not known by the endpt, but it references another one so try it */
-                if (nc_server_get_referenced_endpt(opts->referenced_endpt_name, &referenced_endpt)) {
+                if (nc_server_endpt_get(opts->referenced_endpt_name, &referenced_endpt)) {
                     ERRINT;
                     return 1;
                 }
@@ -1527,10 +1526,9 @@ nc_server_ssh_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, 
 
         /* configure and count accepted auth methods */
         if (local_users_supported) {
-            if (((auth_client->store == NC_STORE_LOCAL) && (auth_client->pubkey_count)) ||
-                    (auth_client->store == NC_STORE_TRUSTSTORE) || (auth_client->store == NC_STORE_SYSTEM)) {
-                /* either locally configured pubkeys, or truststore or system (need to check for
-                 * pubkey count, because NC_STORE_LOCAL is the default enum value) */
+            if ((auth_client->pubkey_store == NC_STORE_LOCAL) ||
+                    (auth_client->pubkey_store == NC_STORE_TRUSTSTORE) || (auth_client->pubkey_store == NC_STORE_SYSTEM)) {
+                /* either locally configured pubkeys, or truststore or system */
                 auth_state->methods |= SSH_AUTH_METHOD_PUBLICKEY;
                 auth_state->method_count++;
             }
@@ -1844,54 +1842,38 @@ nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, struct nc
  * @brief Set hostkeys to be used for an SSH bind.
  *
  * @param[in] sbind SSH bind to use.
- * @param[in] hostkeys Array of hostkeys.
- * @param[in] hostkey_count Count of @p hostkeys.
- * @return 0 on success.
- * @return -1 on error.
+ * @param[in] opts SSH server options.
+ * @return 0 on success, -1 on error.
  */
 static int
-nc_ssh_bind_add_hostkeys(ssh_bind sbind, struct nc_server_ssh_opts *opts, uint16_t hostkey_count)
+nc_ssh_bind_add_hostkeys(ssh_bind sbind, struct nc_server_ssh_opts *opts)
 {
-    uint16_t i;
+    int rc;
     char *privkey_path;
-    int ret;
+    struct nc_hostkey *hostkey = NULL;
     struct nc_asymmetric_key *key = NULL;
 
-    for (i = 0; i < hostkey_count; ++i) {
+    LY_ARRAY_FOR(opts->hostkeys, struct nc_hostkey, hostkey) {
         privkey_path = NULL;
 
         /* get the asymmetric key */
-        if (opts->hostkeys[i].store == NC_STORE_LOCAL) {
+        if (hostkey->store == NC_STORE_LOCAL) {
             /* stored locally */
-            key = &opts->hostkeys[i].key;
+            key = &hostkey->key;
         } else {
             /* keystore reference, need to get it */
-            if (nc_server_ssh_ks_ref_get_key(opts->hostkeys[i].ks_ref, &key)) {
-                return -1;
-            }
+            NC_CHECK_RET(nc_server_ssh_ks_ref_get_key(hostkey->ks_ref, &key), -1);
         }
 
-        privkey_path = nc_server_ssh_privkey_data_to_tmp_file(key->privkey_data, nc_privkey_format_to_str(key->privkey_type));
-        if (!privkey_path) {
-            ERR(NULL, "Temporarily storing a host key into a file failed (%s).", strerror(errno));
-            return -1;
-        }
+        privkey_path = nc_server_ssh_privkey_data_to_tmp_file(key->privkey.data, nc_privkey_format_to_str(key->privkey.type));
+        NC_CHECK_ERR_RET(!privkey_path, ERR(NULL, "Temporarily storing a host key into a file failed."), -1);
 
-        ret = ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HOSTKEY, privkey_path);
-
-        /* cleanup */
+        rc = ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HOSTKEY, privkey_path);
         if (unlink(privkey_path)) {
             WRN(NULL, "Removing a temporary host key file \"%s\" failed (%s).", privkey_path, strerror(errno));
         }
-
-        if (ret != SSH_OK) {
-            ERR(NULL, "Failed to set hostkey \"%s\" (%s).", opts->hostkeys[i].name, privkey_path);
-        }
         free(privkey_path);
-
-        if (ret != SSH_OK) {
-            return -1;
-        }
+        NC_CHECK_ERR_RET(rc != SSH_OK, ERR(NULL, "Failed to set hostkey \"%s\".", hostkey->name), -1);
     }
 
     return 0;
@@ -1973,36 +1955,32 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
     }
 
     /* configure host keys */
-    if (nc_ssh_bind_add_hostkeys(sbind, opts, opts->hostkey_count)) {
+    if (nc_ssh_bind_add_hostkeys(sbind, opts)) {
         rc = -1;
         goto cleanup;
     }
 
     /* configure supported algorithms */
     if (opts->hostkey_algs && ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HOSTKEY_ALGORITHMS, opts->hostkey_algs)) {
+        ERR(session, "Failed to set hostkey algorithms (%s).", ssh_get_error(sbind));
         rc = -1;
         goto cleanup;
     }
     if (opts->encryption_algs) {
         if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_CIPHERS_S_C, opts->encryption_algs)) {
-            rc = -1;
-            goto cleanup;
-        }
-        if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_CIPHERS_C_S, opts->encryption_algs)) {
+            ERR(session, "Failed to set encryption algorithms (%s).", ssh_get_error(sbind));
             rc = -1;
             goto cleanup;
         }
     }
     if (opts->kex_algs && ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_KEY_EXCHANGE, opts->kex_algs)) {
+        ERR(session, "Failed to set key exchange algorithms (%s).", ssh_get_error(sbind));
         rc = -1;
         goto cleanup;
     }
     if (opts->mac_algs) {
         if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HMAC_S_C, opts->mac_algs)) {
-            rc = -1;
-            goto cleanup;
-        }
-        if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HMAC_C_S, opts->mac_algs)) {
+            ERR(session, "Failed to set MAC algorithms (%s).", ssh_get_error(sbind));
             rc = -1;
             goto cleanup;
         }

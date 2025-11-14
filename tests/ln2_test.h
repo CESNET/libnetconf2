@@ -52,7 +52,15 @@ int ln2_glob_test_get_ports(int port_count, ...);
  * @param[in] arg Test context.
  * @return NULL.
  */
-void * ln2_glob_test_server_thread(void *arg);
+void *ln2_glob_test_server_thread(void *arg);
+
+/**
+ * @brief Default server thread for the tests, expecting the client connection to fail.
+ *
+ * @param[in] arg Test context.
+ * @return NULL.
+ */
+void *ln2_glob_test_server_thread_fail(void *arg);
 
 /**
  * @brief Default setup of the test context (init server, client, libyang context and a barrier).

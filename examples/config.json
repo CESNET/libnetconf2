@@ -8,8 +8,12 @@
             "name": "ssh-password-auth-endpt",
             "ssh": {
               "tcp-server-parameters": {
-                "local-address": "127.0.0.1",
-                "local-port": 10000
+                "local-bind": [
+                    {
+                        "local-address": "127.0.0.1",
+                        "local-port": 10000
+                    }
+                ]
               },
               "ssh-server-parameters": {
                 "server-identity": {
@@ -32,7 +36,9 @@
                     "user": [
                       {
                         "name": "admin",
-                        "password": "$0$admin"
+                        "password": {
+                            "hashed-password": "$0$admin"
+                        }
                       }
                     ]
                   }
@@ -44,8 +50,12 @@
             "name": "ssh-pubkey-auth-endpt",
             "ssh": {
               "tcp-server-parameters": {
-                "local-address": "127.0.0.1",
-                "local-port": 10001
+                "local-bind": [
+                    {
+                        "local-address": "127.0.0.1",
+                        "local-port": 10001
+                    }
+                ]
               },
               "ssh-server-parameters": {
                 "server-identity": {

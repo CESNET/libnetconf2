@@ -131,10 +131,11 @@ enum nc_operation {
  * Enumeration of key or certificate store type.
  */
 enum nc_store_type {
-    NC_STORE_LOCAL,     /**< key/certificate is stored locally in the ietf-netconf-server YANG data */
-    NC_STORE_KEYSTORE,  /**< key/certificate is stored externally in a keystore module YANG data */
-    NC_STORE_TRUSTSTORE, /**< key/certificate is stored externally in a truststore module YANG data */
-    NC_STORE_SYSTEM     /**< key/certificate is managed by the system */
+    NC_STORE_UNKNOWN = 0,   /**< unknown store type */
+    NC_STORE_LOCAL,         /**< key/certificate is stored locally in the ietf-netconf-server YANG data */
+    NC_STORE_KEYSTORE,      /**< key/certificate is stored externally in a keystore module YANG data */
+    NC_STORE_TRUSTSTORE,    /**< key/certificate is stored externally in a truststore module YANG data */
+    NC_STORE_SYSTEM         /**< key/certificate is managed by the system */
 };
 
 #ifdef NC_ENABLED_SSH_TLS
@@ -148,22 +149,23 @@ enum nc_store_type {
 #define NC_SSH_TIMEOUT 10
 
 /**
- * Enumeration of SSH public key formats.
+ * @brief Enumeration of SSH public key formats.
  */
 enum nc_pubkey_format {
+    NC_PUBKEY_FORMAT_UNKNOWN = 0, /**< Unknown format */
     NC_PUBKEY_FORMAT_SSH, /**< see RFC 4253, section 6.6 */
     NC_PUBKEY_FORMAT_X509 /**< see RFC 5280 sec. 4.1.2.7 */
 };
 
 /**
- * Enumeration of private key file formats.
+ * @brief Enumeration of private key file formats.
  */
 enum nc_privkey_format {
-    NC_PRIVKEY_FORMAT_RSA,      /**< PKCS1 RSA format */
-    NC_PRIVKEY_FORMAT_EC,       /**< SEC1 EC format */
-    NC_PRIVKEY_FORMAT_X509,     /**< X509 (PKCS8) format */
-    NC_PRIVKEY_FORMAT_OPENSSH,  /**< OpenSSH format */
-    NC_PRIVKEY_FORMAT_UNKNOWN   /**< Unknown format */
+    NC_PRIVKEY_FORMAT_UNKNOWN = 0,  /**< Unknown format */
+    NC_PRIVKEY_FORMAT_RSA,          /**< PKCS1 RSA format */
+    NC_PRIVKEY_FORMAT_EC,           /**< SEC1 EC format */
+    NC_PRIVKEY_FORMAT_X509,         /**< X509 (PKCS8) format */
+    NC_PRIVKEY_FORMAT_OPENSSH       /**< OpenSSH format */
 };
 
 /**
@@ -175,74 +177,71 @@ enum nc_kbdint_auth_method {
 };
 
 /**
- * @brief A basic certificate.
+ * @brief Certificate representation.
  */
 struct nc_certificate {
-    char *name; /**< Arbitrary name of the certificate. */
+    char *name; /**< Optional identifier of the certificate. */
     char *data; /**< Base-64 encoded certificate. */
 };
 
-struct nc_certificate_bag {
-    char *name;
-    struct nc_certificate *certs;
-    uint16_t cert_count;
-};
-
 /**
- * @brief An asymmetric key.
- */
-struct nc_asymmetric_key {
-    char *name;                             /**< Arbitrary name of the key. */
-
-    enum nc_pubkey_format pubkey_type;      /**< Type of the public key. */
-    char *pubkey_data;                      /**< Base-64 encoded public key. */
-    enum nc_privkey_format privkey_type;    /**< Type of the private key. */
-    char *privkey_data;                     /**< Base-64 encoded private key. */
-
-    struct nc_certificate *certs;           /**< The certificates associated with this key. */
-    uint16_t cert_count;                    /**< Number of certificates associated with this key. */
-};
-
-/**
- * @brief A symmetric key.
- */
-struct nc_symmetric_key {
-    char *name; /**< Arbitrary name of the key. */
-    char *data; /**< Base-64 encoded key. */
-};
-
-/**
- * @brief A public key.
+ * @brief Public key representation.
  */
 struct nc_public_key {
-    char *name;                     /**< Arbitrary name of the public key. */
+    char *name;                     /**< Optional identifier of the public key. */
     enum nc_pubkey_format type;     /**< Type of the public key. */
     char *data;                     /**< Base-64 encoded public key. */
 };
 
-struct nc_public_key_bag {
-    char *name;
-    struct nc_public_key *pubkeys;
-    uint16_t pubkey_count;
+/**
+ * @brief Private key representation.
+ */
+struct nc_private_key {
+    enum nc_privkey_format type;    /**< Type of the private key. */
+    char *data;                     /**< Base-64 encoded private key. */
 };
 
-struct nc_truststore {
-    struct nc_certificate_bag *cert_bags;
-    uint16_t cert_bag_count;
+/**
+ * @brief Asymmetric key pair representation.
+ */
+struct nc_asymmetric_key {
+    char *name;                             /**< Optional identifier of the key pair. */
 
-    struct nc_public_key_bag *pub_bags;
-    uint16_t pub_bag_count;
+    struct nc_public_key pubkey;            /**< Public key. */
+    struct nc_private_key privkey;          /**< Private key. */
+};
+
+/**
+ * @brief Store of trusted certificates and public keys.
+ */
+struct nc_truststore {
+    /**
+     * @brief Bag of certificates that should share the same purpose.
+     */
+    struct nc_certificate_bag {
+        char *name;                     /**< Identifier of the certificate bag. */
+        char *description;              /**< Optional description of the certificate bag. */
+        struct nc_certificate *certs;   /**< Certificates in the bag (sized-array, see libyang docs). */
+    } *cert_bags;                       /**< Certificate bags (sized-array, see libyang docs). */
+
+    /**
+     * @brief Bag of public keys that should share the same purpose.
+     */
+    struct nc_public_key_bag {
+        char *name;                     /**< Identifier of the public key bag. */
+        char *description;              /**< Optional description of the public key bag. */
+        struct nc_public_key *pubkeys;  /**< Public keys in the bag (sized-array, see libyang docs). */
+    } *pubkey_bags;                     /**< Public key bags (sized-array, see libyang docs). */
 };
 
 /**
  * @brief Keystore YANG module representation.
  */
 struct nc_keystore {
-    struct nc_asymmetric_key *asym_keys;    /**< Stored asymmetric keys. */
-    uint16_t asym_key_count;                /**< Count of stored asymmetric keys. */
-
-    struct nc_symmetric_key *sym_keys;      /**< Stored symmetric keys. */
-    uint16_t sym_key_count;                 /**< Count of stored symmetric keys. */
+    struct nc_keystore_entry {
+        struct nc_asymmetric_key asym_key;      /**< Stored asymmetric key. */
+        struct nc_certificate *certs;           /**< Certificates associated with the asymmetric key (sized-array, see libyang docs). */
+    } *entries;                                 /**< Asymmetric key + certs entries (sized-array, see libyang docs). */
 };
 
 /**
@@ -256,36 +255,35 @@ struct nc_auth_state {
 };
 
 /**
- * @brief A server's authorized client.
+ * @brief Client authorized to connect to the server over SSH.
  */
 struct nc_auth_client {
-    char *username;                             /**< Arbitrary username. */
+    char *username;                             /**< Identifier of the client. */
 
-    enum nc_store_type store;                   /**< Specifies how/where the client's public key is stored. */
+    enum nc_store_type pubkey_store;            /**< Specifies how/where the client's public keys are stored. */
     union {
-        struct {
-            struct nc_public_key *pubkeys;      /**< The client's public keys. */
-            uint16_t pubkey_count;              /**< The number of client's public keys. */
-        };
-        char *ts_ref;                           /**< Name of the referenced truststore key. */
+        struct nc_public_key *pubkeys;          /**< Locally-defined public keys (sized-array, see libyang docs). */
+        char *ts_ref;                           /**< Name of the referenced truststore public key bag. */
     };
 
-    char *password;                             /**< Client's password */
+    char *password;                             /**< Password for password authentication. */
+    time_t password_last_modified;              /**< Time of the last password modification. */
+
     enum nc_kbdint_auth_method kbdint_method;   /**< Keyboard-interactive authentication method,
                                                   *  may be extended by e.g. a union for each method when needed. */
-    int none_enabled;                           /**< Implies that the client supports the none authentication method. */
+    int none_enabled;                           /**< Whether "none" authentication is enabled for this user. */
 };
 
 /**
- * @brief The server's hostkey.
+ * @brief Server's SSH host key.
  */
 struct nc_hostkey {
-    char *name;                         /**<  Arbitrary name of the host key. */
+    char *name;                         /**<  Identifier of the hostkey. */
 
-    enum nc_store_type store;                /**< Specifies how/where the key is stored. */
+    enum nc_store_type store;           /**< Specifies how/where the key is stored. */
     union {
-        struct nc_asymmetric_key key;   /**< The server's hostkey. */
-        char *ks_ref;                   /**< Name of the referenced key. */
+        struct nc_asymmetric_key key;   /**< Locally-defined key. */
+        char *ks_ref;                   /**< Name of the referenced keystore key. */
     };
 };
 
@@ -293,36 +291,20 @@ struct nc_hostkey {
  * @brief Server options for configuring the SSH transport protocol.
  */
 struct nc_server_ssh_opts {
-    struct nc_hostkey *hostkeys;            /**< Server's hostkeys. */
-    uint16_t hostkey_count;                 /**< Number of server's hostkeys. */
+    struct nc_hostkey *hostkeys;            /**< Server's hostkeys (sized-array, see libyang docs). */
 
-    struct nc_auth_client *auth_clients;    /**< Server's authorized clients. */
-    uint16_t client_count;                  /**< Number of server's authorized clients. */
+    struct nc_auth_client *auth_clients;    /**< Server's authorized clients (sized-array, see libyang docs). */
 
     char *referenced_endpt_name;            /**< Reference to another endpoint (used for client authentication). */
 
-    char *hostkey_algs;                     /**< Hostkey algorithms supported by the server. */
-    char *encryption_algs;                  /**< Encryption algorithms supported by the server. */
-    char *kex_algs;                         /**< Key exchange algorithms supported by the server. */
-    char *mac_algs;                         /**< MAC algorithms supported by the server. */
+    char *hostkey_algs;                     /**< Used hostkey algorithms (comma-separated list). */
+    char *encryption_algs;                  /**< Used encryption algorithms (comma-separated list). */
+    char *kex_algs;                         /**< Used key exchange algorithms (comma-separated list). */
+    char *mac_algs;                         /**< Used MAC algorithms (comma-separated list). */
 
     char *banner;                           /**< SSH banner message. */
 
     uint16_t auth_timeout;                  /**< Authentication timeout. */
-};
-
-/**
- * @brief Certificate grouping (either local-definition or truststore reference).
- */
-struct nc_cert_grouping {
-    enum nc_store_type store;                    /**< Specifies how/where the certificates are stored. */
-    union {
-        struct {
-            struct nc_certificate *certs;   /**< Local-defined certificates. */
-            uint16_t cert_count;            /**< Certificate count. */
-        };
-        char *ts_ref;                       /**< Name of the referenced truststore certificate bag. */
-    };
 };
 
 /**
@@ -345,43 +327,63 @@ struct nc_ctn {
 };
 
 /**
+ * @brief Enumeration of supported TLS versions.
+ */
+enum nc_tls_version {
+    NC_TLS_VERSION_NONE = 0,    /**< Unknown TLS version */
+    NC_TLS_VERSION_1_2,         /**< TLS version 1.2 */
+    NC_TLS_VERSION_1_3          /**< TLS version 1.3 */
+};
+
+/**
+ * @brief Server's TLS client authentication configuration.
+ */
+struct nc_server_tls_client_auth {
+    enum nc_store_type ca_certs_store;      /**< Specifies how/where the CA certificates are stored. */
+    union {
+        struct nc_certificate *ca_certs;    /**< Locally-defined CA certificates (sized-array, see libyang docs). */
+        char *ca_cert_bag_ts_ref;           /**< Name of the referenced truststore certificate bag. */
+    };
+
+    enum nc_store_type ee_certs_store;      /**< Specifies how/where the end-entity certificates are stored. */
+    union {
+        struct nc_certificate *ee_certs;    /**< Locally-defined end-entity certificates (sized-array, see libyang docs). */
+        char *ee_cert_bag_ts_ref;           /**< Name of the referenced truststore certificate bag. */
+    };
+};
+
+/**
  * @brief Server options for configuring the TLS transport protocol.
  */
 struct nc_server_tls_opts {
-    enum nc_store_type store;                        /**< Specifies how/where the server identity is stored. */
+    enum nc_store_type cert_store;          /**< Specifies how/where the server's key and certificate are stored. */
     union {
         struct {
-            enum nc_pubkey_format pubkey_type;       /**< Server public key type */
-            char *pubkey_data;                  /**< Server's public key */
-
-            enum nc_privkey_format privkey_type;     /**< Server private key type */
-            char *privkey_data;                 /**< Server's private key */
-
-            char *cert_data;                    /**< Server's certificate */
-        };
-
+            struct nc_asymmetric_key key;   /**< Locally-defined key. */
+            struct nc_certificate cert;     /**< Locally-defined certificate. */
+        } local;                            /**< Local definition of the server's key and certificate. */
         struct {
-            char *key_ref;                      /**< Reference to the server's key */
-            char *cert_ref;                     /**< Reference to the concrete server's certificate */
-        };
+            char *asym_key_ref;             /**< Name of the referenced keystore asymmetric key. */
+            char *cert_ref;                 /**< Name of the referenced keystore certificate. */
+        } keystore;                         /**< Keystore reference of the server's key and certificate. */
     };
 
-    struct nc_cert_grouping ca_certs;           /**< Client certificate authorities */
-    struct nc_cert_grouping ee_certs;           /**< Client end-entity certificates */
+    struct nc_server_tls_client_auth client_auth;   /**< Client authentication configuration. */
 
-    char *referenced_endpt_name;                /**< Reference to another endpoint (used for client authentication). */
+    struct nc_ctn *ctn;                 /**< Cert-to-name entries linked list */
 
-    unsigned int tls_versions;                  /**< TLS versions */
-    void *ciphers;                              /**< TLS ciphers */
-    uint16_t cipher_count;                      /**< Number of TLS ciphers */
+    char *referenced_endpt_name;        /**< Reference to another endpoint (used for client authentication). */
 
-    struct nc_ctn *ctn;                         /**< Cert-to-name entries */
+    enum nc_tls_version min_version;    /**< Minimum supported TLS version. */
+    enum nc_tls_version max_version;    /**< Maximum supported TLS version. */
+
+    char *cipher_suites;                /**< Allowed cipher suites (colon-separated list). */
 };
 
 #endif /* NC_ENABLED_SSH_TLS */
 
 /**
- * @brief Keepalives configuration data.
+ * @brief TCP keepalives configuration.
  */
 struct nc_keepalives {
     int enabled;                /**< Indicates that keepalives are enabled. */
@@ -391,30 +393,26 @@ struct nc_keepalives {
 };
 
 /**
- * @brief UNIX socket connection configuration.
+ * @brief Server options for configuring the UNIX transport protocol.
  */
 struct nc_server_unix_opts {
-    char *path;                         /**< Filesystem path to the UNIX socket. */
-
     mode_t mode;                        /**< Socket file permissions (defaults to rw-rw----). */
     uid_t uid;                          /**< Owner of the socket file. */
     gid_t gid;                          /**< Group owner of the socket file. */
 
     struct nc_server_unix_user_mapping {
         char *system_user;              /**< System username for authentication. */
-        char **allowed_users;           /**< Permitted NETCONF usernames. */
-        uint32_t allowed_user_count;    /**< Number of allowed usernames. */
-    } *user_mappings;                   /**< Array of username mappings for the UNIX socket connection. */
-    uint32_t mapping_count;             /**< Number of user mapping entries. */
+        char **allowed_users;           /**< Permitted NETCONF usernames (sized-array, see libyang docs). */
+    } *user_mappings;                   /**< Username mappings for the UNIX socket connection (sized-array, see libyang docs). */
 };
 
 /**
- * @brief Stores information about a bind.
+ * @brief Stores information about a server endpoint binding.
  */
 struct nc_bind {
-    char *address;  /**< Bind's address. */
-    uint16_t port;  /**< Bind's port. */
-    int sock;       /**< Bind's socket. */
+    char *address;  /**< Either IPv4/IPv6 address or path to UNIX socket. */
+    uint16_t port;  /**< Either port number or 0 for UNIX socket. */
+    int sock;       /**< Socket file descriptor, -1 if not created yet. */
     int pollin;     /**< Specifies, which sockets to poll on. */
 };
 
@@ -590,7 +588,7 @@ struct nc_cert_path_aux {
 /**
  * @brief Call Home client thread data.
  */
-struct nc_ch_client_thread_arg {
+struct nc_server_ch_thread_arg {
     char *client_name;
 
     const struct ly_ctx *(*acquire_ctx_cb)(void *cb_data);  /**< acquiring libyang context cb */
@@ -604,68 +602,35 @@ struct nc_ch_client_thread_arg {
     pthread_cond_t cond;        /**< Condition used for signalling the thread to terminate */
 };
 
-struct nc_server_opts {
-    /* ACCESS locked - hello lock - separate lock to not always hold config_lock */
-    pthread_rwlock_t hello_lock;    /**< Needs to be held while the server <hello> message is being generated. */
+struct nc_server_config {
+    uint16_t idle_timeout;  /**< Idle timeout of the server sessions. */
 
-    char **ignored_modules;         /**< Names of YANG modules that are not reported in the server <hello> message. */
-    uint16_t ignored_mod_count;     /**< Number of ignored modules. */
-    NC_WD_MODE wd_basic_mode;       /**< With-defaults basic mode of the server. */
-    int wd_also_supported;          /**< Bitmap of with-defaults modes that are also supported by the server. */
-    char **capabilities;            /**< Array of server's capabilities. */
-    uint32_t capabilities_count;    /**< Number of server's capabilities. */
-
-    char *(*content_id_clb)(void *user_data);   /**< Callback for generating content_id for ietf-yang-library data. */
-    void *content_id_data;                      /**< Data passed to the content_id_clb callback. */
-    void (*content_id_data_free)(void *data);   /**< Callback to free the content_id_data. */
-
-    /* ACCESS locked - options modified by YANG data/API - WRITE lock
-     *               - options read when accepting sessions - READ lock */
-    pthread_rwlock_t config_lock;
-
-    uint16_t idle_timeout;              /**< Idle timeout of the server sessions. */
-
-#ifdef NC_ENABLED_SSH_TLS
-    char *authkey_path_fmt;             /**< Path to users' public keys that may contain tokens with special meaning. */
-    char *pam_config_name;              /**< PAM configuration file name. */
-    int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg, void *user_data);
-    void *interactive_auth_data;
-    void (*interactive_auth_data_free)(void *data);
-
-    int (*user_verify_clb)(const struct nc_session *session);
-
-    struct nc_keystore keystore;        /**< Stored asymmetric and symmetric keys used by the server. */
-    struct nc_truststore truststore;    /**< Stored certificates and public keys used for authentication. */
-#endif /* NC_ENABLED_SSH_TLS */
+    char **ignored_modules; /**< Names of YANG modules that are not reported in the server <hello> message (sized-array, see libyang docs). */
 
     struct nc_endpt {
-        char *name;                     /**< Identifier of the endpoint. */
-#ifdef NC_ENABLED_SSH_TLS
-        char *referenced_endpt_name;    /**< Reference to another endpoint (used for client authentication). */
-#endif /* NC_ENABLED_SSH_TLS */
+        char *name;                 /**< Identifier of the endpoint. */
 
-        struct nc_keepalives ka;        /**< Keepalives configuration data. */
+        /* ACCESS locked - bind_lock */
+        struct nc_bind *binds;      /**< Listening binds of the endpoint (sized-array, see libyang docs). */
+        pthread_mutex_t bind_lock;  /**< To avoid concurrent calls of poll and accept on the bound sockets. **/
 
-        NC_TRANSPORT_IMPL ti;           /**< Transport implementation of the endpoint. */
+        struct nc_keepalives ka;    /**< TCP keepalives configuration. */
+
+        NC_TRANSPORT_IMPL ti;       /**< Transport implementation of the endpoint. */
         union {
 #ifdef NC_ENABLED_SSH_TLS
-            struct nc_server_ssh_opts *ssh;         /**< SSH transport options. */
-            struct nc_server_tls_opts *tls;         /**< TLS transport options. */
+            struct nc_server_ssh_opts *ssh;     /**< SSH transport options. */
+            struct nc_server_tls_opts *tls;     /**< TLS transport options. */
 #endif /* NC_ENABLED_SSH_TLS */
-            struct nc_server_unix_opts *unix;       /**< UNIX socket transport options. */
+            struct nc_server_unix_opts *unix;   /**< UNIX socket transport options. */
         } opts;
-    } *endpts;                          /**< Array of server's endpoints. */
-    uint16_t endpt_count;               /**< Number of server's endpoints. */
+    } *endpts;      /**< Listening endpoints (sized-array, see libyang docs). */
 
     struct nc_ch_client {
-        char *name;                                     /**< Identifier of the Call Home client. */
-        struct nc_ch_client_thread_arg *thread_data;    /**< Data of the Call Home client's thread */
+        char *name;                         /**< Identifier of the Call Home client. */
 
         struct nc_ch_endpt {
             char *name;                     /**< Identifier of the Call Home endpoint. */
-#ifdef NC_ENABLED_SSH_TLS
-            char *referenced_endpt_name;    /**< Reference to another endpoint (used for client authentication). */
-#endif /* NC_ENABLED_SSH_TLS */
 
             char *src_addr;                 /**< IP address to bind to when connecting to a Call Home client. */
             uint16_t src_port;              /**< Port to bind to when connecting to a Call Home client. */
@@ -682,28 +647,72 @@ struct nc_server_opts {
                 struct nc_server_tls_opts *tls;     /**< TLS transport options for the Call Home endpoint. */
 #endif /* NC_ENABLED_SSH_TLS */
             } opts;
-        } *ch_endpts;                   /**< Array of Call Home endpoints. */
-        uint16_t ch_endpt_count;        /**< Number of Call Home endpoints. */
+        } *ch_endpts;                       /**< Call Home endpoints (sized-array, see libyang docs). */
 
-        NC_CH_CONN_TYPE conn_type;      /**< Type of the Call Home connection. */
+        NC_CH_CONN_TYPE conn_type;          /**< Type of the Call Home connection. */
         struct {
-            uint16_t period;            /**< Period of a periodic Call Home connection in seconds. */
-            time_t anchor_time;         /**< Anchor time of a periodic Call Home connection. */
-            uint16_t idle_timeout;      /**< Idle timeout of a periodic Call Home connection in seconds. */
+            uint16_t period;                /**< Period of a periodic Call Home connection in seconds. */
+            time_t anchor_time;             /**< Anchor time of a periodic Call Home connection. */
+            uint16_t idle_timeout;          /**< Idle timeout of a periodic Call Home connection in seconds. */
         };
 
-        NC_CH_START_WITH start_with;    /**< How to select the Call Home endpoint to connect to. */
-        uint8_t max_attempts;           /**< Maximum number of attempts to connect to the given Call Home endpoint. */
-        uint16_t max_wait;              /**< Maximum time to wait for a Call Home connection in seconds. */
-        uint32_t id;
-    } *ch_clients;                      /**< Array of Call Home clients. */
-    uint16_t ch_client_count;           /**< Number of Call Home clients. */
+        NC_CH_START_WITH start_with;        /**< How to select the Call Home endpoint to connect to. */
+        uint8_t max_attempts;               /**< Maximum number of attempts to connect to the given Call Home endpoint. */
+        uint16_t max_wait;                  /**< Maximum time to wait for a Call Home connection in seconds. */
+    } *ch_clients;                          /**< Call Home clients (sized-array, see libyang docs). */
 
 #ifdef NC_ENABLED_SSH_TLS
+    struct nc_keystore keystore;        /**< Asymmetric and symmetric key storage used for server identity. */
+    struct nc_truststore truststore;    /**< Public keys and certificates storage used for client authentication. */
+
     /**
-     * @brief Data for dispatching Call Home clients.
+     * @brief Time intervals for certificate expiration notifications.
+     *
+     * See libnetconf2-netconf-server YANG module for more details.
      */
-    struct nc_ch_dispatch_data {
+    struct nc_cert_exp_time_interval {
+        struct nc_cert_exp_time anchor; /**< Lower bound of the given interval. */
+        struct nc_cert_exp_time period; /**< Period of the given interval. */
+    } *cert_exp_notif_intervals;        /**< Certificate expiration notification intervals (sized-array, see libyang docs). */
+#endif /* NC_ENABLED_SSH_TLS */
+};
+
+struct nc_server_opts {
+    /* ACCESS locked - hello lock - separate lock to not always hold config_lock */
+    pthread_rwlock_t hello_lock;    /**< Needs to be held while the server <hello> message is being generated. */
+
+    NC_WD_MODE wd_basic_mode;       /**< With-defaults basic mode of the server. */
+    int wd_also_supported;          /**< Bitmap of with-defaults modes that are also supported by the server. */
+    char **capabilities;            /**< Array of server's capabilities. */
+    uint32_t capabilities_count;    /**< Number of server's capabilities. */
+
+    char *(*content_id_clb)(void *user_data);   /**< Callback for generating content_id for ietf-yang-library data. */
+    void *content_id_data;                      /**< Data passed to the content_id_clb callback. */
+    void (*content_id_data_free)(void *data);   /**< Callback to free the content_id_data. */
+
+    /* ACCESS locked - call home thread creation/deletion - WRITE lock
+     *               - call home threads data access (e.g. to signal thread to end) - READ lock */
+    pthread_rwlock_t ch_threads_lock;  /**< Lock for data of Call Home threads. */
+    struct nc_server_ch_thread_arg **ch_threads;  /**< Call Home threads' data, one for each CH client (sized-array, see libyang docs). */
+
+    /* ACCESS locked - options modified by YANG data/API - WRITE lock
+     *               - options read when accepting sessions - READ lock */
+    pthread_rwlock_t config_lock;           /**< Lock for the server configuration. */
+    struct nc_server_config config;  /**< YANG Server configuration. */
+
+#ifdef NC_ENABLED_SSH_TLS
+    char *authkey_path_fmt;             /**< Path to users' public keys that may contain tokens with special meaning. */
+    char *pam_config_name;              /**< PAM configuration file name. */
+    int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg, void *user_data);
+    void *interactive_auth_data;
+    void (*interactive_auth_data_free)(void *data);
+
+    int (*user_verify_clb)(const struct nc_session *session);
+
+    /**
+     * @brief Data for automatically dispatching Call Home clients.
+     */
+    struct {
         nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb;     /**< Acquiring libyang context callback. */
         nc_server_ch_session_release_ctx_cb release_ctx_cb;     /**< Releasing libyang context callback. */
         void *ctx_cb_data;                                      /**< Data passed to the callbacks above. */
@@ -716,21 +725,8 @@ struct nc_server_opts {
         int thread_running;         /**< Flag representing the runningness of the cert exp notification thread. */
         pthread_mutex_t lock;       /**< Certificate expiration notification thread's data and cond lock. */
         pthread_cond_t cond;        /**< Condition for the certificate expiration notification thread. */
-
-        /**
-         * @brief Intervals for certificate expiration notifications.
-         */
-        struct nc_interval {
-            struct nc_cert_exp_time anchor;     /**< Lower bound of the given interval. */
-            struct nc_cert_exp_time period;     /**< Period of the given interval. */
-        } *intervals;
-        int interval_count;                     /**< Number of intervals. */
     } cert_exp_notif;
 #endif /* NC_ENABLED_SSH_TLS */
-
-    /* ACCESS locked - bind_lock */
-    struct nc_bind *binds;              /**< Array of server's socket binds. The count is the same as endpt_count. */
-    pthread_mutex_t bind_lock;          /**< To avoid concurrent calls of poll and accept on the bound sockets. **/
 
     /* ACCESS unlocked */
     ATOMIC_T new_session_id;
@@ -951,15 +947,13 @@ void nc_client_monitoring_session_stop(struct nc_session *session, int lock);
 void *nc_realloc(void *ptr, size_t size);
 
 /**
- * @brief Set the andress and port of an endpoint.
+ * @brief Bind and listen on a socket for the given endpoint and its bind.
  *
- * @param[in] endpt Endpoint to set the address/port for.
- * @param[in] bind Bind to set the address/port for.
- * @param[in] address Address to set, can be a path to a UNIX socket.
- * @param[in] port Port to set, invalid for UNIX socket endpoint.
+ * @param[in] endpt Endpoint the bind belongs to.
+ * @param[in] bind Bind to bind and listen for.
  * @return 0 on success, 1 on error.
  */
-int nc_server_set_address_port(struct nc_endpt *endpt, struct nc_bind *bind, const char *address, uint16_t port);
+int nc_server_bind_and_listen(struct nc_endpt *endpt, struct nc_bind *bind);
 
 /**
  * @brief Frees memory allocated by a UNIX socket endpoint.
@@ -968,6 +962,13 @@ int nc_server_set_address_port(struct nc_endpt *endpt, struct nc_bind *bind, con
  * @param[in] bind UNIX socket bind.
  */
 void _nc_server_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *bind);
+
+/**
+ * @brief Free server configuration data (only YANG config data).
+ *
+ * @param[in] config Server configuration to free.
+ */
+void nc_server_config_free(struct nc_server_config *config);
 
 /**
  * @brief Get passwd entry for UID or a user.
@@ -1199,13 +1200,13 @@ int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mut
 int nc_connect_unix_session(struct nc_session *session, int sock, const char *username, int timeout_ms);
 
 /**
- * @brief Gets an endpoint structure based on its name.
+ * @brief Gets a listening endpoint based on its name.
  *
  * @param[in] name The name of the endpoint.
  * @param[out] endpt Pointer to the endpoint structure.
  * @return 0 on success, 1 on failure.
  */
-int nc_server_get_referenced_endpt(const char *name, struct nc_endpt **endpt);
+int nc_server_endpt_get(const char *name, struct nc_endpt **endpt);
 
 /**
  * @brief Add a client Call Home bind, listen on it.
@@ -1245,18 +1246,19 @@ NC_MSG_TYPE nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IM
 /**
  * @brief Dispatch a thread connecting to a listening NETCONF client and creating Call Home sessions.
  *
- * @param[in] client_name Existing client name.
+ * @note The config lock MUST be held.
+ *
+ * @param[in] ch_client Call Home client to dispatch the thread for.
  * @param[in] acquire_ctx_cb Callback for acquiring new session context.
  * @param[in] release_ctx_cb Callback for releasing session context.
  * @param[in] ctx_cb_data Arbitrary user data passed to @p acquire_ctx_cb and @p release_ctx_cb.
  * @param[in] new_session_cb Callback called for every established session on the client.
  * @param[in] new_session_cb_data Arbitrary user data passed to @p new_session_cb.
- * @param[in] config_locked Whether the server configuration is locked.
  * @return 0 if the thread was successfully created, -1 on error.
  */
-int _nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
+int _nc_connect_ch_client_dispatch(const struct nc_ch_client *ch_client, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
         nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
-        void *new_session_cb_data, int config_locked);
+        void *new_session_cb_data);
 
 /**
  * @brief Accept a server Call Home connection on a socket.

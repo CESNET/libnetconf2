@@ -511,7 +511,7 @@ _nc_server_config_add_ssh_user_password(const struct ly_ctx *ctx, const char *tr
         goto cleanup;
     }
 
-    ret = nc_server_config_append(ctx, tree_path, "password", hashed_pw, config);
+    ret = nc_server_config_append(ctx, tree_path, "hashed-password", hashed_pw, config);
     if (ret) {
         goto cleanup;
     }
@@ -531,7 +531,7 @@ nc_server_config_add_ssh_user_password(const struct ly_ctx *ctx, const char *end
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, user_name, password, config, 1);
 
     ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/ssh-server-parameters/"
-            "client-authentication/users/user[name='%s']", endpt_name, user_name);
+            "client-authentication/users/user[name='%s']/password", endpt_name, user_name);
     NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_ssh_user_password(ctx, path, password, config);
@@ -555,7 +555,7 @@ nc_server_config_add_ch_ssh_user_password(const struct ly_ctx *ctx, const char *
 
     ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/"
             "endpoint[name='%s']/ssh/ssh-server-parameters/client-authentication/"
-            "users/user[name='%s']", client_name, endpt_name, user_name);
+            "users/user[name='%s']/password", client_name, endpt_name, user_name);
     NC_CHECK_ERRMEM_GOTO(ret == -1, path = NULL; ret = 1, cleanup);
 
     ret = _nc_server_config_add_ssh_user_password(ctx, path, password, config);

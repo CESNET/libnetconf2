@@ -38,7 +38,6 @@
 #include "messages_p.h"
 #include "messages_server.h"
 #include "server_config.h"
-#include "server_config_p.h"
 #include "session.h"
 #include "session_p.h"
 #include "session_server.h"
@@ -55,8 +54,7 @@
 
 struct nc_server_opts server_opts = {
     .hello_lock = PTHREAD_RWLOCK_INITIALIZER,
-    .config_lock = PTHREAD_RWLOCK_INITIALIZER,
-    .idle_timeout = 180,    /**< default idle timeout (not in config for UNIX socket) */
+    .config_lock = PTHREAD_RWLOCK_INITIALIZER
 };
 
 static nc_rpc_clb global_rpc_clb = NULL;
@@ -74,36 +72,36 @@ static nc_rpc_clb global_rpc_clb = NULL;
 static struct nc_ch_client *
 nc_server_ch_client_get(const char *name)
 {
-    uint16_t i;
     struct nc_ch_client *client = NULL;
 
     assert(name);
 
-    for (i = 0; i < server_opts.ch_client_count; ++i) {
-        if (server_opts.ch_clients[i].name && !strcmp(server_opts.ch_clients[i].name, name)) {
-            client = &server_opts.ch_clients[i];
-            break;
+    LY_ARRAY_FOR(server_opts.config.ch_clients, struct nc_ch_client, client) {
+        if (client->name && !strcmp(client->name, name)) {
+            return client;
         }
     }
 
-    return client;
+    return NULL;
 }
 
 #endif /* NC_ENABLED_SSH_TLS */
 
 int
-nc_server_get_referenced_endpt(const char *name, struct nc_endpt **endpt)
+nc_server_endpt_get(const char *name, struct nc_endpt **endpt)
 {
-    uint16_t i;
+    struct nc_endpt *ep;
 
-    for (i = 0; i < server_opts.endpt_count; i++) {
-        if (!strcmp(name, server_opts.endpts[i].name)) {
-            *endpt = &server_opts.endpts[i];
+    *endpt = NULL;
+
+    LY_ARRAY_FOR(server_opts.config.endpts, struct nc_endpt, ep) {
+        if (ep->name && !strcmp(ep->name, name)) {
+            *endpt = ep;
             return 0;
         }
     }
 
-    ERR(NULL, "Referenced endpoint \"%s\" was not found.", name);
+    ERR(NULL, "Endpoint \"%s\" not found in the configuration.", name);
     return 1;
 }
 
@@ -363,20 +361,21 @@ fail:
 /**
  * @brief Create a listening socket (AF_UNIX).
  *
- * @param[in] opts The server options (unix permissions and address of the socket).
+ * @param[in] address Path to the UNIX socket.
+ * @param[in] opts The server options (unix permissions).
  * @return Listening socket, -1 on error.
  */
 static int
-nc_sock_listen_unix(const struct nc_server_unix_opts *opts)
+nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *opts)
 {
     struct sockaddr_un sun;
     int sock = -1;
 
-    if (!opts->path) {
+    if (!address) {
         ERR(NULL, "No socket path set.");
         goto fail;
-    } else if (strlen(opts->path) > sizeof(sun.sun_path) - 1) {
-        ERR(NULL, "Socket path \"%s\" is longer than maximum length %d.", opts->path, (int)(sizeof(sun.sun_path) - 1));
+    } else if (strlen(address) > sizeof(sun.sun_path) - 1) {
+        ERR(NULL, "Socket path \"%s\" is longer than maximum length %d.", address, (int)(sizeof(sun.sun_path) - 1));
         goto fail;
     }
 
@@ -388,11 +387,11 @@ nc_sock_listen_unix(const struct nc_server_unix_opts *opts)
 
     memset(&sun, 0, sizeof(sun));
     sun.sun_family = AF_UNIX;
-    snprintf(sun.sun_path, sizeof(sun.sun_path) - 1, "%s", opts->path);
+    snprintf(sun.sun_path, sizeof(sun.sun_path) - 1, "%s", address);
 
     unlink(sun.sun_path);
     if (bind(sock, (struct sockaddr *)&sun, sizeof(sun)) == -1) {
-        ERR(NULL, "Could not bind \"%s\" (%s).", opts->path, strerror(errno));
+        ERR(NULL, "Could not bind \"%s\" (%s).", address, strerror(errno));
         goto fail;
     }
 
@@ -411,7 +410,7 @@ nc_sock_listen_unix(const struct nc_server_unix_opts *opts)
     }
 
     if (listen(sock, NC_REVERSE_QUEUE) == -1) {
-        ERR(NULL, "Unable to start listening on \"%s\" (%s).", opts->path, strerror(errno));
+        ERR(NULL, "Unable to start listening on \"%s\" (%s).", address, strerror(errno));
         goto fail;
     }
 
@@ -863,7 +862,9 @@ cleanup:
 API int
 nc_server_init(void)
 {
+#ifdef NC_ENABLED_SSH_TLS
     int r;
+#endif /* NC_ENABLED_SSH_TLS */
 
     ATOMIC_STORE_RELAXED(server_opts.new_session_id, 1);
 
@@ -887,14 +888,12 @@ nc_server_init(void)
         ERR(NULL, "%s: failed to init libssh.", __func__);
         goto error;
     }
-#endif
 
-    if ((r = pthread_mutex_init(&server_opts.bind_lock, NULL))) {
-        ERR(NULL, "%s: failed to init bind lock(%s).", __func__, strerror(r));
+    /* CH threads data rwlock */
+    if (nc_server_init_rwlock(&server_opts.ch_threads_lock)) {
         goto error;
     }
 
-#ifdef NC_ENABLED_SSH_TLS
     if ((r = pthread_mutex_init(&server_opts.cert_exp_notif.lock, NULL))) {
         ERR(NULL, "%s: failed to init certificate expiration notification thread lock(%s).", __func__, strerror(r));
         goto error;
@@ -906,7 +905,7 @@ nc_server_init(void)
 
     /* try to open the keylog file for writing TLS secrets */
     nc_server_keylog_file_open();
-#endif
+#endif /* NC_ENABLED_SSH_TLS */
 
     return 0;
 
@@ -932,13 +931,30 @@ nc_server_destroy(void)
 #ifdef NC_ENABLED_SSH_TLS
     /* destroy the certificate expiration notification thread */
     nc_server_notif_cert_expiration_thread_stop(1);
-    nc_server_config_ln2_netconf_server(NULL, NC_OP_DELETE);
 #endif /* NC_ENABLED_SSH_TLS */
 
-    nc_server_config_listen(NULL, NC_OP_DELETE);
-    nc_server_config_ch(NULL, NC_OP_DELETE);
+    /* CONFIG WR LOCK */
+    pthread_rwlock_wrlock(&server_opts.config_lock);
 
-    pthread_mutex_destroy(&server_opts.bind_lock);
+    /* destroy the server configuration */
+    nc_server_config_free(&server_opts.config);
+
+    /* CH THREADS LOCK */
+    pthread_rwlock_rdlock(&server_opts.ch_threads_lock);
+
+    /* notify the CH threads to exit */
+    LY_ARRAY_FOR(server_opts.ch_threads, i) {
+        pthread_mutex_lock(&server_opts.ch_threads[i]->cond_lock);
+        server_opts.ch_threads[i]->thread_running = 0;
+        pthread_cond_signal(&server_opts.ch_threads[i]->cond);
+        pthread_mutex_unlock(&server_opts.ch_threads[i]->cond_lock);
+    }
+
+    /* CH THREADS UNLOCK */
+    pthread_rwlock_unlock(&server_opts.ch_threads_lock);
+
+    /* CONFIG WR UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
 
 #ifdef NC_ENABLED_SSH_TLS
     free(server_opts.authkey_path_fmt);
@@ -951,8 +967,6 @@ nc_server_destroy(void)
     server_opts.interactive_auth_data = NULL;
     server_opts.interactive_auth_data_free = NULL;
 
-    nc_server_config_ks_keystore(NULL, NC_OP_DELETE);
-    nc_server_config_ts_truststore(NULL, NC_OP_DELETE);
     curl_global_cleanup();
     nc_tls_backend_destroy_wrap();
     ssh_finalize();
@@ -1871,6 +1885,7 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
 {
     struct pollfd pfd;
     int r, ret = 0;
+    uint16_t idle_timeout;
 
 #ifdef NC_ENABLED_SSH_TLS
     ssh_message ssh_msg;
@@ -1878,8 +1893,9 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
 #endif /* NC_ENABLED_SSH_TLS */
 
     /* check timeout first */
-    if (!(session->flags & NC_SESSION_CALLHOME) && !nc_session_get_notif_status(session) && server_opts.idle_timeout &&
-            (now_mono >= session->opts.server.last_rpc + (unsigned) server_opts.idle_timeout)) {
+    idle_timeout = server_opts.config.idle_timeout;
+    if (!(session->flags & NC_SESSION_CALLHOME) && !nc_session_get_notif_status(session) && idle_timeout &&
+            (now_mono >= session->opts.server.last_rpc + idle_timeout)) {
         sprintf(msg, "Session idle timeout elapsed");
         session->status = NC_STATUS_INVALID;
         session->term_reason = NC_SESSION_TERM_TIMEOUT;
@@ -2279,54 +2295,48 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
 }
 
 int
-nc_server_set_address_port(struct nc_endpt *endpt, struct nc_bind *bind, const char *address, uint16_t port)
+nc_server_bind_and_listen(struct nc_endpt *endpt, struct nc_bind *bind)
 {
-    int sock = -1, ret = 0;
+    int sock = -1, rc = 0;
 
-    assert(address && (port || (endpt->ti == NC_TI_UNIX)));
-
-    /* we have all the information we need to create a listening socket */
-    if ((address && port) || (endpt->ti == NC_TI_UNIX)) {
-        /* create new socket, close the old one */
-        if (endpt->ti == NC_TI_UNIX) {
-            sock = nc_sock_listen_unix(endpt->opts.unix);
-        } else {
-            sock = nc_sock_listen_inet(address, port);
-        }
-
-        if (sock == -1) {
-            ret = 1;
-            goto cleanup;
-        }
-
-        if (bind->sock > -1) {
-            close(bind->sock);
-        }
-        bind->sock = sock;
+    /* start listening on the endpoint */
+    if (endpt->ti == NC_TI_UNIX) {
+        sock = nc_sock_listen_unix(bind->address, endpt->opts.unix);
+    } else {
+        assert(bind->address && bind->port);
+        sock = nc_sock_listen_inet(bind->address, bind->port);
+    }
+    if (sock == -1) {
+        rc = 1;
+        goto cleanup;
     }
 
-    if (sock > -1) {
-        switch (endpt->ti) {
-        case NC_TI_UNIX:
-            VRB(NULL, "Listening on %s for UNIX connections.", endpt->opts.unix->path);
-            break;
+    /* close the old socket if any and store the new one */
+    if (bind->sock > -1) {
+        close(bind->sock);
+    }
+    bind->sock = sock;
+
+    switch (endpt->ti) {
+    case NC_TI_UNIX:
+        VRB(NULL, "Listening on %s for UNIX connections.", bind->address);
+        break;
 #ifdef NC_ENABLED_SSH_TLS
-        case NC_TI_SSH:
-            VRB(NULL, "Listening on %s:%u for SSH connections.", address, port);
-            break;
-        case NC_TI_TLS:
-            VRB(NULL, "Listening on %s:%u for TLS connections.", address, port);
-            break;
+    case NC_TI_SSH:
+        VRB(NULL, "Listening on %s:%u for SSH connections.", bind->address, bind->port);
+        break;
+    case NC_TI_TLS:
+        VRB(NULL, "Listening on %s:%u for TLS connections.", bind->address, bind->port);
+        break;
 #endif /* NC_ENABLED_SSH_TLS */
-        default:
-            ERRINT;
-            ret = 1;
-            break;
-        }
+    default:
+        ERRINT;
+        rc = 1;
+        break;
     }
 
 cleanup:
-    return ret;
+    return rc;
 }
 
 /**
@@ -2411,15 +2421,15 @@ nc_accept_unix_auth_username(struct nc_session *session, const char *effective_u
 {
     int match = 0;
     struct nc_server_unix_opts *opts = session->data;
-    uint32_t i, j;
+    LY_ARRAY_COUNT_TYPE i, j;
 
     /* try to find a mapping entry for this system user */
-    for (i = 0; i < opts->mapping_count; i++) {
+    LY_ARRAY_FOR(opts->user_mappings, i) {
         if (!strcmp(opts->user_mappings[i].system_user, effective_uname)) {
             break;
         }
     }
-    if (i == opts->mapping_count) {
+    if (i == LY_ARRAY_COUNT(opts->user_mappings)) {
         /* matching entry not found, the user can only authenticate if its
          * requested username is the same as the effective one */
         if (strcmp(effective_uname, requested_uname)) {
@@ -2428,7 +2438,7 @@ nc_accept_unix_auth_username(struct nc_session *session, const char *effective_u
         }
     } else {
         /* found a mapping entry, check if the requested username is allowed for this system user */
-        for (j = 0; j < opts->user_mappings[i].allowed_user_count; j++) {
+        LY_ARRAY_FOR(opts->user_mappings[i].allowed_users, j) {
             if (!strcmp(opts->user_mappings[i].allowed_users[j], "*")) {
                 /* special case, the user can authenticate as any username */
                 match = 1;
@@ -2514,10 +2524,20 @@ error:
     return -1;
 }
 
-API int
+API uint32_t
 nc_server_endpt_count(void)
 {
-    return server_opts.endpt_count;
+    uint32_t cnt;
+
+    /* CONFIG READ LOCK */
+    pthread_rwlock_rdlock(&server_opts.config_lock);
+
+    cnt = LY_ARRAY_COUNT(server_opts.config.endpts);
+
+    /* CONFIG UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
+
+    return cnt;
 }
 
 API NC_MSG_TYPE
@@ -2526,8 +2546,10 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
     NC_MSG_TYPE msgtype;
     int sock = -1, ret;
     char *host = NULL;
-    uint16_t port, bind_idx;
+    uint16_t port = 0;
     struct timespec ts_cur;
+    LY_ARRAY_COUNT_TYPE endpt_idx;
+    struct nc_server_config *config;
 
     NC_CHECK_ARG_RET(NULL, ctx, session, NC_MSG_ERROR);
 
@@ -2541,21 +2563,34 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
     /* CONFIG LOCK */
     pthread_rwlock_rdlock(&server_opts.config_lock);
 
-    if (!server_opts.endpt_count) {
+    config = &server_opts.config;
+
+    if (!config->endpts) {
         ERR(NULL, "No endpoints to accept sessions on.");
         msgtype = NC_MSG_ERROR;
         goto cleanup;
     }
 
-    ret = nc_sock_accept_binds(server_opts.binds, server_opts.endpt_count, &server_opts.bind_lock, timeout, &host,
-            &port, &bind_idx, &sock);
-    if (ret < 1) {
-        msgtype = (!ret ? NC_MSG_WOULDBLOCK : NC_MSG_ERROR);
+    /* try to accept a new connection on any of the endpoints */
+    LY_ARRAY_FOR(config->endpts, endpt_idx) {
+        ret = nc_sock_accept_binds(config->endpts[endpt_idx].binds, LY_ARRAY_COUNT(config->endpts[endpt_idx].binds),
+                &config->endpts[endpt_idx].bind_lock, timeout, &host, &port, NULL, &sock);
+        if (ret < 0) {
+            msgtype = NC_MSG_ERROR;
+            goto cleanup;
+        } else if (ret > 0) {
+            /* accepted */
+            break;
+        }
+    }
+    if (sock == -1) {
+        /* timeout, no connection established */
+        msgtype = NC_MSG_WOULDBLOCK;
         goto cleanup;
     }
 
     /* configure keepalives */
-    if (nc_sock_configure_ka(sock, &server_opts.endpts[bind_idx].ka)) {
+    if (nc_sock_configure_ka(sock, &config->endpts[endpt_idx].ka)) {
         msgtype = NC_MSG_ERROR;
         goto cleanup;
     }
@@ -2571,8 +2606,8 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
 
     /* sock gets assigned to session or closed */
 #ifdef NC_ENABLED_SSH_TLS
-    if (server_opts.endpts[bind_idx].ti == NC_TI_SSH) {
-        ret = nc_accept_ssh_session(*session, server_opts.endpts[bind_idx].opts.ssh, sock, NC_TRANSPORT_TIMEOUT);
+    if (config->endpts[endpt_idx].ti == NC_TI_SSH) {
+        ret = nc_accept_ssh_session(*session, config->endpts[endpt_idx].opts.ssh, sock, NC_TRANSPORT_TIMEOUT);
         sock = -1;
         if (ret < 0) {
             msgtype = NC_MSG_ERROR;
@@ -2581,9 +2616,9 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
             msgtype = NC_MSG_WOULDBLOCK;
             goto cleanup;
         }
-    } else if (server_opts.endpts[bind_idx].ti == NC_TI_TLS) {
-        (*session)->data = server_opts.endpts[bind_idx].opts.tls;
-        ret = nc_accept_tls_session(*session, server_opts.endpts[bind_idx].opts.tls, sock, NC_TRANSPORT_TIMEOUT);
+    } else if (config->endpts[endpt_idx].ti == NC_TI_TLS) {
+        (*session)->data = config->endpts[endpt_idx].opts.tls;
+        ret = nc_accept_tls_session(*session, config->endpts[endpt_idx].opts.tls, sock, NC_TRANSPORT_TIMEOUT);
         sock = -1;
         if (ret < 0) {
             msgtype = NC_MSG_ERROR;
@@ -2594,8 +2629,8 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
         }
     } else
 #endif /* NC_ENABLED_SSH_TLS */
-    if (server_opts.endpts[bind_idx].ti == NC_TI_UNIX) {
-        (*session)->data = server_opts.endpts[bind_idx].opts.unix;
+    if (config->endpts[endpt_idx].ti == NC_TI_UNIX) {
+        (*session)->data = config->endpts[endpt_idx].opts.unix;
         ret = nc_accept_unix_session(*session, sock);
         sock = -1;
         if (ret < 0) {
@@ -2650,7 +2685,7 @@ cleanup:
 API int
 nc_server_ch_is_client(const char *name)
 {
-    uint16_t i;
+    struct nc_ch_client *client;
     int found = 0;
 
     if (!name) {
@@ -2660,9 +2695,9 @@ nc_server_ch_is_client(const char *name)
     /* CONFIG READ LOCK */
     pthread_rwlock_rdlock(&server_opts.config_lock);
 
-    /* check name uniqueness */
-    for (i = 0; i < server_opts.ch_client_count; ++i) {
-        if (!strcmp(server_opts.ch_clients[i].name, name)) {
+    /* check name against all configured clients */
+    LY_ARRAY_FOR(server_opts.config.ch_clients, struct nc_ch_client, client) {
+        if (!strcmp(client->name, name)) {
             found = 1;
             break;
         }
@@ -2677,8 +2712,8 @@ nc_server_ch_is_client(const char *name)
 API int
 nc_server_ch_client_is_endpt(const char *client_name, const char *endpt_name)
 {
-    uint16_t i;
     struct nc_ch_client *client = NULL;
+    struct nc_ch_endpt *endpt = NULL;
     int found = 0;
 
     if (!client_name || !endpt_name) {
@@ -2688,21 +2723,15 @@ nc_server_ch_client_is_endpt(const char *client_name, const char *endpt_name)
     /* CONFIG READ LOCK */
     pthread_rwlock_rdlock(&server_opts.config_lock);
 
-    for (i = 0; i < server_opts.ch_client_count; ++i) {
-        if (!strcmp(server_opts.ch_clients[i].name, client_name)) {
-            client = &server_opts.ch_clients[i];
-            break;
-        }
-    }
-
+    client = nc_server_ch_client_get(client_name);
     if (!client) {
         goto cleanup;
     }
 
-    for (i = 0; i < client->ch_endpt_count; ++i) {
-        if (!strcmp(client->ch_endpts[i].name, endpt_name)) {
+    LY_ARRAY_FOR(client->ch_endpts, struct nc_ch_endpt, endpt) {
+        if (!strcmp(endpt->name, endpt_name)) {
             found = 1;
-            break;
+            goto cleanup;
         }
     }
 
@@ -2862,7 +2891,7 @@ cleanup:
  * @return -1 on error.
  */
 static int
-nc_server_ch_client_thread_session_cond_wait(struct nc_ch_client_thread_arg *data, struct nc_session *session)
+nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *data, struct nc_session *session)
 {
     int rc = 0, r;
     uint32_t idle_timeout;
@@ -2956,7 +2985,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_ch_client_thread_arg *dat
  * @return 0 if the thread should stop running, 1 if it should continue.
  */
 static int
-nc_server_ch_client_thread_is_running_wait(struct nc_session *session, struct nc_ch_client_thread_arg *data, uint64_t cond_wait_time)
+nc_server_ch_client_thread_is_running_wait(struct nc_session *session, struct nc_server_ch_thread_arg *data, uint64_t cond_wait_time)
 {
     struct timespec ts;
     int ret = 0, thread_running;
@@ -3000,7 +3029,7 @@ nc_server_ch_client_thread_is_running_wait(struct nc_session *session, struct nc
  * @return 0 if the thread should stop running, -1 if it can continue.
  */
 static int
-nc_server_ch_client_thread_is_running(struct nc_ch_client_thread_arg *data)
+nc_server_ch_client_thread_is_running(struct nc_server_ch_thread_arg *data)
 {
     int ret = -1;
 
@@ -3026,7 +3055,7 @@ nc_server_ch_client_thread_is_running(struct nc_ch_client_thread_arg *data)
  * @return Pointer to the CH client, NULL if the client was removed.
  */
 static struct nc_ch_client *
-nc_server_ch_client_with_endpt_get(struct nc_ch_client_thread_arg *data, const char *name)
+nc_server_ch_client_with_endpt_get(struct nc_server_ch_thread_arg *data, const char *name)
 {
     struct nc_ch_client *client;
 
@@ -3038,7 +3067,7 @@ nc_server_ch_client_with_endpt_get(struct nc_ch_client_thread_arg *data, const c
         }
 
         /* check if it has at least one endpoint defined */
-        if (client->ch_endpt_count) {
+        if (client->ch_endpts) {
             return client;
         }
 
@@ -3065,7 +3094,7 @@ nc_server_ch_client_with_endpt_get(struct nc_ch_client_thread_arg *data, const c
 static void *
 nc_ch_client_thread(void *arg)
 {
-    struct nc_ch_client_thread_arg *data = arg;
+    struct nc_server_ch_thread_arg *data = arg;
     NC_MSG_TYPE msgtype;
     uint8_t cur_attempts = 0;
     uint16_t next_endpt_index, max_wait;
@@ -3074,6 +3103,12 @@ nc_ch_client_thread(void *arg)
     struct nc_session *session = NULL;
     struct nc_ch_client *client;
     uint32_t reconnect_in;
+    LY_ARRAY_COUNT_TYPE i;
+
+    /* mark the thread as running */
+    pthread_mutex_lock(&data->cond_lock);
+    data->thread_running = 1;
+    pthread_mutex_unlock(&data->cond_lock);
 
     /* CONFIG READ LOCK */
     pthread_rwlock_rdlock(&server_opts.config_lock);
@@ -3163,20 +3198,19 @@ nc_ch_client_thread(void *arg)
                 next_endpt_index = 0;
             } else if (client->start_with == NC_CH_LAST_CONNECTED) {
                 /* we keep the current one but due to unlock/lock we have to find it again */
-                for (next_endpt_index = 0; next_endpt_index < client->ch_endpt_count; ++next_endpt_index) {
+                LY_ARRAY_FOR(client->ch_endpts, next_endpt_index) {
                     if (!strcmp(client->ch_endpts[next_endpt_index].name, cur_endpt_name)) {
                         break;
                     }
                 }
-                if (next_endpt_index >= client->ch_endpt_count) {
+                if (next_endpt_index >= LY_ARRAY_COUNT(client->ch_endpts)) {
                     /* endpoint was removed, start with the first one */
                     next_endpt_index = 0;
                 }
             } else {
                 /* just get a random index */
-                next_endpt_index = rand() % client->ch_endpt_count;
+                next_endpt_index = rand() % LY_ARRAY_COUNT(client->ch_endpts);
             }
-
         } else {
             /* session was not created, wait a little bit and try again */
             max_wait = client->max_wait;
@@ -3203,13 +3237,13 @@ nc_ch_client_thread(void *arg)
             ++cur_attempts;
 
             /* try to find our endpoint again */
-            for (next_endpt_index = 0; next_endpt_index < client->ch_endpt_count; ++next_endpt_index) {
+            LY_ARRAY_FOR(client->ch_endpts, next_endpt_index) {
                 if (!strcmp(client->ch_endpts[next_endpt_index].name, cur_endpt_name)) {
                     break;
                 }
             }
 
-            if (next_endpt_index >= client->ch_endpt_count) {
+            if (next_endpt_index >= LY_ARRAY_COUNT(client->ch_endpts)) {
                 /* endpoint was removed, start with the first one */
                 VRB(session, "Call Home client \"%s\" endpoint \"%s\" removed.", data->client_name, cur_endpt_name);
                 next_endpt_index = 0;
@@ -3226,7 +3260,7 @@ nc_ch_client_thread(void *arg)
                     cur_endpt->sock_pending = -1;
                 }
 
-                if (next_endpt_index < client->ch_endpt_count - 1) {
+                if (next_endpt_index < LY_ARRAY_COUNT(client->ch_endpts) - 1) {
                     /* just go to the next endpoint */
                     ++next_endpt_index;
                 } else {
@@ -3249,6 +3283,24 @@ cleanup_unlock:
 cleanup:
     VRB(session, "Call Home client \"%s\" thread exit.", data->client_name);
     free(cur_endpt_name);
+
+    /* CH THREADS WR LOCK */
+    pthread_rwlock_wrlock(&server_opts.ch_threads_lock);
+
+    /* remove the thread data from the global array */
+    LY_ARRAY_FOR(server_opts.ch_threads, i) {
+        if (server_opts.ch_threads[i] == data) {
+            break;
+        }
+    }
+    if (i < LY_ARRAY_COUNT(server_opts.ch_threads) - 1) {
+        server_opts.ch_threads[i] = server_opts.ch_threads[LY_ARRAY_COUNT(server_opts.ch_threads) - 1];
+    }
+    LY_ARRAY_DECREMENT_FREE(server_opts.ch_threads);
+
+    /* CH THREADS UNLOCK */
+    pthread_rwlock_unlock(&server_opts.ch_threads_lock);
+
     free(data->client_name);
     pthread_mutex_lock(&data->cond_lock);
     pthread_cond_destroy(&data->cond);
@@ -3259,14 +3311,13 @@ cleanup:
 }
 
 int
-_nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
+_nc_connect_ch_client_dispatch(const struct nc_ch_client *ch_client, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
         nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
-        void *new_session_cb_data, int config_locked)
+        void *new_session_cb_data)
 {
-    int rc = 0, r;
+    int rc = 0, r, ch_threads_locked = 0;
     pthread_t tid;
-    struct nc_ch_client_thread_arg *arg = NULL;
-    struct nc_ch_client *ch_client;
+    struct nc_server_ch_thread_arg *arg = NULL, **new_item;
     pthread_attr_t attr;
 
     /* init pthread attribute */
@@ -3282,29 +3333,10 @@ _nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acq
         goto cleanup;
     }
 
-    if (!config_locked) {
-        /* CONFIG READ LOCK */
-        pthread_rwlock_rdlock(&server_opts.config_lock);
-    }
-
-    /* check ch client existence */
-    ch_client = nc_server_ch_client_get(client_name);
-
-    if (!config_locked) {
-        /* CONFIG READ UNLOCK */
-        pthread_rwlock_unlock(&server_opts.config_lock);
-    }
-
-    if (!ch_client) {
-        ERR(NULL, "Client \"%s\" not found.", client_name);
-        rc = -1;
-        goto cleanup;
-    }
-
     /* create the thread argument */
     arg = calloc(1, sizeof *arg);
     NC_CHECK_ERRMEM_GOTO(!arg, rc = -1, cleanup);
-    arg->client_name = strdup(client_name);
+    arg->client_name = strdup(ch_client->name);
     NC_CHECK_ERRMEM_GOTO(!arg->client_name, rc = -1, cleanup);
     arg->acquire_ctx_cb = acquire_ctx_cb;
     arg->release_ctx_cb = release_ctx_cb;
@@ -3314,19 +3346,35 @@ _nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acq
     pthread_cond_init(&arg->cond, NULL);
     pthread_mutex_init(&arg->cond_lock, NULL);
 
-    /* creating the thread */
-    arg->thread_running = 1;
+    /* CH THREADS WR LOCK */
+    pthread_rwlock_wrlock(&server_opts.ch_threads_lock);
+    ch_threads_locked = 1;
+
+    /* Append the thread data pointer to the global array.
+     * Pointer instead of struct so that server_opts.ch_thread_lock does not have to be
+     * locked everytime the arg is accessed */
+    LY_ARRAY_NEW_GOTO(NULL, server_opts.ch_threads, new_item, rc, cleanup);
+    *new_item = arg;
+
+    /* CH THREADS UNLOCK */
+    pthread_rwlock_unlock(&server_opts.ch_threads_lock);
+    ch_threads_locked = 0;
+
+    /* create the CH thread */
     if ((r = pthread_create(&tid, &attr, nc_ch_client_thread, arg))) {
         ERR(NULL, "Creating a new thread failed (%s).", strerror(r));
         rc = -1;
         goto cleanup;
     }
 
-    /* the thread now manages arg */
-    ch_client->thread_data = arg;
+    /* arg is now owned by the thread */
     arg = NULL;
 
 cleanup:
+    if (ch_threads_locked) {
+        /* CH THREADS UNLOCK */
+        pthread_rwlock_unlock(&server_opts.ch_threads_lock);
+    }
     pthread_attr_destroy(&attr);
     if (arg) {
         free(arg->client_name);
@@ -3340,12 +3388,27 @@ nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acqu
         nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
         void *new_session_cb_data)
 {
+    int rc = 0;
+    struct nc_ch_client *ch_client;
+
     NC_CHECK_ARG_RET(NULL, client_name, acquire_ctx_cb, release_ctx_cb, new_session_cb, -1);
 
     NC_CHECK_SRV_INIT_RET(-1);
 
-    return _nc_connect_ch_client_dispatch(client_name, acquire_ctx_cb, release_ctx_cb, ctx_cb_data,
-            new_session_cb, new_session_cb_data, 0);
+    /* CONFIG READ LOCK */
+    pthread_rwlock_rdlock(&server_opts.config_lock);
+
+    /* check ch client existence */
+    ch_client = nc_server_ch_client_get(client_name);
+    NC_CHECK_ERR_GOTO(!ch_client, rc = -1; ERR(NULL, "Call Home client \"%s\" not found.", client_name), cleanup);
+
+    rc = _nc_connect_ch_client_dispatch(ch_client, acquire_ctx_cb, release_ctx_cb, ctx_cb_data,
+            new_session_cb, new_session_cb_data);
+
+cleanup:
+    /* CONFIG READ UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
+    return rc;
 }
 
 #endif /* NC_ENABLED_SSH_TLS */
@@ -3543,7 +3606,8 @@ nc_server_notif_cert_exp_time_sub(time_t orig_time, struct nc_cert_exp_time *sub
  * @return Calendar time of the next notification or -1 on error.
  */
 static time_t
-nc_server_notif_cert_exp_next_notif_time_get(struct nc_interval *intervals, int interval_count, struct nc_cert_expiration *exp)
+nc_server_notif_cert_exp_next_notif_time_get(struct nc_cert_exp_time_interval *intervals, int interval_count,
+        struct nc_cert_expiration *exp)
 {
     time_t new_notif_time, now;
     double diff;
@@ -3589,7 +3653,8 @@ nc_server_notif_cert_exp_next_notif_time_get(struct nc_interval *intervals, int 
  * @return 0 on success, 1 on error.
  */
 static int
-nc_server_notif_cert_exp_init_intervals(struct nc_interval *intervals, int interval_count, struct nc_cert_expiration *exp)
+nc_server_notif_cert_exp_init_intervals(struct nc_cert_exp_time_interval *intervals, int interval_count,
+        struct nc_cert_expiration *exp)
 {
     int i;
 
@@ -3616,7 +3681,8 @@ nc_server_notif_cert_exp_init_intervals(struct nc_interval *intervals, int inter
  * @return 0 on success.
  */
 static int
-nc_server_notif_cert_exp_first_notif_time_get(struct nc_interval *intervals, int interval_count, struct nc_cert_expiration *exp)
+nc_server_notif_cert_exp_first_notif_time_get(struct nc_cert_exp_time_interval *intervals, int interval_count,
+        struct nc_cert_expiration *exp)
 {
     int i;
     time_t now, notif_time;
@@ -3685,7 +3751,8 @@ nc_server_notif_cert_exp_first_notif_time_get(struct nc_interval *intervals, int
  */
 static int
 nc_server_notif_cert_exp_date_append(const char *cert_data, struct nc_cert_path_aux *cp,
-        struct nc_interval *intervals, int interval_count, struct nc_cert_expiration **exp_dates, int *exp_date_count)
+        struct nc_cert_exp_time_interval *intervals, uint32_t interval_count,
+        struct nc_cert_expiration **exp_dates, uint32_t *exp_date_count)
 {
     int ret = 0;
     void *cert = NULL;
@@ -3749,28 +3816,28 @@ cleanup:
  */
 static int
 nc_server_notif_cert_exp_dates_endpt_get(const char *ch_client_name, const char *endpt_name, struct nc_server_tls_opts *opts,
-        struct nc_interval *intervals, int interval_count, struct nc_cert_expiration **exp_dates, int *exp_date_count)
+        struct nc_cert_exp_time_interval *intervals, uint32_t interval_count,
+        struct nc_cert_expiration **exp_dates, uint32_t *exp_date_count)
 {
-    int ret = 0, i;
+    int ret = 0;
+    LY_ARRAY_COUNT_TYPE i;
     struct nc_certificate *certs;
-    uint16_t ncerts;
     struct nc_cert_path_aux cp = {0};
 
     /* append server cert first */
-    if (opts->store == NC_STORE_LOCAL) {
+    if (opts->cert_store == NC_STORE_LOCAL) {
         NC_CERT_EXP_UPDATE_CERT_PATH(&cp, ch_client_name, endpt_name, NULL, NULL, NULL, NULL, NULL, NULL);
-        ret = nc_server_notif_cert_exp_date_append(opts->cert_data, &cp, intervals, interval_count, exp_dates, exp_date_count);
+        ret = nc_server_notif_cert_exp_date_append(opts->local.cert.data, &cp, intervals, interval_count, exp_dates, exp_date_count);
         if (ret) {
             goto cleanup;
         }
     }
 
     /* append CA certs */
-    if (opts->ca_certs.store == NC_STORE_LOCAL) {
-        certs = opts->ca_certs.certs;
-        ncerts = opts->ca_certs.cert_count;
+    if (opts->client_auth.ca_certs_store == NC_STORE_LOCAL) {
+        certs = opts->client_auth.ca_certs;
 
-        for (i = 0; i < ncerts; i++) {
+        LY_ARRAY_FOR(certs, i) {
             NC_CERT_EXP_UPDATE_CERT_PATH(&cp, ch_client_name, endpt_name, certs[i].name, NULL, NULL, NULL, NULL, NULL);
             ret = nc_server_notif_cert_exp_date_append(certs[i].data, &cp, intervals, interval_count, exp_dates, exp_date_count);
             if (ret) {
@@ -3780,11 +3847,10 @@ nc_server_notif_cert_exp_dates_endpt_get(const char *ch_client_name, const char 
     }
 
     /* append end entity certs */
-    if (opts->ee_certs.store == NC_STORE_LOCAL) {
-        certs = opts->ee_certs.certs;
-        ncerts = opts->ee_certs.cert_count;
+    if (opts->client_auth.ee_certs_store == NC_STORE_LOCAL) {
+        certs = opts->client_auth.ee_certs;
 
-        for (i = 0; i < ncerts; i++) {
+        LY_ARRAY_FOR(certs, i) {
             NC_CERT_EXP_UPDATE_CERT_PATH(&cp, ch_client_name, endpt_name, NULL, certs[i].name, NULL, NULL, NULL, NULL);
             ret = nc_server_notif_cert_exp_date_append(certs[i].data, &cp, intervals, interval_count, exp_dates, exp_date_count);
             if (ret) {
@@ -3807,13 +3873,18 @@ cleanup:
  * @return 0 on success, 1 on error.
  */
 static int
-nc_server_notif_cert_exp_dates_get(struct nc_interval *intervals, int interval_count, struct nc_cert_expiration **exp_dates, int *exp_date_count)
+nc_server_notif_cert_exp_dates_get(struct nc_cert_exp_time_interval *intervals, uint32_t interval_count,
+        struct nc_cert_expiration **exp_dates, uint32_t *exp_date_count)
 {
     int ret = 0;
-    uint16_t i, j;
-    struct nc_keystore *ks = &server_opts.keystore;
-    struct nc_truststore *ts = &server_opts.truststore;
+    struct nc_endpt *endpt;
+    struct nc_ch_client *ch_client;
+    struct nc_ch_endpt *ch_endpt;
+    struct nc_certificate *cert;
+    struct nc_keystore *ks = &server_opts.config.keystore;
+    struct nc_truststore *ts = &server_opts.config.truststore;
     struct nc_cert_path_aux cp = {0};
+    LY_ARRAY_COUNT_TYPE i;
 
     NC_CHECK_ARG_RET(NULL, intervals, interval_count, exp_dates, exp_date_count, 1);
 
@@ -3824,10 +3895,10 @@ nc_server_notif_cert_exp_dates_get(struct nc_interval *intervals, int interval_c
     pthread_rwlock_rdlock(&server_opts.config_lock);
 
     /* first go through listen certs */
-    for (i = 0; i < server_opts.endpt_count; ++i) {
-        if (server_opts.endpts[i].ti == NC_TI_TLS) {
-            ret = nc_server_notif_cert_exp_dates_endpt_get(NULL, server_opts.endpts[i].name,
-                    server_opts.endpts[i].opts.tls, intervals, interval_count, exp_dates, exp_date_count);
+    LY_ARRAY_FOR(server_opts.config.endpts, struct nc_endpt, endpt) {
+        if (endpt->ti == NC_TI_TLS) {
+            ret = nc_server_notif_cert_exp_dates_endpt_get(NULL, endpt->name, endpt->opts.tls,
+                    intervals, interval_count, exp_dates, exp_date_count);
             if (ret) {
                 goto cleanup;
             }
@@ -3835,11 +3906,10 @@ nc_server_notif_cert_exp_dates_get(struct nc_interval *intervals, int interval_c
     }
 
     /* then go through all the ch clients and their endpts */
-    for (i = 0; i < server_opts.ch_client_count; ++i) {
-        for (j = 0; j < server_opts.ch_clients[i].ch_endpt_count; ++j) {
-            if (server_opts.ch_clients[i].ch_endpts[j].ti == NC_TI_TLS) {
-                ret = nc_server_notif_cert_exp_dates_endpt_get(server_opts.ch_clients[i].name,
-                        server_opts.ch_clients[i].ch_endpts[j].name, server_opts.ch_clients[i].ch_endpts[j].opts.tls,
+    LY_ARRAY_FOR(server_opts.config.ch_clients, struct nc_ch_client, ch_client) {
+        LY_ARRAY_FOR(ch_client->ch_endpts, struct nc_ch_endpt, ch_endpt) {
+            if (ch_endpt->ti == NC_TI_TLS) {
+                ret = nc_server_notif_cert_exp_dates_endpt_get(ch_client->name, ch_endpt->name, ch_endpt->opts.tls,
                         intervals, interval_count, exp_dates, exp_date_count);
                 if (ret) {
                     goto cleanup;
@@ -3849,10 +3919,10 @@ nc_server_notif_cert_exp_dates_get(struct nc_interval *intervals, int interval_c
     }
 
     /* keystore certs */
-    for (i = 0; i < ks->asym_key_count; i++) {
-        for (j = 0; j < ks->asym_keys[i].cert_count; j++) {
-            NC_CERT_EXP_UPDATE_CERT_PATH(&cp, NULL, NULL, NULL, NULL, ks->asym_keys[i].name, ks->asym_keys[i].certs[j].name, NULL, NULL);
-            ret = nc_server_notif_cert_exp_date_append(ks->asym_keys[i].certs[j].data, &cp, intervals, interval_count, exp_dates, exp_date_count);
+    LY_ARRAY_FOR(ks->entries, i) {
+        LY_ARRAY_FOR(ks->entries[i].certs, struct nc_certificate, cert) {
+            NC_CERT_EXP_UPDATE_CERT_PATH(&cp, NULL, NULL, NULL, NULL, ks->entries[i].asym_key.name, cert->name, NULL, NULL);
+            ret = nc_server_notif_cert_exp_date_append(cert->data, &cp, intervals, interval_count, exp_dates, exp_date_count);
             if (ret) {
                 goto cleanup;
             }
@@ -3860,10 +3930,10 @@ nc_server_notif_cert_exp_dates_get(struct nc_interval *intervals, int interval_c
     }
 
     /* truststore certs */
-    for (i = 0; i < ts->cert_bag_count; i++) {
-        for (j = 0; j < ts->cert_bags[i].cert_count; j++) {
-            NC_CERT_EXP_UPDATE_CERT_PATH(&cp, NULL, NULL, NULL, NULL, NULL, NULL, ts->cert_bags[i].name, ts->cert_bags[i].certs[j].name);
-            ret = nc_server_notif_cert_exp_date_append(ts->cert_bags[i].certs[j].data, &cp, intervals, interval_count, exp_dates, exp_date_count);
+    LY_ARRAY_FOR(ts->cert_bags, i) {
+        LY_ARRAY_FOR(ts->cert_bags[i].certs, struct nc_certificate, cert) {
+            NC_CERT_EXP_UPDATE_CERT_PATH(&cp, NULL, NULL, NULL, NULL, NULL, NULL, ts->cert_bags[i].name, cert->name);
+            ret = nc_server_notif_cert_exp_date_append(cert->data, &cp, intervals, interval_count, exp_dates, exp_date_count);
             if (ret) {
                 goto cleanup;
             }
@@ -3925,9 +3995,11 @@ nc_server_notif_cert_exp_wakeup_time_get(struct nc_cert_expiration *exp_dates, i
  *
  * @param[in] exp_dates Expiration dates.
  * @param[in] exp_date_count Expiration date count.
+ * @param[in] intervals Time intervals to destroy.
  */
 static void
-nc_server_notif_cert_exp_dates_destroy(struct nc_cert_expiration *exp_dates, int exp_date_count)
+nc_server_notif_cert_exp_data_destroy(struct nc_cert_expiration *exp_dates, int exp_date_count,
+        struct nc_cert_exp_time_interval *intervals)
 {
     int i;
 
@@ -3936,6 +4008,8 @@ nc_server_notif_cert_exp_dates_destroy(struct nc_cert_expiration *exp_dates, int
         free(exp_dates[i].xpath);
     }
     free(exp_dates);
+
+    free(intervals);
 }
 
 /**
@@ -3964,30 +4038,42 @@ nc_server_notif_cert_exp_thread_is_running()
 /**
  * @brief Get the certificate expiration notification time intervals either from the config or the default ones.
  *
+ * @note The caller is responsible for freeing the allocated intervals.
+ *
  * @param[in] default_intervals Default intervals.
  * @param[in] default_interval_count Default interval count.
  * @param[out] intervals Actual intervals to be used.
  * @param[out] interval_count Used interval count.
+ * @return 0 on success, 1 on error.
  */
-static void
-nc_server_notif_cert_exp_intervals_get(struct nc_interval *default_intervals, int default_interval_count,
-        struct nc_interval **intervals, int *interval_count)
+static int
+nc_server_notif_cert_exp_intervals_get(struct nc_cert_exp_time_interval *default_intervals, uint32_t default_interval_count,
+        struct nc_cert_exp_time_interval **intervals, uint32_t *interval_count)
 {
-    /* LOCK */
-    pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
+    int rc = 0;
 
-    if (!server_opts.cert_exp_notif.intervals) {
-        /* using the default intervals */
-        *intervals = default_intervals;
+    /* CONFIG LOCK */
+    pthread_rwlock_rdlock(&server_opts.config_lock);
+
+    if (!server_opts.config.cert_exp_notif_intervals) {
+        /* dup the default intervals */
+        *intervals = malloc(default_interval_count * sizeof **intervals);
+        NC_CHECK_ERRMEM_GOTO(!*intervals, rc = 1, cleanup);
+        memcpy(*intervals, default_intervals, default_interval_count * sizeof **intervals);
         *interval_count = default_interval_count;
     } else {
-        /* using configured intervals */
-        *intervals = server_opts.cert_exp_notif.intervals;
-        *interval_count = server_opts.cert_exp_notif.interval_count;
+        /* dup the configured intervals */
+        *intervals = malloc(LY_ARRAY_COUNT(server_opts.config.cert_exp_notif_intervals) * sizeof **intervals);
+        NC_CHECK_ERRMEM_GOTO(!*intervals, rc = 1, cleanup);
+        memcpy(*intervals, server_opts.config.cert_exp_notif_intervals,
+                LY_ARRAY_COUNT(server_opts.config.cert_exp_notif_intervals) * sizeof **intervals);
+        *interval_count = LY_ARRAY_COUNT(server_opts.config.cert_exp_notif_intervals);
     }
 
-    /* UNLOCK */
-    pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
+cleanup:
+    /* CONFIG UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
+    return rc;
 }
 
 /**
@@ -4000,21 +4086,25 @@ nc_server_notif_cert_exp_intervals_get(struct nc_interval *default_intervals, in
 static void *
 nc_server_notif_cert_exp_thread(void *arg)
 {
-    int r = 0, exp_date_count = 0;
+    int r = 0;
     struct nc_cert_exp_notif_thread_arg *targ = arg;
     struct nc_cert_expiration *exp_dates = NULL, *curr_cert = NULL;
     struct timespec wakeup_time = {0};
     char *exp_time = NULL;
-    struct nc_interval default_intervals[3] = {
+    struct nc_cert_exp_time_interval default_intervals[3] = {
         {.anchor = {.months = 3}, .period = {.months = 1}},
         {.anchor = {.weeks = 2}, .period = {.weeks = 1}},
         {.anchor = {.days = 7}, .period = {.days = 1}}
     };
-    struct nc_interval *intervals;
-    int interval_count;
+    struct nc_cert_exp_time_interval *intervals;
+    uint32_t interval_count = 0, exp_date_count = 0;
 
     /* get certificate expiration time intervals */
-    nc_server_notif_cert_exp_intervals_get(default_intervals, 3, &intervals, &interval_count);
+    r = nc_server_notif_cert_exp_intervals_get(default_intervals,
+            sizeof(default_intervals) / sizeof(default_intervals[0]), &intervals, &interval_count);
+    if (r) {
+        goto cleanup;
+    }
 
     /* get the expiration dates */
     r = nc_server_notif_cert_exp_dates_get(intervals, interval_count, &exp_dates, &exp_date_count);
@@ -4040,7 +4130,7 @@ nc_server_notif_cert_exp_thread(void *arg)
             }
 
             /* config changed, reload the certificates and intervals */
-            nc_server_notif_cert_exp_dates_destroy(exp_dates, exp_date_count);
+            nc_server_notif_cert_exp_data_destroy(exp_dates, exp_date_count, intervals);
 
             nc_server_notif_cert_exp_intervals_get(default_intervals, 3, &intervals, &interval_count);
 
@@ -4082,7 +4172,7 @@ cleanup:
         targ->clb_free_data(targ->clb_data);
     }
     if (exp_dates) {
-        nc_server_notif_cert_exp_dates_destroy(exp_dates, exp_date_count);
+        nc_server_notif_cert_exp_data_destroy(exp_dates, exp_date_count, intervals);
     }
     free(targ);
     return NULL;
@@ -4172,13 +4262,21 @@ nc_server_notif_cert_expiration_thread_stop(int wait)
 int
 nc_server_is_mod_ignored(const char *mod_name)
 {
-    uint16_t i;
+    int ignored = 0;
+    LY_ARRAY_COUNT_TYPE i;
 
-    for (i = 0; i < server_opts.ignored_mod_count; ++i) {
-        if (!strcmp(server_opts.ignored_modules[i], mod_name)) {
-            return 1;
+    /* LOCK */
+    pthread_rwlock_rdlock(&server_opts.config_lock);
+
+    LY_ARRAY_FOR(server_opts.config.ignored_modules, i) {
+        if (!strcmp(server_opts.config.ignored_modules[i], mod_name)) {
+            ignored = 1;
+            break;
         }
     }
 
-    return 0;
+    /* UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
+
+    return ignored;
 }

@@ -74,6 +74,9 @@ int nc_server_config_load_modules(struct ly_ctx **ctx);
  *
  * Context must already have implemented the required modules, see ::nc_server_config_load_modules().
  *
+ * @note All the implicit nodes, such as non-presence containers and
+ * leafs with default values, must be present in the diff.
+ *
  * @param[in] diff YANG diff belonging to either ietf-netconf-server, ietf-keystore or ietf-truststore modules.
  * The top level node HAS to have an operation (create, replace, delete or none).
  * @return 0 on success, 1 on error.
@@ -83,9 +86,12 @@ int nc_server_config_setup_diff(const struct lyd_node *diff);
 /**
  * @brief Configure server based on the given data.
  *
- * Behaves as if all the nodes in data had the replace operation. That means that the current configuration will be deleted
- * and just the given data will be applied.
+ * The current configuration will be completely replaced by the given data.
+ *
  * Context must already have implemented the required modules, see ::nc_server_config_load_modules().
+ *
+ * @note All the implicit nodes, such as non-presence containers and
+ * leafs with default values, must be present in the data.
  *
  * @param[in] data YANG data belonging to either ietf-netconf-server, ietf-keystore or ietf-truststore modules.
  * This data __must be valid__. No node can have an operation attribute.
@@ -320,40 +326,27 @@ int nc_server_config_del_truststore_cert(const char *cert_bag_name,
         const char *cert_name, struct lyd_node **config);
 
 /**
- * @brief Gets the hostkey algorithms supported by the server from the 'iana-ssh-public-key-algs' YANG module.
+ * @brief Gets all the SSH transport algorithms supported by the server.
+ *
+ * @note Actual usable algorithms depend on the underlying libssh library version,
+ * the returned list is based on libssh v0.11.0.
  *
  * @param[in] ctx libyang context.
- * @param[out] hostkey_algs Container with leaf-lists containing the supported algorithms.
+ * @param[out] supported_algs Supported SSH transport algorithms.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_oper_get_hostkey_algs(const struct ly_ctx *ctx, struct lyd_node **hostkey_algs);
+int nc_server_config_oper_get_supported_ssh_algs(const struct ly_ctx *ctx, struct lyd_node **supported_algs);
 
 /**
- * @brief Gets the key exchange algorithms supported by the server from the 'iana-ssh-key-exchange-algs' YANG module.
+ * @brief Gets all the TLS transport cipher suites supported by the server.
+ *
+ * @note Actual usable cipher suites depend on the underlying TLS library and its version.
  *
  * @param[in] ctx libyang context.
- * @param[out] kex_algs Container with leaf-lists containing the supported algorithms.
+ * @param[out] supported_algs Supported cipher suites.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_oper_get_kex_algs(const struct ly_ctx *ctx, struct lyd_node **kex_algs);
-
-/**
- * @brief Gets the encryption algorithms supported by the server from the 'iana-ssh-encryption-algs' YANG module.
- *
- * @param[in] ctx libyang context.
- * @param[out] encryption_algs Container with leaf-lists containing the supported algorithms.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_oper_get_encryption_algs(const struct ly_ctx *ctx, struct lyd_node **encryption_algs);
-
-/**
- * @brief Gets the MAC algorithms supported by the server from the 'iana-ssh-mac-algs' YANG module.
- *
- * @param[in] ctx libyang context.
- * @param[out] mac_algs Container with leaf-lists containing the supported algorithms.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_oper_get_mac_algs(const struct ly_ctx *ctx, struct lyd_node **mac_algs);
+int nc_server_config_oper_get_supported_tls_algs(const struct ly_ctx *ctx, struct lyd_node **supported_algs);
 
 /**
  * @} Server Configuration Functions

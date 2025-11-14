@@ -41,6 +41,7 @@ int
 nc_server_config_create(const struct ly_ctx *ctx, struct lyd_node **tree, const char *value, const char *path_fmt, ...)
 {
     int ret = 0;
+    struct lyd_node *iter;
     va_list ap;
     char *path = NULL;
 
@@ -69,10 +70,12 @@ nc_server_config_create(const struct ly_ctx *ctx, struct lyd_node **tree, const 
         goto cleanup;
     }
 
-    /* add all default nodes */
-    ret = lyd_new_implicit_tree(*tree, LYD_IMPLICIT_NO_STATE, NULL);
-    if (ret) {
-        goto cleanup;
+    /* add all implicit nodes of ietf-netconf-server, ietf-keystore and ietf-truststore */
+    LY_LIST_FOR(lyd_first_sibling(*tree), iter) {
+        ret = lyd_new_implicit_tree(iter, LYD_IMPLICIT_NO_STATE, NULL);
+        if (ret) {
+            goto cleanup;
+        }
     }
 
 cleanup:
@@ -86,6 +89,7 @@ nc_server_config_append(const struct ly_ctx *ctx, const char *parent_path, const
         const char *value, struct lyd_node **tree)
 {
     int ret = 0;
+    struct lyd_node *iter;
     char *path = NULL;
 
     NC_CHECK_ARG_RET(NULL, ctx, parent_path, child_name, tree, 1);
@@ -111,10 +115,12 @@ nc_server_config_append(const struct ly_ctx *ctx, const char *parent_path, const
         goto cleanup;
     }
 
-    /* add all default nodes */
-    ret = lyd_new_implicit_tree(*tree, LYD_IMPLICIT_NO_STATE, NULL);
-    if (ret) {
-        goto cleanup;
+    /* add all implicit nodes of ietf-netconf-server, ietf-keystore and ietf-truststore */
+    LY_LIST_FOR(lyd_first_sibling(*tree), iter) {
+        ret = lyd_new_implicit_tree(iter, LYD_IMPLICIT_NO_STATE, NULL);
+        if (ret) {
+            goto cleanup;
+        }
     }
 
 cleanup:
@@ -128,7 +134,7 @@ nc_server_config_delete(struct lyd_node **tree, const char *path_fmt, ...)
     int ret = 0;
     va_list ap;
     char *path = NULL;
-    struct lyd_node *sub = NULL;
+    struct lyd_node *sub = NULL, *iter;
 
     NC_CHECK_ARG_RET(NULL, tree, path_fmt, 1);
 
@@ -146,16 +152,18 @@ nc_server_config_delete(struct lyd_node **tree, const char *path_fmt, ...)
 
     lyd_free_tree(sub);
 
-    /* set the node to top level container */
+    /* set the node to the top level node */
     ret = lyd_find_path(*tree, "/ietf-netconf-server:netconf-server", 0, tree);
     if (ret) {
         goto cleanup;
     }
 
-    /* add all default nodes */
-    ret = lyd_new_implicit_tree(*tree, LYD_IMPLICIT_NO_STATE, NULL);
-    if (ret) {
-        goto cleanup;
+    /* add all implicit nodes of ietf-netconf-server, ietf-keystore and ietf-truststore */
+    LY_LIST_FOR(lyd_first_sibling(*tree), iter) {
+        ret = lyd_new_implicit_tree(iter, LYD_IMPLICIT_NO_STATE, NULL);
+        if (ret) {
+            goto cleanup;
+        }
     }
 
 cleanup:
@@ -170,7 +178,7 @@ nc_server_config_check_delete(struct lyd_node **tree, const char *path_fmt, ...)
     int ret = 0;
     va_list ap;
     char *path = NULL;
-    struct lyd_node *sub = NULL;
+    struct lyd_node *sub = NULL, *iter;
 
     NC_CHECK_ARG_RET(NULL, tree, path_fmt, 1);
 
@@ -192,10 +200,18 @@ nc_server_config_check_delete(struct lyd_node **tree, const char *path_fmt, ...)
 
     lyd_free_tree(sub);
 
-    /* set the node to top level container */
+    /* set the node to the top level node */
     ret = lyd_find_path(*tree, "/ietf-netconf-server:netconf-server", 0, tree);
     if (ret) {
         goto cleanup;
+    }
+
+    /* add all implicit nodes of ietf-netconf-server, ietf-keystore and ietf-truststore */
+    LY_LIST_FOR(lyd_first_sibling(*tree), iter) {
+        ret = lyd_new_implicit_tree(iter, LYD_IMPLICIT_NO_STATE, NULL);
+        if (ret) {
+            goto cleanup;
+        }
     }
 
 cleanup:
@@ -988,32 +1004,27 @@ nc_server_config_add_address_port(const struct ly_ctx *ctx, const char *endpt_na
         const char *address, uint16_t port, struct lyd_node **config)
 {
     int ret = 0;
-    const char *address_fmt, *port_fmt;
+    const char *path_fmt, *transport_str;
     char port_buf[6] = {0};
 
     NC_CHECK_ARG_RET(NULL, ctx, endpt_name, address, config, 1);
 
+    /* prepare the path */
+    path_fmt = "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/%s/tcp-server-parameters/"
+            "local-bind[local-address='%s']/local-port";
+
     if (transport == NC_TI_SSH) {
-        /* SSH path */
-        address_fmt = "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/tcp-server-parameters/local-address";
-        port_fmt = "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/ssh/tcp-server-parameters/local-port";
+        transport_str = "ssh";
     } else if (transport == NC_TI_TLS) {
-        /* TLS path */
-        address_fmt = "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/tcp-server-parameters/local-address";
-        port_fmt = "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/tcp-server-parameters/local-port";
+        transport_str = "tls";
     } else {
         ERR(NULL, "Can not set address and port of a non SSH/TLS endpoint.");
         ret = 1;
         goto cleanup;
     }
 
-    ret = nc_server_config_create(ctx, config, address, address_fmt, endpt_name);
-    if (ret) {
-        goto cleanup;
-    }
-
-    sprintf(port_buf, "%d", port);
-    ret = nc_server_config_create(ctx, config, port_buf, port_fmt, endpt_name);
+    snprintf(port_buf, sizeof(port_buf), "%u", port);
+    ret = nc_server_config_create(ctx, config, port_buf, path_fmt, endpt_name, transport_str, address);
     if (ret) {
         goto cleanup;
     }

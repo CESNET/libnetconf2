@@ -384,12 +384,10 @@ void nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *));
 
 /**
  * @brief Get the number of currently configured listening endpoints.
- * Note that an ednpoint without address and/or port will be included
- * even though it is not, in fact, listening.
  *
- * @return Number of added listening endpoints.
+ * @return Number of listening endpoints.
  */
-int nc_server_endpt_count(void);
+uint32_t nc_server_endpt_count(void);
 
 /** @} */
 

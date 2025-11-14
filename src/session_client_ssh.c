@@ -1798,8 +1798,6 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
         }
     } else {
         username = ssh_opts.username;
-
-        pw = nc_getpw(0, username, &pw_buf, &buf, &buf_len);
     }
 
     /* prepare session structure */

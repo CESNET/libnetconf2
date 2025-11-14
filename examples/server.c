@@ -244,6 +244,13 @@ init(const char *unix_socket_path, struct ly_ctx **context, struct nc_pollsessio
         }
     }
 
+    /* since nc_server_config_setup_data() requires all implicit nodes to be present and the example
+     * configuration data does not contain all of them, we need to add them */
+    rc = lyd_new_implicit_tree(config, LYD_IMPLICIT_NO_STATE, NULL);
+    if (rc) {
+        ERR_MSG_CLEANUP("Adding implicit nodes to the example configuration data failed.\n");
+    }
+
     /* apply the example configuration data to the server */
     rc = nc_server_config_setup_data(config);
     if (rc) {

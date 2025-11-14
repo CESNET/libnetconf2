@@ -270,7 +270,7 @@ nc_client_tls_session_new(int sock, const char *host, int timeout, struct nc_cli
     }
 
     /* init TLS context and store data which may be needed later in it */
-    if (nc_tls_init_ctx_wrap(cli_cert, cli_pkey, cert_store, crl_store, tls_ctx)) {
+    if (nc_tls_init_ctx_wrap(cli_cert, cli_pkey, cert_store, crl_store, NULL, tls_ctx)) {
         goto fail;
     }
 
