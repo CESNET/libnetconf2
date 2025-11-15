@@ -786,6 +786,8 @@ test_config_all_nodes(void **state)
     ret = nc_server_config_setup_diff(dup);
     assert_int_equal(ret, 0);
 
+    free(mem);
+    free(mem_filled);
     lyd_free_all(dup);
     lyd_free_all(tree);
 }
@@ -968,6 +970,7 @@ main(void)
         cmocka_unit_test_setup_teardown(test_preserve_conn, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_transport_params_oper_get, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_config_all_nodes, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_unusupported_asymkey_format, setup_f, ln2_glob_test_teardown),
     };
 
     /* try to get ports from the environment, otherwise use the default */

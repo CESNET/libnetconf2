@@ -744,8 +744,10 @@ config_pubkey_format(const struct lyd_node *node, enum nc_operation parent_op, s
         } else if (!strcmp(format, "subject-public-key-info-format")) {
             pubkey->type = NC_PUBKEY_FORMAT_X509;
         } else {
-            ERR(NULL, "Unknown public key format \"%s\".", format);
-            return 1;
+            /* do not fail, the key may still be usable, or it may have come from a keystore/truststore
+             * and have a different purpose other than NETCONF */
+            WRN(NULL, "Public key format \"%s\" not supported. The key may not be usable.", format);
+            pubkey->type = NC_PUBKEY_FORMAT_UNKNOWN;
         }
     }
 
@@ -794,8 +796,10 @@ config_privkey_format(const struct lyd_node *node, enum nc_operation parent_op, 
         } else if (!strcmp(format, "openssh-private-key-format")) {
             privkey->type = NC_PRIVKEY_FORMAT_OPENSSH;
         } else {
-            ERR(NULL, "Unknown private key format \"%s\".", format);
-            return 1;
+            /* do not fail, the key may still be usable, or it may have come from a keystore/truststore
+             * and have a different purpose other than NETCONF */
+            WRN(NULL, "Private key format \"%s\" not supported. The key may not be usable.", format);
+            privkey->type = NC_PRIVKEY_FORMAT_UNKNOWN;
         }
     }
 
