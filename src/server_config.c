@@ -17,6 +17,7 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <errno.h>
 #include <grp.h>
 #include <pthread.h>
 #include <pwd.h>
@@ -5870,6 +5871,76 @@ nc_server_config_cert_exp_notif_thread_wakeup(void)
 
 #endif /* NC_ENABLED_SSH_TLS */
 
+/**
+ * @brief Wait for any pending updates to complete, then mark the server as "applying configuration".
+ *
+ * @return 0 on success, 1 on timeout.
+ */
+static int
+nc_server_config_update_start(void)
+{
+    int r;
+    struct timespec ts_timeout;
+
+    /* get the time point of timeout */
+    nc_timeouttime_get(&ts_timeout, NC_SERVER_CONFIG_UPDATE_WAIT_TIMEOUT_SEC * 1000);
+
+    while (nc_timeouttime_cur_diff(&ts_timeout) > 0) {
+        /* WR LOCK */
+        r = pthread_rwlock_clockwrlock(&server_opts.config_lock, COMPAT_CLOCK_ID, &ts_timeout);
+        if (r == ETIMEDOUT) {
+            break;
+        } else if (r) {
+            ERR(NULL, "Failed to acquire server configuration write lock (%s).", strerror(r));
+            return 1;
+        }
+
+        if (!server_opts.applying_config) {
+            /* set the flag and end */
+            server_opts.applying_config = 1;
+
+            /* UNLOCK */
+            pthread_rwlock_unlock(&server_opts.config_lock);
+            return 0;
+        }
+
+        /* UNLOCK and wait */
+        pthread_rwlock_unlock(&server_opts.config_lock);
+        usleep(NC_TIMEOUT_STEP);
+    }
+
+    ERR(NULL, "Timeout expired while waiting for the server to apply the previous configuration.");
+    return 1;
+}
+
+/**
+ * @brief Clear the "applying configuration" flag once the configuration update is done.
+ */
+static void
+nc_server_config_update_end(void)
+{
+    int r;
+    struct timespec ts_timeout;
+
+    /* get the time point of timeout */
+    nc_timeouttime_get(&ts_timeout, NC_SERVER_CONFIG_UPDATE_WAIT_TIMEOUT_SEC * 1000);
+
+    /* WR LOCK */
+    r = pthread_rwlock_clockwrlock(&server_opts.config_lock, COMPAT_CLOCK_ID, &ts_timeout);
+    if (r) {
+        /* just log the error, there is nothing we can do */
+        ERR(NULL, "Failed to acquire server configuration write lock (%s).", strerror(r));
+    }
+
+    /* clear the flag */
+    server_opts.applying_config = 0;
+
+    if (!r) {
+        /* UNLOCK only if we locked it */
+        pthread_rwlock_unlock(&server_opts.config_lock);
+    }
+}
+
 API int
 nc_server_config_setup_diff(const struct lyd_node *data)
 {
@@ -5877,6 +5948,9 @@ nc_server_config_setup_diff(const struct lyd_node *data)
     struct nc_server_config config_copy = {0};
 
     NC_CHECK_ARG_RET(NULL, data, 1);
+
+    /* wait until previous is done, then mark us as applying */
+    NC_CHECK_RET(nc_server_config_update_start());
 
     /* CONFIG RD LOCK */
     pthread_rwlock_rdlock(&server_opts.config_lock);
@@ -5919,11 +5993,10 @@ nc_server_config_setup_diff(const struct lyd_node *data)
             ERR(NULL, "Dispatching new call-home threads failed."), cleanup_unlock);
 #endif /* NC_ENABLED_SSH_TLS */
 
-    /* free the old config */
+    /* swap: free old, keep new, zero out the copy just in case to avoid double free */
     nc_server_config_free(&server_opts.config);
-
-    /* replace it with the new one */
     server_opts.config = config_copy;
+    memset(&config_copy, 0, sizeof config_copy);
 
 #ifdef NC_ENABLED_SSH_TLS
     /* wake up the cert expiration notif thread */
@@ -5939,6 +6012,7 @@ cleanup:
         /* free the new config in case of error */
         nc_server_config_free(&config_copy);
     }
+    nc_server_config_update_end();
 
     return ret;
 }
@@ -5951,6 +6025,9 @@ nc_server_config_setup_data(const struct lyd_node *data)
     struct nc_server_config config = {0};
 
     NC_CHECK_ARG_RET(NULL, data, 1);
+
+    /* wait until previous is done, then mark us as applying */
+    NC_CHECK_RET(nc_server_config_update_start());
 
     /* check that the config data are not diff (no op attr) */
     LY_LIST_FOR(data, tree) {
@@ -6000,11 +6077,10 @@ nc_server_config_setup_data(const struct lyd_node *data)
             ERR(NULL, "Dispatching new call-home connections failed."), cleanup_unlock);
 #endif /* NC_ENABLED_SSH_TLS */
 
-    /* free the old config */
+    /* swap: free old, keep new, zero out the copy just in case to avoid double free */
     nc_server_config_free(&server_opts.config);
-
-    /* replace it with the new one */
     server_opts.config = config;
+    memset(&config, 0, sizeof config);
 
 #ifdef NC_ENABLED_SSH_TLS
     /* wake up the cert expiration notif thread */
@@ -6020,6 +6096,7 @@ cleanup:
         /* free the new config in case of error */
         nc_server_config_free(&config);
     }
+    nc_server_config_update_end();
 
     return ret;
 }

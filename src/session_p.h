@@ -79,6 +79,12 @@ extern struct nc_server_opts server_opts;
 #define NC_PS_QUEUE_TIMEOUT 5000
 
 /**
+ * @brief Maximum time (in seconds) to wait for a pending configuration
+ * update to complete before rejecting a new update request.
+ */
+#define NC_SERVER_CONFIG_UPDATE_WAIT_TIMEOUT_SEC 5
+
+/**
  * Time slept in msec if no endpoint was created for a running Call Home client.
  */
 #define NC_CH_NO_ENDPT_WAIT 1000
@@ -697,8 +703,9 @@ struct nc_server_opts {
 
     /* ACCESS locked - options modified by YANG data/API - WRITE lock
      *               - options read when accepting sessions - READ lock */
-    pthread_rwlock_t config_lock;           /**< Lock for the server configuration. */
-    struct nc_server_config config;  /**< YANG Server configuration. */
+    pthread_rwlock_t config_lock;       /**< Lock for the server configuration. */
+    struct nc_server_config config;     /**< YANG Server configuration. */
+    int applying_config;                /**< Flag indicating that the server configuration is currently being applied. */
 
 #ifdef NC_ENABLED_SSH_TLS
     char *authkey_path_fmt;             /**< Path to users' public keys that may contain tokens with special meaning. */
