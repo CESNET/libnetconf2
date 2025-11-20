@@ -349,6 +349,18 @@ int nc_server_config_oper_get_supported_ssh_algs(const struct ly_ctx *ctx, struc
 int nc_server_config_oper_get_supported_tls_algs(const struct ly_ctx *ctx, struct lyd_node **supported_algs);
 
 /**
+ * @brief Gets the last modified time of an SSH user's password.
+ *
+ * @param[in] ch_client Name of the call-home client the user is configured on. NULL if the user is on a listening endpoint.
+ * @param[in] endpoint Name of the endpoint the user is configured on. Can be either a listening or call-home endpoint.
+ * @param[in] username Name of the SSH user.
+ * @param[out] last_modified Time of the last password modification.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_oper_get_user_password_last_modified(const char *ch_client,
+        const char *endpoint, const char *username, time_t *last_modified);
+
+/**
  * @} Server Configuration Functions
  */
 

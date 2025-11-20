@@ -6335,4 +6335,87 @@ nc_server_config_oper_get_supported_tls_algs(const struct ly_ctx *ctx, struct ly
     return nc_server_config_oper_get_algs(ctx, mod, NULL, nc_tls_supported_cipher_suites, supported_algs);
 }
 
+API int
+nc_server_config_oper_get_user_password_last_modified(const char *ch_client, const char *endpoint,
+        const char *username, time_t *last_modified)
+{
+    int rc = 0;
+    LY_ARRAY_COUNT_TYPE i;
+    struct nc_server_ssh_opts *ssh_opts = NULL;
+    struct nc_endpt *endpt = NULL;
+    struct nc_ch_client *client = NULL;
+    struct nc_ch_endpt *ch_endpt = NULL;
+    time_t found_time = 0;
+
+    NC_CHECK_ARG_RET(NULL, endpoint, username, last_modified, 1);
+
+    *last_modified = 0;
+
+    /* LOCK */
+    pthread_rwlock_rdlock(&server_opts.config_lock);
+
+    if (ch_client) {
+        /* find the call-home client */
+        LY_ARRAY_FOR(server_opts.config.ch_clients, i) {
+            if (!strcmp(server_opts.config.ch_clients[i].name, ch_client)) {
+                client = &server_opts.config.ch_clients[i];
+                break;
+            }
+        }
+        if (!client) {
+            ERR(NULL, "Call-home client '%s' not found.", ch_client);
+            rc = 1;
+            goto cleanup;
+        }
+
+        /* find the endpoint */
+        LY_ARRAY_FOR(client->ch_endpts, struct nc_ch_endpt, ch_endpt) {
+            if (!strcmp(ch_endpt->name, endpoint) && (ch_endpt->ti == NC_TI_SSH)) {
+                ssh_opts = ch_endpt->opts.ssh;
+                break;
+            }
+        }
+
+        if (!ssh_opts) {
+            ERR(NULL, "Endpoint '%s' with SSH transport not found in call-home client '%s'.", endpoint, ch_client);
+            rc = 1;
+            goto cleanup;
+        }
+    } else {
+        /* no call-home client specified, search in listening endpoints */
+        LY_ARRAY_FOR(server_opts.config.endpts, struct nc_endpt, endpt) {
+            if (!strcmp(endpt->name, endpoint) && (endpt->ti == NC_TI_SSH)) {
+                ssh_opts = endpt->opts.ssh;
+                break;
+            }
+        }
+
+        if (!ssh_opts) {
+            ERR(NULL, "Endpoint '%s' with SSH transport not found in listening endpoints.", endpoint);
+            rc = 1;
+            goto cleanup;
+        }
+    }
+
+    /* find the SSH user */
+    LY_ARRAY_FOR(ssh_opts->auth_clients, i) {
+        if (!strcmp(ssh_opts->auth_clients[i].username, username)) {
+            found_time = ssh_opts->auth_clients[i].password_last_modified;
+            break;
+        }
+    }
+    if (i == LY_ARRAY_COUNT(ssh_opts->auth_clients)) {
+        ERR(NULL, "SSH user '%s' not found on endpoint '%s'.", username, endpoint);
+        rc = 1;
+        goto cleanup;
+    }
+
+    *last_modified = found_time;
+
+cleanup:
+    /* UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
+    return rc;
+}
+
 #endif /* NC_ENABLED_SSH_TLS */
