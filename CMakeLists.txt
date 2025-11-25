@@ -92,6 +92,7 @@ option(ENABLE_EXAMPLES "Build examples" ON)
 option(ENABLE_COVERAGE "Build code coverage report from tests" OFF)
 option(ENABLE_SSH_TLS "Enable NETCONF over SSH and TLS support (via libssh and OpenSSL)" ON)
 option(ENABLE_DNSSEC "Enable support for SSHFP retrieval using DNSSEC for SSH (requires OpenSSL and libval)" OFF)
+option(ENABLE_PAM "Detect and use PAM" ON)
 option(ENABLE_COMMON_TARGETS "Define common custom target names such as 'doc' or 'uninstall', may cause conflicts when using add_subdirectory() to build this project" ON)
 option(BUILD_SHARED_LIBS "By default, shared libs are enabled. Turn off for a static build." ON)
 set(READ_INACTIVE_TIMEOUT 20 CACHE STRING "Maximum number of seconds waiting for new data once some data have arrived")
@@ -281,7 +282,9 @@ if(ENABLE_SSH_TLS)
     endif()
 
     # libpam
-    find_package(LibPAM)
+    if(ENABLE_PAM)
+        find_package(LibPAM)
+    endif()
     if(LibPAM_FOUND)
         set(HAVE_LIBPAM TRUE)
 
