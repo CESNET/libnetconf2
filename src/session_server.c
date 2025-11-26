@@ -358,6 +358,34 @@ fail:
     return -1;
 }
 
+const char *
+nc_server_unix_get_socket_path(const struct nc_endpt *endpt)
+{
+    LY_ARRAY_COUNT_TYPE i;
+    const char *path = NULL;
+
+    /* check the endpoints options for type of socket path */
+    if (endpt->opts.unix->path_type == NC_UNIX_SOCKET_PATH_FILE) {
+        /* UNIX socket endpoints always have only one bind, get its address */
+        path = endpt->binds[0].address;
+    } else if (endpt->opts.unix->path_type == NC_UNIX_SOCKET_PATH_HIDDEN) {
+        /* serach the mappings */
+        LY_ARRAY_FOR(server_opts.unix_paths, i) {
+            if (!strcmp(server_opts.unix_paths[i].endpt_name, endpt->name)) {
+                path = server_opts.unix_paths[i].path;
+                break;
+            }
+        }
+        if (!path) {
+            ERR(NULL, "UNIX socket path mapping for endpoint \"%s\" not found.", endpt->name);
+        }
+    } else {
+        ERRINT;
+    }
+
+    return path;
+}
+
 /**
  * @brief Create a listening socket (AF_UNIX).
  *
@@ -511,8 +539,8 @@ sock_host_inet6(const struct sockaddr_in6 *addr, char **host, uint16_t *port)
 }
 
 int
-nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t *bind_lock, int timeout, char **host,
-        uint16_t *port, uint16_t *idx, int *sock)
+nc_sock_accept_binds(struct nc_endpt *endpt, struct nc_bind *binds, uint16_t bind_count,
+        pthread_mutex_t *bind_lock, int timeout, char **host, uint16_t *port, uint16_t *idx, int *sock)
 {
     uint16_t i, j, pfd_count, client_port;
     char *client_address;
@@ -620,7 +648,7 @@ nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t
     }
 
     if (saddr.ss_family == AF_UNIX) {
-        VRB(NULL, "Accepted a connection on %s.", binds[i].address);
+        VRB(NULL, "Accepted a connection on %s.", endpt ? nc_server_unix_get_socket_path(endpt) : "UNIX socket");
     } else {
         VRB(NULL, "Accepted a connection on %s:%u from %s:%u.", binds[i].address, binds[i].port, client_address, client_port);
     }
@@ -953,9 +981,6 @@ nc_server_destroy(void)
     /* CH THREADS UNLOCK */
     pthread_rwlock_unlock(&server_opts.ch_threads_lock);
 
-    /* CONFIG WR UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
-
 #ifdef NC_ENABLED_SSH_TLS
     free(server_opts.authkey_path_fmt);
     server_opts.authkey_path_fmt = NULL;
@@ -966,7 +991,20 @@ nc_server_destroy(void)
     }
     server_opts.interactive_auth_data = NULL;
     server_opts.interactive_auth_data_free = NULL;
+#endif /* NC_ENABLED_SSH_TLS */
 
+    /* hidden UNIX socket paths */
+    LY_ARRAY_FOR(server_opts.unix_paths, i) {
+        free(server_opts.unix_paths[i].endpt_name);
+        free(server_opts.unix_paths[i].path);
+    }
+    LY_ARRAY_FREE(server_opts.unix_paths);
+    server_opts.unix_paths = NULL;
+
+    /* CONFIG WR UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
+
+#ifdef NC_ENABLED_SSH_TLS
     curl_global_cleanup();
     nc_tls_backend_destroy_wrap();
     ssh_finalize();
@@ -2297,11 +2335,15 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
 int
 nc_server_bind_and_listen(struct nc_endpt *endpt, struct nc_bind *bind)
 {
+    const char *unix_path = NULL;
     int sock = -1, rc = 0;
 
     /* start listening on the endpoint */
     if (endpt->ti == NC_TI_UNIX) {
-        sock = nc_sock_listen_unix(bind->address, endpt->opts.unix);
+        /* get the socket path for this endpoint */
+        unix_path = nc_server_unix_get_socket_path(endpt);
+        NC_CHECK_ERR_GOTO(!unix_path, rc = 1, cleanup);
+        sock = nc_sock_listen_unix(unix_path, endpt->opts.unix);
     } else {
         assert(bind->address && bind->port);
         sock = nc_sock_listen_inet(bind->address, bind->port);
@@ -2319,7 +2361,7 @@ nc_server_bind_and_listen(struct nc_endpt *endpt, struct nc_bind *bind)
 
     switch (endpt->ti) {
     case NC_TI_UNIX:
-        VRB(NULL, "Listening on %s for UNIX connections.", bind->address);
+        VRB(NULL, "Listening on %s for UNIX connections.", unix_path);
         break;
 #ifdef NC_ENABLED_SSH_TLS
     case NC_TI_SSH:
@@ -2573,7 +2615,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
 
     /* try to accept a new connection on any of the endpoints */
     LY_ARRAY_FOR(config->endpts, endpt_idx) {
-        ret = nc_sock_accept_binds(config->endpts[endpt_idx].binds, LY_ARRAY_COUNT(config->endpts[endpt_idx].binds),
+        ret = nc_sock_accept_binds(&config->endpts[endpt_idx], config->endpts[endpt_idx].binds, LY_ARRAY_COUNT(config->endpts[endpt_idx].binds),
                 &config->endpts[endpt_idx].bind_lock, timeout, &host, &port, NULL, &sock);
         if (ret < 0) {
             msgtype = NC_MSG_ERROR;
@@ -4277,4 +4319,66 @@ nc_server_is_mod_ignored(const char *mod_name)
     pthread_rwlock_unlock(&server_opts.config_lock);
 
     return ignored;
+}
+
+API int
+nc_server_set_unix_socket_path(const char *endpoint_name, const char *socket_path)
+{
+    int rc = 0;
+    LY_ARRAY_COUNT_TYPE i;
+    struct nc_server_unix_path_entry *pentry = NULL;
+
+    NC_CHECK_ARG_RET(NULL, endpoint_name, socket_path, 1);
+
+    /* CONFIG WRITE LOCK */
+    pthread_rwlock_wrlock(&server_opts.config_lock);
+
+    /* try to see if the path for this endpoint already exists */
+    LY_ARRAY_FOR(server_opts.unix_paths, i) {
+        if (!strcmp(server_opts.unix_paths[i].endpt_name, endpoint_name)) {
+            pentry = &server_opts.unix_paths[i];
+            break;
+        }
+    }
+    if (!pentry) {
+        /* create a new entry */
+        LY_ARRAY_NEW_GOTO(NULL, server_opts.unix_paths, pentry, rc, cleanup);
+        pentry->endpt_name = strdup(endpoint_name);
+        NC_CHECK_ERRMEM_GOTO(!pentry->endpt_name, rc = 1, cleanup);
+    } else {
+        /* free the old path */
+        free(pentry->path);
+    }
+
+    pentry->path = strdup(socket_path);
+    NC_CHECK_ERRMEM_GOTO(!pentry->path, rc = 1, cleanup);
+
+cleanup:
+    /* CONFIG WRITE UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
+    return rc;
+}
+
+API const char *
+nc_server_get_unix_socket_path(const char *endpoint_name)
+{
+    const char *socket_path = NULL;
+    LY_ARRAY_COUNT_TYPE i;
+
+    NC_CHECK_ARG_RET(NULL, endpoint_name, NULL);
+
+    /* CONFIG READ LOCK */
+    pthread_rwlock_rdlock(&server_opts.config_lock);
+
+    /* try to find the path for this endpoint */
+    LY_ARRAY_FOR(server_opts.unix_paths, i) {
+        if (!strcmp(server_opts.unix_paths[i].endpt_name, endpoint_name)) {
+            socket_path = server_opts.unix_paths[i].path;
+            break;
+        }
+    }
+
+    /* CONFIG READ UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
+    return socket_path;
 }

@@ -961,6 +961,10 @@ setup_f(void **state)
     ret = nc_server_config_setup_data(tree);
     assert_int_equal(ret, 0);
 
+    /* set hidden path for UNIX endpoint */
+    ret = nc_server_set_unix_socket_path("unix", "/tmp/netconf-test-server.sock");
+    assert_int_equal(ret, 0);
+
     lyd_free_all(tree);
     return 0;
 }

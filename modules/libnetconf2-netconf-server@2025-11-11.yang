@@ -51,6 +51,13 @@ module libnetconf2-netconf-server {
     description "Second revision.";
   }
 
+  // Features
+
+  feature unix-socket-path {
+    description
+      "Indicates that the server supports configuration of the UNIX socket path.";
+    }
+
   // Identities
 
 /*
@@ -310,17 +317,31 @@ module libnetconf2-netconf-server {
            and listen for incoming NETCONF connections. Client authentication
            is based on the connecting process's effective user ID.";
 
-        leaf path {
-          type string {
-            length "1..107";
-          }
+        choice socket-path-config {
           mandatory true;
           description
-            "Filesystem path where the UNIX socket will be created.
-             The parent directory
-             must exist and be writable by the NETCONF server process.
+            "Selects how the UNIX domain socket path is determined.";
+          case socket-path {
+            if-feature "unix-socket-path";
+            leaf socket-path {
+              type string {
+                length "1..107";
+              }
+              description
+                "The explicit filesystem path where the UNIX socket will be bonded.
+                 The parent directory must exist and be writable by the server process.
 
-             Example: /var/run/netconf.sock";
+                 Example: /var/run/netconf.sock";
+            }
+          }
+          case hidden-path {
+            leaf hidden-path {
+              type empty;
+              description
+                "Indicates that the UNIX socket path is not configured via YANG, but is instead
+                 determined by internal server API settings.";
+            }
+          }
         }
 
         container socket-permissions {

@@ -360,6 +360,7 @@ nc_server_config_free(struct nc_server_config *config)
     struct nc_ch_client *ch_client;
     struct nc_ch_endpt *ch_endpt;
     LY_ARRAY_COUNT_TYPE i, j;
+    const char *socket_path = NULL;
 
     if (!config) {
         return;
@@ -375,14 +376,23 @@ nc_server_config_free(struct nc_server_config *config)
     LY_ARRAY_FOR(config->endpts, i) {
         endpt = &config->endpts[i];
 
+        if (endpt->ti == NC_TI_UNIX) {
+            /* get the socket path before freeing the name */
+            socket_path = nc_server_unix_get_socket_path(endpt);
+        }
+
         free(endpt->name);
 
         /* free binds */
         LY_ARRAY_FOR(endpt->binds, j) {
-            free(endpt->binds[j].address);
             if (endpt->binds[j].sock != -1) {
                 close(endpt->binds[j].sock);
+                if (socket_path) {
+                    /* remove the UNIX socket file */
+                    unlink(socket_path);
+                }
             }
+            free(endpt->binds[j].address);
             pthread_mutex_destroy(&endpt->bind_lock);
         }
         LY_ARRAY_FREE(endpt->binds);
@@ -2851,12 +2861,15 @@ config_tls(const struct lyd_node *node, enum nc_operation parent_op, struct nc_e
 #endif /* NC_ENABLED_SSH_TLS */
 
 static int
-config_unix_path(const struct lyd_node *node, enum nc_operation parent_op, struct nc_endpt *endpt)
+config_unix_socket_path(const struct lyd_node *node, enum nc_operation parent_op, struct nc_endpt *endpt)
 {
     enum nc_operation op;
     struct nc_bind *bind;
+    struct nc_server_unix_opts *opts;
 
     NC_NODE_GET_OP(node, parent_op, &op);
+
+    opts = endpt->opts.unix;
 
     if (op == NC_OP_DELETE) {
         /* the endpoint must have a single binding, so we can just free it,
@@ -2864,6 +2877,9 @@ config_unix_path(const struct lyd_node *node, enum nc_operation parent_op, struc
         assert(endpt->binds);
         free(endpt->binds[0].address);
         LY_ARRAY_FREE(endpt->binds);
+
+        /* also clear the cleartext path flag */
+        opts->path_type = NC_UNIX_SOCKET_PATH_UNKNOWN;
     } else if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
         /* the endpoint must not have any bindings yet, so we can just create one */
         assert(!endpt->binds);
@@ -2871,6 +2887,42 @@ config_unix_path(const struct lyd_node *node, enum nc_operation parent_op, struc
         bind->address = strdup(lyd_get_value(node));
         NC_CHECK_ERRMEM_RET(!bind->address, 1);
         bind->sock = -1;
+
+        /* also set the cleartext path flag */
+        opts->path_type = NC_UNIX_SOCKET_PATH_FILE;
+    }
+
+    return 0;
+}
+
+static int
+config_unix_hidden_path(const struct lyd_node *node, enum nc_operation parent_op, struct nc_endpt *endpt)
+{
+    enum nc_operation op;
+    struct nc_bind *bind;
+    struct nc_server_unix_opts *opts;
+
+    NC_NODE_GET_OP(node, parent_op, &op);
+
+    opts = endpt->opts.unix;
+
+    if (op == NC_OP_DELETE) {
+        /* the endpoint must have a single binding, so we can just free it,
+         * the socket will be closed in ::nc_server_config_free() */
+        assert(endpt->binds);
+        LY_ARRAY_FREE(endpt->binds);
+
+        /* also clear the hidden path flag */
+        opts->path_type = NC_UNIX_SOCKET_PATH_UNKNOWN;
+    } else if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+        /* the endpoint must not have any bindings yet, so we can just create one
+         * and since the path is hidden, there is no address to set */
+        assert(!endpt->binds);
+        LY_ARRAY_NEW_RET(LYD_CTX(node), endpt->binds, bind, 1);
+        bind->sock = -1;
+
+        /* also set the hidden path flag */
+        opts->path_type = NC_UNIX_SOCKET_PATH_HIDDEN;
     }
 
     return 0;
@@ -3117,7 +3169,7 @@ config_unix_client_auth(const struct lyd_node *node, enum nc_operation parent_op
 static int
 config_unix(const struct lyd_node *node, enum nc_operation parent_op, struct nc_endpt *endpt)
 {
-    struct lyd_node *n;
+    struct lyd_node *n, *socket_path = NULL, *hidden_path = NULL;
     enum nc_operation op;
 
     NC_NODE_GET_OP(node, parent_op, &op);
@@ -3135,9 +3187,15 @@ config_unix(const struct lyd_node *node, enum nc_operation parent_op, struct nc_
         endpt->opts.unix->gid = (gid_t)-1;
     }
 
-    /* config path */
-    NC_CHECK_RET(nc_lyd_find_child(node, "path", 1, &n));
-    NC_CHECK_RET(config_unix_path(n, op, endpt));
+    /* config mandatory unix socket path choice => only one of them can be present */
+    NC_CHECK_RET(nc_lyd_find_child(node, "socket-path", 0, &socket_path));
+    NC_CHECK_RET(nc_lyd_find_child(node, "hidden-path", 0, &hidden_path));
+    if (socket_path) {
+        NC_CHECK_RET(config_unix_socket_path(socket_path, op, endpt));
+    } else {
+        assert(hidden_path);
+        NC_CHECK_RET(config_unix_hidden_path(hidden_path, op, endpt));
+    }
 
     /* config socket permissions */
     NC_CHECK_RET(nc_lyd_find_child(node, "socket-permissions", 1, &n));
@@ -4963,6 +5021,49 @@ cleanup:
 }
 
 /**
+ * @brief Check if two server endpoint bindings match.
+ *
+ * They match if they use the same transport protocol, address and port.
+ *
+ * @param[in] e1 First server endpoint.
+ * @param[in] b1 First server endpoint binding.
+ * @param[in] e2 Second server endpoint.
+ * @param[in] b2 Second server endpoint binding.
+ * @return 1 if they match, 0 otherwise.
+ */
+static int
+nc_server_config_bindings_match(const struct nc_endpt *e1, const struct nc_bind *b1,
+        const struct nc_endpt *e2, const struct nc_bind *b2)
+{
+    const char *addr1, *addr2;
+
+    if (e1->ti != e2->ti) {
+        /* different transport protocols */
+        return 0;
+    }
+
+    if (e1->ti == NC_TI_UNIX) {
+        /* UNIX sockets may have hidden or cleartext addresses */
+        addr1 = nc_server_unix_get_socket_path(e1);
+        addr2 = nc_server_unix_get_socket_path(e2);
+    } else {
+        addr1 = b1->address;
+        addr2 = b2->address;
+    }
+    if (!addr1 || !addr2) {
+        /* unable to get the address */
+        return 0;
+    }
+
+    if (strcmp(addr1, addr2) || (b1->port != b2->port)) {
+        /* different addresses or ports */
+        return 0;
+    }
+
+    return 1;
+}
+
+/**
  * @brief Atomically starts listening on new sockets and reuses existing ones.
  *
  * @param[in,out] old_cfg Old, currently active server configuration.
@@ -4989,7 +5090,7 @@ nc_server_config_reconcile_sockets_listen(struct nc_server_config *old_cfg,
             found = 0;
             LY_ARRAY_FOR(old_cfg->endpts, struct nc_endpt, old_endpt) {
                 LY_ARRAY_FOR(old_endpt->binds, struct nc_bind, old_bind) {
-                    if (!strcmp(new_bind->address, old_bind->address) && (new_bind->port == old_bind->port)) {
+                    if (nc_server_config_bindings_match(new_endpt, new_bind, old_endpt, old_bind)) {
                         /* match found, reuse the socket */
                         new_bind->sock = old_bind->sock;
                         found = 1;
@@ -5510,6 +5611,8 @@ nc_server_config_unix_dup(const struct nc_server_unix_opts *src, struct nc_serve
     *dst = calloc(1, sizeof **dst);
     NC_CHECK_ERRMEM_RET(!*dst, 1);
 
+    (*dst)->path_type = src->path_type;
+
     (*dst)->mode = src->mode;
     (*dst)->uid = src->uid;
     (*dst)->gid = src->gid;
@@ -5739,8 +5842,10 @@ nc_server_config_dup(const struct nc_server_config *src, struct nc_server_config
         /* binds */
         LN2_LY_ARRAY_CREATE_GOTO_WRAP(dst_endpt->binds, LY_ARRAY_COUNT(src_endpt->binds), rc, cleanup);
         LY_ARRAY_FOR(src_endpt->binds, j) {
-            dst_endpt->binds[j].address = strdup(src_endpt->binds[j].address);
-            NC_CHECK_ERRMEM_GOTO(!dst_endpt->binds[j].address, rc = 1, cleanup);
+            if (src_endpt->binds[j].address) {
+                dst_endpt->binds[j].address = strdup(src_endpt->binds[j].address);
+                NC_CHECK_ERRMEM_GOTO(!dst_endpt->binds[j].address, rc = 1, cleanup);
+            }
             dst_endpt->binds[j].port = src_endpt->binds[j].port;
 
             /* mark the socket as uninitialized, it will be reassigned in ::nc_server_config_reconcile_sockets_listen() */

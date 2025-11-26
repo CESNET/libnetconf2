@@ -304,8 +304,8 @@
  * - ::nc_server_set_capab_withdefaults()
  * - ::nc_server_set_capability()
  * - ::nc_server_endpt_count()
- * - ::nc_server_add_endpt_unix_socket_listen()
- * - ::nc_server_del_endpt_unix_socket()
+ * - ::nc_server_set_unix_socket_path()
+ * - ::nc_server_get_unix_socket_path()
  *
  * Server Configuration
  * ===
@@ -383,7 +383,7 @@
  * You may create this data yourself or by using ::nc_server_config_add_ssh_hostkey().
  *
  * It is important to decide whether the users that can connect to the SSH server should be obtained from the configuration or from the system.
- * If the YANG feature *local-users-supported* is enabled (the default), then the authorized users are derived from the configuration. 
+ * If the YANG feature *local-users-supported* is enabled (the default), then the authorized users are derived from the configuration.
  * When a client connects to the server, he must be found in the configuration and he must authenticate to **all** of his configured authentication methods.
  * If the feature is disabled, then the system will be used to try to authenticate the client via one of the three
  * methods - publickey, keyboard-interactive or password (only one of them has to succeed).
@@ -492,6 +492,28 @@
  * - ::nc_server_config_del_tls_endpoint_client_ref()
  * - ::nc_server_config_add_tls_ctn()
  * - ::nc_server_config_del_tls_ctn()
+ *
+* UNIX Socket
+ * ===========
+ *
+ * A UNIX socket endpoint can be established using one of two mechanisms:
+ *
+ * 1) **Cleartext Path**: The filesystem path is explicitly stored in the configuration.
+ * To use this, pass a valid path string to ::nc_server_config_add_unix_socket().
+ *
+ * 2) **Hidden Path**: The filesystem path is managed via the API and is not visible
+ * in the YANG configuration. To use this, pass NULL as the path argument to
+ * ::nc_server_config_add_unix_socket(). The actual runtime path must then be set
+ * using ::nc_server_set_unix_socket_path().
+ *
+ * Security Recommendation
+ * -----------------------
+ * The **Hidden Path** (Option 2) is strongly recommended.
+ *
+ * If Cleartext paths are enabled, any user with permission to modify the server
+ * configuration can change the UNIX socket path via YANG. This allows them to
+ * force the server to create or overwrite arbitrary files on the filesystem
+ * with the privileges of the server process.
  *
  * FD
  * ==

@@ -399,12 +399,23 @@ struct nc_keepalives {
 };
 
 /**
+ * @brief Enumeration of UNIX socket path types.
+ */
+enum nc_unix_socket_path_type {
+    NC_UNIX_SOCKET_PATH_UNKNOWN = 0,    /**< Unknown or uninitialized path type. */
+    NC_UNIX_SOCKET_PATH_HIDDEN,         /**< Socket path is hidden from YANG; configured via API. */
+    NC_UNIX_SOCKET_PATH_FILE            /**< Socket path is explicitly configured in YANG. */
+};
+
+/**
  * @brief Server options for configuring the UNIX transport protocol.
  */
 struct nc_server_unix_opts {
-    mode_t mode;                        /**< Socket file permissions (defaults to rw-rw----). */
-    uid_t uid;                          /**< Owner of the socket file. */
-    gid_t gid;                          /**< Group owner of the socket file. */
+    enum nc_unix_socket_path_type path_type;    /**< Method used to determine the socket path. */
+
+    mode_t mode;                                /**< Socket file permissions (defaults to rw-rw----). */
+    uid_t uid;                                  /**< Owner of the socket file. */
+    gid_t gid;                                  /**< Group owner of the socket file. */
 
     struct nc_server_unix_user_mapping {
         char *system_user;              /**< System username for authentication. */
@@ -735,6 +746,16 @@ struct nc_server_opts {
     } cert_exp_notif;
 #endif /* NC_ENABLED_SSH_TLS */
 
+    /**
+     * @brief Entry for a UNIX socket path configured via API (Hidden).
+     *
+     * These paths are not part of the YANG configuration and are managed manually by the application.
+     */
+    struct nc_server_unix_path_entry {
+        char *endpt_name;       /**< Name of the endpoint using this path. */
+        char *path;             /**< The actual filesystem path for the socket. */
+    } *unix_paths;  /**< Array of UNIX socket paths set via API (sized-array, see libyang docs). */
+
     /* ACCESS unlocked */
     ATOMIC_T new_session_id;
 
@@ -954,6 +975,14 @@ void nc_client_monitoring_session_stop(struct nc_session *session, int lock);
 void *nc_realloc(void *ptr, size_t size);
 
 /**
+ * @brief Get the UNIX socket path for the given endpoint.
+ *
+ * @param[in] endpt Endpoint to get the socket path for.
+ * @return Socket path, NULL on error.
+ */
+const char *nc_server_unix_get_socket_path(const struct nc_endpt *endpt);
+
+/**
  * @brief Bind and listen on a socket for the given endpoint and its bind.
  *
  * @param[in] endpt Endpoint the bind belongs to.
@@ -961,14 +990,6 @@ void *nc_realloc(void *ptr, size_t size);
  * @return 0 on success, 1 on error.
  */
 int nc_server_bind_and_listen(struct nc_endpt *endpt, struct nc_bind *bind);
-
-/**
- * @brief Frees memory allocated by a UNIX socket endpoint.
- *
- * @param[in] endpt UNIX socket endpoint.
- * @param[in] bind UNIX socket bind.
- */
-void _nc_server_del_endpt_unix_socket(struct nc_endpt *endpt, struct nc_bind *bind);
 
 /**
  * @brief Free server configuration data (only YANG config data).
@@ -1180,6 +1201,7 @@ int nc_sock_listen_inet(const char *address, uint16_t port);
 /**
  * @brief Accept a new connection on a listening socket.
  *
+ * @param[in] endpt Optional endpoint the binds belong to (only for logging purposes).
  * @param[in] binds Structure with the listening sockets.
  * @param[in] bind_count Number of @p binds.
  * @param[in] bind_lock Lock for avoiding concurrent poll/accept on a single bind.
@@ -1192,8 +1214,8 @@ int nc_sock_listen_inet(const char *address, uint16_t port);
  * @return 0 on timeout.
  * @return 1 if a socket was accepted.
  */
-int nc_sock_accept_binds(struct nc_bind *binds, uint16_t bind_count, pthread_mutex_t *bind_lock, int timeout,
-        char **host, uint16_t *port, uint16_t *idx, int *sock);
+int nc_sock_accept_binds(struct nc_endpt *endpt, struct nc_bind *binds, uint16_t bind_count,
+        pthread_mutex_t *bind_lock, int timeout, char **host, uint16_t *port, uint16_t *idx, int *sock);
 
 /**
  * @brief Establish a UNIX transport session.

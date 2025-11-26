@@ -238,12 +238,31 @@ nc_server_config_add_unix_socket(const struct ly_ctx *ctx, const char *endpt_nam
 {
     int rc = 0;
     char *path_fmt = NULL;
+    struct lys_module *mod;
+    const char *path_type_str;
 
-    NC_CHECK_ARG_RET(NULL, ctx, path, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, config, 1);
 
-    /* create the path to the socket's path */
+    if (!path) {
+        /* creating a hidden UNIX socket path set by other means */
+        path_type_str = "hidden-path";
+    } else {
+        /* creating a standard UNIX socket path */
+        path_type_str = "socket-path";
+
+        /* check if the 'unix-socket-path' feature is enabled in the libnetconf2-netconf-server module */
+        mod = ly_ctx_get_module_implemented(ctx, "libnetconf2-netconf-server");
+        NC_CHECK_RET(!mod, 1);
+        if (lys_feature_value(mod, "unix-socket-path")) {
+            ERR(NULL, "Unable to set UNIX socket path ('unix-socket-path' feature not enabled in "
+                    "'libnetconf2-netconf-server' module).");
+            return 1;
+        }
+    }
+
+    /* create the path to UNIX socket or just the empty leaf for hidden path */
     NC_CHECK_ERR_RET(asprintf(&path_fmt, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/"
-            "libnetconf2-netconf-server:unix/path", endpt_name) == -1, ERRMEM, 1);
+            "libnetconf2-netconf-server:unix/%s", endpt_name, path_type_str) == -1, ERRMEM, 1);
     NC_CHECK_GOTO(rc = nc_server_config_create(ctx, config, path, path_fmt), cleanup);
 
     if (!mode && !owner && !group) {

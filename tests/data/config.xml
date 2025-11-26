@@ -137,7 +137,7 @@
             <endpoint>
                 <name>unix</name>
                 <unix xmlns="urn:cesnet:libnetconf2-netconf-server">
-                    <path>/tmp/netconf-test-server.sock</path>
+                    <hidden-path/>
                     <socket-permissions>
                         <mode>0770</mode>
                     </socket-permissions>

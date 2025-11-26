@@ -447,6 +447,26 @@ NC_MSG_TYPE nc_session_accept_ssh_channel(struct nc_session *orig_session, struc
  */
 NC_MSG_TYPE nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session);
 
+/**
+ * @brief Set the UNIX socket path for a given endpoint name.
+ *
+ * The @p endpoint_name endpoint must be configured to use hidden UNIX socket path
+ * for this setting to take effect, see ::nc_server_config_add_unix_socket().
+ *
+ * @param[in] endpoint_name Name of the endpoint.
+ * @param[in] socket_path UNIX socket path to set.
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_set_unix_socket_path(const char *endpoint_name, const char *socket_path);
+
+/**
+ * @brief Get the UNIX socket path for a given endpoint name.
+ *
+ * @param[in] endpoint_name Name of the endpoint.
+ * @return UNIX socket path, NULL if not found.
+ */
+const char *nc_server_get_unix_socket_path(const char *endpoint_name);
+
 /** @} Server Session */
 
 /**

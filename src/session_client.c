@@ -1899,7 +1899,7 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
         return -1;
     }
 
-    ret = nc_sock_accept_binds(client_opts.ch_binds, client_opts.ch_bind_count, &client_opts.ch_bind_lock, timeout,
+    ret = nc_sock_accept_binds(NULL, client_opts.ch_binds, client_opts.ch_bind_count, &client_opts.ch_bind_lock, timeout,
             &host, &port, &idx, &sock);
     if (ret < 1) {
         free(host);
