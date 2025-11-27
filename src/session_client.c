@@ -1485,8 +1485,11 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
     session->ti.unixsock.sock = sock;
     sock = -1;
 
-    /* socket path */
     session->path = strdup(address);
+    if (!session->path) {
+        ERRMEM;
+        goto fail;
+    }
 
     /* NETCONF username */
     if (unix_opts.username) {

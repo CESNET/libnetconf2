@@ -360,7 +360,7 @@ nc_server_config_free(struct nc_server_config *config)
     struct nc_ch_client *ch_client;
     struct nc_ch_endpt *ch_endpt;
     LY_ARRAY_COUNT_TYPE i, j;
-    const char *socket_path = NULL;
+    char *socket_path = NULL;
 
     if (!config) {
         return;
@@ -396,6 +396,11 @@ nc_server_config_free(struct nc_server_config *config)
             pthread_mutex_destroy(&endpt->bind_lock);
         }
         LY_ARRAY_FREE(endpt->binds);
+
+        if (endpt->ti == NC_TI_UNIX) {
+            free(socket_path);
+            socket_path = NULL;
+        }
 
         /* free transport specific options */
         switch (endpt->ti) {
@@ -5035,7 +5040,8 @@ static int
 nc_server_config_bindings_match(const struct nc_endpt *e1, const struct nc_bind *b1,
         const struct nc_endpt *e2, const struct nc_bind *b2)
 {
-    const char *addr1, *addr2;
+    int rc = 1;
+    char *addr1 = NULL, *addr2 = NULL;
 
     if (e1->ti != e2->ti) {
         /* different transport protocols */
@@ -5052,15 +5058,22 @@ nc_server_config_bindings_match(const struct nc_endpt *e1, const struct nc_bind 
     }
     if (!addr1 || !addr2) {
         /* unable to get the address */
-        return 0;
+        rc = 0;
+        goto cleanup;
     }
 
     if (strcmp(addr1, addr2) || (b1->port != b2->port)) {
         /* different addresses or ports */
-        return 0;
+        rc = 0;
+        goto cleanup;
     }
 
-    return 1;
+cleanup:
+    if (e1->ti == NC_TI_UNIX) {
+        free(addr1);
+        free(addr2);
+    }
+    return rc;
 }
 
 /**

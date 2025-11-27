@@ -328,10 +328,10 @@ module libnetconf2-netconf-server {
                 length "1..107";
               }
               description
-                "The explicit filesystem path where the UNIX socket will be bonded.
-                 The parent directory must exist and be writable by the server process.
+                "Relative filesystem path where the UNIX socket will be bound.
+                 The parent directory must be set by an internal server API setting.
 
-                 Example: /var/run/netconf.sock";
+                 Example: netconf.sock";
             }
           }
           case hidden-path {

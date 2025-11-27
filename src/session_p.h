@@ -755,6 +755,7 @@ struct nc_server_opts {
         char *endpt_name;       /**< Name of the endpoint using this path. */
         char *path;             /**< The actual filesystem path for the socket. */
     } *unix_paths;  /**< Array of UNIX socket paths set via API (sized-array, see libyang docs). */
+    char *unix_socket_dir;    /**< Base directory for UNIX sockets created by the server. */
 
     /* ACCESS unlocked */
     ATOMIC_T new_session_id;
@@ -980,7 +981,7 @@ void *nc_realloc(void *ptr, size_t size);
  * @param[in] endpt Endpoint to get the socket path for.
  * @return Socket path, NULL on error.
  */
-const char *nc_server_unix_get_socket_path(const struct nc_endpt *endpt);
+char *nc_server_unix_get_socket_path(const struct nc_endpt *endpt);
 
 /**
  * @brief Bind and listen on a socket for the given endpoint and its bind.

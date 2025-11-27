@@ -54,10 +54,14 @@ setup_glob_f(void **state)
     assert_non_null(test_ctx->test_data);
     test_ctx->free_test_data = ln2_glob_test_free_test_data;
 
-    /* set two hidden paths for UNIX sockets */
-    ret = nc_server_set_unix_socket_path("unix", "/tmp/nc2_test_unix_sock");
+    /* set the base directory for UNIX sockets */
+    ret = nc_server_set_unix_socket_dir("/tmp");
     assert_int_equal(ret, 0);
-    ret = nc_server_set_unix_socket_path("unix2", "/tmp/nc2_test_unix_sock2");
+
+    /* set two hidden paths for UNIX sockets */
+    ret = nc_server_set_unix_socket_path("unix", "nc2_test_unix_sock");
+    assert_int_equal(ret, 0);
+    ret = nc_server_set_unix_socket_path("unix2", "nc2_test_unix_sock2");
     assert_int_equal(ret, 0);
 
     return 0;
@@ -424,7 +428,7 @@ test_cleartext_path(void **state)
 
     /* create the UNIX socket with a different cleartext path */
     ret = nc_server_config_add_unix_socket(test_ctx->ctx,
-            "unix2", "/tmp/nc2_test_cleartext_unix_sock", "0666", NULL, NULL, &config);
+            "unix2", "nc2_test_cleartext_unix_sock", "0666", NULL, NULL, &config);
     assert_int_equal(ret, 0);
 
     ret = nc_server_config_setup_data(config);

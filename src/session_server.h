@@ -467,6 +467,17 @@ int nc_server_set_unix_socket_path(const char *endpoint_name, const char *socket
  */
 const char *nc_server_get_unix_socket_path(const char *endpoint_name);
 
+/**
+ * @brief Set the base directory for UNIX socket paths.
+ *
+ * All UNIX socket paths will be relative to this directory.
+ * It must exist and be writable by the server process.
+ *
+ * @param[in] dir Base directory for UNIX socket paths.
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_set_unix_socket_dir(const char *dir);
+
 /** @} Server Session */
 
 /**

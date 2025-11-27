@@ -358,29 +358,134 @@ fail:
     return -1;
 }
 
-const char *
+/**
+ * @brief Construct the full path to the UNIX socket.
+ *
+ * @param[in] filename Name of the socket file.
+ * @param[out] path Constructed full path to the UNIX socket (must be freed by the caller).
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_session_unix_construct_socket_path(const char *filename, char **path)
+{
+    int rc = 0, is_prefix, is_subdir, is_exact;
+    char *full_path = NULL, *real_base_dir = NULL, *last_slash = NULL, *sock_dir_path = NULL;
+    char *real_target_dir = NULL;
+    struct sockaddr_un sun;
+    size_t dir_len, base_len;
+    const char *dir = server_opts.unix_socket_dir;
+
+    if (!dir) {
+        ERR(NULL, "Cannot construct UNIX socket path \"%s\""
+                " (no base directory set, see nc_set_unix_socket_dir()).", filename);
+        return 1;
+    }
+
+    if (filename[0] == '/') {
+        ERR(NULL, "Cannot construct UNIX socket path \"%s\" (absolute path not allowed).", filename);
+        return 1;
+    }
+
+    /* construct the path to the UNIX socket */
+    if (asprintf(&full_path, "%s/%s", dir, filename) == -1) {
+        ERRMEM;
+        rc = 1;
+        goto cleanup;
+    }
+
+    if (strlen(full_path) > sizeof(sun.sun_path) - 1) {
+        ERR(NULL, "Socket path \"%s\" is too long.", full_path);
+        goto cleanup;
+    }
+
+    /* ensure the socket path is within the base directory */
+    if (!(real_base_dir = realpath(dir, NULL))) {
+        ERR(NULL, "realpath() failed for UNIX socket base directory \"%s\" (%s).", dir, strerror(errno));
+        rc = 1;
+        goto cleanup;
+    }
+
+    /* find the last slash in the constructed path */
+    last_slash = strrchr(full_path, '/');
+    if (last_slash) {
+        /* extract the directory part of the socket path */
+        dir_len = last_slash - full_path;
+        sock_dir_path = strndup(full_path, dir_len);
+        NC_CHECK_ERRMEM_GOTO(!sock_dir_path, rc = 1, cleanup);
+
+        if (!(real_target_dir = realpath(sock_dir_path, NULL))) {
+            ERR(NULL, "realpath() failed for UNIX socket path directory \"%s\" (%s).", sock_dir_path,
+                    strerror(errno));
+            rc = 1;
+            goto cleanup;
+        }
+    } else {
+        /* should not happen as we always add dir/filename */
+        real_target_dir = strdup(real_base_dir);
+        NC_CHECK_ERRMEM_GOTO(!real_target_dir, rc = 1, cleanup);
+    }
+
+    base_len = strlen(real_base_dir);
+
+    /* check the relationship between both paths */
+    is_prefix = (strncmp(real_base_dir, real_target_dir, base_len) == 0);
+
+    is_exact = (real_target_dir[base_len] == '\0');
+
+    is_subdir = (real_target_dir[base_len] == '/');
+
+    /* special case if base is '/' */
+    if ((base_len == 1) && (real_base_dir[0] == '/')) {
+        is_subdir = 1;
+    }
+
+    if (!is_prefix || (!is_exact && !is_subdir)) {
+        ERR(NULL, "UNIX socket path \"%s\" escapes the base directory \"%s\".", full_path, dir);
+        rc = 1;
+        goto cleanup;
+    }
+
+    /* transfer ownership */
+    *path = full_path;
+    full_path = NULL;
+
+cleanup:
+    free(real_base_dir);
+    free(real_target_dir);
+    free(sock_dir_path);
+    free(full_path);
+    return rc;
+}
+
+char *
 nc_server_unix_get_socket_path(const struct nc_endpt *endpt)
 {
     LY_ARRAY_COUNT_TYPE i;
-    const char *path = NULL;
+    const char *filename = NULL;
+    char *path = NULL;
 
     /* check the endpoints options for type of socket path */
     if (endpt->opts.unix->path_type == NC_UNIX_SOCKET_PATH_FILE) {
         /* UNIX socket endpoints always have only one bind, get its address */
-        path = endpt->binds[0].address;
+        filename = endpt->binds[0].address;
     } else if (endpt->opts.unix->path_type == NC_UNIX_SOCKET_PATH_HIDDEN) {
-        /* serach the mappings */
+        /* search the mappings */
         LY_ARRAY_FOR(server_opts.unix_paths, i) {
             if (!strcmp(server_opts.unix_paths[i].endpt_name, endpt->name)) {
-                path = server_opts.unix_paths[i].path;
+                filename = server_opts.unix_paths[i].path;
                 break;
             }
         }
-        if (!path) {
+        if (!filename) {
             ERR(NULL, "UNIX socket path mapping for endpoint \"%s\" not found.", endpt->name);
         }
     } else {
         ERRINT;
+    }
+
+    /* construct the full socket path */
+    if (nc_session_unix_construct_socket_path(filename, &path)) {
+        return NULL;
     }
 
     return path;
@@ -543,7 +648,7 @@ nc_sock_accept_binds(struct nc_endpt *endpt, struct nc_bind *binds, uint16_t bin
         pthread_mutex_t *bind_lock, int timeout, char **host, uint16_t *port, uint16_t *idx, int *sock)
 {
     uint16_t i, j, pfd_count, client_port;
-    char *client_address;
+    char *client_address, *sockpath = NULL;
     struct pollfd *pfd;
     struct sockaddr_storage saddr;
     socklen_t saddr_len = sizeof(saddr);
@@ -648,7 +753,11 @@ nc_sock_accept_binds(struct nc_endpt *endpt, struct nc_bind *binds, uint16_t bin
     }
 
     if (saddr.ss_family == AF_UNIX) {
-        VRB(NULL, "Accepted a connection on %s.", endpt ? nc_server_unix_get_socket_path(endpt) : "UNIX socket");
+        if (endpt) {
+            sockpath = nc_server_unix_get_socket_path(endpt);
+        }
+        VRB(NULL, "Accepted a connection on %s.", sockpath ? sockpath : "UNIX socket");
+        free(sockpath);
     } else {
         VRB(NULL, "Accepted a connection on %s:%u from %s:%u.", binds[i].address, binds[i].port, client_address, client_port);
     }
@@ -2335,7 +2444,7 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
 int
 nc_server_bind_and_listen(struct nc_endpt *endpt, struct nc_bind *bind)
 {
-    const char *unix_path = NULL;
+    char *unix_path = NULL;
     int sock = -1, rc = 0;
 
     /* start listening on the endpoint */
@@ -2378,6 +2487,7 @@ nc_server_bind_and_listen(struct nc_endpt *endpt, struct nc_bind *bind)
     }
 
 cleanup:
+    free(unix_path);
     return rc;
 }
 
@@ -4381,4 +4491,22 @@ nc_server_get_unix_socket_path(const char *endpoint_name)
     /* CONFIG READ UNLOCK */
     pthread_rwlock_unlock(&server_opts.config_lock);
     return socket_path;
+}
+
+API int
+nc_server_set_unix_socket_dir(const char *dir)
+{
+    int rc = 0;
+
+    /* CONFIG WRITE LOCK */
+    pthread_rwlock_wrlock(&server_opts.config_lock);
+
+    free(server_opts.unix_socket_dir);
+    server_opts.unix_socket_dir = strdup(dir);
+    NC_CHECK_ERRMEM_GOTO(!server_opts.unix_socket_dir, rc = 1, cleanup);
+
+cleanup:
+    /* CONFIG WRITE UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
+    return rc;
 }
