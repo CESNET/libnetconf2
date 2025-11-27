@@ -235,12 +235,18 @@ init(const char *unix_socket_path, struct ly_ctx **context, struct nc_pollsessio
         ERR_MSG_CLEANUP("Error while parsing the example configuration data.\n");
     }
 
-    /* add UNIX socket to the configuration tree if the path was specified */
     if (unix_socket_path) {
+        /* add UNIX socket endpoint to the configuration tree if the path was specified */
         rc = nc_server_config_add_unix_socket(*context, "unix-socket-endpt",
-                unix_socket_path, NULL, NULL, NULL, &config);
+                NULL, NULL, NULL, NULL, &config);
         if (rc) {
             ERR_MSG_CLEANUP("Creating UNIX socket endpoint configuration failed.\n");
+        }
+
+        /* use the specified path for the UNIX socket endpoint */
+        rc = nc_server_set_unix_socket_path("unix-socket-endpt", unix_socket_path);
+        if (rc) {
+            ERR_MSG_CLEANUP("Setting UNIX socket path failed.\n");
         }
     }
 
