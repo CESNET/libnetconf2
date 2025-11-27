@@ -493,12 +493,12 @@
  * - ::nc_server_config_add_tls_ctn()
  * - ::nc_server_config_del_tls_ctn()
  *
-* UNIX Socket
+ * UNIX Socket
  * ===========
  *
  * A UNIX socket endpoint can be established using one of two mechanisms:
  *
- * 1) **Cleartext Path**: The filesystem path is explicitly stored in the configuration.
+ * 1) **Standard Filesystem Path**: The filesystem path is explicitly stored in the configuration.
  * To use this, pass a valid path string to ::nc_server_config_add_unix_socket().
  *
  * 2) **Hidden Path**: The filesystem path is managed via the API and is not visible
@@ -506,14 +506,19 @@
  * ::nc_server_config_add_unix_socket(). The actual runtime path must then be set
  * using ::nc_server_set_unix_socket_path().
  *
+ * All UNIX sockets require a designated base directory for their creation.
+ * This directory must be set using ::nc_server_set_unix_socket_dir().
+ * A base directory must be set to create any UNIX socket.
+ * All socket paths will be relative to this base directory.
+ *
  * Security Recommendation
  * -----------------------
  * The **Hidden Path** (Option 2) is strongly recommended.
  *
- * If Cleartext paths are enabled, any user with permission to modify the server
+ * If standard paths are enabled, any user with permission to modify the server
  * configuration can change the UNIX socket path via YANG. This allows them to
- * force the server to create or overwrite arbitrary files on the filesystem
- * with the privileges of the server process.
+ * force the server to create or overwrite arbitrary files in a subdirectory
+ * set by ::nc_server_set_unix_socket_dir() with the privileges of the server process.
  *
  * FD
  * ==

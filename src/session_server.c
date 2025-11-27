@@ -4469,13 +4469,16 @@ cleanup:
     return rc;
 }
 
-API const char *
-nc_server_get_unix_socket_path(const char *endpoint_name)
+API int
+nc_server_get_unix_socket_path(const char *endpoint_name, char **socket_path)
 {
-    const char *socket_path = NULL;
+    int rc = 0;
+    char *p = NULL;
     LY_ARRAY_COUNT_TYPE i;
 
-    NC_CHECK_ARG_RET(NULL, endpoint_name, NULL);
+    NC_CHECK_ARG_RET(NULL, endpoint_name, socket_path, 1);
+
+    *socket_path = NULL;
 
     /* CONFIG READ LOCK */
     pthread_rwlock_rdlock(&server_opts.config_lock);
@@ -4483,14 +4486,22 @@ nc_server_get_unix_socket_path(const char *endpoint_name)
     /* try to find the path for this endpoint */
     LY_ARRAY_FOR(server_opts.unix_paths, i) {
         if (!strcmp(server_opts.unix_paths[i].endpt_name, endpoint_name)) {
-            socket_path = server_opts.unix_paths[i].path;
+            p = server_opts.unix_paths[i].path;
             break;
         }
     }
 
+    if (!p) {
+        goto cleanup;
+    }
+
+    *socket_path = strdup(p);
+    NC_CHECK_ERRMEM_GOTO(!*socket_path, rc = 1, cleanup);
+
+cleanup:
     /* CONFIG READ UNLOCK */
     pthread_rwlock_unlock(&server_opts.config_lock);
-    return socket_path;
+    return rc;
 }
 
 API int
@@ -4507,6 +4518,27 @@ nc_server_set_unix_socket_dir(const char *dir)
 
 cleanup:
     /* CONFIG WRITE UNLOCK */
+    pthread_rwlock_unlock(&server_opts.config_lock);
+    return rc;
+}
+
+API int
+nc_server_get_unix_socket_dir(char **dir)
+{
+    int rc = 0;
+
+    *dir = NULL;
+
+    /* CONFIG READ LOCK */
+    pthread_rwlock_rdlock(&server_opts.config_lock);
+
+    if (server_opts.unix_socket_dir) {
+        *dir = strdup(server_opts.unix_socket_dir);
+        NC_CHECK_ERRMEM_GOTO(!*dir, rc = 1, cleanup);
+    }
+
+cleanup:
+    /* CONFIG READ UNLOCK */
     pthread_rwlock_unlock(&server_opts.config_lock);
     return rc;
 }

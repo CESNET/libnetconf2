@@ -463,9 +463,10 @@ int nc_server_set_unix_socket_path(const char *endpoint_name, const char *socket
  * @brief Get the UNIX socket path for a given endpoint name.
  *
  * @param[in] endpoint_name Name of the endpoint.
- * @return UNIX socket path, NULL if not found.
+ * @param[out] socket_path Found UNIX socket path.
+ * @return 0 on success, 1 on error.
  */
-const char *nc_server_get_unix_socket_path(const char *endpoint_name);
+int nc_server_get_unix_socket_path(const char *endpoint_name, char **socket_path);
 
 /**
  * @brief Set the base directory for UNIX socket paths.
@@ -477,6 +478,14 @@ const char *nc_server_get_unix_socket_path(const char *endpoint_name);
  * @return 0 on success, 1 on error.
  */
 int nc_server_set_unix_socket_dir(const char *dir);
+
+/**
+ * @brief Get the base directory for UNIX socket paths.
+ *
+ * @param[out] dir Base directory for UNIX socket paths.
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_get_unix_socket_dir(char **dir);
 
 /** @} Server Session */
 
