@@ -889,9 +889,11 @@ config_hostkey_pubkey_inline(const struct lyd_node *node, enum nc_operation pare
         NC_CHECK_RET(config_cleartext_privkey_data(cleartext, op, &hostkey->key.privkey));
     } else if (hidden) {
         NC_CHECK_RET(config_hidden_privkey_data(hidden, op));
-    } else {
-        assert(encrypted);
+    } else if (encrypted) {
         NC_CHECK_RET(config_encrypted_privkey_data(encrypted, op));
+    } else {
+        ERR(NULL, "Invalid YANG data provided.");
+        return 1;
     }
 
     if (op == NC_OP_DELETE) {
@@ -937,9 +939,11 @@ config_hostkey_public_key(const struct lyd_node *node, enum nc_operation parent_
     NC_CHECK_RET(nc_lyd_find_child(node, "central-keystore-reference", 0, &keystore_ref));
     if (inline_def) {
         NC_CHECK_RET(config_hostkey_pubkey_inline(inline_def, op, hostkey));
-    } else {
-        assert(keystore_ref);
+    } else if (keystore_ref) {
         NC_CHECK_RET(config_hostkey_pubkey_keystore(keystore_ref, op, hostkey));
+    } else {
+        ERR(NULL, "Invalid YANG data provided.");
+        return 1;
     }
 
     return 0;
@@ -991,10 +995,12 @@ config_ssh_hostkey(const struct lyd_node *node, enum nc_operation parent_op, str
     if (public_key) {
         /* config public key */
         NC_CHECK_RET(config_hostkey_public_key(public_key, op, hostkey));
-    } else {
+    } else if (certificate) {
         /* config certificate */
-        assert(certificate);
         NC_CHECK_RET(config_hostkey_certificate(certificate, op));
+    } else {
+        ERR(NULL, "Invalid YANG data provided.");
+        return 1;
     }
 
     /* all children processed, we can now delete the hostkey */
@@ -1219,9 +1225,11 @@ config_ssh_user_public_keys(const struct lyd_node *node, enum nc_operation paren
         NC_CHECK_RET(config_ssh_user_pubkey_inline(inline_def, op, user));
     } else if (truststore_ref) {
         NC_CHECK_RET(config_ssh_user_pubkey_truststore(truststore_ref, op, user));
-    } else {
-        assert(system);
+    } else if (system) {
         NC_CHECK_RET(config_ssh_user_pubkey_system(system, op, user));
+    } else {
+        ERR(NULL, "Invalid YANG data provided.");
+        return 1;
     }
 
     return 0;
@@ -1942,9 +1950,11 @@ config_tls_server_ident_cert_inline(const struct lyd_node *node, enum nc_operati
         NC_CHECK_RET(config_cleartext_privkey_data(cleartext, op, &opts->local.key.privkey), 1);
     } else if (hidden) {
         NC_CHECK_RET(config_hidden_privkey_data(hidden, op), 1);
-    } else {
-        assert(encrypted);
+    } else if (encrypted) {
         NC_CHECK_RET(config_encrypted_privkey_data(encrypted, op), 1);
+    } else {
+        ERR(NULL, "Invalid YANG data provided.");
+        return 1;
     }
 
     /* config certificate data */
@@ -2055,9 +2065,11 @@ config_tls_server_ident_certificate(const struct lyd_node *node, enum nc_operati
     NC_CHECK_RET(nc_lyd_find_child(node, "central-keystore-reference", 0, &keystore_ref));
     if (inline_def) {
         NC_CHECK_RET(config_tls_server_ident_cert_inline(inline_def, op, tls));
-    } else {
-        assert(keystore_ref);
+    } else if (keystore_ref) {
         NC_CHECK_RET(config_tls_server_ident_cert_keystore(keystore_ref, op, tls));
+    } else {
+        ERR(NULL, "Invalid YANG data provided.");
+        return 1;
     }
 
     return 0;
@@ -2103,9 +2115,11 @@ config_tls_server_identity(const struct lyd_node *node, enum nc_operation parent
         NC_CHECK_RET(config_tls_server_ident_raw_key(raw_private_key, op));
     } else if (tls12_psk) {
         NC_CHECK_RET(config_tls_server_ident_tls12_psk(tls12_psk, op));
-    } else {
-        assert(tls13_epsk);
+    } else if (tls13_epsk) {
         NC_CHECK_RET(config_tls_server_ident_tls13_epsk(tls13_epsk, op));
+    } else {
+        ERR(NULL, "Invalid YANG data provided.");
+        return 1;
     }
 
     return 0;
@@ -2243,9 +2257,11 @@ config_tls_client_auth_ca_certs(const struct lyd_node *node, enum nc_operation p
     NC_CHECK_RET(nc_lyd_find_child(node, "central-truststore-reference", 0, &truststore_ref), 1);
     if (inline_def) {
         NC_CHECK_RET(config_tls_client_auth_ca_certs_inline(inline_def, op, client_auth));
-    } else {
-        assert(truststore_ref);
+    } else if (truststore_ref) {
         NC_CHECK_RET(config_tls_client_auth_ca_certs_truststore(truststore_ref, op, client_auth));
+    } else {
+        ERR(NULL, "Invalid YANG data provided.");
+        return 1;
     }
 
     return 0;
@@ -2365,9 +2381,11 @@ config_tls_client_auth_ee_certs(const struct lyd_node *node,
     NC_CHECK_RET(nc_lyd_find_child(node, "central-truststore-reference", 0, &truststore_ref), 1);
     if (inline_def) {
         NC_CHECK_RET(config_tls_client_auth_ee_certs_inline(inline_def, op, client_auth));
-    } else {
-        assert(truststore_ref);
+    } else if (truststore_ref) {
         NC_CHECK_RET(config_tls_client_auth_ee_certs_truststore(truststore_ref, op, client_auth));
+    } else {
+        ERR(NULL, "Invalid YANG data provided.");
+        return 1;
     }
 
     return 0;
@@ -3197,9 +3215,11 @@ config_unix(const struct lyd_node *node, enum nc_operation parent_op, struct nc_
     NC_CHECK_RET(nc_lyd_find_child(node, "hidden-path", 0, &hidden_path));
     if (socket_path) {
         NC_CHECK_RET(config_unix_socket_path(socket_path, op, endpt));
-    } else {
-        assert(hidden_path);
+    } else if (hidden_path) {
         NC_CHECK_RET(config_unix_hidden_path(hidden_path, op, endpt));
+    } else {
+        ERR(NULL, "Invalid YANG data provided.");
+        return 1;
     }
 
     /* config socket permissions */
@@ -3279,7 +3299,6 @@ config_endpoint(const struct lyd_node *node, enum nc_operation parent_op,
     NC_CHECK_RET(nc_lyd_find_child(node, "ssh", 0, &ssh));
     NC_CHECK_RET(nc_lyd_find_child(node, "tls", 0, &tls));
     NC_CHECK_RET(nc_lyd_find_child(node, "libnetconf2-netconf-server:unix", 0, &unix));
-    assert(ssh || tls || unix);
 
 #ifdef NC_ENABLED_SSH_TLS
     if (ssh) {
@@ -3618,9 +3637,11 @@ config_ch_client_endpoint(const struct lyd_node *node, enum nc_operation parent_
     NC_CHECK_RET(nc_lyd_find_child(node, "tls", 0, &tls));
     if (ssh) {
         NC_CHECK_RET(config_ch_endpoint_ssh(ssh, op, endpt));
-    } else {
-        assert(tls);
+    } else if (tls) {
         NC_CHECK_RET(config_ch_endpoint_tls(tls, op, endpt));
+    } else {
+        ERR(NULL, "Invalid YANG data provided.");
+        return 1;
     }
 #endif /* NC_ENABLED_SSH_TLS */
 
