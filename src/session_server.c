@@ -461,31 +461,34 @@ char *
 nc_server_unix_get_socket_path(const struct nc_endpt *endpt)
 {
     LY_ARRAY_COUNT_TYPE i;
-    const char *filename = NULL;
+    const char *p = NULL;
     char *path = NULL;
 
     /* check the endpoints options for type of socket path */
     if (endpt->opts.unix->path_type == NC_UNIX_SOCKET_PATH_FILE) {
         /* UNIX socket endpoints always have only one bind, get its address */
-        filename = endpt->binds[0].address;
+        p = endpt->binds[0].address;
+
+        /* it is relative, we need to construct the full path */
+        if (nc_session_unix_construct_socket_path(p, &path)) {
+            return NULL;
+        }
     } else if (endpt->opts.unix->path_type == NC_UNIX_SOCKET_PATH_HIDDEN) {
-        /* search the mappings */
+        /* search the mappings, no need to construct the path */
         LY_ARRAY_FOR(server_opts.unix_paths, i) {
             if (!strcmp(server_opts.unix_paths[i].endpt_name, endpt->name)) {
-                filename = server_opts.unix_paths[i].path;
+                p = server_opts.unix_paths[i].path;
                 break;
             }
         }
-        if (!filename) {
+        if (!p) {
             ERR(NULL, "UNIX socket path mapping for endpoint \"%s\" not found.", endpt->name);
         }
+
+        path = strdup(p);
+        NC_CHECK_ERRMEM_RET(!path, NULL);
     } else {
         ERRINT;
-    }
-
-    /* construct the full socket path */
-    if (nc_session_unix_construct_socket_path(filename, &path)) {
-        return NULL;
     }
 
     return path;

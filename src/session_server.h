@@ -471,8 +471,9 @@ int nc_server_get_unix_socket_path(const char *endpoint_name, char **socket_path
 /**
  * @brief Set the base directory for UNIX socket paths.
  *
- * All UNIX socket paths will be relative to this directory.
+ * All YANG defined UNIX socket paths will be relative to this directory.
  * It must exist and be writable by the server process.
+ * This does not apply to "hidden" UNIX socket paths set via ::nc_server_set_unix_socket_path().
  *
  * @param[in] dir Base directory for UNIX socket paths.
  * @return 0 on success, 1 on error.

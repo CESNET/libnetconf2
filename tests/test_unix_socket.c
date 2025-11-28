@@ -59,9 +59,9 @@ setup_glob_f(void **state)
     assert_int_equal(ret, 0);
 
     /* set two hidden paths for UNIX sockets */
-    ret = nc_server_set_unix_socket_path("unix", "nc2_test_unix_sock");
+    ret = nc_server_set_unix_socket_path("unix", "/tmp/nc2_test_unix_sock");
     assert_int_equal(ret, 0);
-    ret = nc_server_set_unix_socket_path("unix2", "nc2_test_unix_sock2");
+    ret = nc_server_set_unix_socket_path("unix2", "/tmp/nc2_test_unix_sock2");
     assert_int_equal(ret, 0);
 
     return 0;

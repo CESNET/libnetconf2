@@ -340,10 +340,7 @@ module libnetconf2-netconf-server {
               type empty;
               description
                 "Indicates that the UNIX socket path is not configured via YANG, but is instead
-                 determined by internal server API settings.
-
-                 The parent directory must be set by an internal server API setting.
-                 The final resolved path must be within the configured parent directory.";
+                 determined by internal server API settings.";
             }
           }
         }
