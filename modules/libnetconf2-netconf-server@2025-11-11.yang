@@ -163,7 +163,7 @@ module libnetconf2-netconf-server {
 
     leaf banner {
       type string {
-        length "1..247";
+        length "1..245";
       }
       description
         "The banner that will be sent to the client when connecting to the server.
