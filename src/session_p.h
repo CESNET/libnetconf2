@@ -134,6 +134,15 @@ enum nc_operation {
 };
 
 /**
+ * @brief Enumeration of rwlock mode.
+ */
+enum nc_rwlock_mode {
+    NC_RWLOCK_NONE = 0,     /**< Lock not held */
+    NC_RWLOCK_READ,         /**< Read lock mode */
+    NC_RWLOCK_WRITE         /**< Write lock mode */
+};
+
+/**
  * Enumeration of key or certificate store type.
  */
 enum nc_store_type {
@@ -1125,6 +1134,56 @@ int nc_session_client_msgs_lock(struct nc_session *session, int *timeout, const 
  * @return -1 on error.
  */
 int nc_session_client_msgs_unlock(struct nc_session *session, const char *func);
+
+/**
+ * @brief Lock a pthread_rwlock with timeout support.
+ *
+ * @param[in] rwlock Lock to be acquired.
+ * @param[in] mode Lock mode (NC_RWLOCK_READ for read lock, NC_RWLOCK_WRITE for write lock).
+ * @param[in] timeout Timeout in milliseconds:
+ *                    - Positive value: Wait up to this many milliseconds for the lock.
+ *                    - 0: Try to acquire the lock without waiting (trylock).
+ *                    - Negative value: Wait indefinitely for the lock.
+ * @param[in] func_name Caller function name for logging purposes.
+ * @return 1 on success (lock acquired);
+ * @return 0 on timeout;
+ * @return -1 on error.
+ */
+int nc_rwlock_lock(pthread_rwlock_t *rwlock, enum nc_rwlock_mode mode, int timeout, const char *func_name);
+
+/**
+ * @brief Unlock a previously locked pthread_rwlock.
+ *
+ * This function unlocks a previously locked pthread_rwlock regardless of whether
+ * it was locked in read or write mode.
+ *
+ * @param[in] rwlock Lock to be unlocked.
+ * @param[in] func_name Caller function name for logging purposes.
+ */
+void nc_rwlock_unlock(pthread_rwlock_t *rwlock, const char *func_name);
+
+/**
+ * @brief Lock a pthread_mutex with timeout support.
+ *
+ * @param[in] mutex Mutex to be acquired.
+ * @param[in] timeout Timeout in milliseconds:
+ *                    - Positive value: Wait up to this many milliseconds for the lock.
+ *                    - 0: Try to acquire the lock without waiting (trylock).
+ *                    - Negative value: Wait indefinitely for the lock.
+ * @param[in] func_name Caller function name for logging purposes.
+ * @return 1 on success (lock acquired);
+ * @return 0 on timeout;
+ * @return -1 on error.
+ */
+int nc_mutex_lock(pthread_mutex_t *mutex, int timeout, const char *func_name);
+
+/**
+ * @brief Unlock a previously locked pthread_mutex.
+ *
+ * @param[in] mutex Mutex to be unlocked.
+ * @param[in] func_name Caller function name for logging purposes.
+ */
+void nc_mutex_unlock(pthread_mutex_t *mutex, const char *func_name);
 
 int nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func);
 

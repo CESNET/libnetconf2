@@ -530,6 +530,127 @@ nc_session_client_msgs_unlock(struct nc_session *session, const char *func)
     return 1;
 }
 
+int
+nc_rwlock_lock(pthread_rwlock_t *rwlock, enum nc_rwlock_mode mode, int timeout, const char *func_name)
+{
+    int ret;
+    struct timespec ts_timeout;
+
+    if (!rwlock || (mode == NC_RWLOCK_NONE)) {
+        ERRINT;
+        return -1;
+    }
+
+    if (timeout > 0) {
+        /* get absolute time for timeout */
+        nc_timeouttime_get(&ts_timeout, timeout);
+
+        /* acquire lock with timeout based on mode */
+        if (mode == NC_RWLOCK_READ) {
+            ret = pthread_rwlock_clockrdlock(rwlock, COMPAT_CLOCK_ID, &ts_timeout);
+        } else {
+            ret = pthread_rwlock_clockwrlock(rwlock, COMPAT_CLOCK_ID, &ts_timeout);
+        }
+    } else if (!timeout) {
+        /* try to acquire lock without waiting */
+        if (mode == NC_RWLOCK_READ) {
+            ret = pthread_rwlock_tryrdlock(rwlock);
+        } else {
+            ret = pthread_rwlock_trywrlock(rwlock);
+        }
+    } else {
+        /* acquire lock without timeout */
+        if (mode == NC_RWLOCK_READ) {
+            ret = pthread_rwlock_rdlock(rwlock);
+        } else {
+            ret = pthread_rwlock_wrlock(rwlock);
+        }
+    }
+
+    if (ret) {
+        if ((ret == EBUSY) || (ret == ETIMEDOUT)) {
+            /* timeout */
+            return 0;
+        }
+
+        ERR(NULL, "%s: failed to lock rwlock in %s mode (%s).", func_name,
+                mode == NC_RWLOCK_READ ? "read" : "write", strerror(ret));
+        return -1;
+    }
+
+    return 1;
+}
+
+void
+nc_rwlock_unlock(pthread_rwlock_t *rwlock, const char *func_name)
+{
+    int r;
+
+    if (!rwlock) {
+        ERRINT;
+        return;
+    }
+
+    r = pthread_rwlock_unlock(rwlock);
+    if (r) {
+        ERR(NULL, "%s: failed to unlock rwlock (%s).", func_name, strerror(r));
+    }
+}
+
+int
+nc_mutex_lock(pthread_mutex_t *mutex, int timeout, const char *func_name)
+{
+    int ret;
+    struct timespec ts_timeout;
+
+    if (!mutex) {
+        ERRINT;
+        return -1;
+    }
+
+    if (timeout > 0) {
+        /* get absolute time for timeout */
+        nc_timeouttime_get(&ts_timeout, timeout);
+
+        /* acquire lock with timeout */
+        ret = pthread_mutex_clocklock(mutex, COMPAT_CLOCK_ID, &ts_timeout);
+    } else if (!timeout) {
+        /* try to acquire lock without waiting */
+        ret = pthread_mutex_trylock(mutex);
+    } else {
+        /* acquire lock without timeout */
+        ret = pthread_mutex_lock(mutex);
+    }
+
+    if (ret) {
+        if ((ret == EBUSY) || (ret == ETIMEDOUT)) {
+            /* timeout */
+            return 0;
+        }
+
+        ERR(NULL, "%s: failed to lock mutex (%s).", func_name, strerror(ret));
+        return -1;
+    }
+
+    return 1;
+}
+
+void
+nc_mutex_unlock(pthread_mutex_t *mutex, const char *func_name)
+{
+    int r;
+
+    if (!mutex) {
+        ERRINT;
+        return;
+    }
+
+    r = pthread_mutex_unlock(mutex);
+    if (r) {
+        ERR(NULL, "%s: failed to unlock mutex (%s).", func_name, strerror(r));
+    }
+}
+
 API NC_STATUS
 nc_session_get_status(const struct nc_session *session)
 {
