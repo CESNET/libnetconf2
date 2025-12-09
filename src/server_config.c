@@ -3897,7 +3897,9 @@ config_netconf_client(const struct lyd_node *node, enum nc_operation parent_op,
     /* all children processed, we can now delete the client */
     if (op == NC_OP_DELETE) {
         /* CH THREADS DATA RD LOCK */
-        NC_CHECK_RET(pthread_rwlock_rdlock(&server_opts.ch_threads_lock), 1);
+        if (nc_rwlock_lock(&server_opts.ch_threads_lock, NC_RWLOCK_READ, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
+            return 1;
+        }
 
         /* find the thread data for this CH client, not found <==> CH thread not running */
         LY_ARRAY_FOR(server_opts.ch_threads, j) {
@@ -3908,14 +3910,15 @@ config_netconf_client(const struct lyd_node *node, enum nc_operation parent_op,
 
         if (j < LY_ARRAY_COUNT(server_opts.ch_threads)) {
             /* the CH thread is running, notify it to stop */
-            pthread_mutex_lock(&server_opts.ch_threads[j]->cond_lock);
-            server_opts.ch_threads[j]->thread_running = 0;
-            pthread_cond_signal(&server_opts.ch_threads[j]->cond);
-            pthread_mutex_unlock(&server_opts.ch_threads[j]->cond_lock);
+            if (nc_mutex_lock(&server_opts.ch_threads[j]->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
+                server_opts.ch_threads[j]->thread_running = 0;
+                pthread_cond_signal(&server_opts.ch_threads[j]->cond);
+                nc_mutex_unlock(&server_opts.ch_threads[j]->cond_lock, __func__);
+            }
         }
 
         /* CH THREADS DATA UNLOCK */
-        pthread_rwlock_unlock(&server_opts.ch_threads_lock);
+        nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
 
         /* we can use 'i' from above */
         if (i < LY_ARRAY_COUNT(config->ch_clients) - 1) {
@@ -5256,7 +5259,10 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
         found = 0;
 
         /* CH THREADS LOCK (reading server_opts.ch_threads) */
-        pthread_rwlock_rdlock(&server_opts.ch_threads_lock);
+        if (nc_rwlock_lock(&server_opts.ch_threads_lock, NC_RWLOCK_READ, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
+            rc = 1;
+            goto rollback;
+        }
 
         LY_ARRAY_FOR(server_opts.ch_threads, struct nc_server_ch_thread_arg *, ch_thread_arg) {
             if (!strcmp(new_ch_client->name, (*ch_thread_arg)->client_name)) {
@@ -5267,7 +5273,7 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
         }
 
         /* CH THREADS UNLOCK */
-        pthread_rwlock_unlock(&server_opts.ch_threads_lock);
+        nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
 
         if (!found) {
             /* this is a new Call Home client, dispatch it */
@@ -5308,19 +5314,23 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
             ch_thread_arg = NULL;
 
             /* CH THREADS LOCK (reading server_opts.ch_threads) */
-            pthread_rwlock_rdlock(&server_opts.ch_threads_lock);
+            if (nc_rwlock_lock(&server_opts.ch_threads_lock, NC_RWLOCK_READ, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
+                /* Continue even if lock fails - best effort cleanup */
+                continue;
+            }
             LY_ARRAY_FOR(server_opts.ch_threads, struct nc_server_ch_thread_arg *, ch_thread_arg) {
                 if (!strcmp(old_ch_client->name, (*ch_thread_arg)->client_name)) {
                     /* notify the thread to stop */
-                    pthread_mutex_lock(&(*ch_thread_arg)->cond_lock);
-                    (*ch_thread_arg)->thread_running = 0;
-                    pthread_cond_signal(&(*ch_thread_arg)->cond);
-                    pthread_mutex_unlock(&(*ch_thread_arg)->cond_lock);
+                    if (nc_mutex_lock(&(*ch_thread_arg)->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
+                        (*ch_thread_arg)->thread_running = 0;
+                        pthread_cond_signal(&(*ch_thread_arg)->cond);
+                        nc_mutex_unlock(&(*ch_thread_arg)->cond_lock, __func__);
+                    }
                     break;
                 }
             }
             /* CH THREADS UNLOCK */
-            pthread_rwlock_unlock(&server_opts.ch_threads_lock);
+            nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
             /* Note: if ch_thread_arg is NULL here, the thread wasn't running. That's fine. */
         }
     }
@@ -5339,19 +5349,22 @@ rollback:
         ch_thread_arg = NULL;
 
         /* CH THREADS LOCK (reading server_opts.ch_threads) */
-        pthread_rwlock_rdlock(&server_opts.ch_threads_lock);
+        if (nc_rwlock_lock(&server_opts.ch_threads_lock, NC_RWLOCK_READ, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
+            /* Continue even if lock fails - best effort rollback */
+            continue;
+        }
         LY_ARRAY_FOR(server_opts.ch_threads, struct nc_server_ch_thread_arg *, ch_thread_arg) {
             if (!strcmp(started_clients[i], (*ch_thread_arg)->client_name)) {
                 /* notify the newly started thread to stop */
-                pthread_mutex_lock(&(*ch_thread_arg)->cond_lock);
+                nc_mutex_lock(&(*ch_thread_arg)->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__);
                 (*ch_thread_arg)->thread_running = 0;
                 pthread_cond_signal(&(*ch_thread_arg)->cond);
-                pthread_mutex_unlock(&(*ch_thread_arg)->cond_lock);
+                nc_mutex_unlock(&(*ch_thread_arg)->cond_lock, __func__);
                 break;
             }
         }
         /* CH THREADS UNLOCK */
-        pthread_rwlock_unlock(&server_opts.ch_threads_lock);
+        nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
     }
     /* rc is already set to non-zero from the failure point */
 
@@ -6014,11 +6027,13 @@ cleanup:
 static void
 nc_server_config_cert_exp_notif_thread_wakeup(void)
 {
-    pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
+    if (nc_mutex_lock(&server_opts.cert_exp_notif.lock, NC_CERT_EXP_LOCK_TIMEOUT, __func__) != 1) {
+        return;
+    }
     if (server_opts.cert_exp_notif.thread_running) {
         pthread_cond_signal(&server_opts.cert_exp_notif.cond);
     }
-    pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
+    nc_mutex_unlock(&server_opts.cert_exp_notif.lock, __func__);
 }
 
 #endif /* NC_ENABLED_SSH_TLS */
@@ -6031,38 +6046,18 @@ nc_server_config_cert_exp_notif_thread_wakeup(void)
 static int
 nc_server_config_update_start(void)
 {
-    int r;
-    struct timespec ts_timeout;
-
-    /* get the time point of timeout */
-    nc_timeouttime_get(&ts_timeout, NC_SERVER_CONFIG_UPDATE_WAIT_TIMEOUT_SEC * 1000);
-
-    while (nc_timeouttime_cur_diff(&ts_timeout) > 0) {
-        /* WR LOCK */
-        r = pthread_rwlock_clockwrlock(&server_opts.config_lock, COMPAT_CLOCK_ID, &ts_timeout);
-        if (r == ETIMEDOUT) {
-            break;
-        } else if (r) {
-            ERR(NULL, "Failed to acquire server configuration write lock (%s).", strerror(r));
-            return 1;
-        }
-
-        if (!server_opts.applying_config) {
-            /* set the flag and end */
-            server_opts.applying_config = 1;
-
-            /* UNLOCK */
-            pthread_rwlock_unlock(&server_opts.config_lock);
-            return 0;
-        }
-
-        /* UNLOCK and wait */
-        pthread_rwlock_unlock(&server_opts.config_lock);
-        usleep(NC_TIMEOUT_STEP);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
     }
 
-    ERR(NULL, "Timeout expired while waiting for the server to apply the previous configuration.");
-    return 1;
+    if (!server_opts.applying_config) {
+        /* set the flag */
+        server_opts.applying_config = 1;
+    }
+
+    /* UNLOCK */
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    return 0;
 }
 
 /**
@@ -6078,18 +6073,14 @@ nc_server_config_update_end(void)
     nc_timeouttime_get(&ts_timeout, NC_SERVER_CONFIG_UPDATE_WAIT_TIMEOUT_SEC * 1000);
 
     /* WR LOCK */
-    r = pthread_rwlock_clockwrlock(&server_opts.config_lock, COMPAT_CLOCK_ID, &ts_timeout);
-    if (r) {
-        /* just log the error, there is nothing we can do */
-        ERR(NULL, "Failed to acquire server configuration write lock (%s).", strerror(r));
-    }
+    r = nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__);
 
     /* clear the flag */
     server_opts.applying_config = 0;
 
-    if (!r) {
-        /* UNLOCK only if we locked it */
-        pthread_rwlock_unlock(&server_opts.config_lock);
+    if (r == 1) {
+        /* UNLOCK */
+        nc_rwlock_unlock(&server_opts.config_lock, __func__);
     }
 }
 
@@ -6105,14 +6096,17 @@ nc_server_config_setup_diff(const struct lyd_node *data)
     NC_CHECK_RET(nc_server_config_update_start());
 
     /* CONFIG RD LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        ret = 1;
+        goto cleanup;
+    }
 
     /* create a copy of the current config to work with, so that we can revert to it in case of error */
     NC_CHECK_ERR_GOTO(ret = nc_server_config_dup(&server_opts.config, &config_copy),
             ERR(NULL, "Duplicating current server configuration failed."), cleanup_unlock);
 
     /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
 
 #ifdef NC_ENABLED_SSH_TLS
     /* configure keystore */
@@ -6133,7 +6127,10 @@ nc_server_config_setup_diff(const struct lyd_node *data)
             ERR(NULL, "Applying libnetconf2-netconf-server configuration failed."), cleanup);
 
     /* CONFIG WR LOCK */
-    pthread_rwlock_wrlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        ret = 1;
+        goto cleanup;
+    }
 
     /* start listening on new endpoints */
     NC_CHECK_ERR_GOTO(ret = nc_server_config_reconcile_sockets_listen(&server_opts.config, &config_copy),
@@ -6157,7 +6154,7 @@ nc_server_config_setup_diff(const struct lyd_node *data)
 
 cleanup_unlock:
     /* CONFIG UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
 
 cleanup:
     if (ret) {
@@ -6217,7 +6214,10 @@ nc_server_config_setup_data(const struct lyd_node *data)
             ERR(NULL, "Applying libnetconf2-netconf-server configuration failed."), cleanup);
 
     /* CONFIG LOCK */
-    pthread_rwlock_wrlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        ret = 1;
+        goto cleanup;
+    }
 
     /* start listening on new endpoints */
     NC_CHECK_ERR_GOTO(ret = nc_server_config_reconcile_sockets_listen(&server_opts.config, &config),
@@ -6241,7 +6241,7 @@ nc_server_config_setup_data(const struct lyd_node *data)
 
 cleanup_unlock:
     /* CONFIG UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
 
 cleanup:
     if (ret) {
@@ -6504,7 +6504,9 @@ nc_server_config_oper_get_user_password_last_modified(const char *ch_client, con
     *last_modified = 0;
 
     /* LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
 
     if (ch_client) {
         /* find the call-home client */
@@ -6566,7 +6568,7 @@ nc_server_config_oper_get_user_password_last_modified(const char *ch_client, con
 
 cleanup:
     /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
     return rc;
 }
 

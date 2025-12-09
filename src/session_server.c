@@ -241,7 +241,9 @@ nc_server_ch_set_dispatch_data(nc_server_ch_session_acquire_ctx_cb acquire_ctx_c
     NC_CHECK_ARG_RET(NULL, acquire_ctx_cb, release_ctx_cb, new_session_cb, );
 
     /* CONFIG WRITE LOCK */
-    pthread_rwlock_wrlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return;
+    }
 
     server_opts.ch_dispatch_data.acquire_ctx_cb = acquire_ctx_cb;
     server_opts.ch_dispatch_data.release_ctx_cb = release_ctx_cb;
@@ -250,7 +252,7 @@ nc_server_ch_set_dispatch_data(nc_server_ch_session_acquire_ctx_cb acquire_ctx_c
     server_opts.ch_dispatch_data.new_session_cb_data = new_session_cb_data;
 
     /* CONFIG WRITE UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
 }
 
 #endif
@@ -662,7 +664,10 @@ nc_sock_accept_binds(struct nc_endpt *endpt, struct nc_bind *binds, uint16_t bin
     NC_CHECK_ERRMEM_RET(!pfd, -1);
 
     /* LOCK */
-    pthread_mutex_lock(bind_lock);
+    if (nc_mutex_lock(bind_lock, timeout, __func__) != 1) {
+        free(pfd);
+        return -1;
+    }
 
     for (i = 0, pfd_count = 0; i < bind_count; ++i) {
         if (binds[i].sock < 0) {
@@ -689,7 +694,7 @@ nc_sock_accept_binds(struct nc_endpt *endpt, struct nc_bind *binds, uint16_t bin
             free(pfd);
 
             /* UNLOCK */
-            pthread_mutex_unlock(bind_lock);
+            nc_mutex_unlock(bind_lock, __func__);
 
             return ret;
         }
@@ -718,7 +723,7 @@ nc_sock_accept_binds(struct nc_endpt *endpt, struct nc_bind *binds, uint16_t bin
     if (server_sock == -1) {
         ERRINT;
         /* UNLOCK */
-        pthread_mutex_unlock(bind_lock);
+        nc_mutex_unlock(bind_lock, __func__);
         return -1;
     }
 
@@ -727,7 +732,7 @@ nc_sock_accept_binds(struct nc_endpt *endpt, struct nc_bind *binds, uint16_t bin
     if (client_sock < 0) {
         ERR(NULL, "Accept failed (%s).", strerror(errno));
         /* UNLOCK */
-        pthread_mutex_unlock(bind_lock);
+        nc_mutex_unlock(bind_lock, __func__);
         return -1;
     }
 
@@ -778,7 +783,7 @@ nc_sock_accept_binds(struct nc_endpt *endpt, struct nc_bind *binds, uint16_t bin
         *idx = i;
     }
     /* UNLOCK */
-    pthread_mutex_unlock(bind_lock);
+    nc_mutex_unlock(bind_lock, __func__);
 
     *sock = client_sock;
     return 1;
@@ -786,7 +791,7 @@ nc_sock_accept_binds(struct nc_endpt *endpt, struct nc_bind *binds, uint16_t bin
 fail:
     close(client_sock);
     /* UNLOCK */
-    pthread_mutex_unlock(bind_lock);
+    nc_mutex_unlock(bind_lock, __func__);
     return -1;
 }
 
@@ -1075,24 +1080,26 @@ nc_server_destroy(void)
 #endif /* NC_ENABLED_SSH_TLS */
 
     /* CONFIG WR LOCK */
-    pthread_rwlock_wrlock(&server_opts.config_lock);
+    nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__);
 
     /* destroy the server configuration */
     nc_server_config_free(&server_opts.config);
 
     /* CH THREADS LOCK */
-    pthread_rwlock_rdlock(&server_opts.ch_threads_lock);
+    nc_rwlock_lock(&server_opts.ch_threads_lock, NC_RWLOCK_READ, NC_CH_THREADS_LOCK_TIMEOUT, __func__);
 
     /* notify the CH threads to exit */
     LY_ARRAY_FOR(server_opts.ch_threads, i) {
-        pthread_mutex_lock(&server_opts.ch_threads[i]->cond_lock);
+        if (nc_mutex_lock(&server_opts.ch_threads[i]->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
+            continue;
+        }
         server_opts.ch_threads[i]->thread_running = 0;
         pthread_cond_signal(&server_opts.ch_threads[i]->cond);
-        pthread_mutex_unlock(&server_opts.ch_threads[i]->cond_lock);
+        nc_mutex_unlock(&server_opts.ch_threads[i]->cond_lock, __func__);
     }
 
     /* CH THREADS UNLOCK */
-    pthread_rwlock_unlock(&server_opts.ch_threads_lock);
+    nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
 
 #ifdef NC_ENABLED_SSH_TLS
     free(server_opts.authkey_path_fmt);
@@ -1115,7 +1122,7 @@ nc_server_destroy(void)
     server_opts.unix_paths = NULL;
 
     /* CONFIG WR UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
 
 #ifdef NC_ENABLED_SSH_TLS
     curl_global_cleanup();
@@ -1141,13 +1148,15 @@ nc_server_set_capab_withdefaults(NC_WD_MODE basic_mode, int also_supported)
     }
 
     /* HELLO LOCK */
-    pthread_rwlock_wrlock(&server_opts.hello_lock);
+    if (nc_rwlock_lock(&server_opts.hello_lock, NC_RWLOCK_WRITE, NC_HELLO_LOCK_TIMEOUT, __func__) != 1) {
+        return -1;
+    }
 
     server_opts.wd_basic_mode = basic_mode;
     server_opts.wd_also_supported = also_supported;
 
     /* HELLO UNLOCK */
-    pthread_rwlock_unlock(&server_opts.hello_lock);
+    nc_rwlock_unlock(&server_opts.hello_lock, __func__);
 
     return 0;
 }
@@ -1160,8 +1169,8 @@ nc_server_get_capab_withdefaults(NC_WD_MODE *basic_mode, int *also_supported)
         return;
     }
 
-    /* HELLO LOCK */
-    pthread_rwlock_wrlock(&server_opts.hello_lock);
+    /* HELLO LOCK, nothing to do on failure */
+    nc_rwlock_lock(&server_opts.hello_lock, NC_RWLOCK_WRITE, NC_HELLO_LOCK_TIMEOUT, __func__);
 
     if (basic_mode) {
         *basic_mode = server_opts.wd_basic_mode;
@@ -1171,54 +1180,52 @@ nc_server_get_capab_withdefaults(NC_WD_MODE *basic_mode, int *also_supported)
     }
 
     /* HELLO UNLOCK */
-    pthread_rwlock_unlock(&server_opts.hello_lock);
+    nc_rwlock_unlock(&server_opts.hello_lock, __func__);
 }
 
 API int
 nc_server_set_capability(const char *value)
 {
+    int rc = 0;
     void *mem;
 
     if (!value || !value[0]) {
         ERRARG(NULL, "value must not be empty");
-        return EXIT_FAILURE;
+        return -1;
     }
 
     /* HELLO LOCK */
-    pthread_rwlock_wrlock(&server_opts.hello_lock);
+    if (nc_rwlock_lock(&server_opts.hello_lock, NC_RWLOCK_WRITE, NC_HELLO_LOCK_TIMEOUT, __func__) != 1) {
+        return -1;
+    }
 
     mem = realloc(server_opts.capabilities, (server_opts.capabilities_count + 1) * sizeof *server_opts.capabilities);
-    if (!mem) {
-        /* HELLO UNLOCK */
-        pthread_rwlock_unlock(&server_opts.hello_lock);
-        ERRMEM;
-        return EXIT_FAILURE;
-    }
+    NC_CHECK_ERRMEM_GOTO(!mem, rc = -1, cleanup);
 
     server_opts.capabilities = mem;
 
     server_opts.capabilities[server_opts.capabilities_count] = strdup(value);
     server_opts.capabilities_count++;
 
+cleanup:
     /* HELLO UNLOCK */
-    pthread_rwlock_unlock(&server_opts.hello_lock);
-
-    return EXIT_SUCCESS;
+    nc_rwlock_unlock(&server_opts.hello_lock, __func__);
+    return rc;
 }
 
 API void
 nc_server_set_content_id_clb(char *(*content_id_clb)(void *user_data), void *user_data,
         void (*free_user_data)(void *user_data))
 {
-    /* HELLO LOCK */
-    pthread_rwlock_wrlock(&server_opts.hello_lock);
+    /* HELLO LOCK, nothing to do on failure */
+    nc_rwlock_lock(&server_opts.hello_lock, NC_RWLOCK_WRITE, NC_HELLO_LOCK_TIMEOUT, __func__);
 
     server_opts.content_id_clb = content_id_clb;
     server_opts.content_id_data = user_data;
     server_opts.content_id_data_free = free_user_data;
 
     /* HELLO UNLOCK */
-    pthread_rwlock_unlock(&server_opts.hello_lock);
+    nc_rwlock_unlock(&server_opts.hello_lock, __func__);
 }
 
 API NC_MSG_TYPE
@@ -1336,20 +1343,18 @@ nc_ps_queue_remove_id(struct nc_pollsession *ps, uint8_t id)
 int
 nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
 {
-    int ret;
+    int r, rc = 0;
     struct timespec ts;
 
     /* LOCK */
-    ret = pthread_mutex_lock(&ps->lock);
-    if (ret) {
-        ERR(NULL, "%s: failed to lock a pollsession (%s).", func, strerror(ret));
+    if (nc_mutex_lock(&ps->lock, NC_PS_LOCK_TIMEOUT, func) != 1) {
         return -1;
     }
 
     /* check that the queue is long enough */
     if (ps->queue_len == NC_PS_QUEUE_SIZE) {
         ERR(NULL, "%s: pollsession queue size (%d) too small.", func, NC_PS_QUEUE_SIZE);
-        pthread_mutex_unlock(&ps->lock);
+        nc_mutex_unlock(&ps->lock, func);
         return -1;
     }
 
@@ -1362,49 +1367,45 @@ nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func)
     while (ps->queue[ps->queue_begin] != *id) {
         nc_timeouttime_get(&ts, NC_PS_QUEUE_TIMEOUT);
 
-        ret = pthread_cond_clockwait(&ps->cond, &ps->lock, COMPAT_CLOCK_ID, &ts);
-        if (ret) {
+        r = pthread_cond_clockwait(&ps->cond, &ps->lock, COMPAT_CLOCK_ID, &ts);
+        if (r) {
             /**
              * This may happen when another thread releases the lock and broadcasts the condition
              * and this thread had already timed out. When this thread is scheduled, it returns timed out error
              * but when actually this thread was ready for condition.
              */
-            if ((ETIMEDOUT == ret) && (ps->queue[ps->queue_begin] == *id)) {
+            if ((ETIMEDOUT == r) && (ps->queue[ps->queue_begin] == *id)) {
                 break;
             }
 
-            ERR(NULL, "%s: failed to wait for a pollsession condition (%s).", func, strerror(ret));
+            ERR(NULL, "%s: failed to wait for a pollsession condition (%s).", func, strerror(r));
             /* remove ourselves from the queue */
             nc_ps_queue_remove_id(ps, *id);
-            pthread_mutex_unlock(&ps->lock);
-            return -1;
+            rc = -1;
+            break;
         }
     }
 
     /* UNLOCK */
-    pthread_mutex_unlock(&ps->lock);
+    nc_mutex_unlock(&ps->lock, func);
 
-    return 0;
+    return rc;
 }
 
 int
 nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func)
 {
-    int ret;
+    int r;
 
-    /* LOCK */
-    ret = pthread_mutex_lock(&ps->lock);
-    if (ret) {
-        ERR(NULL, "%s: failed to lock a pollsession (%s).", func, strerror(ret));
-        ret = -1;
-    }
+    /* LOCK, continue on error */
+    r = nc_mutex_lock(&ps->lock, NC_PS_LOCK_TIMEOUT, func);
 
     /* we must be the first, it was our turn after all, right? */
     if (ps->queue[ps->queue_begin] != id) {
         ERRINT;
         /* UNLOCK */
-        if (!ret) {
-            pthread_mutex_unlock(&ps->lock);
+        if (r == 1) {
+            nc_mutex_unlock(&ps->lock, func);
         }
         return -1;
     }
@@ -1418,11 +1419,11 @@ nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func)
     pthread_cond_broadcast(&ps->cond);
 
     /* UNLOCK */
-    if (!ret) {
-        pthread_mutex_unlock(&ps->lock);
+    if (r == 1) {
+        nc_mutex_unlock(&ps->lock, func);
     }
 
-    return ret;
+    return r == 1 ? 0 : -1;
 }
 
 API struct nc_pollsession *
@@ -2053,9 +2054,8 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
         return NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
     }
 
-    r = nc_session_io_lock(session, io_timeout, __func__);
+    r = nc_mutex_lock(session->io_lock, io_timeout, __func__);
     if (r < 0) {
-        sprintf(msg, "Session IO lock failed to be acquired");
         return NC_PSPOLL_ERROR;
     } else if (!r) {
         return NC_PSPOLL_TIMEOUT;
@@ -2189,7 +2189,7 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
         break;
     }
 
-    nc_session_io_unlock(session, __func__);
+    nc_mutex_unlock(session->io_lock, __func__);
     return ret;
 }
 
@@ -2218,12 +2218,13 @@ nc_ps_poll_sess(struct nc_ps_session *ps_session, time_t now_mono)
             ps_session->state = NC_PS_STATE_BUSY;
 
             /* CONFIG READ LOCK */
-            pthread_rwlock_rdlock(&server_opts.config_lock);
-
-            ret = nc_ps_poll_session_io(ps_session->session, NC_SESSION_LOCK_TIMEOUT, now_mono, msg);
-
-            /* CONFIG UNLOCK */
-            pthread_rwlock_unlock(&server_opts.config_lock);
+            if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+                ret = NC_PSPOLL_ERROR;
+            } else {
+                ret = nc_ps_poll_session_io(ps_session->session, NC_SESSION_LOCK_TIMEOUT, now_mono, msg);
+                /* CONFIG UNLOCK */
+                nc_rwlock_unlock(&server_opts.config_lock, __func__);
+            }
 
             switch (ret) {
             case NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR:
@@ -2693,12 +2694,14 @@ nc_server_endpt_count(void)
     uint32_t cnt;
 
     /* CONFIG READ LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return 0;
+    }
 
     cnt = LY_ARRAY_COUNT(server_opts.config.endpts);
 
     /* CONFIG UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
 
     return cnt;
 }
@@ -2724,7 +2727,9 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
     nc_server_init_cb_ctx(ctx);
 
     /* CONFIG LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return NC_MSG_ERROR;
+    }
 
     config = &server_opts.config;
 
@@ -2809,7 +2814,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
     (*session)->data = NULL;
 
     /* CONFIG UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
 
     /* assign new SID atomically */
     (*session)->id = ATOMIC_INC_RELAXED(server_opts.new_session_id);
@@ -2832,7 +2837,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
 
 cleanup:
     /* CONFIG UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
 
     free(host);
     if (sock > -1) {
@@ -2856,7 +2861,9 @@ nc_server_ch_is_client(const char *name)
     }
 
     /* CONFIG READ LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return found;
+    }
 
     /* check name against all configured clients */
     LY_ARRAY_FOR(server_opts.config.ch_clients, struct nc_ch_client, client) {
@@ -2867,7 +2874,7 @@ nc_server_ch_is_client(const char *name)
     }
 
     /* CONFIG READ UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
 
     return found;
 }
@@ -2884,7 +2891,9 @@ nc_server_ch_client_is_endpt(const char *client_name, const char *endpt_name)
     }
 
     /* CONFIG READ LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return found;
+    }
 
     client = nc_server_ch_client_get(client_name);
     if (!client) {
@@ -2900,7 +2909,7 @@ nc_server_ch_client_is_endpt(const char *client_name, const char *endpt_name)
 
 cleanup:
     /* CONFIG READ UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
     return found;
 }
 
@@ -3024,7 +3033,9 @@ nc_server_ch_client_get_idle_timeout(const char *client_name, uint32_t *idle_tim
     struct nc_ch_client *client;
 
     /* CONFIG READ LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
 
     client = nc_server_ch_client_get(client_name);
     if (!client) {
@@ -3040,7 +3051,7 @@ nc_server_ch_client_get_idle_timeout(const char *client_name, uint32_t *idle_tim
 
 cleanup:
     /* CONFIG READ UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
     return ret;
 }
 
@@ -3059,28 +3070,37 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *dat
     int rc = 0, r;
     uint32_t idle_timeout;
     struct timespec ts;
-    const char *client_name;
 
     /* CH LOCK */
-    pthread_mutex_lock(&session->opts.server.ch_lock);
-
-    /* save the client name - it can not be modified by any other thread */
-    client_name = data->client_name;
+    if (nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__) != 1) {
+        return -1;
+    }
 
     session->flags |= NC_SESSION_CH_THREAD;
 
+    /* CH UNLOCK */
+    nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
+
     /* give the session to the user */
     if (data->new_session_cb(data->client_name, session, data->new_session_cb_data)) {
+        /* CH LOCK, continue on error */
+        nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__);
+
         /* something is wrong, free the session */
         session->flags &= ~NC_SESSION_CH_THREAD;
 
         /* CH UNLOCK */
-        pthread_mutex_unlock(&session->opts.server.ch_lock);
+        nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
 
         /* session terminated, free it and release its context */
         nc_session_free(session, NULL);
         data->release_ctx_cb(data->ctx_cb_data);
         return 0;
+    }
+
+    /* CH LOCK */
+    if (nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__) != 1) {
+        return -1;
     }
 
     /* entering the loop with locked ch_lock */
@@ -3101,27 +3121,31 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *dat
         }
 
         /* CH UNLOCK */
-        pthread_mutex_unlock(&session->opts.server.ch_lock);
+        nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
 
         /* check if the client still exists and get its idle timeout */
-        r = nc_server_ch_client_get_idle_timeout(client_name, &idle_timeout);
+        r = nc_server_ch_client_get_idle_timeout(data->client_name, &idle_timeout);
         if (r) {
             /* client was removed, finish thread */
             VRB(session, "Call Home client \"%s\" removed, but an established session will not be terminated.",
-                    client_name);
+                    data->client_name);
             rc = 1;
 
             /* CH LOCK - to remain consistent */
-            pthread_mutex_lock(&session->opts.server.ch_lock);
+            if (nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__) != 1) {
+                return -1;
+            }
             break;
         }
 
         /* CH LOCK */
-        pthread_mutex_lock(&session->opts.server.ch_lock);
+        if (nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__) != 1) {
+            return -1;
+        }
 
         nc_timeouttime_get(&ts, 0);
         if (!nc_session_get_notif_status(session) && idle_timeout && (ts.tv_sec >= session->opts.server.last_rpc + idle_timeout)) {
-            VRB(session, "Call Home client \"%s\": session idle timeout elapsed.", client_name);
+            VRB(session, "Call Home client \"%s\": session idle timeout elapsed.", data->client_name);
             session->status = NC_STATUS_INVALID;
             session->term_reason = NC_SESSION_TERM_TIMEOUT;
         }
@@ -3133,7 +3157,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *dat
     pthread_cond_signal(&session->opts.server.ch_cond);
 
     /* CH UNLOCK */
-    pthread_mutex_unlock(&session->opts.server.ch_lock);
+    nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
 
     return rc;
 }
@@ -3154,7 +3178,9 @@ nc_server_ch_client_thread_is_running_wait(struct nc_session *session, struct nc
     int ret = 0, thread_running;
 
     /* COND LOCK */
-    pthread_mutex_lock(&data->cond_lock);
+    if (nc_mutex_lock(&data->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
+        return 0;
+    }
     /* get reconnect timeout in ms */
     nc_timeouttime_get(&ts, cond_wait_time * 1000);
     while (!ret && data->thread_running) {
@@ -3163,7 +3189,7 @@ nc_server_ch_client_thread_is_running_wait(struct nc_session *session, struct nc
 
     thread_running = data->thread_running;
     /* COND UNLOCK */
-    pthread_mutex_unlock(&data->cond_lock);
+    nc_mutex_unlock(&data->cond_lock, __func__);
 
     if (!thread_running) {
         /* thread is terminating */
@@ -3197,13 +3223,15 @@ nc_server_ch_client_thread_is_running(struct nc_server_ch_thread_arg *data)
     int ret = -1;
 
     /* COND LOCK */
-    pthread_mutex_lock(&data->cond_lock);
+    if (nc_mutex_lock(&data->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
+        return ret;
+    }
     if (!data->thread_running) {
         /* thread should stop running */
         ret = 0;
     }
     /* COND UNLOCK */
-    pthread_mutex_unlock(&data->cond_lock);
+    nc_mutex_unlock(&data->cond_lock, __func__);
 
     return ret;
 }
@@ -3235,13 +3263,15 @@ nc_server_ch_client_with_endpt_get(struct nc_server_ch_thread_arg *data, const c
         }
 
         /* CONFIG READ UNLOCK - allow another thread to modify the configuration */
-        pthread_rwlock_unlock(&server_opts.config_lock);
+        nc_rwlock_unlock(&server_opts.config_lock, __func__);
 
         /* no endpoints defined yet, wait a little bit */
         usleep(NC_CH_NO_ENDPT_WAIT * 1000);
 
         /* CONFIG READ LOCK */
-        pthread_rwlock_rdlock(&server_opts.config_lock);
+        if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+            return NULL;
+        }
     }
 
     /* thread is not running */
@@ -3269,12 +3299,16 @@ nc_ch_client_thread(void *arg)
     LY_ARRAY_COUNT_TYPE i;
 
     /* mark the thread as running */
-    pthread_mutex_lock(&data->cond_lock);
+    if (nc_mutex_lock(&data->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
+        goto cleanup;
+    }
     data->thread_running = 1;
-    pthread_mutex_unlock(&data->cond_lock);
+    nc_mutex_unlock(&data->cond_lock, __func__);
 
     /* CONFIG READ LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        goto cleanup;
+    }
 
     /* get the client once it has at least one endpoint */
     client = nc_server_ch_client_with_endpt_get(data, data->client_name);
@@ -3296,7 +3330,7 @@ nc_ch_client_thread(void *arg)
         msgtype = nc_connect_ch_endpt(cur_endpt, data->acquire_ctx_cb, data->release_ctx_cb, data->ctx_cb_data, &session);
         if (msgtype == NC_MSG_HELLO) {
             /* CONFIG READ UNLOCK - session established */
-            pthread_rwlock_unlock(&server_opts.config_lock);
+            nc_rwlock_unlock(&server_opts.config_lock, __func__);
 
             if (!nc_server_ch_client_thread_is_running(data)) {
                 /* thread should stop running */
@@ -3317,7 +3351,9 @@ nc_ch_client_thread(void *arg)
             }
 
             /* CONFIG READ LOCK */
-            pthread_rwlock_rdlock(&server_opts.config_lock);
+            if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+                goto cleanup;
+            }
 
             /* get the client again, it may have been removed */
             client = nc_server_ch_client_with_endpt_get(data, data->client_name);
@@ -3338,7 +3374,7 @@ nc_ch_client_thread(void *arg)
                 }
 
                 /* CONFIG READ UNLOCK */
-                pthread_rwlock_unlock(&server_opts.config_lock);
+                nc_rwlock_unlock(&server_opts.config_lock, __func__);
 
                 /* wait for the timeout to elapse, so we can try to reconnect */
                 VRB(session, "Call Home client \"%s\" reconnecting in %" PRIu32 " seconds.", data->client_name, reconnect_in);
@@ -3347,7 +3383,9 @@ nc_ch_client_thread(void *arg)
                 }
 
                 /* CONFIG READ LOCK */
-                pthread_rwlock_rdlock(&server_opts.config_lock);
+                if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+                    goto cleanup;
+                }
 
                 client = nc_server_ch_client_with_endpt_get(data, data->client_name);
                 if (!client) {
@@ -3379,7 +3417,7 @@ nc_ch_client_thread(void *arg)
             max_wait = client->max_wait;
 
             /* CONFIG READ UNLOCK */
-            pthread_rwlock_unlock(&server_opts.config_lock);
+            nc_rwlock_unlock(&server_opts.config_lock, __func__);
 
             /* wait for max_wait seconds */
             if (!nc_server_ch_client_thread_is_running_wait(session, data, max_wait)) {
@@ -3388,7 +3426,9 @@ nc_ch_client_thread(void *arg)
             }
 
             /* CONFIG READ LOCK */
-            pthread_rwlock_rdlock(&server_opts.config_lock);
+            if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+                goto cleanup;
+            }
 
             /* get the client */
             client = nc_server_ch_client_with_endpt_get(data, data->client_name);
@@ -3441,14 +3481,16 @@ nc_ch_client_thread(void *arg)
 
 cleanup_unlock:
     /* CONFIG READ UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
 
 cleanup:
     VRB(session, "Call Home client \"%s\" thread exit.", data->client_name);
     free(cur_endpt_name);
 
     /* CH THREADS WR LOCK */
-    pthread_rwlock_wrlock(&server_opts.ch_threads_lock);
+    if (nc_rwlock_lock(&server_opts.ch_threads_lock, NC_RWLOCK_WRITE, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
+        goto unlock_skip;
+    }
 
     /* remove the thread data from the global array */
     LY_ARRAY_FOR(server_opts.ch_threads, i) {
@@ -3462,12 +3504,16 @@ cleanup:
     LY_ARRAY_DECREMENT_FREE(server_opts.ch_threads);
 
     /* CH THREADS UNLOCK */
-    pthread_rwlock_unlock(&server_opts.ch_threads_lock);
+    nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
 
+unlock_skip:
     free(data->client_name);
-    pthread_mutex_lock(&data->cond_lock);
-    pthread_cond_destroy(&data->cond);
-    pthread_mutex_unlock(&data->cond_lock);
+    if (nc_mutex_lock(&data->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
+        pthread_cond_destroy(&data->cond);
+        nc_mutex_unlock(&data->cond_lock, __func__);
+    } else {
+        pthread_cond_destroy(&data->cond);
+    }
     pthread_mutex_destroy(&data->cond_lock);
     free(data);
     return NULL;
@@ -3478,7 +3524,8 @@ _nc_connect_ch_client_dispatch(const struct nc_ch_client *ch_client, nc_server_c
         nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
         void *new_session_cb_data)
 {
-    int rc = 0, r, ch_threads_locked = 0;
+    int rc = 0, r;
+    enum nc_rwlock_mode ch_threads_lock = NC_RWLOCK_NONE;
     pthread_t tid;
     struct nc_server_ch_thread_arg *arg = NULL, **new_item;
     pthread_attr_t attr;
@@ -3510,8 +3557,11 @@ _nc_connect_ch_client_dispatch(const struct nc_ch_client *ch_client, nc_server_c
     pthread_mutex_init(&arg->cond_lock, NULL);
 
     /* CH THREADS WR LOCK */
-    pthread_rwlock_wrlock(&server_opts.ch_threads_lock);
-    ch_threads_locked = 1;
+    if (nc_rwlock_lock(&server_opts.ch_threads_lock, NC_RWLOCK_WRITE, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
+        rc = -1;
+        goto cleanup;
+    }
+    ch_threads_lock = NC_RWLOCK_WRITE;
 
     /* Append the thread data pointer to the global array.
      * Pointer instead of struct so that server_opts.ch_thread_lock does not have to be
@@ -3520,8 +3570,8 @@ _nc_connect_ch_client_dispatch(const struct nc_ch_client *ch_client, nc_server_c
     *new_item = arg;
 
     /* CH THREADS UNLOCK */
-    pthread_rwlock_unlock(&server_opts.ch_threads_lock);
-    ch_threads_locked = 0;
+    nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
+    ch_threads_lock = NC_RWLOCK_NONE;
 
     /* create the CH thread */
     if ((r = pthread_create(&tid, &attr, nc_ch_client_thread, arg))) {
@@ -3534,9 +3584,9 @@ _nc_connect_ch_client_dispatch(const struct nc_ch_client *ch_client, nc_server_c
     arg = NULL;
 
 cleanup:
-    if (ch_threads_locked) {
+    if (ch_threads_lock) {
         /* CH THREADS UNLOCK */
-        pthread_rwlock_unlock(&server_opts.ch_threads_lock);
+        nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
     }
     pthread_attr_destroy(&attr);
     if (arg) {
@@ -3559,7 +3609,9 @@ nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acqu
     NC_CHECK_SRV_INIT_RET(-1);
 
     /* CONFIG READ LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return -1;
+    }
 
     /* check ch client existence */
     ch_client = nc_server_ch_client_get(client_name);
@@ -3570,7 +3622,7 @@ nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acqu
 
 cleanup:
     /* CONFIG READ UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
     return rc;
 }
 
@@ -3599,13 +3651,13 @@ nc_session_inc_notif_status(struct nc_session *session)
         return;
     }
 
-    /* NTF STATUS LOCK */
-    pthread_mutex_lock(&session->opts.server.ntf_status_lock);
+    /* NTF STATUS LOCK, continue on error */
+    nc_mutex_lock(&session->opts.server.ntf_status_lock, NC_SESSION_NTF_STATUS_LOCK_TIMEOUT, __func__);
 
     ++session->opts.server.ntf_status;
 
     /* NTF STATUS UNLOCK */
-    pthread_mutex_unlock(&session->opts.server.ntf_status_lock);
+    nc_mutex_unlock(&session->opts.server.ntf_status_lock, __func__);
 }
 
 API void
@@ -3616,15 +3668,15 @@ nc_session_dec_notif_status(struct nc_session *session)
         return;
     }
 
-    /* NTF STATUS LOCK */
-    pthread_mutex_lock(&session->opts.server.ntf_status_lock);
+    /* NTF STATUS LOCK, continue on error */
+    nc_mutex_lock(&session->opts.server.ntf_status_lock, NC_SESSION_NTF_STATUS_LOCK_TIMEOUT, __func__);
 
     if (session->opts.server.ntf_status) {
         --session->opts.server.ntf_status;
     }
 
     /* NTF STATUS UNLOCK */
-    pthread_mutex_unlock(&session->opts.server.ntf_status_lock);
+    nc_mutex_unlock(&session->opts.server.ntf_status_lock, __func__);
 }
 
 API int
@@ -3638,12 +3690,15 @@ nc_session_get_notif_status(const struct nc_session *session)
     }
 
     /* NTF STATUS LOCK */
-    pthread_mutex_lock(&((struct nc_session *)session)->opts.server.ntf_status_lock);
+    if (nc_mutex_lock(&((struct nc_session *)session)->opts.server.ntf_status_lock, NC_SESSION_NTF_STATUS_LOCK_TIMEOUT,
+            __func__) != 1) {
+        return 0;
+    }
 
     ntf_status = session->opts.server.ntf_status;
 
     /* NTF STATUS UNLOCK */
-    pthread_mutex_unlock(&((struct nc_session *)session)->opts.server.ntf_status_lock);
+    nc_mutex_unlock(&((struct nc_session *)session)->opts.server.ntf_status_lock, __func__);
 
     return ntf_status;
 }
@@ -4055,7 +4110,9 @@ nc_server_notif_cert_exp_dates_get(struct nc_cert_exp_time_interval *intervals, 
     *exp_date_count = 0;
 
     /* CONFIG READ LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
 
     /* first go through listen certs */
     LY_ARRAY_FOR(server_opts.config.endpts, struct nc_endpt, endpt) {
@@ -4105,7 +4162,7 @@ nc_server_notif_cert_exp_dates_get(struct nc_cert_exp_time_interval *intervals, 
 
 cleanup:
     /* CONFIG READ UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
     return ret;
 }
 
@@ -4186,14 +4243,16 @@ nc_server_notif_cert_exp_thread_is_running()
     int ret = 0;
 
     /* LOCK */
-    pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
+    if (nc_mutex_lock(&server_opts.cert_exp_notif.lock, NC_CERT_EXP_LOCK_TIMEOUT, __func__) != 1) {
+        return 0;
+    }
 
     if (server_opts.cert_exp_notif.thread_running) {
         ret = 1;
     }
 
     /* UNLOCK */
-    pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
+    nc_mutex_unlock(&server_opts.cert_exp_notif.lock, __func__);
 
     return ret;
 }
@@ -4216,7 +4275,9 @@ nc_server_notif_cert_exp_intervals_get(struct nc_cert_exp_time_interval *default
     int rc = 0;
 
     /* CONFIG LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
 
     if (!server_opts.config.cert_exp_notif_intervals) {
         /* dup the default intervals */
@@ -4235,7 +4296,7 @@ nc_server_notif_cert_exp_intervals_get(struct nc_cert_exp_time_interval *default
 
 cleanup:
     /* CONFIG UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
     return rc;
 }
 
@@ -4280,10 +4341,12 @@ nc_server_notif_cert_exp_thread(void *arg)
         wakeup_time.tv_sec = nc_server_notif_cert_exp_wakeup_time_get(exp_dates, exp_date_count, &curr_cert);
 
         /* sleep until the next notification time or until the thread is woken up */
-        pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
+        if (nc_mutex_lock(&server_opts.cert_exp_notif.lock, NC_CERT_EXP_LOCK_TIMEOUT, __func__) != 1) {
+            break;
+        }
         r = pthread_cond_clockwait(&server_opts.cert_exp_notif.cond,
                 &server_opts.cert_exp_notif.lock, CLOCK_REALTIME, &wakeup_time);
-        pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
+        nc_mutex_unlock(&server_opts.cert_exp_notif.lock, __func__);
 
         if (!r) {
             /* we were woken up */
@@ -4357,7 +4420,10 @@ nc_server_notif_cert_expiration_thread_start(nc_cert_exp_notif_clb cert_exp_noti
     arg->clb_free_data = free_data;
 
     /* LOCK */
-    pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
+    if (nc_mutex_lock(&server_opts.cert_exp_notif.lock, NC_CERT_EXP_LOCK_TIMEOUT, __func__) != 1) {
+        ret = 1;
+        goto cleanup;
+    }
 
     /* check if the thread is already running */
     if (server_opts.cert_exp_notif.thread_running) {
@@ -4378,7 +4444,7 @@ nc_server_notif_cert_expiration_thread_start(nc_cert_exp_notif_clb cert_exp_noti
 
 cleanup:
     /* UNLOCK */
-    pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
+    nc_mutex_unlock(&server_opts.cert_exp_notif.lock, __func__);
     if (ret) {
         free(arg);
     }
@@ -4392,7 +4458,9 @@ nc_server_notif_cert_expiration_thread_stop(int wait)
     pthread_t tid;
 
     /* LOCK */
-    pthread_mutex_lock(&server_opts.cert_exp_notif.lock);
+    if (nc_mutex_lock(&server_opts.cert_exp_notif.lock, NC_CERT_EXP_LOCK_TIMEOUT, __func__) != 1) {
+        return;
+    }
     tid = server_opts.cert_exp_notif.tid;
 
     if (server_opts.cert_exp_notif.thread_running) {
@@ -4402,7 +4470,7 @@ nc_server_notif_cert_expiration_thread_stop(int wait)
         pthread_cond_signal(&server_opts.cert_exp_notif.cond);
 
         /* UNLOCK */
-        pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
+        nc_mutex_unlock(&server_opts.cert_exp_notif.lock, __func__);
         if (wait) {
             r = pthread_join(tid, NULL);
         } else {
@@ -4414,7 +4482,7 @@ nc_server_notif_cert_expiration_thread_stop(int wait)
     } else {
         /* thread is not running */
         /* UNLOCK */
-        pthread_mutex_unlock(&server_opts.cert_exp_notif.lock);
+        nc_mutex_unlock(&server_opts.cert_exp_notif.lock, __func__);
     }
 }
 
@@ -4427,7 +4495,9 @@ nc_server_is_mod_ignored(const char *mod_name)
     LY_ARRAY_COUNT_TYPE i;
 
     /* LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return 0;
+    }
 
     LY_ARRAY_FOR(server_opts.config.ignored_modules, i) {
         if (!strcmp(server_opts.config.ignored_modules[i], mod_name)) {
@@ -4437,7 +4507,7 @@ nc_server_is_mod_ignored(const char *mod_name)
     }
 
     /* UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
 
     return ignored;
 }
@@ -4452,7 +4522,9 @@ nc_server_set_unix_socket_path(const char *endpoint_name, const char *socket_pat
     NC_CHECK_ARG_RET(NULL, endpoint_name, socket_path, 1);
 
     /* CONFIG WRITE LOCK */
-    pthread_rwlock_wrlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
 
     /* try to see if the path for this endpoint already exists */
     LY_ARRAY_FOR(server_opts.unix_paths, i) {
@@ -4476,7 +4548,7 @@ nc_server_set_unix_socket_path(const char *endpoint_name, const char *socket_pat
 
 cleanup:
     /* CONFIG WRITE UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
     return rc;
 }
 
@@ -4492,7 +4564,9 @@ nc_server_get_unix_socket_path(const char *endpoint_name, char **socket_path)
     *socket_path = NULL;
 
     /* CONFIG READ LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
 
     /* try to find the path for this endpoint */
     LY_ARRAY_FOR(server_opts.unix_paths, i) {
@@ -4511,7 +4585,7 @@ nc_server_get_unix_socket_path(const char *endpoint_name, char **socket_path)
 
 cleanup:
     /* CONFIG READ UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
     return rc;
 }
 
@@ -4521,7 +4595,9 @@ nc_server_set_unix_socket_dir(const char *dir)
     int rc = 0;
 
     /* CONFIG WRITE LOCK */
-    pthread_rwlock_wrlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
 
     free(server_opts.unix_socket_dir);
     server_opts.unix_socket_dir = strdup(dir);
@@ -4529,7 +4605,7 @@ nc_server_set_unix_socket_dir(const char *dir)
 
 cleanup:
     /* CONFIG WRITE UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
     return rc;
 }
 
@@ -4541,7 +4617,9 @@ nc_server_get_unix_socket_dir(char **dir)
     *dir = NULL;
 
     /* CONFIG READ LOCK */
-    pthread_rwlock_rdlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
 
     if (server_opts.unix_socket_dir) {
         *dir = strdup(server_opts.unix_socket_dir);
@@ -4550,6 +4628,6 @@ nc_server_get_unix_socket_dir(char **dir)
 
 cleanup:
     /* CONFIG READ UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
     return rc;
 }

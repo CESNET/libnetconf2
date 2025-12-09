@@ -1010,14 +1010,16 @@ nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct 
         void *user_data, void (*free_user_data)(void *user_data))
 {
     /* CONFIG LOCK */
-    pthread_rwlock_wrlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return;
+    }
 
     server_opts.interactive_auth_clb = interactive_auth_clb;
     server_opts.interactive_auth_data = user_data;
     server_opts.interactive_auth_data_free = free_user_data;
 
     /* CONFIG UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
 }
 
 #ifdef HAVE_LIBPAM
@@ -1030,7 +1032,9 @@ nc_server_ssh_set_pam_conf_filename(const char *filename)
     NC_CHECK_ARG_RET(NULL, filename, 1);
 
     /* CONFIG LOCK */
-    pthread_rwlock_wrlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
 
     free(server_opts.pam_config_name);
     server_opts.pam_config_name = strdup(filename);
@@ -1040,7 +1044,7 @@ nc_server_ssh_set_pam_conf_filename(const char *filename)
     }
 
     /* CONFIG UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
     return ret;
 }
 
@@ -1064,7 +1068,9 @@ nc_server_ssh_set_authkey_path_format(const char *path)
     NC_CHECK_ARG_RET(NULL, path, 1);
 
     /* CONFIG LOCK */
-    pthread_rwlock_wrlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
 
     free(server_opts.authkey_path_fmt);
     server_opts.authkey_path_fmt = strdup(path);
@@ -1074,7 +1080,7 @@ nc_server_ssh_set_authkey_path_format(const char *path)
     }
 
     /* CONFIG UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
     return ret;
 }
 

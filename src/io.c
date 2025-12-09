@@ -263,7 +263,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, int passing_io_lock, 
 
     if (!passing_io_lock) {
         /* SESSION IO LOCK */
-        ret = nc_session_io_lock(session, io_timeout, __func__);
+        ret = nc_mutex_lock(session->io_lock, io_timeout, __func__);
         if (ret < 1) {
             goto cleanup;
         }
@@ -347,7 +347,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, int passing_io_lock, 
 cleanup:
     if (io_locked) {
         /* SESSION IO UNLOCK */
-        nc_session_io_unlock(session, __func__);
+        nc_mutex_unlock(session->io_lock, __func__);
     }
     free(frame_size_buf);
     return ret;
@@ -468,7 +468,7 @@ nc_read_msg_poll_io(struct nc_session *session, int io_timeout, struct ly_in **m
     }
 
     /* SESSION IO LOCK */
-    ret = nc_session_io_lock(session, io_timeout, __func__);
+    ret = nc_mutex_lock(session->io_lock, io_timeout, __func__);
     if (ret < 1) {
         return ret;
     }
@@ -478,7 +478,7 @@ nc_read_msg_poll_io(struct nc_session *session, int io_timeout, struct ly_in **m
         /* timed out or error */
 
         /* SESSION IO UNLOCK */
-        nc_session_io_unlock(session, __func__);
+        nc_mutex_unlock(session->io_lock, __func__);
         return ret;
     }
 
@@ -486,7 +486,7 @@ nc_read_msg_poll_io(struct nc_session *session, int io_timeout, struct ly_in **m
     ret = nc_read_msg_io(session, io_timeout, 1, &buf, &buf_len);
 
     /* SESSION IO UNLOCK */
-    nc_session_io_unlock(session, __func__);
+    nc_mutex_unlock(session->io_lock, __func__);
 
     if (ret > 0) {
         ret = 1;
@@ -840,7 +840,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
     arg.len = 0;
 
     /* SESSION IO LOCK */
-    ret = nc_session_io_lock(session, io_timeout, __func__);
+    ret = nc_mutex_lock(session->io_lock, io_timeout, __func__);
     if (ret < 0) {
         return NC_MSG_ERROR;
     } else if (!ret) {
@@ -1049,7 +1049,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
 
 cleanup:
     va_end(ap);
-    nc_session_io_unlock(session, __func__);
+    nc_mutex_unlock(session->io_lock, __func__);
     return ret;
 }
 

@@ -1915,13 +1915,13 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     }
 
     /* create the channel safely */
-    if (nc_session_io_lock(new_session, -1, __func__) != 1) {
+    if (nc_mutex_lock(new_session->io_lock, -1, __func__) != 1) {
         goto fail;
     }
     if (open_netconf_channel(new_session, NC_TRANSPORT_TIMEOUT) != 1) {
         goto fail;
     }
-    nc_session_io_unlock(new_session, __func__);
+    nc_mutex_unlock(new_session->io_lock, __func__);
 
     if (nc_client_session_new_ctx(new_session, ctx) != EXIT_SUCCESS) {
         goto fail;

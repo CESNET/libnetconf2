@@ -199,6 +199,7 @@ void nc_server_get_capab_withdefaults(NC_WD_MODE *basic_mode, int *also_supporte
  * string.
  *
  * @param[in] value Capability string to be advertised in server's \<hello\> messages.
+ * @return 0 on success, -1 on error.
  */
 int nc_server_set_capability(const char *value);
 

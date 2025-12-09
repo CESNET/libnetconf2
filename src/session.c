@@ -428,109 +428,6 @@ nc_session_rpc_unlock(struct nc_session *session, int timeout, const char *func)
 }
 
 int
-nc_session_io_lock(struct nc_session *session, int timeout, const char *func)
-{
-    int ret;
-    struct timespec ts_timeout;
-
-    if (timeout > 0) {
-        nc_timeouttime_get(&ts_timeout, timeout);
-
-        ret = pthread_mutex_clocklock(session->io_lock, COMPAT_CLOCK_ID, &ts_timeout);
-    } else if (!timeout) {
-        ret = pthread_mutex_trylock(session->io_lock);
-    } else { /* timeout == -1 */
-        ret = pthread_mutex_lock(session->io_lock);
-    }
-
-    if (ret) {
-        if ((ret == EBUSY) || (ret == ETIMEDOUT)) {
-            /* timeout */
-            return 0;
-        }
-
-        /* error */
-        ERR(session, "%s: failed to IO lock a session (%s).", func, strerror(ret));
-        return -1;
-    }
-
-    return 1;
-}
-
-int
-nc_session_io_unlock(struct nc_session *session, const char *func)
-{
-    int ret;
-
-    ret = pthread_mutex_unlock(session->io_lock);
-    if (ret) {
-        /* error */
-        ERR(session, "%s: failed to IO unlock a session (%s).", func, strerror(ret));
-        return -1;
-    }
-
-    return 1;
-}
-
-int
-nc_session_client_msgs_lock(struct nc_session *session, int *timeout, const char *func)
-{
-    int ret;
-    int32_t diff_msec;
-    struct timespec ts_timeout, ts_start;
-
-    assert(session->side == NC_CLIENT);
-
-    if (*timeout > 0) {
-        /* get current time */
-        nc_timeouttime_get(&ts_start, 0);
-
-        nc_timeouttime_get(&ts_timeout, *timeout);
-
-        ret = pthread_mutex_clocklock(&session->opts.client.msgs_lock, COMPAT_CLOCK_ID, &ts_timeout);
-        if (!ret) {
-            /* update timeout based on what was elapsed */
-            diff_msec = nc_timeouttime_cur_diff(&ts_start);
-            *timeout -= diff_msec;
-        }
-    } else if (!*timeout) {
-        ret = pthread_mutex_trylock(&session->opts.client.msgs_lock);
-    } else { /* timeout == -1 */
-        ret = pthread_mutex_lock(&session->opts.client.msgs_lock);
-    }
-
-    if (ret) {
-        if ((ret == EBUSY) || (ret == ETIMEDOUT)) {
-            /* timeout */
-            return 0;
-        }
-
-        /* error */
-        ERR(session, "%s: failed to MSGS lock a session (%s).", func, strerror(ret));
-        return -1;
-    }
-
-    return 1;
-}
-
-int
-nc_session_client_msgs_unlock(struct nc_session *session, const char *func)
-{
-    int ret;
-
-    assert(session->side == NC_CLIENT);
-
-    ret = pthread_mutex_unlock(&session->opts.client.msgs_lock);
-    if (ret) {
-        /* error */
-        ERR(session, "%s: failed to MSGS unlock a session (%s).", func, strerror(ret));
-        return -1;
-    }
-
-    return 1;
-}
-
-int
 nc_rwlock_lock(pthread_rwlock_t *rwlock, enum nc_rwlock_mode mode, int timeout, const char *func_name)
 {
     int ret;
@@ -909,7 +806,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
          * it. Also, avoid concurrent free by multiple threads of sessions that share the SSH session.
          */
         /* SESSION IO LOCK */
-        r = nc_session_io_lock(session, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
+        r = nc_mutex_lock(session->io_lock, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
 
         if (session->ti.libssh.next) {
             for (siter = session->ti.libssh.next; siter != session; siter = siter->ti.libssh.next) {
@@ -964,7 +861,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
 
         /* SESSION IO UNLOCK */
         if (r == 1) {
-            nc_session_io_unlock(session, __func__);
+            nc_mutex_unlock(session->io_lock, __func__);
         }
         break;
     }
@@ -1002,7 +899,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
 API void
 nc_session_free(struct nc_session *session, void (*data_free)(void *))
 {
-    int r, i, rpc_locked = 0, msgs_locked = 0, timeout;
+    int r, i, rpc_locked = 0, msgs_locked = 0;
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
     struct nc_msg_cont *contiter;
     struct ly_in *msg;
@@ -1016,14 +913,14 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
         /* CH LOCK */
-        pthread_mutex_lock(&session->opts.server.ch_lock);
+        nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__);
     }
 
     status = session->status;
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
         /* CH UNLOCK */
-        pthread_mutex_unlock(&session->opts.server.ch_lock);
+        nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
     }
 
     if (status == NC_STATUS_CLOSING) {
@@ -1066,10 +963,8 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     if (session->side == NC_CLIENT) {
-        timeout = NC_SESSION_FREE_LOCK_TIMEOUT;
-
         /* MSGS LOCK */
-        r = nc_session_client_msgs_lock(session, &timeout, __func__);
+        r = nc_mutex_lock(&session->opts.client.msgs_lock, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
         if (r == -1) {
             return;
         } else if (r) {
@@ -1090,7 +985,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
         if (msgs_locked) {
             /* MSGS UNLOCK */
-            nc_session_client_msgs_unlock(session, __func__);
+            nc_mutex_unlock(&session->opts.client.msgs_lock, __func__);
         }
 
         if ((session->status == NC_STATUS_RUNNING) && nc_session_is_connected(session)) {
@@ -1118,7 +1013,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
         /* CH LOCK */
-        pthread_mutex_lock(&session->opts.server.ch_lock);
+        nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__);
     }
 
     /* mark session for closing */
@@ -1141,7 +1036,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
         /* CH UNLOCK */
-        pthread_mutex_unlock(&session->opts.server.ch_lock);
+        nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
     }
 
     /* transport implementation cleanup */
@@ -1277,7 +1172,9 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
     }
 
     /* HELLO LOCK */
-    pthread_rwlock_rdlock(&server_opts.hello_lock);
+    if (nc_rwlock_lock(&server_opts.hello_lock, NC_RWLOCK_READ, NC_HELLO_LOCK_TIMEOUT, __func__) != 1) {
+        goto error;
+    }
 
     mod = ly_ctx_get_module_implemented(ctx, "ietf-netconf-with-defaults");
     if (mod) {
@@ -1421,7 +1318,7 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
     }
 
     /* HELLO UNLOCK */
-    pthread_rwlock_unlock(&server_opts.hello_lock);
+    nc_rwlock_unlock(&server_opts.hello_lock, __func__);
 
     /* ending NULL capability */
     add_cpblt(NULL, &cpblts, &size, &count);
@@ -1430,7 +1327,7 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
 
 unlock_error:
     /* HELLO UNLOCK */
-    pthread_rwlock_unlock(&server_opts.hello_lock);
+    nc_rwlock_unlock(&server_opts.hello_lock, __func__);
 
 error:
     free(cpblts);

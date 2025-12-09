@@ -100,6 +100,54 @@ extern struct nc_server_opts server_opts;
 #define NC_CH_CONNECT_TIMEOUT 500
 
 /**
+ * @brief Timeout in msec for acquiring the hello_lock
+ * (iterating through all YANG modules + building capability strings)
+ */
+#define NC_HELLO_LOCK_TIMEOUT 5000
+
+/**
+ * @brief Timeout in msec for acquiring the ch_threads_lock
+ * (simple array iteration and thread signaling operations)
+ */
+#define NC_CH_THREADS_LOCK_TIMEOUT 1000
+
+/**
+ * @brief Timeout in msec for acquiring the Call Home thread cond_lock
+ * (short critical sections used to signal thread termination and gate condition waits)
+ */
+#define NC_CH_COND_LOCK_TIMEOUT 1000
+
+/**
+ * @brief Timeout in msec for acquiring the certificate expiration notification lock
+ * (short critical sections for flag updates and condition signaling)
+ */
+#define NC_CERT_EXP_LOCK_TIMEOUT 1000
+
+/**
+ * @brief Timeout in msec for acquiring the config_lock
+ * (socket binding and Call Home client dispatching can involve network operations)
+ */
+#define NC_CONFIG_LOCK_TIMEOUT 10000
+
+/**
+ * @brief Timeout in msec for acquiring session's ch_lock
+ * (just simple session flag checks and updates)
+ */
+#define NC_SESSION_CH_LOCK_TIMEOUT 1000
+
+/**
+ * @brief Timeout in msec for acquiring the pollsession's lock
+ * (only O(n) array manipulation, where n is number of sessions (small usually))
+ */
+#define NC_PS_LOCK_TIMEOUT 1000
+
+/**
+ * @brief Timeout in msec for acquiring the notification status lock
+ * (short critical sections for incrementing/decrementing notification status)
+ */
+#define NC_SESSION_NTF_STATUS_LOCK_TIMEOUT 500
+
+/**
  * Number of sockets kept waiting to be accepted.
  */
 #define NC_REVERSE_QUEUE 5
@@ -1090,50 +1138,6 @@ struct nc_session *nc_new_session(NC_SIDE side, int shared_ti);
 int nc_session_rpc_lock(struct nc_session *session, int timeout, const char *func);
 
 int nc_session_rpc_unlock(struct nc_session *session, int timeout, const char *func);
-
-/**
- * @brief Lock IO lock on a session.
- *
- * @param[in] session Session to lock.
- * @param[in] timeout Timeout in msec to use.
- * @param[in] func Caller function for logging.
- * @return 1 on success;
- * @return 0 on timeout;
- * @return -1 on error.
- */
-int nc_session_io_lock(struct nc_session *session, int timeout, const char *func);
-
-/**
- * @brief Unlock IO lock on a session.
- *
- * @param[in] session Session to unlock.
- * @param[in] func Caller function for logging.
- * @return 1 on success;
- * @return -1 on error.
- */
-int nc_session_io_unlock(struct nc_session *session, const char *func);
-
-/**
- * @brief Lock MSGS lock on a session.
- *
- * @param[in] session Session to lock.
- * @param[in,out] timeout Timeout in msec to use. If positive and on successful lock, is updated based on what was elapsed.
- * @param[in] func Caller function for logging.
- * @return 1 on success;
- * @return 0 on timeout;
- * @return -1 on error.
- */
-int nc_session_client_msgs_lock(struct nc_session *session, int *timeout, const char *func);
-
-/**
- * @brief Unlock MSGS lock on a session.
- *
- * @param[in] session Session to unlock.
- * @param[in] func Caller function for logging.
- * @return 1 on success;
- * @return -1 on error.
- */
-int nc_session_client_msgs_unlock(struct nc_session *session, const char *func);
 
 /**
  * @brief Lock a pthread_rwlock with timeout support.
