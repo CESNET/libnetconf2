@@ -662,12 +662,14 @@ API void
 nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *session))
 {
     /* CONFIG LOCK */
-    pthread_rwlock_wrlock(&server_opts.config_lock);
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return;
+    }
 
     server_opts.user_verify_clb = verify_clb;
 
     /* CONFIG UNLOCK */
-    pthread_rwlock_unlock(&server_opts.config_lock);
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
 }
 
 int

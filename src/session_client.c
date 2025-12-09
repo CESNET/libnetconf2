@@ -2127,7 +2127,7 @@ recv_msg(struct nc_session *session, int timeout, NC_MSG_TYPE expected, struct l
     *message = NULL;
 
     /* MSGS LOCK */
-    r = nc_session_client_msgs_lock(session, &timeout, __func__);
+    r = nc_mutex_lock(&session->opts.client.msgs_lock, timeout, __func__);
     if (!r) {
         ret = NC_MSG_WOULDBLOCK;
         goto cleanup;
@@ -2189,7 +2189,7 @@ recv_msg(struct nc_session *session, int timeout, NC_MSG_TYPE expected, struct l
 
 cleanup_unlock:
     /* MSGS UNLOCK */
-    nc_session_client_msgs_unlock(session, __func__);
+    nc_mutex_unlock(&session->opts.client.msgs_lock, __func__);
 
 cleanup:
     if (ret == expected) {
@@ -3260,55 +3260,15 @@ nc_client_monitoring_get_session_fd(struct nc_session *session)
     return fd;
 }
 
-/**
- * @brief Lock the client monitoring data.
- *
- * @param[in] timeout Timeout in msec to use.
- *
- * @return 1 on success;
- * @return 0 on timeout;
- * @return -1 on error.
- */
-static int
-nc_client_monitoring_lock(int timeout)
-{
-    int r;
-    struct timespec ts;
-
-    if (timeout > 0) {
-        nc_timeouttime_get(&ts, timeout);
-        r = pthread_mutex_clocklock(&client_opts.monitoring_thread_data.lock, COMPAT_CLOCK_ID, &ts);
-    } else if (!timeout) {
-        r = pthread_mutex_trylock(&client_opts.monitoring_thread_data.lock);
-    } else {
-        r = pthread_mutex_lock(&client_opts.monitoring_thread_data.lock);
-    }
-
-    if (r) {
-        ERR(NULL, "Failed to lock the client monitoring data lock (%s).", strerror(r));
-
-        if ((r == EBUSY) || (r == ETIMEDOUT)) {
-            /* timeout */
-            return 0;
-        }
-
-        /* error */
-        return -1;
-    }
-
-    return 1;
-}
-
 int
 nc_client_monitoring_session_start(struct nc_session *session)
 {
-    int ret = 0, fd, r;
+    int ret = 0, fd;
     struct nc_client_monitoring_thread_arg *mtarg;
     void *tmp, *tmp2;
 
     /* LOCK */
-    r = nc_client_monitoring_lock(NC_CLIENT_MONITORING_LOCK_TIMEOUT);
-    if (r < 1) {
+    if (nc_mutex_lock(&client_opts.monitoring_thread_data.lock, NC_CLIENT_MONITORING_LOCK_TIMEOUT, __func__) != 1) {
         return 1;
     }
 
@@ -3344,20 +3304,19 @@ nc_client_monitoring_session_start(struct nc_session *session)
 
 cleanup:
     /* UNLOCK */
-    pthread_mutex_unlock(&client_opts.monitoring_thread_data.lock);
+    nc_mutex_unlock(&client_opts.monitoring_thread_data.lock, __func__);
     return ret;
 }
 
 void
 nc_client_monitoring_session_stop(struct nc_session *session, int lock)
 {
-    int i, r;
+    int i;
     struct nc_client_monitoring_thread_arg *mtarg;
 
     if (lock) {
         /* LOCK */
-        r = nc_client_monitoring_lock(NC_CLIENT_MONITORING_LOCK_TIMEOUT);
-        if (r < 1) {
+        if (nc_mutex_lock(&client_opts.monitoring_thread_data.lock, NC_CLIENT_MONITORING_LOCK_TIMEOUT, __func__) != 1) {
             return;
         }
     }
@@ -3399,7 +3358,7 @@ nc_client_monitoring_session_stop(struct nc_session *session, int lock)
 cleanup:
     if (lock) {
         /* UNLOCK */
-        pthread_mutex_unlock(&mtarg->lock);
+        nc_mutex_unlock(&mtarg->lock, __func__);
     }
 }
 
@@ -3421,8 +3380,7 @@ nc_client_monitoring_thread(void *arg)
     nc_client_set_thread_context(arg);
 
     /* LOCK */
-    r = nc_client_monitoring_lock(NC_CLIENT_MONITORING_LOCK_TIMEOUT);
-    if (r < 1) {
+    if (nc_mutex_lock(&client_opts.monitoring_thread_data.lock, NC_CLIENT_MONITORING_LOCK_TIMEOUT, __func__) != 1) {
         goto cleanup;
     }
     locked = 1;
@@ -3473,8 +3431,7 @@ next_iter:
         usleep(NC_CLIENT_MONITORING_BACKOFF * 1000);
 
         /* LOCK */
-        r = nc_client_monitoring_lock(NC_CLIENT_MONITORING_LOCK_TIMEOUT);
-        if (r < 1) {
+        if (nc_mutex_lock(&client_opts.monitoring_thread_data.lock, NC_CLIENT_MONITORING_LOCK_TIMEOUT, __func__) != 1) {
             goto cleanup;
         }
         locked = 1;
@@ -3498,8 +3455,7 @@ nc_client_monitoring_thread_start(nc_client_monitoring_clb monitoring_clb, void 
     NC_CHECK_ARG_RET(NULL, monitoring_clb, 1);
 
     /* LOCK */
-    r = nc_client_monitoring_lock(NC_CLIENT_MONITORING_LOCK_TIMEOUT);
-    if (r < 1) {
+    if (nc_mutex_lock(&client_opts.monitoring_thread_data.lock, NC_CLIENT_MONITORING_LOCK_TIMEOUT, __func__) != 1) {
         return 1;
     }
 
@@ -3533,7 +3489,7 @@ nc_client_monitoring_thread_start(nc_client_monitoring_clb monitoring_clb, void 
 
 cleanup:
     /* UNLOCK */
-    pthread_mutex_unlock(&client_opts.monitoring_thread_data.lock);
+    nc_mutex_unlock(&client_opts.monitoring_thread_data.lock, __func__);
     return ret;
 }
 
@@ -3545,8 +3501,7 @@ nc_client_monitoring_thread_stop(void)
     struct nc_client_monitoring_thread_arg *mtarg;
 
     /* LOCK */
-    r = nc_client_monitoring_lock(NC_CLIENT_MONITORING_LOCK_TIMEOUT);
-    if (r < 1) {
+    if (nc_mutex_lock(&client_opts.monitoring_thread_data.lock, NC_CLIENT_MONITORING_LOCK_TIMEOUT, __func__) != 1) {
         return;
     }
 
@@ -3554,7 +3509,7 @@ nc_client_monitoring_thread_stop(void)
         ERR(NULL, "Client monitoring thread is not running.");
 
         /* UNLOCK */
-        pthread_mutex_unlock(&client_opts.monitoring_thread_data.lock);
+        nc_mutex_unlock(&client_opts.monitoring_thread_data.lock, __func__);
         return;
     }
 
@@ -3577,8 +3532,7 @@ nc_client_monitoring_thread_stop(void)
     }
 
     /* LOCK */
-    r = nc_client_monitoring_lock(NC_CLIENT_MONITORING_LOCK_TIMEOUT);
-    if (r < 1) {
+    if (nc_mutex_lock(&client_opts.monitoring_thread_data.lock, NC_CLIENT_MONITORING_LOCK_TIMEOUT, __func__) != 1) {
         return;
     }
 
