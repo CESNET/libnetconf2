@@ -757,4 +757,13 @@ time_t nc_tls_get_cert_exp_time_wrap(void *cert);
  */
 void nc_tls_keylog_session_wrap(void *session);
 
+/**
+ * @brief Generate random bytes.
+ *
+ * @param[in] buf Buffer to fill with random bytes.
+ * @param[in] num Number of random bytes to generate. Caller is responsible for ensuring the buffer is large enough.
+ * @return 0 on success, 1 on error.
+ */
+int nc_tls_generate_random_bytes_wrap(void *buf, size_t num);
+
 #endif

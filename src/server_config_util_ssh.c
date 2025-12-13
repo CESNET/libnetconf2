@@ -495,14 +495,30 @@ _nc_server_config_add_ssh_user_password(const struct ly_ctx *ctx, const char *tr
         const char *password, struct lyd_node **config)
 {
     int ret = 0;
+    size_t i;
     char *hashed_pw = NULL;
-    const char *salt = "$6$idsizuippipk$";
+    char salt[3 /* "$6$" */ + 16 /* random chars */ + 1 /* trailing '$' */ + 1 /* NUL */];
     struct crypt_data *cdata = NULL;
-
-    NC_CHECK_ARG_RET(NULL, ctx, tree_path, password, config, 1);
+    unsigned char rnd[16];
+    static const char itoa64[] = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
     cdata = calloc(1, sizeof *cdata);
     NC_CHECK_ERRMEM_GOTO(!cdata, ret = 1, cleanup);
+
+    /* generate a random salt compatible with crypt SHA-512: "$6$<salt>$" */
+    if (nc_tls_generate_random_bytes_wrap(rnd, sizeof rnd)) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    salt[0] = '$';
+    salt[1] = '6';
+    salt[2] = '$';
+    for (i = 0; i < sizeof rnd; ++i) {
+        salt[3 + i] = itoa64[rnd[i] % 64];
+    }
+    salt[3 + sizeof rnd] = '$';
+    salt[3 + sizeof rnd + 1] = '\0';
 
     hashed_pw = crypt_r(password, salt, cdata);
     if (!hashed_pw) {

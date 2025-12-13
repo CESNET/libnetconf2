@@ -40,6 +40,7 @@
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
+#include <openssl/rand.h>
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
@@ -1974,4 +1975,15 @@ nc_tls_keylog_session_wrap(void *session)
     }
 
     SSL_CTX_set_keylog_callback(ctx, nc_tls_keylog_write_line);
+}
+
+int
+nc_tls_generate_random_bytes_wrap(void *buf, size_t num)
+{
+    if (RAND_bytes(buf, (int)num) != 1) {
+        ERR(NULL, "Generating random bytes failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        return 1;
+    }
+
+    return 0;
 }
