@@ -2478,3 +2478,26 @@ nc_tls_keylog_session_wrap(void *session)
 {
     mbedtls_ssl_set_export_keys_cb(session, nc_tls_keylog_write_line, NULL);
 }
+
+int
+nc_tls_generate_random_bytes_wrap(void *buf, size_t num)
+{
+    int rc = 0;
+    mbedtls_ctr_drbg_context *ctr_drbg = NULL;
+    mbedtls_entropy_context *entropy = NULL;
+
+    rc = nc_tls_rng_new(&ctr_drbg, &entropy);
+    if (rc) {
+        goto cleanup;
+    }
+
+    rc = mbedtls_ctr_drbg_random(ctr_drbg, buf, num);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Creating random bytes failed");
+        goto cleanup;
+    }
+
+cleanup:
+    nc_tls_rng_destroy(ctr_drbg, entropy);
+    return rc;
+}
