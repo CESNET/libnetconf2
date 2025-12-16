@@ -38,6 +38,8 @@
 #include "session_p.h"
 #include "session_wrapper.h"
 
+#include <libssh/libssh.h>
+
 #include <mbedtls/base64.h>
 #include <mbedtls/bignum.h>
 #include <mbedtls/ctr_drbg.h>
@@ -1411,28 +1413,79 @@ nc_tls_import_cert_file_wrap(const char *cert_path)
     return c;
 }
 
-char *
-nc_tls_export_privkey_pem_wrap(void *pkey)
+/**
+ * @brief Convert a PKCS#1/SEC1 private key to OpenSSH format.
+ *
+ * @param[in] pk Private key in PKCS#1/SEC1 PEM format.
+ * @param[out] privkey Private key in OpenSSH format.
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_tls_privkey_export_openssh(const char *pk, char **privkey)
 {
-    int rc;
-    char *pem;
+    int rc = 0;
+    ssh_key sshkey = NULL;
+
+    /* load the SEC1/PKCS#1 using libssh */
+    if (ssh_pki_import_privkey_base64(pk, NULL, NULL, NULL, &sshkey)) {
+        ERR(NULL, "Importing the private key to libssh failed (%s).", ssh_get_error(NULL));
+        rc = 1;
+        goto cleanup;
+    }
+
+    /* export to OpenSSH format */
+    if (ssh_pki_export_privkey_base64_format(sshkey, NULL, NULL, NULL, privkey, SSH_FILE_FORMAT_OPENSSH)) {
+        ERR(NULL, "Exporting the private key to OpenSSH format failed (%s).", ssh_get_error(NULL));
+        rc = 1;
+        goto cleanup;
+    }
+
+cleanup:
+    ssh_key_free(sshkey);
+    return rc;
+}
+
+int
+nc_tls_privkey_export_wrap(void *pkey, enum nc_privkey_format format, char **privkey)
+{
+    int r, rc = 0;
     size_t size = 128;
+    char *pk;
 
-    pem = malloc(size);
-    NC_CHECK_ERRMEM_RET(!pem, NULL);
+    if (format == NC_PRIVKEY_FORMAT_UNKNOWN) {
+        ERRINT;
+        return 1;
+    }
 
-    while ((rc = mbedtls_pk_write_key_pem(pkey, (unsigned char *)pem, size)) == MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+    /* use mbedtls_pk_write_key_pem to write either PKCS#1 or SEC1 format */
+    pk = malloc(size);
+    NC_CHECK_ERRMEM_RET(!pk, 1);
+
+    /* try to write the key, reallocating if the buffer is too small */
+    while ((r = mbedtls_pk_write_key_pem(pkey,
+            (unsigned char *)pk, size)) == MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
         size <<= 1;
-        pem = nc_realloc(pem, size);
-        NC_CHECK_ERRMEM_RET(!pem, NULL);
+        pk = nc_realloc(pk, size);
+        NC_CHECK_ERRMEM_RET(!pk, 1);
     }
-    if (rc < 0) {
-        nc_mbedtls_strerr(NULL, rc, "Exporting private key to PEM format failed");
-        free(pem);
-        return NULL;
+    if (r < 0) {
+        nc_mbedtls_strerr(NULL, r, "Exporting private key to PEM format failed");
+        rc = 1;
+        goto cleanup;
     }
 
-    return pem;
+    if (format == NC_PRIVKEY_FORMAT_OPENSSH) {
+        /* convert it to OpenSSH format */
+        rc = nc_tls_privkey_export_openssh(pk, privkey);
+    } else {
+        /* return the PEM as is (PKCS#1 or SEC1), mbedtls can not do NC_PRIVKEY_FORMAT_X509 */
+        *privkey = pk;
+        pk = NULL;
+    }
+
+cleanup:
+    free(pk);
+    return rc;
 }
 
 char *

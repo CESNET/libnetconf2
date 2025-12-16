@@ -76,8 +76,9 @@ struct nc_tls_verify_cb_data {
     void *chain;                        /**< Certificate chain used to verify the client cert. */
 };
 
-/* forward declaration */
+/* forward declarations */
 enum nc_tls_version;
+enum nc_privkey_format;
 
 /**
  * @brief Initializes the TLS backend.
@@ -592,12 +593,14 @@ void * nc_tls_import_privkey_file_wrap(const char *privkey_path);
 void * nc_tls_import_cert_file_wrap(const char *cert_path);
 
 /**
- * @brief Export a private key to a PEM string.
+ * @brief Export a private key to a specific format.
  *
  * @param[in] pkey Private key.
- * @return PEM string on success, NULL on fail.
+ * @param[in] format Desired private key format.
+ * @param[out] privkey Exported private key string (PEM).
+ * @return 0 on success, non-zero on fail.
  */
-char * nc_tls_export_privkey_pem_wrap(void *pkey);
+int nc_tls_privkey_export_wrap(void *pkey, enum nc_privkey_format format, char **privkey);
 
 /**
  * @brief Export a certificate to a PEM string.
