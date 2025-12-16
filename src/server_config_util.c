@@ -794,42 +794,37 @@ nc_server_config_util_get_privkey_format(const char *privkey, enum nc_privkey_fo
     return 0;
 }
 
+/**
+ * @brief Get private key using the TLS backend's functions.
+ *
+ * @param[in] privkey_path Path to the private key file.
+ * @param[out] pkey TLS backend's underlying private key structure.
+ * @return 0 on success, 1 on failure.
+ */
 static int
-nc_server_config_util_get_privkey_libtls(const char *privkey_path, char **privkey, void **pkey)
+nc_server_config_util_get_privkey_libtls(const char *privkey_path, void **pkey)
 {
-    void *pkey_tmp;
-    char *privkey_tmp;
+    *pkey = NULL;
 
-    NC_CHECK_ARG_RET(NULL, privkey_path, privkey, pkey, 1);
-
-    *privkey = *pkey = NULL;
-
-    pkey_tmp = nc_tls_import_privkey_file_wrap(privkey_path);
-    if (!pkey_tmp) {
-        return 1;
-    }
-
-    privkey_tmp = nc_tls_export_privkey_pem_wrap(pkey_tmp);
-    if (!privkey_tmp) {
-        nc_tls_privkey_destroy_wrap(pkey_tmp);
-        return 1;
-    }
-
-    *privkey = privkey_tmp;
-    *pkey = pkey_tmp;
-    return 0;
+    *pkey = nc_tls_import_privkey_file_wrap(privkey_path);
+    return *pkey ? 0 : 1;
 }
 
+/**
+ * @brief Get private key using libssh functions.
+ *
+ * @param[in] privkey_path Path to the private key file.
+ * @param[out] pkey TLS backend's underlying private key structure.
+ * @return 0 on success, 1 on failure.
+ */
 static int
-nc_server_config_util_get_privkey_libssh(const char *privkey_path, char **privkey, void **pkey)
+nc_server_config_util_get_privkey_libssh(const char *privkey_path, void **pkey)
 {
     int ret = 0;
     ssh_key key = NULL;
-    void *pkey_tmp = NULL;
-    char *privkey_tmp = NULL;
+    char *privkey_buf = NULL;
 
-    NC_CHECK_ARG_RET(NULL, privkey_path, privkey, pkey, 1);
-
+    /* import the OpenSSH private key using libssh */
     ret = ssh_pki_import_privkey_file(privkey_path, NULL, NULL, NULL, &key);
     if (ret) {
         ERR(NULL, "Importing privkey from file \"%s\" failed.", privkey_path);
@@ -838,45 +833,43 @@ nc_server_config_util_get_privkey_libssh(const char *privkey_path, char **privke
     }
 
     /* export the key in PEM */
-    ret = ssh_pki_export_privkey_base64(key, NULL, NULL, NULL, &privkey_tmp);
+    ret = ssh_pki_export_privkey_base64(key, NULL, NULL, NULL, &privkey_buf);
     if (ret) {
         ERR(NULL, "Exporting privkey to base64 failed.");
         goto cleanup;
     }
 
-    pkey_tmp = nc_tls_pem_to_privkey_wrap(privkey_tmp);
-    if (!pkey_tmp) {
-        free(privkey_tmp);
+    /* convert the base64 PEM to libtls private key representation */
+    *pkey = nc_tls_pem_to_privkey_wrap(privkey_buf);
+    if (!*pkey) {
         ret = 1;
         goto cleanup;
     }
 
-    *privkey = privkey_tmp;
-    *pkey = pkey_tmp;
-
 cleanup:
+    free(privkey_buf);
     ssh_key_free(key);
     return ret;
 }
 
 static int
-nc_server_config_util_pem_strip_header_footer(const char *pem, char **privkey)
+nc_server_config_util_privkey_strip_header_footer(const char *orig_privkey, char **privkey)
 {
     const char *header, *footer;
 
-    if (!strncmp(pem, NC_PKCS8_PRIVKEY_HEADER, strlen(NC_PKCS8_PRIVKEY_HEADER))) {
+    if (!strncmp(orig_privkey, NC_PKCS8_PRIVKEY_HEADER, strlen(NC_PKCS8_PRIVKEY_HEADER))) {
         /* it's PKCS8 (X.509) private key */
         header = NC_PKCS8_PRIVKEY_HEADER;
         footer = NC_PKCS8_PRIVKEY_FOOTER;
-    } else if (!strncmp(pem, NC_OPENSSH_PRIVKEY_HEADER, strlen(NC_OPENSSH_PRIVKEY_HEADER))) {
+    } else if (!strncmp(orig_privkey, NC_OPENSSH_PRIVKEY_HEADER, strlen(NC_OPENSSH_PRIVKEY_HEADER))) {
         /* it's OpenSSH private key */
         header = NC_OPENSSH_PRIVKEY_HEADER;
         footer = NC_OPENSSH_PRIVKEY_FOOTER;
-    } else if (!strncmp(pem, NC_PKCS1_RSA_PRIVKEY_HEADER, strlen(NC_PKCS1_RSA_PRIVKEY_HEADER))) {
+    } else if (!strncmp(orig_privkey, NC_PKCS1_RSA_PRIVKEY_HEADER, strlen(NC_PKCS1_RSA_PRIVKEY_HEADER))) {
         /* it's RSA privkey in PKCS1 format */
         header = NC_PKCS1_RSA_PRIVKEY_HEADER;
         footer = NC_PKCS1_RSA_PRIVKEY_FOOTER;
-    } else if (!strncmp(pem, NC_SEC1_EC_PRIVKEY_HEADER, strlen(NC_SEC1_EC_PRIVKEY_HEADER))) {
+    } else if (!strncmp(orig_privkey, NC_SEC1_EC_PRIVKEY_HEADER, strlen(NC_SEC1_EC_PRIVKEY_HEADER))) {
         /* it's EC privkey in SEC1 format */
         header = NC_SEC1_EC_PRIVKEY_HEADER;
         footer = NC_SEC1_EC_PRIVKEY_FOOTER;
@@ -885,7 +878,7 @@ nc_server_config_util_pem_strip_header_footer(const char *pem, char **privkey)
     }
 
     /* make a copy without the header and footer */
-    *privkey = strndup(pem + strlen(header), strlen(pem) - strlen(header) - strlen(footer));
+    *privkey = strndup(orig_privkey + strlen(header), strlen(orig_privkey) - strlen(header) - strlen(footer));
     NC_CHECK_ERRMEM_RET(!*privkey, 1);
 
     return 0;
@@ -930,13 +923,11 @@ nc_server_config_util_get_privkey(const char *privkey_path, enum nc_privkey_form
     case NC_PRIVKEY_FORMAT_EC:
     case NC_PRIVKEY_FORMAT_X509:
         /* the TLS lib can do this */
-        ret = nc_server_config_util_get_privkey_libtls(privkey_path, &priv, pkey);
+        ret = nc_server_config_util_get_privkey_libtls(privkey_path, pkey);
         break;
     case NC_PRIVKEY_FORMAT_OPENSSH:
         /* need the help of libssh */
-        ret = nc_server_config_util_get_privkey_libssh(privkey_path, &priv, pkey);
-        /* if the function returned successfully, the key is no longer OpenSSH, it was converted to x509 */
-        *privkey_format = NC_PRIVKEY_FORMAT_X509;
+        ret = nc_server_config_util_get_privkey_libssh(privkey_path, pkey);
         break;
     default:
         ERR(NULL, "Private key format not recognized.");
@@ -947,17 +938,26 @@ nc_server_config_util_get_privkey(const char *privkey_path, enum nc_privkey_form
         goto cleanup;
     }
 
-    /* parsing may have changed its type, get it again */
+    /* export the private key to its original format type,
+     * all of this was done to avoid having to parse the private key ourselves
+     * and since we have a "pkey" we can be sure, that the private key is valid */
+    ret = nc_tls_privkey_export_wrap(*pkey, *privkey_format, &priv);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* get the privkey format again from the exported private key,
+     * it should match the previous one, but in case it doesn't,
+     * we can still at least store the 'current' one in YANG and use it */
     ret = nc_server_config_util_get_privkey_format(priv, privkey_format);
     if (ret) {
-        ERR(NULL, "Getting private key format from file \"%s\" failed.", privkey_path);
+        ERR(NULL, "Private key format \"%s\" not supported.", priv);
         goto cleanup;
     }
 
     /* strip private key's header and footer */
-    ret = nc_server_config_util_pem_strip_header_footer(priv, privkey);
+    ret = nc_server_config_util_privkey_strip_header_footer(priv, privkey);
     if (ret) {
-        ERR(NULL, "Stripping header and footer from private key \"%s\" failed.", privkey_path);
         goto cleanup;
     }
 

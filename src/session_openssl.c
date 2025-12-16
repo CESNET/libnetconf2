@@ -37,7 +37,10 @@
 #include "session_p.h"
 #include "session_wrapper.h"
 
+#include <libssh/libssh.h>
+
 #include <openssl/bio.h>
+#include <openssl/encoder.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/ssl.h>
@@ -1198,32 +1201,119 @@ nc_tls_import_cert_file_wrap(const char *cert_path)
     return cert;
 }
 
-char *
-nc_tls_export_privkey_pem_wrap(void *pkey)
+/**
+ * @brief Export OpenSSL's EVP_PKEY to OpenSSH private key format.
+ *
+ * @param[in] pkey OpenSSL EVP_PKEY.
+ * @param[out] privkey Exported private key in OpenSSH format.
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_tls_privkey_export_openssh(EVP_PKEY *pkey, char **privkey)
 {
+    int rc = 0;
     BIO *bio = NULL;
     char *pem = NULL;
+    ssh_key sshkey = NULL;
 
     bio = BIO_new(BIO_s_mem());
     if (!bio) {
         ERR(NULL, "Creating new bio failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        goto cleanup;
+        return 1;
     }
 
+    /* export the privkey in PEM format first */
     if (!PEM_write_bio_PrivateKey(bio, pkey, NULL, NULL, 0, NULL, NULL)) {
-        ERR(NULL, "Exporting the private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        ERR(NULL, "Exporting the private key to PEM format failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        rc = 1;
         goto cleanup;
     }
 
     pem = malloc(BIO_number_written(bio) + 1);
-    NC_CHECK_ERRMEM_GOTO(!pem, , cleanup);
-
+    NC_CHECK_ERRMEM_GOTO(!pem, rc = 1, cleanup);
     BIO_read(bio, pem, BIO_number_written(bio));
     pem[BIO_number_written(bio)] = '\0';
 
+    /* load the PEM using libssh */
+    if (ssh_pki_import_privkey_base64(pem, NULL, NULL, NULL, &sshkey)) {
+        ERR(NULL, "Importing the private key to libssh failed (%s).", ssh_get_error(NULL));
+        rc = 1;
+        goto cleanup;
+    }
+
+    /* export to OpenSSH format */
+    if (ssh_pki_export_privkey_base64_format(sshkey, NULL, NULL, NULL, privkey, SSH_FILE_FORMAT_OPENSSH)) {
+        ERR(NULL, "Exporting the private key to OpenSSH format failed (%s).", ssh_get_error(NULL));
+        rc = 1;
+        goto cleanup;
+    }
+
 cleanup:
     BIO_free(bio);
-    return pem;
+    free(pem);
+    ssh_key_free(sshkey);
+    return rc;
+}
+
+int
+nc_tls_privkey_export_wrap(void *pkey, enum nc_privkey_format format, char **privkey)
+{
+    int rc = 0;
+    BIO *bio = NULL;
+    OSSL_ENCODER_CTX *ctx = NULL;
+    const char *output_structure;
+
+    bio = BIO_new(BIO_s_mem());
+    if (!bio) {
+        ERR(NULL, "Creating new bio failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        return 1;
+    }
+
+    switch (format) {
+    case NC_PRIVKEY_FORMAT_RSA:
+        output_structure = "type-specific";
+        break;
+    case NC_PRIVKEY_FORMAT_EC:
+        output_structure = "type-specific";
+        break;
+    case NC_PRIVKEY_FORMAT_X509:
+        output_structure = "PrivateKeyInfo";
+        break;
+    case NC_PRIVKEY_FORMAT_OPENSSH:
+        /* we need to use libssh for this */
+        rc = nc_tls_privkey_export_openssh(pkey, privkey);
+        goto cleanup;
+    default:
+        ERRINT;
+        rc = 1;
+        goto cleanup;
+    }
+
+    ctx = OSSL_ENCODER_CTX_new_for_pkey(pkey,
+            OSSL_KEYMGMT_SELECT_PRIVATE_KEY | OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS,
+            "PEM", output_structure, NULL);
+
+    if (!ctx) {
+        ERR(NULL, "Creating encoder context failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        rc = 1;
+        goto cleanup;
+    }
+
+    if (!OSSL_ENCODER_to_bio(ctx, bio)) {
+        ERR(NULL, "Exporting the private key failed (%s).", ERR_reason_error_string(ERR_get_error()));
+        rc = 1;
+        goto cleanup;
+    }
+
+    *privkey = malloc(BIO_number_written(bio) + 1);
+    NC_CHECK_ERRMEM_GOTO(!*privkey, rc = 1, cleanup);
+    BIO_read(bio, *privkey, BIO_number_written(bio));
+    (*privkey)[BIO_number_written(bio)] = '\0';
+
+cleanup:
+    OSSL_ENCODER_CTX_free(ctx);
+    BIO_free(bio);
+    return rc;
 }
 
 char *
