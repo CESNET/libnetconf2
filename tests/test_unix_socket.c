@@ -21,6 +21,7 @@
 #include <pthread.h>
 #include <pwd.h>
 #include <setjmp.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -475,6 +476,7 @@ test_cleartext_path(void **state)
 int
 main(void)
 {
+    struct sigaction action = {0};
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup(test_connect, setup_local_f),
         cmocka_unit_test_setup(test_invalid_user, setup_local_f),
@@ -485,5 +487,10 @@ main(void)
     };
 
     setenv("CMOCKA_TEST_ABORT", "1", 1);
+
+    /* ignore SIGPIPE */
+    action.sa_handler = SIG_IGN;
+    sigaction(SIGPIPE, &action, NULL);
+
     return cmocka_run_group_tests(tests, setup_glob_f, ln2_glob_test_teardown);
 }
