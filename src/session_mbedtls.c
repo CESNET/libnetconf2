@@ -1426,6 +1426,11 @@ nc_tls_privkey_export_openssh(const char *pk, char **privkey)
     int rc = 0;
     ssh_key sshkey = NULL;
 
+    *privkey = NULL;
+
+    /* older versions of libssh (< v0.11.0) do not support exporting to OpenSSH format,
+     * signal this to the caller by returning success with NULL privkey */
+#if (LIBSSH_VERSION_MAJOR > 0) || (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR >= 11)
     /* load the SEC1/PKCS#1 using libssh */
     if (ssh_pki_import_privkey_base64(pk, NULL, NULL, NULL, &sshkey)) {
         ERR(NULL, "Importing the private key to libssh failed (%s).", ssh_get_error(NULL));
@@ -1439,6 +1444,7 @@ nc_tls_privkey_export_openssh(const char *pk, char **privkey)
         rc = 1;
         goto cleanup;
     }
+#endif // (LIBSSH_VERSION_MAJOR > 0) || (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR >= 11)
 
 cleanup:
     ssh_key_free(sshkey);
@@ -1475,8 +1481,16 @@ nc_tls_privkey_export_wrap(void *pkey, enum nc_privkey_format format, char **pri
     }
 
     if (format == NC_PRIVKEY_FORMAT_OPENSSH) {
-        /* convert it to OpenSSH format */
         rc = nc_tls_privkey_export_openssh(pk, privkey);
+        if (rc) {
+            goto cleanup;
+        }
+
+        if (!*privkey) {
+            /* privkey not converted, just use the PEM as is (PKCS#1 or SEC1) */
+            *privkey = pk;
+            pk = NULL;
+        }
     } else {
         /* return the PEM as is (PKCS#1 or SEC1), mbedtls can not do NC_PRIVKEY_FORMAT_X509 */
         *privkey = pk;

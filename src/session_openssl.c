@@ -1217,6 +1217,11 @@ nc_tls_privkey_export_openssh(EVP_PKEY *pkey, char **privkey)
     char *pem = NULL;
     ssh_key sshkey = NULL;
 
+    *privkey = NULL;
+
+    /* older versions of libssh (< v0.11.0) do not support exporting to OpenSSH format,
+     * signal this to the caller by returning success with NULL privkey */
+#if (LIBSSH_VERSION_MAJOR > 0) || (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR >= 11)
     bio = BIO_new(BIO_s_mem());
     if (!bio) {
         ERR(NULL, "Creating new bio failed (%s).", ERR_reason_error_string(ERR_get_error()));
@@ -1248,6 +1253,7 @@ nc_tls_privkey_export_openssh(EVP_PKEY *pkey, char **privkey)
         rc = 1;
         goto cleanup;
     }
+#endif
 
 cleanup:
     BIO_free(bio);
@@ -1262,7 +1268,7 @@ nc_tls_privkey_export_wrap(void *pkey, enum nc_privkey_format format, char **pri
     int rc = 0;
     BIO *bio = NULL;
     OSSL_ENCODER_CTX *ctx = NULL;
-    const char *output_structure;
+    const char *output_structure = NULL;
 
     bio = BIO_new(BIO_s_mem());
     if (!bio) {
@@ -1281,12 +1287,22 @@ nc_tls_privkey_export_wrap(void *pkey, enum nc_privkey_format format, char **pri
         output_structure = "PrivateKeyInfo";
         break;
     case NC_PRIVKEY_FORMAT_OPENSSH:
-        /* we need to use libssh for this */
         rc = nc_tls_privkey_export_openssh(pkey, privkey);
-        goto cleanup;
+        if (rc) {
+            goto cleanup;
+        }
+
+        if (!*privkey) {
+            /* privkey not converted, just convert it to PrivateKeyInfo format */
+            output_structure = "PrivateKeyInfo";
+        }
+        break;
     default:
         ERRINT;
         rc = 1;
+        break;
+    }
+    if (!output_structure) {
         goto cleanup;
     }
 
