@@ -139,7 +139,7 @@ jobs:
         if: ${{ matrix.config.name == 'Coverity' }}
 
       - name: Upload to Codecov.io
-        shell: bash
-        working-directory: ${{ github.workspace }}/build
-        run: bash <(curl -s https://codecov.io/bash)
+        uses: codecov/codecov-action@main
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
         if: ${{ matrix.config.name == 'Codecov' }}
