@@ -268,16 +268,16 @@ The second API is [nc_server_config_load_modules](https://netopeer.liberouter.or
 - **ietf-crypto-types**: cleartext-passwords ✔, cleartext-private-keys ✔, private-key-encryption ✘, csr-generation ✘, p10-csr-format ✘, certificate-expiration-notification **?**, encrypted-passwords ✘, hidden-symmetric-keys ✘, encrypted-symmetric-keys ✘, hidden-private-keys ✘, encrypted-private-keys ✘, one-symmetric-key-format ✘, one-asymmetric-key-format ✘, symmetrically-encrypted-value-format ✘, asymmetrically-encrypted-value-format ✘, cms-enveloped-data-format ✘, cms-encrypted-data-format ✘, cleartext-symmetric-keys ✘,
 - **ietf-keystore**: central-keystore-supported ✔, inline-definitions-supported ✔, asymmetric-keys ✔, symmetric-keys ✘,
 - **ietf-netconf-server**: ssh-listen ✔, tls-listen ✔, ssh-call-home ✔, tls-call-home ✔, central-netconf-server-supported ✔,
-- **ietf-ssh-common**: transport-params ✔, ssh-x509-certs ✘, public-key-generation ✘,
+- **ietf-ssh-common**: algorithm-discovery ✔, transport-params ✔, ssh-x509-certs ✘, asymmetric-key-pair-generation ✘,
 - **ietf-ssh-server**: local-users-supported **?**, local-user-auth-publickey ✔, local-user-auth-password ✔, local-user-auth-none ✔, ssh-server-keepalives ✘, local-user-auth-hostbased ✘,
 - **ietf-tcp-client**: tcp-client-keepalives ✔, proxy-connect ✘, socks5-gss-api ✘, socks5-username-password ✘, local-binding-supported ✔,
-- **ietf-tcp-common**: transport-params ✔, ssh-x509-certs ✘, public-key-generation ✘,
+- **ietf-tcp-common**: keepalives-supported ✔,
 - **ietf-tcp-server**: tcp-server-keepalives ✔,
-- **ietf-tls-common**: tls10 ✔, tls11 ✔, tls12 ✔, tls13 ✔, hello-params ✔, public-key-generation ✘,
+- **ietf-tls-common**: algorithm-discovery ✔, tls12 ✔, tls13 ✔, hello-params ✔, asymmetric-key-pair-generation ✘,
 - **ietf-tls-server**: server-ident-x509-cert ✔, client-auth-supported ✔, client-auth-x509-cert ✔, tls-server-keepalives ✘, server-ident-raw-public-key ✘, server-ident-tls12-psk ✘, server-ident-tls13-epsk ✘, client-auth-raw-public-key ✘, client-auth-tls12-psk ✘, client-auth-tls13-epsk ✘,
 - **ietf-truststore**: central-truststore-supported ✔, inline-definitions-supported ✔, certificates ✔, public-keys ✔,
 - **ietf-x509-cert-to-name**: no features,
-- **libnetconf2-netconf-server**: no features.
+- **libnetconf2-netconf-server**: unix-socket-path **?**.
 
 The following features can be enabled/disabled to influence the behaviour of the `libnetconf2` NETCONF server:
 

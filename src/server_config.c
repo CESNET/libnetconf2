@@ -514,14 +514,14 @@ nc_server_config_load_modules(struct ly_ctx **ctx)
     const char *ietf_keystore[] = {"central-keystore-supported", "inline-definitions-supported", "asymmetric-keys", NULL};
     /* all features */
     const char *ietf_truststore[] = {"central-truststore-supported", "inline-definitions-supported", "certificates", "public-keys", NULL};
-    /* no public-key-generation */
+    /* no asymmetric-key-pair-generation */
     const char *ietf_tls_common[] = {"algorithm-discovery", "tls12", "tls13", "hello-params", NULL};
     /* no tls-server-keepalives, server-ident-raw-public-key, server-ident-tls12-psk, server-ident-tls13-epsk,
      * client-auth-raw-public-key, client-auth-tls12-psk, client-auth-tls13-epsk */
     const char *ietf_tls_server[] = {"server-ident-x509-cert", "client-auth-supported", "client-auth-x509-cert", NULL};
     /* all features */
     const char *iana_tls_cipher_suite_algs[] = {NULL};
-    /* all features */
+    /* no unix-socket-path */
     const char *libnetconf2_netconf_server[] = {NULL};
 
     const char *module_names[] = {
