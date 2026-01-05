@@ -2219,7 +2219,9 @@ nc_ps_poll_sess(struct nc_ps_session *ps_session, time_t now_mono)
 
             /* CONFIG READ LOCK */
             if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+                ps_session->state = NC_PS_STATE_NONE;
                 ret = NC_PSPOLL_ERROR;
+                break;
             } else {
                 ret = nc_ps_poll_session_io(ps_session->session, NC_SESSION_LOCK_TIMEOUT, now_mono, msg);
                 /* CONFIG UNLOCK */
@@ -4358,7 +4360,10 @@ nc_server_notif_cert_exp_thread(void *arg)
             /* config changed, reload the certificates and intervals */
             nc_server_notif_cert_exp_data_destroy(exp_dates, exp_date_count, intervals);
 
-            nc_server_notif_cert_exp_intervals_get(default_intervals, 3, &intervals, &interval_count);
+            r = nc_server_notif_cert_exp_intervals_get(default_intervals, 3, &intervals, &interval_count);
+            if (r) {
+                break;
+            }
 
             r = nc_server_notif_cert_exp_dates_get(intervals, interval_count, &exp_dates, &exp_date_count);
             if (r) {

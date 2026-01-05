@@ -912,15 +912,18 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
-        /* CH LOCK */
-        nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__);
+        /* CH LOCK, continue on error */
+        r = nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__);
     }
 
     status = session->status;
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
         /* CH UNLOCK */
-        nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
+        if (!r) {
+            /* only if we locked it */
+            nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
+        }
     }
 
     if (status == NC_STATUS_CLOSING) {

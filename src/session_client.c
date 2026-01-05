@@ -3419,7 +3419,7 @@ nc_client_monitoring_thread(void *arg)
 
 next_iter:
         /* UNLOCK */
-        pthread_mutex_unlock(&mtarg->lock);
+        nc_mutex_unlock(&client_opts.monitoring_thread_data.lock, __func__);
         locked = 0;
 
         /* if an event occurred, call the callback */
@@ -3440,7 +3440,7 @@ next_iter:
 cleanup:
     if (locked) {
         /* UNLOCK */
-        pthread_mutex_unlock(&mtarg->lock);
+        nc_mutex_unlock(&client_opts.monitoring_thread_data.lock, __func__);
     }
     VRB(NULL, "Client monitoring thread exit.");
     return NULL;
@@ -3524,7 +3524,7 @@ nc_client_monitoring_thread_stop(void)
     }
 
     /* UNLOCK */
-    pthread_mutex_unlock(&mtarg->lock);
+    nc_mutex_unlock(&client_opts.monitoring_thread_data.lock, __func__);
 
     r = pthread_join(tid, NULL);
     if (r) {
@@ -3550,7 +3550,7 @@ nc_client_monitoring_thread_stop(void)
     mtarg->pfds = NULL;
 
     /* UNLOCK */
-    pthread_mutex_unlock(&mtarg->lock);
+    nc_mutex_unlock(&client_opts.monitoring_thread_data.lock, __func__);
 }
 
 API void
