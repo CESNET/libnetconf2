@@ -255,6 +255,22 @@ nc_server_ch_set_dispatch_data(nc_server_ch_session_acquire_ctx_cb acquire_ctx_c
     nc_rwlock_unlock(&server_opts.config_lock, __func__);
 }
 
+API void
+nc_server_ch_set_new_session_fail_cb(nc_server_ch_new_session_fail_cb new_session_fail_cb,
+        void *new_session_fail_cb_data)
+{
+    /* CONFIG WRITE LOCK */
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return;
+    }
+
+    server_opts.ch_dispatch_data.new_session_fail_cb = new_session_fail_cb;
+    server_opts.ch_dispatch_data.new_session_fail_cb_data = new_session_fail_cb_data;
+
+    /* CONFIG WRITE UNLOCK */
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+}
+
 #endif
 
 int
@@ -3291,7 +3307,7 @@ nc_ch_client_thread(void *arg)
 {
     struct nc_server_ch_thread_arg *data = arg;
     NC_MSG_TYPE msgtype;
-    uint8_t cur_attempts = 0;
+    uint8_t cur_attempts = 0, max_attempts;
     uint16_t next_endpt_index, max_wait;
     char *cur_endpt_name = NULL;
     struct nc_ch_endpt *cur_endpt;
@@ -3416,10 +3432,18 @@ nc_ch_client_thread(void *arg)
             }
         } else {
             /* session was not created, wait a little bit and try again */
+            ++cur_attempts;
             max_wait = client->max_wait;
+            max_attempts = client->max_attempts;
 
             /* CONFIG READ UNLOCK */
             nc_rwlock_unlock(&server_opts.config_lock, __func__);
+
+            /* failed connection attempt */
+            if (data->new_session_fail_cb) {
+                data->new_session_fail_cb(data->client_name, cur_endpt_name, max_attempts, cur_attempts,
+                        data->new_session_fail_cb_data);
+            }
 
             /* wait for max_wait seconds */
             if (!nc_server_ch_client_thread_is_running_wait(session, data, max_wait)) {
@@ -3438,8 +3462,6 @@ nc_ch_client_thread(void *arg)
                 VRB(NULL, "Call Home client \"%s\" removed.", data->client_name);
                 goto cleanup_unlock;
             }
-
-            ++cur_attempts;
 
             /* try to find our endpoint again */
             LY_ARRAY_FOR(client->ch_endpts, next_endpt_index) {
@@ -3555,6 +3577,8 @@ _nc_connect_ch_client_dispatch(const struct nc_ch_client *ch_client, nc_server_c
     arg->ctx_cb_data = ctx_cb_data;
     arg->new_session_cb = new_session_cb;
     arg->new_session_cb_data = new_session_cb_data;
+    arg->new_session_fail_cb = server_opts.ch_dispatch_data.new_session_fail_cb;
+    arg->new_session_fail_cb_data = server_opts.ch_dispatch_data.new_session_fail_cb_data;
     pthread_cond_init(&arg->cond, NULL);
     pthread_mutex_init(&arg->cond_lock, NULL);
 

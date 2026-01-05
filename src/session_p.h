@@ -670,6 +670,9 @@ struct nc_server_ch_thread_arg {
     void *ctx_cb_data;                                      /**< acq/rel cb data */
     int (*new_session_cb)(const char *client_name, struct nc_session *new_session, void *user_data);    /**< creating new session cb */
     void *new_session_cb_data;                              /**< new session cb data */
+    void (*new_session_fail_cb)(const char *client_name, const char *endpt_name, uint8_t max_attempts,
+            uint8_t cur_attempt, void *user_data);          /**< failed to create a new session cb */
+    void *new_session_fail_cb_data;                         /**< new session fail cb data */
 
     int thread_running;         /**< A boolean value that is truthy while the underlying Call Home thread is running */
     pthread_mutex_t cond_lock;  /**< Condition's lock used for signalling the thread to terminate */
@@ -793,6 +796,8 @@ struct nc_server_opts {
         void *ctx_cb_data;                                      /**< Data passed to the callbacks above. */
         nc_server_ch_new_session_cb new_session_cb;             /**< New session callback. */
         void *new_session_cb_data;                              /**< Data passed to the new_session_cb callback. */
+        nc_server_ch_new_session_fail_cb new_session_fail_cb;   /**< New session fail callback, */
+        void *new_session_fail_cb_data;                         /**< Data passed to the new_session_fail_cb callback. */
     } ch_dispatch_data;
 
     struct {

@@ -92,6 +92,18 @@ typedef void (*nc_server_ch_session_release_ctx_cb)(void *cb_data);
 typedef int (*nc_server_ch_new_session_cb)(const char *client_name, struct nc_session *new_session, void *user_data);
 
 /**
+ * @brief Callback for failures when creating new Call Home sessions.
+ *
+ * @param[in] client_name Name of the CH client that failed to create the session.
+ * @param[in] endpt_name Name of the CH client endpoint that failed to create the session.
+ * @param[in] max_attemps Maximum connection attempts for the endpoints.
+ * @param[in] cur_attempt Current failed connection attempt.
+ * @param[in] user_data Arbitrary new session callback data.
+ */
+typedef void (*nc_server_ch_new_session_fail_cb)(const char *client_name, const char *endpt_name, uint8_t max_attempts,
+        uint8_t cur_attempt, void *user_data);
+
+/**
  * @brief Dispatch a thread connecting to a listening NETCONF client and creating Call Home sessions.
  *
  * @param[in] client_name Existing client name.
@@ -120,6 +132,15 @@ int nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_
 void nc_server_ch_set_dispatch_data(nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
         nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
         void *new_session_cb_data);
+
+/**
+ * @brief Set callback for failure of a new CH session creation.
+ *
+ * @param[in] new_session_fail_cb Callback to call for every failed session creation.
+ * @param[in] new_session_fail_cb_data Arbitrary user data passed to @p new_session_fail_cb.
+ */
+void nc_server_ch_set_new_session_fail_cb(nc_server_ch_new_session_fail_cb new_session_fail_cb,
+        void *new_session_fail_cb_data);
 
 /** @} Server-side Call Home Functions */
 
