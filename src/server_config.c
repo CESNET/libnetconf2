@@ -123,7 +123,7 @@ nc_server_config_ssh_opts_free(struct nc_server_ssh_opts *opts)
     struct nc_hostkey *hostkey;
     struct nc_auth_client *auth_client;
     struct nc_public_key *pubkey;
-    LY_ARRAY_COUNT_TYPE i, j;
+    LY_ARRAY_COUNT_TYPE i = 0, j = 0;
 
     if (!opts) {
         return;
@@ -179,7 +179,7 @@ static void
 nc_server_config_tls_opts_free(struct nc_server_tls_opts *opts)
 {
     struct nc_ctn *ctn, *next;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
 
     if (!opts) {
         return;
@@ -243,7 +243,7 @@ static void
 nc_server_config_unix_opts_free(struct nc_server_unix_opts *opts)
 {
     struct nc_server_unix_user_mapping *mapping;
-    LY_ARRAY_COUNT_TYPE i, j;
+    LY_ARRAY_COUNT_TYPE i = 0, j = 0;
 
     if (!opts) {
         return;
@@ -275,7 +275,7 @@ static void
 nc_server_config_keystore_free(struct nc_keystore *ks)
 {
     struct nc_keystore_entry *entry;
-    LY_ARRAY_COUNT_TYPE i, j;
+    LY_ARRAY_COUNT_TYPE i = 0, j = 0;
 
     if (!ks) {
         return;
@@ -309,7 +309,7 @@ nc_server_config_truststore_free(struct nc_truststore *ts)
 {
     struct nc_certificate_bag *cbag;
     struct nc_public_key_bag *pkbag;
-    LY_ARRAY_COUNT_TYPE i, j;
+    LY_ARRAY_COUNT_TYPE i = 0, j = 0;
 
     if (!ts) {
         return;
@@ -359,7 +359,7 @@ nc_server_config_free(struct nc_server_config *config)
     struct nc_endpt *endpt;
     struct nc_ch_client *ch_client;
     struct nc_ch_endpt *ch_endpt;
-    LY_ARRAY_COUNT_TYPE i, j;
+    LY_ARRAY_COUNT_TYPE i = 0, j = 0;
     char *socket_path = NULL;
 
     if (!config) {
@@ -599,7 +599,7 @@ config_local_bind(const struct lyd_node *node, enum nc_operation parent_op, stru
     enum nc_operation op;
     struct nc_bind *bind = NULL;
     const char *local_addr;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
 
     NC_NODE_GET_OP(node, parent_op, &op);
 
@@ -963,7 +963,7 @@ config_ssh_hostkey(const struct lyd_node *node, enum nc_operation parent_op, str
     enum nc_operation op;
     struct nc_hostkey *hostkey = NULL;
     const char *name;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
 
     NC_NODE_GET_OP(node, parent_op, &op);
 
@@ -1104,7 +1104,7 @@ config_ssh_user_public_key(const struct lyd_node *node, enum nc_operation parent
     enum nc_operation op;
     struct lyd_node *n;
     struct nc_public_key *key = NULL;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
     const char *name;
 
     NC_NODE_GET_OP(node, parent_op, &op);
@@ -2151,7 +2151,7 @@ config_tls_client_auth_ca_cert(const struct lyd_node *node,
     enum nc_operation op;
     struct lyd_node *n;
     const char *name;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
     struct nc_certificate *cert = NULL;
 
     NC_NODE_GET_OP(node, parent_op, &op);
@@ -2274,7 +2274,7 @@ config_tls_client_auth_ee_cert(const struct lyd_node *node,
     enum nc_operation op;
     struct lyd_node *n;
     const char *name;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
     struct nc_certificate *cert = NULL;
 
     NC_NODE_GET_OP(node, parent_op, &op);
@@ -3068,7 +3068,7 @@ static int
 config_unix_user_mapping_netconf_user(const struct lyd_node *node, enum nc_operation parent_op, struct nc_server_unix_user_mapping *mapping)
 {
     enum nc_operation op;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
     const char *user;
     char **allowed_user;
 
@@ -3126,7 +3126,7 @@ config_unix_user_mapping(const struct lyd_node *node, enum nc_operation parent_o
     enum nc_operation op;
     struct nc_server_unix_user_mapping *mapping = NULL;
     const char *system_user;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
     struct ly_set *set = NULL;
     uint32_t j;
 
@@ -3262,7 +3262,7 @@ config_endpoint(const struct lyd_node *node, enum nc_operation parent_op,
     enum nc_operation op;
     struct nc_endpt *endpt = NULL;
     const char *name;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
     int r;
 
     NC_NODE_GET_OP(node, parent_op, &op);
@@ -3601,7 +3601,7 @@ config_ch_client_endpoint(const struct lyd_node *node, enum nc_operation parent_
     struct lyd_node *n;
     enum nc_operation op;
     const char *name;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
     struct nc_ch_endpt *endpt = NULL;
 
     NC_NODE_GET_OP(node, parent_op, &op);
@@ -3855,7 +3855,7 @@ config_netconf_client(const struct lyd_node *node, enum nc_operation parent_op,
     struct lyd_node *n;
     enum nc_operation op;
     const char *name;
-    LY_ARRAY_COUNT_TYPE i, j;
+    LY_ARRAY_COUNT_TYPE i = 0, j = 0;
     struct nc_ch_client *ch_client = NULL;
 
     NC_NODE_GET_OP(node, parent_op, &op);
@@ -4100,7 +4100,7 @@ config_asymmetric_key_cert(const struct lyd_node *node, enum nc_operation parent
     enum nc_operation op;
     struct nc_certificate *cert = NULL;
     const char *name;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
 
     NC_NODE_GET_OP(node, parent_op, &op);
 
@@ -4170,7 +4170,7 @@ config_asymmetric_key(const struct lyd_node *node, enum nc_operation parent_op, 
     enum nc_operation op;
     const char *name;
     struct nc_keystore_entry *entry = NULL;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
 
     NC_NODE_GET_OP(node, parent_op, &op);
 
@@ -4385,7 +4385,7 @@ config_certificate_bag_cert(const struct lyd_node *node, enum nc_operation paren
     enum nc_operation op;
     struct nc_certificate *cert = NULL;
     const char *name;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
 
     NC_NODE_GET_OP(node, parent_op, &op);
 
@@ -4439,7 +4439,7 @@ config_certificate_bag(const struct lyd_node *node, enum nc_operation parent_op,
     enum nc_operation op;
     const char *name;
     struct nc_certificate_bag *bag = NULL;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
     uint32_t j;
     struct ly_set *set = NULL;
 
@@ -4572,7 +4572,7 @@ config_public_key_bag_pubkey(const struct lyd_node *node, enum nc_operation pare
     enum nc_operation op;
     const char *name;
     struct nc_public_key *pubkey = NULL;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
 
     NC_NODE_GET_OP(node, parent_op, &op);
 
@@ -4624,7 +4624,7 @@ config_public_key_bag(const struct lyd_node *node, enum nc_operation parent_op, 
     enum nc_operation op;
     const char *name;
     struct nc_public_key_bag *bag = NULL;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
     struct ly_set *set = NULL;
     uint32_t j;
 
@@ -4851,7 +4851,7 @@ config_cert_exp_notif_interval(const struct lyd_node *node, enum nc_operation pa
     struct lyd_node *anchor_node, *period_node;
     enum nc_operation op;
     const char *anchor_str, *period_str;
-    uint32_t i;
+    LY_ARRAY_COUNT_TYPE i = 0;
     struct nc_cert_exp_time anchor = {0}, period = {0};
     struct nc_cert_exp_time_interval *interval = NULL;
 
@@ -5241,7 +5241,7 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
     struct nc_ch_client *old_ch_client, *new_ch_client;
     struct nc_server_ch_thread_arg **ch_thread_arg;
     int found;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
     char **started_clients = NULL, **client_name = NULL;
 
     if (!server_opts.ch_dispatch_data.acquire_ctx_cb || !server_opts.ch_dispatch_data.release_ctx_cb ||
@@ -5765,7 +5765,7 @@ static int
 nc_server_config_truststore_dup(const struct nc_truststore *src, struct nc_truststore *dst)
 {
     int rc = 0;
-    LY_ARRAY_COUNT_TYPE i, j;
+    LY_ARRAY_COUNT_TYPE i = 0, j = 0;
     const struct nc_certificate_bag *src_cbag;
     struct nc_certificate_bag *dst_cbag;
     const struct nc_certificate *src_cert;
@@ -6492,7 +6492,7 @@ nc_server_config_oper_get_user_password_last_modified(const char *ch_client, con
         const char *username, time_t *last_modified)
 {
     int rc = 0;
-    LY_ARRAY_COUNT_TYPE i;
+    LY_ARRAY_COUNT_TYPE i = 0;
     struct nc_server_ssh_opts *ssh_opts = NULL;
     struct nc_endpt *endpt = NULL;
     struct nc_ch_client *client = NULL;
