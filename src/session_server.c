@@ -3532,13 +3532,8 @@ cleanup:
 
 unlock_skip:
     free(data->client_name);
-    if (nc_mutex_lock(&data->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
-        pthread_cond_destroy(&data->cond);
-        nc_mutex_unlock(&data->cond_lock, __func__);
-    } else {
-        pthread_cond_destroy(&data->cond);
-    }
     pthread_mutex_destroy(&data->cond_lock);
+    pthread_cond_destroy(&data->cond);
     free(data);
     return NULL;
 }
