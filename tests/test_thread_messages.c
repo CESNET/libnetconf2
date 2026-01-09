@@ -59,6 +59,8 @@ rpc_clb(struct lyd_node *rpc, struct nc_session *session)
     } else {
         nc_assert(0);
     }
+
+    return NULL;
 }
 
 static void *
