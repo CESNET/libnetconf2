@@ -47,9 +47,14 @@ extern struct nc_server_opts server_opts;
 #define NC_READ_BUF_SIZE_STEP 512
 
 /**
- * Maximum size of a framing message chunk (spec max is 2^32 - 1).
+ * Maximum size of a written framing message chunk (spec max is 2^32 - 1).
  */
 #define NC_WRITE_CHUNK_SIZE_MAX 1024 * 10
+
+/**
+ * Maximum size of a read framing message chunk.
+ */
+#define NC_READ_CHUNK_SIZE_MAX 1024 * 1024 * 10
 
 /**
  * Sleep time in usec to wait between nc_recv_notif() calls.

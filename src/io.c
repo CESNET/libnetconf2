@@ -190,8 +190,8 @@ nc_read_until(struct nc_session *session, const char *endtag, uint32_t inact_tim
         char **buf, uint32_t *buf_size)
 {
     char *local_buf = NULL;
-    int r, len, i, matched = 0, count = 0;
-    uint32_t local_size = 0;
+    ssize_t r;
+    uint32_t len, i, matched = 0, count = 0, local_size = 0;
 
     assert(session);
     assert(endtag);
@@ -204,7 +204,7 @@ nc_read_until(struct nc_session *session, const char *endtag, uint32_t inact_tim
     len = strlen(endtag);
     do {
         /* resize buffer if needed */
-        if ((count + (len - matched)) > (signed)*buf_size) {
+        if ((count + (len - matched)) > *buf_size) {
             *buf_size += NC_READ_BUF_SIZE_STEP;
             *buf = nc_realloc(*buf, (*buf_size + 1) * sizeof **buf);
             NC_CHECK_ERRMEM_GOTO(!*buf, count = -1, cleanup);
@@ -243,9 +243,9 @@ cleanup:
 int
 nc_read_msg_io(struct nc_session *session, int io_timeout, int passing_io_lock, char **buf, uint32_t *buf_len)
 {
-    int ret = -1, r, io_locked = 0, chunk_len, buf_used = 0;
+    int ret = -1, r, io_locked = 0;
     char *frame_size_buf = NULL;
-    uint32_t inact_timeout, frame_buf_len;
+    uint32_t inact_timeout, frame_buf_len, chunk_len, buf_used = 0;
     struct timespec ts_act_timeout;
 
     assert(session && buf && buf_len);
@@ -314,13 +314,21 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, int passing_io_lock, 
             /* convert string to the size of the following chunk */
             chunk_len = strtoul(frame_size_buf, NULL, 10);
             if (!chunk_len) {
-                ERR(session, "Invalid frame chunk size detected, fatal error.");
+                ERR(session, "Invalid frame chunk size, fatal error.");
+                ret = -2;
+                goto cleanup;
+            } else if (chunk_len > NC_READ_CHUNK_SIZE_MAX) {
+                ERR(session, "Maximum frame chunk size %" PRIu32 " B exceeded.", (uint32_t)NC_READ_CHUNK_SIZE_MAX);
                 ret = -2;
                 goto cleanup;
             }
 
             /* now we have size of next chunk, prepare a buffer large enough */
-            if ((signed)*buf_len < buf_used + chunk_len + 1) {
+            if (UINT32_MAX - buf_used < chunk_len + 1) {
+                ERR(session, "Maximum supported message size %" PRIu32 " B exceeded.", UINT32_MAX);
+                ret = -2;
+                goto cleanup;
+            } else if (*buf_len < buf_used + chunk_len + 1) {
                 *buf_len = buf_used + chunk_len + 1;
                 *buf = nc_realloc(*buf, *buf_len);
                 NC_CHECK_ERRMEM_GOTO(!*buf, ret = -1, cleanup);
