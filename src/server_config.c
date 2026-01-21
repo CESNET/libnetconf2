@@ -3359,8 +3359,10 @@ config_listen(const struct lyd_node *node, enum nc_operation parent_op,
     NC_NODE_GET_OP(node, parent_op, &op);
 
     /* configure idle-timeout */
-    NC_CHECK_RET(nc_lyd_find_child(node, "idle-timeout", 1, &n));
-    NC_CHECK_RET(config_idle_timeout(n, op, config));
+    NC_CHECK_RET(nc_lyd_find_child(node, "idle-timeout", 0, &n));
+    if (n) {
+        NC_CHECK_RET(config_idle_timeout(n, op, config));
+    }
 
     /* configure endpoints */
     NC_CHECK_RET(nc_lyd_find_child(node, "endpoints", 1, &n));
