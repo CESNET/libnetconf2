@@ -903,19 +903,19 @@ config_hostkey_pubkey_inline(const struct lyd_node *node, enum nc_operation pare
         NC_CHECK_RET(config_privkey_format(n, op, &hostkey->key.privkey));
     }
 
-    /* config privkey data, mandatory case/choice node => only one can be present */
+    /* config privkey data, mandatory case/choice node,
+     * up to 2 can be present in diff, 1 with delete and 1 with create */
     nc_lyd_find_child_optional(node, "cleartext-private-key", &cleartext);
     nc_lyd_find_child_optional(node, "hidden-private-key", &hidden);
     nc_lyd_find_child_optional(node, "encrypted-private-key", &encrypted);
     if (cleartext) {
         NC_CHECK_RET(config_cleartext_privkey_data(cleartext, op, &hostkey->key.privkey));
-    } else if (hidden) {
+    }
+    if (hidden) {
         NC_CHECK_RET(config_hidden_privkey_data(hidden, op));
-    } else if (encrypted) {
+    }
+    if (encrypted) {
         NC_CHECK_RET(config_encrypted_privkey_data(encrypted, op));
-    } else {
-        ERRINT;
-        return 1;
     }
 
     if (op == NC_OP_DELETE) {
@@ -961,11 +961,9 @@ config_hostkey_public_key(const struct lyd_node *node, enum nc_operation parent_
     nc_lyd_find_child_optional(node, "central-keystore-reference", &keystore_ref);
     if (inline_def) {
         NC_CHECK_RET(config_hostkey_pubkey_inline(inline_def, op, hostkey));
-    } else if (keystore_ref) {
+    }
+    if (keystore_ref) {
         NC_CHECK_RET(config_hostkey_pubkey_keystore(keystore_ref, op, hostkey));
-    } else {
-        ERRINT;
-        return 1;
     }
 
     return 0;
@@ -1017,12 +1015,10 @@ config_ssh_hostkey(const struct lyd_node *node, enum nc_operation parent_op, str
     if (public_key) {
         /* config public key */
         NC_CHECK_RET(config_hostkey_public_key(public_key, op, hostkey));
-    } else if (certificate) {
+    }
+    if (certificate) {
         /* config certificate */
         NC_CHECK_RET(config_hostkey_certificate(certificate, op));
-    } else {
-        ERRINT;
-        return 1;
     }
 
     /* all children processed, we can now delete the hostkey */
@@ -1249,13 +1245,12 @@ config_ssh_user_public_keys(const struct lyd_node *node, enum nc_operation paren
     nc_lyd_find_child_optional(node, "libnetconf2-netconf-server:use-system-keys", &system);
     if (inline_def) {
         NC_CHECK_RET(config_ssh_user_pubkey_inline(inline_def, op, user));
-    } else if (truststore_ref) {
+    }
+    if (truststore_ref) {
         NC_CHECK_RET(config_ssh_user_pubkey_truststore(truststore_ref, op, user));
-    } else if (system) {
+    }
+    if (system) {
         NC_CHECK_RET(config_ssh_user_pubkey_system(system, op, user));
-    } else {
-        ERRINT;
-        return 1;
     }
 
     return 0;
@@ -1998,13 +1993,12 @@ config_tls_server_ident_cert_inline(const struct lyd_node *node, enum nc_operati
     nc_lyd_find_child_optional(node, "encrypted-private-key", &encrypted);
     if (cleartext) {
         NC_CHECK_RET(config_cleartext_privkey_data(cleartext, op, &opts->local.key.privkey), 1);
-    } else if (hidden) {
+    }
+    if (hidden) {
         NC_CHECK_RET(config_hidden_privkey_data(hidden, op), 1);
-    } else if (encrypted) {
+    }
+    if (encrypted) {
         NC_CHECK_RET(config_encrypted_privkey_data(encrypted, op), 1);
-    } else {
-        ERRINT;
-        return 1;
     }
 
     /* config certificate data */
@@ -2115,11 +2109,9 @@ config_tls_server_ident_certificate(const struct lyd_node *node, enum nc_operati
     nc_lyd_find_child_optional(node, "central-keystore-reference", &keystore_ref);
     if (inline_def) {
         NC_CHECK_RET(config_tls_server_ident_cert_inline(inline_def, op, tls));
-    } else if (keystore_ref) {
+    }
+    if (keystore_ref) {
         NC_CHECK_RET(config_tls_server_ident_cert_keystore(keystore_ref, op, tls));
-    } else {
-        ERRINT;
-        return 1;
     }
 
     return 0;
@@ -2161,15 +2153,15 @@ config_tls_server_identity(const struct lyd_node *node, enum nc_operation parent
     nc_lyd_find_child_optional(node, "tls13-epsk", &tls13_epsk);
     if (certificate) {
         NC_CHECK_RET(config_tls_server_ident_certificate(certificate, op, tls));
-    } else if (raw_private_key) {
+    }
+    if (raw_private_key) {
         NC_CHECK_RET(config_tls_server_ident_raw_key(raw_private_key, op));
-    } else if (tls12_psk) {
+    }
+    if (tls12_psk) {
         NC_CHECK_RET(config_tls_server_ident_tls12_psk(tls12_psk, op));
-    } else if (tls13_epsk) {
+    }
+    if (tls13_epsk) {
         NC_CHECK_RET(config_tls_server_ident_tls13_epsk(tls13_epsk, op));
-    } else {
-        ERRINT;
-        return 1;
     }
 
     return 0;
@@ -2309,11 +2301,9 @@ config_tls_client_auth_ca_certs(const struct lyd_node *node, enum nc_operation p
     nc_lyd_find_child_optional(node, "central-truststore-reference", &truststore_ref);
     if (inline_def) {
         NC_CHECK_RET(config_tls_client_auth_ca_certs_inline(inline_def, op, client_auth));
-    } else if (truststore_ref) {
+    }
+    if (truststore_ref) {
         NC_CHECK_RET(config_tls_client_auth_ca_certs_truststore(truststore_ref, op, client_auth));
-    } else {
-        ERRINT;
-        return 1;
     }
 
     return 0;
@@ -2435,11 +2425,9 @@ config_tls_client_auth_ee_certs(const struct lyd_node *node,
     nc_lyd_find_child_optional(node, "central-truststore-reference", &truststore_ref);
     if (inline_def) {
         NC_CHECK_RET(config_tls_client_auth_ee_certs_inline(inline_def, op, client_auth));
-    } else if (truststore_ref) {
+    }
+    if (truststore_ref) {
         NC_CHECK_RET(config_tls_client_auth_ee_certs_truststore(truststore_ref, op, client_auth));
-    } else {
-        ERRINT;
-        return 1;
     }
 
     return 0;
@@ -3287,11 +3275,9 @@ config_unix(const struct lyd_node *node, enum nc_operation parent_op, struct nc_
     nc_lyd_find_child_optional(node, "hidden-path", &hidden_path);
     if (socket_path) {
         NC_CHECK_RET(config_unix_socket_path(socket_path, op, endpt));
-    } else if (hidden_path) {
+    }
+    if (hidden_path) {
         NC_CHECK_RET(config_unix_hidden_path(hidden_path, op, endpt));
-    } else {
-        ERRINT;
-        return 1;
     }
 
     /* config socket permissions */
@@ -3379,9 +3365,10 @@ config_endpoint(const struct lyd_node *node, enum nc_operation parent_op,
 #ifdef NC_ENABLED_SSH_TLS
     if (ssh) {
         NC_CHECK_RET(config_ssh(ssh, op, endpt));
-    } else if (tls) {
+    }
+    if (tls) {
         NC_CHECK_RET(config_tls(tls, op, endpt));
-    } else
+    }
 #endif /* NC_ENABLED_SSH_TLS */
     if (unix) {
         NC_CHECK_RET(config_unix(unix, op, endpt));
@@ -3731,11 +3718,9 @@ config_ch_client_endpoint(const struct lyd_node *node, enum nc_operation parent_
     nc_lyd_find_child_optional(node, "tls", &tls);
     if (ssh) {
         NC_CHECK_RET(config_ch_endpoint_ssh(ssh, op, endpt));
-    } else if (tls) {
+    }
+    if (tls) {
         NC_CHECK_RET(config_ch_endpoint_tls(tls, op, endpt));
-    } else {
-        ERRINT;
-        return 1;
     }
 #endif /* NC_ENABLED_SSH_TLS */
 
@@ -3868,12 +3853,13 @@ config_ch_client_connection_type(const struct lyd_node *node, enum nc_operation 
     NC_NODE_GET_OP(node, parent_op, &op);
 
     /* config persistent / periodic choice,
-     * the choice itself is mandatory, but both containers are presence, so need to check explicitly */
+     * the choice itself is mandatory, but both containers are presence */
     nc_lyd_find_child_optional(node, "persistent", &persistent);
     nc_lyd_find_child_optional(node, "periodic", &periodic);
     if (persistent) {
         NC_CHECK_RET(config_ch_conn_type_persistent(persistent, op, ch_client));
-    } else if (periodic) {
+    }
+    if (periodic) {
         NC_CHECK_RET(config_ch_conn_type_periodic(periodic, op, ch_client));
     }
 
@@ -4332,9 +4318,11 @@ config_asymmetric_key(const struct lyd_node *node, enum nc_operation parent_op, 
     nc_lyd_find_child_optional(node, "encrypted-private-key", &encrypted);
     if (cleartext) {
         NC_CHECK_RET(config_cleartext_privkey_data(cleartext, op, &entry->asym_key.privkey));
-    } else if (hidden) {
+    }
+    if (hidden) {
         NC_CHECK_RET(config_hidden_privkey_data(hidden, op));
-    } else if (encrypted) {
+    }
+    if (encrypted) {
         NC_CHECK_RET(config_encrypted_privkey_data(encrypted, op));
     }
 
