@@ -1248,7 +1248,9 @@ nc_server_ssh_auth_password(struct nc_session *session, int local_users_supporte
         /* obtain pw from config */
         password = auth_client->password;
         if (!password) {
-            VRB(session, "User \"%s\" does not have password method configured, but a request was received.", session->username);
+            /* client requested password auth, but it is not configured for this user, so just deny */
+            DBG(session,
+                    "User \"%s\" does not have password method configured, but a request was received.", session->username);
             return 1;
         }
     } else {
@@ -1294,23 +1296,40 @@ nc_server_ssh_auth_pubkey(struct nc_session *session, int local_users_supported,
     assert(!local_users_supported || auth_client);
 
     /* get the public keys */
-    if (!local_users_supported || (auth_client->pubkey_store == NC_STORE_SYSTEM)) {
-        /* system user or the user has 'use system keys' configured, these need to be free'd */
+    if (!local_users_supported) {
+        /* system user, get the keys from the system (these need to be free'd as they're not in the config) */
         ret = nc_server_ssh_get_system_keys(session->username, &pubkeys, &pubkey_count);
         if (ret) {
             goto cleanup;
         }
-    } else if (auth_client->pubkey_store == NC_STORE_LOCAL) {
-        pubkeys = auth_client->pubkeys;
-        pubkey_count = LY_ARRAY_COUNT(auth_client->pubkeys);
-    } else if (auth_client->pubkey_store == NC_STORE_TRUSTSTORE) {
-        ret = nc_server_ssh_ts_ref_get_keys(auth_client->ts_ref, &pubkeys, &pubkey_count);
-        if (ret) {
-            goto cleanup;
-        }
     } else {
-        ERRINT;
-        return 1;
+        if (auth_client->pubkey_store == NC_STORE_UNKNOWN) {
+            /* client requested pubkey auth, but it is not configured for this user, so just deny */
+            DBG(session,
+                    "User \"%s\" does not have public key method configured, but a request was received.", session->username);
+            return 1;
+        }
+
+        if (auth_client->pubkey_store == NC_STORE_SYSTEM) {
+            /* get the keys from the system (these need to be free'd as they're not in the config) */
+            ret = nc_server_ssh_get_system_keys(session->username, &pubkeys, &pubkey_count);
+            if (ret) {
+                goto cleanup;
+            }
+        } else if (auth_client->pubkey_store == NC_STORE_LOCAL) {
+            /* saved directly in the user's config */
+            pubkeys = auth_client->pubkeys;
+            pubkey_count = LY_ARRAY_COUNT(auth_client->pubkeys);
+        } else if (auth_client->pubkey_store == NC_STORE_TRUSTSTORE) {
+            /* need to fetch from the truststore */
+            ret = nc_server_ssh_ts_ref_get_keys(auth_client->ts_ref, &pubkeys, &pubkey_count);
+            if (ret) {
+                goto cleanup;
+            }
+        } else {
+            ERRINT;
+            return 1;
+        }
     }
 
     /* compare the received pubkey with the authorized ones */
@@ -1351,29 +1370,38 @@ cleanup:
 static int
 nc_server_ssh_auth_kbdint(struct nc_session *session, int local_users_supported, struct nc_auth_client *auth_client, ssh_message msg)
 {
-    int rc = 0;
+    int r = 0;
 
     assert(!local_users_supported || auth_client);
 
-    if (local_users_supported && !auth_client->kbdint_method) {
-        VRB(session, "User \"%s\" does not have Keyboard-interactive method configured, but a request was received.", session->username);
-        return 1;
-    } else if (server_opts.interactive_auth_clb) {
-        rc = server_opts.interactive_auth_clb(session, session->ti.libssh.session, msg, server_opts.interactive_auth_data);
-    } else if (!local_users_supported) {
+    if (!local_users_supported) {
         /* no local users supported, use the system method */
-        rc = nc_server_ssh_auth_kbdint_system(session, msg);
+        r = nc_server_ssh_auth_kbdint_system(session, msg);
     } else {
-        /* perform the authentication based on the configured method */
-        if (auth_client->kbdint_method == NC_KBDINT_AUTH_METHOD_SYSTEM) {
-            rc = nc_server_ssh_auth_kbdint_system(session, msg);
+        if (auth_client->kbdint_method == NC_KBDINT_AUTH_METHOD_NONE) {
+            /* client requested kbdint auth, but it is not configured for this user, so just deny */
+            DBG(session,
+                    "User \"%s\" does not have kbdint method configured, but a request was received.", session->username);
+            return 1;
+        }
+
+        if (server_opts.interactive_auth_clb) {
+            /* custom callback has higher priority */
+            r = server_opts.interactive_auth_clb(session,
+                    session->ti.libssh.session, msg, server_opts.interactive_auth_data);
         } else {
-            ERR(session, "Keyboard-interactive authentication method not supported.");
-            rc = 1;
+            /* perform the authentication based on the configured method */
+            if (auth_client->kbdint_method == NC_KBDINT_AUTH_METHOD_SYSTEM) {
+                r = nc_server_ssh_auth_kbdint_system(session, msg);
+            } else {
+                /* add future methods here */
+                ERR(session, "Keyboard-interactive authentication method not supported.");
+                return 1;
+            }
         }
     }
 
-    return rc ? 1 : 0;
+    return r ? 1 : 0;
 }
 
 /**
