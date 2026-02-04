@@ -11,7 +11,7 @@ BuildRequires:  gcc
 BuildRequires:  libssh-devel
 BuildRequires:  openssl-devel
 BuildRequires:  pam-devel
-BuildRequires:  pkgconfig(libyang) >= 2
+BuildRequires:  pkgconfig(libyang) >= 5
 BuildRequires: 	libcurl-devel
 
 %package devel

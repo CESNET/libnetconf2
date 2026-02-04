@@ -482,10 +482,10 @@ retrieve_module_data_getschema(const char *name, const char *rev, struct clb_dat
     switch (get_schema_data->value_type) {
     case LYD_ANYDATA_STRING:
     case LYD_ANYDATA_XML:
-        model_data = strdup(get_schema_data->value.str);
+        model_data = strdup(get_schema_data->value);
         break;
     case LYD_ANYDATA_DATATREE:
-        lyd_print_mem(&model_data, get_schema_data->value.tree, LYD_XML, LYD_PRINT_SIBLINGS);
+        lyd_print_mem(&model_data, get_schema_data->child, LYD_XML, LYD_PRINT_SIBLINGS);
         break;
     case LYD_ANYDATA_JSON:
         ERRINT;
@@ -765,14 +765,14 @@ nc_ctx_load_module(struct nc_session *session, const char *name, const char *rev
     ly_temp_log_options(prev_lo);
     if (!(*mod)) {
         for (eitem = ly_err_first(session->ctx); eitem; eitem = eitem->next) {
-            ly_err_print(session->ctx, eitem);
+            ly_err_print(session->ctx, eitem, NULL, NULL);
         }
         ret = -1;
     } else {
         /* print only warnings */
         for (eitem = ly_err_first(session->ctx); eitem; eitem = eitem->next) {
             if (eitem->level == LY_LLWRN) {
-                ly_err_print(session->ctx, eitem);
+                ly_err_print(session->ctx, eitem, NULL, NULL);
             }
         }
     }
@@ -874,13 +874,13 @@ get_oper_data(struct nc_session *session, int has_get_data, const char *filter, 
     if (data->value_type != LYD_ANYDATA_DATATREE) {
         WRN(session, "Unexpected data in reply to a %s RPC.", rpc_name);
         goto cleanup;
-    } else if (!data->value.tree) {
+    } else if (!data->child) {
         WRN(session, "No data in reply to a %s RPC.", rpc_name);
         goto cleanup;
     }
 
-    *oper_data = data->value.tree;
-    data->value.tree = NULL;
+    *oper_data = data->child;
+    lyd_unlink_siblings(data->child);
 
 cleanup:
     nc_rpc_free(rpc);
