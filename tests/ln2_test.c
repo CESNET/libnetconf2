@@ -110,6 +110,7 @@ ln2_glob_test_server_thread_fail(void *arg)
     /* try to accept a session, but we expect it to fail */
     msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
     assert(msgtype == NC_MSG_ERROR);
+    (void)msgtype;
     assert(!session);
 
     return NULL;

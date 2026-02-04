@@ -1359,7 +1359,7 @@ config_ssh_user(const struct lyd_node *node, enum nc_operation parent_op, struct
     struct lyd_node *n;
     struct nc_auth_client *user = NULL;
     const char *name;
-    uint32_t i;
+    uint32_t i = 0;
 
     NC_NODE_GET_OP(node, parent_op, &op);
 
@@ -2787,7 +2787,7 @@ config_cert_to_name(const struct lyd_node *node, enum nc_operation parent_op, st
     struct lyd_node *n;
     enum nc_operation op;
     uint32_t id;
-    struct nc_ctn *ctn, *iter, *prev;
+    struct nc_ctn *ctn = NULL, *iter, *prev = NULL;
 
     NC_NODE_GET_OP(node, parent_op, &op);
 
