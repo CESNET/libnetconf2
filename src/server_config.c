@@ -5531,7 +5531,7 @@ nc_server_config_ssh_dup(const struct nc_server_ssh_opts *src, struct nc_server_
                 dst_hostkey->key.pubkey.data = strdup(src_hostkey->key.pubkey.data);
                 NC_CHECK_ERRMEM_GOTO(!dst_hostkey->key.pubkey.data, rc = 1, cleanup);
             }
-        } else {
+        } else if (src_hostkey->store == NC_STORE_KEYSTORE) {
             dst_hostkey->ks_ref = strdup(src_hostkey->ks_ref);
             NC_CHECK_ERRMEM_GOTO(!dst_hostkey->ks_ref, rc = 1, cleanup);
         }
@@ -5643,7 +5643,7 @@ nc_server_config_tls_dup(const struct nc_server_tls_opts *src, struct nc_server_
         NC_CHECK_ERRMEM_GOTO(!(*dst)->local.key.pubkey.data, rc = 1, cleanup);
         (*dst)->local.cert.data = strdup(src->local.cert.data);
         NC_CHECK_ERRMEM_GOTO(!(*dst)->local.cert.data, rc = 1, cleanup);
-    } else {
+    } else if (src->cert_store == NC_STORE_KEYSTORE) {
         (*dst)->keystore.asym_key_ref = strdup(src->keystore.asym_key_ref);
         NC_CHECK_ERRMEM_GOTO(!(*dst)->keystore.asym_key_ref, rc = 1, cleanup);
         (*dst)->keystore.cert_ref = strdup(src->keystore.cert_ref);
@@ -5664,7 +5664,7 @@ nc_server_config_tls_dup(const struct nc_server_tls_opts *src, struct nc_server_
             NC_CHECK_ERRMEM_GOTO(!dst_ca->ca_certs[i].data, rc = 1, cleanup);
             LY_ARRAY_INCREMENT(dst_ca->ca_certs);
         }
-    } else {
+    } else if (src_ca->ca_certs_store == NC_STORE_TRUSTSTORE) {
         dst_ca->ca_cert_bag_ts_ref = strdup(src_ca->ca_cert_bag_ts_ref);
         NC_CHECK_ERRMEM_GOTO(!dst_ca->ca_cert_bag_ts_ref, rc = 1, cleanup);
     }
@@ -5679,7 +5679,7 @@ nc_server_config_tls_dup(const struct nc_server_tls_opts *src, struct nc_server_
             NC_CHECK_ERRMEM_GOTO(!dst_ca->ee_certs[i].data, rc = 1, cleanup);
             LY_ARRAY_INCREMENT(dst_ca->ee_certs);
         }
-    } else {
+    } else if (src_ca->ee_certs_store == NC_STORE_TRUSTSTORE) {
         dst_ca->ee_cert_bag_ts_ref = strdup(src_ca->ee_cert_bag_ts_ref);
         NC_CHECK_ERRMEM_GOTO(!dst_ca->ee_cert_bag_ts_ref, rc = 1, cleanup);
     }
