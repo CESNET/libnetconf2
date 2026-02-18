@@ -2003,7 +2003,9 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
         goto cleanup;
     }
     if (opts->encryption_algs) {
-        if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_CIPHERS_S_C, opts->encryption_algs)) {
+        /* both client->server and server->client directions set for the same reason as for MAC algorithms below */
+        if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_CIPHERS_S_C, opts->encryption_algs) ||
+                ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_CIPHERS_C_S, opts->encryption_algs)) {
             ERR(session, "Failed to set encryption algorithms (%s).", ssh_get_error(sbind));
             rc = -1;
             goto cleanup;
@@ -2015,7 +2017,14 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
         goto cleanup;
     }
     if (opts->mac_algs) {
-        if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HMAC_S_C, opts->mac_algs)) {
+        /* * SSH negotiates MAC algorithms independently for each direction (Client->Server
+         * and Server->Client). We must explicitly apply the configured algorithms to
+         * both directions to ensure consistent security and avoid falling back to
+         * libssh defaults for the unspecified direction.
+         * Ref: https://github.com/CESNET/libnetconf2/issues/523
+         */
+        if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HMAC_S_C, opts->mac_algs) ||
+                ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_HMAC_C_S, opts->mac_algs)) {
             ERR(session, "Failed to set MAC algorithms (%s).", ssh_get_error(sbind));
             rc = -1;
             goto cleanup;
