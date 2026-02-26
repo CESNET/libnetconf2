@@ -288,10 +288,8 @@ nc_client_tls_session_new(int sock, const char *host, int timeout, struct nc_cli
         goto fail;
     }
 
-    /* set session fd */
+    /* set session fd, is not closed on tls_session_destroy */
     nc_tls_set_fd_wrap(tls_session, sock, tls_ctx);
-
-    sock = -1;
 
     /* set session hostname to check against in the server cert */
     if (nc_client_tls_set_hostname_wrap(tls_session, host)) {
