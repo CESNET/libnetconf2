@@ -904,7 +904,7 @@ nc_clb_default_get_schema(struct lyd_node *rpc, struct nc_session *session)
         nc_err_set_msg(err, ly_last_logmsg(), "en");
         goto error;
     }
-    if (lyd_new_any(data, NULL, "data", NULL, model_data, LYD_NEW_ANY_USE_VALUE | LYD_NEW_VAL_OUTPUT, NULL)) {
+    if (lyd_new_any(data, NULL, "data", NULL, model_data, 0, LYD_NEW_ANY_USE_VALUE | LYD_NEW_VAL_OUTPUT, NULL)) {
         err = nc_err(session->ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
         nc_err_set_msg(err, ly_last_logmsg(), "en");
         goto error;

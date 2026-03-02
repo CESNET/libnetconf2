@@ -2739,10 +2739,10 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         CHECK_LYRC_BREAK(lyd_new_term(cont, mod, ncds2str[rpc_gc->source], NULL, 0, NULL));
         if (rpc_gc->filter) {
             if (!rpc_gc->filter[0] || (rpc_gc->filter[0] == '<')) {
-                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", NULL, rpc_gc->filter, 0, &node));
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", NULL, rpc_gc->filter, 0, 0, &node));
                 CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "subtree", 0, NULL));
             } else {
-                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", NULL, NULL, 0, &node));
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", NULL, NULL, 0, 0, &node));
                 CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "xpath", 0, NULL));
                 CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:select", rpc_gc->filter, 0, NULL));
             }
@@ -2776,7 +2776,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
             CHECK_LYRC_BREAK(lyd_new_term(data, mod, "error-option", rpcedit_erropt2str[rpc_e->error_opt], 0, NULL));
         }
         if (!rpc_e->edit_cont[0] || (rpc_e->edit_cont[0] == '<')) {
-            CHECK_LYRC_BREAK(lyd_new_any(data, mod, "config", NULL, rpc_e->edit_cont, 0, NULL));
+            CHECK_LYRC_BREAK(lyd_new_any(data, mod, "config", NULL, rpc_e->edit_cont, 0, 0, NULL));
         } else {
             CHECK_LYRC_BREAK(lyd_new_term(data, mod, "url", rpc_e->edit_cont, 0, NULL));
         }
@@ -2796,7 +2796,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         CHECK_LYRC_BREAK(lyd_new_inner(data, mod, "source", 0, &cont));
         if (rpc_cp->url_config_src) {
             if (!rpc_cp->url_config_src[0] || (rpc_cp->url_config_src[0] == '<')) {
-                CHECK_LYRC_BREAK(lyd_new_any(cont, mod, "config", NULL, rpc_cp->url_config_src, 0, NULL));
+                CHECK_LYRC_BREAK(lyd_new_any(cont, mod, "config", NULL, rpc_cp->url_config_src, 0, 0, NULL));
             } else {
                 CHECK_LYRC_BREAK(lyd_new_term(cont, mod, "url", rpc_cp->url_config_src, 0, NULL));
             }
@@ -2849,10 +2849,10 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         CHECK_LYRC_BREAK(lyd_new_inner(NULL, mod, "get", 0, &data));
         if (rpc_g->filter) {
             if (!rpc_g->filter[0] || (rpc_g->filter[0] == '<')) {
-                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", NULL, rpc_g->filter, 0, &node));
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", NULL, rpc_g->filter, 0, 0, &node));
                 CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "subtree", 0, NULL));
             } else {
-                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", NULL, NULL, 0, &node));
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", NULL, NULL, 0, 0, &node));
                 CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "xpath", 0, NULL));
                 CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:select", rpc_g->filter, 0, NULL));
             }
@@ -2917,7 +2917,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
         CHECK_LYRC_BREAK(lyd_new_inner(data, mod, "source", 0, &cont));
         if (rpc_val->url_config_src) {
             if (!rpc_val->url_config_src[0] || (rpc_val->url_config_src[0] == '<')) {
-                CHECK_LYRC_BREAK(lyd_new_any(cont, mod, "config", NULL, rpc_val->url_config_src, 0, NULL));
+                CHECK_LYRC_BREAK(lyd_new_any(cont, mod, "config", NULL, rpc_val->url_config_src, 0, 0, NULL));
             } else {
                 CHECK_LYRC_BREAK(lyd_new_term(cont, mod, "url", rpc_val->url_config_src, 0, NULL));
             }
@@ -2949,10 +2949,10 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         if (rpc_sub->filter) {
             if (!rpc_sub->filter[0] || (rpc_sub->filter[0] == '<')) {
-                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", NULL, rpc_sub->filter, 0, &node));
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", NULL, rpc_sub->filter, 0, 0, &node));
                 CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "subtree", 0, NULL));
             } else {
-                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", NULL, NULL, 0, &node));
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "filter", NULL, NULL, 0, 0, &node));
                 CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:type", "xpath", 0, NULL));
                 CHECK_LYRC_BREAK(lyd_new_meta(NULL, node, NULL, "ietf-netconf:select", rpc_sub->filter, 0, NULL));
             }
@@ -2973,7 +2973,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         if (rpc_getd->filter) {
             if (!rpc_getd->filter[0] || (rpc_getd->filter[0] == '<')) {
-                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "subtree-filter", NULL, rpc_getd->filter, 0, NULL));
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "subtree-filter", NULL, rpc_getd->filter, 0, 0, NULL));
             } else {
                 CHECK_LYRC_BREAK(lyd_new_term(data, mod, "xpath-filter", rpc_getd->filter, 0, NULL));
             }
@@ -3010,7 +3010,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
                     NULL));
         }
         if (!rpc_editd->edit_cont[0] || (rpc_editd->edit_cont[0] == '<')) {
-            CHECK_LYRC_BREAK(lyd_new_any(data, mod, "config", NULL, rpc_editd->edit_cont, 0, NULL));
+            CHECK_LYRC_BREAK(lyd_new_any(data, mod, "config", NULL, rpc_editd->edit_cont, 0, 0, NULL));
         } else {
             CHECK_LYRC_BREAK(lyd_new_term(data, mod, "url", rpc_editd->edit_cont, 0, NULL));
         }
@@ -3023,7 +3023,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         if (rpc_estsub->filter) {
             if (!rpc_estsub->filter[0] || (rpc_estsub->filter[0] == '<')) {
-                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "stream-subtree-filter", NULL, rpc_estsub->filter, 0, NULL));
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "stream-subtree-filter", NULL, rpc_estsub->filter, 0, 0, NULL));
             } else if (rpc_estsub->filter[0] == '/') {
                 CHECK_LYRC_BREAK(lyd_new_term(data, mod, "stream-xpath-filter", rpc_estsub->filter, 0, NULL));
             } else {
@@ -3053,7 +3053,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         if (rpc_modsub->filter) {
             if (!rpc_modsub->filter[0] || (rpc_modsub->filter[0] == '<')) {
-                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "stream-subtree-filter", NULL, rpc_modsub->filter, 0, NULL));
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod, "stream-subtree-filter", NULL, rpc_modsub->filter, 0, 0, NULL));
             } else if (rpc_modsub->filter[0] == '/') {
                 CHECK_LYRC_BREAK(lyd_new_term(data, mod, "stream-xpath-filter", rpc_modsub->filter, 0, NULL));
             } else {
@@ -3091,7 +3091,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         if (rpc_estpush->filter) {
             if (!rpc_estpush->filter[0] || (rpc_estpush->filter[0] == '<')) {
-                CHECK_LYRC_BREAK(lyd_new_any(data, mod2, "datastore-subtree-filter", NULL, rpc_estpush->filter, 0, NULL));
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod2, "datastore-subtree-filter", NULL, rpc_estpush->filter, 0, 0, NULL));
             } else if (rpc_estpush->filter[0] == '/') {
                 CHECK_LYRC_BREAK(lyd_new_term(data, mod2, "datastore-xpath-filter", rpc_estpush->filter, 0, NULL));
             } else {
@@ -3141,7 +3141,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
         if (rpc_modpush->filter) {
             if (!rpc_modpush->filter[0] || (rpc_modpush->filter[0] == '<')) {
-                CHECK_LYRC_BREAK(lyd_new_any(data, mod2, "datastore-subtree-filter", NULL, rpc_modpush->filter, 0, NULL));
+                CHECK_LYRC_BREAK(lyd_new_any(data, mod2, "datastore-subtree-filter", NULL, rpc_modpush->filter, 0, 0, NULL));
             } else if (rpc_modpush->filter[0] == '/') {
                 CHECK_LYRC_BREAK(lyd_new_term(data, mod2, "datastore-xpath-filter", rpc_modpush->filter, 0, NULL));
             } else {
