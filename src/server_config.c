@@ -6146,52 +6146,6 @@ nc_server_config_cert_exp_notif_thread_wakeup(void)
 
 #endif /* NC_ENABLED_SSH_TLS */
 
-/**
- * @brief Wait for any pending updates to complete, then mark the server as "applying configuration".
- *
- * @return 0 on success, 1 on timeout.
- */
-static int
-nc_server_config_update_start(void)
-{
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
-        return 1;
-    }
-
-    if (!server_opts.applying_config) {
-        /* set the flag */
-        server_opts.applying_config = 1;
-    }
-
-    /* UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
-    return 0;
-}
-
-/**
- * @brief Clear the "applying configuration" flag once the configuration update is done.
- */
-static void
-nc_server_config_update_end(void)
-{
-    int r;
-    struct timespec ts_timeout;
-
-    /* get the time point of timeout */
-    nc_timeouttime_get(&ts_timeout, NC_SERVER_CONFIG_UPDATE_WAIT_TIMEOUT_SEC * 1000);
-
-    /* WR LOCK */
-    r = nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__);
-
-    /* clear the flag */
-    server_opts.applying_config = 0;
-
-    if (r == 1) {
-        /* UNLOCK */
-        nc_rwlock_unlock(&server_opts.config_lock, __func__);
-    }
-}
-
 API int
 nc_server_config_setup_diff(const struct lyd_node *data)
 {
@@ -6200,8 +6154,13 @@ nc_server_config_setup_diff(const struct lyd_node *data)
 
     NC_CHECK_ARG_RET(NULL, data, 1);
 
-    /* wait until previous is done, then mark us as applying */
-    NC_CHECK_RET(nc_server_config_update_start());
+    /* CONFIG UPDATE LOCK
+     * - avoids concurrent updates
+     * - readers are still allowed to read the old config while we are applying the new one
+     */
+    if (nc_mutex_lock(&server_opts.config_update_lock, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
 
     /* CONFIG RD LOCK */
     if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
@@ -6269,8 +6228,9 @@ cleanup:
         /* free the new config in case of error */
         nc_server_config_free(&config_copy);
     }
-    nc_server_config_update_end();
 
+    /* CONFIG UPDATE UNLOCK */
+    nc_mutex_unlock(&server_opts.config_update_lock, __func__);
     return ret;
 }
 
@@ -6283,8 +6243,13 @@ nc_server_config_setup_data(const struct lyd_node *data)
 
     NC_CHECK_ARG_RET(NULL, data, 1);
 
-    /* wait until previous is done, then mark us as applying */
-    NC_CHECK_RET(nc_server_config_update_start());
+    /* CONFIG UPDATE LOCK
+     * - avoids concurrent updates
+     * - readers are still allowed to read the old config while we are applying the new one
+     */
+    if (nc_mutex_lock(&server_opts.config_update_lock, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
 
     /* check that the config data are not diff (no op attr) */
     LY_LIST_FOR(data, tree) {
@@ -6356,8 +6321,9 @@ cleanup:
         /* free the new config in case of error */
         nc_server_config_free(&config);
     }
-    nc_server_config_update_end();
 
+    /* CONFIG UPDATE UNLOCK */
+    nc_mutex_unlock(&server_opts.config_update_lock, __func__);
     return ret;
 }
 
