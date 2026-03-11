@@ -1228,6 +1228,15 @@ int nc_ctx_check_and_fill(struct nc_session *session);
 NC_MSG_TYPE nc_handshake_io(struct nc_session *session);
 
 /**
+ * @brief Perform NETCONF handshake on a server-side Call Home session.
+ *
+ * @param[in] session NETCONF session to use.
+ * @return NC_MSG_HELLO on success, NC_MSG_BAD_HELLO on client \<hello\> message parsing fail,
+ * NC_MSG_WOULDBLOCK on timeout, NC_MSG_ERROR on other error.
+ */
+NC_MSG_TYPE nc_ch_handshake_io(struct nc_session *session);
+
+/**
  * @brief Bind a socket to an address and a port.
  *
  * @param[in] sock Socket to bind.
@@ -1434,9 +1443,10 @@ int nc_session_tls_crl_from_cert_ext_fetch(void *leaf_cert, void *cert_store, vo
  * @brief Check whether a module is not ignored by the server.
  *
  * @param[in] mod_name Module name to check.
+ * @param[in] config_locked Whether the configuration lock is already held or should be acquired in this function.
  * @return Whether the module is ignored.
  */
-int nc_server_is_mod_ignored(const char *mod_name);
+int nc_server_is_mod_ignored(const char *mod_name, int config_locked);
 
 /**
  * Functions
