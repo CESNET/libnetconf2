@@ -3016,7 +3016,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
     (*session)->id = ATOMIC_INC_RELAXED(server_opts.new_session_id);
 
     /* NETCONF handshake */
-    msgtype = nc_handshake_io(*session);
+    msgtype = nc_ch_handshake_io(*session);
     if (msgtype != NC_MSG_HELLO) {
         goto fail;
     }
@@ -4514,14 +4514,16 @@ nc_server_notif_cert_expiration_thread_stop(int wait)
 #endif /* NC_ENABLED_SSH_TLS */
 
 int
-nc_server_is_mod_ignored(const char *mod_name)
+nc_server_is_mod_ignored(const char *mod_name, int config_locked)
 {
     int ignored = 0;
     LY_ARRAY_COUNT_TYPE i;
 
-    /* LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
-        return 0;
+    if (!config_locked) {
+        /* LOCK */
+        if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+            return 0;
+        }
     }
 
     LY_ARRAY_FOR(server_opts.config.ignored_modules, i) {
@@ -4531,8 +4533,10 @@ nc_server_is_mod_ignored(const char *mod_name)
         }
     }
 
-    /* UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    if (!config_locked) {
+        /* UNLOCK */
+        nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    }
 
     return ignored;
 }

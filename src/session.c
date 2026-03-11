@@ -1116,8 +1116,16 @@ add_cpblt(const char *capab, char ***cpblts, int *size, int *count)
     ++(*count);
 }
 
-API char **
-nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
+/**
+ * @brief Get the server capabilities.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] version YANG version of the schemas to be included in result.
+ * @param[in] config_locked Whether the configuration lock is already held or should be acquired.
+ * @return Array of capabilities, NULL on error.
+ */
+static char **
+_nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int config_locked)
 {
     char **cpblts;
     const struct lys_module *mod;
@@ -1232,7 +1240,7 @@ nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
     /* models */
     u = 0;
     while ((mod = ly_ctx_get_module_iter(ctx, &u))) {
-        if (nc_server_is_mod_ignored(mod->name)) {
+        if (nc_server_is_mod_ignored(mod->name, config_locked)) {
             /* ignored, not part of the cababilities */
             continue;
         }
@@ -1338,9 +1346,15 @@ error:
 }
 
 API char **
+nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
+{
+    return _nc_server_get_cpblts_version(ctx, version, 0);
+}
+
+API char **
 nc_server_get_cpblts(const struct ly_ctx *ctx)
 {
-    return nc_server_get_cpblts_version(ctx, LYS_VERSION_UNDEF);
+    return _nc_server_get_cpblts_version(ctx, LYS_VERSION_UNDEF, 0);
 }
 
 static int
@@ -1400,8 +1414,15 @@ parse_cpblts(struct lyd_node *capabilities, char ***list)
     return ver;
 }
 
+/**
+ * @brief Send NETCONF hello message on a session.
+ *
+ * @param[in] session Session to send the message on.
+ * @param[in] config_locked Whether the configuration READ lock is already held (only relevant for server side).
+ * @return Sent message type.
+ */
 static NC_MSG_TYPE
-nc_send_hello_io(struct nc_session *session)
+nc_send_hello_io(struct nc_session *session, int config_locked)
 {
     NC_MSG_TYPE ret;
     int i, timeout_io;
@@ -1419,7 +1440,7 @@ nc_send_hello_io(struct nc_session *session)
         timeout_io = NC_CLIENT_HELLO_TIMEOUT * 1000;
         sid = NULL;
     } else {
-        cpblts = nc_server_get_cpblts_version(session->ctx, LYS_VERSION_1_0);
+        cpblts = _nc_server_get_cpblts_version(session->ctx, LYS_VERSION_1_0, config_locked);
         if (!cpblts) {
             return NC_MSG_ERROR;
         }
@@ -1609,7 +1630,7 @@ nc_handshake_io(struct nc_session *session)
 {
     NC_MSG_TYPE type;
 
-    type = nc_send_hello_io(session);
+    type = nc_send_hello_io(session, 0);
     if (type != NC_MSG_HELLO) {
         return type;
     }
@@ -1619,6 +1640,26 @@ nc_handshake_io(struct nc_session *session)
     } else {
         type = nc_server_recv_hello_io(session);
     }
+
+    return type;
+}
+
+NC_MSG_TYPE
+nc_ch_handshake_io(struct nc_session *session)
+{
+    NC_MSG_TYPE type;
+
+    if ((session->side != NC_SERVER) || !(session->flags & NC_SESSION_CALLHOME)) {
+        ERR(session, "Call Home handshake can only be performed on a server session with Call Home flag set.");
+        return NC_MSG_ERROR;
+    }
+
+    type = nc_send_hello_io(session, 1);
+    if (type != NC_MSG_HELLO) {
+        return type;
+    }
+
+    type = nc_server_recv_hello_io(session);
 
     return type;
 }
