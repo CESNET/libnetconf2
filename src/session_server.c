@@ -54,7 +54,8 @@
 
 struct nc_server_opts server_opts = {
     .hello_lock = PTHREAD_RWLOCK_INITIALIZER,
-    .config_lock = PTHREAD_RWLOCK_INITIALIZER
+    .config_lock = PTHREAD_RWLOCK_INITIALIZER,
+    .config_update_lock = PTHREAD_MUTEX_INITIALIZER,
 };
 
 static nc_rpc_clb global_rpc_clb = NULL;

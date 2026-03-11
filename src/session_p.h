@@ -781,7 +781,6 @@ struct nc_server_opts {
      *               - options read when accepting sessions - READ lock */
     pthread_rwlock_t config_lock;       /**< Lock for the server configuration. */
     struct nc_server_config config;     /**< YANG Server configuration. */
-    int applying_config;                /**< Flag indicating that the server configuration is currently being applied. */
 
 #ifdef NC_ENABLED_SSH_TLS
     char *authkey_path_fmt;             /**< Path to users' public keys that may contain tokens with special meaning. */
@@ -831,6 +830,10 @@ struct nc_server_opts {
     /* ACCESS unlocked - set from env */
     FILE *tls_keylog_file;                  /**< File to log TLS secrets to. */
 #endif
+
+    /* ACCESS locked - separate lock to allow concurrent reads of the config while an update is being applied */
+    pthread_mutex_t config_update_lock; /**< Lock for synchronizing configuration updates, used to wait for pending
+                                             configuration update to complete before accepting a new one. */
 };
 
 /**
