@@ -978,7 +978,7 @@ nc_server_tls_send(void *ctx, const unsigned char *buf, size_t len)
 
     ret = send(sock, buf, len, MSG_NOSIGNAL);
     if (ret < 0) {
-        if ((errno == EWOULDBLOCK) || (errno = EAGAIN) || (errno == EINTR)) {
+        if ((errno == EWOULDBLOCK) || (errno == EAGAIN) || (errno == EINTR)) {
             return MBEDTLS_ERR_SSL_WANT_WRITE;
         } else if ((errno == EPIPE) || (errno == ECONNRESET)) {
             return MBEDTLS_ERR_NET_CONN_RESET;
@@ -1009,7 +1009,7 @@ nc_server_tls_recv(void *ctx, unsigned char *buf, size_t len)
 
     ret = recv(sock, buf, len, 0);
     if (ret < 0) {
-        if ((errno == EWOULDBLOCK) || (errno = EAGAIN) || (errno == EINTR)) {
+        if ((errno == EWOULDBLOCK) || (errno == EAGAIN) || (errno == EINTR)) {
             return MBEDTLS_ERR_SSL_WANT_READ;
         } else if ((errno == EPIPE) || (errno == ECONNRESET)) {
             return MBEDTLS_ERR_NET_CONN_RESET;
