@@ -231,7 +231,7 @@ nc_client_tls_connect_check(int connect_ret, void *tls_session, const char *peer
 static void *
 nc_client_tls_session_new(int sock, const char *host, int timeout, struct nc_client_tls_opts *opts, void **out_tls_cfg, struct nc_tls_ctx *tls_ctx)
 {
-    int ret = 0, sock_tmp = sock;
+    int ret = 0;
     struct timespec ts_timeout;
     void *tls_session, *tls_cfg, *cli_cert, *cli_pkey, *cert_store, *crl_store;
 
@@ -300,7 +300,7 @@ nc_client_tls_session_new(int sock, const char *host, int timeout, struct nc_cli
     if (timeout > -1) {
         nc_timeouttime_get(&ts_timeout, timeout);
     }
-    while ((ret = nc_client_tls_handshake_step_wrap(tls_session, sock_tmp)) == 0) {
+    while ((ret = nc_client_tls_handshake_step_wrap(tls_session, sock)) == 0) {
         usleep(NC_TIMEOUT_STEP);
         if ((timeout > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
             ERR(NULL, "SSL connect timeout.");
