@@ -407,7 +407,6 @@ nc_server_config_free(struct nc_server_config *config)
                 }
             }
             free(endpt->binds[j].address);
-            pthread_mutex_destroy(&endpt->bind_lock);
         }
         LY_ARRAY_FREE(endpt->binds);
 
@@ -3325,7 +3324,6 @@ config_endpoint(const struct lyd_node *node, enum nc_operation parent_op,
     struct nc_endpt *endpt = NULL;
     const char *name;
     LY_ARRAY_COUNT_TYPE i = 0;
-    int r;
 
     NC_NODE_GET_OP(node, parent_op, &op);
 
@@ -3346,12 +3344,6 @@ config_endpoint(const struct lyd_node *node, enum nc_operation parent_op,
     } else if (op == NC_OP_CREATE) {
         /* create a new endpoint */
         LY_ARRAY_NEW_RET(LYD_CTX(node), config->endpts, endpt, 1);
-
-        /* init the new endpoint */
-        if ((r = pthread_mutex_init(&endpt->bind_lock, NULL))) {
-            ERR(NULL, "Mutex init failed (%s).", strerror(r));
-            return 1;
-        }
     }
 
     /* config name */
@@ -3376,7 +3368,6 @@ config_endpoint(const struct lyd_node *node, enum nc_operation parent_op,
 
     /* all children processed, we can now delete the endpoint */
     if (op == NC_OP_DELETE) {
-        pthread_mutex_destroy(&endpt->bind_lock);
         if (i < LY_ARRAY_COUNT(config->endpts) - 1) {
             config->endpts[i] = config->endpts[LY_ARRAY_COUNT(config->endpts) - 1];
         }
@@ -6007,7 +5998,6 @@ nc_server_config_dup(const struct nc_server_config *src, struct nc_server_config
             dst_endpt->binds[j].sock = -1;
             LY_ARRAY_INCREMENT(dst_endpt->binds);
         }
-        pthread_mutex_init(&dst_endpt->bind_lock, NULL);
 
         dst_endpt->ka = src_endpt->ka;
 

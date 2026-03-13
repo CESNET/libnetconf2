@@ -1846,7 +1846,6 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, const char *hos
     client_opts.ch_binds[client_opts.ch_bind_count - 1].address = strdup(address);
     client_opts.ch_binds[client_opts.ch_bind_count - 1].port = port;
     client_opts.ch_binds[client_opts.ch_bind_count - 1].sock = sock;
-    client_opts.ch_binds[client_opts.ch_bind_count - 1].pollin = 0;
 
     return 0;
 }
@@ -1909,7 +1908,7 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
 {
     int ret, sock;
     char *host = NULL;
-    uint16_t port, idx;
+    uint16_t port, bind_idx = 0;
 
     NC_CHECK_ARG_RET(NULL, session, -1);
 
@@ -1918,8 +1917,8 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
         return -1;
     }
 
-    ret = nc_sock_accept_binds(NULL, client_opts.ch_binds, client_opts.ch_bind_count, &client_opts.ch_bind_lock, timeout,
-            &host, &port, &idx, &sock);
+    ret = nc_server_ch_accept_binds(client_opts.ch_binds, client_opts.ch_bind_count, timeout,
+            &host, &port, &bind_idx, &sock);
     if (ret < 1) {
         free(host);
         return ret;
@@ -1932,11 +1931,11 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
         return -1;
     }
 
-    if (client_opts.ch_binds_aux[idx].ti == NC_TI_SSH) {
+    if (client_opts.ch_binds_aux[bind_idx].ti == NC_TI_SSH) {
         *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
-    } else if (client_opts.ch_binds_aux[idx].ti == NC_TI_TLS) {
+    } else if (client_opts.ch_binds_aux[bind_idx].ti == NC_TI_TLS) {
         *session = nc_accept_callhome_tls_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT,
-                client_opts.ch_binds_aux[idx].hostname);
+                client_opts.ch_binds_aux[bind_idx].hostname);
     } else {
         close(sock);
         *session = NULL;
@@ -1994,13 +1993,6 @@ nc_session_ntf_thread_running(const struct nc_session *session)
 API int
 nc_client_init(void)
 {
-    int r;
-
-    if ((r = pthread_mutex_init(&client_opts.ch_bind_lock, NULL))) {
-        ERR(NULL, "%s: failed to init bind lock(%s).", __func__, strerror(r));
-        return -1;
-    }
-
 #ifdef NC_ENABLED_SSH_TLS
     if (nc_tls_backend_init_wrap()) {
         ERR(NULL, "%s: failed to init the SSL library backend.", __func__);
@@ -2018,7 +2010,6 @@ nc_client_init(void)
 API void
 nc_client_destroy(void)
 {
-    pthread_mutex_destroy(&client_opts.ch_bind_lock);
     nc_client_set_schema_searchpath(NULL);
     nc_client_unix_set_username(NULL);
 #ifdef NC_ENABLED_SSH_TLS
