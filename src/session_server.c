@@ -332,8 +332,7 @@ nc_sock_bind_inet(int sock, const char *address, uint16_t port, int is_ipv4)
 int
 nc_sock_listen_inet(const char *address, uint16_t port)
 {
-    int opt;
-    int is_ipv4, sock;
+    int opt, flags, is_ipv4, sock;
 
     if (!strchr(address, ':')) {
         is_ipv4 = 1;
@@ -344,6 +343,12 @@ nc_sock_listen_inet(const char *address, uint16_t port)
     sock = socket((is_ipv4 ? AF_INET : AF_INET6), SOCK_STREAM, 0);
     if (sock == -1) {
         ERR(NULL, "Failed to create socket (%s).", strerror(errno));
+        goto fail;
+    }
+
+    /* make the socket non-blocking */
+    if (((flags = fcntl(sock, F_GETFL)) == -1) || (fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
+        ERR(NULL, "Fcntl failed (%s).", strerror(errno));
         goto fail;
     }
 
@@ -414,6 +419,7 @@ nc_session_unix_construct_socket_path(const char *filename, char **path)
 
     if (strlen(full_path) > sizeof(sun.sun_path) - 1) {
         ERR(NULL, "Socket path \"%s\" is too long.", full_path);
+        rc = 1;
         goto cleanup;
     }
 
@@ -525,7 +531,7 @@ static int
 nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *opts)
 {
     struct sockaddr_un sun;
-    int sock = -1;
+    int sock = -1, flags;
 
     if (!address) {
         ERR(NULL, "No socket path set.");
@@ -565,6 +571,12 @@ nc_sock_listen_unix(const char *address, const struct nc_server_unix_opts *opts)
         }
     }
 
+    /* make the socket non-blocking */
+    if (((flags = fcntl(sock, F_GETFL)) == -1) || (fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
+        ERR(NULL, "Fcntl failed (%s).", strerror(errno));
+        goto fail;
+    }
+
     if (listen(sock, NC_REVERSE_QUEUE) == -1) {
         ERR(NULL, "Unable to start listening on \"%s\" (%s).", address, strerror(errno));
         goto fail;
@@ -588,7 +600,7 @@ fail:
  * @return -1 in case of error. Parameter host is set to NULL.
  */
 static int
-sock_host_unix(int acc_sock_fd, char **host)
+nc_sock_host_unix(int acc_sock_fd, char **host)
 {
     char *sun_path;
     struct sockaddr_storage saddr;
@@ -623,7 +635,7 @@ sock_host_unix(int acc_sock_fd, char **host)
  * @return -1 in case of error. Parameter host is set to NULL and port is unchanged.
  */
 static int
-sock_host_inet(const struct sockaddr_in *addr, char **host, uint16_t *port)
+nc_sock_host_inet(const struct sockaddr_in *addr, char **host, uint16_t *port)
 {
     *host = malloc(INET_ADDRSTRLEN);
     NC_CHECK_ERRMEM_RET(!(*host), -1);
@@ -649,7 +661,7 @@ sock_host_inet(const struct sockaddr_in *addr, char **host, uint16_t *port)
  * @return -1 in case of error. Parameter host is set to the NULL and port is unchanged.
  */
 static int
-sock_host_inet6(const struct sockaddr_in6 *addr, char **host, uint16_t *port)
+nc_sock_host_inet6(const struct sockaddr_in6 *addr, char **host, uint16_t *port)
 {
     *host = malloc(INET6_ADDRSTRLEN);
     NC_CHECK_ERRMEM_RET(!(*host), -1);
@@ -666,150 +678,344 @@ sock_host_inet6(const struct sockaddr_in6 *addr, char **host, uint16_t *port)
     return 0;
 }
 
-int
-nc_sock_accept_binds(struct nc_endpt *endpt, struct nc_bind *binds, uint16_t bind_count,
-        pthread_mutex_t *bind_lock, int timeout, char **host, uint16_t *port, uint16_t *idx, int *sock)
+/**
+ * @brief Get the client's host information from the accepted socket address.
+ *
+ * @param[in] saddr sockaddr_storage.
+ * @param[in] client_sock Socket FD of the accepted connection.
+ * @param[out] client_address Hostname or IP address of the connecting client (must be freed by the caller).
+ * @param[out] client_port Port number of the connecting client, if any (0 for AF_UNIX).
+ * @return 0 on success, -1 on error.
+ */
+static int
+nc_sock_host_get(const struct sockaddr_storage *saddr, int client_sock, char **client_address, uint16_t *client_port)
 {
-    uint16_t i, j, pfd_count, client_port;
-    char *client_address, *sockpath = NULL;
-    struct pollfd *pfd;
-    struct sockaddr_storage saddr;
-    socklen_t saddr_len = sizeof(saddr);
-    int ret, client_sock, server_sock = -1, flags;
+    int rc = 0;
 
-    pfd = malloc(bind_count * sizeof *pfd);
-    NC_CHECK_ERRMEM_RET(!pfd, -1);
+    /* learn information about the client end */
+    if (saddr->ss_family == AF_UNIX) {
+        if ((rc = nc_sock_host_unix(client_sock, client_address))) {
+            goto cleanup;
+        }
+        *client_port = 0;
+    } else if (saddr->ss_family == AF_INET) {
+        if ((rc = nc_sock_host_inet((struct sockaddr_in *)saddr, client_address, client_port))) {
+            goto cleanup;
+        }
+    } else if (saddr->ss_family == AF_INET6) {
+        if ((rc = nc_sock_host_inet6((struct sockaddr_in6 *)saddr, client_address, client_port))) {
+            goto cleanup;
+        }
+    } else {
+        ERR(NULL, "Source host of an unknown protocol family.");
+        rc = -1;
+        goto cleanup;
+    }
 
-    /* LOCK */
-    if (nc_mutex_lock(bind_lock, timeout, __func__) != 1) {
-        free(pfd);
+cleanup:
+    return rc;
+}
+
+/**
+ * @brief Log the accepted connection.
+ *
+ * @param[in] saddr sockaddr_storage.
+ * @param[in] endpt Endpoint on which the connection was accepted (optional, used for logging).
+ * @param[in] bind Bind on which the connection was accepted.
+ * @param[in] client_address Hostname or IP address of the connecting client.
+ * @param[in] client_port Port number of the connecting client, if any.
+ * @return 0 on success, -1 on error.
+ */
+static int
+nc_sock_log_accepted(const struct sockaddr_storage *saddr, const struct nc_endpt *endpt, const struct nc_bind *bind,
+        const char *client_address, uint16_t client_port)
+{
+    char *unix_sockpath = NULL;
+
+    if (saddr->ss_family == AF_UNIX) {
+        /* UNIX socket, get the socket path for logging,
+         * UNIX socket connection can NOT be over call home (caller = client connect), so endpt is always available */
+        assert(endpt);
+        unix_sockpath = nc_server_unix_get_socket_path(endpt);
+        VRB(NULL, "Accepted a new connection on %s.", unix_sockpath ? unix_sockpath : "UNIX socket");
+        free(unix_sockpath);
+    } else if (saddr->ss_family == AF_INET) {
+        /* IPv4 socket */
+        VRB(NULL, "Accepted a new connection on %s:%" PRIu16 " from %s:%" PRIu16 ".", bind->address, bind->port,
+                client_address, client_port);
+    } else if (saddr->ss_family == AF_INET6) {
+        /* IPv6 socket */
+        VRB(NULL, "Accepted a new connection on [%s]:%" PRIu16 " from [%s]:%" PRIu16 ".", bind->address, bind->port,
+                client_address, client_port);
+    } else {
+        ERR(NULL, "Source host of an unknown protocol family.");
         return -1;
     }
 
-    for (i = 0, pfd_count = 0; i < bind_count; ++i) {
-        if (binds[i].sock < 0) {
-            /* invalid socket */
-            continue;
-        }
-        if (binds[i].pollin) {
-            binds[i].pollin = 0;
-            /* leftover pollin */
-            server_sock = binds[i].sock;
+    return 0;
+}
+
+/**
+ * @brief Accept the first available connection on the given pollfds.
+ *
+ * @param[in] pfd Array of pollfds to check for incoming connections.
+ * @param[in] pfd_count Number of pollfds in the array.
+ * @param[out] client_sock Socket file descriptor of the accepted connection, -1 if no connection was accepted.
+ * @param[out] saddr sockaddr_storage to store the address of the connecting client.
+ * @param[out] saddr_len Length of the sockaddr_storage structure.
+ * @param[out] fd_idx Index of the pollfd on which the connection was accepted, valid only if client_sock is not -1.
+ * @return 0 on success, -1 on error (client_sock will be -1 on error or if no connection was accepted).
+ */
+static int
+nc_sock_accept_first(struct pollfd *pfd, uint16_t pfd_count, int *client_sock,
+        struct sockaddr_storage *saddr, socklen_t *saddr_len, uint16_t *fd_idx)
+{
+    int sock = -1;
+    uint16_t i;
+
+    *client_sock = -1;
+
+    for (i = 0; i < pfd_count; i++) {
+        if (pfd[i].revents & POLLIN) {
+            sock = accept(pfd[i].fd, (struct sockaddr *)saddr, saddr_len);
+            if (sock < 0) {
+                if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
+                    /* another thread already accepted the connection, try another one */
+                    continue;
+                }
+                ERR(NULL, "Accept failed (%s).", strerror(errno));
+                return -1;
+            }
+
+            /* successfully accepted a connection! */
             break;
         }
-        pfd[pfd_count].fd = binds[i].sock;
-        pfd[pfd_count].events = POLLIN;
-        pfd[pfd_count].revents = 0;
-
-        ++pfd_count;
     }
 
-    if (server_sock == -1) {
-        /* poll for a new connection */
-        ret = nc_poll(pfd, pfd_count, timeout);
-        if (ret < 1) {
-            free(pfd);
-
-            /* UNLOCK */
-            nc_mutex_unlock(bind_lock, __func__);
-
-            return ret;
-        }
-
-        for (i = 0, j = 0; j < pfd_count; ++i, ++j) {
-            /* adjust i so that indices in binds and pfd always match */
-            while (binds[i].sock != pfd[j].fd) {
-                ++i;
-            }
-
-            if (pfd[j].revents & POLLIN) {
-                --ret;
-
-                if (!ret) {
-                    /* the last socket with an event, use it */
-                    server_sock = pfd[j].fd;
-                    break;
-                } else {
-                    /* just remember the event for next time */
-                    binds[i].pollin = 1;
-                }
-            }
-        }
-    }
-    free(pfd);
-    if (server_sock == -1) {
-        ERRINT;
-        /* UNLOCK */
-        nc_mutex_unlock(bind_lock, __func__);
-        return -1;
+    if (sock != -1) {
+        *client_sock = sock;
+        *fd_idx = i;
     }
 
-    /* accept connection */
-    client_sock = accept(server_sock, (struct sockaddr *)&saddr, &saddr_len);
-    if (client_sock < 0) {
-        ERR(NULL, "Accept failed (%s).", strerror(errno));
-        /* UNLOCK */
-        nc_mutex_unlock(bind_lock, __func__);
-        return -1;
+    return 0;
+}
+
+/**
+ * @brief Accept a new connection on any of the given pollfds.
+ *
+ * Can be called by multiple threads. If there is only a single event, one thread will accept the connection,
+ * others will timeout.
+ *
+ * @param[in] pollfds FDs to poll for new connections.
+ * @param[in] pollfd_count Number of FDs in the pollfds array.
+ * @param[in] endpt_map Map of pollfd indices to endpoints (optional, used for logging).
+ * @param[in] bind_map Map of pollfd indices to binds (optional, used for logging).
+ * @param[in] timeout Timeout for accepting a connection.
+ * @param[out] host Hostname or IP address of the connecting client.
+ * @param[out] port Port number of the connecting client, if any.
+ * @param[out] fd_idx Index of the pollfd on which the connection was accepted.
+ * @param[out] sock Socket file descriptor of the accepted connection.
+ * @return 1 on success, 0 on timeout, -1 on error.
+ */
+static int
+nc_sock_accept_pollfds(struct pollfd *pollfds, uint16_t pollfd_count, struct nc_endpt **endpt_map,
+        struct nc_bind **bind_map, int timeout, char **host, uint16_t *port,
+        uint16_t *fd_idx, int *sock)
+{
+    uint16_t client_port = 0, matched_pollfd_idx = 0;
+    char *client_address = NULL;
+    struct sockaddr_storage client_saddr;
+    socklen_t saddr_len = sizeof(client_saddr);
+    struct nc_endpt *endpt;
+    struct nc_bind *bind;
+    int client_sock = -1, ret = 1, r, flags;
+
+    if (!pollfd_count) {
+        /* no FDs to poll, treat as a timeout */
+        ret = 0;
+        goto cleanup;
     }
+
+    /* poll for a new connection */
+    r = nc_poll(pollfds, pollfd_count, timeout);
+    if (r < 1) {
+        /* either 0 (timeout) or -1 (error) */
+        ret = r;
+        goto cleanup;
+    }
+
+    /* try to accept the first available connection */
+    if ((r = nc_sock_accept_first(pollfds, pollfd_count, &client_sock, &client_saddr, &saddr_len, &matched_pollfd_idx))) {
+        ret = r;
+        goto cleanup;
+    }
+    if (client_sock == -1) {
+        /* all events were stolen by other threads, treat as a timeout */
+        ret = 0;
+        goto cleanup;
+    }
+
+    bind = bind_map[matched_pollfd_idx];
+    endpt = endpt_map ? endpt_map[matched_pollfd_idx] : NULL;
 
     /* make the socket non-blocking */
     if (((flags = fcntl(client_sock, F_GETFL)) == -1) || (fcntl(client_sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
         ERR(NULL, "Fcntl failed (%s).", strerror(errno));
-        goto fail;
+        goto cleanup;
     }
 
-    /* learn information about the client end */
-    if (saddr.ss_family == AF_UNIX) {
-        if (sock_host_unix(client_sock, &client_address)) {
-            goto fail;
-        }
-        client_port = 0;
-    } else if (saddr.ss_family == AF_INET) {
-        if (sock_host_inet((struct sockaddr_in *)&saddr, &client_address, &client_port)) {
-            goto fail;
-        }
-    } else if (saddr.ss_family == AF_INET6) {
-        if (sock_host_inet6((struct sockaddr_in6 *)&saddr, &client_address, &client_port)) {
-            goto fail;
-        }
-    } else {
-        ERR(NULL, "Source host of an unknown protocol family.");
-        goto fail;
+    /* learn information about the peer */
+    if ((r = nc_sock_host_get(&client_saddr, client_sock, &client_address, &client_port))) {
+        ret = r;
+        goto cleanup;
     }
 
-    if (saddr.ss_family == AF_UNIX) {
-        if (endpt) {
-            sockpath = nc_server_unix_get_socket_path(endpt);
-        }
-        VRB(NULL, "Accepted a connection on %s.", sockpath ? sockpath : "UNIX socket");
-        free(sockpath);
-    } else {
-        VRB(NULL, "Accepted a connection on %s:%u from %s:%u.", binds[i].address, binds[i].port, client_address, client_port);
+    /* log the new accepted connection */
+    if ((r = nc_sock_log_accepted(&client_saddr, endpt, bind, client_address, client_port))) {
+        ret = r;
+        goto cleanup;
     }
 
     if (host) {
         *host = client_address;
-    } else {
-        free(client_address);
+        client_address = NULL;
     }
     if (port) {
         *port = client_port;
     }
-    if (idx) {
-        *idx = i;
+    if (fd_idx) {
+        *fd_idx = matched_pollfd_idx;
     }
-    /* UNLOCK */
-    nc_mutex_unlock(bind_lock, __func__);
-
     *sock = client_sock;
-    return 1;
+    client_sock = -1;
 
-fail:
-    close(client_sock);
-    /* UNLOCK */
-    nc_mutex_unlock(bind_lock, __func__);
-    return -1;
+cleanup:
+    free(client_address);
+    if (client_sock > -1) {
+        close(client_sock);
+    }
+    return ret;
+}
+
+/**
+ * @brief Accept a new connection on any of the server's listening binds.
+ *
+ * @param[in] config Server configuration.
+ * @param[in] timeout Timeout for accepting a connection.
+ * @param[out] host Hostname or IP address of the connecting client.
+ * @param[out] port Port number of the connecting client, if any.
+ * @param[out] idx Index of the endpoint on which the connection was accepted (optional).
+ * @param[out] sock Socket file descriptor of the accepted connection.
+ * @return 1 on success, 0 on timeout, -1 on error.
+ */
+static int
+nc_server_accept_binds(struct nc_server_config *config, int timeout, char **host,
+        uint16_t *port, LY_ARRAY_COUNT_TYPE *idx, int *sock)
+{
+    struct pollfd *pollfds = NULL;
+    uint16_t pollfd_count = 0, fd_idx = 0, bind_count = 0;
+    LY_ARRAY_COUNT_TYPE i;
+    struct nc_endpt *endpt;
+    struct nc_bind *bind;
+    int ret = 1;
+    struct nc_endpt **endpt_map = NULL;
+    struct nc_bind **bind_map = NULL;
+
+    /* count the number of valid binds and prepare the pollfd and map parallel arrays */
+    LY_ARRAY_FOR(config->endpts, i) {
+        bind_count += LY_ARRAY_COUNT(config->endpts[i].binds);
+    }
+    if (!bind_count) {
+        /* no binds to accept on, treat as a timeout */
+        ret = 0;
+        goto cleanup;
+    }
+
+    pollfds = malloc(bind_count * sizeof *pollfds);
+    NC_CHECK_ERRMEM_RET(!pollfds, -1);
+    endpt_map = malloc(bind_count * sizeof *endpt_map);
+    NC_CHECK_ERRMEM_GOTO(!endpt_map, ret = -1, cleanup);
+    bind_map = malloc(bind_count * sizeof *bind_map);
+    NC_CHECK_ERRMEM_GOTO(!bind_map, ret = -1, cleanup);
+
+    /* fill the arrays */
+    LY_ARRAY_FOR(config->endpts, struct nc_endpt, endpt) {
+        LY_ARRAY_FOR(endpt->binds, struct nc_bind, bind) {
+            if (bind->sock < 0) {
+                /* invalid socket */
+                continue;
+            }
+
+            pollfds[pollfd_count].fd = bind->sock;
+            pollfds[pollfd_count].events = POLLIN;
+            pollfds[pollfd_count].revents = 0;
+
+            endpt_map[pollfd_count] = endpt;
+            bind_map[pollfd_count] = bind;
+
+            ++pollfd_count;
+        }
+    }
+
+    /* accept a new connection on any of the sockets */
+    ret = nc_sock_accept_pollfds(pollfds, pollfd_count, endpt_map, bind_map, timeout, host, port, &fd_idx, sock);
+    if (idx && (ret > 0)) {
+        *idx = endpt_map[fd_idx] - config->endpts;
+    }
+
+cleanup:
+    free(pollfds);
+    free(endpt_map);
+    free(bind_map);
+    return ret;
+}
+
+int
+nc_server_ch_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host,
+        uint16_t *port, uint16_t *bind_idx, int *sock)
+{
+    struct pollfd *pollfds = NULL;
+    uint16_t pollfd_count = 0, fd_idx = 0, i;
+    int ret = 1;
+    struct nc_bind **bind_map = NULL;
+
+    if (!bind_count) {
+        /* no binds to accept on, treat as a timeout */
+        ret = 0;
+        goto cleanup;
+    }
+
+    /* prepare the pollfd and map parallel arrays */
+    pollfds = malloc(bind_count * sizeof *pollfds);
+    NC_CHECK_ERRMEM_RET(!pollfds, -1);
+    bind_map = malloc(bind_count * sizeof *bind_map);
+    NC_CHECK_ERRMEM_GOTO(!bind_map, ret = -1, cleanup);
+
+    /* fill the arrays */
+    for (i = 0; i < bind_count; ++i) {
+        if (binds[i].sock < 0) {
+            /* invalid socket */
+            continue;
+        }
+
+        pollfds[pollfd_count].fd = binds[i].sock;
+        pollfds[pollfd_count].events = POLLIN;
+        pollfds[pollfd_count].revents = 0;
+
+        bind_map[pollfd_count] = &binds[i];
+
+        ++pollfd_count;
+    }
+
+    ret = nc_sock_accept_pollfds(pollfds, pollfd_count, NULL, bind_map, timeout, host, port, &fd_idx, sock);
+    if (bind_idx && (ret > 0)) {
+        *bind_idx = bind_map[fd_idx] - binds;
+    }
+
+cleanup:
+    free(pollfds);
+    free(bind_map);
+    return ret;
 }
 
 API struct nc_server_reply *
@@ -2758,19 +2964,12 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
         goto cleanup;
     }
 
-    /* try to accept a new connection on any of the endpoints */
-    LY_ARRAY_FOR(config->endpts, endpt_idx) {
-        ret = nc_sock_accept_binds(&config->endpts[endpt_idx], config->endpts[endpt_idx].binds, LY_ARRAY_COUNT(config->endpts[endpt_idx].binds),
-                &config->endpts[endpt_idx].bind_lock, timeout, &host, &port, NULL, &sock);
-        if (ret < 0) {
-            msgtype = NC_MSG_ERROR;
-            goto cleanup;
-        } else if (ret > 0) {
-            /* accepted */
-            break;
-        }
-    }
-    if (sock == -1) {
+    /* try to accept a new connection on any of the listening endpoints */
+    ret = nc_server_accept_binds(config, timeout, &host, &port, &endpt_idx, &sock);
+    if (ret < 0) {
+        msgtype = NC_MSG_ERROR;
+        goto cleanup;
+    } else if (!ret) {
         /* timeout, no connection established */
         msgtype = NC_MSG_WOULDBLOCK;
         goto cleanup;

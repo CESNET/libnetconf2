@@ -492,7 +492,6 @@ struct nc_bind {
     char *address;  /**< Either IPv4/IPv6 address or path to UNIX socket. */
     uint16_t port;  /**< Either port number or 0 for UNIX socket. */
     int sock;       /**< Socket file descriptor, -1 if not created yet. */
-    int pollin;     /**< Specifies, which sockets to poll on. */
 };
 
 struct nc_client_unix_opts {
@@ -573,7 +572,6 @@ struct nc_client_opts {
     struct nc_keepalives ka;
 
     struct nc_bind *ch_binds;
-    pthread_mutex_t ch_bind_lock;   /**< To avoid concurrent calls of poll and accept on the bound sockets **/
 
     struct {
         NC_TRANSPORT_IMPL ti;
@@ -692,9 +690,7 @@ struct nc_server_config {
     struct nc_endpt {
         char *name;                 /**< Identifier of the endpoint. */
 
-        /* ACCESS locked - bind_lock */
         struct nc_bind *binds;      /**< Listening binds of the endpoint (sized-array, see libyang docs). */
-        pthread_mutex_t bind_lock;  /**< To avoid concurrent calls of poll and accept on the bound sockets. **/
 
         struct nc_keepalives ka;    /**< TCP keepalives configuration. */
 
@@ -1285,23 +1281,19 @@ int nc_sock_accept(int sock, int timeout, char **peer_host, uint16_t *peer_port)
 int nc_sock_listen_inet(const char *address, uint16_t port);
 
 /**
- * @brief Accept a new connection on a listening socket.
+ * @brief Accept a new connection on any of the given Call Home binds.
  *
- * @param[in] endpt Optional endpoint the binds belong to (only for logging purposes).
- * @param[in] binds Structure with the listening sockets.
+ * @param[in] binds Call Home binds to accept on.
  * @param[in] bind_count Number of @p binds.
- * @param[in] bind_lock Lock for avoiding concurrent poll/accept on a single bind.
  * @param[in] timeout Timeout for accepting.
  * @param[out] host Host of the remote peer. Can be NULL.
  * @param[out] port Port of the new connection. Can be NULL.
- * @param[out] idx Index of the bind that was accepted. Can be NULL.
+ * @param[out] bind_idx Index of the bind that was accepted. Can be NULL.
  * @param[out] sock Accepted socket, if any.
- * @return -1 on error.
- * @return 0 on timeout.
- * @return 1 if a socket was accepted.
+ * @return -1 on error, 0 on timeout, 1 if a socket was accepted.
  */
-int nc_sock_accept_binds(struct nc_endpt *endpt, struct nc_bind *binds, uint16_t bind_count,
-        pthread_mutex_t *bind_lock, int timeout, char **host, uint16_t *port, uint16_t *idx, int *sock);
+int nc_server_ch_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host,
+        uint16_t *port, uint16_t *bind_idx, int *sock);
 
 /**
  * @brief Establish a UNIX transport session.
