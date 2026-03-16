@@ -1079,41 +1079,49 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     free(session);
 }
 
-static void
-add_cpblt(const char *capab, char ***cpblts, int *size, int *count)
+/**
+ * @brief Add a capability into an array.
+ *
+ * @param[in] capab Capability to add.
+ * @param[in,out] cpblts Array of capabilities to add to, terminated with NULL.
+ * @param[in,out] count Count of @p cpblts.
+ * @return 0 on success;
+ * @return -1 on error.
+ */
+static int
+nc_add_cpblt(const char *capab, char ***cpblts, uint32_t *count)
 {
-    size_t len;
-    int i;
+    uint32_t i, len;
     char *p;
 
-    if (capab) {
-        /*  check if already present */
-        p = strchr(capab, '?');
-        if (p) {
-            len = p - capab;
-        } else {
-            len = strlen(capab);
-        }
-        for (i = 0; i < *count; i++) {
-            if (!strncmp((*cpblts)[i], capab, len) && (((*cpblts)[i][len] == '\0') || ((*cpblts)[i][len] == '?'))) {
-                /* already present, do not duplicate it */
-                return;
-            }
+    /*  check if already present */
+    p = strchr(capab, '?');
+    if (p) {
+        len = p - capab;
+    } else {
+        len = strlen(capab);
+    }
+    for (i = 0; i < *count; i++) {
+        if (!strncmp((*cpblts)[i], capab, len) && (((*cpblts)[i][len] == '\0') || ((*cpblts)[i][len] == '?'))) {
+            /* already present, do not duplicate it */
+            return 0;
         }
     }
 
     /* add another capability */
-    if (*count == *size) {
-        *size += 5;
-        *cpblts = nc_realloc(*cpblts, *size * sizeof **cpblts);
-        if (!(*cpblts)) {
-            ERRMEM;
-            return;
-        }
+    *cpblts = nc_realloc(*cpblts, (*count + 2) * sizeof **cpblts);
+    if (!(*cpblts)) {
+        ERRMEM;
+        return -1;
     }
 
-    (*cpblts)[*count] = capab ? strdup(capab) : NULL;
+    (*cpblts)[*count] = strdup(capab);
     ++(*count);
+
+    /* terminating NULL */
+    (*cpblts)[*count] = NULL;
+
+    return 0;
 }
 
 /**
@@ -1122,7 +1130,7 @@ add_cpblt(const char *capab, char ***cpblts, int *size, int *count)
  * @param[in] ctx libyang context.
  * @param[in] version YANG version of the schemas to be included in result.
  * @param[in] config_locked Whether the configuration lock is already held or should be acquired.
- * @return Array of capabilities, NULL on error.
+ * @return Array of capabilities terminated with NULL, NULL on error.
  */
 static char **
 _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int config_locked)
@@ -1130,43 +1138,43 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
     char **cpblts;
     const struct lys_module *mod;
     const char *feat;
-    int size = 10, count, features_count = 0, dev_count = 0, str_len, len;
-    uint32_t u;
+    int features_count = 0, dev_count = 0, str_len, len;
+    uint32_t i, count;
     LY_ARRAY_COUNT_TYPE v;
     char *yl_content_id;
-    uint32_t wd_also_supported;
-    uint32_t wd_basic_mode;
+    uint32_t wd_also_supported, wd_basic_mode;
 
 #define NC_CPBLT_BUF_LEN 4096
     char str[NC_CPBLT_BUF_LEN];
 
     NC_CHECK_ARG_RET(NULL, ctx, NULL);
 
-    cpblts = malloc(size * sizeof *cpblts);
+    cpblts = malloc(3 * sizeof *cpblts);
     NC_CHECK_ERRMEM_GOTO(!cpblts, , error);
     cpblts[0] = strdup("urn:ietf:params:netconf:base:1.0");
     cpblts[1] = strdup("urn:ietf:params:netconf:base:1.1");
+    cpblts[2] = NULL;
     count = 2;
 
     mod = ly_ctx_get_module_implemented(ctx, "ietf-netconf");
     if (mod) {
         if (lys_feature_value(mod, "writable-running") == LY_SUCCESS) {
-            add_cpblt("urn:ietf:params:netconf:capability:writable-running:1.0", &cpblts, &size, &count);
+            NC_CHECK_GOTO(nc_add_cpblt("urn:ietf:params:netconf:capability:writable-running:1.0", &cpblts, &count), error);
         }
         if (lys_feature_value(mod, "candidate") == LY_SUCCESS) {
-            add_cpblt("urn:ietf:params:netconf:capability:candidate:1.0", &cpblts, &size, &count);
+            NC_CHECK_GOTO(nc_add_cpblt("urn:ietf:params:netconf:capability:candidate:1.0", &cpblts, &count), error);
             if (lys_feature_value(mod, "confirmed-commit") == LY_SUCCESS) {
-                add_cpblt("urn:ietf:params:netconf:capability:confirmed-commit:1.1", &cpblts, &size, &count);
+                NC_CHECK_GOTO(nc_add_cpblt("urn:ietf:params:netconf:capability:confirmed-commit:1.1", &cpblts, &count), error);
             }
         }
         if (lys_feature_value(mod, "rollback-on-error") == LY_SUCCESS) {
-            add_cpblt("urn:ietf:params:netconf:capability:rollback-on-error:1.0", &cpblts, &size, &count);
+            NC_CHECK_GOTO(nc_add_cpblt("urn:ietf:params:netconf:capability:rollback-on-error:1.0", &cpblts, &count), error);
         }
         if (lys_feature_value(mod, "validate") == LY_SUCCESS) {
-            add_cpblt("urn:ietf:params:netconf:capability:validate:1.1", &cpblts, &size, &count);
+            NC_CHECK_GOTO(nc_add_cpblt("urn:ietf:params:netconf:capability:validate:1.1", &cpblts, &count), error);
         }
         if (lys_feature_value(mod, "startup") == LY_SUCCESS) {
-            add_cpblt("urn:ietf:params:netconf:capability:startup:1.0", &cpblts, &size, &count);
+            NC_CHECK_GOTO(nc_add_cpblt("urn:ietf:params:netconf:capability:startup:1.0", &cpblts, &count), error);
         }
 
         /* The URL capability must be set manually using nc_server_set_capability()
@@ -1174,11 +1182,11 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
          * https://tools.ietf.org/html/rfc6241#section-8.8.3
          */
         // if (lys_feature_value(mod, "url") == LY_SUCCESS) {
-        // add_cpblt("urn:ietf:params:netconf:capability:url:1.0", &cpblts, &size, &count);
+        // NC_CHECK_GOTO(nc_add_cpblt("urn:ietf:params:netconf:capability:url:1.0", &cpblts, &count), error);
         // }
 
         if (lys_feature_value(mod, "xpath") == LY_SUCCESS) {
-            add_cpblt("urn:ietf:params:netconf:capability:xpath:1.0", &cpblts, &size, &count);
+            NC_CHECK_GOTO(nc_add_cpblt("urn:ietf:params:netconf:capability:xpath:1.0", &cpblts, &count), error);
         }
     }
 
@@ -1227,19 +1235,19 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
                 }
                 str[strlen(str) - 1] = '\0';
 
-                add_cpblt(str, &cpblts, &size, &count);
+                NC_CHECK_GOTO(nc_add_cpblt(str, &cpblts, &count), error);
             }
         }
     }
 
     /* other capabilities */
-    for (u = 0; u < server_opts.capabilities_count; u++) {
-        add_cpblt(server_opts.capabilities[u], &cpblts, &size, &count);
+    for (i = 0; i < server_opts.capabilities_count; i++) {
+        NC_CHECK_GOTO(nc_add_cpblt(server_opts.capabilities[i], &cpblts, &count), error);
     }
 
     /* models */
-    u = 0;
-    while ((mod = ly_ctx_get_module_iter(ctx, &u))) {
+    i = 0;
+    while ((mod = ly_ctx_get_module_iter(ctx, &i))) {
         if (nc_server_is_mod_ignored(mod->name, config_locked)) {
             /* ignored, not part of the cababilities */
             continue;
@@ -1265,12 +1273,12 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
                 /* new one (capab defined in RFC 8526 section 2) */
                 sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.1?revision=%s&content-id=%s",
                         mod->revision, yl_content_id);
-                add_cpblt(str, &cpblts, &size, &count);
+                NC_CHECK_GOTO(nc_add_cpblt(str, &cpblts, &count), error);
             } else {
                 /* old one (capab defined in RFC 7950 section 5.6.4) */
                 sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.0?revision=%s&module-set-id=%s",
                         mod->revision, yl_content_id);
-                add_cpblt(str, &cpblts, &size, &count);
+                NC_CHECK_GOTO(nc_add_cpblt(str, &cpblts, &count), error);
             }
             free(yl_content_id);
             continue;
@@ -1325,14 +1333,11 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
             }
         }
 
-        add_cpblt(str, &cpblts, &size, &count);
+        NC_CHECK_GOTO(nc_add_cpblt(str, &cpblts, &count), error);
     }
 
     /* HELLO UNLOCK */
     nc_rwlock_unlock(&server_opts.hello_lock, __func__);
-
-    /* ending NULL capability */
-    add_cpblt(NULL, &cpblts, &size, &count);
 
     return cpblts;
 
@@ -1341,7 +1346,12 @@ unlock_error:
     nc_rwlock_unlock(&server_opts.hello_lock, __func__);
 
 error:
-    free(cpblts);
+    if (cpblts) {
+        for (i = 0; cpblts[i]; ++i) {
+            free(cpblts[i]);
+        }
+        free(cpblts);
+    }
     return NULL;
 }
 
@@ -1415,6 +1425,44 @@ parse_cpblts(struct lyd_node *capabilities, char ***list)
 }
 
 /**
+ * @brief Get client-side capabilities.
+ *
+ * @return Array of capabilities terminated with NULL, NULL on error.
+ */
+static char **
+nc_client_get_cpblts(void)
+{
+    char **cpblts = NULL;
+    uint32_t i, count;
+
+    cpblts = malloc(3 * sizeof *cpblts);
+    NC_CHECK_ERRMEM_GOTO(!cpblts, , error);
+
+    cpblts[0] = strdup("urn:ietf:params:netconf:base:1.0");
+    NC_CHECK_ERRMEM_GOTO(!cpblts[0], , error);
+    cpblts[1] = strdup("urn:ietf:params:netconf:base:1.1");
+    NC_CHECK_ERRMEM_GOTO(!cpblts[1], , error);
+    cpblts[2] = NULL;
+    count = 3;
+
+    /* custom capabilities */
+    for (i = 0; i < client_opts.capabilities_count; ++i) {
+        NC_CHECK_GOTO(nc_add_cpblt(client_opts.capabilities[i], &cpblts, &count), error);
+    }
+
+    return cpblts;
+
+error:
+    if (cpblts) {
+        for (i = 0; cpblts[i]; ++i) {
+            free(cpblts[i]);
+        }
+        free(cpblts);
+    }
+    return NULL;
+}
+
+/**
  * @brief Send NETCONF hello message on a session.
  *
  * @param[in] session Session to send the message on.
@@ -1431,11 +1479,10 @@ nc_send_hello_io(struct nc_session *session, int config_locked)
 
     if (session->side == NC_CLIENT) {
         /* client side hello - send only NETCONF base capabilities */
-        cpblts = malloc(3 * sizeof *cpblts);
-        NC_CHECK_ERRMEM_RET(!cpblts, NC_MSG_ERROR);
-        cpblts[0] = strdup("urn:ietf:params:netconf:base:1.0");
-        cpblts[1] = strdup("urn:ietf:params:netconf:base:1.1");
-        cpblts[2] = NULL;
+        cpblts = nc_client_get_cpblts();
+        if (!cpblts) {
+            return NC_MSG_ERROR;
+        }
 
         timeout_io = NC_CLIENT_HELLO_TIMEOUT * 1000;
         sid = NULL;

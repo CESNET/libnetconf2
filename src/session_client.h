@@ -4,7 +4,7 @@
  * @brief libnetconf2 session client manipulation
  *
  * @copyright
- * Copyright (c) 2015 - 2025 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -96,6 +96,14 @@ void nc_client_set_new_session_context_autofill(int enabled);
  * @return 0 on success, -1 on error.
  */
 int nc_client_unix_set_username(const char *username);
+
+/**
+ * @brief Set capability of the client.
+ *
+ * @param[in] value Capability string to be advertised in client's \<hello\> messages.
+ * @return 0 on success, -1 on error.
+ */
+int nc_client_set_capability(const char *value);
 
 /**
  * @brief Set client session context to support schema-mount, if possible.

@@ -34,12 +34,6 @@
 #include "session_p.h"
 #include "session_wrapper.h"
 
-struct nc_client_context *nc_client_context_location(void);
-
-#define client_opts nc_client_context_location()->opts
-#define tls_opts nc_client_context_location()->tls_opts
-#define tls_ch_opts nc_client_context_location()->tls_ch_opts
-
 void
 _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts)
 {
@@ -53,8 +47,8 @@ _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts)
 void
 nc_client_tls_destroy_opts(void)
 {
-    _nc_client_tls_destroy_opts(&tls_opts);
-    _nc_client_tls_destroy_opts(&tls_ch_opts);
+    _nc_client_tls_destroy_opts(&client_tls_opts);
+    _nc_client_tls_destroy_opts(&client_tls_ch_opts);
 }
 
 static int
@@ -81,13 +75,13 @@ _nc_client_tls_set_cert_key_paths(const char *client_cert, const char *client_ke
 API int
 nc_client_tls_set_cert_key_paths(const char *client_cert, const char *client_key)
 {
-    return _nc_client_tls_set_cert_key_paths(client_cert, client_key, &tls_opts);
+    return _nc_client_tls_set_cert_key_paths(client_cert, client_key, &client_tls_opts);
 }
 
 API int
 nc_client_tls_ch_set_cert_key_paths(const char *client_cert, const char *client_key)
 {
-    return _nc_client_tls_set_cert_key_paths(client_cert, client_key, &tls_ch_opts);
+    return _nc_client_tls_set_cert_key_paths(client_cert, client_key, &client_tls_ch_opts);
 }
 
 static void
@@ -109,13 +103,13 @@ _nc_client_tls_get_cert_key_paths(const char **client_cert, const char **client_
 API void
 nc_client_tls_get_cert_key_paths(const char **client_cert, const char **client_key)
 {
-    _nc_client_tls_get_cert_key_paths(client_cert, client_key, &tls_opts);
+    _nc_client_tls_get_cert_key_paths(client_cert, client_key, &client_tls_opts);
 }
 
 API void
 nc_client_tls_ch_get_cert_key_paths(const char **client_cert, const char **client_key)
 {
-    _nc_client_tls_get_cert_key_paths(client_cert, client_key, &tls_ch_opts);
+    _nc_client_tls_get_cert_key_paths(client_cert, client_key, &client_tls_ch_opts);
 }
 
 static int
@@ -149,13 +143,13 @@ _nc_client_tls_set_trusted_ca_paths(const char *ca_file, const char *ca_dir, str
 API int
 nc_client_tls_set_trusted_ca_paths(const char *ca_file, const char *ca_dir)
 {
-    return _nc_client_tls_set_trusted_ca_paths(ca_file, ca_dir, &tls_opts);
+    return _nc_client_tls_set_trusted_ca_paths(ca_file, ca_dir, &client_tls_opts);
 }
 
 API int
 nc_client_tls_ch_set_trusted_ca_paths(const char *ca_file, const char *ca_dir)
 {
-    return _nc_client_tls_set_trusted_ca_paths(ca_file, ca_dir, &tls_ch_opts);
+    return _nc_client_tls_set_trusted_ca_paths(ca_file, ca_dir, &client_tls_ch_opts);
 }
 
 static void
@@ -177,13 +171,13 @@ _nc_client_tls_get_trusted_ca_paths(const char **ca_file, const char **ca_dir, s
 API void
 nc_client_tls_get_trusted_ca_paths(const char **ca_file, const char **ca_dir)
 {
-    _nc_client_tls_get_trusted_ca_paths(ca_file, ca_dir, &tls_opts);
+    _nc_client_tls_get_trusted_ca_paths(ca_file, ca_dir, &client_tls_opts);
 }
 
 API void
 nc_client_tls_ch_get_trusted_ca_paths(const char **ca_file, const char **ca_dir)
 {
-    _nc_client_tls_get_trusted_ca_paths(ca_file, ca_dir, &tls_ch_opts);
+    _nc_client_tls_get_trusted_ca_paths(ca_file, ca_dir, &client_tls_ch_opts);
 }
 
 API int
@@ -339,10 +333,10 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     void *tls_cfg = NULL;
     struct nc_tls_ctx tls_ctx = {0};
 
-    if (!tls_opts.cert_path) {
+    if (!client_tls_opts.cert_path) {
         ERR(NULL, "Client certificate not set.");
         return NULL;
-    } else if (!tls_opts.ca_file && !tls_opts.ca_dir) {
+    } else if (!client_tls_opts.ca_file && !client_tls_opts.ca_dir) {
         ERR(NULL, "Certificate authority certificates not set.");
         return NULL;
     }
@@ -370,7 +364,8 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
 
     /* fill the session */
     session->ti_type = NC_TI_TLS;
-    if (!(session->ti.tls.session = nc_client_tls_session_new(sock, host, NC_TRANSPORT_TIMEOUT, &tls_opts, &tls_cfg, &tls_ctx))) {
+    if (!(session->ti.tls.session = nc_client_tls_session_new(sock, host, NC_TRANSPORT_TIMEOUT, &client_tls_opts,
+            &tls_cfg, &tls_ctx))) {
         goto fail;
     }
     session->ti.tls.config = tls_cfg;
@@ -426,7 +421,8 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
 
     /* fill the session */
     session->ti_type = NC_TI_TLS;
-    if (!(session->ti.tls.session = nc_client_tls_session_new(sock, peername, timeout, &tls_ch_opts, &tls_cfg, &tls_ctx))) {
+    if (!(session->ti.tls.session = nc_client_tls_session_new(sock, peername, timeout, &client_tls_ch_opts, &tls_cfg,
+            &tls_ctx))) {
         goto fail;
     }
     session->ti.tls.config = tls_cfg;

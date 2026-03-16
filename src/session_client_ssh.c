@@ -56,12 +56,6 @@
 # include <termios.h>
 #endif
 
-struct nc_client_context *nc_client_context_location(void);
-
-#define client_opts nc_client_context_location()->opts
-#define ssh_opts nc_client_context_location()->ssh_opts
-#define ssh_ch_opts nc_client_context_location()->ssh_ch_opts
-
 #ifdef HAVE_TERMIOS
 
 /**
@@ -223,8 +217,8 @@ _nc_client_ssh_destroy_opts(struct nc_client_ssh_opts *opts)
 void
 nc_client_ssh_destroy_opts(void)
 {
-    _nc_client_ssh_destroy_opts(&ssh_opts);
-    _nc_client_ssh_destroy_opts(&ssh_ch_opts);
+    _nc_client_ssh_destroy_opts(&client_ssh_opts);
+    _nc_client_ssh_destroy_opts(&client_ssh_ch_opts);
 }
 
 #ifdef ENABLE_DNSSEC
@@ -809,25 +803,25 @@ _nc_client_ssh_set_knownhosts_path(const char *path, struct nc_client_ssh_opts *
 API int
 nc_client_ssh_set_knownhosts_path(const char *path)
 {
-    return _nc_client_ssh_set_knownhosts_path(path, &ssh_opts);
+    return _nc_client_ssh_set_knownhosts_path(path, &client_ssh_opts);
 }
 
 API int
 nc_client_ssh_ch_set_knownhosts_path(const char *path)
 {
-    return _nc_client_ssh_set_knownhosts_path(path, &ssh_ch_opts);
+    return _nc_client_ssh_set_knownhosts_path(path, &client_ssh_ch_opts);
 }
 
 API void
 nc_client_ssh_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_MODE mode)
 {
-    ssh_opts.knownhosts_mode = mode;
+    client_ssh_opts.knownhosts_mode = mode;
 }
 
 API void
 nc_client_ssh_ch_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_MODE mode)
 {
-    ssh_ch_opts.knownhosts_mode = mode;
+    client_ssh_ch_opts.knownhosts_mode = mode;
 }
 
 static void
@@ -859,28 +853,28 @@ API void
 nc_client_ssh_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname, void *priv),
         void *priv)
 {
-    _nc_client_ssh_set_auth_password_clb(auth_password, priv, &ssh_opts);
+    _nc_client_ssh_set_auth_password_clb(auth_password, priv, &client_ssh_opts);
 }
 
 API void
 nc_client_ssh_ch_set_auth_password_clb(char *(*auth_password)(const char *username, const char *hostname, void *priv),
         void *priv)
 {
-    _nc_client_ssh_set_auth_password_clb(auth_password, priv, &ssh_ch_opts);
+    _nc_client_ssh_set_auth_password_clb(auth_password, priv, &client_ssh_ch_opts);
 }
 
 API void
 nc_client_ssh_get_auth_password_clb(char *(**auth_password)(const char *username, const char *hostname, void *priv),
         void **priv)
 {
-    _nc_client_ssh_get_auth_password_clb(auth_password, priv, &ssh_opts);
+    _nc_client_ssh_get_auth_password_clb(auth_password, priv, &client_ssh_opts);
 }
 
 API void
 nc_client_ssh_ch_get_auth_password_clb(char *(**auth_password)(const char *username, const char *hostname, void *priv),
         void **priv)
 {
-    _nc_client_ssh_get_auth_password_clb(auth_password, priv, &ssh_ch_opts);
+    _nc_client_ssh_get_auth_password_clb(auth_password, priv, &client_ssh_ch_opts);
 }
 
 static void
@@ -915,7 +909,7 @@ nc_client_ssh_set_auth_interactive_clb(char *(*auth_interactive)(const char *aut
         const char *prompt, int echo, void *priv),
         void *priv)
 {
-    _nc_client_ssh_set_auth_interactive_clb(auth_interactive, priv, &ssh_opts);
+    _nc_client_ssh_set_auth_interactive_clb(auth_interactive, priv, &client_ssh_opts);
 }
 
 API void
@@ -923,7 +917,7 @@ nc_client_ssh_ch_set_auth_interactive_clb(char *(*auth_interactive)(const char *
         const char *prompt, int echo, void *priv),
         void *priv)
 {
-    _nc_client_ssh_set_auth_interactive_clb(auth_interactive, priv, &ssh_ch_opts);
+    _nc_client_ssh_set_auth_interactive_clb(auth_interactive, priv, &client_ssh_ch_opts);
 }
 
 API void
@@ -931,7 +925,7 @@ nc_client_ssh_get_auth_interactive_clb(char *(**auth_interactive)(const char *au
         const char *prompt, int echo, void *priv),
         void **priv)
 {
-    _nc_client_ssh_get_auth_interactive_clb(auth_interactive, priv, &ssh_opts);
+    _nc_client_ssh_get_auth_interactive_clb(auth_interactive, priv, &client_ssh_opts);
 }
 
 API void
@@ -939,7 +933,7 @@ nc_client_ssh_ch_get_auth_interactive_clb(char *(**auth_interactive)(const char 
         const char *prompt, int echo, void *priv),
         void **priv)
 {
-    _nc_client_ssh_get_auth_interactive_clb(auth_interactive, priv, &ssh_ch_opts);
+    _nc_client_ssh_get_auth_interactive_clb(auth_interactive, priv, &client_ssh_ch_opts);
 }
 
 static void
@@ -971,28 +965,28 @@ API void
 nc_client_ssh_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path, void *priv),
         void *priv)
 {
-    _nc_client_ssh_set_auth_privkey_passphrase_clb(auth_privkey_passphrase, priv, &ssh_opts);
+    _nc_client_ssh_set_auth_privkey_passphrase_clb(auth_privkey_passphrase, priv, &client_ssh_opts);
 }
 
 API void
 nc_client_ssh_ch_set_auth_privkey_passphrase_clb(char *(*auth_privkey_passphrase)(const char *privkey_path, void *priv),
         void *priv)
 {
-    _nc_client_ssh_set_auth_privkey_passphrase_clb(auth_privkey_passphrase, priv, &ssh_ch_opts);
+    _nc_client_ssh_set_auth_privkey_passphrase_clb(auth_privkey_passphrase, priv, &client_ssh_ch_opts);
 }
 
 API void
 nc_client_ssh_get_auth_privkey_passphrase_clb(char *(**auth_privkey_passphrase)(const char *privkey_path, void *priv),
         void **priv)
 {
-    _nc_client_ssh_get_auth_privkey_passphrase_clb(auth_privkey_passphrase, priv, &ssh_opts);
+    _nc_client_ssh_get_auth_privkey_passphrase_clb(auth_privkey_passphrase, priv, &client_ssh_opts);
 }
 
 API void
 nc_client_ssh_ch_get_auth_privkey_passphrase_clb(char *(**auth_privkey_passphrase)(const char *privkey_path, void *priv),
         void **priv)
 {
-    _nc_client_ssh_get_auth_privkey_passphrase_clb(auth_privkey_passphrase, priv, &ssh_ch_opts);
+    _nc_client_ssh_get_auth_privkey_passphrase_clb(auth_privkey_passphrase, priv, &client_ssh_ch_opts);
 }
 
 static int
@@ -1068,13 +1062,13 @@ _nc_client_ssh_add_keypair(const char *pub_key, const char *priv_key, struct nc_
 API int
 nc_client_ssh_add_keypair(const char *pub_key, const char *priv_key)
 {
-    return _nc_client_ssh_add_keypair(pub_key, priv_key, &ssh_opts);
+    return _nc_client_ssh_add_keypair(pub_key, priv_key, &client_ssh_opts);
 }
 
 API int
 nc_client_ssh_ch_add_keypair(const char *pub_key, const char *priv_key)
 {
-    return _nc_client_ssh_add_keypair(pub_key, priv_key, &ssh_ch_opts);
+    return _nc_client_ssh_add_keypair(pub_key, priv_key, &client_ssh_ch_opts);
 }
 
 static int
@@ -1106,13 +1100,13 @@ _nc_client_ssh_del_keypair(int idx, struct nc_client_ssh_opts *opts)
 API int
 nc_client_ssh_del_keypair(int idx)
 {
-    return _nc_client_ssh_del_keypair(idx, &ssh_opts);
+    return _nc_client_ssh_del_keypair(idx, &client_ssh_opts);
 }
 
 API int
 nc_client_ssh_ch_del_keypair(int idx)
 {
-    return _nc_client_ssh_del_keypair(idx, &ssh_ch_opts);
+    return _nc_client_ssh_del_keypair(idx, &client_ssh_ch_opts);
 }
 
 static int
@@ -1124,13 +1118,13 @@ _nc_client_ssh_get_keypair_count(struct nc_client_ssh_opts *opts)
 API int
 nc_client_ssh_get_keypair_count(void)
 {
-    return _nc_client_ssh_get_keypair_count(&ssh_opts);
+    return _nc_client_ssh_get_keypair_count(&client_ssh_opts);
 }
 
 API int
 nc_client_ssh_ch_get_keypair_count(void)
 {
-    return _nc_client_ssh_get_keypair_count(&ssh_ch_opts);
+    return _nc_client_ssh_get_keypair_count(&client_ssh_ch_opts);
 }
 
 static int
@@ -1157,13 +1151,13 @@ _nc_client_ssh_get_keypair(int idx, const char **pub_key, const char **priv_key,
 API int
 nc_client_ssh_get_keypair(int idx, const char **pub_key, const char **priv_key)
 {
-    return _nc_client_ssh_get_keypair(idx, pub_key, priv_key, &ssh_opts);
+    return _nc_client_ssh_get_keypair(idx, pub_key, priv_key, &client_ssh_opts);
 }
 
 API int
 nc_client_ssh_ch_get_keypair(int idx, const char **pub_key, const char **priv_key)
 {
-    return _nc_client_ssh_get_keypair(idx, pub_key, priv_key, &ssh_ch_opts);
+    return _nc_client_ssh_get_keypair(idx, pub_key, priv_key, &client_ssh_ch_opts);
 }
 
 static void
@@ -1185,13 +1179,13 @@ _nc_client_ssh_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref, struct nc
 API void
 nc_client_ssh_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref)
 {
-    _nc_client_ssh_set_auth_pref(auth_type, pref, &ssh_opts);
+    _nc_client_ssh_set_auth_pref(auth_type, pref, &client_ssh_opts);
 }
 
 API void
 nc_client_ssh_ch_set_auth_pref(NC_SSH_AUTH_TYPE auth_type, int16_t pref)
 {
-    _nc_client_ssh_set_auth_pref(auth_type, pref, &ssh_ch_opts);
+    _nc_client_ssh_set_auth_pref(auth_type, pref, &client_ssh_ch_opts);
 }
 
 static int16_t
@@ -1213,13 +1207,13 @@ _nc_client_ssh_get_auth_pref(NC_SSH_AUTH_TYPE auth_type, struct nc_client_ssh_op
 API int16_t
 nc_client_ssh_get_auth_pref(NC_SSH_AUTH_TYPE auth_type)
 {
-    return _nc_client_ssh_get_auth_pref(auth_type, &ssh_opts);
+    return _nc_client_ssh_get_auth_pref(auth_type, &client_ssh_opts);
 }
 
 API int16_t
 nc_client_ssh_ch_get_auth_pref(NC_SSH_AUTH_TYPE auth_type)
 {
-    return _nc_client_ssh_get_auth_pref(auth_type, &ssh_ch_opts);
+    return _nc_client_ssh_get_auth_pref(auth_type, &client_ssh_ch_opts);
 }
 
 static int
@@ -1241,13 +1235,13 @@ _nc_client_ssh_set_username(const char *username, struct nc_client_ssh_opts *opt
 API int
 nc_client_ssh_set_username(const char *username)
 {
-    return _nc_client_ssh_set_username(username, &ssh_opts);
+    return _nc_client_ssh_set_username(username, &client_ssh_opts);
 }
 
 API int
 nc_client_ssh_ch_set_username(const char *username)
 {
-    return _nc_client_ssh_set_username(username, &ssh_ch_opts);
+    return _nc_client_ssh_set_username(username, &client_ssh_ch_opts);
 }
 
 static const char *
@@ -1259,13 +1253,13 @@ _nc_client_ssh_get_username(struct nc_client_ssh_opts *opts)
 API const char *
 nc_client_ssh_get_username(void)
 {
-    return _nc_client_ssh_get_username(&ssh_opts);
+    return _nc_client_ssh_get_username(&client_ssh_opts);
 }
 
 API const char *
 nc_client_ssh_ch_get_username(void)
 {
-    return _nc_client_ssh_get_username(&ssh_ch_opts);
+    return _nc_client_ssh_get_username(&client_ssh_ch_opts);
 }
 
 API int
@@ -1788,7 +1782,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     }
     port_uint = port;
 
-    if (!ssh_opts.username) {
+    if (!client_ssh_opts.username) {
         pw = nc_getpw(getuid(), NULL, &pw_buf, &buf, &buf_len);
         if (!pw) {
             ERR(session, "Unknown username for the SSH connection (%s).", strerror(errno));
@@ -1797,7 +1791,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
             username = pw->pw_name;
         }
     } else {
-        username = ssh_opts.username;
+        username = client_ssh_opts.username;
     }
 
     /* prepare session structure */
@@ -1821,8 +1815,8 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_PORT, &port_uint);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_TIMEOUT, &timeout);
-    if (ssh_opts.knownhosts_path) {
-        ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_KNOWNHOSTS, ssh_opts.knownhosts_path);
+    if (client_ssh_opts.knownhosts_path) {
+        ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_KNOWNHOSTS, client_ssh_opts.knownhosts_path);
     }
 
     /* create and assign communication socket */
@@ -1840,7 +1834,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     session->port = port;
 
     /* connect SSH session */
-    if ((connect_ssh_session(session, &ssh_opts, NC_TRANSPORT_TIMEOUT) != 1) ||
+    if ((connect_ssh_session(session, &client_ssh_opts, NC_TRANSPORT_TIMEOUT) != 1) ||
             (open_netconf_channel(session, NC_TRANSPORT_TIMEOUT) != 1)) {
         goto fail;
     }
@@ -1884,7 +1878,7 @@ fail:
 API struct nc_session *
 nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
 {
-    return _nc_connect_libssh(ssh_session, ctx, &client_opts.ka, &ssh_opts, NC_TRANSPORT_TIMEOUT);
+    return _nc_connect_libssh(ssh_session, ctx, &client_opts.ka, &client_ssh_opts, NC_TRANSPORT_TIMEOUT);
 }
 
 API struct nc_session *
@@ -1984,7 +1978,7 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
     ssh_options_set(sess, SSH_OPTIONS_PORT, &uint_port);
     ssh_options_set(sess, SSH_OPTIONS_TIMEOUT, &ssh_timeout);
 
-    if (!ssh_ch_opts.username) {
+    if (!client_ssh_ch_opts.username) {
         pw = nc_getpw(getuid(), NULL, &pw_buf, &buf, &buf_len);
         if (!pw) {
             ERR(NULL, "Unknown username for the SSH connection (%s).", strerror(errno));
@@ -1994,11 +1988,11 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
         ssh_options_set(sess, SSH_OPTIONS_USER, pw->pw_name);
         free(buf);
     } else {
-        ssh_options_set(sess, SSH_OPTIONS_USER, ssh_ch_opts.username);
+        ssh_options_set(sess, SSH_OPTIONS_USER, client_ssh_ch_opts.username);
     }
 
-    if (ssh_ch_opts.knownhosts_path) {
-        ssh_options_set(sess, SSH_OPTIONS_KNOWNHOSTS, ssh_ch_opts.knownhosts_path);
+    if (client_ssh_ch_opts.knownhosts_path) {
+        ssh_options_set(sess, SSH_OPTIONS_KNOWNHOSTS, client_ssh_ch_opts.knownhosts_path);
     }
 
     ssh_options_set(sess, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519,ecdsa-sha2-nistp256,"
@@ -2008,7 +2002,7 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
             "ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-rsa,rsa-sha2-512,rsa-sha2-256,ssh-dss");
 #endif
 
-    session = _nc_connect_libssh(sess, ctx, &client_opts.ka, &ssh_ch_opts, timeout);
+    session = _nc_connect_libssh(sess, ctx, &client_opts.ka, &client_ssh_ch_opts, timeout);
     if (!session) {
         /* sess is freed */
         return NULL;

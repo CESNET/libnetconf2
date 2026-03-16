@@ -67,6 +67,7 @@ extern ATOMIC_T verbose_level;
 #define NC_CHECK_SRV_INIT_RET(RET) if (!ATOMIC_LOAD_RELAXED(server_opts.new_session_id)) {ERRINITSRV; return (RET);}
 #define NC_CHECK_ERRMEM_RET(COND, RET) if ((COND)) {ERRMEM; return (RET);}
 #define NC_CHECK_ERRMEM_GOTO(COND, RET, GOTO) if ((COND)) {ERRMEM; RET; goto GOTO;}
+#define NC_CHECK_GOTO(COND, GOTO) if ((COND)) {goto GOTO;}
 
 #define GETMACRO1(_1, NAME, ...) NAME
 #define GETMACRO2(_1, _2, NAME, ...) NAME

@@ -40,6 +40,13 @@
 
 extern struct nc_server_opts server_opts;
 
+#define client_opts nc_client_context_location()->opts
+#define client_unix_opts nc_client_context_location()->unix_opts
+#define client_ssh_opts nc_client_context_location()->ssh_opts
+#define client_ssh_ch_opts nc_client_context_location()->ssh_ch_opts
+#define client_tls_opts nc_client_context_location()->tls_opts
+#define client_tls_ch_opts nc_client_context_location()->tls_ch_opts
+
 /**
  * Size added to the reader buffer on realloc.
  * Used only for NETCONF 1.0 messages (always the hello message).
@@ -572,6 +579,9 @@ struct nc_client_opts {
     void *schema_clb_data;
     struct nc_keepalives ka;
 
+    char **capabilities;            /**< Array of custom client capabilities. */
+    uint32_t capabilities_count;    /**< Count of capabilities. */
+
     struct nc_bind *ch_binds;
     pthread_mutex_t ch_bind_lock;   /**< To avoid concurrent calls of poll and accept on the bound sockets **/
 
@@ -1042,6 +1052,13 @@ int nc_client_monitoring_session_start(struct nc_session *session);
  * @param[in] lock Whether to lock the thread data while removing the session from the list.
  */
 void nc_client_monitoring_session_stop(struct nc_session *session, int lock);
+
+/**
+ * @brief Get current client context.
+ *
+ * @return Client context.
+ */
+struct nc_client_context *nc_client_context_location(void);
 
 void *nc_realloc(void *ptr, size_t size);
 

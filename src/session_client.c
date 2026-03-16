@@ -4,7 +4,7 @@
  * @brief libnetconf2 session client functions
  *
  * @copyright
- * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -99,6 +99,7 @@ static void
 nc_client_context_free(void *ptr)
 {
     struct nc_client_context *c = (struct nc_client_context *)ptr;
+    uint32_t i;
 
     if (--(c->refcount)) {
         /* still used */
@@ -115,11 +116,13 @@ nc_client_context_free(void *ptr)
     {
         /* for the main thread the same is done in nc_client_destroy() */
         free(c->opts.schema_searchpath);
+        for (i = 0; i < c->opts.capabilities_count; i++) {
+            free(c->opts.capabilities[i]);
+        }
+        free(c->opts.capabilities);
         free(c->unix_opts.username);
 
 #ifdef NC_ENABLED_SSH_TLS
-        int i;
-
         for (i = 0; i < c->opts.ch_bind_count; ++i) {
             close(c->opts.ch_binds[i].sock);
             free((char *)c->opts.ch_binds[i].address);
@@ -203,9 +206,6 @@ nc_client_context_location(void)
 
     return e;
 }
-
-#define client_opts nc_client_context_location()->opts
-#define unix_opts nc_client_context_location()->unix_opts
 
 API void *
 nc_client_get_thread_context(void)
@@ -325,10 +325,33 @@ nc_client_unix_set_username(const char *username)
         NC_CHECK_ERRMEM_RET(!new_user, -1);
     }
 
-    free(unix_opts.username);
-    unix_opts.username = new_user;
+    free(client_unix_opts.username);
+    client_unix_opts.username = new_user;
 
     return 0;
+}
+
+API int
+nc_client_set_capability(const char *value)
+{
+    int rc = 0;
+    void *mem;
+
+    if (!value || !value[0]) {
+        ERRARG(NULL, "value must not be empty");
+        return -1;
+    }
+
+    mem = realloc(client_opts.capabilities, (client_opts.capabilities_count + 1) * sizeof *client_opts.capabilities);
+    NC_CHECK_ERRMEM_GOTO(!mem, rc = -1, cleanup);
+    client_opts.capabilities = mem;
+
+    client_opts.capabilities[client_opts.capabilities_count] = strdup(value);
+    NC_CHECK_ERRMEM_GOTO(!client_opts.capabilities[client_opts.capabilities_count], rc = -1, cleanup);
+    client_opts.capabilities_count++;
+
+cleanup:
+    return rc;
 }
 
 struct module_info {
@@ -1485,8 +1508,8 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
     }
 
     /* NETCONF username */
-    if (unix_opts.username) {
-        username = strdup(unix_opts.username);
+    if (client_unix_opts.username) {
+        username = strdup(client_unix_opts.username);
     } else {
         pw = nc_getpw(geteuid(), NULL, &pw_buf, &buf, &buf_size);
         if (!pw) {
