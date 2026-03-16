@@ -1141,7 +1141,7 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
     int features_count = 0, dev_count = 0, str_len, len;
     uint32_t i, count;
     LY_ARRAY_COUNT_TYPE v;
-    char *yl_content_id;
+    char *yl_content_id = NULL;
     uint32_t wd_also_supported, wd_basic_mode;
 
 #define NC_CPBLT_BUF_LEN 4096
@@ -1266,7 +1266,7 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
             } else {
                 yl_content_id = malloc(11);
                 NC_CHECK_ERRMEM_GOTO(!yl_content_id, , unlock_error);
-                sprintf(yl_content_id, "%u", ly_ctx_get_change_count(ctx));
+                sprintf(yl_content_id, "%" PRIu32, ly_ctx_get_change_count(ctx));
             }
 
             if (!strcmp(mod->revision, "2019-01-04")) {
@@ -1281,6 +1281,7 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
                 NC_CHECK_GOTO(nc_add_cpblt(str, &cpblts, &count), error);
             }
             free(yl_content_id);
+            yl_content_id = NULL;
             continue;
         } else if (mod->version != version) {
             /* skip YANG 1.0 or 1.1 modules */
@@ -1352,6 +1353,7 @@ error:
         }
         free(cpblts);
     }
+    free(yl_content_id);
     return NULL;
 }
 
