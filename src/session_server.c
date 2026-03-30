@@ -1141,6 +1141,8 @@ static void
 nc_server_init_cb_ctx(const struct ly_ctx *ctx)
 {
     struct lysc_node *rpc;
+    void *exp;
+    int result;
 
     if (global_rpc_clb) {
         /* expect it to handle these RPCs as well */
@@ -1152,14 +1154,20 @@ nc_server_init_cb_ctx(const struct ly_ctx *ctx)
     if (ly_ctx_get_module_implemented(ctx, "ietf-netconf-monitoring")) {
         rpc = (struct lysc_node *)lys_find_path(ctx, NULL, "/ietf-netconf-monitoring:get-schema", 0);
     }
-    if (rpc && !rpc->priv) {
-        rpc->priv = nc_clb_default_get_schema;
+    if (rpc) {
+        exp = NULL;
+        ATOMIC_COMPARE_EXCHANGE_RELAXED(rpc->priv, exp, nc_clb_default_get_schema, result);
+
+        /* whatever */
+        (void)result;
     }
 
     /* set default <close-session> callback if not specified */
     rpc = (struct lysc_node *)lys_find_path(ctx, NULL, "/ietf-netconf:close-session", 0);
-    if (rpc && !rpc->priv) {
-        rpc->priv = nc_clb_default_close_session;
+    if (rpc) {
+        exp = NULL;
+        ATOMIC_COMPARE_EXCHANGE_RELAXED(rpc->priv, exp, nc_clb_default_close_session, result);
+        (void)result;
     }
 }
 
