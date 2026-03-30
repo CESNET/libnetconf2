@@ -1489,7 +1489,7 @@ nc_send_hello_io(struct nc_session *session, int config_locked)
         timeout_io = NC_CLIENT_HELLO_TIMEOUT * 1000;
         sid = NULL;
     } else {
-        cpblts = _nc_server_get_cpblts_version(session->ctx, LYS_VERSION_1_0, config_locked);
+        cpblts = _nc_server_get_cpblts_version(session->ctx, LYS_VERSION_UNDEF, config_locked);
         if (!cpblts) {
             return NC_MSG_ERROR;
         }
