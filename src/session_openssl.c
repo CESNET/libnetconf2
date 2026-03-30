@@ -1217,6 +1217,7 @@ nc_tls_privkey_export_openssh(EVP_PKEY *pkey, char **privkey)
     char *pem = NULL;
     ssh_key sshkey = NULL;
 
+    (void)pkey;
     *privkey = NULL;
 
     /* older versions of libssh (< v0.11.0) do not support exporting to OpenSSH format,
@@ -1253,9 +1254,9 @@ nc_tls_privkey_export_openssh(EVP_PKEY *pkey, char **privkey)
         rc = 1;
         goto cleanup;
     }
-#endif
 
 cleanup:
+#endif
     BIO_free(bio);
     free(pem);
     ssh_key_free(sshkey);
