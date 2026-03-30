@@ -1283,8 +1283,8 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
             free(yl_content_id);
             yl_content_id = NULL;
             continue;
-        } else if (mod->version != version) {
-            /* skip YANG 1.0 or 1.1 modules */
+        } else if (version && (mod->version != version)) {
+            /* skip modules not matching the requested YANG version (LYS_VERSION_UNDEF means all) */
             continue;
         }
 
