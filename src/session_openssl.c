@@ -1035,10 +1035,17 @@ nc_tls_get_err_reasons(void)
     unsigned int e;
     int reason_size, reason_len;
     char *reasons = NULL;
+    const char *err_reason;
 
     reason_size = 1;
     reason_len = 0;
     while ((e = ERR_get_error())) {
+        err_reason = ERR_reason_error_string(e);
+        if (!err_reason) {
+            /* couldn't map value to anything from https://datatracker.ietf.org/doc/html/rfc8446#appendix-B.2 */
+            DBG(NULL, "Unknown OpenSSL error (err code %u).", e);
+            err_reason = "unknown AlertDescription value";
+        }
         if (reason_len) {
             /* add "; " */
             reason_size += 2;
@@ -1046,10 +1053,10 @@ nc_tls_get_err_reasons(void)
             NC_CHECK_ERRMEM_RET(!reasons, NULL);
             reason_len += sprintf(reasons + reason_len, "; ");
         }
-        reason_size += strlen(ERR_reason_error_string(e));
+        reason_size += strlen(err_reason);
         reasons = nc_realloc(reasons, reason_size);
         NC_CHECK_ERRMEM_RET(!reasons, NULL);
-        reason_len += sprintf(reasons + reason_len, "%s", ERR_reason_error_string(e));
+        reason_len += sprintf(reasons + reason_len, "%s", err_reason);
     }
 
     return reasons;
