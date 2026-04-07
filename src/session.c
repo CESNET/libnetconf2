@@ -796,17 +796,36 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
 #ifdef NC_ENABLED_SSH_TLS
     case NC_TI_SSH: {
         int r;
+        struct timespec ts;
 
-        if (connected) {
-            ssh_channel_send_eof(session->ti.libssh.channel);
-            ssh_channel_free(session->ti.libssh.channel);
-        }
         /* There can be multiple NETCONF sessions on the same SSH session (NETCONF session maps to
          * SSH channel). So destroy the SSH session only if there is no other NETCONF session using
          * it. Also, avoid concurrent free by multiple threads of sessions that share the SSH session.
          */
         /* SESSION IO LOCK */
         r = nc_mutex_lock(session->io_lock, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
+
+        if (connected) {
+            /* send EOF to the peer, but do not close the channel yet, wait for the peer to send EOF too.
+             * 100ms timeout should be enough for the peer to react and send EOF,
+             * if not, just continue with freeing the session and closing the channel.
+             * This is done to avoid libssh WRN log about reading from a closed channel */
+            ssh_channel_send_eof(session->ti.libssh.channel);
+            nc_timeouttime_get(&ts, 100);
+            while (!ssh_channel_is_eof(session->ti.libssh.channel)) {
+                /* poll for the EOF, non-blocking */
+                if (ssh_channel_poll(session->ti.libssh.channel, 0) == SSH_ERROR) {
+                    /* if poll fails, just break and continue with freeing the session, it will be closed anyway */
+                    break;
+                }
+                if (nc_timeouttime_cur_diff(&ts) < 1) {
+                    /* waited long enough, continue with freeing */
+                    break;
+                }
+                usleep(NC_TIMEOUT_STEP);
+            }
+            ssh_channel_free(session->ti.libssh.channel);
+        }
 
         if (session->ti.libssh.next) {
             for (siter = session->ti.libssh.next; siter != session; siter = siter->ti.libssh.next) {
@@ -869,7 +888,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
         sock = nc_tls_get_fd_wrap(session);
 
         if (connected) {
-            /* notify the peer that we're shutting down */
+            /* notify the peer that we're shutting down, we don't need to wait for the peer's response */
             nc_tls_close_notify_wrap(session->ti.tls.session);
         }
 
