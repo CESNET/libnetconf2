@@ -939,7 +939,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
         /* CH UNLOCK */
-        if (!r) {
+        if (r == 1) {
             /* only if we locked it */
             nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
         }
