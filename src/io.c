@@ -528,7 +528,8 @@ nc_session_is_connected(const struct nc_session *session)
         break;
 #ifdef NC_ENABLED_SSH_TLS
     case NC_TI_SSH:
-        return ssh_is_connected(session->ti.libssh.session);
+        fds.fd = ssh_get_fd(session->ti.libssh.session);
+        break;
     case NC_TI_TLS:
         fds.fd = nc_tls_get_fd_wrap(session);
         break;
