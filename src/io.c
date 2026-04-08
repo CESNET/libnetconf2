@@ -603,12 +603,8 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
 
 #ifdef NC_ENABLED_SSH_TLS
         case NC_TI_SSH:
-            if (ssh_channel_is_closed(session->ti.libssh.channel) || ssh_channel_is_eof(session->ti.libssh.channel)) {
-                if (ssh_channel_is_closed(session->ti.libssh.channel)) {
-                    ERR(session, "SSH channel unexpectedly closed.");
-                } else {
-                    ERR(session, "SSH channel unexpected EOF.");
-                }
+            if (ssh_channel_is_closed(session->ti.libssh.channel)) {
+                ERR(session, "SSH channel unexpectedly closed.");
                 session->status = NC_STATUS_INVALID;
                 session->term_reason = NC_SESSION_TERM_DROPPED;
                 return -1;
