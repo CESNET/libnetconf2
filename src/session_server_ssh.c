@@ -679,8 +679,8 @@ nc_server_ssh_kbdint_get_nanswers(const struct nc_session *session, ssh_session 
 
     /* wait for answers from the client */
     do {
-        if (!nc_session_is_connected(session)) {
-            ERR(NULL, "SSH communication socket unexpectedly closed.");
+        if (!ssh_is_connected(session->ti.libssh.session)) {
+            ERR(NULL, "SSH communication socket unexpectedly closed while waiting for keyboard-interactive authentication answers.");
             ret = -1;
             goto cleanup;
         }
@@ -1846,8 +1846,8 @@ nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, struct nc
         nc_timeouttime_get(&ts_timeout, timeout * 1000);
     }
     while (1) {
-        if (!nc_session_is_connected(session)) {
-            ERR(session, "Communication SSH socket unexpectedly closed.");
+        if (!ssh_is_connected(session->ti.libssh.session)) {
+            ERR(session, "Communication SSH socket unexpectedly closed while waiting for \"netconf\" subsystem request.");
             return -1;
         }
 
@@ -1929,8 +1929,8 @@ nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts
         nc_timeouttime_get(&ts_timeout, opts->auth_timeout * 1000);
     }
     while (1) {
-        if (!nc_session_is_connected(session)) {
-            ERR(session, "Communication SSH socket unexpectedly closed.");
+        if (!ssh_is_connected(session->ti.libssh.session)) {
+            ERR(session, "Communication SSH socket unexpectedly closed while waiting for authentication.");
             return -1;
         }
 

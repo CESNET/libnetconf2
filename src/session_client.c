@@ -2207,6 +2207,41 @@ cleanup:
     return ret;
 }
 
+void
+nc_client_msgs_free(struct nc_session *session)
+{
+    int r;
+    struct nc_msg_cont *contiter, *p;
+
+    if (!session || (session->side != NC_CLIENT)) {
+        return;
+    }
+
+    /* MSGS LOCK */
+    r = nc_mutex_lock(&session->opts.client.msgs_lock, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
+    if (r == -1) {
+        return;
+    } else if (!r) {
+        /* else failed to lock it, too bad */
+        ERR(session, "Freeing a session while messages are being received.");
+    }
+
+    /* cleanup message queue */
+    for (contiter = session->opts.client.msgs; contiter; ) {
+        ly_in_free(contiter->msg, 1);
+
+        p = contiter;
+        contiter = contiter->next;
+        free(p);
+    }
+    session->opts.client.msgs = NULL;
+
+    if (r == 1) {
+        /* MSGS UNLOCK */
+        nc_mutex_unlock(&session->opts.client.msgs_lock, __func__);
+    }
+}
+
 static NC_MSG_TYPE
 recv_reply(struct nc_session *session, int timeout, struct lyd_node *op, uint64_t msgid, struct lyd_node **envp)
 {
@@ -2575,7 +2610,7 @@ nc_recv_notif_dispatch_data(struct nc_session *session, nc_notif_dispatch_clb no
 
     ret = pthread_create(&tid, NULL, nc_recv_notif_thread, ntarg);
     if (ret) {
-        ERR(session, "Failed to create a new thread (%s).", strerror(errno));
+        ERR(session, "Failed to create a new thread (%s).", strerror(ret));
         free(ntarg);
         if (ATOMIC_DEC_RELAXED(session->opts.client.ntf_thread_count) == 1) {
             ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread_running, 0);
@@ -2584,6 +2619,29 @@ nc_recv_notif_dispatch_data(struct nc_session *session, nc_notif_dispatch_clb no
     }
 
     return 0;
+}
+
+void
+nc_client_notification_threads_stop(struct nc_session *session)
+{
+    struct timespec ts;
+
+    if (!session || (session->side != NC_CLIENT)) {
+        return;
+    }
+
+    /* let the threads know they should quit */
+    ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread_running, 0);
+
+    /* wait for them */
+    nc_timeouttime_get(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
+    while (ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread_count)) {
+        usleep(NC_TIMEOUT_STEP);
+        if (nc_timeouttime_cur_diff(&ts) < 1) {
+            ERR(session, "Waiting for notification thread exit failed (timed out).");
+            break;
+        }
+    }
 }
 
 static const char *
@@ -3204,7 +3262,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     }
 
     /* send RPC, store its message ID */
-    r = nc_send_msg_io(session, timeout, data);
+    r = nc_write_msg_io(session, timeout, NC_MSG_RPC, data, NULL);
     cur_msgid = session->opts.client.msgid;
 
     if (dofree) {

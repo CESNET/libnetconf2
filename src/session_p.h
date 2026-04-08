@@ -86,6 +86,11 @@ extern struct nc_server_opts server_opts;
 #define NC_SESSION_FREE_LOCK_TIMEOUT 1000
 
 /**
+ * Timeout in msec to poll for SSH channel EOF response when closing a session.
+ */
+#define NC_SESSION_FREE_SSH_POLL_EOF_TIMEOUT 100
+
+/**
  * Timeout in msec for a thread to wait for its turn to work with a pollsession structure.
  */
 #define NC_PS_QUEUE_TIMEOUT 5000
@@ -1050,6 +1055,23 @@ int nc_client_monitoring_session_start(struct nc_session *session);
 void nc_client_monitoring_session_stop(struct nc_session *session, int lock);
 
 /**
+ * @brief Stop all notification threads for a client session.
+ *
+ * The function asks threads to stop and waits for their termination for at
+ * most ::NC_SESSION_FREE_LOCK_TIMEOUT milliseconds.
+ *
+ * @param[in] session Session to stop notification threads for.
+ */
+void nc_client_notification_threads_stop(struct nc_session *session);
+
+/**
+ * @brief Free messages stored in the client session's message queue.
+ *
+ * @param[in] session Session to free messages for.
+ */
+void nc_client_msgs_free(struct nc_session *session);
+
+/**
  * @brief Get current client context.
  *
  * @return Client context.
@@ -1105,8 +1127,6 @@ struct passwd *nc_getpw(uid_t uid, const char *username, struct passwd *pwd_buf,
  * @return Found group entry, NULL on error.
  */
 struct group *nc_getgr(gid_t gid, const char *grpname, struct group *grp_buf, char **buf, size_t *buf_size);
-
-NC_MSG_TYPE nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op);
 
 /**
  * @brief Get current clock (uses COMPAT_CLOCK_ID) time with an offset.

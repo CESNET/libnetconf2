@@ -859,6 +859,12 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         op = va_arg(ap, struct lyd_node *);
         attrs = va_arg(ap, const char *);
 
+        if (session->ctx != LYD_CTX(op)) {
+            ERR(session, "RPC \"%s\" was created in different context than that of the session.", LYD_NAME(op));
+            ret = NC_MSG_ERROR;
+            goto cleanup;
+        }
+
         /* <rpc> open */
         count = asprintf(&buf, "<rpc xmlns=\"%s\" message-id=\"%" PRIu64 "\"%s>",
                 NC_NS_BASE, session->opts.client.msgid + 1, attrs ? attrs : "");

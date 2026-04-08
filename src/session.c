@@ -694,48 +694,118 @@ nc_session_is_callhome(const struct nc_session *session)
     return 0;
 }
 
-NC_MSG_TYPE
-nc_send_msg_io(struct nc_session *session, int io_timeout, struct lyd_node *op)
-{
-    if (session->ctx != LYD_CTX(op)) {
-        ERR(session, "RPC \"%s\" was created in different context than that of the session.", LYD_NAME(op));
-        return NC_MSG_ERROR;
-    }
-
-    return nc_write_msg_io(session, io_timeout, NC_MSG_RPC, op, NULL);
-}
-
 /**
- * @brief Send \<close-session\> and read the reply on a session.
+ * @brief Send a transport shutdown indication to the peer.
+ *
+ * Depending on the transport type, this may involve sending transport-specific
+ * shutdown signaling so the peer can detect no more outgoing data are expected.
  *
  * @param[in] session Closing NETCONF session.
  */
 static void
-nc_session_free_close_session(struct nc_session *session)
+nc_session_free_send_transport_shutdown(struct nc_session *session)
 {
-    struct ly_in *msg;
-    struct lyd_node *close_rpc, *envp;
-    const struct lys_module *ietfnc;
+    switch (session->ti_type) {
+    case NC_TI_FD:
+    case NC_TI_UNIX:
+        /* nothing needed - the transport will be closed by caller */
+        break;
+#ifdef NC_ENABLED_SSH_TLS
+    case NC_TI_SSH:
+        if (session->ti.libssh.channel) {
+            if (session->side == NC_SERVER) {
+                /* send SSH channel close - we will not be reading nor writing anymore */
+                ssh_channel_close(session->ti.libssh.channel);
+            } else if (session->side == NC_CLIENT) {
+                /* send SSH channel EOF - we can still receive data from the server, but not send.
+                 * we will close the channel later, after receiving the server acknowledges our EOF,
+                 * since we are the one initiating it */
+                ssh_channel_send_eof(session->ti.libssh.channel);
+            }
+        }
+        break;
+    case NC_TI_TLS:
+        /* send TLS close_notify alert - we can still receive data from the peer, but not send */
+        if (session->ti.tls.session) {
+            nc_tls_close_notify_wrap(session->ti.tls.session);
+        }
+        break;
+#endif
+    default:
+        break;
+    }
+}
+
+/**
+ * @brief Send \<close-session\> to the peer.
+ *
+ * @param[in] session Closing NETCONF session.
+ * @param[out] close_rpc The sent \<close-session\> RPC, caller must free.
+ * @return 0 on success, 1 on failure (RPC not sent).
+ */
+static int
+nc_session_free_send_close_session(struct nc_session *session, struct lyd_node **close_rpc)
+{
+    struct lys_module *ietfnc;
+    struct lyd_node *rpc = NULL;
+    NC_MSG_TYPE msg_type;
+
+    *close_rpc = NULL;
 
     ietfnc = ly_ctx_get_module_implemented(session->ctx, "ietf-netconf");
     if (!ietfnc) {
         WRN(session, "Missing ietf-netconf module in context, unable to send <close-session>.");
-        return;
+        return 1;
     }
-    if (lyd_new_inner(NULL, ietfnc, "close-session", 0, &close_rpc)) {
+    if (lyd_new_inner(NULL, ietfnc, "close-session", 0, &rpc)) {
         WRN(session, "Failed to create <close-session> RPC.");
-        return;
+        return 1;
     }
 
     /* send the RPC */
-    nc_send_msg_io(session, NC_SESSION_FREE_LOCK_TIMEOUT, close_rpc);
+    msg_type = nc_write_msg_io(session, NC_SESSION_FREE_LOCK_TIMEOUT, NC_MSG_RPC, rpc, NULL);
+    if (msg_type != NC_MSG_RPC) {
+        WRN(session, "Failed to send <close-session> RPC.");
+        lyd_free_tree(rpc);
+        return 1;
+    } else {
+        *close_rpc = rpc;
+        return 0;
+    }
+}
+
+/**
+ * @brief Wait for the \<close-session\> reply from the server and process it.
+ *
+ * @note Waits for at most ::NC_CLOSE_REPLY_TIMEOUT ms.
+ *
+ * @param[in] session Closing NETCONF session.
+ * @param[in] close_rpc The sent \<close-session\> RPC.
+ */
+static void
+nc_session_free_wait_close_session_reply(struct nc_session *session, struct lyd_node *close_rpc)
+{
+    int32_t timeout;
+    struct timespec ts_end;
+    struct ly_in *msg = NULL;
+    struct lyd_node *envp = NULL;
+
+    nc_timeouttime_get(&ts_end, NC_CLOSE_REPLY_TIMEOUT);
 
 read_msg:
-    switch (nc_read_msg_poll_io(session, NC_CLOSE_REPLY_TIMEOUT, &msg)) {
+    timeout = nc_timeouttime_cur_diff(&ts_end);
+    if (timeout <= 0) {
+        /* avoid waiting for the reply for long in case of notification flooding */
+        WRN(session, "Timeout for receiving a reply to <close-session> elapsed.");
+        return;
+    }
+
+    switch (nc_read_msg_poll_io(session, timeout, &msg)) {
     case 1:
         if (!strncmp(ly_in_memory(msg, NULL), "<notification", 13)) {
             /* ignore */
             ly_in_free(msg, 1);
+            msg = NULL;
             goto read_msg;
         }
         if (lyd_parse_op(session->ctx, close_rpc, msg, LYD_XML, LYD_TYPE_REPLY_NETCONF, LYD_PARSE_STRICT, &envp, NULL)) {
@@ -744,7 +814,9 @@ read_msg:
             WRN(session, "Reply to <close-session> was not <ok> as expected.");
         }
         lyd_free_tree(envp);
+        envp = NULL;
         ly_in_free(msg, 1);
+        msg = NULL;
         break;
     case 0:
         WRN(session, "Timeout for receiving a reply to <close-session> elapsed.");
@@ -755,6 +827,38 @@ read_msg:
     default:
         /* cannot happen */
         break;
+    }
+}
+
+/**
+ * @brief Gracefully close a client session on NETCONF and transport levels.
+ *
+ * Sends the \<close-session\> RPC to close the NETCONF layer and then sends
+ * a transport shutdown indication.
+ *
+ * @param[in] session Closing NETCONF session.
+ */
+static void
+nc_session_free_client_close_graceful(struct nc_session *session)
+{
+    int r;
+    struct ly_in *msg;
+    struct lyd_node *close_rpc = NULL;
+
+    /* receive any leftover messages */
+    while (nc_read_msg_poll_io(session, 0, &msg) == 1) {
+        ly_in_free(msg, 1);
+    }
+
+    /* send the <close-session> RPC */
+    r = nc_session_free_send_close_session(session, &close_rpc);
+
+    /* regardless of RPC-send result, send transport shutdown indication */
+    nc_session_free_send_transport_shutdown(session);
+
+    if (!r) {
+        /* if we sent the RPC successfully, wait for the server reply */
+        nc_session_free_wait_close_session_reply(session, close_rpc);
     }
     lyd_free_tree(close_rpc);
 }
@@ -768,12 +872,9 @@ read_msg:
 static void
 nc_session_free_transport(struct nc_session *session, int *multisession)
 {
-    int connected; /* flag to indicate whether the transport socket is still connected */
     int sock = -1;
-    struct nc_session *siter;
 
     *multisession = 0;
-    connected = nc_session_is_connected(session);
 
     /* transport implementation cleanup */
     switch (session->ti_type) {
@@ -782,21 +883,16 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
          * so it is up to the caller to close them correctly
          * TODO use callbacks
          */
-        /* just to avoid compiler warning */
-        (void)connected;
-        (void)siter;
         break;
 
     case NC_TI_UNIX:
         sock = session->ti.unixsock.sock;
-        (void)connected;
-        (void)siter;
         break;
 
 #ifdef NC_ENABLED_SSH_TLS
     case NC_TI_SSH: {
         int r;
-        struct timespec ts;
+        struct nc_session *siter;
 
         /* There can be multiple NETCONF sessions on the same SSH session (NETCONF session maps to
          * SSH channel). So destroy the SSH session only if there is no other NETCONF session using
@@ -805,24 +901,17 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
         /* SESSION IO LOCK */
         r = nc_mutex_lock(session->io_lock, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
 
-        if (connected) {
-            /* send EOF to the peer, but do not close the channel yet, wait for the peer to send EOF too.
-             * 100ms timeout should be enough for the peer to react and send EOF,
-             * if not, just continue with freeing the session and closing the channel.
-             * This is done to avoid libssh WRN log about reading from a closed channel */
-            ssh_channel_send_eof(session->ti.libssh.channel);
-            nc_timeouttime_get(&ts, 100);
-            while (!ssh_channel_is_eof(session->ti.libssh.channel)) {
-                /* poll for the EOF, non-blocking */
-                if (ssh_channel_poll(session->ti.libssh.channel, 0) == SSH_ERROR) {
-                    /* if poll fails, just break and continue with freeing the session, it will be closed anyway */
-                    break;
+        if (session->ti.libssh.channel) {
+            if ((session->side == NC_CLIENT) ||
+                    ((session->side == NC_SERVER) && (session->term_reason == NC_SESSION_TERM_CLOSED))) {
+                /* NC_SERVER: session was properly closed by the client, so he should have sent SSH channel EOF.
+                 * Polling here should properly set libssh internal state and avoid libssh WRN log about writing
+                 * to a closed channel in ssh_channel_free().
+                 * NC_CLIENT: we are waiting for the server to acknowledge our SSH channel EOF
+                 * by sending us its own SSH channel EOF. */
+                if (ssh_channel_poll_timeout(session->ti.libssh.channel, NC_SESSION_FREE_SSH_POLL_EOF_TIMEOUT, 0) != SSH_EOF) {
+                    WRN(session, "Timeout for receiving SSH channel EOF from the peer elapsed.");
                 }
-                if (nc_timeouttime_cur_diff(&ts) < 1) {
-                    /* waited long enough, continue with freeing */
-                    break;
-                }
-                usleep(NC_TIMEOUT_STEP);
             }
             ssh_channel_free(session->ti.libssh.channel);
         }
@@ -853,16 +942,15 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
                     free(siter);
                 } while (session->ti.libssh.next != session);
             }
-            if (connected) {
-                /* remember sock so we can close it */
-                sock = ssh_get_fd(session->ti.libssh.session);
 
-                /* clears sock but does not close it if passed via options (libssh >= 0.10) */
-                ssh_disconnect(session->ti.libssh.session);
+            /* remember sock so we can close it */
+            sock = ssh_get_fd(session->ti.libssh.session);
+
+            /* clears sock but does not close it if passed via options (libssh >= 0.10) */
+            ssh_disconnect(session->ti.libssh.session);
 #if (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR < 10)
-                sock = -1;
+            sock = -1;
 #endif
-            }
 
             /* closes sock if set */
             ssh_free(session->ti.libssh.session);
@@ -886,11 +974,6 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
     }
     case NC_TI_TLS:
         sock = nc_tls_get_fd_wrap(session);
-
-        if (connected) {
-            /* notify the peer that we're shutting down, we don't need to wait for the peer's response */
-            nc_tls_close_notify_wrap(session->ti.tls.session);
-        }
 
         nc_tls_ctx_destroy_wrap(&session->ti.tls.ctx);
         memset(&session->ti.tls.ctx, 0, sizeof session->ti.tls.ctx);
@@ -918,12 +1001,9 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
 API void
 nc_session_free(struct nc_session *session, void (*data_free)(void *))
 {
-    int r, i, rpc_locked = 0, msgs_locked = 0;
+    int r, i, rpc_locked = 0;
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
-    struct nc_msg_cont *contiter;
-    struct ly_in *msg;
     struct timespec ts;
-    void *p;
     NC_STATUS status;
 
     if (!session) {
@@ -935,6 +1015,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         r = nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__);
     }
 
+    /* store status, so we can check if this session is already closing */
     status = session->status;
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
@@ -954,25 +1035,15 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
             /* remove the session from the monitored list */
             nc_client_monitoring_session_stop(session, 1);
         }
-    }
 
-    /* stop notification threads if any */
-    if ((session->side == NC_CLIENT) && ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread_running)) {
-        /* let the threads know they should quit */
-        ATOMIC_STORE_RELAXED(session->opts.client.ntf_thread_running, 0);
-
-        /* wait for them */
-        nc_timeouttime_get(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
-        while (ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread_count)) {
-            usleep(NC_TIMEOUT_STEP);
-            if (nc_timeouttime_cur_diff(&ts) < 1) {
-                ERR(session, "Waiting for notification thread exit failed (timed out).");
-                break;
-            }
+        if (ATOMIC_LOAD_RELAXED(session->opts.client.ntf_thread_running)) {
+            /* stop notification threads if any */
+            nc_client_notification_threads_stop(session);
         }
     }
 
     if (session->side == NC_SERVER) {
+        /* RPC LOCK, not to receive new RPCs while we're freeing the session, continue on error */
         r = nc_session_rpc_lock(session, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
         if (r == -1) {
             return;
@@ -985,52 +1056,19 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     if (session->side == NC_CLIENT) {
-        /* MSGS LOCK */
-        r = nc_mutex_lock(&session->opts.client.msgs_lock, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
-        if (r == -1) {
-            return;
-        } else if (r) {
-            msgs_locked = 1;
-        } else {
-            /* else failed to lock it, too bad */
-            ERR(session, "Freeing a session while messages are being received.");
-        }
-
-        /* cleanup message queue */
-        for (contiter = session->opts.client.msgs; contiter; ) {
-            ly_in_free(contiter->msg, 1);
-
-            p = contiter;
-            contiter = contiter->next;
-            free(p);
-        }
-
-        if (msgs_locked) {
-            /* MSGS UNLOCK */
-            nc_mutex_unlock(&session->opts.client.msgs_lock, __func__);
-        }
-
-        if ((session->status == NC_STATUS_RUNNING) && nc_session_is_connected(session)) {
-            /* receive any leftover messages */
-            while (nc_read_msg_poll_io(session, 0, &msg) == 1) {
-                ly_in_free(msg, 1);
-            }
-
-            /* send closing info to the other side */
-            nc_session_free_close_session(session);
-        }
-
-        /* list of server's capabilities */
-        if (session->opts.client.cpblts) {
-            for (i = 0; session->opts.client.cpblts[i]; i++) {
-                free(session->opts.client.cpblts[i]);
-            }
-            free(session->opts.client.cpblts);
-        }
+        /* free queued messages */
+        nc_client_msgs_free(session);
     }
 
-    if (session->data && data_free) {
-        data_free(session->data);
+    if (session->status == NC_STATUS_RUNNING) {
+        /* notify the peer that we're closing the session */
+        if (session->side == NC_CLIENT) {
+            /* graceful close: <close-session> + transport shutdown indication */
+            nc_session_free_client_close_graceful(session);
+        } else if (session->side == NC_SERVER) {
+            /* only send transport shutdown indication to the peer */
+            nc_session_free_send_transport_shutdown(session);
+        }
     }
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
@@ -1068,6 +1106,20 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     free(session->username);
     free(session->host);
     free(session->path);
+
+    if (session->side == NC_CLIENT) {
+        /* list of server's capabilities */
+        if (session->opts.client.cpblts) {
+            for (i = 0; session->opts.client.cpblts[i]; i++) {
+                free(session->opts.client.cpblts[i]);
+            }
+            free(session->opts.client.cpblts);
+        }
+    }
+
+    if (session->data && data_free) {
+        data_free(session->data);
+    }
 
     if (session->side == NC_SERVER) {
         pthread_mutex_destroy(&session->opts.server.ntf_status_lock);
