@@ -692,6 +692,7 @@ struct nc_server_ch_thread_arg {
             uint8_t cur_attempt, void *user_data);          /**< failed to create a new session cb */
     void *new_session_fail_cb_data;                         /**< new session fail cb data */
 
+    pthread_t tid;              /**< Thread ID of the Call Home client thread. */
     int thread_running;         /**< A boolean value that is truthy while the underlying Call Home thread is running */
     pthread_mutex_t cond_lock;  /**< Condition's lock used for signalling the thread to terminate */
     pthread_cond_t cond;        /**< Condition used for signalling the thread to terminate */
@@ -1386,6 +1387,17 @@ int nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL 
 NC_MSG_TYPE nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struct nc_session **session);
 
 #ifdef NC_ENABLED_SSH_TLS
+
+/**
+ * @brief Stop a dispatched Call Home client thread, if such thread was dispatched for the given client name.
+ *
+ * @param[in] client_name Name of the Call Home client to stop the thread for.
+ * @param[in] config_lock_mode Lock mode of the configuration lock, if it is held by the caller.
+ * If NC_RWLOCK_WRITE is passed, config lock will be briefly unlocked and then locked again.
+ * The caller MUST ensure that it holds the CONFIG APPLY mutex, so that nobody steals the wrlock from him.
+ * @return 0 if the thread was successfully stopped or not found, 1 on error.
+ */
+int nc_session_server_ch_client_dispatch_stop_if_dispatched(const char *client_name, enum nc_rwlock_mode config_lock_mode);
 
 /**
  * @brief Dispatch a thread connecting to a listening NETCONF client and creating Call Home sessions.
