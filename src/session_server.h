@@ -448,6 +448,8 @@ NC_MSG_TYPE nc_session_accept_ssh_channel(struct nc_session *orig_session, struc
  */
 NC_MSG_TYPE nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session);
 
+#endif /* NC_ENABLED_SSH_TLS */
+
 /**
  * @brief Set the UNIX socket path for a given endpoint name.
  *
@@ -490,6 +492,8 @@ int nc_server_set_unix_socket_dir(const char *dir);
 int nc_server_get_unix_socket_dir(char **dir);
 
 /** @} Server Session */
+
+#ifdef NC_ENABLED_SSH_TLS
 
 /**
  * @defgroup server_ssh Server SSH
