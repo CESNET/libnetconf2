@@ -1299,6 +1299,8 @@ error:
 API void
 nc_server_destroy(void)
 {
+    int config_update_locked = 0;
+    enum nc_rwlock_mode config_lock_mode = NC_RWLOCK_NONE;
     uint32_t i;
 
     for (i = 0; i < server_opts.capabilities_count; i++) {
@@ -1316,27 +1318,28 @@ nc_server_destroy(void)
     nc_server_notif_cert_expiration_thread_stop(1);
 #endif /* NC_ENABLED_SSH_TLS */
 
-    /* CONFIG WR LOCK */
-    nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__);
+    /* CONFIG UPDATE LOCK, continue on error */
+    if (nc_mutex_lock(&server_opts.config_update_lock, NC_CONFIG_LOCK_TIMEOUT, __func__) == 1) {
+        config_update_locked = 1;
+    }
+
+    /* CONFIG WR LOCK, continue on error */
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) == 1) {
+        config_lock_mode = NC_RWLOCK_WRITE;
+    }
+
+#ifdef NC_ENABLED_SSH_TLS
+    if (!config_update_locked || (config_lock_mode != NC_RWLOCK_WRITE)) {
+        WRN(NULL, "Config locks not acquired, skipping Call Home threads cleanup.");
+    } else {
+        /* stop all dispatched CH threads */
+        LY_ARRAY_FOR(server_opts.config.ch_clients, i) {
+            nc_session_server_ch_client_dispatch_stop_if_dispatched(server_opts.config.ch_clients[i].name, config_lock_mode);
+        }
+    }
 
     /* destroy the server configuration */
     nc_server_config_free(&server_opts.config);
-
-    /* CH THREADS LOCK */
-    nc_rwlock_lock(&server_opts.ch_threads_lock, NC_RWLOCK_READ, NC_CH_THREADS_LOCK_TIMEOUT, __func__);
-
-    /* notify the CH threads to exit */
-    LY_ARRAY_FOR(server_opts.ch_threads, i) {
-        if (nc_mutex_lock(&server_opts.ch_threads[i]->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
-            continue;
-        }
-        server_opts.ch_threads[i]->thread_running = 0;
-        pthread_cond_signal(&server_opts.ch_threads[i]->cond);
-        nc_mutex_unlock(&server_opts.ch_threads[i]->cond_lock, __func__);
-    }
-
-    /* CH THREADS UNLOCK */
-    nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
 
 #ifdef NC_ENABLED_SSH_TLS
     free(server_opts.authkey_path_fmt);
@@ -1359,7 +1362,14 @@ nc_server_destroy(void)
     server_opts.unix_paths = NULL;
 
     /* CONFIG WR UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    if (config_lock_mode != NC_RWLOCK_NONE) {
+        nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    }
+
+    /* CONFIG UPDATE UNLOCK */
+    if (config_update_locked) {
+        nc_mutex_unlock(&server_opts.config_update_lock, __func__);
+    }
 
 #ifdef NC_ENABLED_SSH_TLS
     curl_global_cleanup();
@@ -3753,28 +3763,84 @@ unlock_skip:
 }
 
 int
+nc_session_server_ch_client_dispatch_stop_if_dispatched(const char *client_name, enum nc_rwlock_mode config_lock_mode)
+{
+    int rc = 0, r;
+    struct nc_server_ch_thread_arg **ch_thread_arg;
+    pthread_t tid;
+    enum nc_rwlock_mode ch_threads_lock = NC_RWLOCK_NONE;
+
+    /* CH THREADS LOCK */
+    if (nc_rwlock_lock(&server_opts.ch_threads_lock, NC_RWLOCK_READ, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
+    ch_threads_lock = NC_RWLOCK_READ;
+
+    if (config_lock_mode == NC_RWLOCK_WRITE) {
+        /* CONFIG UNLOCK - if the caller holds the config lock in write mode, we need to unlock it
+         * to prevent deadlock with the CH thread, it tries to acquire the config lock in read mode when it
+         * checks if the client still exists.
+         * It is the caller's responsibility to hold config apply mutex, so noone steals the write lock from him */
+        nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    }
+
+    LY_ARRAY_FOR(server_opts.ch_threads, struct nc_server_ch_thread_arg *, ch_thread_arg) {
+        if (strcmp(client_name, (*ch_thread_arg)->client_name)) {
+            continue;
+        }
+
+        /* CH COND LOCK */
+        if (nc_mutex_lock(&(*ch_thread_arg)->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
+            rc = 1;
+            goto cleanup;
+        }
+
+        /* notify the thread to stop */
+        (*ch_thread_arg)->thread_running = 0;
+        tid = (*ch_thread_arg)->tid;
+        pthread_cond_signal(&(*ch_thread_arg)->cond);
+
+        /* CH COND UNLOCK */
+        nc_mutex_unlock(&(*ch_thread_arg)->cond_lock, __func__);
+
+        /* CH THREADS UNLOCK - let the thread free itself from the global array, it needs WR lock for that */
+        nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
+        ch_threads_lock = NC_RWLOCK_NONE;
+
+        /* wait for the thread to end */
+        r = pthread_join(tid, NULL);
+        if (r) {
+            ERR(NULL, "Joining Call Home client \"%s\" thread failed (%s).", client_name, strerror(r));
+            rc = 1;
+            goto cleanup;
+        }
+        break;
+    }
+
+cleanup:
+    if (config_lock_mode == NC_RWLOCK_WRITE) {
+        /* CONFIG LOCK - lock it back if we unlocked it. It MUST succeed, if the caller holds the config apply mutex */
+        if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, -1, __func__) != 1) {
+            ERRINT;
+        }
+    }
+
+    if (ch_threads_lock) {
+        /* CH THREADS UNLOCK */
+        nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
+    }
+
+    return rc;
+}
+
+int
 _nc_connect_ch_client_dispatch(const struct nc_ch_client *ch_client, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
         nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
         void *new_session_cb_data)
 {
     int rc = 0, r;
     enum nc_rwlock_mode ch_threads_lock = NC_RWLOCK_NONE;
-    pthread_t tid;
     struct nc_server_ch_thread_arg *arg = NULL, **new_item;
-    pthread_attr_t attr;
-
-    /* init pthread attribute */
-    if ((r = pthread_attr_init(&attr))) {
-        ERR(NULL, "Initializing pthread attributes failed (%s).", strerror(r));
-        return -1;
-    }
-
-    /* set the thread to be detached */
-    if ((r = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED))) {
-        ERR(NULL, "Setting pthread attributes to detached failed (%s).", strerror(r));
-        rc = -1;
-        goto cleanup;
-    }
 
     /* create the thread argument */
     arg = calloc(1, sizeof *arg);
@@ -3804,13 +3870,11 @@ _nc_connect_ch_client_dispatch(const struct nc_ch_client *ch_client, nc_server_c
     LY_ARRAY_NEW_GOTO(NULL, server_opts.ch_threads, new_item, rc, cleanup);
     *new_item = arg;
 
-    /* CH THREADS UNLOCK */
-    nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
-    ch_threads_lock = NC_RWLOCK_NONE;
-
     /* create the CH thread */
-    if ((r = pthread_create(&tid, &attr, nc_ch_client_thread, arg))) {
+    if ((r = pthread_create(&arg->tid, NULL, nc_ch_client_thread, arg))) {
         ERR(NULL, "Creating a new thread failed (%s).", strerror(r));
+        /* remove from the array */
+        LY_ARRAY_DECREMENT_FREE(server_opts.ch_threads);
         rc = -1;
         goto cleanup;
     }
@@ -3823,7 +3887,6 @@ cleanup:
         /* CH THREADS UNLOCK */
         nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
     }
-    pthread_attr_destroy(&attr);
     if (arg) {
         free(arg->client_name);
         free(arg);
