@@ -1516,7 +1516,7 @@ nc_client_get_cpblts(void)
     cpblts[1] = strdup("urn:ietf:params:netconf:base:1.1");
     NC_CHECK_ERRMEM_GOTO(!cpblts[1], , error);
     cpblts[2] = NULL;
-    count = 3;
+    count = 2;
 
     /* custom capabilities */
     for (i = 0; i < client_opts.capabilities_count; ++i) {
