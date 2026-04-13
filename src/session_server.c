@@ -1337,6 +1337,7 @@ nc_server_destroy(void)
             nc_session_server_ch_client_dispatch_stop_if_dispatched(server_opts.config.ch_clients[i].name, config_lock_mode);
         }
     }
+#endif /* NC_ENABLED_SSH_TLS */
 
     /* destroy the server configuration */
     nc_server_config_free(&server_opts.config);
