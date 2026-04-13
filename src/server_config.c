@@ -3941,7 +3941,7 @@ config_netconf_client(const struct lyd_node *node, enum nc_operation parent_op,
     struct lyd_node *n;
     enum nc_operation op;
     const char *name;
-    LY_ARRAY_COUNT_TYPE i = 0, j = 0;
+    LY_ARRAY_COUNT_TYPE i = 0;
     struct nc_ch_client *ch_client = NULL;
 
     NC_NODE_GET_OP(node, parent_op, &op);
@@ -3988,30 +3988,6 @@ config_netconf_client(const struct lyd_node *node, enum nc_operation parent_op,
 
     /* all children processed, we can now delete the client */
     if (op == NC_OP_DELETE) {
-        /* CH THREADS DATA RD LOCK */
-        if (nc_rwlock_lock(&server_opts.ch_threads_lock, NC_RWLOCK_READ, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
-            return 1;
-        }
-
-        /* find the thread data for this CH client, not found <==> CH thread not running */
-        LY_ARRAY_FOR(server_opts.ch_threads, j) {
-            if (!strcmp(server_opts.ch_threads[j]->client_name, name)) {
-                break;
-            }
-        }
-
-        if (j < LY_ARRAY_COUNT(server_opts.ch_threads)) {
-            /* the CH thread is running, notify it to stop */
-            if (nc_mutex_lock(&server_opts.ch_threads[j]->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
-                server_opts.ch_threads[j]->thread_running = 0;
-                pthread_cond_signal(&server_opts.ch_threads[j]->cond);
-                nc_mutex_unlock(&server_opts.ch_threads[j]->cond_lock, __func__);
-            }
-        }
-
-        /* CH THREADS DATA UNLOCK */
-        nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
-
         /* we can use 'i' from above */
         if (i < LY_ARRAY_COUNT(config->ch_clients) - 1) {
             config->ch_clients[i] = config->ch_clients[LY_ARRAY_COUNT(config->ch_clients) - 1];
@@ -5331,6 +5307,37 @@ rollback:
 #ifdef NC_ENABLED_SSH_TLS
 
 /**
+ * @brief Check if there are any new Call Home clients created in the new configuration.
+ *
+ * @param[in] old_cfg Old, currently active server configuration.
+ * @param[in] new_cfg New server configuration currently being applied.
+ * @return 1 if there are new CH clients, 0 otherwise.
+ */
+static int
+nc_server_config_new_ch_clients_created(struct nc_server_config *old_cfg, struct nc_server_config *new_cfg)
+{
+    struct nc_ch_client *old_ch_client, *new_ch_client;
+    int found;
+
+    /* check if there are any new clients */
+    LY_ARRAY_FOR(new_cfg->ch_clients, struct nc_ch_client, new_ch_client) {
+        found = 0;
+        LY_ARRAY_FOR(old_cfg->ch_clients, struct nc_ch_client, old_ch_client) {
+            if (!strcmp(new_ch_client->name, old_ch_client->name)) {
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            return 1;
+        }
+    }
+
+    /* no differences found */
+    return 0;
+}
+
+/**
  * @brief Atomically dispatch new Call Home clients and reuse existing ones.
  *
  * @param[in,out] old_cfg Old, currently active server configuration.
@@ -5347,11 +5354,16 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
     int found;
     LY_ARRAY_COUNT_TYPE i = 0;
     char **started_clients = NULL, **client_name = NULL;
+    int dispatch_new_clients = 1;
 
     if (!server_opts.ch_dispatch_data.acquire_ctx_cb || !server_opts.ch_dispatch_data.release_ctx_cb ||
             !server_opts.ch_dispatch_data.new_session_cb) {
-        /* Call Home dispatch callbacks not set, nothing to do */
-        return 0;
+        /* Call Home dispatch callbacks not set, we can't dispatch new clients, but we can still stop deleted ones */
+        if (nc_server_config_new_ch_clients_created(old_cfg, new_cfg)) {
+            WRN(NULL, "New Call Home clients were created but Call Home dispatch callbacks are not set - "
+                    "new clients will not be dispatched automatically.");
+        }
+        dispatch_new_clients = 0;
     }
 
     /*
@@ -5359,43 +5371,46 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
      * Start clients present in new_cfg that are not already running.
      * Track successfully started clients for potential rollback.
      */
-    LY_ARRAY_FOR(new_cfg->ch_clients, struct nc_ch_client, new_ch_client) {
-        found = 0;
+    if (dispatch_new_clients) {
+        /* only dispatch if all required CBs are set */
+        LY_ARRAY_FOR(new_cfg->ch_clients, struct nc_ch_client, new_ch_client) {
+            found = 0;
 
-        /* CH THREADS LOCK (reading server_opts.ch_threads) */
-        if (nc_rwlock_lock(&server_opts.ch_threads_lock, NC_RWLOCK_READ, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
-            rc = 1;
-            goto rollback;
-        }
-
-        LY_ARRAY_FOR(server_opts.ch_threads, struct nc_server_ch_thread_arg *, ch_thread_arg) {
-            if (!strcmp(new_ch_client->name, (*ch_thread_arg)->client_name)) {
-                /* already running, do not start again */
-                found = 1;
-                break;
-            }
-        }
-
-        /* CH THREADS UNLOCK */
-        nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
-
-        if (!found) {
-            /* this is a new Call Home client, dispatch it */
-            rc = _nc_connect_ch_client_dispatch(new_ch_client, server_opts.ch_dispatch_data.acquire_ctx_cb,
-                    server_opts.ch_dispatch_data.release_ctx_cb, server_opts.ch_dispatch_data.ctx_cb_data,
-                    server_opts.ch_dispatch_data.new_session_cb, server_opts.ch_dispatch_data.new_session_cb_data);
-            if (rc) {
-                /* FAILURE! trigger rollback */
+            /* CH THREADS LOCK (reading server_opts.ch_threads) */
+            if (nc_rwlock_lock(&server_opts.ch_threads_lock, NC_RWLOCK_READ, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
+                rc = 1;
                 goto rollback;
             }
 
-            /* successfully started, track it for potential rollback */
-            LY_ARRAY_NEW_GOTO(NULL, started_clients, client_name, rc, rollback);
-            *client_name = strdup(new_ch_client->name);
-            NC_CHECK_ERRMEM_GOTO(!*client_name, rc = 1, rollback);
+            LY_ARRAY_FOR(server_opts.ch_threads, struct nc_server_ch_thread_arg *, ch_thread_arg) {
+                if (!strcmp(new_ch_client->name, (*ch_thread_arg)->client_name)) {
+                    /* already running, do not start again */
+                    found = 1;
+                    break;
+                }
+            }
 
-            /* ownership transferred to array */
-            client_name = NULL;
+            /* CH THREADS UNLOCK */
+            nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
+
+            if (!found) {
+                /* this is a new Call Home client, dispatch it */
+                rc = _nc_connect_ch_client_dispatch(new_ch_client, server_opts.ch_dispatch_data.acquire_ctx_cb,
+                        server_opts.ch_dispatch_data.release_ctx_cb, server_opts.ch_dispatch_data.ctx_cb_data,
+                        server_opts.ch_dispatch_data.new_session_cb, server_opts.ch_dispatch_data.new_session_cb_data);
+                if (rc) {
+                    /* FAILURE! trigger rollback */
+                    goto rollback;
+                }
+
+                /* successfully started, track it for potential rollback */
+                LY_ARRAY_NEW_GOTO(NULL, started_clients, client_name, rc, rollback);
+                *client_name = strdup(new_ch_client->name);
+                NC_CHECK_ERRMEM_GOTO(!*client_name, rc = 1, rollback);
+
+                /* ownership transferred to array */
+                client_name = NULL;
+            }
         }
     }
 
@@ -5415,27 +5430,10 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
 
         if (!found) {
             /* this Call Home client was deleted, notify it to stop */
-            ch_thread_arg = NULL;
-
-            /* CH THREADS LOCK (reading server_opts.ch_threads) */
-            if (nc_rwlock_lock(&server_opts.ch_threads_lock, NC_RWLOCK_READ, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
-                /* Continue even if lock fails - best effort cleanup */
-                continue;
+            if ((rc = nc_session_server_ch_client_dispatch_stop_if_dispatched(old_ch_client->name, NC_RWLOCK_WRITE))) {
+                ERR(NULL, "Failed to dispatch stop for Call Home client \"%s\".", old_ch_client->name);
+                goto rollback;
             }
-            LY_ARRAY_FOR(server_opts.ch_threads, struct nc_server_ch_thread_arg *, ch_thread_arg) {
-                if (!strcmp(old_ch_client->name, (*ch_thread_arg)->client_name)) {
-                    /* notify the thread to stop */
-                    if (nc_mutex_lock(&(*ch_thread_arg)->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
-                        (*ch_thread_arg)->thread_running = 0;
-                        pthread_cond_signal(&(*ch_thread_arg)->cond);
-                        nc_mutex_unlock(&(*ch_thread_arg)->cond_lock, __func__);
-                    }
-                    break;
-                }
-            }
-            /* CH THREADS UNLOCK */
-            nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
-            /* Note: if ch_thread_arg is NULL here, the thread wasn't running. That's fine. */
         }
     }
 
@@ -5450,25 +5448,7 @@ rollback:
      * to return to the pre-call state.
      */
     LY_ARRAY_FOR(started_clients, i) {
-        ch_thread_arg = NULL;
-
-        /* CH THREADS LOCK (reading server_opts.ch_threads) */
-        if (nc_rwlock_lock(&server_opts.ch_threads_lock, NC_RWLOCK_READ, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
-            /* Continue even if lock fails - best effort rollback */
-            continue;
-        }
-        LY_ARRAY_FOR(server_opts.ch_threads, struct nc_server_ch_thread_arg *, ch_thread_arg) {
-            if (!strcmp(started_clients[i], (*ch_thread_arg)->client_name)) {
-                /* notify the newly started thread to stop */
-                nc_mutex_lock(&(*ch_thread_arg)->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__);
-                (*ch_thread_arg)->thread_running = 0;
-                pthread_cond_signal(&(*ch_thread_arg)->cond);
-                nc_mutex_unlock(&(*ch_thread_arg)->cond_lock, __func__);
-                break;
-            }
-        }
-        /* CH THREADS UNLOCK */
-        nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
+        nc_session_server_ch_client_dispatch_stop_if_dispatched(started_clients[i], NC_RWLOCK_WRITE);
     }
     /* rc is already set to non-zero from the failure point */
 
