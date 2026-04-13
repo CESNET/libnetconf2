@@ -910,7 +910,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
                  * NC_CLIENT: we are waiting for the server to acknowledge our SSH channel EOF
                  * by sending us its own SSH channel EOF. */
                 if (ssh_channel_poll_timeout(session->ti.libssh.channel, NC_SESSION_FREE_SSH_POLL_EOF_TIMEOUT, 0) != SSH_EOF) {
-                    WRN(session, "Timeout for receiving SSH channel EOF from the peer elapsed.");
+                    WRN(session, "Timeout for receiving SSH channel EOF from the %s elapsed.", session->side == NC_CLIENT ? "server" : "client");
                 }
             }
             ssh_channel_free(session->ti.libssh.channel);
@@ -1001,7 +1001,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
 API void
 nc_session_free(struct nc_session *session, void (*data_free)(void *))
 {
-    int r, i, rpc_locked = 0;
+    int r, i, rpc_locked = 0, ch_locked = 0;
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
     struct timespec ts;
     NC_STATUS status;
@@ -1012,7 +1012,9 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
         /* CH LOCK, continue on error */
-        r = nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__);
+        if (nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__) == 1) {
+            ch_locked = 1;
+        }
     }
 
     /* store status, so we can check if this session is already closing */
@@ -1020,7 +1022,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
         /* CH UNLOCK */
-        if (r == 1) {
+        if (ch_locked) {
             /* only if we locked it */
             nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
         }
@@ -1060,8 +1062,12 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         nc_client_msgs_free(session);
     }
 
-    if (session->status == NC_STATUS_RUNNING) {
-        /* notify the peer that we're closing the session */
+    /* notify the peer that we're closing the session, either if:
+     * - session running - normal disconnect from client
+     * - session invalid - client disconnected from a Call Home session */
+    if ((session->status == NC_STATUS_RUNNING) ||
+            ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME) &&
+            (session->status == NC_STATUS_INVALID) && (session->term_reason == NC_SESSION_TERM_CLOSED))) {
         if (session->side == NC_CLIENT) {
             /* graceful close: <close-session> + transport shutdown indication */
             nc_session_free_client_close_graceful(session);
@@ -1073,7 +1079,10 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
         /* CH LOCK */
-        nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__);
+        ch_locked = 0;
+        if (nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__) == 1) {
+            ch_locked = 1;
+        }
     }
 
     /* mark session for closing */
@@ -1096,7 +1105,10 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
         /* CH UNLOCK */
-        nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
+        if (ch_locked) {
+            /* only if we locked it */
+            nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
+        }
     }
 
     /* transport implementation cleanup */
