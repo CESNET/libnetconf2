@@ -165,24 +165,30 @@ nc_server_init_ctx(struct ly_ctx **ctx)
 
     if (!*ctx) {
         /* context not given, create a new one */
-        if (ly_ctx_new(NC_SERVER_SEARCH_DIR, 0, ctx)) {
-            ERR(NULL, "Couldn't create new libyang context.\n");
+        if (ly_ctx_new(ly_yang_module_dir(), 0, ctx)) {
+            ERR(NULL, "Failed to create a new libyang context.");
             ret = 1;
             goto cleanup;
         }
         new_ctx = 1;
+
+        if (ly_ctx_set_searchdir(*ctx, nc_yang_module_dir())) {
+            ERR(NULL, "Failed to set searchdir for a context.");
+            ret = 1;
+            goto cleanup;
+        }
     }
 
     if (new_ctx) {
         /* new context created, implement both modules */
         if (!ly_ctx_load_module(*ctx, "ietf-netconf", NULL, ietf_netconf_features)) {
-            ERR(NULL, "Loading module \"ietf-netconf\" failed.\n");
+            ERR(NULL, "Loading module \"ietf-netconf\" failed.");
             ret = 1;
             goto cleanup;
         }
 
         if (!ly_ctx_load_module(*ctx, "ietf-netconf-monitoring", NULL, ietf_netconf_monitoring_features)) {
-            ERR(NULL, "Loading module \"ietf-netconf-monitoring\" failed.\n");
+            ERR(NULL, "Loading module \"ietf-netconf-monitoring\" failed.");
             ret = 1;
             goto cleanup;
         }
@@ -197,7 +203,7 @@ nc_server_init_ctx(struct ly_ctx **ctx)
             if (lys_feature_value(module, ietf_netconf_features[i])) {
                 /* feature not found, enable all of them */
                 if (!ly_ctx_load_module(*ctx, "ietf-netconf", NULL, ietf_netconf_features)) {
-                    ERR(NULL, "Loading module \"ietf-netconf\" failed.\n");
+                    ERR(NULL, "Loading module \"ietf-netconf\" failed.");
                     ret = 1;
                     goto cleanup;
                 }
@@ -208,7 +214,7 @@ nc_server_init_ctx(struct ly_ctx **ctx)
     } else {
         /* ietf-netconf module not found, add it */
         if (!ly_ctx_load_module(*ctx, "ietf-netconf", NULL, ietf_netconf_features)) {
-            ERR(NULL, "Loading module \"ietf-netconf\" failed.\n");
+            ERR(NULL, "Loading module \"ietf-netconf\" failed.");
             ret = 1;
             goto cleanup;
         }
@@ -218,7 +224,7 @@ nc_server_init_ctx(struct ly_ctx **ctx)
     if (!module) {
         /* ietf-netconf-monitoring module not found, add it */
         if (!ly_ctx_load_module(*ctx, "ietf-netconf-monitoring", NULL, ietf_netconf_monitoring_features)) {
-            ERR(NULL, "Loading module \"ietf-netconf-monitoring\" failed.\n");
+            ERR(NULL, "Loading module \"ietf-netconf-monitoring\" failed.");
             ret = 1;
             goto cleanup;
         }

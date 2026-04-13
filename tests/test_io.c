@@ -48,7 +48,8 @@ setup_write(void **state)
 
     w = malloc(sizeof *w);
     w->session = calloc(1, sizeof *w->session);
-    ly_ctx_new(TESTS_DIR "/data/modules", 0, &w->session->ctx);
+    ly_ctx_new(ly_yang_module_dir(), 0, &w->session->ctx);
+    ly_ctx_set_searchdir(w->session->ctx, TESTS_DIR "/data/modules");
 
     /* ietf-netconf */
     fd = open(TESTS_DIR "/data/modules/ietf-netconf.yin", O_RDONLY);

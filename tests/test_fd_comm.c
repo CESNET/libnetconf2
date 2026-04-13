@@ -565,8 +565,9 @@ main(void)
     pthread_barrier_init(&barrier, NULL, 2);
 
     /* create ctx */
-    ly_ctx_new(TESTS_DIR "/data/modules", 0, &ctx);
+    ly_ctx_new(ly_yang_module_dir(), 0, &ctx);
     assert_non_null(ctx);
+    ly_ctx_set_searchdir(ctx, TESTS_DIR "/data/modules");
 
     /* load modules */
     module = ly_ctx_load_module(ctx, "ietf-netconf-acm", NULL, NULL);

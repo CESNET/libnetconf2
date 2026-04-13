@@ -249,6 +249,13 @@ int nc_session_is_callhome(const struct nc_session *session);
  */
 void nc_session_free(struct nc_session *session, void (*data_free)(void *));
 
+/**
+ * @brief Get the directory with internal libnetconf2 YANG modules.
+ *
+ * @return YANG module dir.
+ */
+const char *nc_yang_module_dir(void);
+
 #ifdef __cplusplus
 }
 #endif

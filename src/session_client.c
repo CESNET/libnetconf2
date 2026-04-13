@@ -52,9 +52,6 @@
 #include "session_client_ch.h"
 #include "session_p.h"
 
-#include "../modules/ietf_netconf@2013-09-29_yang.h"
-#include "../modules/ietf_netconf_monitoring@2010-10-04_yang.h"
-
 static const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "candidate"};
 
 #ifdef NC_ENABLED_SSH_TLS
@@ -241,7 +238,7 @@ nc_client_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx)
 {
     /* assign context (dicionary needed for handshake) */
     if (!ctx) {
-        if (ly_ctx_new(NULL, LY_CTX_NO_YANGLIBRARY, &ctx)) {
+        if (ly_ctx_new(ly_yang_module_dir(), LY_CTX_NO_YANGLIBRARY, &ctx)) {
             return EXIT_FAILURE;
         }
 
@@ -1179,7 +1176,6 @@ nc_ctx_fill_ietf_netconf(struct nc_session *session, struct module_info *modules
 {
     uint32_t u;
     const char **features = NULL;
-    struct ly_in *in;
     struct lys_module *ietfnc;
 
     /* find supported features (capabilities) in ietf-netconf */
@@ -1202,11 +1198,6 @@ nc_ctx_fill_ietf_netconf(struct nc_session *session, struct module_info *modules
     } else {
         /* load the module */
         nc_ctx_load_module(session, "ietf-netconf", NULL, features, modules, user_clb, user_data, has_get_schema, &ietfnc);
-        if (!ietfnc) {
-            ly_in_new_memory(ietf_netconf_2013_09_29_yang, &in);
-            lys_parse(session->ctx, in, LYS_IN_YANG, features, &ietfnc);
-            ly_in_free(in, 0);
-        }
     }
     if (!ietfnc) {
         ERR(session, "Loading base NETCONF module failed.");
@@ -1265,7 +1256,8 @@ nc_ctx_check_and_fill(struct nc_session *session)
     }
 
     /* get-schema is supported, load local ietf-netconf-monitoring so we can create <get-schema> RPCs */
-    if (get_schema_support && lys_parse_mem(session->ctx, ietf_netconf_monitoring_2010_10_04_yang, LYS_IN_YANG, NULL)) {
+    if (get_schema_support &&
+            nc_ctx_load_module(session, "ietf-netconf-monitoring", NULL, NULL, server_modules, old_clb, old_data, 0, &mod)) {
         WRN(session, "Loading NETCONF monitoring module failed, cannot use <get-schema>.");
         get_schema_support = 0;
     }

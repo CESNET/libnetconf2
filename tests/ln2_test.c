@@ -153,11 +153,12 @@ ln2_glob_test_setup(struct ln2_test_ctx **test_ctx)
     }
 
     /* create libyang context */
-    ret = ly_ctx_new(MODULES_DIR, 0, &(*test_ctx)->ctx);
+    ret = ly_ctx_new(ly_yang_module_dir(), 0, &(*test_ctx)->ctx);
     if (ret) {
         SETUP_FAIL_LOG;
         goto cleanup;
     }
+    ly_ctx_set_searchdir((*test_ctx)->ctx, MODULES_DIR);
 
     /* load default yang modules */
     ret = nc_server_init_ctx(&(*test_ctx)->ctx);

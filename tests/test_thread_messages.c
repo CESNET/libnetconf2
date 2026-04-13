@@ -163,14 +163,16 @@ main(void)
     thread_arg.out = pipes[3];
 
     /* create both contexts */
-    nc_assert(ly_ctx_new(TESTS_DIR "/data/modules", 0, &server_ctx) == LY_SUCCESS);
+    nc_assert(ly_ctx_new(ly_yang_module_dir(), 0, &server_ctx) == LY_SUCCESS);
+    nc_assert(ly_ctx_set_searchdir(server_ctx, TESTS_DIR "/data/modules") == LY_SUCCESS);
     nc_assert(ly_ctx_load_module(server_ctx, "ietf-netconf", NULL, features));
     nc_assert(ly_ctx_load_module(server_ctx, "notif1", NULL, NULL));
     nc_assert(ly_ctx_load_module(server_ctx, "module-a", NULL, NULL));
     thread_arg.ctx = server_ctx;
     nc_set_global_rpc_clb(rpc_clb);
 
-    nc_assert(ly_ctx_new(TESTS_DIR "/data/modules", 0, &client_ctx) == LY_SUCCESS);
+    nc_assert(ly_ctx_new(ly_yang_module_dir(), 0, &client_ctx) == LY_SUCCESS);
+    nc_assert(ly_ctx_set_searchdir(client_ctx, TESTS_DIR "/data/modules") == LY_SUCCESS);
     nc_assert(ly_ctx_load_module(client_ctx, "ietf-netconf", NULL, features));
     nc_assert(ly_ctx_load_module(client_ctx, "notif1", NULL, NULL));
     nc_assert(ly_ctx_load_module(client_ctx, "module-a", NULL, NULL));

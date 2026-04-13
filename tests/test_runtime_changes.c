@@ -375,8 +375,9 @@ setup_f(void **state)
     test_state->tree = NULL;
     *state = test_state;
 
-    ret = ly_ctx_new(MODULES_DIR, 0, &ctx);
+    ret = ly_ctx_new(ly_yang_module_dir(), 0, &ctx);
     assert_int_equal(ret, 0);
+    ly_ctx_set_searchdir(ctx, MODULES_DIR);
 
     ret = nc_server_init_ctx(&ctx);
     assert_int_equal(ret, 0);

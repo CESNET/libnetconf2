@@ -541,8 +541,9 @@ init_test_ctx(struct ly_ctx **ctx)
     struct lys_module *mod;
     const char *ietf_ct_features[] = {"cleartext-passwords", "cleartext-private-keys", "certificate-expiration-notification", NULL};
 
-    ret = ly_ctx_new(MODULES_DIR, 0, ctx);
+    ret = ly_ctx_new(ly_yang_module_dir(), 0, ctx);
     assert_int_equal(ret, 0);
+    ly_ctx_set_searchdir(*ctx, MODULES_DIR);
 
     ret = nc_server_init_ctx(ctx);
     assert_int_equal(ret, 0);

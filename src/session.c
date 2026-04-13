@@ -1948,3 +1948,9 @@ cleanup:
 }
 
 #endif
+
+API const char *
+nc_yang_module_dir(void)
+{
+    return NC_SERVER_SEARCH_DIR;
+}

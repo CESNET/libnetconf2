@@ -486,11 +486,16 @@ nc_server_config_load_modules(struct ly_ctx **ctx)
     int i, new_ctx = 0;
 
     if (!*ctx) {
-        if (ly_ctx_new(NC_SERVER_SEARCH_DIR, 0, ctx)) {
-            ERR(NULL, "Couldn't create new libyang context.\n");
+        if (ly_ctx_new(ly_yang_module_dir(), 0, ctx)) {
+            ERR(NULL, "Failed to create new libyang context.");
             goto error;
         }
         new_ctx = 1;
+
+        if (ly_ctx_set_searchdir(*ctx, nc_yang_module_dir())) {
+            ERR(NULL, "Failed to set new searchdir for a context.");
+            goto error;
+        }
     }
 
     /* all features */
@@ -555,7 +560,7 @@ nc_server_config_load_modules(struct ly_ctx **ctx)
 
     for (i = 0; module_names[i]; i++) {
         if (!ly_ctx_load_module(*ctx, module_names[i], NULL, module_features[i])) {
-            ERR(NULL, "Loading module \"%s\" failed.\n", module_names[i]);
+            ERR(NULL, "Loading module \"%s\" failed.", module_names[i]);
             goto error;
         }
     }
