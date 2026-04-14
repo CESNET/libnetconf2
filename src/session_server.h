@@ -144,8 +144,12 @@ int nc_server_init(void);
 /**
  * @brief Destroy any dynamically allocated libssh and/or libssl/libcrypto and
  *        server resources.
+ *
+ * Can be called multiple times, even if a previous call failed.
+ *
+ * @return 0 on success, 1 on error - all resources could not be freed safely.
  */
-void nc_server_destroy(void);
+int nc_server_destroy(void);
 
 /**
  * @brief Initialize a context which can serve as a default server context.
@@ -668,9 +672,12 @@ int nc_server_notif_cert_expiration_thread_start(nc_cert_exp_notif_clb cert_exp_
 /**
  * @brief Stop the certificate expiration notification thread.
  *
+ * Can be called multiple times. If the thread is not running, does nothing and returns 0.
+ *
  * @param[in] wait Boolean representing whether to block and wait for the thread to finish.
+ * @return 0 on success, 1 on error.
  */
-void nc_server_notif_cert_expiration_thread_stop(int wait);
+int nc_server_notif_cert_expiration_thread_stop(int wait);
 
 #endif /* NC_ENABLED_SSH_TLS */
 
