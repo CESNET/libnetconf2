@@ -4,7 +4,7 @@
  * @brief libnetconf2 - general session functions
  *
  * @copyright
- * Copyright (c) 2015 - 2023 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -663,6 +663,31 @@ nc_session_get_ctx(const struct nc_session *session)
     return session->ctx;
 }
 
+API const char * const *
+nc_session_get_cpblts(const struct nc_session *session)
+{
+    NC_CHECK_ARG_RET(session, session, NULL);
+
+    return (const char * const *)session->cpblts;
+}
+
+API const char *
+nc_session_cpblt(const struct nc_session *session, const char *capab)
+{
+    int i, len;
+
+    NC_CHECK_ARG_RET(session, session, capab, NULL);
+
+    len = strlen(capab);
+    for (i = 0; session->cpblts[i]; ++i) {
+        if (!strncmp(session->cpblts[i], capab, len)) {
+            return session->cpblts[i];
+        }
+    }
+
+    return NULL;
+}
+
 API void
 nc_session_set_data(struct nc_session *session, void *data)
 {
@@ -1106,15 +1131,11 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     free(session->username);
     free(session->host);
     free(session->path);
-
-    if (session->side == NC_CLIENT) {
-        /* list of server's capabilities */
-        if (session->opts.client.cpblts) {
-            for (i = 0; session->opts.client.cpblts[i]; i++) {
-                free(session->opts.client.cpblts[i]);
-            }
-            free(session->opts.client.cpblts);
+    if (session->cpblts) {
+        for (i = 0; session->cpblts[i]; i++) {
+            free(session->cpblts[i]);
         }
+        free(session->cpblts);
     }
 
     if (session->data && data_free) {
@@ -1440,24 +1461,30 @@ nc_server_get_cpblts(const struct ly_ctx *ctx)
     return _nc_server_get_cpblts_version(ctx, LYS_VERSION_UNDEF, 0);
 }
 
+/**
+ * @brief Parse received capabilities.
+ *
+ * @param[in] capabilities Opaque capability nodes.
+ * @param[out] list List of parsed capabilities terminated by NULL.
+ * @return NETCONF version;
+ * @return -1 on error.
+ */
 static int
-parse_cpblts(struct lyd_node *capabilities, char ***list)
+nc_parse_cpblts(struct lyd_node *capabilities, char ***list)
 {
     struct lyd_node *iter;
     struct lyd_node_opaq *cpblt;
     int ver = -1, i = 0;
     const char *cpb_start, *cpb_end;
 
-    if (list) {
-        /* get the storage for server's capabilities */
-        LY_LIST_FOR(lyd_child(capabilities), iter) {
-            i++;
-        }
-        /* last item remains NULL */
-        *list = calloc(i + 1, sizeof **list);
-        NC_CHECK_ERRMEM_RET(!*list, -1);
-        i = 0;
+    /* get the storage for capabilities */
+    LY_LIST_FOR(lyd_child(capabilities), iter) {
+        i++;
     }
+    /* last item remains NULL */
+    *list = calloc(i + 1, sizeof **list);
+    NC_CHECK_ERRMEM_RET(!*list, -1);
+    i = 0;
 
     LY_LIST_FOR(lyd_child(capabilities), iter) {
         cpblt = (struct lyd_node_opaq *)iter;
@@ -1483,11 +1510,9 @@ parse_cpblts(struct lyd_node *capabilities, char ***list)
         }
 
         /* store capabilities */
-        if (list) {
-            (*list)[i] = strndup(cpb_start, cpb_end - cpb_start);
-            NC_CHECK_ERRMEM_RET(!(*list)[i], -1);
-            i++;
-        }
+        (*list)[i] = strndup(cpb_start, cpb_end - cpb_start);
+        NC_CHECK_ERRMEM_RET(!(*list)[i], -1);
+        i++;
     }
 
     if (ver == -1) {
@@ -1644,7 +1669,7 @@ nc_client_recv_hello_io(struct nc_session *session)
             }
             flag = 1;
 
-            if ((ver = parse_cpblts(&node->node, &session->opts.client.cpblts)) < 0) {
+            if ((ver = nc_parse_cpblts(&node->node, &session->cpblts)) < 0) {
                 rc = NC_MSG_ERROR;
                 goto cleanup;
             }
@@ -1723,7 +1748,7 @@ nc_server_recv_hello_io(struct nc_session *session)
             }
             flag = 1;
 
-            if ((ver = parse_cpblts(&node->node, NULL)) < 0) {
+            if ((ver = nc_parse_cpblts(&node->node, &session->cpblts)) < 0) {
                 rc = NC_MSG_BAD_HELLO;
                 goto cleanup;
             }

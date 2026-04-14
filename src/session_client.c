@@ -1217,7 +1217,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     char *revision;
     struct module_info *server_modules = NULL, *sm = NULL;
 
-    assert(session->opts.client.cpblts && session->ctx);
+    assert(session->cpblts && session->ctx);
 
     if (client_opts.auto_context_fill_disabled) {
         VRB(session, "Context of the new session is left only with the default YANG modules.");
@@ -1235,12 +1235,12 @@ nc_ctx_check_and_fill(struct nc_session *session)
     ly_ctx_set_module_imp_clb(session->ctx, NULL, NULL);
 
     /* check if get-schema and yang-library is supported */
-    for (i = 0; session->opts.client.cpblts[i]; ++i) {
-        if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring?", 52)) {
+    for (i = 0; session->cpblts[i]; ++i) {
+        if (!strncmp(session->cpblts[i], "urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring?", 52)) {
             get_schema_support = 1 + i;
-        } else if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:netconf:capability:yang-library:", 48)) {
+        } else if (!strncmp(session->cpblts[i], "urn:ietf:params:netconf:capability:yang-library:", 48)) {
             yanglib_support = 1 + i;
-        } else if (!strncmp(session->opts.client.cpblts[i], "urn:ietf:params:netconf:capability:xpath:1.0", 44)) {
+        } else if (!strncmp(session->cpblts[i], "urn:ietf:params:netconf:capability:xpath:1.0", 44)) {
             xpath_support = 1 + i;
         }
         /* NMDA is YANG 1.1 module, which is not present in the capabilities */
@@ -1250,7 +1250,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     VRB(session, "Capability for XPath filter support%s found.", xpath_support ? "" : " not");
 
     /* get information about server's modules from capabilities list until we will have yang-library */
-    if (build_module_info_cpblts(session->opts.client.cpblts, &server_modules) || !server_modules) {
+    if (build_module_info_cpblts(session->cpblts, &server_modules) || !server_modules) {
         ERR(session, "Unable to get server module information from the <hello>'s capabilities.");
         goto cleanup;
     }
@@ -1270,7 +1270,7 @@ nc_ctx_check_and_fill(struct nc_session *session)
     /* get correct version of ietf-yang-library into context */
     if (yanglib_support) {
         /* use get-schema to get server's ietf-yang-library */
-        revision = strstr(session->opts.client.cpblts[yanglib_support - 1], "revision=");
+        revision = strstr(session->cpblts[yanglib_support - 1], "revision=");
         if (!revision) {
             WRN(session, "Loading NETCONF ietf-yang-library module failed, missing revision in NETCONF <hello> message.");
             WRN(session, "Unable to automatically use <get-schema>.");
@@ -1943,31 +1943,6 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
 }
 
 #endif /* NC_ENABLED_SSH_TLS */
-
-API const char * const *
-nc_session_get_cpblts(const struct nc_session *session)
-{
-    NC_CHECK_ARG_RET(session, session, NULL);
-
-    return (const char * const *)session->opts.client.cpblts;
-}
-
-API const char *
-nc_session_cpblt(const struct nc_session *session, const char *capab)
-{
-    int i, len;
-
-    NC_CHECK_ARG_RET(session, session, capab, NULL);
-
-    len = strlen(capab);
-    for (i = 0; session->opts.client.cpblts[i]; ++i) {
-        if (!strncmp(session->opts.client.cpblts[i], capab, len)) {
-            return session->opts.client.cpblts[i];
-        }
-    }
-
-    return NULL;
-}
 
 API int
 nc_session_ntf_thread_running(const struct nc_session *session)

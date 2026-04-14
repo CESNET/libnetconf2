@@ -100,6 +100,7 @@ server_thread(void *arg)
     struct ln2_test_ctx *test_ctx = arg;
     int fd;
     struct linger ling = {1, 0};
+    const char *cpb;
 
     ps = nc_ps_new();
     assert_non_null(ps);
@@ -110,6 +111,10 @@ server_thread(void *arg)
     /* accept a session and add it to the poll session structure */
     msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
     assert_int_equal(msgtype, NC_MSG_HELLO);
+
+    /* just check capabilities function on the client */
+    cpb = nc_session_cpblt(session, "urn:ietf:params:netconf:base:1.1");
+    assert_non_null(cpb);
 
     /* get the session's fd */
     fd = ssh_get_fd(session->ti.libssh.session);

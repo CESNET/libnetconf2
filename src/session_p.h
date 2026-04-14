@@ -876,6 +876,7 @@ struct nc_session {
     /* NETCONF data */
     uint32_t id;                 /**< NETCONF session ID (session-id-type) */
     NC_PROT_VERSION version;     /**< NETCONF protocol version */
+    char **cpblts;               /**< NETCONF capabilities received from the other end */
 
     /* Transport implementation */
     NC_TRANSPORT_IMPL ti_type;   /**< transport implementation type to select items from ti union */
@@ -936,7 +937,6 @@ struct nc_session {
         struct {
             /* client side only data */
             uint64_t msgid;
-            char **cpblts;                 /**< list of server's capabilities on client side */
             pthread_mutex_t msgs_lock;     /**< lock for the msgs buffer */
             struct nc_msg_cont *msgs;      /**< queue for messages received of different type than expected */
             ATOMIC_T ntf_thread_count;     /**< number of running notification threads */

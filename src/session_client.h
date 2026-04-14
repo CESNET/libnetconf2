@@ -490,23 +490,6 @@ struct nc_session *nc_connect_tls(const char *host, uint16_t port, struct ly_ctx
  */
 
 /**
- * @brief Get session capabilities.
- *
- * @param[in] session Session to get the information from.
- * @return NULL-terminated array of the @p session capabilities.
- */
-const char * const *nc_session_get_cpblts(const struct nc_session *session);
-
-/**
- * @brief Check capability presence in a session.
- *
- * @param[in] session Session to check.
- * @param[in] capab Capability to look for, capability with any additional suffix will match.
- * @return Matching capability, NULL if none found.
- */
-const char *nc_session_cpblt(const struct nc_session *session, const char *capab);
-
-/**
  * @brief Check whether the session has a notification thread running.
  *
  * @param[in] session Session to check.
