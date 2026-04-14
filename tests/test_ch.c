@@ -29,13 +29,14 @@
 
 struct test_ch_data {
     struct lyd_node *tree;
+    pthread_barrier_t *barrier2;
 };
 
 char buffer[512];
 char expected[512];
 
-int TEST_PORT = 10050, TEST_PORT_2 = 10051;
-const char *TEST_PORT_STR = "10050", *TEST_PORT_2_STR = "10051";
+int TEST_PORT = 10050, TEST_PORT_2 = 10051, TEST_PORT_3 = 10052, TEST_PORT_4 = 10053;
+const char *TEST_PORT_STR = "10050", *TEST_PORT_2_STR = "10051", *TEST_PORT_3_STR = "10052", *TEST_PORT_4_STR = "10053";
 
 static void
 test_msg_callback(const struct nc_session *session, NC_VERB_LEVEL level, const char *msg)
@@ -169,6 +170,10 @@ test_nc_ch_free_test_data(void *test_data)
 
     test_ch_data = test_data;
     lyd_free_tree(test_ch_data->tree);
+    if (test_ch_data->barrier2) {
+        pthread_barrier_destroy(test_ch_data->barrier2);
+        free(test_ch_data->barrier2);
+    }
     free(test_ch_data);
 }
 
@@ -382,16 +387,188 @@ setup_tls(void **state)
     return 0;
 }
 
+/*
+ * Test: Delete CH client while session is established
+ * Verifies that deleting a CH client from config properly signals the thread to stop,
+ * even when the session is in RUNNING state.
+ */
+static int session_established_flag = 0;
+
+static int
+ch_new_session_set_flag_cb(const char *client_name, struct nc_session *new_session, void *user_data)
+{
+    int ret = 0;
+    struct nc_pollsession *ps = (struct nc_pollsession *)user_data;
+
+    (void) client_name;
+
+    ret = nc_ps_add_session(ps, new_session);
+    assert_int_equal(ret, 0);
+
+    session_established_flag = 1;
+    return 0;
+}
+
+static void *
+server_thread_delete_while_session(void *arg)
+{
+    int ret;
+    struct nc_pollsession *ps;
+    struct ln2_test_ctx *test_ctx = arg;
+    struct test_ch_data *test_data = test_ctx->test_data;
+
+    nc_set_print_clb_session(test_msg_callback);
+    buffer[0] = '\0';
+    strcpy(expected, "thread exit");
+
+    ps = nc_ps_new();
+    assert_non_null(ps);
+
+    pthread_barrier_wait(&test_ctx->barrier);
+
+    ret = nc_connect_ch_client_dispatch("ch_delete_test", ch_session_acquire_ctx_cb,
+            ch_session_release_ctx_cb, test_ctx, ch_new_session_set_flag_cb, ps);
+    assert_int_equal(ret, 0);
+
+    while (!session_established_flag) {
+        usleep(10000);
+    }
+
+    do {
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
+        if (ret & (NC_PSPOLL_TIMEOUT | NC_PSPOLL_NOSESSIONS)) {
+            usleep(500);
+        }
+    } while (ret & NC_PSPOLL_RPC);
+
+    ret = nc_server_config_setup_data(test_data->tree);
+    assert_int_equal(ret, 0);
+
+    do {
+        usleep(5000);
+    } while (!strlen(buffer));
+
+    assert_true(strlen(buffer) > 0);
+
+    pthread_barrier_wait(test_data->barrier2);
+
+    nc_ps_clear(ps, 1, NULL);
+    nc_ps_free(ps);
+
+    return NULL;
+}
+
+static void *
+client_thread_delete_while_session(void *arg)
+{
+    int ret;
+    struct nc_session *session = NULL;
+    struct ln2_test_ctx *test_ctx = arg;
+    struct test_ch_data *test_data = test_ctx->test_data;
+
+    nc_client_ssh_ch_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_SKIP);
+    ret = nc_client_set_schema_searchpath(MODULES_DIR);
+    assert_int_equal(ret, 0);
+    ret = nc_client_ssh_ch_set_username("test_ch_delete");
+    assert_int_equal(ret, 0);
+    ret = nc_client_ssh_ch_add_keypair(TESTS_DIR "/data/id_ed25519.pub", TESTS_DIR "/data/id_ed25519");
+    assert_int_equal(ret, 0);
+    ret = nc_client_ssh_ch_add_bind_listen("127.0.0.1", TEST_PORT_3);
+    assert_int_equal(ret, 0);
+
+    pthread_barrier_wait(&test_ctx->barrier);
+
+    ret = nc_accept_callhome(NC_ACCEPT_TIMEOUT, NULL, &session);
+    assert_int_equal(ret, 1);
+
+    /* wait until the server deletes the client */
+    pthread_barrier_wait(test_data->barrier2);
+
+    ret = nc_client_ssh_ch_del_bind("127.0.0.1", TEST_PORT_3);
+    assert_int_equal(ret, 0);
+
+    nc_session_free(session, NULL);
+    return NULL;
+}
+
+static int
+setup_delete_while_session(void **state)
+{
+    int ret;
+    struct lyd_node *tree = NULL;
+    struct ln2_test_ctx *test_ctx;
+    struct test_ch_data *test_data;
+
+    ret = ln2_glob_test_setup(&test_ctx);
+    assert_int_equal(ret, 0);
+
+    test_data = calloc(1, sizeof *test_data);
+    assert_non_null(test_data);
+    test_data->barrier2 = calloc(1, sizeof(pthread_barrier_t));
+    assert_non_null(test_data->barrier2);
+    pthread_barrier_init(test_data->barrier2, NULL, 2);
+
+    test_ctx->test_data = test_data;
+    test_ctx->free_test_data = test_nc_ch_free_test_data;
+    *state = test_ctx;
+
+    session_established_flag = 0;
+
+    ret = nc_server_config_add_ch_address_port(test_ctx->ctx, "ch_delete_test", "endpt", NC_TI_SSH,
+            "127.0.0.1", TEST_PORT_3_STR, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_persistent(test_ctx->ctx, "ch_delete_test", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_ssh_hostkey(test_ctx->ctx, "ch_delete_test", "endpt", "hostkey",
+            TESTS_DIR "/data/key_ecdsa", NULL, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_ssh_user_pubkey(test_ctx->ctx, "ch_delete_test", "endpt", "test_ch_delete",
+            "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_del_ch_client("ch_delete_test", &tree);
+    assert_int_equal(ret, 0);
+
+    test_data->tree = tree;
+    return 0;
+}
+
+static void
+test_nc_ch_delete_client_while_session(void **state)
+{
+    int ret, i;
+    pthread_t tids[2];
+
+    assert_non_null(state);
+
+    ret = pthread_create(&tids[0], NULL, client_thread_delete_while_session, *state);
+    assert_int_equal(ret, 0);
+
+    ret = pthread_create(&tids[1], NULL, server_thread_delete_while_session, *state);
+    assert_int_equal(ret, 0);
+
+    for (i = 0; i < 2; i++) {
+        pthread_join(tids[i], NULL);
+    }
+}
+
 int
 main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_nc_ch_ssh, setup_ssh, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_nc_ch_tls, setup_tls, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_nc_ch_delete_client_while_session, setup_delete_while_session, ln2_glob_test_teardown),
     };
 
-    /* try to get ports from the environment, otherwise use the default */
-    if (ln2_glob_test_get_ports(2, &TEST_PORT, &TEST_PORT_STR, &TEST_PORT_2, &TEST_PORT_2_STR)) {
+    if (ln2_glob_test_get_ports(4, &TEST_PORT, &TEST_PORT_STR, &TEST_PORT_2, &TEST_PORT_2_STR,
+            &TEST_PORT_3, &TEST_PORT_3_STR, &TEST_PORT_4, &TEST_PORT_4_STR)) {
         return 1;
     }
 
