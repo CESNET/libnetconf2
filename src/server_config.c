@@ -5350,10 +5350,9 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
 {
     int rc = 0;
     struct nc_ch_client *old_ch_client, *new_ch_client;
-    struct nc_server_ch_thread_arg **ch_thread_arg;
     int found;
-    LY_ARRAY_COUNT_TYPE i = 0;
-    char **started_clients = NULL, **client_name = NULL;
+    LY_ARRAY_COUNT_TYPE i;
+    struct nc_ch_client **started_clients = NULL, **started_client_ptr;
     int dispatch_new_clients = 1;
 
     if (!server_opts.ch_dispatch_data.acquire_ctx_cb || !server_opts.ch_dispatch_data.release_ctx_cb ||
@@ -5369,48 +5368,28 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
     /*
      * == PHASE 1: START NEW CLIENTS ==
      * Start clients present in new_cfg that are not already running.
-     * Track successfully started clients for potential rollback.
+     * Track successfully started threads for potential rollback.
      */
     if (dispatch_new_clients) {
         /* only dispatch if all required CBs are set */
         LY_ARRAY_FOR(new_cfg->ch_clients, struct nc_ch_client, new_ch_client) {
-            found = 0;
+            if (new_ch_client->thread) {
+                /* already running */
+                continue;
+            }
 
-            /* CH THREADS LOCK (reading server_opts.ch_threads) */
-            if (nc_rwlock_lock(&server_opts.ch_threads_lock, NC_RWLOCK_READ, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
-                rc = 1;
+            /* this is a new Call Home client, dispatch it */
+            rc = _nc_connect_ch_client_dispatch(new_ch_client, server_opts.ch_dispatch_data.acquire_ctx_cb,
+                    server_opts.ch_dispatch_data.release_ctx_cb, server_opts.ch_dispatch_data.ctx_cb_data,
+                    server_opts.ch_dispatch_data.new_session_cb, server_opts.ch_dispatch_data.new_session_cb_data);
+            if (rc) {
+                /* FAILURE! trigger rollback */
                 goto rollback;
             }
 
-            LY_ARRAY_FOR(server_opts.ch_threads, struct nc_server_ch_thread_arg *, ch_thread_arg) {
-                if (!strcmp(new_ch_client->name, (*ch_thread_arg)->client_name)) {
-                    /* already running, do not start again */
-                    found = 1;
-                    break;
-                }
-            }
-
-            /* CH THREADS UNLOCK */
-            nc_rwlock_unlock(&server_opts.ch_threads_lock, __func__);
-
-            if (!found) {
-                /* this is a new Call Home client, dispatch it */
-                rc = _nc_connect_ch_client_dispatch(new_ch_client, server_opts.ch_dispatch_data.acquire_ctx_cb,
-                        server_opts.ch_dispatch_data.release_ctx_cb, server_opts.ch_dispatch_data.ctx_cb_data,
-                        server_opts.ch_dispatch_data.new_session_cb, server_opts.ch_dispatch_data.new_session_cb_data);
-                if (rc) {
-                    /* FAILURE! trigger rollback */
-                    goto rollback;
-                }
-
-                /* successfully started, track it for potential rollback */
-                LY_ARRAY_NEW_GOTO(NULL, started_clients, client_name, rc, rollback);
-                *client_name = strdup(new_ch_client->name);
-                NC_CHECK_ERRMEM_GOTO(!*client_name, rc = 1, rollback);
-
-                /* ownership transferred to array */
-                client_name = NULL;
-            }
+            /* successfully started, track client for potential rollback */
+            LY_ARRAY_NEW_GOTO(NULL, started_clients, started_client_ptr, rc, rollback);
+            *started_client_ptr = new_ch_client;
         }
     }
 
@@ -5428,9 +5407,9 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
             }
         }
 
-        if (!found) {
+        if (!found && old_ch_client->thread) {
             /* this Call Home client was deleted, notify it to stop */
-            if ((rc = nc_session_server_ch_client_dispatch_stop_if_dispatched(old_ch_client->name, NC_RWLOCK_WRITE))) {
+            if ((rc = nc_session_server_ch_client_dispatch_stop(old_ch_client))) {
                 ERR(NULL, "Failed to dispatch stop for Call Home client \"%s\".", old_ch_client->name);
                 goto rollback;
             }
@@ -5448,15 +5427,12 @@ rollback:
      * to return to the pre-call state.
      */
     LY_ARRAY_FOR(started_clients, i) {
-        nc_session_server_ch_client_dispatch_stop_if_dispatched(started_clients[i], NC_RWLOCK_WRITE);
+        nc_session_server_ch_client_dispatch_stop(started_clients[i]);
     }
     /* rc is already set to non-zero from the failure point */
 
 cleanup:
-    /* free the tracking list and its contents */
-    LY_ARRAY_FOR(started_clients, i) {
-        free(started_clients[i]);
-    }
+    /* free the tracking list */
     LY_ARRAY_FREE(started_clients);
     return rc;
 }
@@ -6072,6 +6048,8 @@ nc_server_config_dup(const struct nc_server_config *src, struct nc_server_config
         dst_ch_client->start_with = src_ch_client->start_with;
         dst_ch_client->max_attempts = src_ch_client->max_attempts;
         dst_ch_client->max_wait = src_ch_client->max_wait;
+
+        dst_ch_client->thread = src_ch_client->thread;
 
         LY_ARRAY_INCREMENT(dst->ch_clients);
     }

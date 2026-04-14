@@ -753,6 +753,8 @@ struct nc_server_config {
         NC_CH_START_WITH start_with;        /**< How to select the Call Home endpoint to connect to. */
         uint8_t max_attempts;               /**< Maximum number of attempts to connect to the given Call Home endpoint. */
         uint16_t max_wait;                  /**< Maximum time to wait for a Call Home connection in seconds. */
+
+        struct nc_server_ch_thread_arg *thread; /**< Call Home client thread data, if dispatched. */
     } *ch_clients;                          /**< Call Home clients (sized-array, see libyang docs). */
 
 #ifdef NC_ENABLED_SSH_TLS
@@ -783,11 +785,6 @@ struct nc_server_opts {
     char *(*content_id_clb)(void *user_data);   /**< Callback for generating content_id for ietf-yang-library data. */
     void *content_id_data;                      /**< Data passed to the content_id_clb callback. */
     void (*content_id_data_free)(void *data);   /**< Callback to free the content_id_data. */
-
-    /* ACCESS locked - call home thread creation/deletion - WRITE lock
-     *               - call home threads data access (e.g. to signal thread to end) - READ lock */
-    pthread_rwlock_t ch_threads_lock;  /**< Lock for data of Call Home threads. */
-    struct nc_server_ch_thread_arg **ch_threads;  /**< Call Home threads' data, one for each CH client (sized-array, see libyang docs). */
 
     /* ACCESS locked - options modified by YANG data/API - WRITE lock
      *               - options read when accepting sessions - READ lock */
@@ -1389,20 +1386,19 @@ NC_MSG_TYPE nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IM
 #ifdef NC_ENABLED_SSH_TLS
 
 /**
- * @brief Stop a dispatched Call Home client thread, if such thread was dispatched for the given client name.
+ * @brief Stop a dispatched Call Home client thread, if such thread was dispatched for the given client.
  *
- * @param[in] client_name Name of the Call Home client to stop the thread for.
- * @param[in] config_lock_mode Lock mode of the configuration lock, if it is held by the caller.
- * If NC_RWLOCK_WRITE is passed, config lock will be briefly unlocked and then locked again.
- * The caller MUST ensure that it holds the CONFIG APPLY mutex, so that nobody steals the wrlock from him.
- * @return 0 if the thread was successfully stopped or not found, 1 on error.
+ * @warning The caller MUST hold both WRITE config lock and CONFIG APPLY mutex when calling this function.
+ *
+ * @param[in] ch_client Call Home client to stop the thread for, can be NULL.
+ * @return 0 if the thread was successfully stopped, 1 on error.
  */
-int nc_session_server_ch_client_dispatch_stop_if_dispatched(const char *client_name, enum nc_rwlock_mode config_lock_mode);
+int nc_session_server_ch_client_dispatch_stop(struct nc_ch_client *ch_client);
 
 /**
  * @brief Dispatch a thread connecting to a listening NETCONF client and creating Call Home sessions.
  *
- * @note The config lock MUST be held.
+ * @note The config WRITE lock MUST be held.
  *
  * @param[in] ch_client Call Home client to dispatch the thread for.
  * @param[in] acquire_ctx_cb Callback for acquiring new session context.
@@ -1412,7 +1408,7 @@ int nc_session_server_ch_client_dispatch_stop_if_dispatched(const char *client_n
  * @param[in] new_session_cb_data Arbitrary user data passed to @p new_session_cb.
  * @return 0 if the thread was successfully created, -1 on error.
  */
-int _nc_connect_ch_client_dispatch(const struct nc_ch_client *ch_client, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
+int _nc_connect_ch_client_dispatch(struct nc_ch_client *ch_client, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
         nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
         void *new_session_cb_data);
 
