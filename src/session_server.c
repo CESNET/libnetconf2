@@ -3270,7 +3270,7 @@ fail:
  *
  * @param[in] client_name Name of the Call Home client.
  * @param[out] idle_timeout Idle timeout in seconds.
- * @return 0 on success, 1 if the client was not found.
+ * @return 0 on success, 1 if the client was not found, -1 on error.
  */
 static int
 nc_server_ch_client_get_idle_timeout(const char *client_name, uint32_t *idle_timeout)
@@ -3280,7 +3280,7 @@ nc_server_ch_client_get_idle_timeout(const char *client_name, uint32_t *idle_tim
 
     /* CONFIG READ LOCK */
     if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
-        return 1;
+        return -1;
     }
 
     client = nc_server_ch_client_get(client_name);
@@ -3302,6 +3302,33 @@ cleanup:
 }
 
 /**
+ * @brief Checks if a Call Home thread should terminate.
+ *
+ * Checks the shared boolean variable thread_running. This should be done everytime
+ * before entering a critical section.
+ *
+ * @param[in] data Call Home thread's data.
+ * @return 1 if running, 0 if the thread should terminate, -1 on error.
+ */
+static int
+nc_server_ch_client_thread_is_running(struct nc_server_ch_thread_arg *data)
+{
+    int rc = -1;
+
+    /* COND LOCK */
+    if (nc_mutex_lock(&data->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
+        return -1;
+    }
+
+    rc = data->thread_running;
+
+    /* COND UNLOCK */
+    nc_mutex_unlock(&data->cond_lock, __func__);
+
+    return rc;
+}
+
+/**
  * @brief Wait for any event after a NC session was established on a CH client.
  *
  * @param[in] data CH client thread argument.
@@ -3313,7 +3340,7 @@ cleanup:
 static int
 nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *data, struct nc_session *session)
 {
-    int rc = 0, r;
+    int rc = 0, r, terminate;
     uint32_t idle_timeout;
     struct timespec ts;
 
@@ -3369,24 +3396,37 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *dat
         /* CH UNLOCK */
         nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
 
+        terminate = 0;
+
         /* check if the client still exists and get its idle timeout */
         r = nc_server_ch_client_get_idle_timeout(data->client_name, &idle_timeout);
         if (r) {
-            /* client was removed, finish thread */
-            VRB(session, "Call Home client \"%s\" removed, but an established session will not be terminated.",
-                    data->client_name);
-            rc = 1;
-
-            /* CH LOCK - to remain consistent */
-            if (nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__) != 1) {
-                return -1;
+            if (r == 1) {
+                /* the client must always be found, because if we delete it, then the configuring thread calls
+                 * pthread_join() on this thread with the old config where the client still exists */
+                ERRINT;
             }
-            break;
+            rc = -1;
+            terminate = 1;
+        }
+
+        /* check if the thread should terminate */
+        r = nc_server_ch_client_thread_is_running(data);
+        if (r != 1) {
+            if (r == -1) {
+                rc = -1;
+            }
+            terminate = 1;
         }
 
         /* CH LOCK */
         if (nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__) != 1) {
             return -1;
+        }
+
+        if (terminate) {
+            /* the purpose of this is to break only after we've acquired the ch_lock */
+            break;
         }
 
         nc_timeouttime_get(&ts, 0);
@@ -3397,6 +3437,12 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *dat
         }
     } while (session->status == NC_STATUS_RUNNING);
     /* broke out of the loop, but still holding the ch_lock */
+
+    if (session->status == NC_STATUS_RUNNING) {
+        /* thread is terminating but the session is still running, so just log it */
+        VRB(session, "Call Home client \"%s\" removed, but an established session will not be terminated.",
+                data->client_name);
+    }
 
     /* signal to nc_session_free() that CH thread is terminating */
     session->flags &= ~NC_SESSION_CH_THREAD;
@@ -3449,35 +3495,6 @@ nc_server_ch_client_thread_is_running_wait(struct nc_session *session, struct nc
         ERR(session, "Pthread condition timedwait failed (%s).", strerror(ret));
         ret = 0;
     }
-
-    return ret;
-}
-
-/**
- * @brief Checks if a Call Home thread should terminate.
- *
- * Checks the shared boolean variable thread_running. This should be done everytime
- * before entering a critical section.
- *
- * @param[in] data Call Home thread's data.
- *
- * @return 0 if the thread should stop running, -1 if it can continue.
- */
-static int
-nc_server_ch_client_thread_is_running(struct nc_server_ch_thread_arg *data)
-{
-    int ret = -1;
-
-    /* COND LOCK */
-    if (nc_mutex_lock(&data->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
-        return ret;
-    }
-    if (!data->thread_running) {
-        /* thread should stop running */
-        ret = 0;
-    }
-    /* COND UNLOCK */
-    nc_mutex_unlock(&data->cond_lock, __func__);
 
     return ret;
 }
@@ -3848,6 +3865,8 @@ _nc_connect_ch_client_dispatch(struct nc_ch_client *ch_client, nc_server_ch_sess
 cleanup:
     if (arg) {
         free(arg->client_name);
+        pthread_mutex_destroy(&arg->cond_lock);
+        pthread_cond_destroy(&arg->cond);
         free(arg);
     }
     return rc;
