@@ -558,6 +558,205 @@ test_nc_ch_delete_client_while_session(void **state)
     }
 }
 
+static int session_count = 0;
+static pthread_mutex_t session_count_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+struct ch_thread_arg {
+    struct ln2_test_ctx *test_ctx;
+    const char *ch_client_name;
+    int port;
+};
+
+static int
+ch_new_session_count_cb(const char *client_name, struct nc_session *new_session, void *user_data)
+{
+    int ret = 0;
+    struct nc_pollsession *ps = (struct nc_pollsession *)user_data;
+
+    (void) client_name;
+
+    ret = nc_ps_add_session(ps, new_session);
+    assert_int_equal(ret, 0);
+
+    pthread_mutex_lock(&session_count_mutex);
+    session_count++;
+    pthread_mutex_unlock(&session_count_mutex);
+
+    return 0;
+}
+
+static void *
+server_thread_two_ch(void *arg)
+{
+    int ret;
+    struct nc_pollsession *ps;
+    struct ch_thread_arg *ch_arg = arg;
+
+    ps = nc_ps_new();
+    assert_non_null(ps);
+
+    pthread_barrier_wait(&ch_arg->test_ctx->barrier);
+
+    ret = nc_connect_ch_client_dispatch(ch_arg->ch_client_name, ch_session_acquire_ctx_cb,
+            ch_session_release_ctx_cb, ch_arg->test_ctx, ch_new_session_count_cb, ps);
+    assert_int_equal(ret, 0);
+
+    while (1) {
+        pthread_mutex_lock(&session_count_mutex);
+        if (session_count >= 2) {
+            pthread_mutex_unlock(&session_count_mutex);
+            break;
+        }
+        pthread_mutex_unlock(&session_count_mutex);
+
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
+        if (ret & (NC_PSPOLL_TIMEOUT | NC_PSPOLL_NOSESSIONS)) {
+            usleep(10000);
+        }
+    }
+
+    nc_ps_clear(ps, 1, NULL);
+    nc_ps_free(ps);
+
+    free(ch_arg);
+    return NULL;
+}
+
+static void *
+client_thread_two_ch(void *arg)
+{
+    int ret;
+    struct nc_session *session = NULL;
+    struct ch_thread_arg *ch_arg = arg;
+
+    nc_client_ssh_ch_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_SKIP);
+    ret = nc_client_set_schema_searchpath(MODULES_DIR);
+    assert_int_equal(ret, 0);
+    ret = nc_client_ssh_ch_set_username("test_ch_simul");
+    assert_int_equal(ret, 0);
+    ret = nc_client_ssh_ch_add_keypair(TESTS_DIR "/data/id_ed25519.pub", TESTS_DIR "/data/id_ed25519");
+    assert_int_equal(ret, 0);
+
+    ret = nc_client_ssh_ch_add_bind_listen("127.0.0.1", ch_arg->port);
+    assert_int_equal(ret, 0);
+
+    pthread_barrier_wait(&ch_arg->test_ctx->barrier);
+
+    ret = nc_accept_callhome(NC_ACCEPT_TIMEOUT, NULL, &session);
+    assert_int_equal(ret, 1);
+
+    ret = nc_client_ssh_ch_del_bind("127.0.0.1", ch_arg->port);
+    assert_int_equal(ret, 0);
+
+    nc_session_free(session, NULL);
+    free(ch_arg);
+    return NULL;
+}
+
+static int
+setup_two_simultaneous(void **state)
+{
+    int ret;
+    struct lyd_node *tree = NULL;
+    struct ln2_test_ctx *test_ctx;
+    struct test_ch_data *test_data;
+
+    ret = ln2_glob_test_setup(&test_ctx);
+    assert_int_equal(ret, 0);
+
+    pthread_barrier_destroy(&test_ctx->barrier);
+    ret = pthread_barrier_init(&test_ctx->barrier, NULL, 4);
+    assert_int_equal(ret, 0);
+
+    test_data = calloc(1, sizeof *test_data);
+    assert_non_null(test_data);
+
+    test_ctx->test_data = test_data;
+    test_ctx->free_test_data = test_nc_ch_free_test_data;
+    *state = test_ctx;
+
+    session_count = 0;
+
+    ret = nc_server_config_add_ch_address_port(test_ctx->ctx, "ch_simul_1", "endpt", NC_TI_SSH,
+            "127.0.0.1", TEST_PORT_3_STR, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_persistent(test_ctx->ctx, "ch_simul_1", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_ssh_hostkey(test_ctx->ctx, "ch_simul_1", "endpt", "hostkey",
+            TESTS_DIR "/data/key_ecdsa", NULL, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_ssh_user_pubkey(test_ctx->ctx, "ch_simul_1", "endpt", "test_ch_simul",
+            "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_address_port(test_ctx->ctx, "ch_simul_2", "endpt", NC_TI_SSH,
+            "127.0.0.1", TEST_PORT_4_STR, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_persistent(test_ctx->ctx, "ch_simul_2", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_ssh_hostkey(test_ctx->ctx, "ch_simul_2", "endpt", "hostkey",
+            TESTS_DIR "/data/key_ecdsa", NULL, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_ssh_user_pubkey(test_ctx->ctx, "ch_simul_2", "endpt", "test_ch_simul",
+            "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    test_data->tree = tree;
+    return 0;
+}
+
+static void
+test_nc_ch_two_simultaneous(void **state)
+{
+    int ret, i;
+    pthread_t tids[4];
+    struct ch_thread_arg *ch_arg;
+    struct ln2_test_ctx *test_ctx = *state;
+
+    assert_non_null(state);
+
+    ch_arg = calloc(1, sizeof *ch_arg);
+    assert_non_null(ch_arg);
+    ch_arg->test_ctx = test_ctx;
+    ch_arg->port = TEST_PORT_3;
+    ret = pthread_create(&tids[0], NULL, client_thread_two_ch, ch_arg);
+    assert_int_equal(ret, 0);
+
+    ch_arg = calloc(1, sizeof *ch_arg);
+    assert_non_null(ch_arg);
+    ch_arg->test_ctx = test_ctx;
+    ch_arg->port = TEST_PORT_4;
+    ret = pthread_create(&tids[1], NULL, client_thread_two_ch, ch_arg);
+    assert_int_equal(ret, 0);
+
+    ch_arg = calloc(1, sizeof *ch_arg);
+    assert_non_null(ch_arg);
+    ch_arg->test_ctx = test_ctx;
+    ch_arg->ch_client_name = "ch_simul_1";
+    ret = pthread_create(&tids[2], NULL, server_thread_two_ch, ch_arg);
+    assert_int_equal(ret, 0);
+
+    ch_arg = calloc(1, sizeof *ch_arg);
+    assert_non_null(ch_arg);
+    ch_arg->test_ctx = test_ctx;
+    ch_arg->ch_client_name = "ch_simul_2";
+    ret = pthread_create(&tids[3], NULL, server_thread_two_ch, ch_arg);
+    assert_int_equal(ret, 0);
+
+    for (i = 0; i < 4; i++) {
+        pthread_join(tids[i], NULL);
+    }
+}
+
 int
 main(void)
 {
@@ -565,6 +764,7 @@ main(void)
         cmocka_unit_test_setup_teardown(test_nc_ch_ssh, setup_ssh, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_nc_ch_tls, setup_tls, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_nc_ch_delete_client_while_session, setup_delete_while_session, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_nc_ch_two_simultaneous, setup_two_simultaneous, ln2_glob_test_teardown),
     };
 
     if (ln2_glob_test_get_ports(4, &TEST_PORT, &TEST_PORT_STR, &TEST_PORT_2, &TEST_PORT_2_STR,
