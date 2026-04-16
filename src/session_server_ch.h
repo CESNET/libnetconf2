@@ -96,7 +96,7 @@ typedef int (*nc_server_ch_new_session_cb)(const char *client_name, struct nc_se
  *
  * @param[in] client_name Name of the CH client that failed to create the session.
  * @param[in] endpt_name Name of the CH client endpoint that failed to create the session.
- * @param[in] max_attemps Maximum connection attempts for the endpoints.
+ * @param[in] max_attempts Maximum connection attempts for the endpoints.
  * @param[in] cur_attempt Current failed connection attempt.
  * @param[in] user_data Arbitrary new session callback data.
  */
