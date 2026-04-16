@@ -3884,7 +3884,7 @@ nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acqu
 
     NC_CHECK_SRV_INIT_RET(-1);
 
-    /* CONFIG READ LOCK */
+    /* CONFIG WRITE LOCK */
     if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
         return -1;
     }
@@ -3898,7 +3898,7 @@ nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acqu
             new_session_cb, new_session_cb_data);
 
 cleanup:
-    /* CONFIG READ UNLOCK */
+    /* CONFIG WRITE UNLOCK */
     nc_rwlock_unlock(&server_opts.config_lock, __func__);
     return rc;
 }
