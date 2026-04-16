@@ -142,12 +142,11 @@ struct nc_server_reply *nc_clb_default_close_session(struct lyd_node *rpc, struc
 int nc_server_init(void);
 
 /**
- * @brief Destroy any dynamically allocated libssh and/or libssl/libcrypto and
- *        server resources.
+ * @brief Destroy any dynamically allocated libssh and/or libssl/libcrypto and server resources.
  *
- * Can be called multiple times, even if a previous call failed.
- *
- * @return 0 on success, 1 on error - all resources could not be freed safely.
+ * @return 0 on success, 1 on error - failed to synchronize with other threads
+ *         (timed out waiting for locks or failed to join threads). Safe to call
+ *         again to retry freeing resources.
  */
 int nc_server_destroy(void);
 
