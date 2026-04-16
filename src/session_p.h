@@ -693,7 +693,8 @@ struct nc_server_ch_thread_arg {
     void *new_session_fail_cb_data;                         /**< new session fail cb data */
 
     pthread_t tid;              /**< Thread ID of the Call Home client thread. */
-    int thread_running;         /**< A boolean value that is truthy while the underlying Call Home thread is running */
+    ATOMIC_T thread_running;    /**< Non-zero while the Call Home thread is running. Atomic for lock-free checks,
+                                     but also used with the condition variable under cond_lock for signalling. */
     pthread_mutex_t cond_lock;  /**< Condition's lock used for signalling the thread to terminate */
     pthread_cond_t cond;        /**< Condition used for signalling the thread to terminate */
 };
