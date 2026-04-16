@@ -4551,6 +4551,9 @@ nc_server_notif_cert_exp_intervals_get(struct nc_cert_exp_time_interval *default
 {
     int rc = 0;
 
+    *intervals = NULL;
+    *interval_count = 0;
+
     /* CONFIG LOCK */
     if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
         return 1;
