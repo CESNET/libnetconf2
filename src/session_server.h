@@ -352,23 +352,23 @@ uint16_t nc_ps_session_count(struct nc_pollsession *ps);
  * @brief Poll sessions and process any received RPCs.
  *
  * Only one event on one session is handled in one function call. If this event
- * is a session termination (#NC_PSPOLL_SESSION_TERM returned), the session
+ * is a session termination (::NC_PSPOLL_SESSION_TERM returned), the session
  * should be removed from @p ps.
  *
  * @param[in] ps Pollsession structure to use.
  * @param[in] timeout Poll timeout in milliseconds. 0 for non-blocking call, -1 for
- *                    infinite waiting.
+ * infinite waiting. If ::NC_PSPOLL_NOSESSIONS is returned, no waiting is performed at all.
  * @param[in] session Session that was processed and that specific return bits concern.
- *                    Can be NULL.
+ * Can be NULL.
  * @return Bitfield of NC_PSPOLL_* macros.
  */
 int nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session);
 
 /**
  * @brief Remove sessions from a pollsession structure and
- *        call nc_session_free() on them.
+ * call ::nc_session_free() on them.
  *
- * Calling this function with @p all false makes sense if nc_ps_poll() returned #NC_PSPOLL_SESSION_TERM.
+ * Calling this function with @p all false makes sense if ::nc_ps_poll() returned ::NC_PSPOLL_SESSION_TERM.
  *
  * @param[in] ps Pollsession structure to clear.
  * @param[in] all Whether to free all sessions, or only the invalid ones.
