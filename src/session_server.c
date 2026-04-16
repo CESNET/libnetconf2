@@ -3302,33 +3302,6 @@ cleanup:
 }
 
 /**
- * @brief Checks if a Call Home thread should terminate.
- *
- * Checks the shared boolean variable thread_running. This should be done everytime
- * before entering a critical section.
- *
- * @param[in] data Call Home thread's data.
- * @return 1 if running, 0 if the thread should terminate, -1 on error.
- */
-static int
-nc_server_ch_client_thread_is_running(struct nc_server_ch_thread_arg *data)
-{
-    int rc = -1;
-
-    /* COND LOCK */
-    if (nc_mutex_lock(&data->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
-        return -1;
-    }
-
-    rc = data->thread_running;
-
-    /* COND UNLOCK */
-    nc_mutex_unlock(&data->cond_lock, __func__);
-
-    return rc;
-}
-
-/**
  * @brief Wait for any event after a NC session was established on a CH client.
  *
  * @param[in] data CH client thread argument.
@@ -3411,11 +3384,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *dat
         }
 
         /* check if the thread should terminate */
-        r = nc_server_ch_client_thread_is_running(data);
-        if (r != 1) {
-            if (r == -1) {
-                rc = -1;
-            }
+        if (!ATOMIC_LOAD_RELAXED(data->thread_running)) {
             terminate = 1;
         }
 
@@ -3467,7 +3436,7 @@ static int
 nc_server_ch_client_thread_is_running_wait(struct nc_session *session, struct nc_server_ch_thread_arg *data, uint64_t cond_wait_time)
 {
     struct timespec ts;
-    int ret = 0, thread_running;
+    int ret = 0;
 
     /* COND LOCK */
     if (nc_mutex_lock(&data->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
@@ -3475,15 +3444,14 @@ nc_server_ch_client_thread_is_running_wait(struct nc_session *session, struct nc
     }
     /* get reconnect timeout in ms */
     nc_timeouttime_get(&ts, cond_wait_time * 1000);
-    while (!ret && data->thread_running) {
+    while (!ret && ATOMIC_LOAD_RELAXED(data->thread_running)) {
         ret = pthread_cond_clockwait(&data->cond, &data->cond_lock, COMPAT_CLOCK_ID, &ts);
     }
 
-    thread_running = data->thread_running;
     /* COND UNLOCK */
     nc_mutex_unlock(&data->cond_lock, __func__);
 
-    if (!thread_running) {
+    if (!ATOMIC_LOAD_RELAXED(data->thread_running)) {
         /* thread is terminating */
         VRB(session, "Call Home thread signaled to exit, client \"%s\" probably removed.", data->client_name);
         ret = 0;
@@ -3513,7 +3481,7 @@ nc_server_ch_client_with_endpt_get(struct nc_server_ch_thread_arg *data, const c
 {
     struct nc_ch_client *client;
 
-    while (nc_server_ch_client_thread_is_running(data)) {
+    while (ATOMIC_LOAD_RELAXED(data->thread_running)) {
         /* get the client */
         client = nc_server_ch_client_get(name);
         if (!client) {
@@ -3561,11 +3529,7 @@ nc_ch_client_thread(void *arg)
     uint32_t reconnect_in;
 
     /* mark the thread as running */
-    if (nc_mutex_lock(&data->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
-        goto cleanup;
-    }
-    data->thread_running = 1;
-    nc_mutex_unlock(&data->cond_lock, __func__);
+    ATOMIC_STORE_RELAXED(data->thread_running, 1);
 
     /* CONFIG READ LOCK */
     if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
@@ -3583,7 +3547,7 @@ nc_ch_client_thread(void *arg)
     cur_endpt = &client->ch_endpts[0];
     cur_endpt_name = strdup(cur_endpt->name);
 
-    while (nc_server_ch_client_thread_is_running(data)) {
+    while (ATOMIC_LOAD_RELAXED(data->thread_running)) {
         if (!cur_attempts) {
             VRB(NULL, "Call Home client \"%s\" endpoint \"%s\" connecting...", data->client_name, cur_endpt_name);
         }
@@ -3594,7 +3558,7 @@ nc_ch_client_thread(void *arg)
             /* CONFIG READ UNLOCK - session established */
             nc_rwlock_unlock(&server_opts.config_lock, __func__);
 
-            if (!nc_server_ch_client_thread_is_running(data)) {
+            if (!ATOMIC_LOAD_RELAXED(data->thread_running)) {
                 /* thread should stop running */
                 goto cleanup;
             }
@@ -3607,7 +3571,7 @@ nc_ch_client_thread(void *arg)
             session = NULL;
 
             VRB(NULL, "Call Home client \"%s\" session terminated.", data->client_name);
-            if (!nc_server_ch_client_thread_is_running(data)) {
+            if (!ATOMIC_LOAD_RELAXED(data->thread_running)) {
                 /* thread should stop running */
                 goto cleanup;
             }
@@ -3792,7 +3756,7 @@ nc_session_server_ch_client_dispatch_stop(struct nc_ch_client *ch_client)
     }
 
     /* notify the thread to stop */
-    thread_arg->thread_running = 0;
+    ATOMIC_STORE_RELAXED(thread_arg->thread_running, 0);
     tid = thread_arg->tid;
     pthread_cond_signal(&thread_arg->cond);
 
