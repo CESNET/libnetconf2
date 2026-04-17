@@ -1350,6 +1350,8 @@ nc_server_destroy(void)
     server_opts.authkey_path_fmt = NULL;
     free(server_opts.pam_config_name);
     server_opts.pam_config_name = NULL;
+    free(server_opts.ssh_protocol_string);
+    server_opts.ssh_protocol_string = NULL;
     if (server_opts.interactive_auth_data && server_opts.interactive_auth_data_free) {
         server_opts.interactive_auth_data_free(server_opts.interactive_auth_data);
     }

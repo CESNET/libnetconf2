@@ -28,7 +28,7 @@
                                     </inline-definition>
                                 </public-key>
                             </host-key>
-                            <np2:banner>Welcome to libnetconf2 test server over SSH!</np2:banner>
+                            <np2:banner>test banner</np2:banner>
                         </server-identity>
                         <client-authentication>
                             <np2:auth-timeout>14</np2:auth-timeout>
@@ -178,7 +178,7 @@
                                         </inline-definition>
                                     </public-key>
                                 </host-key>
-                                <np2:banner>Welcome to libnetconf2 test server over SSH!</np2:banner>
+                                <np2:banner>test banner</np2:banner>
                             </server-identity>
                             <client-authentication>
                                 <np2:auth-timeout>14</np2:auth-timeout>
@@ -313,7 +313,7 @@
                                         </inline-definition>
                                     </public-key>
                                 </host-key>
-                                <np2:banner>Welcome to libnetconf2 test server over SSH!</np2:banner>
+                                <np2:banner>test banner</np2:banner>
                             </server-identity>
                             <client-authentication>
                                 <np2:auth-timeout>14</np2:auth-timeout>

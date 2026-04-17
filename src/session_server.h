@@ -576,6 +576,23 @@ int nc_server_ssh_kbdint_get_nanswers(const struct nc_session *session, ssh_sess
  */
 int nc_server_ssh_set_pam_conf_filename(const char *filename);
 
+/**
+ * @brief Set the SSH protocol identification string.
+ *
+ * Creates an SSH identification string (per RFC 4253 Section 4.2) in the format:
+ * \<prefix\>-libnetconf2_\<version\>-libssh_\<version\>
+ *
+ * For example: "NETCONF-libnetconf2_5.3.3-libssh_0.9.6"
+ *
+ * Maximum length of the resulting string is 245 characters.
+ *
+ * If not set, the default identification string is "libnetconf2_\<version\>-libssh_\<version\>".
+ *
+ * @param[in] prefix Prefix string to use at the beginning of the identification string.
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_ssh_set_protocol_string(const char *prefix);
+
 /** @} Server SSH */
 
 /**

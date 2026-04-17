@@ -1085,6 +1085,68 @@ nc_server_ssh_set_authkey_path_format(const char *path)
 }
 
 /**
+ * @brief Forge the SSH protocol identification string based on the given prefix and the library versions.
+ *
+ * @param[in] prefix Optional prefix to include in the protocol string, can be NULL.
+ * @return Protocol string on success, NULL on error.
+ */
+static char *
+nc_server_ssh_forge_protocol_string(const char *prefix)
+{
+    int r;
+    char *protocol_str = NULL;
+
+    if (prefix) {
+        r = asprintf(&protocol_str, "%s-libnetconf2_%s-libssh_%d.%d.%d",
+                prefix, NC_VERSION,
+                LIBSSH_VERSION_MAJOR, LIBSSH_VERSION_MINOR, LIBSSH_VERSION_MICRO);
+    } else {
+        r = asprintf(&protocol_str, "libnetconf2_%s-libssh_%d.%d.%d",
+                NC_VERSION,
+                LIBSSH_VERSION_MAJOR, LIBSSH_VERSION_MINOR, LIBSSH_VERSION_MICRO);
+    }
+    NC_CHECK_ERRMEM_RET(r == -1, NULL);
+
+    if (strlen(protocol_str) > 245) {
+        ERR(NULL, "SSH protocol identification string too long (max 245 characters).");
+        free(protocol_str);
+        return NULL;
+    }
+
+    return protocol_str;
+}
+
+API int
+nc_server_ssh_set_protocol_string(const char *prefix)
+{
+    int rc = 0;
+    char *protocol_str = NULL;
+
+    NC_CHECK_ARG_RET(NULL, prefix, 1);
+
+    protocol_str = nc_server_ssh_forge_protocol_string(prefix);
+    NC_CHECK_ERRMEM_GOTO(!protocol_str, rc = 1, cleanup);
+
+    /* CONFIG LOCK */
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        rc = 1;
+        goto cleanup;
+    }
+
+    /* transfer ownership */
+    free(server_opts.ssh_protocol_string);
+    server_opts.ssh_protocol_string = protocol_str;
+    protocol_str = NULL;
+
+    /* CONFIG UNLOCK */
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+
+cleanup:
+    free(protocol_str);
+    return rc;
+}
+
+/**
  * @brief Get the public key type from binary data.
  *
  * @param[in] buffer Binary key data, which is in the form of: 4 bytes = data length, then data of data length.
@@ -1204,6 +1266,34 @@ nc_server_ssh_auth_pubkey_compare_key(ssh_key key, struct nc_public_key *pubkeys
 }
 
 /**
+ * @brief Send the SSH issue banner if configured.
+ *
+ * @param[in] session NETCONF session.
+ * @param[in] opts SSH server options.
+ */
+static void
+nc_server_ssh_send_banner(struct nc_session *session, struct nc_server_ssh_opts *opts)
+{
+    if (!opts->banner) {
+        return;
+    }
+
+#if (LIBSSH_VERSION_MAJOR > 0) || (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR >= 10)
+    ssh_string ban;
+
+    ban = ssh_string_from_char(opts->banner);
+    if (ban) {
+        if (ssh_send_issue_banner(session->ti.libssh.session, ban)) {
+            ERR(session, "Failed to send SSH banner (%s).", ssh_get_error(session->ti.libssh.session));
+        }
+        ssh_string_free(ban);
+    }
+#else
+    WRN(session, "SSH banner set but cannot be sent (libssh version 0.10.0 or later required).");
+#endif
+}
+
+/**
  * @brief Handle authentication request for the None method.
  *
  * @param[in] local_users_supported Whether the server supports local users.
@@ -1217,11 +1307,9 @@ nc_server_ssh_auth_none(int local_users_supported, struct nc_auth_client *auth_c
     assert(!local_users_supported || auth_client);
 
     if (local_users_supported && auth_client->none_enabled) {
-        /* success */
         return 0;
     }
 
-    /* reply and return -1 so that this does not get counted as an unsuccessful authentication attempt */
     ssh_message_reply_default(msg);
     return -1;
 }
@@ -1559,6 +1647,9 @@ nc_server_ssh_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, 
     if (!session->username) {
         session->username = strdup(username);
         NC_CHECK_ERRMEM_RET(!session->username, 1);
+
+        /* send the SSH issue banner on the first userauth request */
+        nc_server_ssh_send_banner(session, opts);
 
         /* configure and count accepted auth methods */
         if (local_users_supported) {
@@ -1972,7 +2063,8 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
     ssh_bind sbind = NULL;
     int rc = 1, r;
     struct timespec ts_timeout;
-    const char *err_msg, *banner;
+    const char *err_msg;
+    char *proto_str = NULL, *proto_str_dyn = NULL;
 
     /* other transport-specific data */
     session->ti_type = NC_TI_SSH;
@@ -2031,13 +2123,15 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
         }
     }
 
-    /* configure the ssh banner */
-    if (opts->banner) {
-        banner = opts->banner;
+    /* configure the ssh protocol identification string */
+    if (server_opts.ssh_protocol_string) {
+        proto_str = server_opts.ssh_protocol_string;
     } else {
-        banner = "libnetconf2-" NC_VERSION;
+        proto_str_dyn = nc_server_ssh_forge_protocol_string(NULL);
+        NC_CHECK_ERRMEM_GOTO(!proto_str_dyn, rc = -1, cleanup);
+        proto_str = proto_str_dyn;
     }
-    if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_BANNER, banner)) {
+    if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_BANNER, proto_str)) {
         rc = -1;
         goto cleanup;
     }
@@ -2112,6 +2206,7 @@ cleanup:
     if (sock > -1) {
         close(sock);
     }
+    free(proto_str_dyn);
     ssh_bind_free(sbind);
     return rc;
 }
