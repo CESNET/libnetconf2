@@ -162,15 +162,15 @@ module libnetconf2-netconf-server {
       "Grouping for the SSH server banner.";
 
     leaf banner {
-      type string {
-        length "1..245";
-      }
+      type string;
+
       description
-        "The banner that will be sent to the client when connecting to the server.
-         If not set, the libnetconf2 default with its version will be used.";
+        "SSH banner sent to clients before authentication.
+         It can be used to provide information about the server or legal notices.
+         Note that the banner is sent before authentication, so it should not contain any sensitive information.";
 
       reference
-        "RFC 4253: The Secure Shell (SSH) Transport Layer Protocol, section 4.2.";
+        "RFC 4252: The Secure Shell (SSH) Authentication Protocol, section 5.4.";
     }
   }
 

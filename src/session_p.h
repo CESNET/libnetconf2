@@ -382,7 +382,7 @@ struct nc_server_ssh_opts {
     char *kex_algs;                         /**< Used key exchange algorithms (comma-separated list). */
     char *mac_algs;                         /**< Used MAC algorithms (comma-separated list). */
 
-    char *banner;                           /**< SSH banner message. */
+    char *banner;                           /**< SSH banner message, sent before authentication. */
 
     uint16_t auth_timeout;                  /**< Authentication timeout. */
 };
@@ -795,6 +795,7 @@ struct nc_server_opts {
 #ifdef NC_ENABLED_SSH_TLS
     char *authkey_path_fmt;             /**< Path to users' public keys that may contain tokens with special meaning. */
     char *pam_config_name;              /**< PAM configuration file name. */
+    char *ssh_protocol_string;          /**< SSH protocol identification string. */
     int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg, void *user_data);
     void *interactive_auth_data;
     void (*interactive_auth_data_free)(void *data);

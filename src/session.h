@@ -192,10 +192,19 @@ uint16_t nc_session_get_port(const struct nc_session *session);
 #ifdef NC_ENABLED_SSH_TLS
 
 /**
+ * @brief Get the SSH protocol identification string sent by the peer.
+ *
+ * @param[in] session Session to get the protocol string from.
+ * @return SSH protocol identification string on success, NULL on error.
+ */
+const char *nc_session_ssh_get_protocol_string(const struct nc_session *session);
+
+/**
  * @brief Get the SSH banner sent by the peer.
+ * @deprecated Use nc_session_ssh_get_protocol_string() instead.
  *
  * @param[in] session Session to get the banner from.
- * @return SSH banner on success, NULL on error.
+ * @return SSH protocol identification string on success, NULL on error.
  */
 const char *nc_session_ssh_get_banner(const struct nc_session *session);
 

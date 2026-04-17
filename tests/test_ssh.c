@@ -24,19 +24,47 @@
 #include <string.h>
 
 #include <cmocka.h>
+#include <libssh/libssh.h>
 
 #include "ln2_test.h"
+#include "nc_version.h"
 
 struct test_ssh_data {
     const char *username;
     const char *pubkey_path;
     const char *privkey_path;
-    int check_banner;
+    int check_protocol_string;
     int expect_fail;
 };
 
 int TEST_PORT = 10050;
 const char *TEST_PORT_STR = "10050";
+
+#if (LIBSSH_VERSION_MAJOR > 0) || (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR >= 10)
+static char banner_buffer[512];
+static const char *expected_banner_text = "This is a test SSH banner message";
+
+char *__real_ssh_get_issue_banner(ssh_session session);
+
+/**
+ * @brief Wrapper for ssh_get_issue_banner to store the banner for later checks.
+ */
+char *
+__wrap_ssh_get_issue_banner(ssh_session session)
+{
+    char *banner;
+
+    /* get the real banner */
+    banner = __real_ssh_get_issue_banner(session);
+    if (banner) {
+        /* store the banner for later checks */
+        strncpy(banner_buffer, banner, sizeof(banner_buffer) - 1);
+        banner_buffer[sizeof(banner_buffer) - 1] = '\0';
+    }
+    return banner;
+}
+
+#endif /* (LIBSSH_VERSION_MAJOR > 0) || (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR >= 10) */
 
 static char *
 auth_password(const char *username, const char *hostname, void *priv)
@@ -53,14 +81,21 @@ auth_password(const char *username, const char *hostname, void *priv)
 }
 
 static void
-check_banner(const struct nc_session *session)
+check_protocol_string(const struct nc_session *session)
 {
-    const char *banner;
+    const char *proto_str;
+    char *expected;
 
-    banner = nc_session_ssh_get_banner(session);
-    assert_non_null(banner);
+    proto_str = nc_session_ssh_get_protocol_string(session);
+    assert_non_null(proto_str);
 
-    assert_string_equal(banner, "SSH-2.0-test-banner");
+    expected = malloc(256);
+    assert_non_null(expected);
+
+    sprintf(expected, "SSH-2.0-test-libnetconf2_%s-libssh_%d.%d.%d", NC_VERSION,
+            LIBSSH_VERSION_MAJOR, LIBSSH_VERSION_MINOR, LIBSSH_VERSION_MICRO);
+    assert_true(strncmp(proto_str, expected, strlen(expected)) == 0);
+    free(expected);
 }
 
 static void *
@@ -101,8 +136,8 @@ client_thread_ssh(void *arg)
 
     assert_non_null(session);
 
-    if (test_data->check_banner) {
-        check_banner(session);
+    if (test_data->check_protocol_string) {
+        check_protocol_string(session);
     }
 
     nc_session_free(session, NULL);
@@ -260,17 +295,20 @@ test_ed25519_pubkey(void **state)
 }
 
 static void
-test_banner(void **state)
+test_protocol_string(void **state)
 {
     int ret, i;
     pthread_t tids[2];
     struct ln2_test_ctx *test_ctx = *state;
     struct test_ssh_data *test_data = test_ctx->test_data;
 
+    ret = nc_server_ssh_set_protocol_string("test");
+    assert_int_equal(ret, 0);
+
     test_data->username = "test_ed25519";
     test_data->pubkey_path = TESTS_DIR "/data/id_ed25519.pub";
     test_data->privkey_path = TESTS_DIR "/data/id_ed25519";
-    test_data->check_banner = 1;
+    test_data->check_protocol_string = 1;
 
     ret = pthread_create(&tids[0], NULL, client_thread_ssh, *state);
     assert_int_equal(ret, 0);
@@ -281,6 +319,60 @@ test_banner(void **state)
         pthread_join(tids[i], NULL);
     }
 }
+
+#if (LIBSSH_VERSION_MAJOR > 0) || (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR >= 10)
+static void
+test_banner(void **state)
+{
+    int ret, i;
+    pthread_t tids[2];
+    struct ln2_test_ctx *test_ctx = *state;
+    struct test_ssh_data *test_data = test_ctx->test_data;
+    struct lyd_node *tree = NULL, *banner, *nc_server;
+
+    banner_buffer[0] = '\0';
+
+    test_data->username = "test_ed25519";
+    test_data->pubkey_path = TESTS_DIR "/data/id_ed25519.pub";
+    test_data->privkey_path = TESTS_DIR "/data/id_ed25519";
+
+    /* add the banner to the server configuration (set 'none' op to all the nodes but the banner) */
+    ret = lyd_new_path(NULL, test_ctx->ctx, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='endpt']/ssh/"
+            "ssh-server-parameters/server-identity/libnetconf2-netconf-server:banner", expected_banner_text, 0, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = lyd_find_path(tree, "/ietf-netconf-server:netconf-server", 0, &nc_server);
+    assert_int_equal(ret, 0);
+
+    ret = lyd_new_meta(test_ctx->ctx, nc_server, NULL, "yang:operation", "none", 0, NULL);
+    assert_int_equal(ret, 0);
+
+    ret = lyd_find_path(tree, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='endpt']/ssh/"
+            "ssh-server-parameters/server-identity/libnetconf2-netconf-server:banner", 0, &banner);
+    assert_int_equal(ret, 0);
+
+    ret = lyd_new_meta(test_ctx->ctx, banner, NULL, "yang:operation", "create", 0, NULL);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_diff(tree);
+    assert_int_equal(ret, 0);
+
+    lyd_free_all(tree);
+
+    ret = pthread_create(&tids[0], NULL, client_thread_ssh, *state);
+    assert_int_equal(ret, 0);
+    ret = pthread_create(&tids[1], NULL, ln2_glob_test_server_thread, *state);
+    assert_int_equal(ret, 0);
+
+    for (i = 0; i < 2; i++) {
+        pthread_join(tids[i], NULL);
+    }
+
+    assert_true(strlen(banner_buffer) > 0);
+    assert_non_null(strstr(banner_buffer, expected_banner_text));
+}
+
+#endif /* (LIBSSH_VERSION_MAJOR > 0) || (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR >= 10) */
 
 /* BUG various libssh versions and systems are using different defaults of algorithms making this test fail */
 void
@@ -656,10 +748,6 @@ setup_ssh(void **state)
     assert_int_equal(ret, 0);
 
     ret = lyd_new_path(tree, test_ctx->ctx, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='endpt']/ssh/"
-            "ssh-server-parameters/server-identity/libnetconf2-netconf-server:banner", "test-banner", 0, NULL);
-    assert_int_equal(ret, 0);
-
-    ret = lyd_new_path(tree, test_ctx->ctx, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='endpt']/ssh/"
             "ssh-server-parameters/client-authentication/users/user[name='test_none']/none", NULL, 0, NULL);
     assert_int_equal(ret, 0);
 
@@ -687,7 +775,10 @@ main(void)
         cmocka_unit_test_setup_teardown(test_ec384_pubkey, setup_ssh, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_ec521_pubkey, setup_ssh, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_ed25519_pubkey, setup_ssh, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_protocol_string, setup_ssh, ln2_glob_test_teardown),
+#if (LIBSSH_VERSION_MAJOR > 0) || (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR >= 10)
         cmocka_unit_test_setup_teardown(test_banner, setup_ssh, ln2_glob_test_teardown),
+#endif
     };
 
     /* try to get ports from the environment, otherwise use the default */

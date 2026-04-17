@@ -1274,6 +1274,58 @@ nc_client_ssh_ch_del_bind(const char *address, uint16_t port)
     return nc_client_ch_del_bind(address, port, NC_TI_SSH);
 }
 
+#if (LIBSSH_VERSION_MAJOR > 0) || (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR >= 10)
+
+/**
+ * @brief Print the SSH issue banner received from the server.
+ *
+ * @param[in] ssh_sess libssh session.
+ */
+static void
+nc_client_ssh_print_banner(ssh_session ssh_sess)
+{
+    char *banner;
+    FILE *out = NULL;
+
+    banner = ssh_get_issue_banner(ssh_sess);
+    if (!banner) {
+        return;
+    }
+
+#ifdef HAVE_TERMIOS
+    out = nc_open_out();
+#endif
+
+    if (!out) {
+        /* fallback to standard output if we cannot open the terminal */
+        out = stdout;
+    }
+    fprintf(out, "%s\n", banner);
+    fflush(out);
+
+#ifdef HAVE_TERMIOS
+    if (out != stdout) {
+        nc_close_inout(out, 1, NULL);
+    }
+#endif
+
+    free(banner);
+}
+
+#else
+
+/**
+ * @brief Dummy function for libssh versions that do not support receiving the banner.
+ */
+static void
+nc_client_ssh_print_banner(ssh_session UNUSED(ssh_sess))
+{
+    /* libssh < 0.10 does not support receiving the banner */
+    return;
+}
+
+#endif /* (LIBSSH_VERSION_MAJOR > 0) || (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR >= 10) */
+
 /**
  * @brief Establish a secure SSH connection and authenticate.
  * Host, port, username, and a connected socket is expected to be set.
@@ -1336,6 +1388,9 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
     } else if (ret_auth == SSH_AUTH_SUCCESS) {
         return 1;
     }
+
+    /* print the banner if any was received */
+    nc_client_ssh_print_banner(ssh_sess);
 
     /* check what authentication methods are available */
     userauthlist = ssh_userauth_list(ssh_sess, NULL);
