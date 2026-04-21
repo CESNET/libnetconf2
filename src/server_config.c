@@ -633,7 +633,10 @@ config_local_bind(const struct lyd_node *node, enum nc_operation parent_op, stru
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(endpt->binds));
+        if (i == LY_ARRAY_COUNT(endpt->binds)) {
+            ERR(NULL, "Local bind with address \"%s\" not found.", local_addr);
+            return 1;
+        }
         bind = &endpt->binds[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new bind */
@@ -1003,7 +1006,10 @@ config_ssh_hostkey(const struct lyd_node *node, enum nc_operation parent_op, str
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(ssh->hostkeys));
+        if (i == LY_ARRAY_COUNT(ssh->hostkeys)) {
+            ERR(NULL, "Hostkey with name \"%s\" not found.", name);
+            return 1;
+        }
         hostkey = &ssh->hostkeys[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new hostkey */
@@ -1143,7 +1149,10 @@ config_ssh_user_public_key(const struct lyd_node *node, enum nc_operation parent
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(user->pubkeys));
+        if (i == LY_ARRAY_COUNT(user->pubkeys)) {
+            ERR(NULL, "Public key with name \"%s\" not found.", name);
+            return 1;
+        }
         key = &user->pubkeys[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new public key */
@@ -1379,7 +1388,10 @@ config_ssh_user(const struct lyd_node *node, enum nc_operation parent_op, struct
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(ssh->auth_clients));
+        if (i == LY_ARRAY_COUNT(ssh->auth_clients)) {
+            ERR(NULL, "SSH user with name \"%s\" not found.", name);
+            return 1;
+        }
         user = &ssh->auth_clients[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new user */
@@ -2214,7 +2226,10 @@ config_tls_client_auth_ca_cert(const struct lyd_node *node,
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(client_auth->ca_certs));
+        if (i == LY_ARRAY_COUNT(client_auth->ca_certs)) {
+            ERR(NULL, "CA certificate \"%s\" not found.", name);
+            return 1;
+        }
         cert = &client_auth->ca_certs[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new ca-cert */
@@ -2337,7 +2352,10 @@ config_tls_client_auth_ee_cert(const struct lyd_node *node,
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(client_auth->ee_certs));
+        if (i == LY_ARRAY_COUNT(client_auth->ee_certs)) {
+            ERR(NULL, "End-entity certificate \"%s\" not found.", name);
+            return 1;
+        }
         cert = &client_auth->ee_certs[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new ee-cert */
@@ -2801,18 +2819,16 @@ config_cert_to_name(const struct lyd_node *node, enum nc_operation parent_op, st
 
     if ((op == NC_OP_DELETE) || (op == NC_OP_NONE)) {
         /* find the ctn we are deleting/modifying */
-        if (!tls->ctn) {
-            ERR(NULL, "Trying to modify/delete a non-existing cert-to-name mapping with ID %" PRIu32 ".", id);
-            return 1;
-        }
-
         iter = tls->ctn;
         prev = NULL;
         while (iter && (iter->id != id)) {
             prev = iter;
             iter = iter->next;
         }
-        assert(iter);
+        if (!iter) {
+            ERR(NULL, "Cert-to-name mapping with id %" PRIu32 " not found.", id);
+            return 1;
+        }
         ctn = iter;
     } else if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
         /* create a new ctn */
@@ -2959,7 +2975,10 @@ config_unix_socket_path(const struct lyd_node *node, enum nc_operation parent_op
     if (op == NC_OP_DELETE) {
         /* the endpoint must have a single binding, so we can just free it,
          * the socket will be closed in ::nc_server_config_free() */
-        assert(endpt->binds);
+        if (!endpt->binds) {
+            ERR(NULL, "No UNIX socket path binding to delete.");
+            return 1;
+        }
         free(endpt->binds[0].address);
         LY_ARRAY_FREE(endpt->binds);
 
@@ -2967,7 +2986,10 @@ config_unix_socket_path(const struct lyd_node *node, enum nc_operation parent_op
         opts->path_type = NC_UNIX_SOCKET_PATH_UNKNOWN;
     } else if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
         /* the endpoint must not have any bindings yet, so we can just create one */
-        assert(!endpt->binds);
+        if (endpt->binds) {
+            ERR(NULL, "UNIX socket path binding already exists.");
+            return 1;
+        }
         LY_ARRAY_NEW_RET(LYD_CTX(node), endpt->binds, bind, 1);
         bind->address = strdup(lyd_get_value(node));
         NC_CHECK_ERRMEM_RET(!bind->address, 1);
@@ -2994,7 +3016,10 @@ config_unix_hidden_path(const struct lyd_node *node, enum nc_operation parent_op
     if (op == NC_OP_DELETE) {
         /* the endpoint must have a single binding, so we can just free it,
          * the socket will be closed in ::nc_server_config_free() */
-        assert(endpt->binds);
+        if (!endpt->binds) {
+            ERR(NULL, "No UNIX socket hidden path binding to delete.");
+            return 1;
+        }
         LY_ARRAY_FREE(endpt->binds);
 
         /* also clear the hidden path flag */
@@ -3002,7 +3027,10 @@ config_unix_hidden_path(const struct lyd_node *node, enum nc_operation parent_op
     } else if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
         /* the endpoint must not have any bindings yet, so we can just create one
          * and since the path is hidden, there is no address to set */
-        assert(!endpt->binds);
+        if (endpt->binds) {
+            ERR(NULL, "UNIX socket hidden path binding already exists.");
+            return 1;
+        }
         LY_ARRAY_NEW_RET(LYD_CTX(node), endpt->binds, bind, 1);
         bind->sock = -1;
 
@@ -3208,7 +3236,10 @@ config_unix_user_mapping(const struct lyd_node *node, enum nc_operation parent_o
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(unix->user_mappings));
+        if (i == LY_ARRAY_COUNT(unix->user_mappings)) {
+            ERR(NULL, "UNIX user mapping with system user \"%s\" not found.", system_user);
+            return 1;
+        }
         mapping = &unix->user_mappings[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new user mapping */
@@ -3344,7 +3375,10 @@ config_endpoint(const struct lyd_node *node, enum nc_operation parent_op,
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(config->endpts));
+        if (i == LY_ARRAY_COUNT(config->endpts)) {
+            ERR(NULL, "Endpoint \"%s\" not found.", name);
+            return 1;
+        }
         endpt = &config->endpts[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new endpoint */
@@ -3695,7 +3729,10 @@ config_ch_client_endpoint(const struct lyd_node *node, enum nc_operation parent_
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(ch_client->ch_endpts));
+        if (i == LY_ARRAY_COUNT(ch_client->ch_endpts)) {
+            ERR(NULL, "Call Home client \"%s\" endpoint \"%s\" not found.", ch_client->name, name);
+            return 1;
+        }
         endpt = &ch_client->ch_endpts[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new endpoint and init it */
@@ -3958,7 +3995,10 @@ config_netconf_client(const struct lyd_node *node, enum nc_operation parent_op,
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(config->ch_clients));
+        if (i == LY_ARRAY_COUNT(config->ch_clients)) {
+            ERR(NULL, "Call Home client \"%s\" not found.", name);
+            return 1;
+        }
         ch_client = &config->ch_clients[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new client */
@@ -4184,7 +4224,10 @@ config_asymmetric_key_cert(const struct lyd_node *node, enum nc_operation parent
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(entry->certs));
+        if (i == LY_ARRAY_COUNT(entry->certs)) {
+            ERR(NULL, "Certificate \"%s\" not found for asymmetric key \"%s\".", name, entry->asym_key.name);
+            return 1;
+        }
         cert = &entry->certs[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new certificate */
@@ -4256,7 +4299,10 @@ config_asymmetric_key(const struct lyd_node *node, enum nc_operation parent_op, 
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(keystore->entries));
+        if (i == LY_ARRAY_COUNT(keystore->entries)) {
+            ERR(NULL, "Asymmetric key \"%s\" not found.", name);
+            return 1;
+        }
         entry = &keystore->entries[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new asymmetric key entry */
@@ -4475,7 +4521,10 @@ config_certificate_bag_cert(const struct lyd_node *node, enum nc_operation paren
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(bag->certs));
+        if (i == LY_ARRAY_COUNT(bag->certs)) {
+            ERR(NULL, "Certificate \"%s\" not found in certificate bag \"%s\".", name, bag->name);
+            return 1;
+        }
         cert = &bag->certs[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new certificate */
@@ -4533,7 +4582,10 @@ config_certificate_bag(const struct lyd_node *node, enum nc_operation parent_op,
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(truststore->cert_bags));
+        if (i == LY_ARRAY_COUNT(truststore->cert_bags)) {
+            ERR(NULL, "Certificate bag \"%s\" not found.", name);
+            return 1;
+        }
         bag = &truststore->cert_bags[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new certificate bag */
@@ -4664,7 +4716,10 @@ config_public_key_bag_pubkey(const struct lyd_node *node, enum nc_operation pare
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(bag->pubkeys));
+        if (i == LY_ARRAY_COUNT(bag->pubkeys)) {
+            ERR(NULL, "Public key \"%s\" not found in public key bag \"%s\".", name, bag->name);
+            return 1;
+        }
         pubkey = &bag->pubkeys[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new public key */
@@ -4722,7 +4777,10 @@ config_public_key_bag(const struct lyd_node *node, enum nc_operation parent_op, 
                 break;
             }
         }
-        assert(i < LY_ARRAY_COUNT(truststore->pubkey_bags));
+        if (i == LY_ARRAY_COUNT(truststore->pubkey_bags)) {
+            ERR(NULL, "Public key bag \"%s\" not found.", name);
+            return 1;
+        }
         bag = &truststore->pubkey_bags[i];
     } else if (op == NC_OP_CREATE) {
         /* create a new public key bag */
@@ -4897,6 +4955,7 @@ config_cert_exp_notif_anchor(const struct lyd_node *node, enum nc_operation pare
     if (op == NC_OP_DELETE) {
         memset(anchor, 0, sizeof *anchor);
     } else if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+        /* list key */
         value = lyd_get_value(node);
         assert(value);
         NC_CHECK_RET(nc_server_config_cert_exp_time_from_str(value, anchor));
@@ -4916,6 +4975,7 @@ config_cert_exp_notif_period(const struct lyd_node *node, enum nc_operation pare
     if (op == NC_OP_DELETE) {
         memset(period, 0, sizeof *period);
     } else if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+        /* list key */
         value = lyd_get_value(node);
         assert(value);
         NC_CHECK_RET(nc_server_config_cert_exp_time_from_str(value, period));

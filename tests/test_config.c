@@ -937,6 +937,60 @@ test_unusupported_asymkey_format(void **state)
     lyd_free_all(tree);
 }
 
+static void
+test_invalid_diff(void **state)
+{
+    int ret;
+    struct lyd_node *diff = NULL, *node = NULL;
+    struct ln2_test_ctx *test_ctx = *state;
+    const struct lys_module *yang_mod;
+
+    yang_mod = ly_ctx_get_module_implemented(test_ctx->ctx, "yang");
+    assert_non_null(yang_mod);
+
+    /* dup the keystore config */
+    ret = lyd_find_path(test_ctx->test_data, "/ietf-keystore:keystore", 0, &node);
+    assert_int_equal(ret, 0);
+    ret = lyd_dup_single(node, NULL, LYD_DUP_RECURSIVE, &diff);
+    assert_int_equal(ret, 0);
+
+    /* add none operation to the root */
+    ret = lyd_new_meta(test_ctx->ctx, diff, yang_mod, "operation", "none", 0, NULL);
+    assert_int_equal(ret, 0);
+
+    /* Delete the "hostkey" asymmetric key from the keystore */
+    ret = lyd_find_path(diff, "/ietf-keystore:keystore/asymmetric-keys/asymmetric-key[name='hostkey']", 0, &node);
+    assert_int_equal(ret, 0);
+    ret = lyd_new_meta(test_ctx->ctx, node, yang_mod, "operation", "delete", 0, NULL);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_diff(diff);
+    assert_int_equal(ret, 0);
+
+    /* Now apply a diff with op=none on the deleted key and op=delete on its previously existing child public-key */
+    ret = lyd_new_meta(test_ctx->ctx, node, yang_mod, "operation", "none", 0, NULL);
+    assert_int_equal(ret, 0);
+
+    /* add delete op to the previously existing child public-key */
+    ret = lyd_find_path(diff,
+            "/ietf-keystore:keystore/asymmetric-keys/asymmetric-key[name='hostkey']/public-key", 0, &node);
+    assert_int_equal(ret, 0);
+    ret = lyd_new_meta(test_ctx->ctx, node, yang_mod, "operation", "delete", 0, NULL);
+    assert_int_equal(ret, 0);
+
+    /* should fail because the key was already deleted and the diff is invalid, but it should not crash */
+    ret = nc_server_config_setup_diff(diff);
+    assert_int_equal(ret, 1);
+
+    lyd_free_all(diff);
+}
+
+static void
+test_config_data_free(void *data)
+{
+    lyd_free_all(data);
+}
+
 static int
 setup_f(void **state)
 {
@@ -969,7 +1023,8 @@ setup_f(void **state)
     ret = nc_server_set_unix_socket_path("unix", "netconf-test-server.sock");
     assert_int_equal(ret, 0);
 
-    lyd_free_all(tree);
+    test_ctx->test_data = tree;
+    test_ctx->free_test_data = test_config_data_free;
     return 0;
 }
 
@@ -982,6 +1037,7 @@ main(void)
         cmocka_unit_test_setup_teardown(test_transport_params_oper_get, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_config_all_nodes, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_unusupported_asymkey_format, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_invalid_diff, setup_f, ln2_glob_test_teardown),
     };
 
     /* try to get ports from the environment, otherwise use the default */
