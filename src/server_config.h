@@ -826,7 +826,7 @@ int nc_server_config_del_tls_endpoint_client_ref(const char *endpt_name, struct 
  * @param[in] fingerprint Optional fingerprint of the entry. The fingerprint should always be set, however if it is
  * not set, it will match any certificate. Entry with no fingerprint should therefore be placed only as the last entry.
  * @param[in] map_type Mapping username to the certificate option.
- * @param[in] name Username for this cert-to-name entry.
+ * @param[in] name Username for this cert-to-name entry. Mandatory if @p map_type is set to ::NC_TLS_CTN_SPECIFIED.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
@@ -1479,7 +1479,7 @@ int nc_server_config_del_ch_tls_ca_cert_truststore_ref(const char *client_name, 
  * @param[in] fingerprint Optional fingerprint of the entry. The fingerprint should always be set, however if it is
  * not set, it will match any certificate. Entry with no fingerprint should therefore be placed only as the last entry.
  * @param[in] map_type Mapping username to the certificate option.
- * @param[in] name Username for this cert-to-name entry.
+ * @param[in] name Username for this cert-to-name entry. Mandatory if @p map_type is set to ::NC_TLS_CTN_SPECIFIED.
  * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.

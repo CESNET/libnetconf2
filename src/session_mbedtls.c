@@ -587,35 +587,123 @@ nc_tls_cert_dup(const mbedtls_x509_crt *cert)
 }
 
 /**
- * @brief Duplicate a certificate and append it to a chain.
+ * @brief Duplicate a certificate and prepend it to a chain.
  *
- * @param[in] cert Certificate to duplicate and append.
- * @param[in,out] chain Chain to append the certificate to.
+ * @param[in] cert Certificate to duplicate and prepend.
+ * @param[in,out] chain Chain to prepend the certificate to.
  * @return 0 on success, -1 on error.
  */
 static int
-nc_server_tls_append_cert_to_chain(mbedtls_x509_crt *cert, mbedtls_x509_crt **chain)
+nc_server_tls_prepend_cert_to_chain(mbedtls_x509_crt *cert, mbedtls_x509_crt **chain)
 {
-    mbedtls_x509_crt *iter, *copy;
+    mbedtls_x509_crt *copy;
 
     copy = nc_tls_cert_dup(cert);
     if (!copy) {
         return -1;
     }
 
-    if (!*chain) {
-        /* first in the list */
-        *chain = copy;
-    } else {
-        /* find the last cert */
-        iter = *chain;
-        while (iter->next) {
-            iter = iter->next;
+    copy->next = *chain;
+    *chain = copy;
+
+    return 0;
+}
+
+/**
+ * @brief Check whether a certificate is already present in a chain.
+ *
+ * @param[in] cert Certificate to search for.
+ * @param[in] chain Certificate chain.
+ * @return 1 if found, 0 otherwise.
+ */
+static int
+nc_server_tls_cert_in_chain(const mbedtls_x509_crt *cert, const mbedtls_x509_crt *chain)
+{
+    const mbedtls_x509_crt *iter;
+
+    for (iter = chain; iter; iter = iter->next) {
+        if (cert->raw.p && iter->raw.p && (cert->raw.len == iter->raw.len) && !memcmp(cert->raw.p, iter->raw.p, cert->raw.len)) {
+            return 1;
         }
-        iter->next = copy;
     }
 
     return 0;
+}
+
+/**
+ * @brief Prepend issuer chain for a certificate.
+ *
+ * Repeatedly parse issuer_raw of @p cert into a certificate, then parse issuer_raw
+ * of that parsed issuer, and so on. Parsed issuers are prepended into @p chain in
+ * root-first order so that prepending the actual cert afterwards yields peer-first
+ * order.
+ *
+ * @param[in] cert Certificate whose issuers are to be prepended.
+ * @param[in,out] chain Chain to prepend issuer certificates to.
+ * @return 0 on success, -1 on error.
+ */
+static int
+nc_server_tls_prepend_issuer_chain(mbedtls_x509_crt *cert, mbedtls_x509_crt **chain)
+{
+    size_t i = 0;
+    mbedtls_x509_crt *copy;
+    const mbedtls_x509_crt *issuer, *iter, *cur;
+    mbedtls_x509_crt *issuers[MBEDTLS_X509_MAX_VERIFY_CHAIN_SIZE - 1];
+
+    cur = cert;
+    while (cur && (i < (sizeof issuers / sizeof *issuers))) {
+        if (!cur->issuer_raw.p || !cur->issuer_raw.len) {
+            break;
+        }
+
+        if ((cur->issuer_raw.len == cur->subject_raw.len) && !memcmp(cur->issuer_raw.p, cur->subject_raw.p, cur->issuer_raw.len)) {
+            /* self-issued root reached */
+            break;
+        }
+
+        /* find issuer cert by matching issuer DN to subject DN */
+        issuer = NULL;
+        for (iter = cert; iter; iter = iter->next) {
+            if ((iter->subject_raw.len == cur->issuer_raw.len) &&
+                    !memcmp(iter->subject_raw.p, cur->issuer_raw.p, cur->issuer_raw.len)) {
+                issuer = iter;
+                break;
+            }
+        }
+        if (!issuer) {
+            /* no more issuers available in the certificate set */
+            break;
+        }
+
+        if (nc_server_tls_cert_in_chain(issuer, *chain)) {
+            /* already present in chain */
+            break;
+        }
+
+        copy = nc_tls_cert_dup(issuer);
+        if (!copy) {
+            goto error;
+        }
+
+        issuers[i] = copy;
+        ++i;
+        cur = issuer;
+    }
+
+    while (i) {
+        --i;
+        issuers[i]->next = *chain;
+        *chain = issuers[i];
+    }
+
+    return 0;
+
+error:
+    while (i) {
+        --i;
+        nc_tls_cert_destroy_wrap(issuers[i]);
+    }
+    return -1;
 }
 
 /**
@@ -634,11 +722,22 @@ nc_server_tls_verify_cb(void *cb_data, mbedtls_x509_crt *cert, int depth, uint32
     struct nc_tls_verify_cb_data *data = cb_data;
     char *err;
 
-    /* append to the chain we're building */
-    ret = nc_server_tls_append_cert_to_chain(cert, (mbedtls_x509_crt **)&data->chain);
-    if (ret) {
-        nc_tls_cert_destroy_wrap(data->chain);
-        return MBEDTLS_ERR_X509_ALLOC_FAILED;
+    if (!data->chain) {
+        /* first call, prepend the issuer chain so that we have the whole chain available for CTN */
+        ret = nc_server_tls_prepend_issuer_chain(cert, (mbedtls_x509_crt **)&data->chain);
+        if (ret) {
+            nc_tls_cert_destroy_wrap(data->chain);
+            return MBEDTLS_ERR_X509_ALLOC_FAILED;
+        }
+    }
+
+    /* prepend to the chain we're building to maintain peer-first order */
+    if (!nc_server_tls_cert_in_chain(cert, (const mbedtls_x509_crt *)data->chain)) {
+        ret = nc_server_tls_prepend_cert_to_chain(cert, (mbedtls_x509_crt **)&data->chain);
+        if (ret) {
+            nc_tls_cert_destroy_wrap(data->chain);
+            return MBEDTLS_ERR_X509_ALLOC_FAILED;
+        }
     }
 
     if (!*flags) {
@@ -836,18 +935,22 @@ nc_tls_get_num_certs_wrap(void *chain)
     return n;
 }
 
-void
-nc_tls_get_cert_wrap(void *chain, int idx, void **cert)
+void *
+nc_tls_get_cert_wrap(void *chain, int idx)
 {
     int i;
     mbedtls_x509_crt *iter;
 
+    if (!chain || (idx < 0)) {
+        return NULL;
+    }
+
     iter = chain;
-    for (i = 0; i < idx; i++) {
+    for (i = 0; iter && (i < idx); i++) {
         iter = iter->next;
     }
 
-    *cert = iter;
+    return iter;
 }
 
 int

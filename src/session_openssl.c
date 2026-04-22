@@ -616,10 +616,14 @@ nc_tls_get_num_certs_wrap(void *chain)
     return sk_X509_num(chain);
 }
 
-void
-nc_tls_get_cert_wrap(void *chain, int idx, void **cert)
+void *
+nc_tls_get_cert_wrap(void *chain, int idx)
 {
-    *cert = sk_X509_value(chain, idx);
+    if (!chain || (idx < 0)) {
+        return NULL;
+    }
+
+    return sk_X509_value(chain, idx);
 }
 
 int

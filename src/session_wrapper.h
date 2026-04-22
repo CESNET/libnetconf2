@@ -318,9 +318,9 @@ int nc_tls_get_num_certs_wrap(void *chain);
  *
  * @param[in] chain Certificate chain.
  * @param[in] idx Index of the certificate to get.
- * @param[out] cert Certificate.
+ * @return Certificate or NULL if not found.
  */
-void nc_tls_get_cert_wrap(void *chain, int idx, void **cert);
+void *nc_tls_get_cert_wrap(void *chain, int idx);
 
 /**
  * @brief Compare two certificates.
