@@ -660,7 +660,10 @@ _nc_server_config_add_tls_ctn(const struct ly_ctx *ctx, const char *tree_path, c
     int ret = 0;
     const char *map;
 
-    NC_CHECK_ARG_RET(NULL, ctx, tree_path, name, config, 1);
+    if ((map_type == NC_TLS_CTN_SPECIFIED) && !name) {
+        ERR(NULL, "Client name must be provided for the \"specified\" CTN mapping type.");
+        return 1;
+    }
 
     if (fingerprint) {
         /* optional */
@@ -682,9 +685,11 @@ _nc_server_config_add_tls_ctn(const struct ly_ctx *ctx, const char *tree_path, c
         goto cleanup;
     }
 
-    ret = nc_server_config_append(ctx, tree_path, "name", name, config);
-    if (ret) {
-        goto cleanup;
+    if (name) {
+        ret = nc_server_config_append(ctx, tree_path, "name", name, config);
+        if (ret) {
+            goto cleanup;
+        }
     }
 
 cleanup:
@@ -698,7 +703,7 @@ nc_server_config_add_tls_ctn(const struct ly_ctx *ctx, const char *endpt_name, u
     int ret = 0;
     char *path = NULL;
 
-    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, id, name, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, endpt_name, id, config, 1);
 
     ret = asprintf(&path, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/netconf-server-parameters/"
             "client-identity-mappings/cert-to-name[id='%" PRIu32 "']", endpt_name, id);
@@ -736,7 +741,7 @@ nc_server_config_add_ch_tls_ctn(const struct ly_ctx *ctx, const char *client_nam
     int ret = 0;
     char *path = NULL;
 
-    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, id, name, config, 1);
+    NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, id, config, 1);
 
     ret = asprintf(&path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
             "endpoints/endpoint[name='%s']/tls/netconf-server-parameters/client-identity-mappings/"

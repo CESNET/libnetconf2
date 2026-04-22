@@ -972,6 +972,139 @@ test_tls_version(void **state)
 #endif
 }
 
+/*
+ * Test CTN SAN: add end-entity cert with SAN rfc822Name field and check that the username is resolved from the SAN if:
+ * - the CTN entry matches the client cert's fingerprint
+ * - the CTN entry doesn't match the client cert's fingerprint but matches the client CA cert's fingerprint
+*/
+
+void *
+server_thread_ctn_san(void *arg)
+{
+    int ret;
+    NC_MSG_TYPE msgtype;
+    struct nc_session *session = NULL;
+    struct nc_pollsession *ps = NULL;
+    struct ln2_test_ctx *test_ctx = arg;
+    const char *client_username;
+
+    ps = nc_ps_new();
+    assert_non_null(ps);
+
+    /* wait for the client to be ready to connect */
+    pthread_barrier_wait(&test_ctx->barrier);
+
+    /* accept a session and add it to the poll session structure */
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
+    assert_int_equal(msgtype, NC_MSG_HELLO);
+
+    /* the username should be resolved from the client cert's SAN rfc822Name field */
+    client_username = nc_session_get_username(session);
+    assert_string_equal(client_username, "user@example.com");
+
+    ret = nc_ps_add_session(ps, session);
+    assert_int_equal(ret, 0);
+
+    /* poll until the session is terminated by the client */
+    do {
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
+        assert_int_equal(ret & NC_PSPOLL_RPC, NC_PSPOLL_RPC);
+    } while (!(ret & NC_PSPOLL_SESSION_TERM));
+
+    nc_ps_clear(ps, 1, NULL);
+    nc_ps_free(ps);
+    return NULL;
+}
+
+static void *
+client_thread_ctn_san(void *arg)
+{
+    int ret;
+    struct nc_session *session = NULL;
+    struct ln2_test_ctx *test_ctx = arg;
+    struct test_tls_data *test_data = test_ctx->test_data;
+
+    ret = nc_client_set_schema_searchpath(MODULES_DIR);
+    assert_int_equal(ret, 0);
+
+    /* set client cert */
+    ret = nc_client_tls_set_cert_key_paths(TESTS_DIR "/data/client_SAN.crt", TESTS_DIR "/data/client.key");
+    assert_int_equal(ret, 0);
+
+    /* set client ca */
+    ret = nc_client_tls_set_trusted_ca_paths(NULL, TESTS_DIR "/data");
+    assert_int_equal(ret, 0);
+
+    pthread_barrier_wait(&test_ctx->barrier);
+    session = nc_connect_tls("127.0.0.1", TEST_PORT, NULL);
+
+    if (test_data->expect_fail) {
+        /* the connection is expected to fail */
+        assert_null(session);
+        return NULL;
+    }
+
+    assert_non_null(session);
+
+    nc_session_free(session, NULL);
+    return NULL;
+}
+
+static void
+test_nc_tls_ctn_san(void **state)
+{
+    int ret, i;
+    pthread_t tids[2];
+    struct ln2_test_ctx *test_ctx;
+    struct test_tls_data *test_data;
+    struct lyd_node *tree;
+
+    assert_non_null(state);
+    test_ctx = *state;
+    test_data = test_ctx->test_data;
+    tree = test_data->tree;
+
+    /* create CTN entry matching the client cert's fingerprint */
+    ret = nc_server_config_add_tls_ctn(test_ctx->ctx, "endpt", 1,
+            "02:EC:08:61:BE:B4:5F:23:FF:47:7F:E4:C5:5D:81:0E:D3:C4:A5:97:0A", NC_TLS_CTN_SAN_RFC822_NAME, NULL, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    /* username should be resolved from the SAN rfc822Name field of the client certificate */
+    ret = pthread_create(&tids[0], NULL, client_thread_ctn_san, *state);
+    assert_int_equal(ret, 0);
+    ret = pthread_create(&tids[1], NULL, server_thread_ctn_san, *state);
+    assert_int_equal(ret, 0);
+
+    for (i = 0; i < 2; i++) {
+        pthread_join(tids[i], NULL);
+    }
+
+    /* delete the CTN entry */
+    ret = nc_server_config_del_tls_ctn("endpt", 1, &tree);
+    assert_int_equal(ret, 0);
+
+    /* create CTN entry matching the client CA cert's fingerprint */
+    ret = nc_server_config_add_tls_ctn(test_ctx->ctx, "endpt", 1,
+            "02:E5:3F:E7:C7:28:8D:F8:3B:EC:AC:AB:85:AB:76:48:68:47:0D:B5:C3", NC_TLS_CTN_SAN_RFC822_NAME, NULL, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    /* the username should still be resolved from the client cert's SAN */
+    ret = pthread_create(&tids[0], NULL, client_thread_ctn_san, *state);
+    assert_int_equal(ret, 0);
+    ret = pthread_create(&tids[1], NULL, server_thread_ctn_san, *state);
+    assert_int_equal(ret, 0);
+
+    for (i = 0; i < 2; i++) {
+        pthread_join(tids[i], NULL);
+    }
+}
+
 static void
 test_nc_tls_free_test_data(void *test_data)
 {
@@ -1090,6 +1223,50 @@ keylog_setup_f(void **state)
     return setup_f(state);
 }
 
+static int
+setup_ctn_san(void **state)
+{
+    int ret;
+    struct lyd_node *tree = NULL;
+    struct ln2_test_ctx *test_ctx;
+    struct test_tls_data *test_data;
+
+    ret = ln2_glob_test_setup(&test_ctx);
+    assert_int_equal(ret, 0);
+
+    *state = test_ctx;
+
+    /* create new address and port data */
+    ret = nc_server_config_add_address_port(test_ctx->ctx, "endpt", NC_TI_TLS, "127.0.0.1", TEST_PORT, &tree);
+    assert_int_equal(ret, 0);
+
+    /* create new server certificate data */
+    ret = nc_server_config_add_tls_server_cert(test_ctx->ctx, "endpt", TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &tree);
+    assert_int_equal(ret, 0);
+
+    /* create new end entity client cert data */
+    ret = nc_server_config_add_tls_client_cert(test_ctx->ctx, "endpt", "client_cert", TESTS_DIR "/data/client_SAN.crt", &tree);
+    assert_int_equal(ret, 0);
+
+    /* create new client ca data */
+    ret = nc_server_config_add_tls_ca_cert(test_ctx->ctx, "endpt", "client_ca", TESTS_DIR "/data/serverca.pem", &tree);
+    assert_int_equal(ret, 0);
+
+    /* configure the server based on the data */
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    test_data = calloc(1, sizeof *test_data);
+    assert_non_null(test_data);
+
+    test_data->tree = tree;
+
+    test_ctx->test_data = test_data;
+    test_ctx->free_test_data = test_nc_tls_free_test_data;
+
+    return 0;
+}
+
 int
 main(void)
 {
@@ -1103,6 +1280,7 @@ main(void)
         cmocka_unit_test_setup_teardown(test_nc_tls_keylog, keylog_setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_cipher_suites, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_tls_version, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_nc_tls_ctn_san, setup_ctn_san, ln2_glob_test_teardown),
     };
 
     /* try to get ports from the environment, otherwise use the default */
