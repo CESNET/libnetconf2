@@ -2588,6 +2588,35 @@ nc_recv_notif_dispatch_data(struct nc_session *session, nc_notif_dispatch_clb no
     return 0;
 }
 
+API int
+nc_recv_msg(struct nc_session *session, int timeout, char **msg)
+{
+    struct ly_in *msg_in = NULL;
+    NC_MSG_TYPE ret;
+    ly_bool msg_destroy = 1;
+
+    NC_CHECK_ARG_RET(session, session, msg, NC_MSG_ERROR);
+
+    if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
+        ERR(session, "Invalid session to receive RPC replies.");
+        return NC_MSG_ERROR;
+    }
+
+    /* receive a message */
+    ret = recv_msg(session, timeout, NC_MSG_REPLY, &msg_in);
+    if (ret != NC_MSG_REPLY) {
+        goto cleanup;
+    }
+
+    /* get the message string */
+    *msg = (char *)ly_in_memory(msg_in, NULL);
+    msg_destroy = 0;
+
+cleanup:
+    ly_in_free(msg_in, msg_destroy);
+    return ret;
+}
+
 void
 nc_client_notification_threads_stop(struct nc_session *session)
 {
@@ -3237,6 +3266,33 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
     }
 
     if (r == NC_MSG_RPC) {
+        *msgid = cur_msgid;
+    }
+    return r;
+}
+
+API NC_MSG_TYPE
+nc_send_msg(struct nc_session *session, const char *msg, uint32_t msg_len, int timeout, uint64_t *msgid)
+{
+    NC_MSG_TYPE r;
+    uint64_t cur_msgid;
+
+    NC_CHECK_ARG_RET(session, session, msg, NC_MSG_ERROR);
+
+    if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
+        ERR(session, "Invalid session to send RPCs.");
+        return NC_MSG_ERROR;
+    }
+
+    if (!msg_len) {
+        msg_len = strlen(msg);
+    }
+
+    /* send RPC, store its message ID */
+    r = nc_write_msg_io(session, timeout, NC_MSG_RAW, msg, msg_len);
+    cur_msgid = session->opts.client.msgid;
+
+    if (msgid && (r == NC_MSG_RPC)) {
         *msgid = cur_msgid;
     }
     return r;

@@ -831,7 +831,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
     char *buf;
     struct nc_wclb_arg arg;
     const char **capabilities;
-    uint32_t *sid = NULL, i, wd = 0;
+    uint32_t *sid = NULL, i, wd = 0, str_len;
     LY_ERR lyrc;
 
     assert(session);
@@ -1040,6 +1040,16 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         } else {
             nc_write_clb((void *)&arg, "</capabilities></hello>", 23, 0);
         }
+        break;
+
+    case NC_MSG_RAW:
+        str = va_arg(ap, const char *);
+        str_len = va_arg(ap, uint32_t);
+
+        /* write the message */
+        nc_write_clb((void *)&arg, str, str_len, 0);
+
+        session->opts.client.msgid++;
         break;
 
     default:

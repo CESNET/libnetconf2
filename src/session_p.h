@@ -1562,6 +1562,9 @@ int nc_write_clb(struct nc_wclb_arg *arg, const void *buf, uint32_t count, int x
  * - #NC_MSG_HELLO
  *   - `const char **capabs;` - capabilities array ended with NULL. Required parameter.
  *   - `uint32_t *sid;` - session ID to be included in the hello message. Optional parameter.
+ * - #NC_MSG_RAW
+ *   - `const char *msg;` - string message to print. Required parameter.
+ *   - `uint32_t msg_len;` - message length. Required parameter.
  *
  * @return Type of the written message. #NC_MSG_WOULDBLOCK is returned if timeout is positive
  * (or zero) value and IO lock could not be acquired in that time. #NC_MSG_ERROR is

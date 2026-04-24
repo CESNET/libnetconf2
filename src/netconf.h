@@ -75,7 +75,8 @@ typedef enum {
     NC_MSG_RPC,             /**< \<rpc\> message */
     NC_MSG_REPLY,           /**< \<rpc-reply\> message */
     NC_MSG_REPLY_ERR_MSGID, /**< \<rpc-reply\> message with missing or wrong message-id attribute value */
-    NC_MSG_NOTIF            /**< \<notification\> message */
+    NC_MSG_NOTIF,           /**< \<notification\> message */
+    NC_MSG_RAW              /**< raw string message */
 } NC_MSG_TYPE;
 
 /**

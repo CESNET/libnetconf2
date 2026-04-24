@@ -500,8 +500,6 @@ int nc_session_ntf_thread_running(const struct nc_session *session);
 /**
  * @brief Receive NETCONF RPC reply.
  *
- * @note This function can be called in a single thread only.
- *
  * @param[in] session NETCONF session from which the function gets data. It must be the
  * client side session object.
  * @param[in] rpc Original RPC this should be the reply to.
@@ -576,6 +574,24 @@ int nc_recv_notif_dispatch_data(struct nc_session *session, nc_notif_dispatch_cl
         void (*free_data)(void *));
 
 /**
+ * @brief Receive a reply message.
+ *
+ * Allows receiving raw NETCONF messages and does not perform any checks including message-id matching.
+ * For all valid messages, ::nc_recv_reply() should be used instead.
+ *
+ * @param[in] session NETCONF session from which the function gets data. It must be the
+ * client side session object.
+ * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite
+ * waiting and 0 for immediate return if data are not available on the wire.
+ * @param[out] msg Received message as a string.
+ * @return #NC_MSG_REPLY for success,
+ *         #NC_MSG_WOULDBLOCK if @p timeout has elapsed,
+ *         #NC_MSG_ERROR if reading has failed,
+ *         #NC_MSG_NOTIF if a notification was read instead (call this function again to get the reply).
+ */
+int nc_recv_msg(struct nc_session *session, int timeout, char **msg);
+
+/**
  * @brief Send NETCONF RPC message via the session.
  *
  * @param[in] session NETCONF session where the RPC will be written.
@@ -588,6 +604,24 @@ int nc_recv_notif_dispatch_data(struct nc_session *session, nc_notif_dispatch_cl
  *         #NC_MSG_ERROR on error.
  */
 NC_MSG_TYPE nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_t *msgid);
+
+/**
+ * @brief Send a message via the session.
+ *
+ * Allows for sending arbitrary NETCONF-encoded messages. For all valid messages, ::nc_send_rpc() should be used
+ * instead.
+ *
+ * @param[in] session NETCONF session where the RPC will be written.
+ * @param[in] msg Message (XML-encoded) to send.
+ * @param[in] msg_len Length of @p msg. May be 0 if it is 0-terminated.
+ * @param[in] timeout Timeout for writing in milliseconds. Use negative value for infinite
+ * waiting and 0 for return if data cannot be sent immediately.
+ * @param[out] msgid Optional, if RPC was successfully sent, this is it's message ID.
+ * @return #NC_MSG_RPC on success,
+ *         #NC_MSG_WOULDBLOCK in case of a busy session, and
+ *         #NC_MSG_ERROR on error.
+ */
+NC_MSG_TYPE nc_send_msg(struct nc_session *session, const char *msg, uint32_t msg_len, int timeout, uint64_t *msgid);
 
 /**
  * @brief Make a session not strict when sending RPCs and receiving RPC replies. In other words,
