@@ -2635,16 +2635,20 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
     if (ret == NC_PSPOLL_RPC) {
         ret = nc_server_recv_rpc_io(cur_session, timeout, &rpc);
         if (ret & (NC_PSPOLL_ERROR | NC_PSPOLL_BAD_RPC)) {
+            /* error, do not send a reply */
             if (cur_session->status != NC_STATUS_RUNNING) {
                 ret |= NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
                 cur_ps_session->state = NC_PS_STATE_INVALID;
             } else {
                 cur_ps_session->state = NC_PS_STATE_NONE;
             }
+        } else if (ret & NC_PSPOLL_REPLY_ERROR) {
+            /* error reply has been sent */
+            cur_ps_session->state = NC_PS_STATE_NONE;
         } else {
             cur_session->opts.server.last_rpc = ts_cur.tv_sec;
 
-            /* process RPC */
+            /* process RPC and send a reply */
             ret |= nc_server_send_reply_io(cur_session, timeout, rpc);
             if (cur_session->status != NC_STATUS_RUNNING) {
                 ret |= NC_PSPOLL_SESSION_TERM;
