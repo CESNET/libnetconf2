@@ -3725,19 +3725,6 @@ cleanup:
     VRB(session, "Call Home client \"%s\" thread exit.", data->client_name);
     free(cur_endpt_name);
 
-    /* find the client and clear thread pointer */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) == 1) {
-        client = nc_server_ch_client_get(data->client_name);
-        if (client && (client->thread == data)) {
-            client->thread = NULL;
-        }
-        nc_rwlock_unlock(&server_opts.config_lock, __func__);
-    }
-
-    free(data->client_name);
-    pthread_mutex_destroy(&data->cond_lock);
-    pthread_cond_destroy(&data->cond);
-    free(data);
     return NULL;
 }
 
@@ -3748,12 +3735,15 @@ nc_session_server_ch_client_dispatch_stop(struct nc_ch_client *ch_client)
     struct nc_server_ch_thread_arg *thread_arg;
     pthread_t tid;
     enum nc_rwlock_mode config_lock_mode = NC_RWLOCK_WRITE;
+    char *ch_client_name = NULL;
 
     if (!ch_client || !ch_client->thread) {
         return 0;
     }
 
     thread_arg = ch_client->thread;
+    ch_client_name = strdup(thread_arg->client_name);
+    NC_CHECK_ERRMEM_GOTO(!ch_client_name, rc = 1, cleanup);
 
     /* CH COND LOCK */
     if (nc_mutex_lock(&thread_arg->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
@@ -3779,19 +3769,40 @@ nc_session_server_ch_client_dispatch_stop(struct nc_ch_client *ch_client)
     /* wait for the thread to end */
     r = pthread_join(tid, NULL);
     if (r) {
-        ERR(NULL, "Joining Call Home client \"%s\" thread failed (%s).", ch_client->name, strerror(r));
+        ERR(NULL, "Joining Call Home client \"%s\" thread failed (%s).", ch_client_name, strerror(r));
         rc = 1;
         goto cleanup;
     }
 
+    /* CONFIG WRITE LOCK - re-acquire to clear the thread pointer and free the thread data */
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        /* if we fail, attempt to lock again in cleanup.
+         * ch thread data will cause a memory leak, but we should avoid a possible crash this way */
+        ERRINT;
+        rc = 1;
+        goto cleanup;
+    }
+    config_lock_mode = NC_RWLOCK_WRITE;
+
+    /* clear the thread pointer,
+     * ch_client MUST remain valid even though we unlocked config lock,
+     * because the caller MUST hold config apply mutex, so no one can change the config and free the client */
+    ch_client->thread = NULL;
+
+    /* free the thread data */
+    free(thread_arg->client_name);
+    pthread_mutex_destroy(&thread_arg->cond_lock);
+    pthread_cond_destroy(&thread_arg->cond);
+    free(thread_arg);
+
 cleanup:
     if (config_lock_mode == NC_RWLOCK_NONE) {
         /* CONFIG LOCK - lock it back if we unlocked it. It MUST succeed, if the caller holds the config apply mutex */
-        if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, -1, __func__) != 1) {
+        if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
             ERRINT;
         }
     }
-
+    free(ch_client_name);
     return rc;
 }
 
