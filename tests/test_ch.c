@@ -25,6 +25,7 @@
 
 #include <cmocka.h>
 
+#include "compat.h"
 #include "ln2_test.h"
 
 struct test_ch_data {
@@ -392,7 +393,7 @@ setup_tls(void **state)
  * Verifies that deleting a CH client from config properly signals the thread to stop,
  * even when the session is in RUNNING state.
  */
-static int session_established_flag = 0;
+static ATOMIC_T session_established_flag = 0;
 
 static int
 ch_new_session_set_flag_cb(const char *client_name, struct nc_session *new_session, void *user_data)
@@ -405,7 +406,7 @@ ch_new_session_set_flag_cb(const char *client_name, struct nc_session *new_sessi
     ret = nc_ps_add_session(ps, new_session);
     assert_int_equal(ret, 0);
 
-    session_established_flag = 1;
+    ATOMIC_STORE_RELAXED(session_established_flag, 1);
     return 0;
 }
 
@@ -430,7 +431,7 @@ server_thread_delete_while_session(void *arg)
             ch_session_release_ctx_cb, test_ctx, ch_new_session_set_flag_cb, ps);
     assert_int_equal(ret, 0);
 
-    while (!session_established_flag) {
+    while (!ATOMIC_LOAD_RELAXED(session_established_flag)) {
         usleep(10000);
     }
 
@@ -512,7 +513,7 @@ setup_delete_while_session(void **state)
     test_ctx->free_test_data = test_nc_ch_free_test_data;
     *state = test_ctx;
 
-    session_established_flag = 0;
+    ATOMIC_STORE_RELAXED(session_established_flag, 0);
 
     ret = nc_server_config_add_ch_address_port(test_ctx->ctx, "ch_delete_test", "endpt", NC_TI_SSH,
             "127.0.0.1", TEST_PORT_3_STR, &tree);
