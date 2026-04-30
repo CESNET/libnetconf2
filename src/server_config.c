@@ -484,6 +484,7 @@ API int
 nc_server_config_load_modules(struct ly_ctx **ctx)
 {
     int i, new_ctx = 0;
+    LY_ERR r;
 
     if (!*ctx) {
         if (ly_ctx_new(ly_yang_module_dir(), 0, ctx)) {
@@ -492,7 +493,8 @@ nc_server_config_load_modules(struct ly_ctx **ctx)
         }
         new_ctx = 1;
 
-        if (ly_ctx_set_searchdir(*ctx, nc_yang_module_dir())) {
+        r = ly_ctx_set_searchdir(*ctx, nc_yang_module_dir());
+        if (r && (r != LY_EEXIST)) {
             ERR(NULL, "Failed to set new searchdir for a context.");
             goto error;
         }

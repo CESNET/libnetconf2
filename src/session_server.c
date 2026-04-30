@@ -156,6 +156,7 @@ nc_server_init_ctx(struct ly_ctx **ctx)
 {
     int new_ctx = 0, i, ret = 0;
     struct lys_module *module;
+    LY_ERR r;
     /* all features */
     const char *ietf_netconf_features[] = {"writable-running", "candidate", "rollback-on-error", "validate", "startup", "url", "xpath", "confirmed-commit", NULL};
     /* all features (module has no features) */
@@ -172,7 +173,8 @@ nc_server_init_ctx(struct ly_ctx **ctx)
         }
         new_ctx = 1;
 
-        if (ly_ctx_set_searchdir(*ctx, nc_yang_module_dir())) {
+        r = ly_ctx_set_searchdir(*ctx, nc_yang_module_dir());
+        if (r && (r != LY_EEXIST)) {
             ERR(NULL, "Failed to set searchdir for a context.");
             ret = 1;
             goto cleanup;
