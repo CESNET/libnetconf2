@@ -1909,15 +1909,15 @@ nc_server_tls_parse_crl_dist_points(unsigned char **p, size_t len, char ***uris,
                 }
             }
 
-            /* GeneralNames ::= SEQUENCE SIZE (1..MAX) OF GeneralName */
+            /*
+             * GeneralNames ::= SEQUENCE SIZE (1..MAX) OF GeneralName
+             *
+             * The fullName [0] implicitly tags the GeneralNames SEQUENCE,
+             * so the [0] CONSTRUCTED tag replaces the SEQUENCE tag.
+             * No inner SEQUENCE to parse — *p already points at the GeneralName entries.
+             */
             end_general_names = *p + len;
-            ret = mbedtls_asn1_get_tag(p, end_general_names, &name_len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
-            if (ret) {
-                nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
-                goto cleanup;
-            }
-
-            end_names = *p + name_len;
+            end_names = end_general_names;
             while (*p < end_names) {
                 tag = **p;
                 tag_class = tag & MBEDTLS_ASN1_TAG_CLASS_MASK;
