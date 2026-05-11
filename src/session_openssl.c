@@ -301,47 +301,45 @@ nc_tls_pem_to_privkey_wrap(const char *privkey_data)
 int
 nc_server_tls_add_crl_to_store_wrap(const unsigned char *crl_data, size_t size, void *crl_store)
 {
-    int ret = 0;
+    int rc = 0;
     X509_CRL *crl = NULL;
     BIO *bio = NULL;
+
+    if (!crl_data || !size) {
+        ERR(NULL, "CRL data is empty.");
+        return 1;
+    }
 
     bio = BIO_new_mem_buf(crl_data, size);
     if (!bio) {
         ERR(NULL, "Creating new bio failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        ret = 1;
+        rc = 1;
         goto cleanup;
     }
 
-    /* try DER first */
-    crl = d2i_X509_CRL_bio(bio, NULL);
-    if (crl) {
-        /* it was DER */
-        goto ok;
+    /* determine the format by checking for the PEM header */
+    if (!strncmp((const char *)crl_data, "-----BEGIN", 10)) {
+        crl = PEM_read_bio_X509_CRL(bio, NULL, NULL, NULL);
+    } else {
+        crl = d2i_X509_CRL_bio(bio, NULL);
     }
-
-    /* DER failed, try PEM next */
-    crl = PEM_read_bio_X509_CRL(bio, NULL, NULL, NULL);
     if (!crl) {
         ERR(NULL, "Parsing downloaded CRL failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        ret = 1;
+        rc = 1;
         goto cleanup;
     }
 
-ok:
     /* we obtained the CRL, now add it to the CRL store */
-    ret = X509_STORE_add_crl(crl_store, crl);
-    if (!ret) {
+    if (X509_STORE_add_crl(crl_store, crl) != 1) {
         ERR(NULL, "Error adding CRL to store (%s).", ERR_reason_error_string(ERR_get_error()));
-        ret = 1;
+        rc = 1;
         goto cleanup;
     }
-    /* ok */
-    ret = 0;
 
 cleanup:
     X509_CRL_free(crl);
     BIO_free(bio);
-    return ret;
+    return rc;
 }
 
 int

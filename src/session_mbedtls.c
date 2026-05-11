@@ -521,25 +521,34 @@ cleanup:
 int
 nc_server_tls_add_crl_to_store_wrap(const unsigned char *crl_data, size_t size, void *crl_store)
 {
-    int rc;
+    int r, rc = 0;
+    unsigned char *pem = NULL;
 
-    /* try DER first */
-    rc = mbedtls_x509_crl_parse_der(crl_store, crl_data, size);
-    if (!rc) {
-        /* success, it was DER */
-        return 0;
+    if (!crl_data || !size) {
+        ERR(NULL, "CRL data is empty.");
+        return 1;
     }
 
-    /* DER failed, try PEM */
-    rc = mbedtls_x509_crl_parse(crl_store, crl_data, size + 1);
-    if (!rc) {
-        /* success, it was PEM */
-        return 0;
+    /* determine the format by checking for the PEM header */
+    if (!strncmp((const char *)crl_data, "-----BEGIN", 10)) {
+        /* PEM requires null-terminated data for mbedtls_x509_crl_parse */
+        pem = malloc(size + 1);
+        NC_CHECK_ERRMEM_GOTO(!pem, rc = 1, cleanup);
+        memcpy(pem, crl_data, size);
+        pem[size] = '\0';
+        r = mbedtls_x509_crl_parse(crl_store, pem, size + 1);
+    } else {
+        r = mbedtls_x509_crl_parse_der(crl_store, crl_data, size);
+    }
+    if (r) {
+        nc_mbedtls_strerr(NULL, r, "Parsing downloaded CRL failed");
+        rc = 1;
+        goto cleanup;
     }
 
-    /* failed to parse it */
-    ERR(NULL, "Reading downloaded CRL failed.");
-    return 1;
+cleanup:
+    free(pem);
+    return rc;
 }
 
 int
