@@ -9,6 +9,7 @@ include(GNUInstallDirs)
 include(CheckFunctionExists)
 include(CheckCSourceCompiles)
 include(CheckIncludeFile)
+include(CheckSymbolExists)
 include(UseCompat)
 include(ABICheck)
 include(SourceFormat)
@@ -94,6 +95,7 @@ option(ENABLE_SSH_TLS "Enable NETCONF over SSH and TLS support (via libssh and O
 option(ENABLE_DNSSEC "Enable support for SSHFP retrieval using DNSSEC for SSH (requires OpenSSL and libval)" OFF)
 option(ENABLE_PAM "Detect and use PAM" ON)
 option(ENABLE_COMMON_TARGETS "Define common custom target names such as 'doc' or 'uninstall', may cause conflicts when using add_subdirectory() to build this project" ON)
+option(ENABLE_IP_FREEBIND "Enable the IP_FREEBIND/IPV6_FREEBIND options on the listening TCP socket" OFF)
 option(BUILD_SHARED_LIBS "By default, shared libs are enabled. Turn off for a static build." ON)
 set(READ_INACTIVE_TIMEOUT 20 CACHE STRING "Maximum number of seconds waiting for new data once some data have arrived")
 set(READ_ACTIVE_TIMEOUT 300 CACHE STRING "Maximum number of seconds for receiving a full message")
@@ -126,6 +128,10 @@ if(ENABLE_SSH_TLS)
         src/session_server_tls.c
         src/server_config_util_tls.c)
     set(SSH_TLS_MACRO "#ifndef NC_ENABLED_SSH_TLS\n#define NC_ENABLED_SSH_TLS\n#endif")
+endif()
+
+if(ENABLE_IP_FREEBIND)
+    check_symbol_exists(IP_FREEBIND "netinet/in.h" NC_ENABLE_IP_FREEBIND)
 endif()
 
 set(headers

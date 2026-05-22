@@ -289,6 +289,10 @@ nc_sock_bind_inet(int sock, const char *address, uint16_t port, int is_ipv4)
     struct sockaddr_in *saddr4;
     struct sockaddr_in6 *saddr6;
 
+#ifdef NC_ENABLE_IP_FREEBIND
+    int opt;
+#endif
+
     memset(&saddr, 0, sizeof(struct sockaddr_storage));
 
     if (is_ipv4) {
@@ -306,6 +310,14 @@ nc_sock_bind_inet(int sock, const char *address, uint16_t port, int is_ipv4)
             ERR(NULL, "Failed to convert IPv4 address \"%s\".", address);
             return -1;
         }
+
+#ifdef NC_ENABLE_IP_FREEBIND
+        opt = 1;
+        if (setsockopt(sock, IPPROTO_IP, IP_FREEBIND, &opt, sizeof(opt))) {
+            ERR(NULL, "Could not add IP_FREEBIND option (%s).", strerror(errno));
+            return -1;
+        }
+#endif
 
         if (bind(sock, (struct sockaddr *)saddr4, sizeof(struct sockaddr_in)) == -1) {
             ERR(NULL, "Could not bind %s:%" PRIu16 " (%s).", address, port, strerror(errno));
@@ -327,6 +339,14 @@ nc_sock_bind_inet(int sock, const char *address, uint16_t port, int is_ipv4)
             ERR(NULL, "Failed to convert IPv6 address \"%s\".", address);
             return -1;
         }
+
+#ifdef NC_ENABLE_IP_FREEBIND
+        opt = 1;
+        if (setsockopt(sock, IPPROTO_IPV6, IPV6_FREEBIND, &opt, sizeof(opt))) {
+            ERR(NULL, "Could not add IPV6_FREEBIND option (%s).", strerror(errno));
+            return -1;
+        }
+#endif
 
         if (bind(sock, (struct sockaddr *)saddr6, sizeof(struct sockaddr_in6)) == -1) {
             ERR(NULL, "Could not bind [%s]:%" PRIu16 " (%s).", address, port, strerror(errno));
