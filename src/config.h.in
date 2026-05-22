@@ -83,4 +83,7 @@
 /* Portability feature-check macros. */
 #cmakedefine HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP
 
+/* Enable IP_FREEBIND/IPV6_FREEBIND on listening sockets. */
+#cmakedefine NC_ENABLE_IP_FREEBIND
+
 #endif /* NC_CONFIG_H_ */
