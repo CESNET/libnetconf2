@@ -926,9 +926,7 @@ build_module_info_yl(struct nc_session *session, int get_data_sup, int xpath_sup
     uint32_t u, v, submodules_count, feature_count;
     struct lyd_node *iter, *child, *oper_data = NULL;
     struct lys_module *mod;
-    int ret = 0;
-    uint8_t notifications_found = 0;
-    uint8_t nc_notifications_found = 0;
+    int ret = 0, notifications_found = 0, nc_notifications_found = 0;
 
     /* get yang-library operational data */
     if (xpath_sup) {
@@ -1027,6 +1025,9 @@ build_module_info_yl(struct nc_session *session, int get_data_sup, int xpath_sup
         (*result)[u].name = strdup("nc-notifications");
         (*result)[u].revision = strdup("2008-07-14");
         (*result)[u].implemented = 1;
+        u++;
+
+        (*result)[u].name = NULL;
     }
 
 cleanup:
