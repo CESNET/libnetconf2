@@ -1200,7 +1200,7 @@ static int
 nc_add_cpblt(const char *capab, char ***cpblts, uint32_t *count)
 {
     uint32_t i, len;
-    char *p;
+    const char *p;
 
     /*  check if already present */
     p = strchr(capab, '?');
