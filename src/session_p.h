@@ -166,7 +166,7 @@ extern struct nc_server_opts server_opts;
 /**
  * Number of sockets kept waiting to be accepted.
  */
-#define NC_REVERSE_QUEUE 5
+#define NC_REVERSE_QUEUE 64
 
 /**
  * Time slept in msec in each cycle of the client monitoring thread.
