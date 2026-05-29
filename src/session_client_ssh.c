@@ -1800,7 +1800,6 @@ fail:
 API struct nc_session *
 nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
 {
-    const long timeout = NC_SSH_TIMEOUT;
     int sock;
     uint32_t port_uint;
     char *username, *ip_host = NULL;
@@ -1851,7 +1850,6 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     }
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_PORT, &port_uint);
     ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_USER, username);
-    ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_TIMEOUT, &timeout);
     if (client_ssh_opts.knownhosts_path) {
         ssh_options_set(session->ti.libssh.session, SSH_OPTIONS_KNOWNHOSTS, client_ssh_opts.knownhosts_path);
     }
@@ -1988,7 +1986,6 @@ fail:
 struct nc_session *
 nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx)
 {
-    const long ssh_timeout = NC_SSH_TIMEOUT;
     unsigned int uint_port;
     struct passwd *pw, pw_buf;
     struct nc_session *session;
@@ -2012,7 +2009,6 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
     }
     uint_port = port;
     ssh_options_set(sess, SSH_OPTIONS_PORT, &uint_port);
-    ssh_options_set(sess, SSH_OPTIONS_TIMEOUT, &ssh_timeout);
 
     if (!client_ssh_ch_opts.username) {
         pw = nc_getpw(getuid(), NULL, &pw_buf, &buf, &buf_len);

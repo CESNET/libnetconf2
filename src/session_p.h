@@ -223,11 +223,6 @@ enum nc_store_type {
 #include <libssh/libssh.h>
 
 /**
- * Timeout set for libssh (s).
- */
-#define NC_SSH_TIMEOUT 10
-
-/**
  * @brief Enumeration of SSH public key formats.
  */
 enum nc_pubkey_format {
