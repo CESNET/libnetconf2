@@ -1332,11 +1332,10 @@ nc_client_ssh_print_banner(ssh_session UNUSED(ssh_sess))
  *
  * @param[in] session NETCONF session to use.
  * @param[in] opts Client SSH options to use.
- * @param[in] timeout_ms Timeout in msec used for every SSH message, not a total timeout.
  * @return -1 on failure; 0 on timeout; 1 on success.
  */
 static int
-connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts, int timeout_ms)
+connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts)
 {
     int j, ret_auth, userauthlist, ret, attempt = 0;
     NC_SSH_AUTH_TYPE auth;
@@ -1349,7 +1348,7 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
 
     ssh_sess = session->ti.libssh.session;
 
-    nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_TIMEOUT);
+    nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_HANDSHAKE_TIMEOUT);
     while ((ret = ssh_connect(ssh_sess)) == SSH_AGAIN) {
         usleep(NC_TIMEOUT_STEP);
         if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
@@ -1370,12 +1369,10 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
         return -1;
     }
 
-    if (timeout_ms > -1) {
-        nc_timeouttime_get(&ts_timeout, timeout_ms);
-    }
+    nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_MSG_TIMEOUT);
     while ((ret_auth = ssh_userauth_none(ssh_sess, NULL)) == SSH_AUTH_AGAIN) {
         usleep(NC_TIMEOUT_STEP);
-        if ((timeout_ms > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
+        if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
             break;
         }
     }
@@ -1446,12 +1443,10 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
                 return -1;
             }
 
-            if (timeout_ms > -1) {
-                nc_timeouttime_get(&ts_timeout, timeout_ms);
-            }
+            nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_MSG_TIMEOUT);
             while ((ret_auth = ssh_userauth_password(ssh_sess, session->username, s)) == SSH_AUTH_AGAIN) {
                 usleep(NC_TIMEOUT_STEP);
-                if ((timeout_ms > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
+                if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
                     break;
                 }
             }
@@ -1464,14 +1459,12 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
 
             VRB(session, "Keyboard-interactive authentication.");
 
-            if (timeout_ms > -1) {
-                nc_timeouttime_get(&ts_timeout, timeout_ms);
-            }
+            nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_MSG_TIMEOUT);
             while (((ret_auth = ssh_userauth_kbdint(ssh_sess, NULL, NULL)) == SSH_AUTH_INFO) ||
                     (ret_auth == SSH_AUTH_AGAIN)) {
                 if (ret_auth == SSH_AUTH_AGAIN) {
                     usleep(NC_TIMEOUT_STEP);
-                    if ((timeout_ms > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
+                    if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
                         break;
                     }
                     continue;
@@ -1497,9 +1490,7 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
                 if (ret_auth == SSH_AUTH_ERROR) {
                     break;
                 }
-                if (timeout_ms > -1) {
-                    nc_timeouttime_get(&ts_timeout, timeout_ms);
-                }
+                nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_MSG_TIMEOUT);
             }
             break;
 
@@ -1528,12 +1519,10 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
                     continue;
                 }
 
-                if (timeout_ms > -1) {
-                    nc_timeouttime_get(&ts_timeout, timeout_ms);
-                }
+                nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_MSG_TIMEOUT);
                 while ((ret_auth = ssh_userauth_try_publickey(ssh_sess, NULL, pubkey)) == SSH_AUTH_AGAIN) {
                     usleep(NC_TIMEOUT_STEP);
-                    if ((timeout_ms > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
+                    if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
                         break;
                     }
                 }
@@ -1564,12 +1553,10 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
                     continue;
                 }
 
-                if (timeout_ms > -1) {
-                    nc_timeouttime_get(&ts_timeout, timeout_ms);
-                }
+                nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_MSG_TIMEOUT);
                 while ((ret_auth = ssh_userauth_publickey(ssh_sess, NULL, privkey)) == SSH_AUTH_AGAIN) {
                     usleep(NC_TIMEOUT_STEP);
-                    if ((timeout_ms > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
+                    if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
                         break;
                     }
                 }
@@ -1615,11 +1602,10 @@ connect_ssh_session(struct nc_session *session, struct nc_client_ssh_opts *opts,
  * SSH connection is expected to be established.
  *
  * @param[in] session NETCONF session to use.
- * @param[in] timeout_ms Timeout in msec used for every SSH message, not a total timeout.
  * @return -1 on failure; 0 on timeout; 1 on success.
  */
 static int
-open_netconf_channel(struct nc_session *session, int timeout_ms)
+open_netconf_channel(struct nc_session *session)
 {
     ssh_session ssh_sess;
     int ret;
@@ -1638,13 +1624,11 @@ open_netconf_channel(struct nc_session *session, int timeout_ms)
     }
 
     /* open a channel */
-    if (timeout_ms > -1) {
-        nc_timeouttime_get(&ts_timeout, timeout_ms);
-    }
+    nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_MSG_TIMEOUT);
     session->ti.libssh.channel = ssh_channel_new(ssh_sess);
     while ((ret = ssh_channel_open_session(session->ti.libssh.channel)) == SSH_AGAIN) {
         usleep(NC_TIMEOUT_STEP);
-        if ((timeout_ms > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
+        if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
             break;
         }
     }
@@ -1661,12 +1645,10 @@ open_netconf_channel(struct nc_session *session, int timeout_ms)
     }
 
     /* execute the NETCONF subsystem on the channel */
-    if (timeout_ms > -1) {
-        nc_timeouttime_get(&ts_timeout, timeout_ms);
-    }
+    nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_MSG_TIMEOUT);
     while ((ret = ssh_channel_request_subsystem(session->ti.libssh.channel, "netconf")) == SSH_AGAIN) {
         usleep(NC_TIMEOUT_STEP);
-        if ((timeout_ms > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
+        if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
             break;
         }
     }
@@ -1687,7 +1669,7 @@ open_netconf_channel(struct nc_session *session, int timeout_ms)
 
 static struct nc_session *
 _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepalives *ka,
-        struct nc_client_ssh_opts *opts, int timeout)
+        struct nc_client_ssh_opts *opts)
 {
     char *host = NULL, *username = NULL, *ip_host;
     unsigned int port = 0;
@@ -1767,7 +1749,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
         /* connect and authenticate SSH session */
         session->host = host;
         session->username = username;
-        if (connect_ssh_session(session, opts, timeout) != 1) {
+        if (connect_ssh_session(session, opts) != 1) {
             goto fail;
         }
     }
@@ -1775,7 +1757,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
     /*
      * Almost done, open a netconf channel. (Transport layer / application layer)
      */
-    if (open_netconf_channel(session, timeout) != 1) {
+    if (open_netconf_channel(session) != 1) {
         goto fail;
     }
 
@@ -1889,8 +1871,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     session->port = port;
 
     /* connect SSH session */
-    if ((connect_ssh_session(session, &client_ssh_opts, NC_TRANSPORT_TIMEOUT) != 1) ||
-            (open_netconf_channel(session, NC_TRANSPORT_TIMEOUT) != 1)) {
+    if ((connect_ssh_session(session, &client_ssh_opts) != 1) || (open_netconf_channel(session) != 1)) {
         goto fail;
     }
 
@@ -1933,7 +1914,7 @@ fail:
 API struct nc_session *
 nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx)
 {
-    return _nc_connect_libssh(ssh_session, ctx, &client_opts.ka, &client_ssh_opts, NC_TRANSPORT_TIMEOUT);
+    return _nc_connect_libssh(ssh_session, ctx, &client_opts.ka, &client_ssh_opts);
 }
 
 API struct nc_session *
@@ -1967,7 +1948,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     if (nc_mutex_lock(new_session->io_lock, -1, __func__) != 1) {
         goto fail;
     }
-    if (open_netconf_channel(new_session, NC_TRANSPORT_TIMEOUT) != 1) {
+    if (open_netconf_channel(new_session) != 1) {
         goto fail;
     }
     nc_mutex_unlock(new_session->io_lock, __func__);
@@ -2005,7 +1986,7 @@ fail:
 }
 
 struct nc_session *
-nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout)
+nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx)
 {
     const long ssh_timeout = NC_SSH_TIMEOUT;
     unsigned int uint_port;
@@ -2057,7 +2038,7 @@ nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly
             "ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-rsa,rsa-sha2-512,rsa-sha2-256,ssh-dss");
 #endif
 
-    session = _nc_connect_libssh(sess, ctx, &client_opts.ka, &client_ssh_ch_opts, timeout);
+    session = _nc_connect_libssh(sess, ctx, &client_opts.ka, &client_ssh_ch_opts);
     if (!session) {
         /* sess is freed */
         return NULL;

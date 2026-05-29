@@ -1926,16 +1926,14 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
 
 /* ret 1 on success, 0 on timeout, -1 on error */
 static int
-nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, struct nc_server_ssh_opts *opts, int timeout)
+nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, struct nc_server_ssh_opts *opts)
 {
     struct timespec ts_timeout;
     ssh_message msg;
 
     DBG(session, "Waiting for \"netconf\" SSH subsystem request...");
 
-    if (timeout) {
-        nc_timeouttime_get(&ts_timeout, timeout * 1000);
-    }
+    nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_MSG_TIMEOUT);
     while (1) {
         if (!ssh_is_connected(session->ti.libssh.session)) {
             ERR(session, "Communication SSH socket unexpectedly closed while waiting for \"netconf\" subsystem request.");
@@ -1955,7 +1953,7 @@ nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, struct nc
         }
 
         usleep(NC_TIMEOUT_STEP);
-        if (timeout && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
+        if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
             /* timeout */
             ERR(session, "Failed to start \"netconf\" SSH subsystem for too long, disconnecting.");
             break;
@@ -2058,7 +2056,7 @@ nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts
 }
 
 int
-nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opts, int sock, int timeout)
+nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opts, int sock)
 {
     ssh_bind sbind = NULL;
     int rc = 1, r;
@@ -2165,13 +2163,11 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
     ssh_set_blocking(session->ti.libssh.session, 0);
 
     DBG(session, "Performing SSH key exchange...");
-    if (timeout > -1) {
-        nc_timeouttime_get(&ts_timeout, timeout);
-    }
+    nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_HANDSHAKE_TIMEOUT);
     while ((r = ssh_handle_key_exchange(session->ti.libssh.session)) == SSH_AGAIN) {
         /* this tends to take longer */
         usleep(NC_TIMEOUT_STEP * 20);
-        if ((timeout > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
+        if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
             break;
         }
     }
@@ -2198,7 +2194,7 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
     }
 
     /* open channel and request 'netconf' subsystem */
-    if ((rc = nc_accept_ssh_session_open_netconf_channel(session, opts, timeout)) != 1) {
+    if ((rc = nc_accept_ssh_session_open_netconf_channel(session, opts)) != 1) {
         goto cleanup;
     }
 

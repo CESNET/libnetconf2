@@ -69,10 +69,9 @@ extern struct nc_server_opts server_opts;
 #define NC_CLIENT_NOTIF_THREAD_SLEEP 10000
 
 /**
- * Timeout in msec for transport-related data to arrive (ssh_handle_key_exchange(), SSL_accept(), SSL_connect()).
- * It can be quite a lot on slow machines (waiting for TLS cert-to-name resolution, ...).
+ * Timeout in msec for transport-related data to arrive (SSL_accept(), SSL_connect(), SSH channel open, subsystem start).
  */
-#define NC_TRANSPORT_TIMEOUT 10000
+#define NC_TRANSPORT_MSG_TIMEOUT 2000
 
 /**
  * Timeout in msec for acquiring a lock of a session (used with a condition, so higher numbers could be required
@@ -1338,10 +1337,9 @@ int nc_server_ch_accept_binds(struct nc_bind *binds, uint16_t bind_count, int ti
  * @param[in] session NETCONF session for logging.
  * @param[in] sock Connected socket to use.
  * @param[in] username NETCONF username to use.
- * @param[in] timeout_ms Timeout for writing the username.
  * @return -1 on failure; 0 on timeout; 1 on success.
  */
-int nc_connect_unix_session(struct nc_session *session, int sock, const char *username, int timeout_ms);
+int nc_connect_unix_session(struct nc_session *session, int sock, const char *username);
 
 /**
  * @brief Gets a listening endpoint based on its name.
@@ -1421,20 +1419,19 @@ int _nc_connect_ch_client_dispatch(struct nc_ch_client *ch_client, nc_server_ch_
  * @param[in] host Hostname of the server.
  * @param[in] port Port of the server.
  * @param[in] ctx Context for the session. Can be NULL.
- * @param[in] timeout Transport operations timeout in msec.
  * @return New session, NULL on error.
  */
-struct nc_session *nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout);
+struct nc_session *nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx);
 
 /**
  * @brief Establish SSH transport on a socket.
  *
  * @param[in] session Session structure of the new connection.
+ * @param[in] opts SSH server options to use.
  * @param[in] sock Socket of the new connection, closed if not set to the session.
- * @param[in] timeout Transport operations timeout in msec (not SSH authentication one).
  * @return 1 on success, 0 on timeout, -1 on error.
  */
-int nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opts, int sock, int timeout);
+int nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opts, int sock);
 
 /**
  * @brief Process a SSH message.
@@ -1451,7 +1448,7 @@ void nc_client_ssh_destroy_opts(void);
 void _nc_client_ssh_destroy_opts(struct nc_client_ssh_opts *opts);
 
 struct nc_session *nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx,
-        int timeout, const char *peername);
+        const char *peername);
 
 /**
  * @brief Establish TLS transport on a socket.
@@ -1461,7 +1458,7 @@ struct nc_session *nc_accept_callhome_tls_sock(int sock, const char *host, uint1
  * @param[in] timeout Transport operations timeout in msec.
  * @return 1 on success, 0 on timeout, -1 on error.
  */
-int nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opts, int sock, int timeout);
+int nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opts, int sock);
 
 void nc_client_tls_destroy_opts(void);
 void _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts);

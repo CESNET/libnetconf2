@@ -834,7 +834,7 @@ nc_server_tls_get_num_certs(struct nc_server_tls_client_auth *client_auth)
 }
 
 int
-nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opts, int sock, int timeout)
+nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opts, int sock)
 {
     int rc, timeouted = 0;
     struct timespec ts_timeout;
@@ -951,12 +951,10 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     sock = -1;
 
     /* do the handshake */
-    if (timeout > -1) {
-        nc_timeouttime_get(&ts_timeout, timeout);
-    }
+    nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_HANDSHAKE_TIMEOUT);
     while ((rc = nc_server_tls_handshake_step_wrap(session->ti.tls.session)) == 0) {
         usleep(NC_TIMEOUT_STEP);
-        if ((timeout > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
+        if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
             ERR(session, "TLS accept timeout.");
             timeouted = 1;
             goto fail;

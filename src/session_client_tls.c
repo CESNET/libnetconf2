@@ -223,7 +223,8 @@ nc_client_tls_connect_check(int connect_ret, void *tls_session, const char *peer
 }
 
 static void *
-nc_client_tls_session_new(int sock, const char *host, int timeout, struct nc_client_tls_opts *opts, void **out_tls_cfg, struct nc_tls_ctx *tls_ctx)
+nc_client_tls_session_new(int sock, const char *host, struct nc_client_tls_opts *opts, void **out_tls_cfg,
+        struct nc_tls_ctx *tls_ctx)
 {
     int ret = 0;
     struct timespec ts_timeout;
@@ -291,12 +292,10 @@ nc_client_tls_session_new(int sock, const char *host, int timeout, struct nc_cli
     }
 
     /* handshake */
-    if (timeout > -1) {
-        nc_timeouttime_get(&ts_timeout, timeout);
-    }
+    nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_HANDSHAKE_TIMEOUT);
     while ((ret = nc_client_tls_handshake_step_wrap(tls_session, sock)) == 0) {
         usleep(NC_TIMEOUT_STEP);
-        if ((timeout > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
+        if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
             ERR(NULL, "SSL connect timeout.");
             goto fail;
         }
@@ -364,8 +363,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
 
     /* fill the session */
     session->ti_type = NC_TI_TLS;
-    if (!(session->ti.tls.session = nc_client_tls_session_new(sock, host, NC_TRANSPORT_TIMEOUT, &client_tls_opts,
-            &tls_cfg, &tls_ctx))) {
+    if (!(session->ti.tls.session = nc_client_tls_session_new(sock, host, &client_tls_opts, &tls_cfg, &tls_ctx))) {
         goto fail;
     }
     session->ti.tls.config = tls_cfg;
@@ -408,7 +406,7 @@ fail:
 }
 
 struct nc_session *
-nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, int timeout, const char *peername)
+nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx, const char *peername)
 {
     struct nc_session *session = NULL;
     void *tls_cfg = NULL;
@@ -421,8 +419,7 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
 
     /* fill the session */
     session->ti_type = NC_TI_TLS;
-    if (!(session->ti.tls.session = nc_client_tls_session_new(sock, peername, timeout, &client_tls_ch_opts, &tls_cfg,
-            &tls_ctx))) {
+    if (!(session->ti.tls.session = nc_client_tls_session_new(sock, peername, &client_tls_ch_opts, &tls_cfg, &tls_ctx))) {
         goto fail;
     }
     session->ti.tls.config = tls_cfg;

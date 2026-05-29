@@ -1408,16 +1408,14 @@ fail:
 }
 
 int
-nc_connect_unix_session(struct nc_session *session, int sock, const char *username, int timeout_ms)
+nc_connect_unix_session(struct nc_session *session, int sock, const char *username)
 {
     struct timespec ts_timeout;
     size_t written = 0, len;
     ssize_t r;
 
     /* fill timespec */
-    if (timeout_ms > -1) {
-        nc_timeouttime_get(&ts_timeout, timeout_ms);
-    }
+    nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_MSG_TIMEOUT);
 
     len = strlen(username) + 1;
     while (1) {
@@ -1441,7 +1439,7 @@ nc_connect_unix_session(struct nc_session *session, int sock, const char *userna
         /* sleep */
         usleep(NC_TIMEOUT_STEP);
 
-        if ((timeout_ms > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
+        if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
             /* final timeout */
             ERR(session, "Failed to write NETCONF username into UNIX session for too long, disconnecting.");
             return 0;
@@ -1516,7 +1514,7 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
     session->username = username;
 
     /* connect UNIX session */
-    if (nc_connect_unix_session(session, session->ti.unixsock.sock, session->username, NC_TRANSPORT_TIMEOUT) != 1) {
+    if (nc_connect_unix_session(session, session->ti.unixsock.sock, session->username) != 1) {
         goto fail;
     }
 
@@ -1925,10 +1923,9 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
     }
 
     if (client_opts.ch_binds_aux[bind_idx].ti == NC_TI_SSH) {
-        *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT);
+        *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx);
     } else if (client_opts.ch_binds_aux[bind_idx].ti == NC_TI_TLS) {
-        *session = nc_accept_callhome_tls_sock(sock, host, port, ctx, NC_TRANSPORT_TIMEOUT,
-                client_opts.ch_binds_aux[bind_idx].hostname);
+        *session = nc_accept_callhome_tls_sock(sock, host, port, ctx, client_opts.ch_binds_aux[bind_idx].hostname);
     } else {
         close(sock);
         *session = NULL;

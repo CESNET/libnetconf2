@@ -71,7 +71,7 @@ nc_proxy_unix_connect(const char *address, const char *username)
     }
 
     /* connect UNIX session */
-    if (nc_connect_unix_session(NULL, sock, username, NC_TRANSPORT_TIMEOUT) != 1) {
+    if (nc_connect_unix_session(NULL, sock, username) != 1) {
         goto error;
     }
 

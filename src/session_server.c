@@ -2789,12 +2789,11 @@ cleanup:
  *
  * @param[in] session NETCONF session for logging.
  * @param[in] sock Socket to read from.
- * @param[in] timeout_ms Timeout for reading the whole username.
  * @param[out] username Read NETCONF username.
  * @return 1 on success, 0 on timeout, -1 on error.
  */
 static int
-nc_accept_unix_read_username(struct nc_session *session, int sock, int timeout_ms, char **username)
+nc_accept_unix_read_username(struct nc_session *session, int sock, char **username)
 {
     struct timespec ts_timeout;
     size_t size = 32, rr = 0;
@@ -2803,9 +2802,7 @@ nc_accept_unix_read_username(struct nc_session *session, int sock, int timeout_m
     assert(sock > -1);
 
     /* fill timespec */
-    if (timeout_ms > -1) {
-        nc_timeouttime_get(&ts_timeout, timeout_ms);
-    }
+    nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_MSG_TIMEOUT);
 
     /* prepare username */
     *username = malloc(size);
@@ -2834,7 +2831,7 @@ nc_accept_unix_read_username(struct nc_session *session, int sock, int timeout_m
             /* sleep */
             usleep(NC_TIMEOUT_STEP);
 
-            if ((timeout_ms > -1) && (nc_timeouttime_cur_diff(&ts_timeout) < 1)) {
+            if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
                 /* final timeout */
                 ERR(session, "Failed to read NETCONF username from a UNIX session for too long, disconnecting.");
                 return 0;
@@ -2937,7 +2934,7 @@ nc_accept_unix_session(struct nc_session *session, int sock)
     pwname = pw->pw_name;
 
     /* read the NETCONF username */
-    if (nc_accept_unix_read_username(session, sock, NC_TRANSPORT_TIMEOUT, &requested_username) != 1) {
+    if (nc_accept_unix_read_username(session, sock, &requested_username) != 1) {
         goto error;
     }
 
@@ -3049,7 +3046,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
     /* sock gets assigned to session or closed */
 #ifdef NC_ENABLED_SSH_TLS
     if (config->endpts[endpt_idx].ti == NC_TI_SSH) {
-        ret = nc_accept_ssh_session(*session, config->endpts[endpt_idx].opts.ssh, sock, NC_TRANSPORT_TIMEOUT);
+        ret = nc_accept_ssh_session(*session, config->endpts[endpt_idx].opts.ssh, sock);
         sock = -1;
         if (ret < 0) {
             msgtype = NC_MSG_ERROR;
@@ -3060,7 +3057,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
         }
     } else if (config->endpts[endpt_idx].ti == NC_TI_TLS) {
         (*session)->data = config->endpts[endpt_idx].opts.tls;
-        ret = nc_accept_tls_session(*session, config->endpts[endpt_idx].opts.tls, sock, NC_TRANSPORT_TIMEOUT);
+        ret = nc_accept_tls_session(*session, config->endpts[endpt_idx].opts.tls, sock);
         sock = -1;
         if (ret < 0) {
             msgtype = NC_MSG_ERROR;
@@ -3238,7 +3235,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
 
     /* sock gets assigned to session or closed */
     if (endpt->ti == NC_TI_SSH) {
-        ret = nc_accept_ssh_session(*session, endpt->opts.ssh, sock, NC_TRANSPORT_TIMEOUT);
+        ret = nc_accept_ssh_session(*session, endpt->opts.ssh, sock);
         (*session)->data = NULL;
 
         if (ret < 0) {
@@ -3250,7 +3247,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
         }
     } else if (endpt->ti == NC_TI_TLS) {
         (*session)->data = endpt->opts.tls;
-        ret = nc_accept_tls_session(*session, endpt->opts.tls, sock, NC_TRANSPORT_TIMEOUT);
+        ret = nc_accept_tls_session(*session, endpt->opts.tls, sock);
         (*session)->data = NULL;
 
         if (ret < 0) {
