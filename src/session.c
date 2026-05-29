@@ -21,6 +21,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -1224,10 +1225,54 @@ nc_add_cpblt(const char *capab, char ***cpblts, uint32_t *count)
     }
 
     (*cpblts)[*count] = strdup(capab);
+    if (!(*cpblts)[*count]) {
+        ERRMEM;
+        return -1;
+    }
     ++(*count);
 
     /* terminating NULL */
     (*cpblts)[*count] = NULL;
+
+    return 0;
+}
+
+/**
+ * @brief Append string to a string buffer.
+ *
+ * @param[in,out] str String to append to.
+ * @param[in,out] used Used bytes of @p str excluding the terminating 0 byte.
+ * @param[in,out] size Size of @p str.
+ * @param[in] app_format Format string to append.
+ * @param[in] ... Format string arguments.
+ * @return 0 on success,
+ * @return -1 on error.
+ */
+static int
+nc_str_append(char **str, uint32_t *used, uint32_t *size, const char *app_format, ...)
+{
+    va_list ap;
+    int r;
+
+    /* try to append */
+    va_start(ap, app_format);
+    r = vsnprintf(*str + *used, *size - *used, app_format, ap);
+    va_end(ap);
+
+    if (*used + r >= *size) {
+        /* enlarge */
+        *str = nc_realloc(*str, *used + r + 1);
+        NC_CHECK_ERRMEM_RET(!*str, -1);
+
+        *size = *used + r + 1;
+
+        /* append */
+        va_start(ap, app_format);
+        *used += vsnprintf(*str + *used, *size - *used, app_format, ap);
+        va_end(ap);
+    } else {
+        *used += r;
+    }
 
     return 0;
 }
@@ -1245,15 +1290,11 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
 {
     char **cpblts;
     const struct lys_module *mod;
-    const char *feat;
-    int features_count = 0, dev_count = 0, str_len, len;
-    uint32_t i, count;
+    uint32_t i, count, str_used = 0, str_size = 0;
     LY_ARRAY_COUNT_TYPE v;
     char *yl_content_id = NULL;
     uint32_t wd_also_supported, wd_basic_mode;
-
-#define NC_CPBLT_BUF_LEN 4096
-    char str[NC_CPBLT_BUF_LEN];
+    char *str = NULL;
 
     NC_CHECK_ARG_RET(NULL, ctx, NULL);
 
@@ -1310,16 +1351,18 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
             VRB(NULL, "with-defaults capability will not be advertised even though \"ietf-netconf-with-defaults\" "
                     "model is present, unknown basic-mode.");
         } else {
-            strcpy(str, "urn:ietf:params:netconf:capability:with-defaults:1.0");
+            str_used = 0;
+            NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, "urn:ietf:params:netconf:capability:with-defaults:1.0"),
+                    unlock_error);
             switch (wd_basic_mode) {
             case NC_WD_ALL:
-                strcat(str, "?basic-mode=report-all");
+                NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, "?basic-mode=report-all"), unlock_error);
                 break;
             case NC_WD_TRIM:
-                strcat(str, "?basic-mode=trim");
+                NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, "?basic-mode=trim"), unlock_error);
                 break;
             case NC_WD_EXPLICIT:
-                strcat(str, "?basic-mode=explicit");
+                NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, "?basic-mode=explicit"), unlock_error);
                 break;
             default:
                 ERRINT;
@@ -1328,29 +1371,30 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
 
             wd_also_supported = server_opts.wd_also_supported;
             if (wd_also_supported) {
-                strcat(str, "&also-supported=");
+                NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, "&also-supported="), unlock_error);
                 if (wd_also_supported & NC_WD_ALL) {
-                    strcat(str, "report-all,");
+                    NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, "report-all,"), unlock_error);
                 }
                 if (wd_also_supported & NC_WD_ALL_TAG) {
-                    strcat(str, "report-all-tagged,");
+                    NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, "report-all-tagged,"), unlock_error);
                 }
                 if (wd_also_supported & NC_WD_TRIM) {
-                    strcat(str, "trim,");
+                    NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, "trim,"), unlock_error);
                 }
                 if (wd_also_supported & NC_WD_EXPLICIT) {
-                    strcat(str, "explicit,");
+                    NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, "explicit,"), unlock_error);
                 }
-                str[strlen(str) - 1] = '\0';
+                str[str_used] = '\0';
+                --str_used;
 
-                NC_CHECK_GOTO(nc_add_cpblt(str, &cpblts, &count), error);
+                NC_CHECK_GOTO(nc_add_cpblt(str, &cpblts, &count), unlock_error);
             }
         }
     }
 
     /* other capabilities */
     for (i = 0; i < server_opts.capabilities_count; i++) {
-        NC_CHECK_GOTO(nc_add_cpblt(server_opts.capabilities[i], &cpblts, &count), error);
+        NC_CHECK_GOTO(nc_add_cpblt(server_opts.capabilities[i], &cpblts, &count), unlock_error);
     }
 
     /* models */
@@ -1379,14 +1423,18 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
 
             if (!strcmp(mod->revision, "2019-01-04")) {
                 /* new one (capab defined in RFC 8526 section 2) */
-                sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.1?revision=%s&content-id=%s",
-                        mod->revision, yl_content_id);
-                NC_CHECK_GOTO(nc_add_cpblt(str, &cpblts, &count), error);
+                str_used = 0;
+                NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size,
+                        "urn:ietf:params:netconf:capability:yang-library:1.1?revision=%s&content-id=%s",
+                        mod->revision, yl_content_id), unlock_error);
+                NC_CHECK_GOTO(nc_add_cpblt(str, &cpblts, &count), unlock_error);
             } else {
                 /* old one (capab defined in RFC 7950 section 5.6.4) */
-                sprintf(str, "urn:ietf:params:netconf:capability:yang-library:1.0?revision=%s&module-set-id=%s",
-                        mod->revision, yl_content_id);
-                NC_CHECK_GOTO(nc_add_cpblt(str, &cpblts, &count), error);
+                str_used = 0;
+                NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size,
+                        "urn:ietf:params:netconf:capability:yang-library:1.0?revision=%s&module-set-id=%s",
+                        mod->revision, yl_content_id), unlock_error);
+                NC_CHECK_GOTO(nc_add_cpblt(str, &cpblts, &count), unlock_error);
             }
             free(yl_content_id);
             yl_content_id = NULL;
@@ -1396,58 +1444,37 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
             continue;
         }
 
-        str_len = sprintf(str, "%s?module=%s%s%s", mod->ns, mod->name, mod->revision ? "&revision=" : "",
-                mod->revision ? mod->revision : "");
+        str_used = 0;
+        NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, "%s?module=%s%s%s", mod->ns, mod->name,
+                mod->revision ? "&revision=" : "", mod->revision ? mod->revision : ""), unlock_error);
 
         if (mod->compiled) {
-            features_count = 0;
             LY_ARRAY_FOR(mod->compiled->features, v) {
-                feat = mod->compiled->features[v];
-                if (!features_count) {
-                    strcat(str, "&features=");
-                    str_len += 10;
+                if (!v) {
+                    NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, "&features="), unlock_error);
+                } else {
+                    NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, ","), unlock_error);
                 }
-                len = strlen(feat);
-                if (str_len + 1 + len >= NC_CPBLT_BUF_LEN) {
-                    ERRINT;
-                    break;
-                }
-                if (features_count) {
-                    strcat(str, ",");
-                    ++str_len;
-                }
-                strcat(str, feat);
-                str_len += len;
-                features_count++;
+                NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, mod->compiled->features[v]), unlock_error);
             }
         }
 
-        if (mod->deviated_by) {
-            strcat(str, "&deviations=");
-            str_len += 12;
-            dev_count = 0;
-            LY_ARRAY_FOR(mod->deviated_by, v) {
-                len = strlen(mod->deviated_by[v]->name);
-                if (str_len + 1 + len >= NC_CPBLT_BUF_LEN) {
-                    ERRINT;
-                    break;
-                }
-                if (dev_count) {
-                    strcat(str, ",");
-                    ++str_len;
-                }
-                strcat(str, mod->deviated_by[v]->name);
-                str_len += len;
-                dev_count++;
+        LY_ARRAY_FOR(mod->deviated_by, v) {
+            if (!v) {
+                NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, "&deviations="), unlock_error);
+            } else {
+                NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, ","), unlock_error);
             }
+            NC_CHECK_GOTO(nc_str_append(&str, &str_used, &str_size, mod->deviated_by[v]->name), unlock_error);
         }
 
-        NC_CHECK_GOTO(nc_add_cpblt(str, &cpblts, &count), error);
+        NC_CHECK_GOTO(nc_add_cpblt(str, &cpblts, &count), unlock_error);
     }
 
     /* HELLO UNLOCK */
     nc_rwlock_unlock(&server_opts.hello_lock, __func__);
 
+    free(str);
     return cpblts;
 
 unlock_error:
@@ -1462,6 +1489,7 @@ error:
         free(cpblts);
     }
     free(yl_content_id);
+    free(str);
     return NULL;
 }
 
