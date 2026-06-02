@@ -2232,6 +2232,7 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, const struct
     struct nc_server_reply *reply;
     const struct lysc_node *rpc_act = NULL;
     struct lyd_node *elem;
+    void *priv_ptr;
     int ret = 0;
     NC_MSG_TYPE r;
 
@@ -2258,7 +2259,8 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, const struct
         }
     }
 
-    if (!rpc_act->priv) {
+    priv_ptr = ATOMIC_PTR_LOAD_RELAXED(rpc_act->priv);
+    if (!priv_ptr) {
         if (!global_rpc_clb) {
             /* no callback, reply with a not-implemented error */
             reply = nc_server_reply_err(nc_err(session->ctx, NC_ERR_OP_NOT_SUPPORTED, NC_ERR_TYPE_PROT));
@@ -2266,7 +2268,7 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, const struct
             reply = global_rpc_clb(rpc->rpc, session);
         }
     } else {
-        clb = (nc_rpc_clb)rpc_act->priv;
+        clb = (nc_rpc_clb)priv_ptr;
         reply = clb(rpc->rpc, session);
     }
 
