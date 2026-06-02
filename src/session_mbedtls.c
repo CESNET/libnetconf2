@@ -1538,6 +1538,7 @@ nc_tls_privkey_export_openssh(const char *pk, char **privkey)
     int rc = 0;
     ssh_key sshkey = NULL;
 
+    (void)pk;
     *privkey = NULL;
 
     /* older versions of libssh (< v0.11.0) do not support exporting to OpenSSH format,
@@ -1556,9 +1557,10 @@ nc_tls_privkey_export_openssh(const char *pk, char **privkey)
         rc = 1;
         goto cleanup;
     }
-#endif // (LIBSSH_VERSION_MAJOR > 0) || (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR >= 11)
 
 cleanup:
+#endif // (LIBSSH_VERSION_MAJOR > 0) || (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR >= 11)
+
     ssh_key_free(sshkey);
     return rc;
 }
