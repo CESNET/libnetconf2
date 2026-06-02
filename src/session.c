@@ -1252,11 +1252,15 @@ static int
 nc_str_append(char **str, uint32_t *used, uint32_t *size, const char *app_format, ...)
 {
     va_list ap;
+    char *ptr;
     int r;
+
+    /* get the string end to avoid (NULL + 0) (which UBSAN reports as undefined behaviour :| ) */
+    ptr = *str ? *str + *used : NULL;
 
     /* try to append */
     va_start(ap, app_format);
-    r = vsnprintf(*str + *used, *size - *used, app_format, ap);
+    r = vsnprintf(ptr, *size - *used, app_format, ap);
     va_end(ap);
 
     if (*used + r >= *size) {
