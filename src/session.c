@@ -2020,7 +2020,121 @@ cleanup:
     return ret;
 }
 
-#endif
+/**
+ * @brief Download CRLs for certificates in the peer's chain and merge them into crl_store.
+ *
+ * @param[in] peer_chain Peer's certificate chain.
+ * @param[in] cert_store Certificate store containing CAs (for resolving CRL distribution points).
+ * @param[in,out] crl_store CRL store to add downloaded CRLs to.
+ * @return 0 on success, non-zero on error.
+ */
+static int
+nc_session_tls_crl_fetch_for_peer_chain(void *peer_chain, void *cert_store, void *crl_store)
+{
+    int i, ret = 0, uri_count = 0, j;
+    void *cert = NULL;
+    CURL *handle = NULL;
+    struct nc_curl_data downloaded = {0};
+    char **uris = NULL;
+
+    /* init curl */
+    ret = nc_session_curl_init(&handle, &downloaded);
+    if (ret) {
+        goto cleanup;
+    }
+
+    /* iterate over all certificates in the peer chain and collect CRL distribution point URIs */
+    for (i = 0; i < nc_tls_get_num_certs_wrap(peer_chain); i++) {
+        cert = nc_tls_get_cert_wrap(peer_chain, i);
+        uris = NULL;
+        uri_count = 0;
+
+        /*
+         * For the first (leaf) cert, pass cert_store to also extract CRL DPs
+         * from the CA certificates. For subsequent certs, pass NULL to only
+         * extract their own CRL DPs, avoiding duplicates from cert_store.
+         */
+        ret = nc_server_tls_get_crl_distpoint_uris_wrap(cert, i == 0 ? cert_store : NULL, &uris, &uri_count);
+        if (ret) {
+            goto cleanup;
+        }
+
+        for (j = 0; j < uri_count; j++) {
+            VRB(NULL, "Downloading CRL from \"%s\".", uris[j]);
+            ret = nc_session_curl_fetch(handle, uris[j]);
+            if (ret) {
+                WRN(NULL, "Failed to fetch CRL from \"%s\".", uris[j]);
+                continue;
+            }
+
+            ret = nc_server_tls_add_crl_to_store_wrap(downloaded.data, downloaded.size, crl_store);
+
+            free(downloaded.data);
+            downloaded.data = NULL;
+            downloaded.size = 0;
+
+            if (ret) {
+                for (j = j + 1; j < uri_count; j++) {
+                    free(uris[j]);
+                }
+                free(uris);
+                uris = NULL;
+                goto cleanup;
+            }
+        }
+
+        for (j = 0; j < uri_count; j++) {
+            free(uris[j]);
+        }
+        free(uris);
+        uris = NULL;
+    }
+
+cleanup:
+    curl_easy_cleanup(handle);
+    free(downloaded.data);
+    if (uris) {
+        for (i = 0; i < uri_count; i++) {
+            free(uris[i]);
+        }
+        free(uris);
+    }
+    return ret;
+}
+
+int
+nc_session_tls_crl_verify_post_handshake(void *tls_session, void *cert_store, void *crl_store)
+{
+    int ret = 0;
+    void *peer_chain = NULL;
+
+    peer_chain = nc_tls_get_peer_cert_chain_wrap(tls_session);
+    if (!peer_chain) {
+        /* no peer certificate, nothing to verify */
+        return 0;
+    }
+
+    if (!crl_store && !cert_store) {
+        /* no CRL store and no cert store, nothing to verify */
+        return 0;
+    }
+
+    /* download CRLs for peer certificates and add them to the CRL store */
+    ret = nc_session_tls_crl_fetch_for_peer_chain(peer_chain, cert_store, crl_store);
+    if (ret) {
+        return ret;
+    }
+
+    /* verify the peer chain against the CRLs */
+    ret = nc_tls_verify_cert_chain_crl_wrap(peer_chain, cert_store, crl_store);
+    if (ret) {
+        ERR(NULL, "Post-handshake CRL verification failed.");
+    }
+
+    return ret;
+}
+
+#endif /* NC_ENABLED_SSH_TLS */
 
 API const char *
 nc_yang_module_dir(void)

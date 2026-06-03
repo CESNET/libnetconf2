@@ -1181,6 +1181,48 @@ nc_client_tls_handshake_step_wrap(void *tls_session, int sock)
     }
 }
 
+void *
+nc_tls_get_peer_cert_chain_wrap(void *tls_session)
+{
+    return (mbedtls_x509_crt *)mbedtls_ssl_get_peer_cert(tls_session);
+}
+
+int
+nc_tls_verify_cert_chain_crl_wrap(void *cert_chain, void *cert_store, void *crl_store)
+{
+    const mbedtls_x509_crt *peer_chain = cert_chain;
+    const mbedtls_x509_crt *trust_ca = cert_store;
+    const mbedtls_x509_crl *ca_crl = crl_store;
+    uint32_t flags = 0;
+    int ret;
+
+    if (!crl_store || !cert_store) {
+        return 0;
+    }
+
+    ret = mbedtls_x509_crt_verify((mbedtls_x509_crt *)peer_chain,
+            (mbedtls_x509_crt *)trust_ca, (mbedtls_x509_crl *)ca_crl,
+            NULL, &flags, NULL, NULL);
+    if (ret != 0) {
+        ERR(NULL, "CRL verification failed (%s).", nc_tls_get_verify_err_str(flags));
+        return 1;
+    }
+
+    return 0;
+}
+
+void *
+nc_tls_get_cert_store_wrap(void *UNUSED(tls_cfg), struct nc_tls_ctx *tls_ctx)
+{
+    return tls_ctx->cert_store;
+}
+
+void *
+nc_tls_get_crl_store_wrap(void *UNUSED(tls_cfg), struct nc_tls_ctx *tls_ctx)
+{
+    return tls_ctx->crl_store;
+}
+
 void
 nc_tls_ctx_destroy_wrap(struct nc_tls_ctx *tls_ctx)
 {
@@ -1315,8 +1357,12 @@ nc_tls_setup_config_from_ctx_wrap(struct nc_tls_ctx *tls_ctx, void *tls_cfg)
     mbedtls_ssl_conf_rng(tls_cfg, mbedtls_ctr_drbg_random, tls_ctx->ctr_drbg);
     /* set config's cert and key */
     mbedtls_ssl_conf_own_cert(tls_cfg, tls_ctx->cert, tls_ctx->pkey);
-    /* set config's CA and CRL cert store */
-    mbedtls_ssl_conf_ca_chain(tls_cfg, tls_ctx->cert_store, tls_ctx->crl_store);
+    /*
+     * Do NOT pass crl_store to mbedtls_ssl_conf_ca_chain. CRL verification is done
+     * post-handshake so that CRLs for peer certificates (received during the handshake)
+     * can also be downloaded and checked. crl_store is kept in tls_ctx for later use.
+     */
+    mbedtls_ssl_conf_ca_chain(tls_cfg, tls_ctx->cert_store, NULL);
 
     return 0;
 }
@@ -2000,20 +2046,27 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *leaf_cert, void *cert_store, cha
     size_t len;
     mbedtls_x509_buf ext_oid = {0};
 
-    NC_CHECK_ARG_RET(NULL, cert_store, uris, uri_count, 1);
+    if (!uris || !uri_count) {
+        ERRINT;
+        return 1;
+    }
 
     *uris = NULL;
     *uri_count = 0;
 
-    /* get the number of certs in the store */
-    cert = cert_store;
-    cert_count = 0;
-    while (cert) {
-        ++cert_count;
-        cert = cert->next;
+    if (cert_store) {
+        /* get the number of certs in the store */
+        cert = cert_store;
+        cert_count = 0;
+        while (cert) {
+            ++cert_count;
+            cert = cert->next;
+        }
+    } else {
+        cert_count = 0;
     }
 
-    /* iterate over all the certs */
+    /* iterate over leaf cert (i = -1) and all the certs in the store */
     for (i = -1; i < cert_count; i++) {
         if (i == -1) {
             cert = leaf_cert;

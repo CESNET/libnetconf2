@@ -966,6 +966,14 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
         goto fail;
     }
 
+    /* post-handshake CRL verification: download CRLs for peer certs and verify the full chain */
+    if (nc_session_tls_crl_verify_post_handshake(session->ti.tls.session,
+            nc_tls_get_cert_store_wrap(session->ti.tls.config, &session->ti.tls.ctx),
+            nc_tls_get_crl_store_wrap(session->ti.tls.config, &session->ti.tls.ctx))) {
+        ERR(session, "TLS accept failed (post-handshake CRL verification).");
+        goto fail;
+    }
+
     return 1;
 
 fail:

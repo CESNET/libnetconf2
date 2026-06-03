@@ -304,6 +304,7 @@ nc_server_tls_add_crl_to_store_wrap(const unsigned char *crl_data, size_t size, 
     int rc = 0;
     X509_CRL *crl = NULL;
     BIO *bio = NULL;
+    unsigned long err_code;
 
     if (!crl_data || !size) {
         ERR(NULL, "CRL data is empty.");
@@ -331,9 +332,15 @@ nc_server_tls_add_crl_to_store_wrap(const unsigned char *crl_data, size_t size, 
 
     /* we obtained the CRL, now add it to the CRL store */
     if (X509_STORE_add_crl(crl_store, crl) != 1) {
-        ERR(NULL, "Error adding CRL to store (%s).", ERR_reason_error_string(ERR_get_error()));
-        rc = 1;
-        goto cleanup;
+        err_code = ERR_get_error();
+
+        if (ERR_GET_REASON(err_code) == X509_R_CRL_ALREADY_DELTA) {
+            VRB(NULL, "CRL already present in store, skipping.");
+        } else {
+            ERR(NULL, "Error adding CRL to store (%s).", ERR_reason_error_string(err_code));
+            rc = 1;
+            goto cleanup;
+        }
     }
 
 cleanup:
@@ -754,6 +761,107 @@ nc_client_tls_handshake_step_wrap(void *tls_session, int UNUSED(sock))
     return -1;
 }
 
+void *
+nc_tls_get_peer_cert_chain_wrap(void *tls_session)
+{
+    /* SSL_get0_verified_chain() returns the full verified chain including the
+     * leaf certificate, unlike SSL_get_peer_cert_chain() which may exclude
+     * the leaf cert on the server side in TLS 1.3 */
+    return SSL_get0_verified_chain(tls_session);
+}
+
+int
+nc_tls_verify_cert_chain_crl_wrap(void *cert_chain, void *cert_store, void *UNUSED(crl_store))
+{
+    STACK_OF(X509) * chain = cert_chain;
+    X509_STORE *store = cert_store;
+    X509_STORE_CTX *verify_ctx = NULL;
+
+    STACK_OF(X509_OBJECT) * objs;
+    STACK_OF(X509) * untrusted = NULL;
+    int i, ncerts, nobjs, have_crls = 0, ret = 1;
+
+    ncerts = sk_X509_num(chain);
+    if (ncerts == 0) {
+        return 0;
+    }
+
+    /* check if the store actually contains any CRLs */
+    objs = X509_STORE_get0_objects(store);
+    if (objs) {
+        nobjs = sk_X509_OBJECT_num(objs);
+        for (i = 0; i < nobjs; i++) {
+            if (X509_OBJECT_get0_X509_CRL(sk_X509_OBJECT_value(objs, i))) {
+                have_crls = 1;
+                break;
+            }
+        }
+    }
+
+    if (!have_crls) {
+        DBG(NULL, "No CRLs in store, skipping CRL verification.");
+        return 0;
+    }
+
+    verify_ctx = X509_STORE_CTX_new();
+    if (!verify_ctx) {
+        ERR(NULL, "Failed to create X509_STORE_CTX (%s).", ERR_reason_error_string(ERR_get_error()));
+        goto cleanup;
+    }
+
+    if (!X509_STORE_CTX_init(verify_ctx, store, sk_X509_value(chain, 0), NULL)) {
+        ERR(NULL, "Failed to init X509_STORE_CTX (%s).", ERR_reason_error_string(ERR_get_error()));
+        goto cleanup;
+    }
+
+    /* set intermediate certs as untrusted (all chain certs except the leaf at index 0) */
+    if (ncerts > 1) {
+        untrusted = sk_X509_new_null();
+        if (!untrusted) {
+            goto cleanup;
+        }
+        for (i = 1; i < ncerts; i++) {
+            if (!sk_X509_push(untrusted, sk_X509_value(chain, i))) {
+                goto cleanup;
+            }
+        }
+        X509_STORE_CTX_set0_untrusted(verify_ctx, untrusted);
+
+        /* ownership transferred */
+        untrusted = NULL;
+    }
+
+    /* enable CRL checks for all certificates in the chain */
+    X509_STORE_CTX_set_flags(verify_ctx, X509_V_FLAG_CRL_CHECK | X509_V_FLAG_CRL_CHECK_ALL);
+
+    ret = X509_verify_cert(verify_ctx);
+    if (ret != 1) {
+        ERR(NULL, "CRL verification failed (%s).",
+                X509_verify_cert_error_string(X509_STORE_CTX_get_error(verify_ctx)));
+        ret = 1;
+    } else {
+        ret = 0;
+    }
+
+cleanup:
+    sk_X509_free(untrusted);
+    X509_STORE_CTX_free(verify_ctx);
+    return ret;
+}
+
+void *
+nc_tls_get_cert_store_wrap(void *tls_cfg, struct nc_tls_ctx *UNUSED(tls_ctx))
+{
+    return SSL_CTX_get_cert_store(tls_cfg);
+}
+
+void *
+nc_tls_get_crl_store_wrap(void *tls_cfg, struct nc_tls_ctx *UNUSED(tls_ctx))
+{
+    /* OpenSSL stores CRLs in the same X509_STORE as CA certs */
+    return SSL_CTX_get_cert_store(tls_cfg);
+}
+
 void
 nc_tls_ctx_destroy_wrap(struct nc_tls_ctx *UNUSED(tls_ctx))
 {
@@ -904,8 +1012,11 @@ nc_tls_setup_config_from_ctx_wrap(struct nc_tls_ctx *tls_ctx, void *tls_cfg)
             return 1;
         }
 
-        /* enable CRL checks */
-        X509_STORE_set_flags(tls_ctx->cert_store, X509_V_FLAG_CRL_CHECK | X509_V_FLAG_CRL_CHECK_ALL);
+        /*
+         * Do NOT enable CRL checks here. CRL verification is done post-handshake
+         * so that CRLs for peer certificates (received during the handshake) can
+         * also be downloaded and checked.
+         */
     }
 
     SSL_CTX_set_cert_store(tls_cfg, tls_ctx->cert_store);
@@ -1553,21 +1664,26 @@ nc_server_tls_get_crl_distpoint_uris_wrap(void *leaf_cert, void *cert_store, cha
     ASN1_STRING *asn_string_uri;
     void *tmp;
 
+    if (!uris || !uri_count) {
+        ERRINT;
+        return 1;
+    }
+
     *uris = NULL;
     *uri_count = 0;
 
-    NC_CHECK_ARG_RET(NULL, cert_store, uris, uri_count, 1);
-
-    /* treat all entries in the cert_store as X509_OBJECTs */
-    objs = X509_STORE_get0_objects(cert_store);
-    if (!objs) {
-        ERR(NULL, "Getting certificates from store failed (%s).", ERR_reason_error_string(ERR_get_error()));
-        ret = -1;
-        goto cleanup;
+    if (cert_store) {
+        /* treat all entries in the cert_store as X509_OBJECTs */
+        objs = X509_STORE_get0_objects(cert_store);
+        if (!objs) {
+            ERR(NULL, "Getting certificates from store failed (%s).", ERR_reason_error_string(ERR_get_error()));
+            ret = -1;
+            goto cleanup;
+        }
     }
 
-    /* iterate over all the CAs */
-    for (i = -1; i < sk_X509_OBJECT_num(objs); i++) {
+    /* iterate over leaf cert (i = -1) and all the CAs in the store */
+    for (i = -1; cert_store ? (i < sk_X509_OBJECT_num(objs)) : (i < 0); i++) {
         if (i == -1) {
             cert = leaf_cert;
         } else {
