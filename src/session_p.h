@@ -1468,6 +1468,21 @@ void _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts);
  */
 int nc_session_tls_crl_from_cert_ext_fetch(void *leaf_cert, void *cert_store, void **crl_store);
 
+/**
+ * @brief Perform post-handshake CRL verification for the peer's certificate chain.
+ *
+ * Downloads CRLs from the peer certificates' CRL distribution point extensions
+ * and verifies the entire peer chain against all collected CRLs.
+ *
+ * @param[in] tls_session Established TLS session.
+ * @param[in] cert_store Certificate store containing CAs and local CRLs
+ * (OpenSSL: used for verification, MbedTLS: for CRL DP URI extraction and verification).
+ * @param[in] crl_store CRL store with pre-downloaded CRLs
+ * (OpenSSL: unused as CRLs are in cert_store, MbedTLS: used for verification).
+ * @return 0 on success, non-zero on failure.
+ */
+int nc_session_tls_crl_verify_post_handshake(void *tls_session, void *cert_store, void *crl_store);
+
 #endif /* NC_ENABLED_SSH_TLS */
 
 /**

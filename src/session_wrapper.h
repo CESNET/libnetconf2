@@ -715,8 +715,11 @@ void * nc_tls_import_pubkey_file_wrap(const char *pubkey_path);
 /**
  * @brief Get all the URIs from the CRLDistributionPoints x509v3 extensions.
  *
+ * If cert_store is non-NULL, also extracts CRL DPs from CA certificates
+ * in the store. If NULL, only the leaf_cert's own CRL DPs are extracted.
+ *
  * @param[in] leaf_cert Server/client certificate.
- * @param[in] cert_store Certificate store.
+ * @param[in] cert_store Certificate store (may be NULL to skip store iteration).
  * @param[out] uris URIs to download the CRLs from.
  * @param[out] uri_count Number of URIs found.
  * @return 0 on success, non-zero on fail.
@@ -768,5 +771,56 @@ void nc_tls_keylog_session_wrap(void *session);
  * @return 0 on success, 1 on error.
  */
 int nc_tls_generate_random_bytes_wrap(void *buf, size_t num);
+
+/**
+ * @brief Get the peer's certificate chain from an established TLS session.
+ *
+ * @param[in] tls_session TLS session.
+ * @return Peer's certificate chain, NULL on error or if no peer cert.
+ */
+void *nc_tls_get_peer_cert_chain_wrap(void *tls_session);
+
+/**
+ * @brief Verify a certificate chain against CRLs.
+ *
+ * For OpenSSL, uses X509_STORE_CTX with X509_V_FLAG_CRL_CHECK |
+ * X509_V_FLAG_CRL_CHECK_ALL to verify the chain including CRL signature checks.
+ * cert_store must contain both CAs and CRLs. crl_store is unused.
+ *
+ * For MbedTLS, uses mbedtls_x509_crt_verify with the CRL store, which verifies
+ * CRL signatures as part of chain verification. Both cert_store (CA certs)
+ * and crl_store (CRLs) are required.
+ *
+ * @param[in] cert_chain Peer's certificate chain.
+ * @param[in] cert_store Certificate store (OpenSSL: contains CAs + CRLs, MbedTLS: CA certs).
+ * @param[in] crl_store CRL store (OpenSSL: unused, MbedTLS: CRLs for verification).
+ * @return 0 on success, non-zero on failure.
+ */
+int nc_tls_verify_cert_chain_crl_wrap(void *cert_chain, void *cert_store, void *crl_store);
+
+/**
+ * @brief Get the certificate store from a TLS configuration.
+ *
+ * For OpenSSL, retrieves the X509_STORE from the SSL_CTX.
+ * For MbedTLS, returns the cert_store from the TLS context.
+ *
+ * @param[in] tls_cfg TLS configuration (SSL_CTX for OpenSSL, unused for MbedTLS).
+ * @param[in] tls_ctx TLS context (unused for OpenSSL, used for MbedTLS).
+ * @return Certificate store or NULL on error.
+ */
+void *nc_tls_get_cert_store_wrap(void *tls_cfg, struct nc_tls_ctx *tls_ctx);
+
+/**
+ * @brief Get the CRL store from a TLS context.
+ *
+ * For OpenSSL, returns the cert_store (X509_STORE), since CRLs are stored
+ * in the same X509_STORE as CA certs.
+ * For MbedTLS, returns the crl_store from the TLS context.
+ *
+ * @param[in] tls_cfg TLS configuration (SSL_CTX for OpenSSL, unused for MbedTLS).
+ * @param[in] tls_ctx TLS context (unused for OpenSSL, used for MbedTLS).
+ * @return CRL store or NULL.
+ */
+void *nc_tls_get_crl_store_wrap(void *tls_cfg, struct nc_tls_ctx *tls_ctx);
 
 #endif

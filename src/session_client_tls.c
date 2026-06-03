@@ -306,6 +306,14 @@ nc_client_tls_session_new(int sock, const char *host, struct nc_client_tls_opts 
         goto fail;
     }
 
+    /* post-handshake CRL verification: download CRLs for peer certs and verify the full chain */
+    if (nc_session_tls_crl_verify_post_handshake(tls_session,
+            nc_tls_get_cert_store_wrap(tls_cfg, tls_ctx),
+            nc_tls_get_crl_store_wrap(tls_cfg, tls_ctx))) {
+        ERR(NULL, "TLS connect failed (post-handshake CRL verification).");
+        goto fail;
+    }
+
     *out_tls_cfg = tls_cfg;
     return tls_session;
 
