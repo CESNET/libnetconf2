@@ -228,9 +228,9 @@ nc_client_tls_session_new(int sock, const char *host, struct nc_client_tls_opts 
 {
     int ret = 0;
     struct timespec ts_timeout;
-    void *tls_session, *tls_cfg, *cli_cert, *cli_pkey, *cert_store, *crl_store;
+    void *tls_session, *tls_cfg, *cli_cert, *cli_pkey, *cert_store;
 
-    tls_session = tls_cfg = cli_cert = cli_pkey = cert_store = crl_store = NULL;
+    tls_session = tls_cfg = cli_cert = cli_pkey = cert_store = NULL;
 
     /* prepare TLS context from which a session will be created */
     tls_cfg = nc_tls_config_new_wrap(NC_CLIENT);
@@ -254,23 +254,18 @@ nc_client_tls_session_new(int sock, const char *host, struct nc_client_tls_opts 
         goto fail;
     }
 
-    /* load CRLs from set certificates' extensions */
-    if (nc_session_tls_crl_from_cert_ext_fetch(cli_cert, cert_store, &crl_store)) {
-        goto fail;
-    }
-
     /* set client's verify mode flags */
     if (nc_client_tls_set_verify_wrap(tls_cfg)) {
         goto fail;
     }
 
     /* init TLS context and store data which may be needed later in it */
-    if (nc_tls_init_ctx_wrap(cli_cert, cli_pkey, cert_store, crl_store, NULL, tls_ctx)) {
+    if (nc_tls_init_ctx_wrap(cli_cert, cli_pkey, cert_store, NULL, tls_ctx)) {
         goto fail;
     }
 
     /* memory is managed by context now */
-    cli_cert = cli_pkey = cert_store = crl_store = NULL;
+    cli_cert = cli_pkey = cert_store = NULL;
 
     /* setup config from ctx */
     if (nc_tls_setup_config_from_ctx_wrap(tls_ctx, tls_cfg)) {
@@ -308,8 +303,7 @@ nc_client_tls_session_new(int sock, const char *host, struct nc_client_tls_opts 
 
     /* post-handshake CRL verification: download CRLs for peer certs and verify the full chain */
     if (nc_session_tls_crl_verify_post_handshake(tls_session,
-            nc_tls_get_cert_store_wrap(tls_cfg, tls_ctx),
-            nc_tls_get_crl_store_wrap(tls_cfg, tls_ctx))) {
+            nc_tls_get_cert_store_wrap(tls_cfg, tls_ctx))) {
         ERR(NULL, "TLS connect failed (post-handshake CRL verification).");
         goto fail;
     }
@@ -326,7 +320,6 @@ fail:
     nc_tls_cert_destroy_wrap(cli_cert);
     nc_tls_privkey_destroy_wrap(cli_pkey);
     nc_tls_cert_store_destroy_wrap(cert_store);
-    nc_tls_crl_store_destroy_wrap(crl_store);
     nc_tls_config_destroy_wrap(tls_cfg);
     return NULL;
 }

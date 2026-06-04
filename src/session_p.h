@@ -116,6 +116,13 @@ extern struct nc_server_opts server_opts;
 #define NC_CH_CONNECT_TIMEOUT 500
 
 /**
+ * @brief Timeout in msec for CURL connection phase when downloading CRLs.
+ * Limits the time spent on DNS resolution and TCP handshake per URI,
+ * preventing long delays on unreachable CRL distribution points.
+ */
+#define NC_CURL_CONNECT_TIMEOUT_MS 2000
+
+/**
  * @brief Timeout in msec for acquiring the hello_lock
  * (iterating through all YANG modules + building capability strings)
  */
@@ -1459,29 +1466,17 @@ void nc_client_tls_destroy_opts(void);
 void _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts);
 
 /**
- * @brief Fetch CRLs from the x509v3 CRLDistributionPoints extension.
- *
- * @param[in] leaf_cert Server/client certificate.
- * @param[in] cert_store CA/EE certificates store.
- * @param[out] crl_store Created CRL store.
- * @return 0 on success, 1 on error.
- */
-int nc_session_tls_crl_from_cert_ext_fetch(void *leaf_cert, void *cert_store, void **crl_store);
-
-/**
  * @brief Perform post-handshake CRL verification for the peer's certificate chain.
  *
  * Downloads CRLs from the peer certificates' CRL distribution point extensions
  * and verifies the entire peer chain against all collected CRLs.
  *
  * @param[in] tls_session Established TLS session.
- * @param[in] cert_store Certificate store containing CAs and local CRLs
- * (OpenSSL: used for verification, MbedTLS: for CRL DP URI extraction and verification).
- * @param[in] crl_store CRL store with pre-downloaded CRLs
- * (OpenSSL: unused as CRLs are in cert_store, MbedTLS: used for verification).
+ * @param[in] cert_store Certificate store containing CAs
+ * (OpenSSL: also used for CRL storage and verification, MbedTLS: for CRL DP URI extraction and verification).
  * @return 0 on success, non-zero on failure.
  */
-int nc_session_tls_crl_verify_post_handshake(void *tls_session, void *cert_store, void *crl_store);
+int nc_session_tls_crl_verify_post_handshake(void *tls_session, void *cert_store);
 
 #endif /* NC_ENABLED_SSH_TLS */
 

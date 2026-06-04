@@ -840,10 +840,10 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     struct timespec ts_timeout;
     struct nc_tls_verify_cb_data cb_data = {0};
     struct nc_endpt *referenced_endpt;
-    void *tls_cfg, *srv_cert, *srv_pkey, *cert_store, *crl_store, *cipher_suites;
+    void *tls_cfg, *srv_cert, *srv_pkey, *cert_store, *cipher_suites;
     uint32_t cert_count = 0;
 
-    tls_cfg = srv_cert = srv_pkey = cert_store = crl_store = cipher_suites = NULL;
+    tls_cfg = srv_cert = srv_pkey = cert_store = cipher_suites = NULL;
 
     /* set verify cb data */
     cb_data.session = session;
@@ -898,11 +898,6 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
         goto fail;
     }
 
-    if (nc_session_tls_crl_from_cert_ext_fetch(srv_cert, cert_store, &crl_store)) {
-        ERR(session, "Loading server CRL failed.");
-        goto fail;
-    }
-
     /* set supported TLS versions */
     if (nc_server_tls_set_tls_versions_wrap(tls_cfg, opts->min_version, opts->max_version)) {
         ERR(session, "Setting supported server TLS versions failed.");
@@ -920,12 +915,12 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     nc_server_tls_set_verify_wrap(tls_cfg, &cb_data);
 
     /* init TLS context and store data which may be needed later in it */
-    if (nc_tls_init_ctx_wrap(srv_cert, srv_pkey, cert_store, crl_store, cipher_suites, &session->ti.tls.ctx)) {
+    if (nc_tls_init_ctx_wrap(srv_cert, srv_pkey, cert_store, cipher_suites, &session->ti.tls.ctx)) {
         goto fail;
     }
 
     /* memory is managed by context now */
-    srv_cert = srv_pkey = cert_store = crl_store = cipher_suites = NULL;
+    srv_cert = srv_pkey = cert_store = cipher_suites = NULL;
 
     /* setup config from ctx */
     if (nc_tls_setup_config_from_ctx_wrap(&session->ti.tls.ctx, tls_cfg)) {
@@ -968,8 +963,7 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
 
     /* post-handshake CRL verification: download CRLs for peer certs and verify the full chain */
     if (nc_session_tls_crl_verify_post_handshake(session->ti.tls.session,
-            nc_tls_get_cert_store_wrap(session->ti.tls.config, &session->ti.tls.ctx),
-            nc_tls_get_crl_store_wrap(session->ti.tls.config, &session->ti.tls.ctx))) {
+            nc_tls_get_cert_store_wrap(session->ti.tls.config, &session->ti.tls.ctx))) {
         ERR(session, "TLS accept failed (post-handshake CRL verification).");
         goto fail;
     }
@@ -985,7 +979,6 @@ fail:
     nc_tls_cert_destroy_wrap(srv_cert);
     nc_tls_privkey_destroy_wrap(srv_pkey);
     nc_tls_cert_store_destroy_wrap(cert_store);
-    nc_tls_crl_store_destroy_wrap(crl_store);
     free(cipher_suites);
 
     if (timeouted) {

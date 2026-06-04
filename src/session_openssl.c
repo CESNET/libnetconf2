@@ -856,10 +856,16 @@ nc_tls_get_cert_store_wrap(void *tls_cfg, struct nc_tls_ctx *UNUSED(tls_ctx))
 }
 
 void *
-nc_tls_get_crl_store_wrap(void *tls_cfg, struct nc_tls_ctx *UNUSED(tls_ctx))
+nc_tls_crl_store_for_post_handshake_wrap(void *cert_store)
 {
     /* OpenSSL stores CRLs in the same X509_STORE as CA certs */
-    return SSL_CTX_get_cert_store(tls_cfg);
+    return cert_store;
+}
+
+void
+nc_tls_crl_store_post_handshake_free_wrap(void *UNUSED(crl_store))
+{
+    /* no-op: the store is the cert_store owned by SSL_CTX */
 }
 
 void
@@ -950,46 +956,11 @@ cleanup:
 
 int
 nc_tls_init_ctx_wrap(void *cert, void *pkey, void *cert_store,
-        void *crl_store, void *UNUSED(cipher_suites), struct nc_tls_ctx *tls_ctx)
+        void *UNUSED(cipher_suites), struct nc_tls_ctx *tls_ctx)
 {
     tls_ctx->cert = cert;
     tls_ctx->pkey = pkey;
     tls_ctx->cert_store = cert_store;
-    tls_ctx->crl_store = crl_store;
-    return 0;
-}
-
-/**
- * @brief Move CRLs from one store to another.
- *
- * @param[in] src Source store.
- * @param[in] dst Destination store.
- * @return 0 on success, 1 on error.
- */
-static int
-nc_tls_move_crls_to_store(const X509_STORE *src, X509_STORE *dst)
-{
-    int i, nobjs = 0;
-
-    STACK_OF(X509_OBJECT) * objs;
-    X509_OBJECT *obj;
-    X509_CRL *crl;
-
-    objs = X509_STORE_get0_objects(src);
-    nobjs = sk_X509_OBJECT_num(objs);
-    for (i = 0; i < nobjs; i++) {
-        obj = sk_X509_OBJECT_value(objs, i);
-        crl = X509_OBJECT_get0_X509_CRL(obj);
-        if (!crl) {
-            /* not a CRL */
-            continue;
-        }
-        if (!X509_STORE_add_crl(dst, crl)) {
-            ERR(NULL, "Adding CRL to the store failed (%s).", ERR_reason_error_string(ERR_get_error()));
-            return 1;
-        }
-    }
-
     return 0;
 }
 
@@ -1006,27 +977,12 @@ nc_tls_setup_config_from_ctx_wrap(struct nc_tls_ctx *tls_ctx, void *tls_cfg)
         return 1;
     }
 
-    if (tls_ctx->crl_store) {
-        /* move CRLs from crl_store to cert_store, because SSL_CTX can only have one store */
-        if (nc_tls_move_crls_to_store(tls_ctx->crl_store, tls_ctx->cert_store)) {
-            return 1;
-        }
-
-        /*
-         * Do NOT enable CRL checks here. CRL verification is done post-handshake
-         * so that CRLs for peer certificates (received during the handshake) can
-         * also be downloaded and checked.
-         */
-    }
-
     SSL_CTX_set_cert_store(tls_cfg, tls_ctx->cert_store);
 
     X509_free(tls_ctx->cert);
     tls_ctx->cert = NULL;
     EVP_PKEY_free(tls_ctx->pkey);
     tls_ctx->pkey = NULL;
-    X509_STORE_free(tls_ctx->crl_store);
-    tls_ctx->crl_store = NULL;
 
     return 0;
 }

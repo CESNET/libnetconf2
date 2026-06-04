@@ -41,7 +41,6 @@ struct nc_tls_ctx {
     mbedtls_x509_crt *cert;             /**< Certificate. */
     mbedtls_pk_context *pkey;           /**< Private key. */
     mbedtls_x509_crt *cert_store;       /**< CA certificates store. */
-    mbedtls_x509_crl *crl_store;        /**< CRL store. */
 };
 
 #else
@@ -57,7 +56,6 @@ struct nc_tls_ctx {
     X509 *cert;             /**< Certificate. */
     EVP_PKEY *pkey;         /**< Private key. */
     X509_STORE *cert_store; /**< CA certificate store. */
-    X509_STORE *crl_store;  /**< CRL store. */
 };
 
 #endif
@@ -454,13 +452,12 @@ int nc_client_tls_set_hostname_wrap(void *tls_session, const char *hostname);
  * @param[in] cert Certificate.
  * @param[in] pkey Private key.
  * @param[in] cert_store Certificate store.
- * @param[in] crl_store CRL store.
  * @param[in] cipher_suites List of cipher suites.
  * @param[in,out] tls_ctx TLS context.
  * @return 0 on success, non-zero on fail.
  */
 int nc_tls_init_ctx_wrap(void *cert, void *pkey, void *cert_store,
-        void *crl_store, void *cipher_suites, struct nc_tls_ctx *tls_ctx);
+        void *cipher_suites, struct nc_tls_ctx *tls_ctx);
 
 /**
  * @brief Setup a TLS configuration from a TLS context.
@@ -811,16 +808,27 @@ int nc_tls_verify_cert_chain_crl_wrap(void *cert_chain, void *cert_store, void *
 void *nc_tls_get_cert_store_wrap(void *tls_cfg, struct nc_tls_ctx *tls_ctx);
 
 /**
- * @brief Get the CRL store from a TLS context.
+ * @brief Get the CRL store for post-handshake CRL verification.
  *
  * For OpenSSL, returns the cert_store (X509_STORE), since CRLs are stored
- * in the same X509_STORE as CA certs.
- * For MbedTLS, returns the crl_store from the TLS context.
+ * in the same X509_STORE as CA certs. Must NOT be freed by the caller.
  *
- * @param[in] tls_cfg TLS configuration (SSL_CTX for OpenSSL, unused for MbedTLS).
- * @param[in] tls_ctx TLS context (unused for OpenSSL, used for MbedTLS).
- * @return CRL store or NULL.
+ * For MbedTLS, creates and returns a new empty CRL store. Must be freed
+ * by calling nc_tls_crl_store_post_handshake_free_wrap after use.
+ *
+ * @param[in] cert_store Certificate store.
+ * @return CRL store or NULL on error.
  */
-void *nc_tls_get_crl_store_wrap(void *tls_cfg, struct nc_tls_ctx *tls_ctx);
+void *nc_tls_crl_store_for_post_handshake_wrap(void *cert_store);
+
+/**
+ * @brief Free the CRL store obtained from nc_tls_crl_store_for_post_handshake_wrap.
+ *
+ * For OpenSSL, no-op since the store is the cert_store owned by SSL_CTX.
+ * For MbedTLS, destroys the CRL store.
+ *
+ * @param[in] crl_store CRL store to free.
+ */
+void nc_tls_crl_store_post_handshake_free_wrap(void *crl_store);
 
 #endif
