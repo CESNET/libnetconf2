@@ -1200,6 +1200,12 @@ nc_tls_verify_cert_chain_crl_wrap(void *cert_chain, void *cert_store, void *crl_
         return 0;
     }
 
+    /* skip verification if the CRL store is empty (no CRLs were downloaded) */
+    if (((mbedtls_x509_crl *)crl_store)->raw.len == 0) {
+        DBG(NULL, "No CRLs in store, skipping CRL verification.");
+        return 0;
+    }
+
     ret = mbedtls_x509_crt_verify((mbedtls_x509_crt *)peer_chain,
             (mbedtls_x509_crt *)trust_ca, (mbedtls_x509_crl *)ca_crl,
             NULL, &flags, NULL, NULL);
@@ -1218,9 +1224,15 @@ nc_tls_get_cert_store_wrap(void *UNUSED(tls_cfg), struct nc_tls_ctx *tls_ctx)
 }
 
 void *
-nc_tls_get_crl_store_wrap(void *UNUSED(tls_cfg), struct nc_tls_ctx *tls_ctx)
+nc_tls_crl_store_for_post_handshake_wrap(void *UNUSED(cert_store))
 {
-    return tls_ctx->crl_store;
+    return nc_tls_crl_store_new_wrap();
+}
+
+void
+nc_tls_crl_store_post_handshake_free_wrap(void *crl_store)
+{
+    nc_tls_crl_store_destroy_wrap(crl_store);
 }
 
 void
@@ -1230,7 +1242,6 @@ nc_tls_ctx_destroy_wrap(struct nc_tls_ctx *tls_ctx)
     nc_tls_cert_destroy_wrap(tls_ctx->cert);
     nc_tls_privkey_destroy_wrap(tls_ctx->pkey);
     nc_tls_cert_store_destroy_wrap(tls_ctx->cert_store);
-    nc_tls_crl_store_destroy_wrap(tls_ctx->crl_store);
     free(tls_ctx->sock);
     free(tls_ctx->cipher_suites);
 }
@@ -1332,7 +1343,7 @@ nc_client_tls_set_hostname_wrap(void *tls_session, const char *hostname)
 
 int
 nc_tls_init_ctx_wrap(void *cert, void *pkey, void *cert_store,
-        void *crl_store, void *cipher_suites, struct nc_tls_ctx *tls_ctx)
+        void *cipher_suites, struct nc_tls_ctx *tls_ctx)
 {
     /* setup rng */
     if (nc_tls_rng_new(&tls_ctx->ctr_drbg, &tls_ctx->entropy)) {
@@ -1346,7 +1357,6 @@ nc_tls_init_ctx_wrap(void *cert, void *pkey, void *cert_store,
     tls_ctx->cert = cert;
     tls_ctx->pkey = pkey;
     tls_ctx->cert_store = cert_store;
-    tls_ctx->crl_store = crl_store;
     return 0;
 }
 
@@ -1358,9 +1368,9 @@ nc_tls_setup_config_from_ctx_wrap(struct nc_tls_ctx *tls_ctx, void *tls_cfg)
     /* set config's cert and key */
     mbedtls_ssl_conf_own_cert(tls_cfg, tls_ctx->cert, tls_ctx->pkey);
     /*
-     * Do NOT pass crl_store to mbedtls_ssl_conf_ca_chain. CRL verification is done
-     * post-handshake so that CRLs for peer certificates (received during the handshake)
-     * can also be downloaded and checked. crl_store is kept in tls_ctx for later use.
+     * Do NOT pass a CRL store to mbedtls_ssl_conf_ca_chain. CRL verification
+     * is done post-handshake so that CRLs for peer certificates (received
+     * during the handshake) can also be downloaded and checked.
      */
     mbedtls_ssl_conf_ca_chain(tls_cfg, tls_ctx->cert_store, NULL);
 

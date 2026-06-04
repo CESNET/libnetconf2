@@ -1920,6 +1920,53 @@ nc_session_curl_fetch(CURL *handle, const char *url)
 }
 
 /**
+ * @brief Check if a URI has already been processed, add it to the seen list if not.
+ *
+ * @param[in] uri URI to check.
+ * @param[in,out] seen_uris Array of already seen URIs.
+ * @param[in,out] seen_count Number of seen URIs.
+ * @return 1 if already seen, 0 if added (not seen before), -1 on error.
+ */
+static int
+nc_session_uri_seen(const char *uri, char ***seen_uris, int *seen_count)
+{
+    int i;
+    char **tmp;
+
+    for (i = 0; i < *seen_count; i++) {
+        if (!strcmp((*seen_uris)[i], uri)) {
+            return 1;
+        }
+    }
+
+    tmp = nc_realloc(*seen_uris, (*seen_count + 1) * sizeof **seen_uris);
+    NC_CHECK_ERRMEM_RET(!tmp, -1);
+    *seen_uris = tmp;
+    (*seen_uris)[*seen_count] = strdup(uri);
+    NC_CHECK_ERRMEM_RET(!(*seen_uris)[*seen_count], -1);
+    (*seen_count)++;
+
+    return 0;
+}
+
+/**
+ * @brief Free the seen URIs array.
+ *
+ * @param[in] seen_uris Array of seen URIs.
+ * @param[in] seen_count Number of seen URIs.
+ */
+static void
+nc_session_seen_uris_free(char **seen_uris, int seen_count)
+{
+    int i;
+
+    for (i = 0; i < seen_count; i++) {
+        free(seen_uris[i]);
+    }
+    free(seen_uris);
+}
+
+/**
  * @brief Initialize CURL handle for downloading CRL.
  *
  * @param[out] handle CURL handle.
@@ -1939,6 +1986,18 @@ nc_session_curl_init(CURL **handle, struct nc_curl_data *data)
         return 1;
     }
 
+    /* limit connection phase to avoid long delays on unreachable CRL hosts */
+    if (curl_easy_setopt(*handle, CURLOPT_CONNECTTIMEOUT_MS, NC_CURL_CONNECT_TIMEOUT_MS)) {
+        ERR(NULL, "Setting curl connection timeout failed.");
+        return 1;
+    }
+
+    /* do not use signals for timeouts, required for thread safety */
+    if (curl_easy_setopt(*handle, CURLOPT_NOSIGNAL, 1L)) {
+        ERR(NULL, "Setting CURLOPT_NOSIGNAL failed.");
+        return 1;
+    }
+
     if (curl_easy_setopt(*handle, CURLOPT_WRITEFUNCTION, nc_session_curl_cb)) {
         ERR(NULL, "Setting curl callback failed.");
         return 1;
@@ -1952,74 +2011,6 @@ nc_session_curl_init(CURL **handle, struct nc_curl_data *data)
     return 0;
 }
 
-int
-nc_session_tls_crl_from_cert_ext_fetch(void *leaf_cert, void *cert_store, void **crl_store)
-{
-    int ret = 0, uri_count = 0, i;
-    CURL *handle = NULL;
-    struct nc_curl_data downloaded = {0};
-    char **uris = NULL;
-    void *crl_store_aux = NULL;
-
-    *crl_store = NULL;
-
-    crl_store_aux = nc_tls_crl_store_new_wrap();
-    if (!crl_store_aux) {
-        goto cleanup;
-    }
-
-    /* init curl */
-    ret = nc_session_curl_init(&handle, &downloaded);
-    if (ret) {
-        goto cleanup;
-    }
-
-    /* get all the uris we can, even though some may point to the same CRL */
-    ret = nc_server_tls_get_crl_distpoint_uris_wrap(leaf_cert, cert_store, &uris, &uri_count);
-    if (ret) {
-        goto cleanup;
-    }
-
-    if (!uri_count) {
-        /* no CRL distribution points, nothing to download */
-        goto cleanup;
-    }
-
-    for (i = 0; i < uri_count; i++) {
-        VRB(NULL, "Downloading CRL from \"%s\".", uris[i]);
-        ret = nc_session_curl_fetch(handle, uris[i]);
-        if (ret) {
-            /* failed to download the CRL from this entry, try the next entry */
-            WRN(NULL, "Failed to fetch CRL from \"%s\".", uris[i]);
-            continue;
-        }
-
-        /* convert the downloaded data to CRL and add it to the store */
-        ret = nc_server_tls_add_crl_to_store_wrap(downloaded.data, downloaded.size, crl_store_aux);
-
-        /* free the downloaded data */
-        free(downloaded.data);
-        downloaded.data = NULL;
-        downloaded.size = 0;
-
-        if (ret) {
-            goto cleanup;
-        }
-    }
-
-    *crl_store = crl_store_aux;
-    crl_store_aux = NULL;
-
-cleanup:
-    for (i = 0; i < uri_count; i++) {
-        free(uris[i]);
-    }
-    free(uris);
-    curl_easy_cleanup(handle);
-    nc_tls_crl_store_destroy_wrap(crl_store_aux);
-    return ret;
-}
-
 /**
  * @brief Download CRLs for certificates in the peer's chain and merge them into crl_store.
  *
@@ -2031,11 +2022,11 @@ cleanup:
 static int
 nc_session_tls_crl_fetch_for_peer_chain(void *peer_chain, void *cert_store, void *crl_store)
 {
-    int i, ret = 0, uri_count = 0, j;
+    int i, ret = 0, uri_count = 0, j, seen_count = 0, uri_seen;
     void *cert = NULL;
     CURL *handle = NULL;
     struct nc_curl_data downloaded = {0};
-    char **uris = NULL;
+    char **uris = NULL, **seen_uris = NULL;
 
     /* init curl */
     ret = nc_session_curl_init(&handle, &downloaded);
@@ -2060,6 +2051,20 @@ nc_session_tls_crl_fetch_for_peer_chain(void *peer_chain, void *cert_store, void
         }
 
         for (j = 0; j < uri_count; j++) {
+            uri_seen = nc_session_uri_seen(uris[j], &seen_uris, &seen_count);
+            if (uri_seen == 1) {
+                /* already downloaded this URI, skip */
+                continue;
+            } else if (uri_seen == -1) {
+                ret = 1;
+                for (j++; j < uri_count; j++) {
+                    free(uris[j]);
+                }
+                free(uris);
+                uris = NULL;
+                goto cleanup;
+            }
+
             VRB(NULL, "Downloading CRL from \"%s\".", uris[j]);
             ret = nc_session_curl_fetch(handle, uris[j]);
             if (ret) {
@@ -2093,6 +2098,7 @@ nc_session_tls_crl_fetch_for_peer_chain(void *peer_chain, void *cert_store, void
 cleanup:
     curl_easy_cleanup(handle);
     free(downloaded.data);
+    nc_session_seen_uris_free(seen_uris, seen_count);
     if (uris) {
         for (i = 0; i < uri_count; i++) {
             free(uris[i]);
@@ -2103,10 +2109,10 @@ cleanup:
 }
 
 int
-nc_session_tls_crl_verify_post_handshake(void *tls_session, void *cert_store, void *crl_store)
+nc_session_tls_crl_verify_post_handshake(void *tls_session, void *cert_store)
 {
     int ret = 0;
-    void *peer_chain = NULL;
+    void *peer_chain = NULL, *crl_store = NULL;
 
     peer_chain = nc_tls_get_peer_cert_chain_wrap(tls_session);
     if (!peer_chain) {
@@ -2114,15 +2120,20 @@ nc_session_tls_crl_verify_post_handshake(void *tls_session, void *cert_store, vo
         return 0;
     }
 
-    if (!crl_store && !cert_store) {
-        /* no CRL store and no cert store, nothing to verify */
+    if (!cert_store) {
+        /* no cert store, nothing to verify */
         return 0;
+    }
+
+    crl_store = nc_tls_crl_store_for_post_handshake_wrap(cert_store);
+    if (!crl_store) {
+        return 1;
     }
 
     /* download CRLs for peer certificates and add them to the CRL store */
     ret = nc_session_tls_crl_fetch_for_peer_chain(peer_chain, cert_store, crl_store);
     if (ret) {
-        return ret;
+        goto cleanup;
     }
 
     /* verify the peer chain against the CRLs */
@@ -2131,6 +2142,8 @@ nc_session_tls_crl_verify_post_handshake(void *tls_session, void *cert_store, vo
         ERR(NULL, "Post-handshake CRL verification failed.");
     }
 
+cleanup:
+    nc_tls_crl_store_post_handshake_free_wrap(crl_store);
     return ret;
 }
 
