@@ -2018,16 +2018,18 @@ recv_reply_check_msgid(struct nc_session *session, const struct lyd_node *envp, 
 }
 
 /**
- * @brief Used to roughly estimate the type of the message, does not actually parse or verify it.
+ * @brief Peek at the root element name of an XML message, skipping whitespace,
+ * comments, and XML declarations.
+ *
+ * The message cursor is not advanced, so the message can be parsed afterwards from the start.
  *
  * @param[in] session NETCONF session used to send error messages.
- * @param[in] msg Message to check for type.
- * @return NC_MSG_REPLY If format roughly matches a rpc-reply;
- * @return NC_MSG_NOTIF If format roughly matches a notification;
- * @return NC_MSG_ERROR If format is malformed or unrecognized.
+ * @param[in] msg Message to scan.
+ * @return Pointer to the element name (right after '<') on success.
+ * @return NULL on error (malformed XML or unexpected end of message).
  */
-static NC_MSG_TYPE
-get_msg_type(struct nc_session *session, struct ly_in *msg)
+static const char *
+get_msg_root_element(struct nc_session *session, struct ly_in *msg)
 {
     const char *str, *end;
 
@@ -2049,29 +2051,56 @@ get_msg_type(struct nc_session *session, struct ly_in *msg)
                 /* Skip xml declaration */
                 end = "?>";
                 str = strstr(str, end);
-            } else if (!strncmp(str, "rpc-reply", 9)) {
-                return NC_MSG_REPLY;
-            } else if (!strncmp(str, "notification", 12)) {
-                return NC_MSG_NOTIF;
             } else {
-                ERR(session, "Unknown xml element '%.10s'.", str);
-                return NC_MSG_ERROR;
+                /* Root element found */
+                return str;
             }
             if (!str) {
                 /* No matching ending tag found */
                 ERR(session, "No matching ending tag '%s' found in xml message.", end);
-                return NC_MSG_ERROR;
+                return NULL;
             }
             str += strlen(end);
         } else {
             /* Not a valid xml */
             ERR(session, "Unexpected character '%c' in xml message.", *str);
-            return NC_MSG_ERROR;
+            return NULL;
         }
     }
 
     /* Unexpected end of message */
     ERR(session, "Unexpected end of xml message.");
+    return NULL;
+}
+
+/**
+ * @brief Used to roughly estimate the type of the message, does not actually parse or verify it.
+ *
+ * @param[in] session NETCONF session used to send error messages.
+ * @param[in] msg Message to check for type.
+ * @return NC_MSG_REPLY If format roughly matches a rpc-reply;
+ * @return NC_MSG_NOTIF If format roughly matches a notification;
+ * @return NC_MSG_ERROR If format is malformed or unrecognized.
+ */
+static NC_MSG_TYPE
+get_msg_type(struct nc_session *session, struct ly_in *msg)
+{
+    const char *str;
+
+    str = get_msg_root_element(session, msg);
+    if (!str) {
+        return NC_MSG_ERROR;
+    }
+
+    if (!strncmp(str, "rpc-reply", 9)) {
+        return NC_MSG_REPLY;
+    } else if (!strncmp(str, "notification", 12)) {
+        return NC_MSG_NOTIF;
+    } else if (!strncmp(str, "envelope", 8)) {
+        return NC_MSG_NOTIF;
+    }
+
+    ERR(session, "Unknown xml element '%.10s'.", str);
     return NC_MSG_ERROR;
 }
 
@@ -2443,11 +2472,56 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
     return ret;
 }
 
+static LY_ERR
+recv_notif_parse_legacy(struct nc_session *session, struct ly_in *msg, struct lyd_node **envp, struct lyd_node **op)
+{
+    return lyd_parse_op(session->ctx, NULL, msg, LYD_XML, LYD_TYPE_NOTIF_NETCONF, LYD_PARSE_STRICT, envp, op);
+}
+
+static LY_ERR
+recv_notif_parse_envelope(struct nc_session *session, struct ly_in *msg, struct lyd_node **envp, struct lyd_node **op)
+{
+    LY_ERR lyrc;
+    struct lyd_node *contents = NULL;
+
+    *envp = NULL;
+    *op = NULL;
+
+    lyrc = lyd_parse_data(session->ctx, NULL, msg, LYD_XML,
+            LYD_PARSE_STRICT | LYD_PARSE_ANYDATA_STRICT, LYD_VALIDATE_PRESENT, envp);
+    if (lyrc) {
+        goto cleanup;
+    }
+
+    /* extract the notification from the contents anydata node */
+    lyd_find_path(*envp, "contents", 0, &contents);
+    if (contents && (contents->schema->nodetype == LYS_ANYDATA)) {
+        *op = lyd_child_any(contents);
+        if (*op) {
+            /* detach the notification from the envelope; lyd_unlink_tree also updates the anydata node's child pointer */
+            lyd_unlink_tree(*op);
+        }
+    }
+    if (!*op) {
+        lyrc = LY_EINVAL;
+        goto cleanup;
+    }
+
+cleanup:
+    if (lyrc) {
+        lyd_free_tree(*envp);
+        *envp = NULL;
+        *op = NULL;
+    }
+    return lyrc;
+}
+
 static NC_MSG_TYPE
 recv_notif(struct nc_session *session, int timeout, struct lyd_node **envp, struct lyd_node **op)
 {
     LY_ERR lyrc;
     struct ly_in *msg = NULL;
+    const char *elem;
     NC_MSG_TYPE ret = NC_MSG_ERROR;
 
     *op = NULL;
@@ -2459,16 +2533,30 @@ recv_notif(struct nc_session *session, int timeout, struct lyd_node **envp, stru
         goto cleanup;
     }
 
-    /* Parse */
-    lyrc = lyd_parse_op(session->ctx, NULL, msg, LYD_XML, LYD_TYPE_NOTIF_NETCONF, LYD_PARSE_STRICT, envp, op);
-    if (!lyrc) {
-        goto cleanup;
-    } else {
-        ERR(session, "Received an invalid message (%s).", ly_errmsg(session->ctx));
-        lyd_free_tree(*envp);
-        *envp = NULL;
+    /* Dispatch by root element name: "notification" -> legacy, "envelope" -> envelope */
+    elem = get_msg_root_element(session, msg);
+    if (!elem) {
         ret = NC_MSG_ERROR;
         goto cleanup;
+    }
+
+    if (!strncmp(elem, "notification", 12)) {
+        lyrc = recv_notif_parse_legacy(session, msg, envp, op);
+    } else if (!strncmp(elem, "envelope", 8)) {
+        lyrc = recv_notif_parse_envelope(session, msg, envp, op);
+    } else {
+        ERR(session, "Unexpected notification element '%.10s'.", elem);
+        ret = NC_MSG_ERROR;
+        goto cleanup;
+    }
+
+    if (lyrc) {
+        ERR(session, "Received an invalid notification message (%s).", ly_errmsg(session->ctx));
+        lyd_free_tree(*envp);
+        *envp = NULL;
+        lyd_free_tree(*op);
+        *op = NULL;
+        ret = NC_MSG_ERROR;
     }
 
 cleanup:

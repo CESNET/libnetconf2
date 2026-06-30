@@ -525,8 +525,11 @@ NC_MSG_TYPE nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64
  * client side session object.
  * @param[in] timeout Timeout for reading in milliseconds. Use negative value for infinite
  * waiting and 0 for immediate return if data are not available on the wire.
- * @param[out] envp NETCONF notification XML envelopes.
- * @param[out] op Parsed NETCONF notification data.
+ * @param[out] envp Notification envelope data tree. In legacy RFC 5277 mode this is the parsed
+ * \<notification\> wrapper element. In ietf-yp-notification envelope mode this is the parsed \<envelope\> element.
+ * The two formats can be distinguished by the root element name
+ * (e.g. via `LYD_NAME(envp)`): "notification" for legacy, "envelope" for ietf-yp-notification.
+ * @param[out] op Parsed NETCONF notification data tree, extracted from the envelope.
  * @return #NC_MSG_NOTIF for success,
  *         #NC_MSG_WOULDBLOCK if @p timeout has elapsed,
  *         #NC_MSG_ERROR if reading has failed, and
@@ -538,8 +541,11 @@ NC_MSG_TYPE nc_recv_notif(struct nc_session *session, int timeout, struct lyd_no
  * @brief Callback for receiving notifications in a separate thread.
  *
  * @param[in] session NC session that received the notification.
- * @param[in] envp Notification envelope data tree.
- * @param[in] op Notification body data tree.
+ * @param[in] envp Notification envelope data tree. In legacy RFC 5277 mode this is the parsed
+ * \<notification\> wrapper element. In ietf-yp-notification envelope mode this is the parsed \<envelope\> element.
+ * The two formats can be distinguished by the root element name
+ * (e.g. via `LYD_NAME(envp)`): "notification" for legacy, "envelope" for ietf-yp-notification.
+ * @param[in] op Notification body data tree, extracted from the envelope.
  * @param[in] user_data Arbitrary user data passed to the callback.
  */
 typedef void (*nc_notif_dispatch_clb)(struct nc_session *session, const struct lyd_node *envp, const struct lyd_node *op,
@@ -552,7 +558,9 @@ typedef void (*nc_notif_dispatch_clb)(struct nc_session *session, const struct l
  * @param[in] session Netconf session to read notifications from.
  * @param[in] notif_clb Function that is called for every received notification (including
  * \<notificationComplete\>). Parameters are the session the notification was received on
- * and the notification data.
+ * and the notification data. The @p envp parameter of the callback can be either a legacy
+ * RFC 5277 \<notification\> wrapper or an ietf-yp-notification \<envelope\> element; see ::nc_notif_dispatch_clb
+ * for details.
  * @return 0 if the thread was successfully created, -1 on error.
  */
 int nc_recv_notif_dispatch(struct nc_session *session, nc_notif_dispatch_clb notif_clb);
@@ -565,7 +573,9 @@ int nc_recv_notif_dispatch(struct nc_session *session, nc_notif_dispatch_clb not
  * @param[in] session Netconf session to read notifications from.
  * @param[in] notif_clb Callback that is called for every received notification (including
  * \<notificationComplete\>). Parameters are the session the notification was received on
- * and the notification data.
+ * and the notification data. The @p envp parameter of the callback can be either a legacy
+ * RFC 5277 \<notification\> wrapper or an ietf-yp-notification \<envelope\> element; see ::nc_notif_dispatch_clb
+ * for details.
  * @param[in] user_data Arbitrary user data.
  * @param[in] free_data Callback for freeing the user data after notif thread exit.
  * @return 0 if the thread was successfully created, -1 on error.

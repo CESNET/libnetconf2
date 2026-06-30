@@ -1560,7 +1560,9 @@ int nc_write_clb(struct nc_wclb_arg *arg, const void *buf, uint32_t count, int x
  *   - `struct lyd_node_opaq *rpc_envp;` - parsed envelopes of the RPC to reply to. Required parameter.
  *   - `struct nc_server_reply *reply;` - RPC reply. Required parameter.
  * - #NC_MSG_NOTIF
- *   - `struct nc_server_notif *notif;` - notification object. Required parameter.
+ *   - `struct nc_server_notif *notif;` - notification object. Required parameter. The object can be
+ *     created by ::nc_server_notif_new2() either in legacy RFC 5277 mode (with eventTime) or in
+ *     ietf-yp-notification envelope mode (eventtime NULL, tree serialized as-is).
  * - #NC_MSG_HELLO
  *   - `const char **capabs;` - capabilities array ended with NULL. Required parameter.
  *   - `uint32_t *sid;` - session ID to be included in the hello message. Optional parameter.

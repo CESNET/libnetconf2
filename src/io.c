@@ -1004,15 +1004,24 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
     case NC_MSG_NOTIF:
         notif = va_arg(ap, struct nc_server_notif *);
 
-        nc_write_clb((void *)&arg, "<notification xmlns=\""NC_NS_NOTIF "\">", 21 + 47 + 2, 0);
-        nc_write_clb((void *)&arg, "<eventTime>", 11, 0);
-        nc_write_clb((void *)&arg, notif->eventtime, strlen(notif->eventtime), 0);
-        nc_write_clb((void *)&arg, "</eventTime>", 12, 0);
-        if (lyd_print_clb(nc_write_xmlclb, (void *)&arg, notif->ntf, LYD_XML, LYD_PRINT_SHRINK)) {
-            ret = NC_MSG_ERROR;
-            goto cleanup;
+        if (notif->type == NC_NOTIF_TYPE_ENVELOPE) {
+            /* serialize the pre-built tree directly, no envelope wrapping */
+            if (lyd_print_clb(nc_write_xmlclb, (void *)&arg, notif->ntf, LYD_XML, LYD_PRINT_SHRINK)) {
+                ret = NC_MSG_ERROR;
+                goto cleanup;
+            }
+        } else {
+            /* legacy RFC 5277 notification wrapper */
+            nc_write_clb((void *)&arg, "<notification xmlns=\""NC_NS_NOTIF "\">", 21 + 47 + 2, 0);
+            nc_write_clb((void *)&arg, "<eventTime>", 11, 0);
+            nc_write_clb((void *)&arg, notif->eventtime, strlen(notif->eventtime), 0);
+            nc_write_clb((void *)&arg, "</eventTime>", 12, 0);
+            if (lyd_print_clb(nc_write_xmlclb, (void *)&arg, notif->ntf, LYD_XML, LYD_PRINT_SHRINK)) {
+                ret = NC_MSG_ERROR;
+                goto cleanup;
+            }
+            nc_write_clb((void *)&arg, "</notification>", 15, 0);
         }
-        nc_write_clb((void *)&arg, "</notification>", 15, 0);
         break;
 
     case NC_MSG_HELLO:
