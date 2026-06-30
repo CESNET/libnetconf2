@@ -21,6 +21,10 @@
 
 #include "tests/config.h"
 
+/* forward declarations for libyang types */
+struct ly_ctx;
+struct lyd_node;
+
 #define NC_ACCEPT_TIMEOUT 4000
 #define NC_PS_POLL_TIMEOUT 2000
 
@@ -84,5 +88,16 @@ int ln2_glob_test_teardown(void **state);
  * @param[in] test_data Test data.
  */
 void ln2_glob_test_free_test_data(void *test_data);
+
+/**
+ * @brief Wrap a notification tree in an ietf-yp-notification envelope.
+ *
+ * The @p notif tree is freed by this function (ownership is transferred).
+ *
+ * @param[in] ctx libyang context with ietf-yp-notification loaded.
+ * @param[in] notif Notification tree to wrap (freed on return).
+ * @return Envelope tree, NULL on error.
+ */
+struct lyd_node *ln2_build_yp_envelope(struct ly_ctx *ctx, struct lyd_node *notif);
 
 #endif

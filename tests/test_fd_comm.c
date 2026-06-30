@@ -422,8 +422,84 @@ thread_recv_notif(void *arg)
     return (void *)0;
 }
 
+static struct lyd_node *
+build_envelope_notif(struct ly_ctx *ctx, const char *notif_path, const char *notif_value)
+{
+    struct lyd_node *notif_tree = NULL;
+
+    /* create a notification tree */
+    assert_int_equal(lyd_new_path(NULL, ctx, notif_path, notif_value, 0, &notif_tree), LY_SUCCESS);
+
+    /* wrap it in an ietf-yp-notification envelope (takes ownership of notif_tree) */
+    return ln2_build_yp_envelope(ctx, notif_tree);
+}
+
+static void *
+server_send_notif_envelope_thread(void *arg)
+{
+    NC_MSG_TYPE msg_type;
+    struct lyd_node *env;
+    struct nc_server_notif *notif;
+
+    (void)arg;
+
+    /* wait for the RPC callback to be called */
+    pthread_mutex_lock(&state_lock);
+    while (glob_state != 1) {
+        pthread_mutex_unlock(&state_lock);
+        usleep(1000);
+        pthread_mutex_lock(&state_lock);
+    }
+
+    /* build and send an envelope notification */
+    env = build_envelope_notif(ctx, "/notif1:n1/first", "envelope-test");
+    nc_session_inc_notif_status(server_session);
+    notif = nc_server_notif_new2(env, NC_NOTIF_TYPE_ENVELOPE, NULL, NC_PARAMTYPE_FREE);
+    assert_non_null(notif);
+    msg_type = nc_server_notif_send(server_session, notif, 100);
+    nc_server_notif_free(notif);
+    assert_int_equal(msg_type, NC_MSG_NOTIF);
+
+    /* update state */
+    glob_state = 2;
+    pthread_barrier_wait(&barrier);
+    pthread_mutex_unlock(&state_lock);
+
+    return NULL;
+}
+
+static void *
+thread_recv_notif_envelope(void *arg)
+{
+    struct nc_session *session = (struct nc_session *)arg;
+    struct lyd_node *envp;
+    struct lyd_node *op;
+    NC_MSG_TYPE msgtype;
+
+    pthread_barrier_wait(&barrier);
+    msgtype = nc_recv_notif(session, 1000, &envp, &op);
+    assert_int_equal(msgtype, NC_MSG_NOTIF);
+
+    /* envp should be the envelope structure */
+    assert_non_null(envp);
+    assert_string_equal(LYD_NAME(envp), "envelope");
+
+    /* op should be the notification extracted from contents */
+    assert_non_null(op);
+    assert_string_equal(op->schema->name, "n1");
+
+    lyd_free_tree(envp);
+    lyd_free_tree(op);
+
+    pthread_mutex_lock(&state_lock);
+    glob_state = 3;
+    pthread_mutex_unlock(&state_lock);
+
+    return (void *)0;
+}
+
 static void
-test_send_recv_notif(void)
+test_send_recv_notif_impl(void *(*recv_fn)(void *), void *(*send_fn)(void *))
 {
     int ret;
     pthread_t tid[2];
@@ -441,7 +517,7 @@ test_send_recv_notif(void)
     assert_int_equal(msgtype, NC_MSG_RPC);
 
     /* client subscription */
-    pthread_create(&tid[0], NULL, thread_recv_notif, client_session);
+    pthread_create(&tid[0], NULL, recv_fn, client_session);
 
     /* create server */
     ps = nc_ps_new();
@@ -452,7 +528,7 @@ test_send_recv_notif(void)
     pthread_mutex_lock(&state_lock);
     glob_state = 0;
     pthread_mutex_unlock(&state_lock);
-    ret = pthread_create(&tid[1], NULL, server_send_notif_thread, NULL);
+    ret = pthread_create(&tid[1], NULL, send_fn, NULL);
     assert_int_equal(ret, 0);
 
     /* server blocked on RPC */
@@ -482,6 +558,12 @@ test_send_recv_notif(void)
 }
 
 static void
+test_send_recv_notif(void)
+{
+    test_send_recv_notif_impl(thread_recv_notif, server_send_notif_thread);
+}
+
+static void
 test_send_recv_notif_10(void **state)
 {
     (void)state;
@@ -501,6 +583,34 @@ test_send_recv_notif_11(void **state)
     client_session->version = NC_PROT_VERSION_11;
 
     test_send_recv_notif();
+}
+
+static void
+test_send_recv_notif_envelope(void)
+{
+    test_send_recv_notif_impl(thread_recv_notif_envelope, server_send_notif_envelope_thread);
+}
+
+static void
+test_send_recv_notif_envelope_10(void **state)
+{
+    (void)state;
+
+    server_session->version = NC_PROT_VERSION_10;
+    client_session->version = NC_PROT_VERSION_10;
+
+    test_send_recv_notif_envelope();
+}
+
+static void
+test_send_recv_notif_envelope_11(void **state)
+{
+    (void)state;
+
+    server_session->version = NC_PROT_VERSION_11;
+    client_session->version = NC_PROT_VERSION_11;
+
+    test_send_recv_notif_envelope();
 }
 
 static void
@@ -579,6 +689,12 @@ main(void)
     module = ly_ctx_load_module(ctx, "nc-notifications", NULL, NULL);
     assert_non_null(module);
 
+    module = ly_ctx_load_module(ctx, "notif1", NULL, NULL);
+    assert_non_null(module);
+
+    module = ly_ctx_load_module(ctx, "ietf-yp-notification", NULL, NULL);
+    assert_non_null(module);
+
     /* set RPC callbacks */
     node = (struct lysc_node *)lys_find_path(module->ctx, NULL, "/ietf-netconf:get", 0);
     assert_non_null(node);
@@ -604,6 +720,8 @@ main(void)
         cmocka_unit_test_setup_teardown(test_send_recv_error_11, setup_sessions, teardown_sessions),
         cmocka_unit_test_setup_teardown(test_send_recv_data_11, setup_sessions, teardown_sessions),
         cmocka_unit_test_setup_teardown(test_send_recv_notif_11, setup_sessions, teardown_sessions),
+        cmocka_unit_test_setup_teardown(test_send_recv_notif_envelope_10, setup_sessions, teardown_sessions),
+        cmocka_unit_test_setup_teardown(test_send_recv_notif_envelope_11, setup_sessions, teardown_sessions),
     };
 
     ret = cmocka_run_group_tests(comm, NULL, NULL);

@@ -21,6 +21,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
+#include <libyang/libyang.h>
 
 #include "ln2_test.h"
 
@@ -199,4 +202,33 @@ void
 ln2_glob_test_free_test_data(void *test_data)
 {
     free(test_data);
+}
+
+struct lyd_node *
+ln2_build_yp_envelope(struct ly_ctx *ctx, struct lyd_node *notif)
+{
+    struct lyd_node *env = NULL, *contents_val = NULL;
+    const struct lys_module *ypn_mod;
+    struct timespec ts;
+    char *eventtime;
+
+    assert(ctx);
+    assert(notif);
+
+    /* build an ietf-yp-notification envelope */
+    assert(clock_gettime(CLOCK_REALTIME, &ts) != -1);
+    assert(ly_time_ts2str(&ts, &eventtime) == LY_SUCCESS);
+    ypn_mod = ly_ctx_get_module_implemented(ctx, "ietf-yp-notification");
+    assert(ypn_mod);
+    assert(lyd_new_inner(NULL, ypn_mod, "envelope", 0, &env) == LY_SUCCESS);
+    assert(lyd_new_term(env, NULL, "event-time", eventtime, 0, NULL) == LY_SUCCESS);
+    free(eventtime);
+
+    /* clone the notification into the contents anydata */
+    assert(lyd_dup_single(notif, NULL, LYD_DUP_RECURSIVE, &contents_val) == LY_SUCCESS);
+    assert(lyd_new_any(env, NULL, "contents", contents_val, NULL, 0, 0, NULL) == LY_SUCCESS);
+    lyd_free_tree(contents_val);
+    lyd_free_tree(notif);
+
+    return env;
 }
