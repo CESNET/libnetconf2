@@ -854,6 +854,7 @@ nc_server_notif_new(struct lyd_node *event, char *eventtime, NC_PARAMTYPE paramt
     ntf = malloc(sizeof *ntf);
     NC_CHECK_ERRMEM_RET(!ntf, NULL);
 
+    ntf->type = NC_NOTIF_TYPE_LEGACY;
     if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
         ntf->eventtime = strdup(eventtime);
         NC_CHECK_ERRMEM_GOTO(!ntf->eventtime, , error);
@@ -866,6 +867,98 @@ nc_server_notif_new(struct lyd_node *event, char *eventtime, NC_PARAMTYPE paramt
         ntf->ntf = event;
     }
     ntf->free = (paramtype == NC_PARAMTYPE_CONST ? 0 : 1);
+
+    return ntf;
+
+error:
+    free(ntf->eventtime);
+    free(ntf);
+    return NULL;
+}
+
+API struct nc_server_notif *
+nc_server_notif_new2(struct lyd_node *notif, NC_NOTIF_TYPE notif_type, char *eventtime, NC_PARAMTYPE paramtype)
+{
+    struct nc_server_notif *ntf = NULL;
+    int notif_found = 0;
+    struct lyd_node *et_node = NULL, *elem;
+    const char *et = NULL;
+
+    NC_CHECK_ARG_RET(NULL, notif, NULL);
+
+    if (notif_type == NC_NOTIF_TYPE_LEGACY) {
+        /* legacy RFC 5277 mode: check that there is a notification and eventtime is set */
+        if (!eventtime) {
+            ERR(NULL, "Eventtime must be set for legacy notification type.");
+            return NULL;
+        }
+        et = eventtime;
+
+        notif_found = 0;
+        LYD_TREE_DFS_BEGIN(notif, elem) {
+            if (elem->schema->nodetype == LYS_NOTIF) {
+                notif_found = 1;
+                break;
+            }
+            LYD_TREE_DFS_END(notif, elem);
+        }
+        if (!notif_found) {
+            ERR(NULL, "No notification found in the provided data tree for legacy notification type.");
+            return NULL;
+        }
+    } else if (notif_type == NC_NOTIF_TYPE_ENVELOPE) {
+        /* envelope RFC 8639 mode: verify it's ietf-yp-notification envelope element */
+        if (!notif->schema || !notif->schema->module || strcmp(notif->schema->module->name, "ietf-yp-notification") ||
+                strcmp(notif->schema->name, "envelope")) {
+            ERR(NULL, "Provided data tree is not an ietf-yp-notification envelope element for envelope notification type.");
+            return NULL;
+        }
+
+        /* provided eventtime must be NULL and is extracted from the notification */
+        if (eventtime) {
+            ERR(NULL, "eventTime must not be set for envelope notification type.");
+            return NULL;
+        }
+
+        lyd_find_path(notif, "event-time", 0, &et_node);
+        if (!et_node) {
+            ERR(NULL, "\"event-time\" node not found in the provided data tree for envelope notification type.");
+            return NULL;
+        }
+
+        /* extract eventTime from the notification */
+        et = lyd_get_value(et_node);
+    } else {
+        ERR(NULL, "Unknown notification type.");
+        return NULL;
+    }
+
+    ntf = calloc(1, sizeof *ntf);
+    NC_CHECK_ERRMEM_RET(!ntf, NULL);
+
+    if (paramtype == NC_PARAMTYPE_DUP_AND_FREE) {
+        ntf->eventtime = strdup(et);
+        NC_CHECK_ERRMEM_GOTO(!ntf->eventtime, , error);
+
+        if (lyd_dup_single(notif, NULL, LYD_DUP_RECURSIVE, &ntf->ntf)) {
+            goto error;
+        }
+    } else if (paramtype == NC_PARAMTYPE_FREE) {
+        if (notif_type == NC_NOTIF_TYPE_ENVELOPE) {
+            /* for envelope ntf, we need to dup the eventtime string because it is part of the notification tree */
+            ntf->eventtime = strdup(et);
+            NC_CHECK_ERRMEM_GOTO(!ntf->eventtime, , error);
+        } else {
+            ntf->eventtime = (char *)et;
+        }
+        ntf->ntf = notif;
+    } else {
+        ntf->eventtime = (char *)et;
+        ntf->ntf = notif;
+    }
+
+    ntf->free = (paramtype == NC_PARAMTYPE_CONST ? 0 : 1);
+    ntf->type = notif_type;
 
     return ntf;
 

@@ -51,9 +51,10 @@ struct nc_server_rpc {
 };
 
 struct nc_server_notif {
-    char *eventtime;        /**< eventTime of the notification */
     struct lyd_node *ntf;   /**< notification data tree of the message */
-    int free;
+    NC_NOTIF_TYPE type;     /**< notification format */
+    char *eventtime;        /**< eventTime of the notification */
+    int free;               /**< whether the notification data tree and eventTime should be freed */
 };
 
 struct nc_client_reply_error {
