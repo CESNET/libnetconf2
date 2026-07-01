@@ -3565,6 +3565,7 @@ nc_client_monitoring_thread_start(nc_client_monitoring_clb monitoring_clb, void 
             nc_client_monitoring_thread, ctx);
     if (r) {
         ERR(NULL, "Failed to create the client monitoring thread (%s).", strerror(r));
+        client_opts.monitoring_thread_data.thread_running = 0;
         ret = 1;
         goto cleanup;
     }
