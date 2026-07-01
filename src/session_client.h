@@ -649,9 +649,15 @@ typedef void (*nc_client_monitoring_clb)(struct nc_session *session, void *user_
  *
  * Once the thread is running, new sessions will be monitored automatically.
  *
- * Note that once you start the monitoring thread, any other client thread that
- * calls ::nc_session_free() needs to share the same thread context (or be the same thread)
- * as the thread that called this function (see ::nc_client_set_thread_context()).
+ * This function should be called only once at the start of the application. To stop
+ * the monitoring thread, use ::nc_client_monitoring_thread_stop().
+ *
+ * Note that the monitoring thread is bound to the thread context of the thread that
+ * started it. Therefore, any other thread that calls functions managing connections
+ * (such as ::nc_connect_ssh(), ::nc_connect_tls(), ...), ::nc_session_free(), or
+ * ::nc_client_monitoring_thread_stop() needs to share the same thread context
+ * (or be the same thread) as the thread that called this function
+ * (see ::nc_client_set_thread_context()).
  *
  * @param[in] monitoring_clb Callback called whenever a session is terminated.
  * @param[in] user_data Arbitrary user data passed to the callback.
