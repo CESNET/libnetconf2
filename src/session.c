@@ -1939,7 +1939,7 @@ nc_session_uri_seen(const char *uri, char ***seen_uris, int *seen_count)
         }
     }
 
-    tmp = nc_realloc(*seen_uris, (*seen_count + 1) * sizeof **seen_uris);
+    tmp = realloc(*seen_uris, (*seen_count + 1) * sizeof **seen_uris);
     NC_CHECK_ERRMEM_RET(!tmp, -1);
     *seen_uris = tmp;
     (*seen_uris)[*seen_count] = strdup(uri);
