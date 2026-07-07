@@ -3665,6 +3665,7 @@ nc_ch_client_thread(void *arg)
                 /* just get a random index */
                 next_endpt_index = rand() % LY_ARRAY_COUNT(client->ch_endpts);
             }
+            cur_attempts = 0;
         } else {
             /* session was not created, wait a little bit and try again */
             ++cur_attempts;
