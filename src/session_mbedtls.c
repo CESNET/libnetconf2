@@ -789,6 +789,37 @@ nc_server_tls_verify_cb(void *cb_data, mbedtls_x509_crt *cert, int depth, uint32
     } else if (!ret) {
         /* success */
         if ((depth == 0) && (!data->session->opts.server.client_cert)) {
+#ifdef COMPLY_WITH_ORAN_WG11
+            /* WG11 6.9.3 / O-RAN: the end-entity (client) certificate MUST carry
+             * the clientAuth Extended Key Usage, so explicitly reject any leaf
+             * certificate lacking the clientAuth EKU extension. */
+            const mbedtls_x509_sequence *usage;
+            int has_client_auth = 0;
+
+            for (usage = &cert->ext_key_usage; usage && usage->buf.p; usage = usage->next) {
+                if (!MBEDTLS_OID_CMP(MBEDTLS_OID_CLIENT_AUTH, &usage->buf)) {
+                    has_client_auth = 1;
+                    break;
+                }
+            }
+            if (!has_client_auth) {
+                ERR(data->session, "Cert verify: fail (client certificate lacks the required clientAuth Extended Key Usage).");
+                *flags |= MBEDTLS_X509_BADCERT_EXT_KEY_USAGE;
+                return 0;
+            }
+
+            /* WG11 6.9.3 / O-RAN: the end-entity (client) certificate MUST also
+             * carry a Key Usage extension with the digitalSignature bit set (the
+             * client signs the CertificateVerify handshake message), so reject any
+             * leaf certificate missing the Key Usage extension or that bit. */
+            if (!mbedtls_x509_crt_has_ext_type(cert, MBEDTLS_X509_EXT_KEY_USAGE) ||
+                    mbedtls_x509_crt_check_key_usage(cert, MBEDTLS_X509_KU_DIGITAL_SIGNATURE)) {
+                ERR(data->session, "Cert verify: fail (client certificate lacks the required digitalSignature Key Usage).");
+                *flags |= MBEDTLS_X509_BADCERT_KEY_USAGE;
+                return 0;
+            }
+#endif /* COMPLY_WITH_ORAN_WG11 */
+
             /* copy the client cert */
             data->session->opts.server.client_cert = nc_tls_cert_dup(cert);
             if (!data->session->opts.server.client_cert) {

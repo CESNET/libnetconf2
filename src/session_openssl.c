@@ -463,6 +463,49 @@ nc_server_tls_verify_cb(int preverify_ok, X509_STORE_CTX *x509_ctx)
     } else if (!ret) {
         /* success */
         if ((depth == 0) && (!data->session->opts.server.client_cert)) {
+#ifdef COMPLY_WITH_ORAN_WG11
+            /* WG11 6.9.3 / O-RAN: the end-entity (client) certificate MUST carry
+             * the clientAuth Extended Key Usage, so explicitly reject any leaf
+             * certificate lacking the clientAuth EKU extension. */
+            {
+                EXTENDED_KEY_USAGE *eku = X509_get_ext_d2i(cert, NID_ext_key_usage, NULL, NULL);
+                int has_client_auth = 0, i;
+
+                if (eku) {
+                    for (i = 0; i < sk_ASN1_OBJECT_num(eku); ++i) {
+                        if (OBJ_obj2nid(sk_ASN1_OBJECT_value(eku, i)) == NID_client_auth) {
+                            has_client_auth = 1;
+                            break;
+                        }
+                    }
+                    EXTENDED_KEY_USAGE_free(eku);
+                }
+                if (!has_client_auth) {
+                    ERR(data->session, "Cert verify: fail (client certificate lacks the required clientAuth Extended Key Usage).");
+                    return 0;
+                }
+            }
+
+            /* WG11 6.9.3 / O-RAN: the end-entity (client) certificate MUST also
+             * carry a Key Usage extension with the digitalSignature bit set (the
+             * client signs the CertificateVerify handshake message), so reject any
+             * leaf certificate missing the Key Usage extension or that bit. */
+            {
+                ASN1_BIT_STRING *ku = X509_get_ext_d2i(cert, NID_key_usage, NULL, NULL);
+                int has_digital_signature = 0;
+
+                if (ku) {
+                    /* bit 0 of the Key Usage bit string is digitalSignature */
+                    has_digital_signature = ASN1_BIT_STRING_get_bit(ku, 0);
+                    ASN1_BIT_STRING_free(ku);
+                }
+                if (!has_digital_signature) {
+                    ERR(data->session, "Cert verify: fail (client certificate lacks the required digitalSignature Key Usage).");
+                    return 0;
+                }
+            }
+#endif /* COMPLY_WITH_ORAN_WG11 */
+
             /* copy the client cert */
             data->session->opts.server.client_cert = X509_dup(cert);
             NC_CHECK_ERRMEM_RET(!data->session->opts.server.client_cert, 0);
