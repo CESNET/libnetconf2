@@ -379,6 +379,58 @@ nc_server_tls_set_tls_versions_wrap(void *tls_cfg, enum nc_tls_version min, enum
     return 0;
 }
 
+#ifdef NC_COMPLY_WITH_ORAN_WG11
+
+/**
+ * @brief Check that a client certificate complies with the O-RAN WG11 6.9.3 key usage requirements.
+ *
+ * The end-entity (client) certificate MUST carry the clientAuth Extended Key Usage and a Key Usage
+ * extension with the digitalSignature bit set (the client signs the CertificateVerify handshake message).
+ *
+ * @param[in] session Session for logging.
+ * @param[in] cert Client (leaf) certificate to check.
+ * @return 0 if the certificate complies, non-zero otherwise.
+ */
+static int
+nc_server_tls_check_oran_wg11_usage(struct nc_session *session, X509 *cert)
+{
+    EXTENDED_KEY_USAGE *eku;
+    ASN1_BIT_STRING *ku;
+    int has_client_auth = 0, has_digital_signature = 0, i;
+
+    /* the client certificate MUST carry the clientAuth Extended Key Usage */
+    eku = X509_get_ext_d2i(cert, NID_ext_key_usage, NULL, NULL);
+    if (eku) {
+        for (i = 0; i < sk_ASN1_OBJECT_num(eku); ++i) {
+            if (OBJ_obj2nid(sk_ASN1_OBJECT_value(eku, i)) == NID_client_auth) {
+                has_client_auth = 1;
+                break;
+            }
+        }
+        EXTENDED_KEY_USAGE_free(eku);
+    }
+    if (!has_client_auth) {
+        ERR(session, "Cert verify: fail (client certificate lacks the required clientAuth Extended Key Usage).");
+        return 1;
+    }
+
+    /* the client certificate MUST also carry a Key Usage extension with the digitalSignature bit set */
+    ku = X509_get_ext_d2i(cert, NID_key_usage, NULL, NULL);
+    if (ku) {
+        /* bit 0 of the Key Usage bit string is digitalSignature */
+        has_digital_signature = ASN1_BIT_STRING_get_bit(ku, 0);
+        ASN1_BIT_STRING_free(ku);
+    }
+    if (!has_digital_signature) {
+        ERR(session, "Cert verify: fail (client certificate lacks the required digitalSignature Key Usage).");
+        return 1;
+    }
+
+    return 0;
+}
+
+#endif /* NC_COMPLY_WITH_ORAN_WG11 */
+
 /**
  * @brief Verify a certificate.
  *
@@ -463,6 +515,13 @@ nc_server_tls_verify_cb(int preverify_ok, X509_STORE_CTX *x509_ctx)
     } else if (!ret) {
         /* success */
         if ((depth == 0) && (!data->session->opts.server.client_cert)) {
+#ifdef NC_COMPLY_WITH_ORAN_WG11
+            /* O-RAN WG11 6.9.3: enforce the clientAuth Extended Key Usage and digitalSignature Key Usage */
+            if (nc_server_tls_check_oran_wg11_usage(data->session, cert)) {
+                return 0;
+            }
+#endif /* NC_COMPLY_WITH_ORAN_WG11 */
+
             /* copy the client cert */
             data->session->opts.server.client_cert = X509_dup(cert);
             NC_CHECK_ERRMEM_RET(!data->session->opts.server.client_cert, 0);

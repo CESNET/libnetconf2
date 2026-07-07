@@ -96,6 +96,7 @@ option(ENABLE_DNSSEC "Enable support for SSHFP retrieval using DNSSEC for SSH (r
 option(ENABLE_PAM "Detect and use PAM" ON)
 option(ENABLE_COMMON_TARGETS "Define common custom target names such as 'doc' or 'uninstall', may cause conflicts when using add_subdirectory() to build this project" ON)
 option(ENABLE_IP_FREEBIND "Enable the IP_FREEBIND/IPV6_FREEBIND options on the listening TCP socket" OFF)
+option(ENABLE_COMPLY_WITH_ORAN_WG11 "Comply with the O-RAN WG11 security spec (e.g. enforce the clientAuth Extended Key Usage and the digitalSignature Key Usage on client certificates)" OFF)
 option(BUILD_SHARED_LIBS "By default, shared libs are enabled. Turn off for a static build." ON)
 set(READ_INACTIVE_TIMEOUT 20 CACHE STRING "Maximum number of seconds waiting for new data once some data have arrived")
 set(READ_ACTIVE_TIMEOUT 300 CACHE STRING "Maximum number of seconds for receiving a full message")
@@ -179,6 +180,11 @@ set(format_sources
 if(ENABLE_DNSSEC AND NOT ENABLE_SSH_TLS)
     message(WARNING "DNSSEC SSHFP retrieval cannot be used without SSH support.")
     set(ENABLE_DNSSEC OFF)
+endif()
+
+if(ENABLE_COMPLY_WITH_ORAN_WG11 AND NOT ENABLE_SSH_TLS)
+    message(WARNING "O-RAN WG11 compliance cannot be used without TLS support.")
+    set(ENABLE_COMPLY_WITH_ORAN_WG11 OFF)
 endif()
 
 if(ENABLE_VALGRIND_TESTS)
@@ -309,6 +315,11 @@ if(ENABLE_SSH_TLS)
 
     # set compiler flag
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH_TLS")
+
+    # comply with the O-RAN WG11 security spec (e.g. client cert Extended Key Usage and Key Usage checks)
+    if(ENABLE_COMPLY_WITH_ORAN_WG11)
+        set(NC_COMPLY_WITH_ORAN_WG11 ON)
+    endif()
 endif()
 
 # dependencies - libval

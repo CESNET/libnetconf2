@@ -92,4 +92,7 @@
 /* Enable IP_FREEBIND/IPV6_FREEBIND on listening sockets. */
 #cmakedefine NC_ENABLE_IP_FREEBIND
 
+/* Comply with the O-RAN WG11 security spec (client cert Extended Key Usage and Key Usage checks). */
+#cmakedefine NC_COMPLY_WITH_ORAN_WG11
+
 #endif /* NC_CONFIG_H_ */
