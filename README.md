@@ -137,6 +137,19 @@ interaction. Enable it with the following command.
 $ cmake -DENABLE_DNSSEC=ON ..
 ```
 
+### O-RAN WG11 Compliance
+
+By default, **libnetconf2** implements only the base YANG and NETCONF
+specifications. The O-RAN WG11 security specification (section 6.9.3) imposes
+additional requirements on the client certificate used for TLS authentication,
+namely that its end-entity certificate must carry the `clientAuth` Extended Key
+Usage and the `digitalSignature` Key Usage. This behavior is not part of the
+base specification, so it is disabled by default and can be enabled with the
+following command (requires TLS support).
+```
+$ cmake -DENABLE_COMPLY_WITH_ORAN_WG11=ON ..
+```
+
 ### Build Modes
 
 There are two build modes:
