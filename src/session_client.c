@@ -15,10 +15,6 @@
 
 #define _GNU_SOURCE
 
-#ifdef __linux__
-# include <sys/syscall.h>
-#endif
-
 #include <arpa/inet.h>
 #include <assert.h>
 #include <ctype.h>
@@ -62,35 +58,6 @@ char *sshauth_privkey_passphrase(const char *privkey_path, void *priv);
 
 static pthread_once_t nc_client_context_once = PTHREAD_ONCE_INIT;
 static pthread_key_t nc_client_context_key;
-#ifdef __linux__
-static struct nc_client_context context_main = {
-    .opts.ka = {
-        .enabled = 1,
-        .idle_time = 1,
-        .max_probes = 10,
-        .probe_interval = 5
-    },
-    .opts.monitoring_thread_data.lock = PTHREAD_MUTEX_INITIALIZER,
-#ifdef NC_ENABLED_SSH_TLS
-    .ssh_opts = {
-        .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}},
-        .auth_password = sshauth_password,
-        .auth_interactive = sshauth_interactive,
-        .auth_privkey_passphrase = sshauth_privkey_passphrase,
-        .knownhosts_mode = NC_SSH_KNOWNHOSTS_ASK
-    },
-    .ssh_ch_opts = {
-        .auth_pref = {{NC_SSH_AUTH_INTERACTIVE, 1}, {NC_SSH_AUTH_PASSWORD, 2}, {NC_SSH_AUTH_PUBLICKEY, 3}},
-        .auth_password = sshauth_password,
-        .auth_interactive = sshauth_interactive,
-        .auth_privkey_passphrase = sshauth_privkey_passphrase,
-        .knownhosts_mode = NC_SSH_KNOWNHOSTS_ASK
-    },
-#endif /* NC_ENABLED_SSH_TLS */
-    /* .tls_ structures zeroed */
-    .refcount = 0
-};
-#endif
 
 static void
 nc_client_context_free(void *ptr)
@@ -103,39 +70,30 @@ nc_client_context_free(void *ptr)
         return;
     }
 
-#ifdef __linux__
-    /* in __linux__ we use static memory in the main thread,
-     * so this check is for programs terminating the main()
-     * function by pthread_exit() :)
-     */
-    if (c != &context_main)
-#endif
-    {
-        /* for the main thread the same is done in nc_client_destroy() */
-        free(c->opts.schema_searchpath);
-        for (i = 0; i < c->opts.capabilities_count; i++) {
-            free(c->opts.capabilities[i]);
-        }
-        free(c->opts.capabilities);
-        free(c->unix_opts.username);
+    /* for the main thread the same is done in nc_client_destroy() */
+    free(c->opts.schema_searchpath);
+    for (i = 0; i < c->opts.capabilities_count; i++) {
+        free(c->opts.capabilities[i]);
+    }
+    free(c->opts.capabilities);
+    free(c->unix_opts.username);
 
 #ifdef NC_ENABLED_SSH_TLS
-        for (i = 0; i < c->opts.ch_bind_count; ++i) {
-            close(c->opts.ch_binds[i].sock);
-            free((char *)c->opts.ch_binds[i].address);
-        }
-        free(c->opts.ch_binds);
-        c->opts.ch_binds = NULL;
-        c->opts.ch_bind_count = 0;
-
-        _nc_client_ssh_destroy_opts(&c->ssh_opts);
-        _nc_client_ssh_destroy_opts(&c->ssh_ch_opts);
-
-        _nc_client_tls_destroy_opts(&c->tls_opts);
-        _nc_client_tls_destroy_opts(&c->tls_ch_opts);
-#endif /* NC_ENABLED_SSH_TLS */
-        free(c);
+    for (i = 0; i < c->opts.ch_bind_count; ++i) {
+        close(c->opts.ch_binds[i].sock);
+        free((char *)c->opts.ch_binds[i].address);
     }
+    free(c->opts.ch_binds);
+    c->opts.ch_binds = NULL;
+    c->opts.ch_bind_count = 0;
+
+    _nc_client_ssh_destroy_opts(&c->ssh_opts);
+    _nc_client_ssh_destroy_opts(&c->ssh_ch_opts);
+
+    _nc_client_tls_destroy_opts(&c->tls_opts);
+    _nc_client_tls_destroy_opts(&c->tls_ch_opts);
+#endif /* NC_ENABLED_SSH_TLS */
+    free(c);
 }
 
 static void
@@ -157,43 +115,35 @@ nc_client_context_location(void)
     e = pthread_getspecific(nc_client_context_key);
     if (!e) {
         /* prepare ly_err storage */
-#ifdef __linux__
-        if (getpid() == syscall(SYS_gettid)) {
-            /* main thread - use global variable instead of thread-specific variable. */
-            e = &context_main;
-        } else
-#endif /* __linux__ */
-        {
-            e = calloc(1, sizeof *e);
-            /* set default values */
-            e->refcount = 1;
-            e->opts.ka.enabled = 1;
-            e->opts.ka.idle_time = 1;
-            e->opts.ka.max_probes = 10;
-            e->opts.ka.probe_interval = 5;
+        e = calloc(1, sizeof *e);
+        /* set default values */
+        e->refcount = 1;
+        e->opts.ka.enabled = 1;
+        e->opts.ka.idle_time = 1;
+        e->opts.ka.max_probes = 10;
+        e->opts.ka.probe_interval = 5;
 #ifdef NC_ENABLED_SSH_TLS
 # ifdef HAVE_TERMIOS
-            e->ssh_opts.knownhosts_mode = NC_SSH_KNOWNHOSTS_ASK;
+        e->ssh_opts.knownhosts_mode = NC_SSH_KNOWNHOSTS_ASK;
 # else
-            e->ssh_opts.knownhosts_mode = NC_SSH_KNOWNHOSTS_ACCEPT;
+        e->ssh_opts.knownhosts_mode = NC_SSH_KNOWNHOSTS_ACCEPT;
 # endif
-            e->ssh_opts.auth_pref[0].type = NC_SSH_AUTH_INTERACTIVE;
-            e->ssh_opts.auth_pref[0].value = 1;
-            e->ssh_opts.auth_pref[1].type = NC_SSH_AUTH_PASSWORD;
-            e->ssh_opts.auth_pref[1].value = 2;
-            e->ssh_opts.auth_pref[2].type = NC_SSH_AUTH_PUBLICKEY;
-            e->ssh_opts.auth_pref[2].value = 3;
-            e->ssh_opts.auth_password = sshauth_password;
-            e->ssh_opts.auth_interactive = sshauth_interactive;
-            e->ssh_opts.auth_privkey_passphrase = sshauth_privkey_passphrase;
+        e->ssh_opts.auth_pref[0].type = NC_SSH_AUTH_INTERACTIVE;
+        e->ssh_opts.auth_pref[0].value = 1;
+        e->ssh_opts.auth_pref[1].type = NC_SSH_AUTH_PASSWORD;
+        e->ssh_opts.auth_pref[1].value = 2;
+        e->ssh_opts.auth_pref[2].type = NC_SSH_AUTH_PUBLICKEY;
+        e->ssh_opts.auth_pref[2].value = 3;
+        e->ssh_opts.auth_password = sshauth_password;
+        e->ssh_opts.auth_interactive = sshauth_interactive;
+        e->ssh_opts.auth_privkey_passphrase = sshauth_privkey_passphrase;
 
-            /* callhome settings are the same */
-            memcpy(&e->ssh_ch_opts, &e->ssh_opts, sizeof e->ssh_ch_opts);
-            e->ssh_ch_opts.auth_pref[0].value = 1;
-            e->ssh_ch_opts.auth_pref[1].value = 2;
-            e->ssh_ch_opts.auth_pref[2].value = 3;
+        /* callhome settings are the same */
+        memcpy(&e->ssh_ch_opts, &e->ssh_opts, sizeof e->ssh_ch_opts);
+        e->ssh_ch_opts.auth_pref[0].value = 1;
+        e->ssh_ch_opts.auth_pref[1].value = 2;
+        e->ssh_ch_opts.auth_pref[2].value = 3;
 #endif /* NC_ENABLED_SSH_TLS */
-        }
 
         /* init the monitoring thread data lock */
         pthread_mutex_init(&e->opts.monitoring_thread_data.lock, NULL);
