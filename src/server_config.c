@@ -1484,6 +1484,15 @@ config_ssh_auth_timeout(const struct lyd_node *node, enum nc_operation UNUSED(pa
 }
 
 static int
+config_ssh_max_auth_attempts(const struct lyd_node *node, enum nc_operation UNUSED(parent_op),
+        struct nc_server_ssh_opts *ssh)
+{
+    /* default value always present */
+    ssh->max_auth_attempts = strtoul(lyd_get_value(node), NULL, 10);
+    return 0;
+}
+
+static int
 config_endpt_reference(const struct lyd_node *node, enum nc_operation parent_op, char **endpt_ref)
 {
     enum nc_operation op;
@@ -1532,6 +1541,12 @@ config_ssh_client_auth(const struct lyd_node *node, enum nc_operation parent_op,
     nc_lyd_find_child_optional(node, "libnetconf2-netconf-server:auth-timeout", &n);
     if (n) {
         NC_CHECK_RET(config_ssh_auth_timeout(n, op, ssh));
+    }
+
+    /* config max auth attempts (augment) */
+    nc_lyd_find_child_optional(node, "libnetconf2-netconf-server:max-auth-attempts", &n);
+    if (n) {
+        NC_CHECK_RET(config_ssh_max_auth_attempts(n, op, ssh));
     }
 
     /* config endpoint reference (augment) */
@@ -5618,6 +5633,7 @@ nc_server_config_ssh_dup(const struct nc_server_ssh_opts *src, struct nc_server_
     }
 
     (*dst)->auth_timeout = src->auth_timeout;
+    (*dst)->max_auth_attempts = src->max_auth_attempts;
 
 cleanup:
     if (rc) {

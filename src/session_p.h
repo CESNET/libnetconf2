@@ -386,6 +386,7 @@ struct nc_server_ssh_opts {
     char *banner;                           /**< SSH banner message, sent before authentication. */
 
     uint16_t auth_timeout;                  /**< Authentication timeout. */
+    uint16_t max_auth_attempts;             /**< Maximum number of failed authentication attempts. */
 };
 
 /**
@@ -961,6 +962,7 @@ struct nc_session {
 
 #ifdef NC_ENABLED_SSH_TLS
             uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
+            uint16_t ssh_max_auth_attempts; /**< max-auth-attempts of the endpoint the session was accepted on */
             void *client_cert;                /**< TLS client certificate if used for authentication */
 #endif /* NC_ENABLED_SSH_TLS */
         } server;
