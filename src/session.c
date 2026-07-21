@@ -38,6 +38,7 @@
 
 #ifdef NC_ENABLED_SSH_TLS
 
+#include "session_server_ssh_wrapper.h"
 #include "session_wrapper.h"
 
 #include <curl/curl.h>
@@ -923,6 +924,8 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
     case NC_TI_SSH: {
         int r;
         struct nc_session *siter;
+        void **channel_cbs = NULL, **channel_cbs_tmp;
+        uint16_t channel_cbs_count = 0, i;
 
         /* There can be multiple NETCONF sessions on the same SSH session (NETCONF session maps to
          * SSH channel). So destroy the SSH session only if there is no other NETCONF session using
@@ -944,6 +947,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
                 }
             }
             ssh_channel_free(session->ti.libssh.channel);
+            free(session->ti.libssh.channel_cb);
         }
 
         if (session->ti.libssh.next) {
@@ -965,6 +969,18 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
                     /* free starting SSH NETCONF session (channel will be freed in ssh_free()) */
                     free(siter->username);
                     free(siter->host);
+                    if (siter->ti.libssh.channel_cb) {
+                        /* channel callbacks must stay valid until all the channels are freed in
+                         * ssh_free(), so only collect them here and free them afterwards */
+                        channel_cbs_tmp = realloc(channel_cbs, (channel_cbs_count + 1) * sizeof *channel_cbs);
+                        if (channel_cbs_tmp) {
+                            channel_cbs = channel_cbs_tmp;
+                            channel_cbs[channel_cbs_count++] = siter->ti.libssh.channel_cb;
+                        } else {
+                            /* leak this one struct, the channel would otherwise use freed callbacks */
+                            ERRMEM;
+                        }
+                    }
                     if (!(siter->flags & NC_SESSION_SHAREDCTX)) {
                         ly_ctx_destroy((struct ly_ctx *)siter->ctx);
                     }
@@ -982,8 +998,24 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
             sock = -1;
 #endif
 
+#if LIBSSH_0_12
+            /* Free ssh event before freeing the session */
+            ssh_event_free(session->ti.libssh.event);
+#endif
+
             /* closes sock if set */
             ssh_free(session->ti.libssh.session);
+
+            /* all the SSH channels were freed now, free their callback data */
+            for (i = 0; i < channel_cbs_count; ++i) {
+                free(channel_cbs[i]);
+            }
+            free(channel_cbs);
+
+#if LIBSSH_0_12
+            /* Free callback data after session is destroyed */
+            nc_server_ssh_cb_data_free(session->ti.libssh.cb_data);
+#endif
         } else {
             /* remove the session from the list */
             for (siter = session->ti.libssh.next; siter->ti.libssh.next != session; siter = siter->ti.libssh.next) {}
@@ -994,6 +1026,19 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
                 /* there are still multiple sessions, keep the ring list */
                 siter->ti.libssh.next = session->ti.libssh.next;
             }
+#if LIBSSH_0_12
+            /* transfer cb_data to a remaining session so it's freed when the SSH session is freed */
+            if (session->ti.libssh.cb_data) {
+                /* the callback data now belongs to the surviving session */
+                ((struct nc_server_ssh_cb_data *)session->ti.libssh.cb_data)->session = siter;
+                siter->ti.libssh.cb_data = session->ti.libssh.cb_data;
+                session->ti.libssh.cb_data = NULL;
+            }
+            if (session->ti.libssh.event) {
+                siter->ti.libssh.event = session->ti.libssh.event;
+                session->ti.libssh.event = NULL;
+            }
+#endif
         }
 
         /* SESSION IO UNLOCK */

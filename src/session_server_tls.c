@@ -523,6 +523,7 @@ _nc_server_tls_cert_to_name(struct nc_server_tls_opts *opts, void *cert_chain, c
     /* do the same for referenced endpoint's ctn entries */
     if (opts->referenced_endpt_name) {
         if (nc_server_endpt_get(opts->referenced_endpt_name, &referenced_endpt)) {
+            ERR(NULL, "Referenced endpoint \"%s\" not found.", opts->referenced_endpt_name);
             ERRINT;
             rc = -1;
             goto cleanup;
@@ -591,6 +592,7 @@ nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_server_tls_opts *opts)
 
     if (opts->referenced_endpt_name) {
         if (nc_server_endpt_get(opts->referenced_endpt_name, &referenced_endpt)) {
+            ERR(NULL, "Referenced endpoint \"%s\" not found.", opts->referenced_endpt_name);
             ERRINT;
             return -1;
         }
