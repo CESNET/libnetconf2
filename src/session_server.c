@@ -45,6 +45,7 @@
 
 #ifdef NC_ENABLED_SSH_TLS
 
+#include "session_server_ssh_wrapper.h"
 #include "session_wrapper.h"
 
 #include <curl/curl.h>
@@ -102,7 +103,6 @@ nc_server_endpt_get(const char *name, struct nc_endpt **endpt)
         }
     }
 
-    ERR(NULL, "Endpoint \"%s\" not found in the configuration.", name);
     return 1;
 }
 
@@ -2294,6 +2294,34 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, const struct
     return ret;
 }
 
+#ifdef NC_ENABLED_SSH_TLS
+/**
+ * @brief Scan the session ring for a newly established NETCONF SSH channel.
+ *
+ * @param[in] session Session whose SSH channel ring to scan.
+ * @return 1 if a new SSH channel is found, 0 otherwise.
+ */
+static int
+nc_ps_ssh_find_new_channel(struct nc_session *session)
+{
+    struct nc_session *new;
+
+    if (!session->ti.libssh.next) {
+        return 0;
+    }
+
+    for (new = session->ti.libssh.next; new != session; new = new->ti.libssh.next) {
+        if ((new->status == NC_STATUS_STARTING) && new->ti.libssh.channel &&
+                (new->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+#endif /* NC_ENABLED_SSH_TLS */
+
 /**
  * @brief Poll a session from pspoll acquiring IO lock as needed.
  * Session must be running and session RPC lock held!
@@ -2317,8 +2345,9 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
     uint16_t idle_timeout;
 
 #ifdef NC_ENABLED_SSH_TLS
+#if !LIBSSH_0_12
     ssh_message ssh_msg;
-    struct nc_session *new;
+#endif
 #endif /* NC_ENABLED_SSH_TLS */
 
     /* check timeout first */
@@ -2341,36 +2370,33 @@ nc_ps_poll_session_io(struct nc_session *session, int io_timeout, time_t now_mon
     switch (session->ti_type) {
 #ifdef NC_ENABLED_SSH_TLS
     case NC_TI_SSH:
+#if LIBSSH_0_12
+        if (nc_ps_ssh_find_new_channel(session)) {
+            ret = NC_PSPOLL_SSH_CHANNEL;
+            break;
+        }
+#else
         ssh_msg = ssh_message_get(session->ti.libssh.session);
         if (ssh_msg) {
             if (nc_session_ssh_msg(session, NULL, ssh_msg, NULL)) {
                 ssh_message_reply_default(ssh_msg);
             }
-            if (session->ti.libssh.next) {
-                for (new = session->ti.libssh.next; new != session; new = new->ti.libssh.next) {
-                    if ((new->status == NC_STATUS_STARTING) && new->ti.libssh.channel &&
-                            (new->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
-                        /* new NETCONF SSH channel */
-                        ret = NC_PSPOLL_SSH_CHANNEL;
-                        break;
-                    }
-                }
-                if (new != session) {
-                    ssh_message_free(ssh_msg);
-                    break;
-                }
+            if (nc_ps_ssh_find_new_channel(session)) {
+                ret = NC_PSPOLL_SSH_CHANNEL;
+                ssh_message_free(ssh_msg);
+                break;
             }
             if (!ret) {
                 /* just some SSH message */
                 ret = NC_PSPOLL_SSH_MSG;
             }
             ssh_message_free(ssh_msg);
-
             /* break because 1) we don't want to return anything here ORred with NC_PSPOLL_RPC
-             * and 2) we don't want to delay openning a new channel by waiting for a RPC to get processed
+             * and 2) we don't want to delay opening a new channel by waiting for a RPC to get processed
              */
             break;
         }
+#endif
 
         r = ssh_channel_poll_timeout(session->ti.libssh.channel, 0, 0);
         if (r == SSH_EOF) {

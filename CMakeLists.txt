@@ -244,6 +244,7 @@ target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
 # check availability for some pthread functions
 set(CMAKE_REQUIRED_LIBRARIES pthread)
 check_function_exists(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
+check_function_exists(pthread_timedjoin_np HAVE_PTHREAD_TIMEDJOIN_NP)
 
 # header file compatibility
 check_include_file("shadow.h" HAVE_SHADOW)
@@ -273,6 +274,12 @@ if(ENABLE_SSH_TLS)
     target_link_libraries(netconf2 ${LIBSSH_LIBRARIES})
     list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBSSH_LIBRARIES})
     include_directories(${LIBSSH_INCLUDE_DIRS})
+
+    if(LIBSSH_VERSION VERSION_GREATER_EQUAL "0.12.0")
+        list(APPEND libsrc src/session_server_ssh_auth_callback.c)
+    else ()
+        list(APPEND libsrc src/session_server_ssh_auth_message.c)
+    endif()
 
     # dependencies - libcurl
     find_package(CURL 7.30.0 REQUIRED)

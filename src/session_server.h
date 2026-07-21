@@ -525,17 +525,36 @@ int nc_server_ssh_set_authkey_path_format(const char *path);
  * @brief Keyboard interactive authentication callback.
  *
  * The callback has to handle sending interactive challenges and receiving responses by itself.
- * An example callback may fit the following description:
- * Prepare all prompts for the user and send them via `ssh_message_auth_interactive_request()`.
- * Get the answers either by calling `ssh_message_get()` or `nc_server_ssh_kbdint_get_nanswers()`.
- * Return value based on your authentication logic and user answers retrieved by
- * calling `ssh_userauth_kbdint_getanswer()`.
+ * The exact workflow depends on the libssh version the library was compiled with.
+ *
+ * **libssh older than 0.12 (message-based workflow):**
+ * The callback is invoked exactly once per authentication attempt, with the initial
+ * keyboard-interactive request message. Prepare all prompts for the user and send them via
+ * `ssh_message_auth_interactive_request()`. Get the answers either by calling `ssh_message_get()`
+ * or `nc_server_ssh_kbdint_get_nanswers()`, and then `ssh_userauth_kbdint_getanswer()` for each
+ * of them. Multiple challenge-response rounds can be performed within this single invocation.
+ *
+ * **libssh 0.12 and newer (callback-based workflow):**
+ * Authentication is driven by libssh server callbacks, so this callback is invoked separately
+ * for every stage of the keyboard-interactive exchange and each invocation must return promptly
+ * (blocking helpers such as `ssh_message_get()` or `nc_server_ssh_kbdint_get_nanswers()` must
+ * not be used). Determine the current stage with `ssh_message_auth_kbdint_is_response()`:
+ * - not a response: send a challenge via `ssh_message_auth_interactive_request()` and return
+ *   `SSH_AUTH_INFO`;
+ * - a response: retrieve the answers with `ssh_userauth_kbdint_getnanswers()` and
+ *   `ssh_userauth_kbdint_getanswer()` and return the authentication result, or send another
+ *   challenge and return `SSH_AUTH_INFO` to start the next round.
  *
  * @param[in] session NETCONF session.
  * @param[in] ssh_sess libssh session.
- * @param[in] msg SSH message that contains the interactive request and which expects a reply with prompts.
+ * @param[in] msg SSH message with the interactive request (a response message with libssh 0.12+).
  * @param[in] user_data Arbitrary user data.
- * @return 0 for successful authentication, non-zero to deny the user.
+ * @return 0 for successful authentication, non-zero to deny the user; with libssh 0.12+
+ * `SSH_AUTH_INFO` may be returned when a challenge was sent and the client's response
+ * is expected (the callback is then invoked again once it arrives). With libssh 0.12+,
+ * `SSH_AUTH_PARTIAL` may also be returned if the method succeeded but more authentication
+ * methods are required based on the server configuration; if none are required, the
+ * authentication completes instead of returning a partial success.
  */
 typedef int (*nc_server_ssh_interactive_auth_clb)(const struct nc_session *session,
         ssh_session ssh_sess, ssh_message msg, void *user_data);
@@ -543,8 +562,8 @@ typedef int (*nc_server_ssh_interactive_auth_clb)(const struct nc_session *sessi
 /**
  * @brief Set the callback for SSH interactive authentication.
  *
- * @param[in] auth_clb Keyboard interactive authentication callback. This callback is only called once per authentication.
- * @param[in] user_data Optional arbitrary user data that will be passed to @p interactive_auth_clb.
+ * @param[in] auth_clb Keyboard interactive authentication callback. Called once per authentication (libssh < 0.12) or once per stage (libssh >= 0.12).
+ * @param[in] user_data Optional arbitrary user data that will be passed to @p auth_clb.
  * @param[in] free_user_data Optional callback that will be called during cleanup to free any @p user_data.
  */
 void nc_server_ssh_set_interactive_auth_clb(nc_server_ssh_interactive_auth_clb auth_clb, void *user_data, void (*free_user_data)(void *user_data));

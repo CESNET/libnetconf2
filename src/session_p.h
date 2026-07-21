@@ -887,9 +887,13 @@ struct nc_session {
         struct {
             ssh_channel channel;
             ssh_session session;
+            struct ssh_channel_callbacks_struct *channel_cb; /**< channel callbacks used in the
+                                                                   callback-based auth (libssh >= 0.12) */
+            void *cb_data; /**< heap-allocated nc_server_ssh_cb_data (libssh >= 0.12) */
             struct nc_session *next; /**< pointer to the next NETCONF session on the same
                                           SSH session, but different SSH channel. If no such session exists, it is NULL.
                                           otherwise there is a ring list of the NETCONF sessions */
+            ssh_event event; /**< libssh event structure used for the callback-based auth (libssh >= 0.12) */
         } libssh;
 
         struct {
@@ -1425,17 +1429,6 @@ struct nc_session *nc_accept_callhome_ssh_sock(int sock, const char *host, uint1
  * @return 1 on success, 0 on timeout, -1 on error.
  */
 int nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opts, int sock);
-
-/**
- * @brief Process a SSH message.
- *
- * @param[in] session Session structure of the connection.
- * @param[in] opts Endpoint SSH options on which the session was created.
- * @param[in] msg SSH message itself.
- * @param[in] auth_state State of the authentication.
- * @return 0 if the message was handled, 1 if it is left up to libssh.
- */
-int nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg, struct nc_auth_state *auth_state);
 
 void nc_client_ssh_destroy_opts(void);
 void _nc_client_ssh_destroy_opts(struct nc_client_ssh_opts *opts);
