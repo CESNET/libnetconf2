@@ -212,7 +212,7 @@ nc_read_until(struct nc_session *session, const char *endtag, uint32_t inact_tim
 
         /* get another character */
         r = nc_read(session, *buf + count, len - matched, inact_timeout, ts_act_timeout);
-        if (r != len - matched) {
+        if ((r < 0) || ((size_t)r != len - matched)) {
             count = -1;
             goto cleanup;
         }

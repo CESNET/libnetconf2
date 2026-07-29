@@ -1422,7 +1422,7 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
             } else {
                 yl_content_id = malloc(11);
                 NC_CHECK_ERRMEM_GOTO(!yl_content_id, , unlock_error);
-                sprintf(yl_content_id, "%" PRIu32, ly_ctx_get_change_count(ctx));
+                sprintf(yl_content_id, "%" PRIu16, ly_ctx_get_change_count(ctx));
             }
 
             if (!strcmp(mod->revision, "2019-01-04")) {

@@ -417,7 +417,7 @@ nc_server_ssh_read_authorized_keys_file(const char *path, struct nc_public_key *
         /* add the key */
         *pubkeys = nc_realloc(*pubkeys, (*pubkey_count + 1) * sizeof **pubkeys);
         NC_CHECK_ERRMEM_GOTO(!(*pubkeys), ret = 1, cleanup);
-        rc = asprintf(&(*pubkeys)[*pubkey_count].name, "authorized_key_%" PRIu16, *pubkey_count);
+        rc = asprintf(&(*pubkeys)[*pubkey_count].name, "authorized_key_%" PRIu32, *pubkey_count);
         NC_CHECK_ERRMEM_GOTO(rc == -1, (*pubkeys)[*pubkey_count].name = NULL; ret = 1, cleanup);
         (*pubkeys)[*pubkey_count].type = NC_PUBKEY_FORMAT_SSH;
         (*pubkeys)[*pubkey_count].data = strdup(ptr);
