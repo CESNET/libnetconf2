@@ -795,6 +795,70 @@ test_config_all_nodes(void **state)
     lyd_free_all(tree);
 }
 
+static void
+test_config_cascade_delete(void **state)
+{
+    int ret;
+    struct lyd_node *tree = NULL, *node = NULL;
+    struct ln2_test_ctx *test_ctx = *state;
+
+    /*
+     * Test the fix for GitHub issue #614:
+     * Deleting the last entry of a list inside a presence container must
+     * also delete the empty presence container to maintain YANG validity.
+     */
+
+    /* add a listen endpoint and a call-home client */
+    ret = nc_server_config_add_address_port(test_ctx->ctx, "endpt", NC_TI_SSH,
+            "127.0.0.1", TEST_PORT, &tree);
+    assert_int_equal(ret, 0);
+    ret = nc_server_config_add_ssh_hostkey(test_ctx->ctx, "endpt", "hostkey1",
+            TESTS_DIR "/data/key_rsa", NULL, &tree);
+    assert_int_equal(ret, 0);
+    ret = nc_server_config_add_ssh_user_password(test_ctx->ctx, "endpt", "user1", "passwd", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_address_port(test_ctx->ctx, "ch1", "ch-endpt1",
+            NC_TI_SSH, "127.0.0.1", TEST_PORT_2_STR, &tree);
+    assert_int_equal(ret, 0);
+    ret = nc_server_config_add_ch_ssh_hostkey(test_ctx->ctx, "ch1", "ch-endpt1",
+            "hostkey1", TESTS_DIR "/data/key_rsa", NULL, &tree);
+    assert_int_equal(ret, 0);
+    ret = nc_server_config_add_ch_ssh_user_password(test_ctx->ctx, "ch1", "ch-endpt1",
+            "user1", "passwd", &tree);
+    assert_int_equal(ret, 0);
+    ret = nc_server_config_add_ch_persistent(test_ctx->ctx, "ch1", &tree);
+    assert_int_equal(ret, 0);
+
+    /* must be valid */
+    ret = lyd_validate_all(&tree, test_ctx->ctx, LYD_VALIDATE_PRESENT, NULL);
+    assert_int_equal(ret, 0);
+
+    /* delete the last listen endpoint, the listen container should be deleted as well */
+    ret = nc_server_config_del_endpt("endpt", &tree);
+    assert_int_equal(ret, 0);
+    ret = lyd_find_path(tree, "/ietf-netconf-server:netconf-server/listen", 0, &node);
+
+    /* listen should have been deleted, lyd_find_path should find the parent netconf-server container */
+    assert_int_equal(ret, LY_EINCOMPLETE);
+    assert_int_equal(strcmp(LYD_NAME(node), "netconf-server"), 0);
+
+    /* delete the last call-home client, the call-home container should be deleted as well */
+    ret = nc_server_config_del_ch_client("ch1", &tree);
+    assert_int_equal(ret, 0);
+    ret = lyd_find_path(tree, "/ietf-netconf-server:netconf-server/call-home", 0, &node);
+
+    /* call-home should have been deleted, lyd_find_path should find the parent netconf-server container */
+    assert_int_equal(ret, LY_EINCOMPLETE);
+    assert_int_equal(strcmp(LYD_NAME(node), "netconf-server"), 0);
+
+    /* the configuration should stay valid */
+    ret = lyd_validate_all(&tree, test_ctx->ctx, LYD_VALIDATE_PRESENT, NULL);
+    assert_int_equal(ret, 0);
+
+    lyd_free_all(tree);
+}
+
 static void *
 unsupported_asymkey_client_thread(void *arg)
 {
@@ -1036,6 +1100,7 @@ main(void)
         cmocka_unit_test_setup_teardown(test_preserve_conn, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_transport_params_oper_get, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_config_all_nodes, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_config_cascade_delete, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_unusupported_asymkey_format, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_invalid_diff, setup_f, ln2_glob_test_teardown),
     };
