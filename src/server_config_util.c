@@ -223,13 +223,30 @@ cleanup:
 API int
 nc_server_config_del_endpt(const char *endpt_name, struct lyd_node **config)
 {
+    int rc = 0;
+    struct lyd_node *node = NULL;
+
     NC_CHECK_ARG_RET(NULL, config, 1);
 
     if (endpt_name) {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']", endpt_name);
+        rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']", endpt_name);
     } else {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint");
+        rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint");
     }
+    if (rc) {
+        goto cleanup;
+    }
+
+    lyd_find_path(*config, "/ietf-netconf-server:netconf-server/listen/endpoints", 0, &node);
+    if (node && !lyd_child(node)) {
+        /* no more endpoints, delete the listen container */
+        if ((rc = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/listen"))) {
+            goto cleanup;
+        }
+    }
+
+cleanup:
+    return rc;
 }
 
 API int
@@ -1092,13 +1109,30 @@ cleanup:
 API int
 nc_server_config_del_ch_client(const char *ch_client_name, struct lyd_node **config)
 {
+    int rc = 0;
+    struct lyd_node *node = NULL;
+
     NC_CHECK_ARG_RET(NULL, config, 1);
 
     if (ch_client_name) {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']", ch_client_name);
+        rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']", ch_client_name);
     } else {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client");
+        rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client");
     }
+    if (rc) {
+        goto cleanup;
+    }
+
+    lyd_find_path(*config, "/ietf-netconf-server:netconf-server/call-home", 0, &node);
+    if (node && !lyd_child(node)) {
+        /* no more clients, delete the call-home container */
+        if ((rc = nc_server_config_check_delete(config, "/ietf-netconf-server:netconf-server/call-home"))) {
+            goto cleanup;
+        }
+    }
+
+cleanup:
+    return rc;
 }
 
 API int

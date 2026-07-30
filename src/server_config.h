@@ -139,6 +139,9 @@ int nc_server_config_add_address_port(const struct ly_ctx *ctx, const char *endp
  * If NULL, all of the endpoints will be deleted.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note If the last endpoint is deleted, the parent listen presence container
+ * is also deleted to maintain a valid YANG data tree.
  */
 int nc_server_config_del_endpt(const char *endpt_name, struct lyd_node **config);
 
@@ -400,6 +403,9 @@ int nc_server_config_add_ssh_hostkey(const struct ly_ctx *ctx, const char *endpt
  * If NULL, all of the hostkeys on this endpoint will be deleted.
  * @param[in,out] config Configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note If the last hostkey is deleted, the configuration becomes invalid.
+ * Add a new hostkey to make it valid again.
  */
 int nc_server_config_del_ssh_hostkey(const struct ly_ctx *ctx, const char *endpt_name,
         const char *hostkey_name, struct lyd_node **config);
@@ -650,6 +656,9 @@ int nc_server_config_add_tls_server_cert(const struct ly_ctx *ctx, const char *e
  * @param[in] endpt_name Identifier of an existing endpoint.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note Deleting the server certificate makes the configuration invalid.
+ * Add a new server certificate to make it valid again.
  */
 int nc_server_config_del_tls_server_cert(const char *endpt_name, struct lyd_node **config);
 
@@ -674,6 +683,9 @@ int nc_server_config_add_tls_keystore_ref(const struct ly_ctx *ctx, const char *
  * @param[in] endpt_name Identifier of an existing endpoint.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note Deleting the keystore reference makes the configuration invalid.
+ * Add a new keystore reference to make it valid again.
  */
 int nc_server_config_del_tls_keystore_ref(const char *endpt_name, struct lyd_node **config);
 
@@ -703,6 +715,10 @@ int nc_server_config_add_tls_client_cert(const struct ly_ctx *ctx, const char *e
  * If NULL, all of the end-entity certificates on the given endpoint will be deleted.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note If the last certificate is deleted, the parent ee-certs container and
+ * possibly the client-authentication container are also deleted to maintain
+ * a valid YANG data tree.
  */
 int nc_server_config_del_tls_client_cert(const char *endpt_name, const char *cert_name, struct lyd_node **config);
 
@@ -726,6 +742,9 @@ int nc_server_config_add_tls_client_cert_truststore_ref(const struct ly_ctx *ctx
  * @param[in] endpt_name Identifier of an existing endpoint.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note The parent ee-certs container and possibly the client-authentication
+ * container are also deleted to maintain a valid YANG data tree.
  */
 int nc_server_config_del_tls_client_cert_truststore_ref(const char *endpt_name, struct lyd_node **config);
 
@@ -763,6 +782,10 @@ int nc_server_config_add_tls_ca_cert(const struct ly_ctx *ctx, const char *endpt
  * If NULL, all of the CA certificates on the given endpoint will be deleted.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note If the last certificate is deleted, the parent ca-certs container and
+ * possibly the client-authentication container are also deleted to maintain
+ * a valid YANG data tree.
  */
 int nc_server_config_del_tls_ca_cert(const char *endpt_name, const char *cert_name, struct lyd_node **config);
 
@@ -786,6 +809,9 @@ int nc_server_config_add_tls_ca_cert_truststore_ref(const struct ly_ctx *ctx, co
  * @param[in] endpt_name Identifier of an existing endpoint.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note The parent ca-certs container and possibly the client-authentication
+ * container are also deleted to maintain a valid YANG data tree.
  */
 int nc_server_config_del_tls_ca_cert_truststore_ref(const char *endpt_name, struct lyd_node **config);
 
@@ -842,6 +868,9 @@ int nc_server_config_add_tls_ctn(const struct ly_ctx *ctx, const char *endpt_nam
  * If 0, all of the cert-to-name entries on the given endpoint will be deleted.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note If the last cert-to-name entry is deleted, the configuration becomes
+ * invalid. Add a new cert-to-name entry to make it valid again.
  */
 int nc_server_config_del_tls_ctn(const char *endpt_name, uint32_t id, struct lyd_node **config);
 
@@ -896,6 +925,9 @@ int nc_server_config_add_ch_address_port(const struct ly_ctx *ctx, const char *c
  * If NULL, all of the Call Home clients will be deleted.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note If the last client is deleted, the parent call-home presence container
+ * is also deleted to maintain a valid YANG data tree.
  */
 int nc_server_config_del_ch_client(const char *client_name, struct lyd_node **config);
 
@@ -907,6 +939,9 @@ int nc_server_config_del_ch_client(const char *client_name, struct lyd_node **co
  * If NULL, all of the CH endpoints which belong to the given client will be deleted.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note If the last endpoint of the client is deleted, the configuration
+ * becomes invalid. Add a new endpoint to make it valid again.
  */
 int nc_server_config_del_ch_endpt(const char *client_name, const char *endpt_name, struct lyd_node **config);
 
@@ -1074,6 +1109,9 @@ int nc_server_config_add_ch_ssh_hostkey(const struct ly_ctx *ctx, const char *cl
  * If NULL, all of the hostkeys on the given endpoint will be deleted.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note If the last hostkey is deleted, the configuration becomes invalid.
+ * Add a new hostkey to make it valid again.
  */
 int nc_server_config_del_ch_ssh_hostkey(const char *client_name, const char *endpt_name,
         const char *hostkey_name, struct lyd_node **config);
@@ -1319,6 +1357,9 @@ int nc_server_config_add_ch_tls_server_cert(const struct ly_ctx *ctx, const char
  * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note Deleting the server certificate makes the configuration invalid.
+ * Add a new server certificate to make it valid again.
  */
 int nc_server_config_del_ch_tls_server_cert(const char *client_name, const char *endpt_name,
         struct lyd_node **config);
@@ -1347,6 +1388,9 @@ int nc_server_config_add_ch_tls_keystore_ref(const struct ly_ctx *ctx, const cha
  * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note Deleting the keystore reference makes the configuration invalid.
+ * Add a new keystore reference to make it valid again.
  */
 int nc_server_config_del_ch_tls_keystore_ref(const char *client_name, const char *endpt_name,
         struct lyd_node **config);
@@ -1378,6 +1422,10 @@ int nc_server_config_add_ch_tls_client_cert(const struct ly_ctx *ctx, const char
  * If NULL, all of the client certificates will be deleted.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note If the last certificate is deleted, the parent ee-certs container and
+ * possibly the client-authentication container are also deleted to maintain
+ * a valid YANG data tree.
  */
 int nc_server_config_del_ch_tls_client_cert(const char *client_name, const char *endpt_name,
         const char *cert_name, struct lyd_node **config);
@@ -1405,6 +1453,9 @@ int nc_server_config_add_ch_tls_client_cert_truststore_ref(const struct ly_ctx *
  * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note The parent ee-certs container and possibly the client-authentication
+ * container are also deleted to maintain a valid YANG data tree.
  */
 int nc_server_config_del_ch_tls_client_cert_truststore_ref(const char *client_name, const char *endpt_name,
         struct lyd_node **config);
@@ -1436,6 +1487,10 @@ int nc_server_config_add_ch_tls_ca_cert(const struct ly_ctx *ctx, const char *cl
  * If NULL, all of the CA certificates will be deleted.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note If the last certificate is deleted, the parent ca-certs container and
+ * possibly the client-authentication container are also deleted to maintain
+ * a valid YANG data tree.
  */
 int nc_server_config_del_ch_tls_ca_cert(const char *client_name, const char *endpt_name,
         const char *cert_name, struct lyd_node **config);
@@ -1463,6 +1518,9 @@ int nc_server_config_add_ch_tls_ca_cert_truststore_ref(const struct ly_ctx *ctx,
  * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note The parent ca-certs container and possibly the client-authentication
+ * container are also deleted to maintain a valid YANG data tree.
  */
 int nc_server_config_del_ch_tls_ca_cert_truststore_ref(const char *client_name, const char *endpt_name,
         struct lyd_node **config);
@@ -1496,6 +1554,9 @@ int nc_server_config_add_ch_tls_ctn(const struct ly_ctx *ctx, const char *client
  * If 0, all of the CTN entries will be deleted.
  * @param[in,out] config Modified configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
+ *
+ * @note If the last cert-to-name entry is deleted, the configuration becomes
+ * invalid. Add a new cert-to-name entry to make it valid again.
  */
 int nc_server_config_del_ch_tls_ctn(const char *client_name, const char *endpt_name,
         uint32_t id, struct lyd_node **config);

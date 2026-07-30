@@ -267,6 +267,82 @@ nc_server_config_del_ch_tls_keystore_ref(const char *client_name, const char *en
             "central-keystore-reference", client_name, endpt_name);
 }
 
+/**
+ * @brief After deleting a cert or truststore ref, clean up the parent cert bag
+ * (ee-certs/ca-certs) if empty, and then client-authentication if it has no
+ * cert bags left. This maintains YANG validation (must 'ca-certs or ee-certs').
+ *
+ * @param[in,out] config Configuration YANG data tree.
+ * @param[in] client_auth_path Path to the client-authentication container.
+ * @param[in] cert_bag_name Either "ee-certs" or "ca-certs".
+ * @return 0 on success, non-zero otherwise.
+ */
+static int
+nc_server_config_tls_cleanup_cert_bag(struct lyd_node **config, const char *client_auth_path,
+        const char *cert_bag_name)
+{
+    int rc = 0;
+    char *path = NULL;
+    struct lyd_node *node = NULL, *child;
+    int has_ca = 0, has_ee = 0, bag_has_content = 0;
+
+    /* check if the cert bag (ee-certs/ca-certs) is effectively empty and delete it if so */
+    if (asprintf(&path, "%s/%s", client_auth_path, cert_bag_name) == -1) {
+        ERRMEM;
+        path = NULL;
+        rc = 1;
+        goto cleanup;
+    }
+
+    if ((rc = lyd_find_path(*config, path, 0, &node))) {
+        goto cleanup;
+    }
+
+    /* check if the cert bag has any meaningful content,
+     * inline-definition with no certificate entries is not meaningful content */
+    LY_LIST_FOR(lyd_child(node), child) {
+        if (!strcmp(LYD_NAME(child), "inline-definition")) {
+            if (lyd_child(child)) {
+                bag_has_content = 1;
+            }
+        } else {
+            /* central-truststore-reference or any other node */
+            bag_has_content = 1;
+        }
+    }
+
+    if (!bag_has_content) {
+        /* cert bag is empty, delete it */
+        if ((rc = nc_server_config_check_delete(config, "%s", path))) {
+            goto cleanup;
+        }
+    }
+
+    /* check if client-authentication has no ca-certs or ee-certs */
+    if ((rc = lyd_find_path(*config, client_auth_path, 0, &node))) {
+        goto cleanup;
+    }
+
+    LY_LIST_FOR(lyd_child(node), child) {
+        if (!strcmp(LYD_NAME(child), "ca-certs")) {
+            has_ca = 1;
+        } else if (!strcmp(LYD_NAME(child), "ee-certs")) {
+            has_ee = 1;
+        }
+    }
+
+    if (!has_ca && !has_ee) {
+        /* neither ca-certs nor ee-certs, delete client-authentication */
+        if ((rc = nc_server_config_check_delete(config, "%s", client_auth_path))) {
+            goto cleanup;
+        }
+    }
+
+cleanup:
+    free(path);
+    return rc;
+}
+
 static int
 _nc_server_config_add_tls_client_cert(const struct ly_ctx *ctx, const char *tree_path,
         const char *cert_path, struct lyd_node **config)
@@ -326,17 +402,40 @@ cleanup:
 API int
 nc_server_config_del_tls_client_cert(const char *endpt_name, const char *cert_name, struct lyd_node **config)
 {
+    int rc = 0;
+    char *client_auth_path = NULL;
+
     NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
 
     if (cert_name) {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
+        rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
                 "tls-server-parameters/client-authentication/ee-certs/inline-definition/"
                 "certificate[name='%s']", endpt_name, cert_name);
     } else {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
+        rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
                 "tls-server-parameters/client-authentication/ee-certs/inline-definition/"
                 "certificate", endpt_name);
     }
+    if (rc) {
+        goto cleanup;
+    }
+
+    /* clean up ee-certs and possibly client-authentication to maintain YANG validation */
+    if (asprintf(&client_auth_path, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
+            "tls-server-parameters/client-authentication", endpt_name) == -1) {
+        ERRMEM;
+        client_auth_path = NULL;
+        rc = 1;
+        goto cleanup;
+    }
+
+    if ((rc = nc_server_config_tls_cleanup_cert_bag(config, client_auth_path, "ee-certs"))) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(client_auth_path);
+    return rc;
 }
 
 API int
@@ -376,17 +475,40 @@ API int
 nc_server_config_del_ch_tls_client_cert(const char *client_name, const char *endpt_name,
         const char *cert_name, struct lyd_node **config)
 {
+    int rc = 0;
+    char *client_auth_path = NULL;
+
     NC_CHECK_ARG_RET(NULL, client_name, endpt_name, config, 1);
 
     if (cert_name) {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+        rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
                 "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication/ee-certs/"
                 "inline-definition/certificate[name='%s']", client_name, endpt_name, cert_name);
     } else {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+        rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
                 "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication/ee-certs/"
                 "inline-definition/certificate", client_name, endpt_name);
     }
+    if (rc) {
+        goto cleanup;
+    }
+
+    /* clean up ee-certs and possibly client-authentication to maintain YANG validation */
+    if (asprintf(&client_auth_path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+            "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication", client_name, endpt_name) == -1) {
+        ERRMEM;
+        client_auth_path = NULL;
+        rc = 1;
+        goto cleanup;
+    }
+
+    if ((rc = nc_server_config_tls_cleanup_cert_bag(config, client_auth_path, "ee-certs"))) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(client_auth_path);
+    return rc;
 }
 
 API int
@@ -417,10 +539,32 @@ cleanup:
 API int
 nc_server_config_del_tls_client_cert_truststore_ref(const char *endpt_name, struct lyd_node **config)
 {
+    int rc = 0;
+    char *client_auth_path = NULL;
+
     NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
 
-    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
-            "tls-server-parameters/client-authentication/ee-certs/central-truststore-reference", endpt_name);
+    if ((rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
+            "tls-server-parameters/client-authentication/ee-certs/central-truststore-reference", endpt_name))) {
+        goto cleanup;
+    }
+
+    /* clean up ee-certs and possibly client-authentication to maintain YANG validation */
+    if (asprintf(&client_auth_path, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
+            "tls-server-parameters/client-authentication", endpt_name) == -1) {
+        ERRMEM;
+        client_auth_path = NULL;
+        rc = 1;
+        goto cleanup;
+    }
+
+    if ((rc = nc_server_config_tls_cleanup_cert_bag(config, client_auth_path, "ee-certs"))) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(client_auth_path);
+    return rc;
 }
 
 API int
@@ -454,11 +598,33 @@ API int
 nc_server_config_del_ch_tls_client_cert_truststore_ref(const char *client_name, const char *endpt_name,
         struct lyd_node **config)
 {
+    int rc = 0;
+    char *client_auth_path = NULL;
+
     NC_CHECK_ARG_RET(NULL, client_name, endpt_name, config, 1);
 
-    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/"
+    if ((rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/"
             "netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tls-server-parameters/"
-            "client-authentication/ee-certs/central-truststore-reference", client_name, endpt_name);
+            "client-authentication/ee-certs/central-truststore-reference", client_name, endpt_name))) {
+        goto cleanup;
+    }
+
+    /* clean up ee-certs and possibly client-authentication to maintain YANG validation */
+    if (asprintf(&client_auth_path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+            "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication", client_name, endpt_name) == -1) {
+        ERRMEM;
+        client_auth_path = NULL;
+        rc = 1;
+        goto cleanup;
+    }
+
+    if ((rc = nc_server_config_tls_cleanup_cert_bag(config, client_auth_path, "ee-certs"))) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(client_auth_path);
+    return rc;
 }
 
 API int
@@ -495,17 +661,40 @@ cleanup:
 API int
 nc_server_config_del_tls_ca_cert(const char *endpt_name, const char *cert_name, struct lyd_node **config)
 {
+    int rc = 0;
+    char *client_auth_path = NULL;
+
     NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
 
     if (cert_name) {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
+        rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
                 "tls-server-parameters/client-authentication/ca-certs/inline-definition/"
                 "certificate[name='%s']", endpt_name, cert_name);
     } else {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
+        rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
                 "tls-server-parameters/client-authentication/ca-certs/inline-definition/"
                 "certificate", endpt_name);
     }
+    if (rc) {
+        goto cleanup;
+    }
+
+    /* clean up ca-certs and possibly client-authentication to maintain YANG validation */
+    if (asprintf(&client_auth_path, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
+            "tls-server-parameters/client-authentication", endpt_name) == -1) {
+        ERRMEM;
+        client_auth_path = NULL;
+        rc = 1;
+        goto cleanup;
+    }
+
+    if ((rc = nc_server_config_tls_cleanup_cert_bag(config, client_auth_path, "ca-certs"))) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(client_auth_path);
+    return rc;
 }
 
 API int
@@ -545,17 +734,40 @@ API int
 nc_server_config_del_ch_tls_ca_cert(const char *client_name, const char *endpt_name,
         const char *cert_name, struct lyd_node **config)
 {
+    int rc = 0;
+    char *client_auth_path = NULL;
+
     NC_CHECK_ARG_RET(NULL, client_name, endpt_name, config, 1);
 
     if (cert_name) {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+        rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
                 "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication/ca-certs/"
                 "inline-definition/certificate[name='%s']", client_name, endpt_name, cert_name);
     } else {
-        return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+        rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
                 "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication/ca-certs/"
                 "inline-definition/certificate", client_name, endpt_name);
     }
+    if (rc) {
+        goto cleanup;
+    }
+
+    /* clean up ca-certs and possibly client-authentication to maintain YANG validation */
+    if (asprintf(&client_auth_path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+            "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication", client_name, endpt_name) == -1) {
+        ERRMEM;
+        client_auth_path = NULL;
+        rc = 1;
+        goto cleanup;
+    }
+
+    if ((rc = nc_server_config_tls_cleanup_cert_bag(config, client_auth_path, "ca-certs"))) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(client_auth_path);
+    return rc;
 }
 
 API int
@@ -586,10 +798,32 @@ cleanup:
 API int
 nc_server_config_del_tls_ca_cert_truststore_ref(const char *endpt_name, struct lyd_node **config)
 {
+    int rc = 0;
+    char *client_auth_path = NULL;
+
     NC_CHECK_ARG_RET(NULL, endpt_name, config, 1);
 
-    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
-            "tls-server-parameters/client-authentication/ca-certs/central-truststore-reference", endpt_name);
+    if ((rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
+            "tls-server-parameters/client-authentication/ca-certs/central-truststore-reference", endpt_name))) {
+        goto cleanup;
+    }
+
+    /* clean up ca-certs and possibly client-authentication to maintain YANG validation */
+    if (asprintf(&client_auth_path, "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/tls/"
+            "tls-server-parameters/client-authentication", endpt_name) == -1) {
+        ERRMEM;
+        client_auth_path = NULL;
+        rc = 1;
+        goto cleanup;
+    }
+
+    if ((rc = nc_server_config_tls_cleanup_cert_bag(config, client_auth_path, "ca-certs"))) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(client_auth_path);
+    return rc;
 }
 
 API int
@@ -623,11 +857,33 @@ API int
 nc_server_config_del_ch_tls_ca_cert_truststore_ref(const char *client_name, const char *endpt_name,
         struct lyd_node **config)
 {
+    int rc = 0;
+    char *client_auth_path = NULL;
+
     NC_CHECK_ARG_RET(NULL, client_name, endpt_name, config, 1);
 
-    return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/"
+    if ((rc = nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/"
             "netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tls-server-parameters/"
-            "client-authentication/ca-certs/central-truststore-reference", client_name, endpt_name);
+            "client-authentication/ca-certs/central-truststore-reference", client_name, endpt_name))) {
+        goto cleanup;
+    }
+
+    /* clean up ca-certs and possibly client-authentication to maintain YANG validation */
+    if (asprintf(&client_auth_path, "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/"
+            "endpoints/endpoint[name='%s']/tls/tls-server-parameters/client-authentication", client_name, endpt_name) == -1) {
+        ERRMEM;
+        client_auth_path = NULL;
+        rc = 1;
+        goto cleanup;
+    }
+
+    if ((rc = nc_server_config_tls_cleanup_cert_bag(config, client_auth_path, "ca-certs"))) {
+        goto cleanup;
+    }
+
+cleanup:
+    free(client_auth_path);
+    return rc;
 }
 
 static const char *
