@@ -1967,6 +1967,61 @@ nc_session_seen_uris_free(char **seen_uris, int seen_count)
 }
 
 /**
+ * @brief Restrict allowed CURL protocols to prevent SSRF via malicious CRL DP URIs.
+ *
+ * Only HTTP(S) and, if supported by the linked libcurl, LDAP(S) are allowed.
+ *
+ * @param[in] handle CURL handle to configure.
+ * @return 0 on success, 1 on failure.
+ */
+static int
+nc_session_curl_set_protocols(CURL *handle)
+{
+    curl_version_info_data *ver;
+    int i, have_ldap = 0, have_ldaps = 0;
+
+#if CURL_AT_LEAST_VERSION(7, 85, 0)
+    char proto_str[32]; /* "http,https,ldap,ldaps" + NUL */
+#else
+    long protocols = CURLPROTO_HTTP | CURLPROTO_HTTPS;
+#endif
+
+    ver = curl_version_info(CURLVERSION_NOW);
+    if (ver && ver->protocols) {
+        for (i = 0; ver->protocols[i]; i++) {
+            if (!strcmp(ver->protocols[i], "ldap")) {
+                have_ldap = 1;
+            } else if (!strcmp(ver->protocols[i], "ldaps")) {
+                have_ldaps = 1;
+            }
+        }
+    }
+
+#if CURL_AT_LEAST_VERSION(7, 85, 0)
+    /* curl 7.85.0+ uses a string-based option to avoid deprecation */
+    snprintf(proto_str, sizeof proto_str, "http,https%s%s",
+            have_ldap ? ",ldap" : "", have_ldaps ? ",ldaps" : "");
+    if (curl_easy_setopt(handle, CURLOPT_PROTOCOLS_STR, proto_str)) {
+        ERR(NULL, "Setting CURLOPT_PROTOCOLS_STR failed.");
+        return 1;
+    }
+#else
+    if (have_ldap) {
+        protocols |= CURLPROTO_LDAP;
+    }
+    if (have_ldaps) {
+        protocols |= CURLPROTO_LDAPS;
+    }
+    if (curl_easy_setopt(handle, CURLOPT_PROTOCOLS, protocols)) {
+        ERR(NULL, "Setting CURLOPT_PROTOCOLS failed.");
+        return 1;
+    }
+#endif
+
+    return 0;
+}
+
+/**
  * @brief Initialize CURL handle for downloading CRL.
  *
  * @param[out] handle CURL handle.
@@ -1998,6 +2053,11 @@ nc_session_curl_init(CURL **handle, struct nc_curl_data *data)
         return 1;
     }
 
+    /* restrict allowed protocols to prevent SSRF via malicious CRL DP URIs */
+    if (nc_session_curl_set_protocols(*handle)) {
+        return 1;
+    }
+
     if (curl_easy_setopt(*handle, CURLOPT_WRITEFUNCTION, nc_session_curl_cb)) {
         ERR(NULL, "Setting curl callback failed.");
         return 1;
@@ -2007,6 +2067,252 @@ nc_session_curl_init(CURL **handle, struct nc_curl_data *data)
         ERR(NULL, "Setting curl callback data failed.");
         return 1;
     }
+
+    return 0;
+}
+
+/**
+ * @brief Advance past the end of the current LDIF line.
+ *
+ * @param[in] line_end Pointer to the end of the line content (after stripping CR).
+ * @param[in] data_end End of the whole LDIF buffer.
+ * @return Pointer to the start of the next line, or data_end if at the end.
+ */
+static char *
+nc_session_ldif_next_line(char *line_end, char *data_end)
+{
+    char *next;
+
+    if (line_end >= data_end) {
+        return data_end;
+    }
+
+    /* skip the CR of a CRLF pair */
+    if (*line_end == '\r') {
+        next = line_end + 2;
+    } else {
+        next = line_end + 1;
+    }
+
+    if (next > data_end) {
+        next = data_end;
+    }
+
+    return next;
+}
+
+/**
+ * @brief Check if an LDIF attribute name is a known CRL attribute.
+ *
+ * Accepts certificateRevocationList, authorityRevocationList, and
+ * deltaRevocationList, optionally followed by a transfer option such
+ * as ';binary' (RFC 4523).
+ *
+ * @param[in] name Attribute name (not null-terminated).
+ * @param[in] len Length of the attribute name.
+ * @return 1 if it is a CRL attribute, 0 otherwise.
+ */
+static int
+nc_session_ldif_is_crl_attr(const char *name, uint32_t len)
+{
+    static const char *crl_attrs[] = {"certificateRevocationList", "authorityRevocationList", "deltaRevocationList"};
+    uint32_t i, attr_len;
+
+    for (i = 0; i < (sizeof crl_attrs) / (sizeof crl_attrs[0]); i++) {
+        attr_len = (uint32_t)strlen(crl_attrs[i]);
+        /* the name must match exactly or be followed by ';' (transfer option) */
+        if ((len == attr_len) || ((len > attr_len) && (name[attr_len] == ';'))) {
+            if (!strncasecmp(name, crl_attrs[i], attr_len)) {
+                return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * @brief Extract a binary CRL from an LDIF response.
+ *
+ * The LDIF data is not null-terminated, so we scan it as a byte buffer.
+ * We look for an attribute line carrying a known CRL attribute (see
+ * nc_session_ldif_is_crl_attr) with the '::' binary value marker, collect
+ * its base64 value (including folded continuation lines starting with a
+ * space), and decode it to raw DER.
+ *
+ * @param[in] ldif LDIF response data.
+ * @param[out] crl_data Extracted raw CRL data.
+ * @param[out] crl_size Size of the extracted CRL data.
+ * @return 0 on success, 1 on failure.
+ */
+static int
+nc_session_ldif_extract_crl(struct nc_curl_data *ldif, unsigned char **crl_data, uint32_t *crl_size)
+{
+    int ret, rc = 0;
+    char *line_start, *line_end, *b64_start, *attr_colon, *tmp;
+    char *b64_buf = NULL;
+    uint32_t b64_len = 0, b64_cap = 0, line_len;
+    char *pos, *data_end;
+
+    *crl_data = NULL;
+    *crl_size = 0;
+
+    if (!ldif->data || !ldif->size) {
+        return 1;
+    }
+
+    data_end = (char *)ldif->data + ldif->size;
+    pos = (char *)ldif->data;
+
+    while (pos < data_end) {
+        /* find end of current line */
+        line_start = pos;
+        line_end = memchr(pos, '\n', data_end - pos);
+        if (!line_end) {
+            line_end = data_end;
+        } else {
+            /* strip trailing \r */
+            if ((line_end > line_start) && (line_end[-1] == '\r')) {
+                line_end--;
+            }
+        }
+        line_len = (uint32_t)(line_end - line_start);
+
+        /* strip leading tabs (curl's LDIF output indents attribute lines) */
+        while ((line_len > 0) && (line_start[0] == '\t')) {
+            line_start++;
+            line_len--;
+        }
+
+        /* advance pos past the newline for the next iteration */
+        pos = nc_session_ldif_next_line(line_end, data_end);
+
+        /* skip empty lines and comments */
+        if ((line_len == 0) || (line_start[0] == '#')) {
+            continue;
+        }
+
+        /* skip continuation lines (start with space) */
+        if (line_start[0] == ' ') {
+            continue;
+        }
+
+        /* look for '::' which marks a binary attribute value */
+        attr_colon = memchr(line_start, ':', line_len);
+        if (attr_colon && (attr_colon + 1 < line_end) && (attr_colon[1] == ':')) {
+            /* check the attribute name is a known CRL attribute */
+            if (!nc_session_ldif_is_crl_attr(line_start, (uint32_t)(attr_colon - line_start))) {
+                continue;
+            }
+
+            /* found the CRL attribute; b64 starts after ":: " */
+            b64_start = attr_colon + 2;
+            if ((b64_start < line_end) && (b64_start[0] == ' ')) {
+                b64_start++;
+            }
+
+            /* collect this first chunk */
+            b64_len = (uint32_t)(line_end - b64_start);
+            b64_cap = b64_len + 1;
+            b64_buf = malloc(b64_cap);
+            NC_CHECK_ERRMEM_GOTO(!b64_buf, rc = 1, cleanup);
+            memcpy(b64_buf, b64_start, b64_len);
+            b64_buf[b64_len] = '\0';
+
+            /* now collect continuation lines (folded, start with space) */
+            while (pos < data_end) {
+                if ((pos[0] != ' ') && (pos[0] != '\t')) {
+                    break;
+                }
+
+                line_start = pos;
+                line_end = memchr(pos, '\n', data_end - pos);
+                if (!line_end) {
+                    line_end = data_end;
+                } else {
+                    if ((line_end > line_start) && (line_end[-1] == '\r')) {
+                        line_end--;
+                    }
+                }
+                line_len = (uint32_t)(line_end - line_start);
+
+                /* advance pos */
+                pos = nc_session_ldif_next_line(line_end, data_end);
+
+                /* skip leading whitespace (the fold marker) */
+                while ((line_len > 0) && ((line_start[0] == ' ') || (line_start[0] == '\t'))) {
+                    line_start++;
+                    line_len--;
+                }
+
+                if (b64_len + line_len + 1 > b64_cap) {
+                    b64_cap = b64_len + line_len + 1;
+                    tmp = realloc(b64_buf, b64_cap);
+                    NC_CHECK_ERRMEM_GOTO(!tmp, rc = 1, cleanup);
+                    b64_buf = tmp;
+                }
+                memcpy(b64_buf + b64_len, line_start, line_len);
+                b64_len += line_len;
+                b64_buf[b64_len] = '\0';
+            }
+
+            break;
+        }
+    }
+
+    if (!b64_buf) {
+        ERR(NULL, "No binary CRL attribute found in LDIF response.");
+        rc = 1;
+        goto cleanup;
+    }
+
+    /* decode base64 to raw DER */
+    ret = nc_base64_decode_wrap(b64_buf, crl_data);
+    if (ret == -1) {
+        ERR(NULL, "Decoding base64 CRL data from LDIF failed.");
+        rc = 1;
+        goto cleanup;
+    }
+
+    /* nc_base64_decode_wrap returns the decoded length */
+    *crl_size = (uint32_t)ret;
+
+cleanup:
+    free(b64_buf);
+    return rc;
+}
+
+/**
+ * @brief Fetch a CRL from an LDAP URL via CURL and parse the LDIF response.
+ *
+ * @param[in] handle CURL handle.
+ * @param[in] url LDAP URL to fetch the CRL from.
+ * @param[in,out] data Stores the downloaded LDIF, then the decoded raw CRL.
+ * @return 0 on success, 1 on failure.
+ */
+static int
+nc_session_ldap_fetch(CURL *handle, const char *url, struct nc_curl_data *data)
+{
+    int ret;
+    unsigned char *crl_data = NULL;
+    uint32_t crl_size = 0;
+
+    /* fetch via curl, which handles the LDAP protocol natively */
+    ret = nc_session_curl_fetch(handle, url);
+    if (ret) {
+        return ret;
+    }
+
+    /* parse the LDIF response and extract the base64-encoded CRL */
+    ret = nc_session_ldif_extract_crl(data, &crl_data, &crl_size);
+    if (ret) {
+        return ret;
+    }
+
+    /* replace the LDIF data with the decoded raw CRL */
+    free(data->data);
+    data->data = crl_data;
+    data->size = crl_size;
 
     return 0;
 }
@@ -2066,9 +2372,16 @@ nc_session_tls_crl_fetch_for_peer_chain(void *peer_chain, void *cert_store, void
             }
 
             VRB(NULL, "Downloading CRL from \"%s\".", uris[j]);
-            ret = nc_session_curl_fetch(handle, uris[j]);
+            if (!strncasecmp(uris[j], "ldap://", 7) || !strncasecmp(uris[j], "ldaps://", 8)) {
+                ret = nc_session_ldap_fetch(handle, uris[j], &downloaded);
+            } else {
+                ret = nc_session_curl_fetch(handle, uris[j]);
+            }
             if (ret) {
                 WRN(NULL, "Failed to fetch CRL from \"%s\".", uris[j]);
+                free(downloaded.data);
+                downloaded.data = NULL;
+                downloaded.size = 0;
                 continue;
             }
 

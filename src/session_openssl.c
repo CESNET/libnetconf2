@@ -1114,18 +1114,33 @@ nc_tls_is_der_subpubkey_wrap(unsigned char *der, long len)
 int
 nc_base64_decode_wrap(const char *base64, unsigned char **bin)
 {
-    int ret;
+    int ret, pad = 0;
+    uint32_t len;
 
-    *bin = malloc((strlen(base64) / 4) * 3);
+    len = (uint32_t)strlen(base64);
+
+    *bin = malloc((len / 4) * 3);
     NC_CHECK_ERRMEM_RET(!*bin, -1);
 
-    ret = EVP_DecodeBlock(*bin, (const unsigned char *)base64, strlen(base64));
+    ret = EVP_DecodeBlock(*bin, (const unsigned char *)base64, len);
     if (ret == -1) {
         ERR(NULL, "Base64 decoding failed (%s).", ERR_reason_error_string(ERR_get_error()));
         free(*bin);
         *bin = NULL;
+        return -1;
     }
-    return ret;
+
+    /* EVP_DecodeBlock returns a length rounded up to a multiple of 3 and does
+     * not strip base64 padding, so subtract trailing '=' chars for the real
+     * decoded length, matching mbedtls_base64_decode behaviour */
+    if ((len >= 1) && (base64[len - 1] == '=')) {
+        pad++;
+    }
+    if ((len >= 2) && (base64[len - 2] == '=')) {
+        pad++;
+    }
+
+    return ret - pad;
 }
 
 int
