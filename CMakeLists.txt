@@ -102,6 +102,7 @@ set(READ_INACTIVE_TIMEOUT 20 CACHE STRING "Maximum number of seconds waiting for
 set(READ_ACTIVE_TIMEOUT 300 CACHE STRING "Maximum number of seconds for receiving a full message")
 set(MAX_PSPOLL_THREAD_COUNT 6 CACHE STRING "Maximum number of threads that could simultaneously access a ps_poll structure")
 set(TRANSPORT_HANDSHAKE_TIMEOUT 10 CACHE STRING "SSH key exchange and TLS handshake timeout in seconds")
+set(MESSAGE_MAX_SIZE 1048576 CACHE STRING "Maximum size of a message in kB")
 set(TIMEOUT_STEP 100 CACHE STRING "Number of microseconds tasks are repeated until timeout elapses")
 set(YANG_MODULE_DIR "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/yang/modules/libnetconf2" CACHE STRING "Directory where to copy the YANG modules to")
 set(CLIENT_SEARCH_DIR "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/yang/modules" CACHE STRING "Default NC client YANG module search directory")

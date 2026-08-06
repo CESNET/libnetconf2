@@ -58,6 +58,17 @@ const char *nc_msgtype2str[] = {
     "notification message",
 };
 
+/**
+ * @brief Read data from a session.
+ *
+ * @param[in] session Session to use.
+ * @param[in] buf Buffer to write to.
+ * @param[in] count Number of bytes to read.
+ * @param[in] inact_timeout Inactive timeout to use when reading.
+ * @param[in] ts_act_timeout Active timeout to use when reading.
+ * @return Number of bytes read;
+ * @return -1 on error.
+ */
 static ssize_t
 nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_timeout, struct timespec *ts_act_timeout)
 {
@@ -183,7 +194,8 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
  * @param[in,out] buf Buffer for read data, may be NULL.
  * @param[in,out] buf_size Current size of @p buf - 1 (actual size is one byte larger).
  * @return Number of characters read;
- * @return -1 on error.
+ * @return -1 on error;
+ * @return -2 on message-too-big error.
  */
 static int
 nc_read_until(struct nc_session *session, const char *endtag, uint32_t inact_timeout, struct timespec *ts_act_timeout,
@@ -205,6 +217,12 @@ nc_read_until(struct nc_session *session, const char *endtag, uint32_t inact_tim
     do {
         /* resize buffer if needed */
         if ((count + (len - matched)) > *buf_size) {
+            if (*buf_size + NC_READ_BUF_SIZE_STEP > NC_MESSAGE_MAX_SIZE) {
+                ERR(session, "Maximum supported message size %" PRIu32 " B exceeded.", NC_MESSAGE_MAX_SIZE);
+                count = -2;
+                goto cleanup;
+            }
+
             *buf_size += NC_READ_BUF_SIZE_STEP;
             *buf = nc_realloc(*buf, (*buf_size + 1) * sizeof **buf);
             NC_CHECK_ERRMEM_GOTO(!*buf, count = -1, cleanup);
@@ -274,7 +292,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, int passing_io_lock, 
     switch (session->version) {
     case NC_PROT_VERSION_10:
         r = nc_read_until(session, NC_VERSION_10_ENDTAG, inact_timeout, &ts_act_timeout, buf, buf_len);
-        if (r == -1) {
+        if (r < 0) {
             ret = r;
             goto cleanup;
         }
@@ -291,12 +309,12 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, int passing_io_lock, 
 
         while (1) {
             r = nc_read_until(session, "\n#", inact_timeout, &ts_act_timeout, NULL, NULL);
-            if (r == -1) {
+            if (r < 0) {
                 ret = r;
                 goto cleanup;
             }
             r = nc_read_until(session, "\n", inact_timeout, &ts_act_timeout, &frame_size_buf, &frame_buf_len);
-            if (r == -1) {
+            if (r < 0) {
                 ret = r;
                 goto cleanup;
             }
@@ -324,8 +342,8 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, int passing_io_lock, 
             }
 
             /* now we have size of next chunk, prepare a buffer large enough */
-            if (UINT32_MAX - buf_used < chunk_len + 1) {
-                ERR(session, "Maximum supported message size %" PRIu32 " B exceeded.", UINT32_MAX);
+            if (NC_MESSAGE_MAX_SIZE - buf_used < chunk_len + 1) {
+                ERR(session, "Maximum supported message size %" PRIu32 " B exceeded.", NC_MESSAGE_MAX_SIZE);
                 ret = -2;
                 goto cleanup;
             } else if (*buf_len < buf_used + chunk_len + 1) {
