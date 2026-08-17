@@ -1727,7 +1727,13 @@ nc_server_ssh_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, 
         ++session->opts.server.ssh_auth_attempts;
         VRB(session, "Failed user \"%s\" authentication attempt (#%d).", session->username,
                 session->opts.server.ssh_auth_attempts);
-        ssh_message_reply_default(msg);
+        if (session->opts.server.ssh_max_auth_attempts &&
+                (session->opts.server.ssh_auth_attempts >= session->opts.server.ssh_max_auth_attempts)) {
+            /* disconnect immediately so client does not prompt again */
+            ssh_disconnect(session->ti.libssh.session);
+        } else {
+            ssh_message_reply_default(msg);
+        }
     }
 
     return 0;
@@ -2013,6 +2019,9 @@ nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts
 
     DBG(session, "SSH authentication...");
 
+    /* copy so the value stays fixed even if endpoint-reference delegation later uses different opts */
+    session->opts.server.ssh_max_auth_attempts = opts->max_auth_attempts;
+
     /* authenticate */
     if (opts->auth_timeout) {
         nc_timeouttime_get(&ts_timeout, opts->auth_timeout * 1000);
@@ -2040,14 +2049,31 @@ nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts
             /* timeout */
             break;
         }
+        if (session->opts.server.ssh_max_auth_attempts &&
+                (session->opts.server.ssh_auth_attempts >= session->opts.server.ssh_max_auth_attempts)) {
+            /* max auth attempts reached */
+            break;
+        }
     }
 
     if (!(session->flags & NC_SESSION_SSH_AUTHENTICATED)) {
-        /* timeout */
-        if (session->username) {
-            ERR(session, "User \"%s\" failed to authenticate for too long, disconnecting.", session->username);
+        if (session->opts.server.ssh_max_auth_attempts &&
+                (session->opts.server.ssh_auth_attempts >= session->opts.server.ssh_max_auth_attempts)) {
+            /* max auth attempts reached */
+            if (session->username) {
+                ERR(session, "User \"%s\" reached the maximum number of failed SSH authentication attempts (%d), disconnecting.",
+                        session->username, session->opts.server.ssh_max_auth_attempts);
+            } else {
+                ERR(session, "Reached the maximum number of failed SSH authentication attempts (%d), disconnecting.",
+                        session->opts.server.ssh_max_auth_attempts);
+            }
         } else {
-            ERR(session, "User failed to authenticate for too long, disconnecting.");
+            /* timeout */
+            if (session->username) {
+                ERR(session, "User \"%s\" failed to authenticate for too long, disconnecting.", session->username);
+            } else {
+                ERR(session, "User failed to authenticate for too long, disconnecting.");
+            }
         }
         return 0;
     }
