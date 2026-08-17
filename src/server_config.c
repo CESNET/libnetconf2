@@ -3739,7 +3739,6 @@ config_ch_client_endpoint(const struct lyd_node *node, enum nc_operation parent_
     } else if (op == NC_OP_CREATE) {
         /* create a new endpoint and init it */
         LY_ARRAY_NEW_RET(LYD_CTX(node), ch_client->ch_endpts, endpt, 1);
-        endpt->sock_pending = -1;
     }
 
     /* config name */
@@ -6077,7 +6076,6 @@ nc_server_config_dup(const struct nc_server_config *src, struct nc_server_config
                 NC_CHECK_ERRMEM_GOTO(!dst_ch_endpt->dst_addr, rc = 1, cleanup);
             }
             dst_ch_endpt->dst_port = src_ch_endpt->dst_port;
-            dst_ch_endpt->sock_pending = -1;
 
             dst_ch_endpt->ka = src_ch_endpt->ka;
 

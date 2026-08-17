@@ -135,12 +135,6 @@ extern struct nc_server_opts server_opts;
 #define NC_CH_THREADS_LOCK_TIMEOUT 1000
 
 /**
- * @brief Timeout in msec for acquiring the Call Home thread cond_lock
- * (short critical sections used to signal thread termination and gate condition waits)
- */
-#define NC_CH_COND_LOCK_TIMEOUT 1000
-
-/**
  * @brief Timeout in msec for acquiring the certificate expiration notification lock
  * (short critical sections for flag updates and condition signaling)
  */
@@ -694,10 +688,8 @@ struct nc_server_ch_thread_arg {
     void *new_session_fail_cb_data;                         /**< new session fail cb data */
 
     pthread_t tid;              /**< Thread ID of the Call Home client thread. */
-    ATOMIC_T thread_running;    /**< Non-zero while the Call Home thread is running. Atomic for lock-free checks,
-                                     but also used with the condition variable under cond_lock for signalling. */
-    pthread_mutex_t cond_lock;  /**< Condition's lock used for signalling the thread to terminate */
-    pthread_cond_t cond;        /**< Condition used for signalling the thread to terminate */
+    ATOMIC_T thread_running;    /**< Non-zero while the Call Home thread is running. */
+    int notify_pipe[2];         /**< Self-pipe for signaling the thread to terminate. Index 0 = read end, 1 = write end. */
 };
 
 struct nc_server_config {
@@ -733,7 +725,6 @@ struct nc_server_config {
             char *dst_addr;                 /**< IP address of the Call Home client. */
             uint16_t dst_port;              /**< Port of the Call Home client. */
 
-            int sock_pending;               /**< Socket file descriptor of the pending connection to the Call Home client. */
             struct nc_keepalives ka;        /**< Keepalives configuration data for the Call Home endpoint. */
 
             NC_TRANSPORT_IMPL ti;           /**< Transport implementation of the Call Home endpoint. */

@@ -3192,6 +3192,7 @@ cleanup:
  * Config read lock must be held - the configuration is being read.
  *
  * @param[in] endpt Endpoint to use.
+ * @param[in,out] cur_sock_pending Current pending socket for the connection.
  * @param[in] acquire_ctx_cb Callback for acquiring the libyang context.
  * @param[in] release_ctx_cb Callback for releasing the libyang context.
  * @param[in] ctx_cb_data Context callbacks data.
@@ -3199,8 +3200,9 @@ cleanup:
  * @return NC_MSG values.
  */
 static NC_MSG_TYPE
-nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
-        nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, struct nc_session **session)
+nc_connect_ch_endpt(struct nc_ch_endpt *endpt, int *cur_sock_pending,
+        nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb, nc_server_ch_session_release_ctx_cb release_ctx_cb,
+        void *ctx_cb_data, struct nc_session **session)
 {
     NC_MSG_TYPE msgtype;
     const struct ly_ctx *ctx = NULL;
@@ -3209,7 +3211,7 @@ nc_connect_ch_endpt(struct nc_ch_endpt *endpt, nc_server_ch_session_acquire_ctx_
     char *ip_host = NULL;
 
     sock = nc_sock_connect(endpt->src_addr, endpt->src_port, endpt->dst_addr, endpt->dst_port,
-            NC_CH_CONNECT_TIMEOUT, &endpt->ka, &endpt->sock_pending, &ip_host);
+            NC_CH_CONNECT_TIMEOUT, &endpt->ka, cur_sock_pending, &ip_host);
     if (sock < 0) {
         return NC_MSG_ERROR;
     }
@@ -3451,47 +3453,87 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *dat
 }
 
 /**
- * @brief Waits for some amount of time while reacting to signals about terminating a Call Home thread.
+ * @brief Waits for some amount of time while reacting to signals about terminating a Call Home thread
+ * and optionally monitoring a pending socket for connection establishment.
+ *
+ * Uses a self-pipe (data->notify_pipe) for the stop signal and poll(2) to wait on both the pipe and
+ * the pending socket simultaneously.
  *
  * @param[in] session An established session.
  * @param[in] data Call Home thread's data.
- * @param[in] cond_wait_time Time in seconds to sleep for, after which a reconnect is attempted.
- *
- * @return 0 if the thread should stop running, 1 if it should continue.
+ * @param[in] wait_time Time in seconds to wait for, after which a reconnect is attempted.
+ * @param[in,out] cur_sock_pending Pointer to the current pending socket. May be NULL, in which case
+ * only the notify pipe is polled. If non-NULL and the socket connects, it is kept; if the peer closes
+ * or an error occurs, it is closed and set to -1.
+ * @return -1 if the thread should stop running (pipe was signaled or poll failed).
+ * @return 0 if the timeout elapsed (caller should close the pending socket and retry with a new one).
+ * @return 1 if the pending socket became writable (connection established, proceed to handshake).
  */
 static int
-nc_server_ch_client_thread_is_running_wait(struct nc_session *session, struct nc_server_ch_thread_arg *data, uint64_t cond_wait_time)
+nc_server_ch_client_thread_wait(struct nc_session *session, struct nc_server_ch_thread_arg *data,
+        uint32_t wait_time, int *cur_sock_pending)
 {
-    struct timespec ts;
-    int ret = 0;
+    struct pollfd pfd[2] = {0};
+    uint16_t pfd_count = 1;
+    int r, timeout_ms;
+    char buf[16];
 
-    /* COND LOCK */
-    if (nc_mutex_lock(&data->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
+    /* always poll the notify pipe (for stop signal) */
+    pfd[0].fd = data->notify_pipe[0];
+    pfd[0].events = POLLIN;
+
+    /* if we have a pending socket, poll it for writability (connection established) */
+    if (cur_sock_pending && (*cur_sock_pending != -1)) {
+        pfd[1].fd = *cur_sock_pending;
+        pfd[1].events = POLLOUT;
+        pfd_count = 2;
+    }
+
+    /* convert seconds to ms, avoid int overflow (negative poll timeout = infinite) */
+    if (wait_time > (uint32_t)INT32_MAX / 1000) {
+        timeout_ms = INT32_MAX;
+    } else {
+        timeout_ms = (int)(wait_time * 1000);
+    }
+
+    r = nc_poll(pfd, pfd_count, timeout_ms);
+    if (r == -1) {
+        /* poll failed, nc_poll already logged the error */
+        return -1;
+    } else if (r == 0) {
+        /* timeout */
+        VRB(session, "Call Home client \"%s\" timeout of %" PRIu32 " seconds expired, reconnecting.",
+                data->client_name, wait_time);
         return 0;
     }
-    /* get reconnect timeout in ms */
-    nc_timeouttime_get(&ts, cond_wait_time * 1000);
-    while (!ret && ATOMIC_LOAD_RELAXED(data->thread_running)) {
-        ret = pthread_cond_clockwait(&data->cond, &data->cond_lock, COMPAT_CLOCK_ID, &ts);
-    }
 
-    /* COND UNLOCK */
-    nc_mutex_unlock(&data->cond_lock, __func__);
-
+    /* check if the thread was signaled to stop */
     if (!ATOMIC_LOAD_RELAXED(data->thread_running)) {
-        /* thread is terminating */
-        VRB(session, "Call Home thread signaled to exit, client \"%s\" probably removed.", data->client_name);
-        ret = 0;
-    } else if (ret == ETIMEDOUT) {
-        /* time to reconnect */
-        VRB(session, "Call Home client \"%s\" timeout of %" PRIu64 " seconds expired, reconnecting.", data->client_name, cond_wait_time);
-        ret = 1;
-    } else if (ret) {
-        ERR(session, "Pthread condition timedwait failed (%s).", strerror(ret));
-        ret = 0;
+        return -1;
     }
 
-    return ret;
+    /* drain the pipe if it was signaled */
+    if (pfd[0].revents & POLLIN) {
+        while (read(data->notify_pipe[0], buf, sizeof buf) > 0) {}
+    }
+
+    /* check if the pending socket became writable or had an error */
+    if (pfd_count == 2) {
+        if (pfd[1].revents & (POLLHUP | POLLERR)) {
+            /* socket connected but peer already closed, or error.
+             * treat as timeout, will create a new socket */
+            VRB(session, "Call Home client \"%s\" pending socket connected but peer closed.", data->client_name);
+            close(*cur_sock_pending);
+            *cur_sock_pending = -1;
+            return 0;
+        }
+        if (pfd[1].revents & POLLOUT) {
+            return 1;
+        }
+    }
+
+    /* only the pipe was signaled but thread_running is still 1 — shouldn't happen, treat as timeout */
+    return 0;
 }
 
 /**
@@ -3547,6 +3589,7 @@ nc_ch_client_thread(void *arg)
 {
     struct nc_server_ch_thread_arg *data = arg;
     NC_MSG_TYPE msgtype;
+    int cur_sock_pending = -1, r;
     uint8_t cur_attempts = 0, max_attempts;
     uint16_t next_endpt_index, max_wait;
     char *cur_endpt_name = NULL;
@@ -3580,7 +3623,8 @@ nc_ch_client_thread(void *arg)
         }
 
         /* try to connect to the endpoint */
-        msgtype = nc_connect_ch_endpt(cur_endpt, data->acquire_ctx_cb, data->release_ctx_cb, data->ctx_cb_data, &session);
+        msgtype = nc_connect_ch_endpt(cur_endpt, &cur_sock_pending, data->acquire_ctx_cb, data->release_ctx_cb,
+                data->ctx_cb_data, &session);
         if (msgtype == NC_MSG_HELLO) {
             /* CONFIG READ UNLOCK - session established */
             nc_rwlock_unlock(&server_opts.config_lock, __func__);
@@ -3631,7 +3675,8 @@ nc_ch_client_thread(void *arg)
 
                 /* wait for the timeout to elapse, so we can try to reconnect */
                 VRB(session, "Call Home client \"%s\" reconnecting in %" PRIu32 " seconds.", data->client_name, reconnect_in);
-                if (!nc_server_ch_client_thread_is_running_wait(session, data, reconnect_in)) {
+                r = nc_server_ch_client_thread_wait(session, data, reconnect_in, NULL);
+                if (r == -1) {
                     goto cleanup;
                 }
 
@@ -3682,10 +3727,18 @@ nc_ch_client_thread(void *arg)
             }
 
             /* wait for max_wait seconds */
-            if (!nc_server_ch_client_thread_is_running_wait(session, data, max_wait)) {
+            r = nc_server_ch_client_thread_wait(session, data, max_wait, &cur_sock_pending);
+            if (r == -1) {
                 /* thread should stop running */
                 goto cleanup;
+            } else if (r == 0) {
+                /* timeout or peer closed - close pending socket, will create a new one next iteration */
+                if (cur_sock_pending != -1) {
+                    close(cur_sock_pending);
+                    cur_sock_pending = -1;
+                }
             }
+            /* if r == 1, socket is connected, keep cur_sock_pending for nc_connect_ch_endpt */
 
             /* CONFIG READ LOCK */
             if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
@@ -3709,6 +3762,13 @@ nc_ch_client_thread(void *arg)
             if (next_endpt_index >= LY_ARRAY_COUNT(client->ch_endpts)) {
                 /* endpoint was removed, start with the first one */
                 VRB(session, "Call Home client \"%s\" endpoint \"%s\" removed.", data->client_name, cur_endpt_name);
+
+                /* close pending socket to the removed endpoint, if any */
+                if (cur_sock_pending != -1) {
+                    close(cur_sock_pending);
+                    cur_sock_pending = -1;
+                }
+
                 next_endpt_index = 0;
                 cur_attempts = 0;
             } else if (cur_attempts == client->max_attempts) {
@@ -3716,11 +3776,10 @@ nc_ch_client_thread(void *arg)
                 VRB(session, "Call Home client \"%s\" endpoint \"%s\" failed connection attempt limit %" PRIu8 " reached.",
                         data->client_name, cur_endpt_name, client->max_attempts);
 
-                /* clear a pending socket, if any */
-                cur_endpt = &client->ch_endpts[next_endpt_index];
-                if (cur_endpt->sock_pending > -1) {
-                    close(cur_endpt->sock_pending);
-                    cur_endpt->sock_pending = -1;
+                /* close pending socket, switching to a different endpoint */
+                if (cur_sock_pending != -1) {
+                    close(cur_sock_pending);
+                    cur_sock_pending = -1;
                 }
 
                 if (next_endpt_index < LY_ARRAY_COUNT(client->ch_endpts) - 1) {
@@ -3746,6 +3805,9 @@ cleanup_unlock:
 cleanup:
     VRB(session, "Call Home client \"%s\" thread exit.", data->client_name);
     free(cur_endpt_name);
+    if (cur_sock_pending != -1) {
+        close(cur_sock_pending);
+    }
 
     return NULL;
 }
@@ -3767,19 +3829,17 @@ nc_session_server_ch_client_dispatch_stop(struct nc_ch_client *ch_client)
     ch_client_name = strdup(thread_arg->client_name);
     NC_CHECK_ERRMEM_GOTO(!ch_client_name, rc = 1, cleanup);
 
-    /* CH COND LOCK */
-    if (nc_mutex_lock(&thread_arg->cond_lock, NC_CH_COND_LOCK_TIMEOUT, __func__) != 1) {
-        rc = 1;
-        goto cleanup;
-    }
-
     /* notify the thread to stop */
     ATOMIC_STORE_RELAXED(thread_arg->thread_running, 0);
     tid = thread_arg->tid;
-    pthread_cond_signal(&thread_arg->cond);
 
-    /* CH COND UNLOCK */
-    nc_mutex_unlock(&thread_arg->cond_lock, __func__);
+    /* wake up the thread if it's in thread_wait */
+    if (write(thread_arg->notify_pipe[1], "x", 1) == -1) {
+        if (errno != EAGAIN) {
+            ERR(NULL, "Writing to the notify pipe failed (%s).", strerror(errno));
+        }
+        /* EAGAIN is fine: pipe buffer is full, meaning it's already been signaled */
+    }
 
     /* CONFIG UNLOCK - the caller must hold WRITE config lock, we need to unlock it
     * to prevent deadlock with the CH thread, it tries to acquire the config lock in read mode when it
@@ -3813,8 +3873,8 @@ nc_session_server_ch_client_dispatch_stop(struct nc_ch_client *ch_client)
 
     /* free the thread data */
     free(thread_arg->client_name);
-    pthread_mutex_destroy(&thread_arg->cond_lock);
-    pthread_cond_destroy(&thread_arg->cond);
+    close(thread_arg->notify_pipe[0]);
+    close(thread_arg->notify_pipe[1]);
     free(thread_arg);
 
 cleanup:
@@ -3834,11 +3894,14 @@ _nc_connect_ch_client_dispatch(struct nc_ch_client *ch_client, nc_server_ch_sess
         void *new_session_cb_data)
 {
     int rc = 0, r;
+    int flags;
     struct nc_server_ch_thread_arg *arg = NULL;
 
     /* create the thread argument */
     arg = calloc(1, sizeof *arg);
     NC_CHECK_ERRMEM_GOTO(!arg, rc = -1, cleanup);
+    arg->notify_pipe[0] = -1;
+    arg->notify_pipe[1] = -1;
     arg->client_name = strdup(ch_client->name);
     NC_CHECK_ERRMEM_GOTO(!arg->client_name, rc = -1, cleanup);
     arg->acquire_ctx_cb = acquire_ctx_cb;
@@ -3848,8 +3911,23 @@ _nc_connect_ch_client_dispatch(struct nc_ch_client *ch_client, nc_server_ch_sess
     arg->new_session_cb_data = new_session_cb_data;
     arg->new_session_fail_cb = server_opts.ch_dispatch_data.new_session_fail_cb;
     arg->new_session_fail_cb_data = server_opts.ch_dispatch_data.new_session_fail_cb_data;
-    pthread_cond_init(&arg->cond, NULL);
-    pthread_mutex_init(&arg->cond_lock, NULL);
+
+    /* create the self-pipe for signaling the thread to terminate */
+    if (pipe(arg->notify_pipe) == -1) {
+        ERR(NULL, "pipe() failed (%s).", strerror(errno));
+        rc = -1;
+        goto cleanup;
+    }
+
+    /* set both ends non-blocking */
+    if (((flags = fcntl(arg->notify_pipe[0], F_GETFL)) == -1) ||
+            (fcntl(arg->notify_pipe[0], F_SETFL, flags | O_NONBLOCK) == -1) ||
+            ((flags = fcntl(arg->notify_pipe[1], F_GETFL)) == -1) ||
+            (fcntl(arg->notify_pipe[1], F_SETFL, flags | O_NONBLOCK) == -1)) {
+        ERR(NULL, "fcntl() failed (%s).", strerror(errno));
+        rc = -1;
+        goto cleanup;
+    }
 
     /* store thread data in the client */
     ch_client->thread = arg;
@@ -3868,8 +3946,12 @@ _nc_connect_ch_client_dispatch(struct nc_ch_client *ch_client, nc_server_ch_sess
 cleanup:
     if (arg) {
         free(arg->client_name);
-        pthread_mutex_destroy(&arg->cond_lock);
-        pthread_cond_destroy(&arg->cond);
+        if (arg->notify_pipe[0] != -1) {
+            close(arg->notify_pipe[0]);
+        }
+        if (arg->notify_pipe[1] != -1) {
+            close(arg->notify_pipe[1]);
+        }
         free(arg);
     }
     return rc;
