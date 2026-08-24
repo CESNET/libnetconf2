@@ -141,6 +141,12 @@ extern struct nc_server_opts server_opts;
 #define NC_CERT_EXP_LOCK_TIMEOUT 1000
 
 /**
+ * @brief Timeout in msec for acquiring the binds_lock
+ * (only listening socket registry array manipulation)
+ */
+#define NC_BINDS_LOCK_TIMEOUT 1000
+
+/**
  * @brief Timeout in msec for acquiring the config_lock
  * (socket binding and Call Home client dispatching can involve network operations)
  */
@@ -508,7 +514,6 @@ struct nc_server_unix_opts {
 struct nc_bind {
     char *address;  /**< Either IPv4/IPv6 address or path to UNIX socket. */
     uint16_t port;  /**< Either port number or 0 for UNIX socket. */
-    int sock;       /**< Socket file descriptor, -1 if not created yet. */
 };
 
 struct nc_client_unix_opts {
@@ -593,9 +598,10 @@ struct nc_client_opts {
 
     struct nc_bind *ch_binds;
 
-    struct {
+    struct nc_client_ch_bind_aux {
         NC_TRANSPORT_IMPL ti;
         char *hostname;
+        int sock;                   /**< Listening socket file descriptor of the corresponding bind. */
     } *ch_binds_aux;
     uint16_t ch_bind_count;
 
@@ -793,6 +799,23 @@ struct nc_server_opts {
      *               - options read when accepting sessions - READ lock */
     pthread_rwlock_t config_lock;       /**< Lock for the server configuration. */
     struct nc_server_config config;     /**< YANG Server configuration. */
+
+    /* ACCESS locked - binds lock - leaf lock, never acquire another lock while holding it */
+    pthread_mutex_t binds_lock;         /**< Lock for the listening socket registry. */
+
+    /**
+     * @brief Entry of the listening socket registry.
+     *
+     * A listening socket is runtime state, not configuration, so it is kept out of
+     * ::nc_server_config, which must not be written to while it is being read by an accept path.
+     */
+    struct nc_bind_entry {
+        char *endpt_name;       /**< Name of the endpoint the listening socket belongs to. */
+        char *address;          /**< IPv4/IPv6 address or the full path of a UNIX socket. */
+        uint16_t port;          /**< Port number, 0 for a UNIX socket. */
+        NC_TRANSPORT_IMPL ti;   /**< Transport implementation of the endpoint. */
+        int sock;               /**< Listening socket file descriptor. */
+    } *binds;   /**< Listening socket registry (sized-array, see libyang docs). */
 
 #ifdef NC_ENABLED_SSH_TLS
     char *authkey_path_fmt;             /**< Path to users' public keys that may contain tokens with special meaning. */
@@ -1087,21 +1110,23 @@ struct nc_client_context *nc_client_context_location(void);
 void *nc_realloc(void *ptr, size_t size);
 
 /**
- * @brief Get the UNIX socket path for the given endpoint.
+ * @brief Reconcile the listening socket registry with the given server configuration.
  *
- * @param[in] endpt Endpoint to get the socket path for.
- * @return Socket path, NULL on error.
+ * Starts listening for every bind of @p config that has no registry entry yet and stops listening
+ * for every registry entry that @p config no longer contains. Nothing is written to @p config.
+ *
+ * @note Only one thread may reconcile the registry at a time, the callers must be serialized by
+ * ::nc_server_opts.config_update_lock.
+ *
+ * @param[in] config Server configuration to reconcile the registry with.
+ * @return 0 on success, 1 on error (the registry is left as it was).
  */
-char *nc_server_unix_get_socket_path(const struct nc_endpt *endpt);
+int nc_server_binds_reconcile(const struct nc_server_config *config);
 
 /**
- * @brief Bind and listen on a socket for the given endpoint and its bind.
- *
- * @param[in] endpt Endpoint the bind belongs to.
- * @param[in] bind Bind to bind and listen for.
- * @return 0 on success, 1 on error.
+ * @brief Stop listening on all the registered sockets and free the listening socket registry.
  */
-int nc_server_bind_and_listen(struct nc_endpt *endpt, struct nc_bind *bind);
+void nc_server_binds_destroy(void);
 
 /**
  * @brief Free server configuration data (only YANG config data).
@@ -1327,6 +1352,7 @@ int nc_sock_listen_inet(const char *address, uint16_t port);
  * @brief Accept a new connection on any of the given Call Home binds.
  *
  * @param[in] binds Call Home binds to accept on.
+ * @param[in] binds_aux Auxiliary data of @p binds holding the listening sockets.
  * @param[in] bind_count Number of @p binds.
  * @param[in] timeout Timeout for accepting.
  * @param[out] host Host of the remote peer. Can be NULL.
@@ -1335,8 +1361,8 @@ int nc_sock_listen_inet(const char *address, uint16_t port);
  * @param[out] sock Accepted socket, if any.
  * @return -1 on error, 0 on timeout, 1 if a socket was accepted.
  */
-int nc_server_ch_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host,
-        uint16_t *port, uint16_t *bind_idx, int *sock);
+int nc_server_ch_accept_binds(const struct nc_bind *binds, const struct nc_client_ch_bind_aux *binds_aux,
+        uint16_t bind_count, int timeout, char **host, uint16_t *port, uint16_t *bind_idx, int *sock);
 
 /**
  * @brief Establish a UNIX transport session.
