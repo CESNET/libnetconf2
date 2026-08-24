@@ -206,6 +206,8 @@ int
 nc_server_ssh_kbdint_select_method(struct nc_session *session, int local_users_supported,
         struct nc_auth_client *auth_client, enum nc_kbdint_backend *backend)
 {
+    int custom_clb_set;
+
     assert(!local_users_supported || auth_client);
 
     if (!local_users_supported) {
@@ -221,7 +223,15 @@ nc_server_ssh_kbdint_select_method(struct nc_session *session, int local_users_s
         return 1;
     }
 
-    if (server_opts.interactive_auth_clb) {
+    /* OPTS READ LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_READ, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
+    custom_clb_set = server_opts.interactive_auth_clb ? 1 : 0;
+    /* OPTS READ UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
+
+    if (custom_clb_set) {
         /* custom callback has higher priority */
         *backend = NC_KBDINT_BACKEND_CUSTOM_CLB;
         return 0;
@@ -409,20 +419,47 @@ nc_server_ssh_pam_conv_fill(struct nc_session *session, struct pam_response *res
 }
 
 int
+nc_server_ssh_get_pam_conf_filename(char **filename)
+{
+    int rc = 0;
+
+    *filename = NULL;
+
+    /* OPTS READ LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_READ, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
+
+    if (server_opts.pam_config_name) {
+        *filename = strdup(server_opts.pam_config_name);
+        NC_CHECK_ERRMEM_GOTO(!*filename, rc = 1, cleanup);
+    }
+
+cleanup:
+    /* OPTS READ UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
+    return rc;
+}
+
+int
 nc_server_ssh_pam_authenticate(struct nc_session *session, const char *username,
         const struct pam_conv *conv)
 {
     pam_handle_t *pam_h = NULL;
+    char *pam_config_name = NULL;
     int ret;
 
-    /* check the PAM configuration */
-    if (!server_opts.pam_config_name) {
+    /* get the PAM configuration, PAM must not be called with the lock held */
+    if (nc_server_ssh_get_pam_conf_filename(&pam_config_name)) {
+        return 1;
+    }
+    if (!pam_config_name) {
         ERR(session, "PAM configuration filename not set.");
         return 1;
     }
 
     /* initialize PAM and see if the given configuration file exists */
-    ret = pam_start(server_opts.pam_config_name, username, conv, &pam_h);
+    ret = pam_start(pam_config_name, username, conv, &pam_h);
     if (ret != PAM_SUCCESS) {
         ERR(session, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
         goto cleanup;
@@ -462,6 +499,7 @@ cleanup:
     if (pam_h && (pam_end(pam_h, ret) != PAM_SUCCESS)) {
         ERR(NULL, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
     }
+    free(pam_config_name);
     return ret;
 }
 
@@ -769,10 +807,20 @@ static int
 nc_server_ssh_get_system_keys_path(const char *username, char **out_path)
 {
     int ret = 0, i, have_percent = 0, size = 0, idx = 0;
-    const char *path_fmt = server_opts.authkey_path_fmt;
+    char *path_fmt = NULL;
     char *path = NULL, *buf = NULL, *uid = NULL;
     struct passwd *pw, pw_buf;
     size_t buf_len = 0;
+
+    /* OPTS READ LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_READ, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
+    if (server_opts.authkey_path_fmt) {
+        path_fmt = strdup(server_opts.authkey_path_fmt);
+    }
+    /* OPTS READ UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
 
     if (!path_fmt) {
         ERR(NULL, "System public keys path format not set.");
@@ -798,7 +846,7 @@ nc_server_ssh_get_system_keys_path(const char *username, char **out_path)
     } else {
         /* no tokens, just copy the path and return */
         *out_path = strdup(path_fmt);
-        NC_CHECK_ERRMEM_RET(!*out_path, 1);
+        NC_CHECK_ERRMEM_GOTO(!*out_path, ret = 1, cleanup);
         goto cleanup;
     }
 
@@ -818,7 +866,7 @@ nc_server_ssh_get_system_keys_path(const char *username, char **out_path)
                 /* UID */
                 ret = nc_server_ssh_str_append(0, uid, &size, &idx, &path);
             } else {
-                ERR(NULL, "Failed to parse system public keys path format \"%s\".", server_opts.authkey_path_fmt);
+                ERR(NULL, "Failed to parse system public keys path format \"%s\".", path_fmt);
                 ret = 1;
             }
 
@@ -841,6 +889,7 @@ nc_server_ssh_get_system_keys_path(const char *username, char **out_path)
     path = NULL;
 
 cleanup:
+    free(path_fmt);
     free(uid);
     free(buf);
     free(path);
@@ -1239,8 +1288,8 @@ API void
 nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg, void *user_data),
         void *user_data, void (*free_user_data)(void *user_data))
 {
-    /* CONFIG LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+    /* OPTS WRITE LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_WRITE, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
         return;
     }
 
@@ -1248,8 +1297,29 @@ nc_server_ssh_set_interactive_auth_clb(int (*interactive_auth_clb)(const struct 
     server_opts.interactive_auth_data = user_data;
     server_opts.interactive_auth_data_free = free_user_data;
 
-    /* CONFIG UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    /* OPTS WRITE UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
+}
+
+int
+nc_server_ssh_get_interactive_auth_clb(int (**clb)(const struct nc_session *session, ssh_session ssh_sess,
+        ssh_message msg, void *user_data), void **user_data)
+{
+    *clb = NULL;
+    *user_data = NULL;
+
+    /* OPTS READ LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_READ, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
+
+    /* the callback and its data must be read as a pair */
+    *clb = server_opts.interactive_auth_clb;
+    *user_data = server_opts.interactive_auth_data;
+
+    /* OPTS READ UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
+    return 0;
 }
 
 #ifdef HAVE_LIBPAM
@@ -1261,8 +1331,8 @@ nc_server_ssh_set_pam_conf_filename(const char *filename)
 
     NC_CHECK_ARG_RET(NULL, filename, 1);
 
-    /* CONFIG LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+    /* OPTS WRITE LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_WRITE, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
         return 1;
     }
 
@@ -1273,8 +1343,8 @@ nc_server_ssh_set_pam_conf_filename(const char *filename)
         ret = 1;
     }
 
-    /* CONFIG UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    /* OPTS WRITE UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
     return ret;
 }
 
@@ -1297,8 +1367,8 @@ nc_server_ssh_set_authkey_path_format(const char *path)
 
     NC_CHECK_ARG_RET(NULL, path, 1);
 
-    /* CONFIG LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+    /* OPTS WRITE LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_WRITE, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
         return 1;
     }
 
@@ -1309,8 +1379,8 @@ nc_server_ssh_set_authkey_path_format(const char *path)
         ret = 1;
     }
 
-    /* CONFIG UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    /* OPTS WRITE UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
     return ret;
 }
 
@@ -1357,8 +1427,8 @@ nc_server_ssh_set_protocol_string(const char *prefix)
     protocol_str = nc_server_ssh_forge_protocol_string(prefix);
     NC_CHECK_ERRMEM_GOTO(!protocol_str, rc = 1, cleanup);
 
-    /* CONFIG LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+    /* OPTS WRITE LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_WRITE, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
         rc = 1;
         goto cleanup;
     }
@@ -1368,8 +1438,8 @@ nc_server_ssh_set_protocol_string(const char *prefix)
     server_opts.ssh_protocol_string = protocol_str;
     protocol_str = NULL;
 
-    /* CONFIG UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    /* OPTS WRITE UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
 
 cleanup:
     free(protocol_str);
@@ -1738,10 +1808,10 @@ int
 nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opts, int sock)
 {
     ssh_bind sbind = NULL;
-    int rc = 1, r;
+    int rc = 1, r, proto_str_set = 0;
     struct timespec ts_timeout;
     const char *err_msg;
-    char *proto_str = NULL, *proto_str_dyn = NULL;
+    char *proto_str = NULL;
 
 #if LIBSSH_0_12
     struct nc_server_ssh_cb_data *cb_data = NULL;
@@ -1822,14 +1892,24 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
         }
     }
 
-    /* configure the ssh protocol identification string */
-    if (server_opts.ssh_protocol_string) {
-        proto_str = server_opts.ssh_protocol_string;
-    } else {
-        proto_str_dyn = nc_server_ssh_forge_protocol_string(NULL);
-        NC_CHECK_ERRMEM_GOTO(!proto_str_dyn, rc = -1, cleanup);
-        proto_str = proto_str_dyn;
+    /* configure the ssh protocol identification string, copy it so that the lock is not held any longer */
+    /* OPTS READ LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_READ, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
+        rc = -1;
+        goto cleanup;
     }
+    if (server_opts.ssh_protocol_string) {
+        proto_str_set = 1;
+        proto_str = strdup(server_opts.ssh_protocol_string);
+    }
+    /* OPTS READ UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
+
+    if (!proto_str_set) {
+        proto_str = nc_server_ssh_forge_protocol_string(NULL);
+    }
+    NC_CHECK_ERRMEM_GOTO(!proto_str, rc = -1, cleanup);
+
     if (ssh_bind_options_set(sbind, SSH_BIND_OPTIONS_BANNER, proto_str)) {
         rc = -1;
         goto cleanup;
@@ -1912,7 +1992,7 @@ cleanup:
     if (sock > -1) {
         close(sock);
     }
-    free(proto_str_dyn);
+    free(proto_str);
     ssh_bind_free(sbind);
     return rc;
 }

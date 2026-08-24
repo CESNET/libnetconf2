@@ -285,13 +285,18 @@ static int
 nc_server_ssh_cb_kbdint_pam_request(struct nc_server_ssh_cb_data *cb_data, ssh_message message)
 {
     struct nc_server_ssh_cb_pam_data *pam_data;
+    char *pam_config_name = NULL;
     int rc;
 
     /* check the PAM configuration */
-    if (!server_opts.pam_config_name) {
+    if (nc_server_ssh_get_pam_conf_filename(&pam_config_name)) {
+        return SSH_AUTH_DENIED;
+    }
+    if (!pam_config_name) {
         ERR(cb_data->session, "PAM configuration filename not set.");
         return SSH_AUTH_DENIED;
     }
+    free(pam_config_name);
 
     /* cancel any in-progress PAM exchange, e.g. the client abandoned the previous one */
     nc_server_ssh_cb_kbdint_pam_cancel_stored(cb_data);
@@ -655,6 +660,10 @@ nc_server_ssh_cb_auth_kbdint(ssh_message message, ssh_session UNUSED(libssh_sess
     int ret = SSH_AUTH_DENIED;
     const char *user;
 
+    int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg,
+            void *user_data);
+    void *interactive_auth_data;
+
     /* Extract the username from the message. */
     if (ssh_message_auth_kbdint_is_response(message) && session->username) {
         user = session->username;
@@ -682,9 +691,19 @@ nc_server_ssh_cb_auth_kbdint(ssh_message message, ssh_session UNUSED(libssh_sess
     }
 
     if (backend == NC_KBDINT_BACKEND_CUSTOM_CLB) {
-        /* custom interactive auth callback */
-        ret = server_opts.interactive_auth_clb(session,
-                session->ti.libssh.session, message, server_opts.interactive_auth_data);
+        /* custom interactive auth callback, it must not be called with the options lock held */
+        if (nc_server_ssh_get_interactive_auth_clb(&interactive_auth_clb, &interactive_auth_data)) {
+            nc_server_ssh_auth_attempt_failed(session);
+            return SSH_AUTH_DENIED;
+        }
+        if (!interactive_auth_clb) {
+            /* the callback was unset in the meantime */
+            ERR(session, "Custom keyboard-interactive authentication callback not set.");
+            nc_server_ssh_auth_attempt_failed(session);
+            return SSH_AUTH_DENIED;
+        }
+
+        ret = interactive_auth_clb(session, session->ti.libssh.session, message, interactive_auth_data);
     } else {
         ret = nc_server_ssh_cb_kbdint_system(cb_data, message, user);
     }

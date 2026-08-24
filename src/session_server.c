@@ -58,6 +58,7 @@ struct nc_server_opts server_opts = {
     .config_lock = PTHREAD_RWLOCK_INITIALIZER,
     .config_update_lock = PTHREAD_MUTEX_INITIALIZER,
     .binds_lock = PTHREAD_MUTEX_INITIALIZER,
+    .opts_lock = PTHREAD_RWLOCK_INITIALIZER,
 };
 
 static nc_rpc_clb global_rpc_clb = NULL;
@@ -250,8 +251,8 @@ nc_server_ch_set_dispatch_data(nc_server_ch_session_acquire_ctx_cb acquire_ctx_c
 {
     NC_CHECK_ARG_RET(NULL, acquire_ctx_cb, release_ctx_cb, new_session_cb, );
 
-    /* CONFIG WRITE LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+    /* OPTS WRITE LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_WRITE, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
         return;
     }
 
@@ -261,24 +262,24 @@ nc_server_ch_set_dispatch_data(nc_server_ch_session_acquire_ctx_cb acquire_ctx_c
     server_opts.ch_dispatch_data.new_session_cb = new_session_cb;
     server_opts.ch_dispatch_data.new_session_cb_data = new_session_cb_data;
 
-    /* CONFIG WRITE UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    /* OPTS WRITE UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
 }
 
 API void
 nc_server_ch_set_new_session_fail_cb(nc_server_ch_new_session_fail_cb new_session_fail_cb,
         void *new_session_fail_cb_data)
 {
-    /* CONFIG WRITE LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+    /* OPTS WRITE LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_WRITE, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
         return;
     }
 
     server_opts.ch_dispatch_data.new_session_fail_cb = new_session_fail_cb;
     server_opts.ch_dispatch_data.new_session_fail_cb_data = new_session_fail_cb_data;
 
-    /* CONFIG WRITE UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    /* OPTS WRITE UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
 }
 
 #endif
@@ -414,6 +415,8 @@ fail:
 /**
  * @brief Construct the full path to the UNIX socket.
  *
+ * @note The options read lock must be held.
+ *
  * @param[in] filename Name of the socket file.
  * @param[out] path Constructed full path to the UNIX socket (must be freed by the caller).
  * @return 0 on success, 1 on error.
@@ -524,6 +527,11 @@ nc_server_unix_get_socket_path(const struct nc_endpt *endpt)
     const char *p = NULL;
     char *path = NULL;
 
+    /* OPTS READ LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_READ, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
+        return NULL;
+    }
+
     /* check the endpoints options for type of socket path */
     if (endpt->opts.unix->path_type == NC_UNIX_SOCKET_PATH_FILE) {
         /* UNIX socket endpoints always have only one bind, get its address */
@@ -531,7 +539,8 @@ nc_server_unix_get_socket_path(const struct nc_endpt *endpt)
 
         /* it is relative, we need to construct the full path */
         if (nc_session_unix_construct_socket_path(p, &path)) {
-            return NULL;
+            path = NULL;
+            goto cleanup;
         }
     } else if (endpt->opts.unix->path_type == NC_UNIX_SOCKET_PATH_HIDDEN) {
         /* search the mappings, no need to construct the path */
@@ -543,15 +552,18 @@ nc_server_unix_get_socket_path(const struct nc_endpt *endpt)
         }
         if (!p) {
             ERR(NULL, "UNIX socket path mapping for endpoint \"%s\" not found.", endpt->name);
-            return NULL;
+            goto cleanup;
         }
 
         path = strdup(p);
-        NC_CHECK_ERRMEM_RET(!path, NULL);
+        NC_CHECK_ERRMEM_GOTO(!path, path = NULL, cleanup);
     } else {
         ERRINT;
     }
 
+cleanup:
+    /* OPTS READ UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
     return path;
 }
 
@@ -1324,6 +1336,10 @@ nc_server_init(void)
         goto error;
     }
 
+    if (nc_server_init_rwlock(&server_opts.opts_lock)) {
+        goto error;
+    }
+
 #ifdef NC_ENABLED_SSH_TLS
     if (curl_global_init(CURL_GLOBAL_SSL | CURL_GLOBAL_ACK_EINTR)) {
         ERR(NULL, "%s: failed to init CURL.", __func__);
@@ -1364,9 +1380,15 @@ API int
 nc_server_destroy(void)
 {
     int rc = 0;
-    int config_update_locked = 0;
+    int config_update_locked = 0, opts_locked = 0;
     enum nc_rwlock_mode config_lock_mode = NC_RWLOCK_NONE;
     uint32_t i;
+
+#ifdef NC_ENABLED_SSH_TLS
+    void *interactive_auth_data;
+
+    void (*interactive_auth_data_free)(void *data);
+#endif /* NC_ENABLED_SSH_TLS */
 
     for (i = 0; i < server_opts.capabilities_count; i++) {
         free(server_opts.capabilities[i]);
@@ -1418,6 +1440,13 @@ nc_server_destroy(void)
     /* destroy the server configuration */
     nc_server_config_free(&server_opts.config);
 
+    /* OPTS WRITE LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_WRITE, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
+        rc = 1;
+        goto cleanup;
+    }
+    opts_locked = 1;
+
 #ifdef NC_ENABLED_SSH_TLS
     free(server_opts.authkey_path_fmt);
     server_opts.authkey_path_fmt = NULL;
@@ -1425,11 +1454,12 @@ nc_server_destroy(void)
     server_opts.pam_config_name = NULL;
     free(server_opts.ssh_protocol_string);
     server_opts.ssh_protocol_string = NULL;
-    if (server_opts.interactive_auth_data && server_opts.interactive_auth_data_free) {
-        server_opts.interactive_auth_data_free(server_opts.interactive_auth_data);
-    }
+    server_opts.interactive_auth_clb = NULL;
+    interactive_auth_data = server_opts.interactive_auth_data;
+    interactive_auth_data_free = server_opts.interactive_auth_data_free;
     server_opts.interactive_auth_data = NULL;
     server_opts.interactive_auth_data_free = NULL;
+    server_opts.user_verify_clb = NULL;
 
     /* Call Home dispatch data, its callback data does not have to be valid once the server is destroyed */
     memset(&server_opts.ch_dispatch_data, 0, sizeof server_opts.ch_dispatch_data);
@@ -1442,8 +1472,19 @@ nc_server_destroy(void)
     }
     LY_ARRAY_FREE(server_opts.unix_paths);
     server_opts.unix_paths = NULL;
+    free(server_opts.unix_socket_dir);
+    server_opts.unix_socket_dir = NULL;
+
+    /* OPTS WRITE UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
+    opts_locked = 0;
 
 #ifdef NC_ENABLED_SSH_TLS
+    /* free the user data only once the lock is released, the callback may call back into the library */
+    if (interactive_auth_data && interactive_auth_data_free) {
+        interactive_auth_data_free(interactive_auth_data);
+    }
+
     curl_global_cleanup();
     nc_tls_backend_destroy_wrap();
     ssh_finalize();
@@ -1456,6 +1497,9 @@ nc_server_destroy(void)
 #endif /* NC_ENABLED_SSH_TLS */
 
 cleanup:
+    if (opts_locked) {
+        nc_rwlock_unlock(&server_opts.opts_lock, __func__);
+    }
     if (config_lock_mode != NC_RWLOCK_NONE) {
         nc_rwlock_unlock(&server_opts.config_lock, __func__);
     }
@@ -4278,8 +4322,15 @@ _nc_connect_ch_client_dispatch(struct nc_ch_client *ch_client, nc_server_ch_sess
     arg->ctx_cb_data = ctx_cb_data;
     arg->new_session_cb = new_session_cb;
     arg->new_session_cb_data = new_session_cb_data;
+    /* OPTS READ LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_READ, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
+        rc = -1;
+        goto cleanup;
+    }
     arg->new_session_fail_cb = server_opts.ch_dispatch_data.new_session_fail_cb;
     arg->new_session_fail_cb_data = server_opts.ch_dispatch_data.new_session_fail_cb_data;
+    /* OPTS READ UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
 
     /* create the self-pipe for signaling the thread to terminate */
     if (pipe(arg->notify_pipe) == -1) {
@@ -5264,8 +5315,8 @@ nc_server_set_unix_socket_path(const char *endpoint_name, const char *socket_pat
 
     NC_CHECK_ARG_RET(NULL, endpoint_name, socket_path, 1);
 
-    /* CONFIG WRITE LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+    /* OPTS WRITE LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_WRITE, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
         return 1;
     }
 
@@ -5290,8 +5341,8 @@ nc_server_set_unix_socket_path(const char *endpoint_name, const char *socket_pat
     NC_CHECK_ERRMEM_GOTO(!pentry->path, rc = 1, cleanup);
 
 cleanup:
-    /* CONFIG WRITE UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    /* OPTS WRITE UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
     return rc;
 }
 
@@ -5306,8 +5357,8 @@ nc_server_get_unix_socket_path(const char *endpoint_name, char **socket_path)
 
     *socket_path = NULL;
 
-    /* CONFIG READ LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+    /* OPTS READ LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_READ, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
         return 1;
     }
 
@@ -5327,8 +5378,8 @@ nc_server_get_unix_socket_path(const char *endpoint_name, char **socket_path)
     NC_CHECK_ERRMEM_GOTO(!*socket_path, rc = 1, cleanup);
 
 cleanup:
-    /* CONFIG READ UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    /* OPTS READ UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
     return rc;
 }
 
@@ -5337,8 +5388,8 @@ nc_server_set_unix_socket_dir(const char *dir)
 {
     int rc = 0;
 
-    /* CONFIG WRITE LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+    /* OPTS WRITE LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_WRITE, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
         return 1;
     }
 
@@ -5347,8 +5398,8 @@ nc_server_set_unix_socket_dir(const char *dir)
     NC_CHECK_ERRMEM_GOTO(!server_opts.unix_socket_dir, rc = 1, cleanup);
 
 cleanup:
-    /* CONFIG WRITE UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    /* OPTS WRITE UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
     return rc;
 }
 
@@ -5359,8 +5410,8 @@ nc_server_get_unix_socket_dir(char **dir)
 
     *dir = NULL;
 
-    /* CONFIG READ LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+    /* OPTS READ LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_READ, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
         return 1;
     }
 
@@ -5370,7 +5421,7 @@ nc_server_get_unix_socket_dir(char **dir)
     }
 
 cleanup:
-    /* CONFIG READ UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    /* OPTS READ UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
     return rc;
 }

@@ -147,6 +147,12 @@ extern struct nc_server_opts server_opts;
 #define NC_BINDS_LOCK_TIMEOUT 1000
 
 /**
+ * @brief Timeout in msec for acquiring the opts_lock
+ * (only a few field reads or a single string duplication)
+ */
+#define NC_OPTS_LOCK_TIMEOUT 1000
+
+/**
  * @brief Timeout in msec for acquiring the config_lock
  * (socket binding and Call Home client dispatching can involve network operations)
  */
@@ -817,6 +823,23 @@ struct nc_server_opts {
         int sock;               /**< Listening socket file descriptor. */
     } *binds;   /**< Listening socket registry (sized-array, see libyang docs). */
 
+    /**
+     * @brief Lock for the server options settable only through the API, not through YANG data.
+     *
+     * Protects ::nc_server_opts.ch_dispatch_data, ::nc_server_opts.interactive_auth_clb,
+     * ::nc_server_opts.interactive_auth_data, ::nc_server_opts.interactive_auth_data_free,
+     * ::nc_server_opts.pam_config_name, ::nc_server_opts.authkey_path_fmt,
+     * ::nc_server_opts.ssh_protocol_string, ::nc_server_opts.user_verify_clb,
+     * ::nc_server_opts.unix_socket_dir and ::nc_server_opts.unix_paths.
+     *
+     * It is a leaf lock, never acquire another lock while holding it. Only ::nc_server_opts.config_lock
+     * may be held while acquiring it, never the other way around. Since it is also held on the
+     * authentication path, it must never be held across anything slow and, most importantly, never
+     * across a call to a user callback - read the callback and its data pointer as a pair, unlock,
+     * and only then call it.
+     */
+    pthread_rwlock_t opts_lock;
+
 #ifdef NC_ENABLED_SSH_TLS
     char *authkey_path_fmt;             /**< Path to users' public keys that may contain tokens with special meaning. */
     char *pam_config_name;              /**< PAM configuration file name. */
@@ -830,7 +853,7 @@ struct nc_server_opts {
     /**
      * @brief Data for automatically dispatching Call Home clients.
      */
-    struct {
+    struct nc_server_ch_dispatch_data {
         nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb;     /**< Acquiring libyang context callback. */
         nc_server_ch_session_release_ctx_cb release_ctx_cb;     /**< Releasing libyang context callback. */
         void *ctx_cb_data;                                      /**< Data passed to the callbacks above. */

@@ -615,6 +615,8 @@ nc_server_tls_verify_cert(void *cert, int depth, int trusted, struct nc_tls_veri
     struct nc_session *session = cb_data->session;
     void *cert_chain = cb_data->chain;
 
+    int (*user_verify_clb)(const struct nc_session *session);
+
     if (session->username) {
         /* already verified */
         return 0;
@@ -661,7 +663,17 @@ nc_server_tls_verify_cert(void *cert, int depth, int trusted, struct nc_tls_veri
             goto cleanup;
         }
 
-        if (server_opts.user_verify_clb && !server_opts.user_verify_clb(session)) {
+        /* OPTS READ LOCK */
+        if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_READ, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
+            rc = -1;
+            goto cleanup;
+        }
+        user_verify_clb = server_opts.user_verify_clb;
+        /* OPTS READ UNLOCK */
+        nc_rwlock_unlock(&server_opts.opts_lock, __func__);
+
+        /* the callback must not be called with the options lock held */
+        if (user_verify_clb && !user_verify_clb(session)) {
             VRB(session, "Cert verify: user verify callback revoked authorization.");
             rc = 1;
             goto cleanup;
@@ -688,15 +700,15 @@ nc_session_get_client_cert(const struct nc_session *session)
 API void
 nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *session))
 {
-    /* CONFIG LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+    /* OPTS WRITE LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_WRITE, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
         return;
     }
 
     server_opts.user_verify_clb = verify_clb;
 
-    /* CONFIG UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    /* OPTS WRITE UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
 }
 
 int
