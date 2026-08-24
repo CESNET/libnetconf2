@@ -147,6 +147,16 @@ extern struct nc_server_opts server_opts;
 #define NC_CONFIG_LOCK_TIMEOUT 10000
 
 /**
+ * @brief Timeout in msec for the locks acquired while applying a new configuration.
+ *
+ * A reader may hold the config_lock for the whole duration of a transport handshake (TCP connect,
+ * SSH/TLS key exchange and authentication), which is far longer than ::NC_CONFIG_LOCK_TIMEOUT.
+ * Giving up here means losing the configuration change, which the caller generally cannot recover
+ * from, so wait much longer than any handshake can take.
+ */
+#define NC_CONFIG_APPLY_LOCK_TIMEOUT 300000
+
+/**
  * @brief Timeout in msec for acquiring session's ch_lock
  * (just simple session flag checks and updates)
  */

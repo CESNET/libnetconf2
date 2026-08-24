@@ -1050,6 +1050,14 @@ test_invalid_diff(void **state)
     lyd_free_all(diff);
 }
 
+/**
+ * @brief Time in seconds the client stalls in its password callback.
+ *
+ * The server waits for the authentication while holding the configuration READ lock, so this has to be
+ * longer than ::NC_CONFIG_LOCK_TIMEOUT (10 s) for the test to be meaningful.
+ */
+#define TEST_STALL_AUTH_SLEEP 13
+
 /** @brief Time in seconds to wait for a Call Home client to report failed connection attempts. */
 #define TEST_CH_WATCH_TIME 4
 
@@ -1207,6 +1215,125 @@ test_ch_dispatch_not_duplicated(void **state)
     pthread_mutex_destroy(&threads.lock);
 }
 
+/* password callback of the stalling client */
+static char *
+test_stall_auth_password(const char *username, const char *hostname, void *priv)
+{
+    (void) username;
+    (void) hostname;
+    (void) priv;
+
+    /* keep the server waiting for the authentication, it holds the configuration READ lock meanwhile */
+    sleep(TEST_STALL_AUTH_SLEEP);
+
+    /* a wrong password, the connection is expected to fail */
+    return strdup("wrong");
+}
+
+static void *
+test_stall_auth_client_thread(void *arg)
+{
+    int ret;
+    struct nc_session *session = NULL;
+    struct ln2_test_ctx *test_ctx = arg;
+
+    /* skip all hostkey and known_hosts checks */
+    nc_client_ssh_set_knownhosts_mode(NC_SSH_KNOWNHOSTS_SKIP);
+
+    ret = nc_client_set_schema_searchpath(MODULES_DIR);
+    assert_int_equal(ret, 0);
+
+    ret = nc_client_ssh_set_username("stall");
+    assert_int_equal(ret, 0);
+
+    nc_client_ssh_set_auth_password_clb(test_stall_auth_password, NULL);
+
+    /* wait for the server to be ready */
+    pthread_barrier_wait(&test_ctx->barrier);
+
+    /* the authentication is stalled and then fails */
+    session = nc_connect_ssh("127.0.0.1", TEST_PORT, NULL);
+    assert_null(session);
+
+    return NULL;
+}
+
+static void *
+test_stall_auth_server_thread(void *arg)
+{
+    NC_MSG_TYPE msgtype;
+    struct nc_session *session = NULL;
+    struct ln2_test_ctx *test_ctx = arg;
+
+    /* wait for the client to be ready to connect */
+    pthread_barrier_wait(&test_ctx->barrier);
+
+    /* the client never authenticates, so this is expected to fail after the stall */
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
+    assert_int_not_equal(msgtype, NC_MSG_HELLO);
+    nc_session_free(session, NULL);
+
+    return NULL;
+}
+
+/**
+ * @brief A configuration update must not be dropped because a session handshake is holding
+ * the configuration lock.
+ */
+static void
+test_config_update_during_auth(void **state)
+{
+    int ret, i;
+    pthread_t tids[2];
+    struct lyd_node *tree = NULL, *diff = NULL;
+    struct ln2_test_ctx *test_ctx = *state;
+    const struct lys_module *yang_mod;
+
+    yang_mod = ly_ctx_get_module_implemented(test_ctx->ctx, "yang");
+    assert_non_null(yang_mod);
+
+    /* a listening SSH endpoint with a password-authenticated user */
+    ret = nc_server_config_add_address_port(test_ctx->ctx, "endpt", NC_TI_SSH, "127.0.0.1", TEST_PORT, &tree);
+    assert_int_equal(ret, 0);
+    ret = nc_server_config_add_ssh_hostkey(test_ctx->ctx, "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa",
+            NULL, &tree);
+    assert_int_equal(ret, 0);
+    ret = nc_server_config_add_ssh_user_password(test_ctx->ctx, "endpt", "stall", "correct", &tree);
+    assert_int_equal(ret, 0);
+
+    /* add all the default nodes, the authentication timeout has to be longer than the stall */
+    ret = lyd_new_implicit_tree(tree, LYD_IMPLICIT_NO_STATE, NULL);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    /* prepare the configuration update in advance so that only the lock wait is measured */
+    test_create_ch_client_data(test_ctx->ctx, "ch", &diff);
+    ret = lyd_new_meta(test_ctx->ctx, diff, yang_mod, "operation", "create", 0, NULL);
+    assert_int_equal(ret, 0);
+
+    ret = pthread_create(&tids[0], NULL, test_stall_auth_client_thread, test_ctx);
+    assert_int_equal(ret, 0);
+    ret = pthread_create(&tids[1], NULL, test_stall_auth_server_thread, test_ctx);
+    assert_int_equal(ret, 0);
+
+    /* let the key exchange finish, the server is now waiting for the authentication
+     * while holding the configuration READ lock */
+    sleep(2);
+
+    /* this must not be silently dropped */
+    ret = nc_server_config_setup_diff(diff);
+    assert_int_equal(ret, 0);
+
+    for (i = 0; i < 2; i++) {
+        pthread_join(tids[i], NULL);
+    }
+
+    lyd_free_all(diff);
+    lyd_free_all(tree);
+}
+
 static void
 test_config_data_free(void *data)
 {
@@ -1262,6 +1389,7 @@ main(void)
         cmocka_unit_test_setup_teardown(test_unusupported_asymkey_format, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_invalid_diff, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_ch_dispatch_not_duplicated, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_config_update_during_auth, setup_f, ln2_glob_test_teardown),
     };
 
     /* try to get ports from the environment, otherwise use the default */
