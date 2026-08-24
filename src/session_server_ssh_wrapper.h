@@ -128,7 +128,16 @@ void nc_server_ssh_cb_pam_cancel(struct nc_server_ssh_cb_pam_data *data);
 struct nc_server_ssh_cb_data {
     struct ssh_server_callbacks_struct server_cb;  /**< libssh server callbacks. */
     struct nc_session *session;      /**< The current session. */
-    struct nc_server_ssh_opts *opts;     /**< SSH server options. */
+
+    /**
+     * @brief SSH server options, a pointer into a configuration generation.
+     *
+     * Only valid during the transport handshake - it is dereferenced solely by
+     * ::nc_server_ssh_cb_auth_common_setup(), reached only from the four authentication callbacks.
+     * The long-lived channel callbacks use only @p session. It is cleared at the end of the
+     * handshake so that a later dereference fails immediately instead of reading freed memory.
+     */
+    struct nc_server_ssh_opts *opts;
     struct nc_auth_state auth_state;  /**< Tracks multi-method authentication state. */
     struct nc_ssh_channel_cb_data *channels;  /**< List of additional channel callback data,
                                                    tracked so non-netconf channels can be freed. */
@@ -295,12 +304,14 @@ int nc_server_ssh_auth_pubkey_compare_key(ssh_key key, struct nc_public_key *pub
 /**
  * @brief Get public keys from the truststore.
  *
+ * @param[in] config Pinned server configuration to search.
  * @param[in] referenced_name Name of the public key bag in the truststore.
  * @param[out] pubkeys Referenced public keys.
  * @param[out] pubkey_count Referenced public key count.
  * @return 0 on success, 1 on error.
  */
-int nc_server_ssh_ts_ref_get_keys(const char *referenced_name, struct nc_public_key **pubkeys, uint32_t *pubkey_count);
+int nc_server_ssh_ts_ref_get_keys(const struct nc_server_config *config, const char *referenced_name,
+        struct nc_public_key **pubkeys, uint32_t *pubkey_count);
 
 /**
  * @brief Get user's public keys from the system.

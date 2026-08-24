@@ -154,17 +154,16 @@ extern struct nc_server_opts server_opts;
 
 /**
  * @brief Timeout in msec for acquiring the config_lock
- * (socket binding and Call Home client dispatching can involve network operations)
+ * (only a pointer read plus a refcount increment)
  */
 #define NC_CONFIG_LOCK_TIMEOUT 10000
 
 /**
  * @brief Timeout in msec for the locks acquired while applying a new configuration.
  *
- * A reader may hold the config_lock for the whole duration of a transport handshake (TCP connect,
- * SSH/TLS key exchange and authentication), which is far longer than ::NC_CONFIG_LOCK_TIMEOUT.
- * Giving up here means losing the configuration change, which the caller generally cannot recover
- * from, so wait much longer than any handshake can take.
+ * The config_lock is only ever held for the pointer swap now, so this can never fire. It is kept as
+ * a safety net because giving up here means losing the configuration change, which the caller
+ * generally cannot recover from.
  */
 #define NC_CONFIG_APPLY_LOCK_TIMEOUT 300000
 
@@ -714,7 +713,26 @@ struct nc_server_ch_thread_arg {
     int notify_pipe[2];         /**< Self-pipe for signaling the thread to terminate. Index 0 = read end, 1 = write end. */
 };
 
+/**
+ * @brief Refcounted immutable snapshot of the server configuration.
+ *
+ * Once published in ::nc_server_opts.config, a generation is never written to again. Runtime state
+ * that used to live here (listening sockets, Call Home thread handles) is kept in registries in
+ * ::nc_server_opts instead.
+ *
+ * Reference ownership rules:
+ * - a generation is allocated by an applier with @p refcount 1, that reference is transferred to
+ *   ::nc_server_opts.config when the generation is published,
+ * - an applier that fails before publishing releases its reference itself,
+ * - an applier that published a new generation releases the reference of the old one,
+ * - ::nc_server_config_acquire() takes a reference, ::nc_server_config_release() drops one and frees
+ *   the generation when the last one is dropped,
+ * - so ::nc_server_opts.config always holds exactly one reference and @p refcount is at least 1 for
+ *   as long as a generation is published.
+ */
 struct nc_server_config {
+    ATOMIC_T refcount;      /**< Number of references held to this configuration generation. */
+
     uint16_t idle_timeout;  /**< Idle timeout of the server sessions. */
 
     char **ignored_modules; /**< Names of YANG modules that are not reported in the server <hello> message (sized-array, see libyang docs). */
@@ -768,8 +786,6 @@ struct nc_server_config {
         NC_CH_START_WITH start_with;        /**< How to select the Call Home endpoint to connect to. */
         uint8_t max_attempts;               /**< Maximum number of attempts to connect to the given Call Home endpoint. */
         uint16_t max_wait;                  /**< Maximum time to wait for a Call Home connection in seconds. */
-
-        struct nc_server_ch_thread_arg *thread; /**< Call Home client thread data, if dispatched. */
     } *ch_clients;                          /**< Call Home clients (sized-array, see libyang docs). */
 
 #ifdef NC_ENABLED_SSH_TLS
@@ -801,10 +817,25 @@ struct nc_server_opts {
     void *content_id_data;                      /**< Data passed to the content_id_clb callback. */
     void (*content_id_data_free)(void *data);   /**< Callback to free the content_id_data. */
 
-    /* ACCESS locked - options modified by YANG data/API - WRITE lock
-     *               - options read when accepting sessions - READ lock */
-    pthread_rwlock_t config_lock;       /**< Lock for the server configuration. */
-    struct nc_server_config config;     /**< YANG Server configuration. */
+    /* ACCESS locked - the published configuration pointer is swapped under the WRITE lock,
+     *               - a reference to it is acquired under the READ lock */
+    pthread_rwlock_t config_lock;       /**< Lock for the ::nc_server_opts.config pointer. */
+    struct nc_server_config *config;    /**< Currently published YANG server configuration generation,
+                                             NULL until ::nc_server_init(). */
+
+    /* ACCESS unlocked - mirror of the published config->idle_timeout, stored under the config WRITE lock */
+    ATOMIC_T idle_timeout;              /**< Idle timeout of the server sessions in seconds, 0 for none. */
+
+    /* ACCESS locked - CH threads lock - leaf lock, never acquire another lock while holding it */
+    pthread_mutex_t ch_threads_lock;    /**< Lock for the Call Home thread registry. */
+
+    /**
+     * @brief Call Home thread registry, keyed by the client name of the thread argument.
+     *
+     * A thread handle is runtime state, not configuration, so it is kept out of
+     * ::nc_server_config (sized-array, see libyang docs).
+     */
+    struct nc_server_ch_thread_arg **ch_threads;
 
     /* ACCESS locked - binds lock - leaf lock, never acquire another lock while holding it */
     pthread_mutex_t binds_lock;         /**< Lock for the listening socket registry. */
@@ -1010,6 +1041,16 @@ struct nc_session {
             pthread_mutex_t ch_lock;       /**< Call Home thread lock */
             pthread_cond_t ch_cond;        /**< Call Home thread condition */
 
+            /**
+             * @brief Configuration generation pinned for the duration of the transport handshake.
+             *
+             * A borrowed pointer, NOT a counted reference - the reference belongs to the function
+             * that acquired it, which also clears this field before the session leaves the handshake.
+             * ::nc_session_free() must not release it. It is only ever set by ::nc_accept() and
+             * ::nc_connect_ch_endpt(); do not add a third setter with different ownership.
+             */
+            const struct nc_server_config *config;
+
 #ifdef NC_ENABLED_SSH_TLS
             uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
             void *client_cert;                /**< TLS client certificate if used for authentication */
@@ -1152,11 +1193,24 @@ int nc_server_binds_reconcile(const struct nc_server_config *config);
 void nc_server_binds_destroy(void);
 
 /**
- * @brief Free server configuration data (only YANG config data).
+ * @brief Acquire a reference to the currently published server configuration generation.
  *
- * @param[in] config Server configuration to free.
+ * The returned generation is guaranteed to stay valid and unchanged until the reference is dropped
+ * by ::nc_server_config_release(), no lock needs to be held meanwhile.
+ *
+ * @return Pinned server configuration.
+ * @return NULL if the server is not initialized or the configuration lock could not be acquired.
  */
-void nc_server_config_free(struct nc_server_config *config);
+const struct nc_server_config *nc_server_config_acquire(void);
+
+/**
+ * @brief Release a reference to a server configuration generation.
+ *
+ * Frees the generation if this was the last reference held to it.
+ *
+ * @param[in] config Server configuration to release, may be NULL.
+ */
+void nc_server_config_release(const struct nc_server_config *config);
 
 /**
  * @brief Get passwd entry for UID or a user.
@@ -1398,13 +1452,14 @@ int nc_server_ch_accept_binds(const struct nc_bind *binds, const struct nc_clien
 int nc_connect_unix_session(struct nc_session *session, int sock, const char *username);
 
 /**
- * @brief Gets a listening endpoint based on its name.
+ * @brief Gets a listening endpoint of a pinned configuration based on its name.
  *
+ * @param[in] config Pinned server configuration to search.
  * @param[in] name The name of the endpoint.
  * @param[out] endpt Pointer to the endpoint structure.
  * @return 0 on success, 1 on failure.
  */
-int nc_server_endpt_get(const char *name, struct nc_endpt **endpt);
+int nc_server_endpt_get(const struct nc_server_config *config, const char *name, struct nc_endpt **endpt);
 
 /**
  * @brief Add a client Call Home bind, listen on it.
@@ -1442,21 +1497,42 @@ NC_MSG_TYPE nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IM
 #ifdef NC_ENABLED_SSH_TLS
 
 /**
+ * @brief Get the names of all the Call Home clients that have a thread running.
+ *
+ * @param[out] names Copies of the client names (sized-array, see libyang docs), free with
+ * ::nc_server_ch_thread_names_free().
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_ch_thread_names_get(char ***names);
+
+/**
+ * @brief Free the Call Home client names returned by ::nc_server_ch_thread_names_get().
+ *
+ * @param[in] names Client names to free, may be NULL.
+ */
+void nc_server_ch_thread_names_free(char **names);
+
+/**
+ * @brief Stop all the Call Home client threads and free the thread registry.
+ *
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_ch_threads_destroy(void);
+
+/**
  * @brief Stop a dispatched Call Home client thread, if such thread was dispatched for the given client.
  *
- * @warning The caller MUST hold both WRITE config lock and CONFIG APPLY mutex when calling this function.
+ * Takes no configuration lock at all, the thread is looked up in the Call Home thread registry.
  *
- * @param[in] ch_client Call Home client to stop the thread for, can be NULL.
- * @return 0 if the thread was successfully stopped, 1 on error.
+ * @param[in] client_name Name of the Call Home client to stop the thread for.
+ * @return 0 if the thread was successfully stopped or none was running, 1 on error.
  */
-int nc_session_server_ch_client_dispatch_stop(struct nc_ch_client *ch_client);
+int nc_session_server_ch_client_dispatch_stop(const char *client_name);
 
 /**
  * @brief Dispatch a thread connecting to a listening NETCONF client and creating Call Home sessions.
  *
- * @note The config WRITE lock MUST be held.
- *
- * @param[in] ch_client Call Home client to dispatch the thread for.
+ * @param[in] client_name Name of the Call Home client to dispatch the thread for.
  * @param[in] acquire_ctx_cb Callback for acquiring new session context.
  * @param[in] release_ctx_cb Callback for releasing session context.
  * @param[in] ctx_cb_data Arbitrary user data passed to @p acquire_ctx_cb and @p release_ctx_cb.
@@ -1464,7 +1540,7 @@ int nc_session_server_ch_client_dispatch_stop(struct nc_ch_client *ch_client);
  * @param[in] new_session_cb_data Arbitrary user data passed to @p new_session_cb.
  * @return 0 if the thread was successfully created, -1 on error.
  */
-int _nc_connect_ch_client_dispatch(struct nc_ch_client *ch_client, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
+int _nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
         nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
         void *new_session_cb_data);
 
@@ -1526,11 +1602,11 @@ int nc_session_tls_crl_verify_post_handshake(void *tls_session, void *cert_store
 /**
  * @brief Check whether a module is not ignored by the server.
  *
+ * @param[in] config Pinned server configuration, may be NULL.
  * @param[in] mod_name Module name to check.
- * @param[in] config_locked Whether the configuration lock is already held or should be acquired in this function.
  * @return Whether the module is ignored.
  */
-int nc_server_is_mod_ignored(const char *mod_name, int config_locked);
+int nc_server_is_mod_ignored(const struct nc_server_config *config, const char *mod_name);
 
 /**
  * Functions

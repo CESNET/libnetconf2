@@ -498,7 +498,7 @@ nc_server_tls_verify_cb(int preverify_ok, X509_STORE_CTX *x509_ctx)
              * if yes, this callback will be called again with the same cert, but with preverify_ok = 1
              */
             cert = X509_STORE_CTX_get0_cert(x509_ctx);
-            ret = nc_server_tls_verify_peer_cert(cert, data->opts);
+            ret = nc_server_tls_verify_peer_cert(cert, data);
             if (ret) {
                 VRB(NULL, "Cert verify: fail (%s).", X509_verify_cert_error_string(X509_STORE_CTX_get_error(x509_ctx)));
                 ret = -1;
