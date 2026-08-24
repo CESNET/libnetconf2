@@ -1341,8 +1341,9 @@ nc_server_destroy(void)
     }
 #endif /* NC_ENABLED_SSH_TLS */
 
-    /* CONFIG UPDATE LOCK */
-    if (nc_mutex_lock(&server_opts.config_update_lock, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+    /* CONFIG UPDATE LOCK - the same timeout as the appliers use, destroying the server must not
+     * fail just because a legitimate configuration apply is in progress */
+    if (nc_mutex_lock(&server_opts.config_update_lock, NC_CONFIG_APPLY_LOCK_TIMEOUT, __func__) != 1) {
         rc = 1;
         goto cleanup;
     }
@@ -3885,11 +3886,13 @@ nc_session_server_ch_client_dispatch_stop(struct nc_ch_client *ch_client)
         goto cleanup;
     }
 
-    /* CONFIG WRITE LOCK - re-acquire to clear the thread pointer and free the thread data */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+    /* CONFIG WRITE LOCK - re-acquire to clear the thread pointer and free the thread data,
+     * a reader may be holding the lock for the whole duration of a transport handshake */
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_APPLY_LOCK_TIMEOUT, __func__) != 1) {
         /* if we fail, attempt to lock again in cleanup.
          * ch thread data will cause a memory leak, but we should avoid a possible crash this way */
-        ERRINT;
+        ERR(NULL, "Timed out waiting for the configuration lock, Call Home client \"%s\" thread data leaked.",
+                ch_client_name);
         rc = 1;
         goto cleanup;
     }
@@ -3909,7 +3912,7 @@ nc_session_server_ch_client_dispatch_stop(struct nc_ch_client *ch_client)
 cleanup:
     if (config_lock_mode == NC_RWLOCK_NONE) {
         /* CONFIG LOCK - lock it back if we unlocked it. It MUST succeed, if the caller holds the config apply mutex */
-        if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_APPLY_LOCK_TIMEOUT, __func__) != 1) {
             ERRINT;
         }
     }

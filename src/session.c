@@ -468,7 +468,11 @@ nc_rwlock_lock(pthread_rwlock_t *rwlock, enum nc_rwlock_mode mode, int timeout, 
 
     if (ret) {
         if ((ret == EBUSY) || (ret == ETIMEDOUT)) {
-            /* timeout */
+            /* timeout, a trylock (no timeout) being busy is a normal outcome, an expired deadline is not */
+            if (timeout > 0) {
+                ERR(NULL, "%s: timed out after %d ms waiting for the rwlock in %s mode.", func_name, timeout,
+                        mode == NC_RWLOCK_READ ? "read" : "write");
+            }
             return 0;
         }
 
@@ -523,7 +527,10 @@ nc_mutex_lock(pthread_mutex_t *mutex, int timeout, const char *func_name)
 
     if (ret) {
         if ((ret == EBUSY) || (ret == ETIMEDOUT)) {
-            /* timeout */
+            /* timeout, a trylock (no timeout) being busy is a normal outcome, an expired deadline is not */
+            if (timeout > 0) {
+                ERR(NULL, "%s: timed out after %d ms waiting for the mutex.", func_name, timeout);
+            }
             return 0;
         }
 
