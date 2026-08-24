@@ -1051,6 +1051,78 @@ test_invalid_diff(void **state)
 }
 
 /**
+ * @brief Moving an entry of an ordered-by user list is reported as a replace operation,
+ * which must be handled and must not crash.
+ */
+static void
+test_ordered_list_move(void **state)
+{
+    int ret;
+    struct lyd_node *tree = NULL, *diff = NULL;
+    struct ln2_test_ctx *test_ctx = *state;
+    char *mem = NULL, *mem_filled = NULL;
+
+    /* a diff that only moves entries of the two ordered-by user lists, just like sysrepo
+     * reports it - the moved list entry is present with its keys only, without the new position */
+    const char *move_diff =
+            "<netconf-server xmlns=\"urn:ietf:params:xml:ns:yang:ietf-netconf-server\" "
+            "    xmlns:yang=\"urn:ietf:params:xml:ns:yang:1\" yang:operation=\"none\">"
+            "  <listen>"
+            "    <endpoints>"
+            "      <endpoint>"
+            "        <name>ssh</name>"
+            "        <ssh>"
+            "          <ssh-server-parameters>"
+            "            <server-identity>"
+            "              <host-key yang:operation=\"replace\">"
+            "                <name>ssh-rsa</name>"
+            "              </host-key>"
+            "            </server-identity>"
+            "          </ssh-server-parameters>"
+            "        </ssh>"
+            "      </endpoint>"
+            "    </endpoints>"
+            "  </listen>"
+            "  <call-home>"
+            "    <netconf-client>"
+            "      <name>persistent</name>"
+            "      <endpoints>"
+            "        <endpoint yang:operation=\"replace\">"
+            "          <name>tls</name>"
+            "        </endpoint>"
+            "      </endpoints>"
+            "    </netconf-client>"
+            "  </call-home>"
+            "</netconf-server>\n";
+
+    /* read the config file into memory */
+    read_config_file(TESTS_DIR "/data/config.xml", &mem);
+
+    /* print the port numbers into the config */
+    ret = asprintf(&mem_filled, mem, TEST_PORT_STR, TEST_PORT_2_STR, TEST_PORT_3_STR,
+            TEST_PORT_4_STR, TEST_PORT_5_STR, TEST_PORT_6_STR);
+    assert_int_not_equal(ret, -1);
+
+    ret = lyd_parse_data_mem(test_ctx->ctx, mem_filled, LYD_XML, LYD_PARSE_STRICT, LYD_VALIDATE_PRESENT, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    /* the move must be handled, not crash and not fail */
+    ret = lyd_parse_data_mem(test_ctx->ctx, move_diff, LYD_XML, LYD_PARSE_ONLY, 0, &diff);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_diff(diff);
+    assert_int_equal(ret, 0);
+
+    lyd_free_all(diff);
+    lyd_free_all(tree);
+    free(mem);
+    free(mem_filled);
+}
+
+/**
  * @brief Time in seconds the client stalls in its password callback.
  *
  * The server waits for the authentication while holding the configuration READ lock, so this has to be
@@ -1069,6 +1141,7 @@ struct test_ch_threads {
     pthread_cond_t cond;
     pthread_t tids[TEST_CH_TID_MAX];
     uint32_t tid_count;
+    char endpt[64];
 };
 
 /* acquire ctx cb for the Call Home dispatch */
@@ -1110,11 +1183,14 @@ test_ch_new_session_fail_cb(const char *client_name, const char *endpt_name, uin
     uint32_t i;
 
     (void) client_name;
-    (void) endpt_name;
     (void) max_attempts;
     (void) cur_attempt;
 
     pthread_mutex_lock(&threads->lock);
+    if (!threads->endpt[0]) {
+        /* the endpoint of the very first failed attempt is the first one in the configuration */
+        strncpy(threads->endpt, endpt_name, sizeof threads->endpt - 1);
+    }
     for (i = 0; i < threads->tid_count; ++i) {
         if (pthread_equal(threads->tids[i], self)) {
             break;
@@ -1125,6 +1201,33 @@ test_ch_new_session_fail_cb(const char *client_name, const char *endpt_name, uin
     }
     pthread_cond_broadcast(&threads->cond);
     pthread_mutex_unlock(&threads->lock);
+}
+
+/**
+ * @brief Create the YANG data of a Call Home endpoint that can never connect anywhere.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] client_name Name of the Call Home client.
+ * @param[in] endpt_name Name of the Call Home endpoint.
+ * @param[out] tree Created YANG data.
+ */
+static void
+test_create_ch_endpt_data(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
+        struct lyd_node **tree)
+{
+    int ret;
+
+    /* port 1 is never listening, so the connection is refused immediately */
+    ret = nc_server_config_add_ch_address_port(ctx, client_name, endpt_name, NC_TI_SSH, "127.0.0.1", "1", tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_ssh_hostkey(ctx, client_name, endpt_name, "hostkey",
+            TESTS_DIR "/data/key_ecdsa", NULL, tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_ssh_user_pubkey(ctx, client_name, endpt_name, "user", "pubkey",
+            TESTS_DIR "/data/id_ed25519.pub", tree);
+    assert_int_equal(ret, 0);
 }
 
 /**
@@ -1139,23 +1242,13 @@ test_create_ch_client_data(const struct ly_ctx *ctx, const char *client_name, st
 {
     int ret;
 
-    /* port 1 is never listening, so the connection is refused immediately */
-    ret = nc_server_config_add_ch_address_port(ctx, client_name, "endpt", NC_TI_SSH, "127.0.0.1", "1", tree);
-    assert_int_equal(ret, 0);
+    test_create_ch_endpt_data(ctx, client_name, "endpt", tree);
 
     ret = nc_server_config_add_ch_persistent(ctx, client_name, tree);
     assert_int_equal(ret, 0);
 
     /* retry quickly so that the test does not have to wait long */
     ret = nc_server_config_add_ch_reconnect_strategy(ctx, client_name, NC_CH_FIRST_LISTED, 1, 3, tree);
-    assert_int_equal(ret, 0);
-
-    ret = nc_server_config_add_ch_ssh_hostkey(ctx, client_name, "endpt", "hostkey",
-            TESTS_DIR "/data/key_ecdsa", NULL, tree);
-    assert_int_equal(ret, 0);
-
-    ret = nc_server_config_add_ch_ssh_user_pubkey(ctx, client_name, "endpt", "user", "pubkey",
-            TESTS_DIR "/data/id_ed25519.pub", tree);
     assert_int_equal(ret, 0);
 }
 
@@ -1210,6 +1303,80 @@ test_ch_dispatch_not_duplicated(void **state)
     /* exactly one Call Home thread may be running for the client */
     assert_int_equal(tid_count, 1);
 
+    lyd_free_all(tree);
+    pthread_cond_destroy(&threads.cond);
+    pthread_mutex_destroy(&threads.lock);
+}
+
+/**
+ * @brief A moved entry of an ordered-by user list must actually change its position.
+ *
+ * The Call Home thread always starts with the first endpoint of the client, so the endpoint of the
+ * first failed connection attempt tells which one that is.
+ */
+static void
+test_ch_endpoint_order(void **state)
+{
+    int ret;
+    struct lyd_node *tree = NULL, *diff = NULL;
+    struct ln2_test_ctx *test_ctx = *state;
+    struct test_ch_threads threads = {0};
+    struct timespec ts;
+
+    /* move the second endpoint to the front, an empty "key" means the entry belongs first */
+    const char *move_diff =
+            "<netconf-server xmlns=\"urn:ietf:params:xml:ns:yang:ietf-netconf-server\" "
+            "    xmlns:yang=\"urn:ietf:params:xml:ns:yang:1\" yang:operation=\"none\">"
+            "  <call-home>"
+            "    <netconf-client>"
+            "      <name>ch</name>"
+            "      <endpoints>"
+            "        <endpoint yang:operation=\"replace\" yang:key=\"\">"
+            "          <name>second</name>"
+            "        </endpoint>"
+            "      </endpoints>"
+            "    </netconf-client>"
+            "  </call-home>"
+            "</netconf-server>\n";
+
+    pthread_mutex_init(&threads.lock, NULL);
+    pthread_cond_init(&threads.cond, NULL);
+
+    /* two endpoints, "first" is listed first */
+    test_create_ch_endpt_data(test_ctx->ctx, "ch", "first", &tree);
+    test_create_ch_endpt_data(test_ctx->ctx, "ch", "second", &tree);
+
+    ret = nc_server_config_add_ch_persistent(test_ctx->ctx, "ch", &tree);
+    assert_int_equal(ret, 0);
+    ret = nc_server_config_add_ch_reconnect_strategy(test_ctx->ctx, "ch", NC_CH_FIRST_LISTED, 1, 1, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    ret = lyd_parse_data_mem(test_ctx->ctx, move_diff, LYD_XML, LYD_PARSE_ONLY, 0, &diff);
+    assert_int_equal(ret, 0);
+    ret = nc_server_config_setup_diff(diff);
+    assert_int_equal(ret, 0);
+
+    /* dispatch the client only now, so that it starts with the reordered endpoints */
+    nc_server_ch_set_new_session_fail_cb(test_ch_new_session_fail_cb, &threads);
+    ret = nc_connect_ch_client_dispatch("ch", test_ch_acquire_ctx_cb, test_ch_release_ctx_cb, test_ctx,
+            test_ch_new_session_cb, NULL);
+    assert_int_equal(ret, 0);
+
+    /* wait for the first failed connection attempt */
+    pthread_mutex_lock(&threads.lock);
+    while (!threads.endpt[0]) {
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 10;
+        ret = pthread_cond_timedwait(&threads.cond, &threads.lock, &ts);
+        assert_int_equal(ret, 0);
+    }
+    assert_string_equal(threads.endpt, "second");
+    pthread_mutex_unlock(&threads.lock);
+
+    lyd_free_all(diff);
     lyd_free_all(tree);
     pthread_cond_destroy(&threads.cond);
     pthread_mutex_destroy(&threads.lock);
@@ -1388,7 +1555,9 @@ main(void)
         cmocka_unit_test_setup_teardown(test_config_cascade_delete, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_unusupported_asymkey_format, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_invalid_diff, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_ordered_list_move, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_ch_dispatch_not_duplicated, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_ch_endpoint_order, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_config_update_during_auth, setup_f, ln2_glob_test_teardown),
     };
 
