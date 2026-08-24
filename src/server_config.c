@@ -21,6 +21,7 @@
 #include <grp.h>
 #include <pthread.h>
 #include <pwd.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -122,6 +123,144 @@ nc_lyd_find_child_optional(const struct lyd_node *ctx_node, const char *child, s
 {
     *match = NULL;
     lyd_find_path(ctx_node, child, 0, match);
+}
+
+/**
+ * @brief Get the instance a created or moved entry of an ordered-by user list should be placed after.
+ *
+ * The position is stored in the "key" metadata of the entry as a single key predicate
+ * (for example "[name='endpt']"), an empty value means the entry belongs first.
+ *
+ * @param[in] node List entry from the diff, the list is expected to have exactly one key.
+ * @param[out] anchor Name of the instance the entry should be placed after, NULL if it belongs first.
+ * Points into the metadata value, so it is not terminated, use @p anchor_len.
+ * @param[out] anchor_len Length of @p anchor.
+ * @param[out] move Whether the diff specifies a position at all.
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_server_config_get_userord_anchor(const struct lyd_node *node, const char **anchor, uint32_t *anchor_len, int *move)
+{
+    struct lyd_meta *meta;
+    const char *val, *key_end, *val_end;
+    char quot;
+
+    *anchor = NULL;
+    *anchor_len = 0;
+    *move = 0;
+
+    meta = lyd_find_meta(node->meta, NULL, "yang:key");
+    if (!meta) {
+        /* the diff says nothing about the position, for example because it was not created by libyang */
+        return 0;
+    }
+
+    *move = 1;
+    val = lyd_get_meta_value(meta);
+    if (!val[0]) {
+        /* the entry belongs first */
+        return 0;
+    }
+
+    key_end = strchr(val, '=');
+    if ((val[0] != '[') || !key_end) {
+        goto error;
+    }
+
+    /* libyang always quotes the value with a quote it does not contain, so there is no escaping */
+    quot = key_end[1];
+    if ((quot != '\'') && (quot != '\"')) {
+        goto error;
+    }
+
+    val_end = strchr(key_end + 2, quot);
+    if (!val_end || (val_end[1] != ']')) {
+        goto error;
+    }
+
+    *anchor = key_end + 2;
+    *anchor_len = (uint32_t)(val_end - (key_end + 2));
+    return 0;
+
+error:
+    ERR(NULL, "Invalid \"key\" metadata value \"%s\" of node \"%s\".", val, LYD_NAME(node));
+    return 1;
+}
+
+/**
+ * @brief Move an entry of an ordered-by user list to the position specified by the diff.
+ *
+ * The entries are stored in a sized array in the order they are configured in, so the item is
+ * moved within the array and the items in between are shifted. If the instance the entry should
+ * follow is not found, the entry is left where it is.
+ *
+ * @param[in] node List entry from the diff, the list is expected to have exactly one key.
+ * @param[in] index Current index of the entry in @p items.
+ * @param[in,out] items Sized array of the list entries.
+ * @param[in] item_size Size of a single item of @p items.
+ * @param[in] name_offset Offset of the entry name (the list key) within an item of @p items.
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_server_config_move_userord_item(const struct lyd_node *node, LY_ARRAY_COUNT_TYPE index, void *items,
+        uint32_t item_size, uint32_t name_offset)
+{
+    int move = 0;
+    const char *anchor = NULL, *name;
+    uint32_t anchor_len = 0;
+    LY_ARRAY_COUNT_TYPE count, i, new_index;
+    char *item, *tmp;
+
+    NC_CHECK_RET(nc_server_config_get_userord_anchor(node, &anchor, &anchor_len, &move));
+    if (!move) {
+        /* keep the current position */
+        return 0;
+    }
+
+    count = LY_ARRAY_COUNT(items);
+    assert(index < count);
+
+    if (!anchor) {
+        /* the entry belongs first */
+        new_index = 0;
+    } else {
+        /* find the instance the entry should follow */
+        for (i = 0; i < count; ++i) {
+            name = *(char **)((char *)items + (i * item_size) + name_offset);
+            if (!strncmp(name, anchor, anchor_len) && !name[anchor_len]) {
+                break;
+            }
+        }
+        if (i == count) {
+            WRN(NULL, "Instance \"%.*s\" to order the node \"%s\" after not found, keeping its position.",
+                    (int)anchor_len, anchor, LYD_NAME(node));
+            return 0;
+        }
+
+        /* the entry is removed from its current position first, which shifts a following anchor down */
+        new_index = (i < index) ? i + 1 : i;
+    }
+
+    if (new_index == index) {
+        /* already in place */
+        return 0;
+    }
+
+    tmp = malloc(item_size);
+    NC_CHECK_ERRMEM_RET(!tmp, 1);
+
+    item = (char *)items + (index * item_size);
+    memcpy(tmp, item, item_size);
+    if (new_index > index) {
+        memmove(item, item + item_size, (new_index - index) * item_size);
+    } else {
+        memmove((char *)items + ((new_index + 1) * item_size), (char *)items + (new_index * item_size),
+                (index - new_index) * item_size);
+    }
+    memcpy((char *)items + (new_index * item_size), tmp, item_size);
+
+    free(tmp);
+    return 0;
 }
 
 #ifdef NC_ENABLED_SSH_TLS
@@ -645,6 +784,9 @@ config_local_bind(const struct lyd_node *node, enum nc_operation parent_op, stru
         LY_ARRAY_NEW_RET(LYD_CTX(node), endpt->binds, bind, 1);
         /* init the new bind */
         bind->sock = -1;
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config local address */
@@ -1001,8 +1143,9 @@ config_ssh_hostkey(const struct lyd_node *node, enum nc_operation parent_op, str
     name = lyd_get_value(n);
     assert(name);
 
-    if ((op == NC_OP_DELETE) || (op == NC_OP_NONE)) {
-        /* find the hostkey we are deleting/modifying */
+    if ((op == NC_OP_DELETE) || (op == NC_OP_NONE) || (op == NC_OP_REPLACE)) {
+        /* find the hostkey we are deleting/modifying/moving, the list is ordered-by user so a moved
+         * entry is reported as replaced, but its contents do not change */
         LY_ARRAY_FOR(ssh->hostkeys, i) {
             if (!strcmp(ssh->hostkeys[i].name, name)) {
                 break;
@@ -1016,6 +1159,10 @@ config_ssh_hostkey(const struct lyd_node *node, enum nc_operation parent_op, str
     } else if (op == NC_OP_CREATE) {
         /* create a new hostkey */
         LY_ARRAY_NEW_RET(LYD_CTX(node), ssh->hostkeys, hostkey, 1);
+        i = LY_ARRAY_COUNT(ssh->hostkeys) - 1;
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config hostkey name */
@@ -1035,10 +1182,16 @@ config_ssh_hostkey(const struct lyd_node *node, enum nc_operation parent_op, str
 
     /* all children processed, we can now delete the hostkey */
     if (op == NC_OP_DELETE) {
+        /* the list is ordered-by user, shift the rest instead of swapping the last hostkey in */
         if (i < LY_ARRAY_COUNT(ssh->hostkeys) - 1) {
-            ssh->hostkeys[i] = ssh->hostkeys[LY_ARRAY_COUNT(ssh->hostkeys) - 1];
+            memmove(&ssh->hostkeys[i], &ssh->hostkeys[i + 1],
+                    (LY_ARRAY_COUNT(ssh->hostkeys) - i - 1) * sizeof *ssh->hostkeys);
         }
         LY_ARRAY_DECREMENT_FREE(ssh->hostkeys);
+    } else if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+        /* the list is ordered-by user, place the hostkey at its configured position */
+        NC_CHECK_RET(nc_server_config_move_userord_item(node, i, ssh->hostkeys,
+                (uint32_t)sizeof *ssh->hostkeys, (uint32_t)offsetof(struct nc_hostkey, name)));
     }
 
     return 0;
@@ -1159,6 +1312,9 @@ config_ssh_user_public_key(const struct lyd_node *node, enum nc_operation parent
     } else if (op == NC_OP_CREATE) {
         /* create a new public key */
         LY_ARRAY_NEW_RET(LYD_CTX(node), user->pubkeys, key, 1);
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config public key name */
@@ -1398,6 +1554,9 @@ config_ssh_user(const struct lyd_node *node, enum nc_operation parent_op, struct
     } else if (op == NC_OP_CREATE) {
         /* create a new user */
         LY_ARRAY_NEW_RET(LYD_CTX(node), ssh->auth_clients, user, 1);
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config user name */
@@ -2236,6 +2395,9 @@ config_tls_client_auth_ca_cert(const struct lyd_node *node,
     } else if (op == NC_OP_CREATE) {
         /* create a new ca-cert */
         LY_ARRAY_NEW_RET(LYD_CTX(node), client_auth->ca_certs, cert, 1);
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config ca-cert name */
@@ -2362,6 +2524,9 @@ config_tls_client_auth_ee_cert(const struct lyd_node *node,
     } else if (op == NC_OP_CREATE) {
         /* create a new ee-cert */
         LY_ARRAY_NEW_RET(LYD_CTX(node), client_auth->ee_certs, cert, 1);
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config ee-cert name */
@@ -3246,6 +3411,9 @@ config_unix_user_mapping(const struct lyd_node *node, enum nc_operation parent_o
     } else if (op == NC_OP_CREATE) {
         /* create a new user mapping */
         LY_ARRAY_NEW_RET(LYD_CTX(node), unix->user_mappings, mapping, 1);
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config system-user */
@@ -3385,6 +3553,9 @@ config_endpoint(const struct lyd_node *node, enum nc_operation parent_op,
     } else if (op == NC_OP_CREATE) {
         /* create a new endpoint */
         LY_ARRAY_NEW_RET(LYD_CTX(node), config->endpts, endpt, 1);
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config name */
@@ -3724,8 +3895,9 @@ config_ch_client_endpoint(const struct lyd_node *node, enum nc_operation parent_
     name = lyd_get_value(n);
     assert(name);
 
-    if ((op == NC_OP_DELETE) || (op == NC_OP_NONE)) {
-        /* find the endpoint we are deleting/modifying */
+    if ((op == NC_OP_DELETE) || (op == NC_OP_NONE) || (op == NC_OP_REPLACE)) {
+        /* find the endpoint we are deleting/modifying/moving, the list is ordered-by user so a moved
+         * entry is reported as replaced, but its contents do not change */
         LY_ARRAY_FOR(ch_client->ch_endpts, i) {
             if (!strcmp(ch_client->ch_endpts[i].name, name)) {
                 break;
@@ -3739,6 +3911,10 @@ config_ch_client_endpoint(const struct lyd_node *node, enum nc_operation parent_
     } else if (op == NC_OP_CREATE) {
         /* create a new endpoint and init it */
         LY_ARRAY_NEW_RET(LYD_CTX(node), ch_client->ch_endpts, endpt, 1);
+        i = LY_ARRAY_COUNT(ch_client->ch_endpts) - 1;
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config name */
@@ -3760,10 +3936,16 @@ config_ch_client_endpoint(const struct lyd_node *node, enum nc_operation parent_
 
     /* all children processed, we can now delete the endpoint */
     if (op == NC_OP_DELETE) {
+        /* the list is ordered-by user, shift the rest instead of swapping the last endpoint in */
         if (i < LY_ARRAY_COUNT(ch_client->ch_endpts) - 1) {
-            ch_client->ch_endpts[i] = ch_client->ch_endpts[LY_ARRAY_COUNT(ch_client->ch_endpts) - 1];
+            memmove(&ch_client->ch_endpts[i], &ch_client->ch_endpts[i + 1],
+                    (LY_ARRAY_COUNT(ch_client->ch_endpts) - i - 1) * sizeof *ch_client->ch_endpts);
         }
         LY_ARRAY_DECREMENT_FREE(ch_client->ch_endpts);
+    } else if ((op == NC_OP_CREATE) || (op == NC_OP_REPLACE)) {
+        /* the list is ordered-by user, place the endpoint at its configured position */
+        NC_CHECK_RET(nc_server_config_move_userord_item(node, i, ch_client->ch_endpts,
+                (uint32_t)sizeof *ch_client->ch_endpts, (uint32_t)offsetof(struct nc_ch_endpt, name)));
     }
 
     return 0;
@@ -4004,6 +4186,9 @@ config_netconf_client(const struct lyd_node *node, enum nc_operation parent_op,
     } else if (op == NC_OP_CREATE) {
         /* create a new client */
         LY_ARRAY_NEW_RET(LYD_CTX(node), config->ch_clients, ch_client, 1);
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config name */
@@ -4233,6 +4418,9 @@ config_asymmetric_key_cert(const struct lyd_node *node, enum nc_operation parent
     } else if (op == NC_OP_CREATE) {
         /* create a new certificate */
         LY_ARRAY_NEW_RET(LYD_CTX(node), entry->certs, cert, 1);
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config certificate name */
@@ -4308,6 +4496,9 @@ config_asymmetric_key(const struct lyd_node *node, enum nc_operation parent_op, 
     } else if (op == NC_OP_CREATE) {
         /* create a new asymmetric key entry */
         LY_ARRAY_NEW_RET(LYD_CTX(node), keystore->entries, entry, 1);
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config asymmetric key name */
@@ -4530,6 +4721,9 @@ config_certificate_bag_cert(const struct lyd_node *node, enum nc_operation paren
     } else if (op == NC_OP_CREATE) {
         /* create a new certificate */
         LY_ARRAY_NEW_RET(LYD_CTX(node), bag->certs, cert, 1);
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config certificate name */
@@ -4591,6 +4785,9 @@ config_certificate_bag(const struct lyd_node *node, enum nc_operation parent_op,
     } else if (op == NC_OP_CREATE) {
         /* create a new certificate bag */
         LY_ARRAY_NEW_RET(LYD_CTX(node), truststore->cert_bags, bag, 1);
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config certificate bag name */
@@ -4725,6 +4922,9 @@ config_public_key_bag_pubkey(const struct lyd_node *node, enum nc_operation pare
     } else if (op == NC_OP_CREATE) {
         /* create a new public key */
         LY_ARRAY_NEW_RET(LYD_CTX(node), bag->pubkeys, pubkey, 1);
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config public key name */
@@ -4786,6 +4986,9 @@ config_public_key_bag(const struct lyd_node *node, enum nc_operation parent_op, 
     } else if (op == NC_OP_CREATE) {
         /* create a new public key bag */
         LY_ARRAY_NEW_RET(LYD_CTX(node), truststore->pubkey_bags, bag, 1);
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config public key bag name */
@@ -5027,6 +5230,9 @@ config_cert_exp_notif_interval(const struct lyd_node *node, enum nc_operation pa
     } else if (op == NC_OP_CREATE) {
         /* create a new interval */
         LY_ARRAY_NEW_RET(LYD_CTX(node), config->cert_exp_notif_intervals, interval, 1);
+    } else {
+        ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
+        return 1;
     }
 
     /* config anchor */
