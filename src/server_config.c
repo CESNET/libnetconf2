@@ -5423,10 +5423,18 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
     int found;
     LY_ARRAY_COUNT_TYPE i;
     struct nc_ch_client **started_clients = NULL, **started_client_ptr;
+    struct nc_server_ch_dispatch_data dispatch_data;
     int dispatch_new_clients = 1;
 
-    if (!server_opts.ch_dispatch_data.acquire_ctx_cb || !server_opts.ch_dispatch_data.release_ctx_cb ||
-            !server_opts.ch_dispatch_data.new_session_cb) {
+    /* OPTS READ LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_READ, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
+    dispatch_data = server_opts.ch_dispatch_data;
+    /* OPTS READ UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
+
+    if (!dispatch_data.acquire_ctx_cb || !dispatch_data.release_ctx_cb || !dispatch_data.new_session_cb) {
         /* Call Home dispatch callbacks not set, we can't dispatch new clients, but we can still stop deleted ones */
         if (nc_server_config_new_ch_clients_created(old_cfg, new_cfg)) {
             WRN(NULL, "New Call Home clients were created but Call Home dispatch callbacks are not set - "
@@ -5460,9 +5468,9 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
             }
 
             /* this is a new Call Home client, dispatch it */
-            rc = _nc_connect_ch_client_dispatch(new_ch_client, server_opts.ch_dispatch_data.acquire_ctx_cb,
-                    server_opts.ch_dispatch_data.release_ctx_cb, server_opts.ch_dispatch_data.ctx_cb_data,
-                    server_opts.ch_dispatch_data.new_session_cb, server_opts.ch_dispatch_data.new_session_cb_data);
+            rc = _nc_connect_ch_client_dispatch(new_ch_client, dispatch_data.acquire_ctx_cb,
+                    dispatch_data.release_ctx_cb, dispatch_data.ctx_cb_data,
+                    dispatch_data.new_session_cb, dispatch_data.new_session_cb_data);
             if (rc) {
                 /* FAILURE! trigger rollback */
                 goto rollback;

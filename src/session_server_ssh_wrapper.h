@@ -374,6 +374,19 @@ int nc_server_ssh_kbdint_select_method(struct nc_session *session, int local_use
         struct nc_auth_client *auth_client, enum nc_kbdint_backend *backend);
 
 /**
+ * @brief Get the configured custom keyboard-interactive authentication callback and its data.
+ *
+ * The callback is an application callback that may call back into the library, so it is read
+ * together with its data and only called once the options lock is released.
+ *
+ * @param[out] clb Custom keyboard-interactive authentication callback, NULL if not set.
+ * @param[out] user_data Data to pass to @p clb .
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_ssh_get_interactive_auth_clb(int (**clb)(const struct nc_session *session, ssh_session ssh_sess,
+        ssh_message msg, void *user_data), void **user_data);
+
+/**
  * @brief Check a channel subsystem request against the session state.
  *
  * @param[in] session NETCONF session.
@@ -425,6 +438,16 @@ int nc_server_ssh_pam_conv_parse(struct nc_session *session, int n_messages,
  */
 int nc_server_ssh_pam_conv_fill(struct nc_session *session, struct pam_response *resp,
         int n_prompts, int n_answers, const char **answers);
+
+/**
+ * @brief Get a copy of the configured PAM service name.
+ *
+ * PAM must never be called while holding the options lock, so the name is always copied.
+ *
+ * @param[out] filename PAM service name copy, NULL if none is configured.
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_ssh_get_pam_conf_filename(char **filename);
 
 /**
  * @brief Run the PAM authentication sequence with a prepared conversation.

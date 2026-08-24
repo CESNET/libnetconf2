@@ -282,15 +282,27 @@ nc_server_ssh_msg_auth_kbdint(struct nc_session *session, int local_users_suppor
     int r;
     enum nc_kbdint_backend backend;
 
+    int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg,
+            void *user_data);
+    void *interactive_auth_data;
+
     /* select the kbdint backend based on the configuration */
     if (nc_server_ssh_kbdint_select_method(session, local_users_supported, auth_client, &backend)) {
         return 1;
     }
 
     if (backend == NC_KBDINT_BACKEND_CUSTOM_CLB) {
-        /* custom callback has higher priority */
-        r = server_opts.interactive_auth_clb(session,
-                session->ti.libssh.session, msg, server_opts.interactive_auth_data);
+        /* custom callback has higher priority, it must not be called with the options lock held */
+        if (nc_server_ssh_get_interactive_auth_clb(&interactive_auth_clb, &interactive_auth_data)) {
+            return 1;
+        }
+        if (!interactive_auth_clb) {
+            /* the callback was unset in the meantime */
+            ERR(session, "Custom keyboard-interactive authentication callback not set.");
+            return 1;
+        }
+
+        r = interactive_auth_clb(session, session->ti.libssh.session, msg, interactive_auth_data);
     } else {
         r = nc_server_ssh_msg_auth_kbdint_system(session, msg);
     }
