@@ -1379,6 +1379,9 @@ nc_server_destroy(void)
     }
     server_opts.interactive_auth_data = NULL;
     server_opts.interactive_auth_data_free = NULL;
+
+    /* Call Home dispatch data, its callback data does not have to be valid once the server is destroyed */
+    memset(&server_opts.ch_dispatch_data, 0, sizeof server_opts.ch_dispatch_data);
 #endif /* NC_ENABLED_SSH_TLS */
 
     /* hidden UNIX socket paths */

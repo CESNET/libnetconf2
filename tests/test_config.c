@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <cmocka.h>
 
@@ -1049,6 +1050,163 @@ test_invalid_diff(void **state)
     lyd_free_all(diff);
 }
 
+/** @brief Time in seconds to wait for a Call Home client to report failed connection attempts. */
+#define TEST_CH_WATCH_TIME 4
+
+/** @brief Maximum number of distinct Call Home threads the test keeps track of. */
+#define TEST_CH_TID_MAX 8
+
+struct test_ch_threads {
+    pthread_mutex_t lock;
+    pthread_cond_t cond;
+    pthread_t tids[TEST_CH_TID_MAX];
+    uint32_t tid_count;
+};
+
+/* acquire ctx cb for the Call Home dispatch */
+static const struct ly_ctx *
+test_ch_acquire_ctx_cb(void *cb_data)
+{
+    return ((struct ln2_test_ctx *)cb_data)->ctx;
+}
+
+/* release ctx cb for the Call Home dispatch */
+static void
+test_ch_release_ctx_cb(void *cb_data)
+{
+    (void) cb_data;
+}
+
+/* new session cb for the Call Home dispatch, never actually called in these tests */
+static int
+test_ch_new_session_cb(const char *client_name, struct nc_session *new_session, void *user_data)
+{
+    (void) client_name;
+    (void) new_session;
+    (void) user_data;
+    return 1;
+}
+
+/**
+ * @brief Record the thread of every failed Call Home connection attempt.
+ *
+ * Called by the Call Home thread itself, so the number of distinct thread IDs seen is the number
+ * of Call Home threads running for the client.
+ */
+static void
+test_ch_new_session_fail_cb(const char *client_name, const char *endpt_name, uint8_t max_attempts,
+        uint8_t cur_attempt, void *user_data)
+{
+    struct test_ch_threads *threads = user_data;
+    pthread_t self = pthread_self();
+    uint32_t i;
+
+    (void) client_name;
+    (void) endpt_name;
+    (void) max_attempts;
+    (void) cur_attempt;
+
+    pthread_mutex_lock(&threads->lock);
+    for (i = 0; i < threads->tid_count; ++i) {
+        if (pthread_equal(threads->tids[i], self)) {
+            break;
+        }
+    }
+    if ((i == threads->tid_count) && (threads->tid_count < TEST_CH_TID_MAX)) {
+        threads->tids[threads->tid_count++] = self;
+    }
+    pthread_cond_broadcast(&threads->cond);
+    pthread_mutex_unlock(&threads->lock);
+}
+
+/**
+ * @brief Create the YANG data of a Call Home client that can never connect anywhere.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] client_name Name of the Call Home client.
+ * @param[out] tree Created YANG data.
+ */
+static void
+test_create_ch_client_data(const struct ly_ctx *ctx, const char *client_name, struct lyd_node **tree)
+{
+    int ret;
+
+    /* port 1 is never listening, so the connection is refused immediately */
+    ret = nc_server_config_add_ch_address_port(ctx, client_name, "endpt", NC_TI_SSH, "127.0.0.1", "1", tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_persistent(ctx, client_name, tree);
+    assert_int_equal(ret, 0);
+
+    /* retry quickly so that the test does not have to wait long */
+    ret = nc_server_config_add_ch_reconnect_strategy(ctx, client_name, NC_CH_FIRST_LISTED, 1, 3, tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_ssh_hostkey(ctx, client_name, "endpt", "hostkey",
+            TESTS_DIR "/data/key_ecdsa", NULL, tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_ssh_user_pubkey(ctx, client_name, "endpt", "user", "pubkey",
+            TESTS_DIR "/data/id_ed25519.pub", tree);
+    assert_int_equal(ret, 0);
+}
+
+/**
+ * @brief Applying the whole configuration data again must not dispatch a second thread
+ * for an already running Call Home client.
+ */
+static void
+test_ch_dispatch_not_duplicated(void **state)
+{
+    int ret;
+    uint32_t tid_count;
+    struct lyd_node *tree = NULL;
+    struct ln2_test_ctx *test_ctx = *state;
+    struct test_ch_threads threads = {0};
+    struct timespec ts;
+
+    pthread_mutex_init(&threads.lock, NULL);
+    pthread_cond_init(&threads.cond, NULL);
+
+    nc_server_ch_set_dispatch_data(test_ch_acquire_ctx_cb, test_ch_release_ctx_cb, test_ctx,
+            test_ch_new_session_cb, NULL);
+    nc_server_ch_set_new_session_fail_cb(test_ch_new_session_fail_cb, &threads);
+
+    test_create_ch_client_data(test_ctx->ctx, "ch", &tree);
+
+    /* dispatch the Call Home client */
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    /* wait until its thread reports a failed connection attempt */
+    pthread_mutex_lock(&threads.lock);
+    while (!threads.tid_count) {
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 10;
+        ret = pthread_cond_timedwait(&threads.cond, &threads.lock, &ts);
+        assert_int_equal(ret, 0);
+    }
+    pthread_mutex_unlock(&threads.lock);
+
+    /* apply the very same data again, the client is already running */
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    /* give a duplicate thread enough time to report a failed connection attempt of its own */
+    sleep(TEST_CH_WATCH_TIME);
+
+    pthread_mutex_lock(&threads.lock);
+    tid_count = threads.tid_count;
+    pthread_mutex_unlock(&threads.lock);
+
+    /* exactly one Call Home thread may be running for the client */
+    assert_int_equal(tid_count, 1);
+
+    lyd_free_all(tree);
+    pthread_cond_destroy(&threads.cond);
+    pthread_mutex_destroy(&threads.lock);
+}
+
 static void
 test_config_data_free(void *data)
 {
@@ -1103,6 +1261,7 @@ main(void)
         cmocka_unit_test_setup_teardown(test_config_cascade_delete, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_unusupported_asymkey_format, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_invalid_diff, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_ch_dispatch_not_duplicated, setup_f, ln2_glob_test_teardown),
     };
 
     /* try to get ports from the environment, otherwise use the default */

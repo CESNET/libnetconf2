@@ -5434,6 +5434,17 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
     if (dispatch_new_clients) {
         /* only dispatch if all required CBs are set */
         LY_ARRAY_FOR(new_cfg->ch_clients, struct nc_ch_client, new_ch_client) {
+            if (!new_ch_client->thread) {
+                /* the new config may have been built from scratch (::nc_server_config_setup_data()), in which
+                 * case the thread data of an already running client is only present in the old config */
+                LY_ARRAY_FOR(old_cfg->ch_clients, struct nc_ch_client, old_ch_client) {
+                    if (!strcmp(old_ch_client->name, new_ch_client->name)) {
+                        new_ch_client->thread = old_ch_client->thread;
+                        break;
+                    }
+                }
+            }
+
             if (new_ch_client->thread) {
                 /* already running */
                 continue;
