@@ -80,7 +80,7 @@ nc_client_context_free(void *ptr)
 
 #ifdef NC_ENABLED_SSH_TLS
     for (i = 0; i < c->opts.ch_bind_count; ++i) {
-        close(c->opts.ch_binds[i].sock);
+        close(c->opts.ch_binds_aux[i].sock);
         free((char *)c->opts.ch_binds[i].address);
     }
     free(c->opts.ch_binds);
@@ -1783,10 +1783,10 @@ nc_client_ch_add_bind_listen(const char *address, uint16_t port, const char *hos
     }
     client_opts.ch_binds_aux[client_opts.ch_bind_count - 1].ti = ti;
     client_opts.ch_binds_aux[client_opts.ch_bind_count - 1].hostname = hostname ? strdup(hostname) : NULL;
+    client_opts.ch_binds_aux[client_opts.ch_bind_count - 1].sock = sock;
 
     client_opts.ch_binds[client_opts.ch_bind_count - 1].address = strdup(address);
     client_opts.ch_binds[client_opts.ch_bind_count - 1].port = port;
-    client_opts.ch_binds[client_opts.ch_bind_count - 1].sock = sock;
 
     return 0;
 }
@@ -1799,7 +1799,7 @@ nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
 
     if (!address && !port && !ti) {
         for (i = 0; i < client_opts.ch_bind_count; ++i) {
-            close(client_opts.ch_binds[i].sock);
+            close(client_opts.ch_binds_aux[i].sock);
             free(client_opts.ch_binds[i].address);
 
             free(client_opts.ch_binds_aux[i].hostname);
@@ -1818,7 +1818,7 @@ nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
             if ((!address || !strcmp(client_opts.ch_binds[i].address, address)) &&
                     (!port || (client_opts.ch_binds[i].port == port)) &&
                     (!ti || (client_opts.ch_binds_aux[i].ti == ti))) {
-                close(client_opts.ch_binds[i].sock);
+                close(client_opts.ch_binds_aux[i].sock);
                 free(client_opts.ch_binds[i].address);
 
                 --client_opts.ch_bind_count;
@@ -1858,8 +1858,8 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
         return -1;
     }
 
-    ret = nc_server_ch_accept_binds(client_opts.ch_binds, client_opts.ch_bind_count, timeout,
-            &host, &port, &bind_idx, &sock);
+    ret = nc_server_ch_accept_binds(client_opts.ch_binds, client_opts.ch_binds_aux, client_opts.ch_bind_count,
+            timeout, &host, &port, &bind_idx, &sock);
     if (ret < 1) {
         free(host);
         return ret;

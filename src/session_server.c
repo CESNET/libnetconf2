@@ -57,6 +57,7 @@ struct nc_server_opts server_opts = {
     .hello_lock = PTHREAD_RWLOCK_INITIALIZER,
     .config_lock = PTHREAD_RWLOCK_INITIALIZER,
     .config_update_lock = PTHREAD_MUTEX_INITIALIZER,
+    .binds_lock = PTHREAD_MUTEX_INITIALIZER,
 };
 
 static nc_rpc_clb global_rpc_clb = NULL;
@@ -510,7 +511,13 @@ cleanup:
     return rc;
 }
 
-char *
+/**
+ * @brief Get the full path of the UNIX socket of an endpoint.
+ *
+ * @param[in] endpt Endpoint to get the socket path for.
+ * @return Socket path, NULL on error.
+ */
+static char *
 nc_server_unix_get_socket_path(const struct nc_endpt *endpt)
 {
     LY_ARRAY_COUNT_TYPE i;
@@ -748,32 +755,26 @@ cleanup:
  * @brief Log the accepted connection.
  *
  * @param[in] saddr sockaddr_storage.
- * @param[in] endpt Endpoint on which the connection was accepted (optional, used for logging).
- * @param[in] bind Bind on which the connection was accepted.
+ * @param[in] address Address of the bind the connection was accepted on, the socket path for AF_UNIX.
+ * @param[in] port Port of the bind the connection was accepted on.
  * @param[in] client_address Hostname or IP address of the connecting client.
  * @param[in] client_port Port number of the connecting client, if any.
  * @return 0 on success, -1 on error.
  */
 static int
-nc_sock_log_accepted(const struct sockaddr_storage *saddr, const struct nc_endpt *endpt, const struct nc_bind *bind,
+nc_sock_log_accepted(const struct sockaddr_storage *saddr, const char *address, uint16_t port,
         const char *client_address, uint16_t client_port)
 {
-    char *unix_sockpath = NULL;
-
     if (saddr->ss_family == AF_UNIX) {
-        /* UNIX socket, get the socket path for logging,
-         * UNIX socket connection can NOT be over call home (caller = client connect), so endpt is always available */
-        assert(endpt);
-        unix_sockpath = nc_server_unix_get_socket_path(endpt);
-        VRB(NULL, "Accepted a new connection on %s.", unix_sockpath ? unix_sockpath : "UNIX socket");
-        free(unix_sockpath);
+        /* UNIX socket, the address is the full socket path */
+        VRB(NULL, "Accepted a new connection on %s.", address);
     } else if (saddr->ss_family == AF_INET) {
         /* IPv4 socket */
-        VRB(NULL, "Accepted a new connection on %s:%" PRIu16 " from %s:%" PRIu16 ".", bind->address, bind->port,
+        VRB(NULL, "Accepted a new connection on %s:%" PRIu16 " from %s:%" PRIu16 ".", address, port,
                 client_address, client_port);
     } else if (saddr->ss_family == AF_INET6) {
         /* IPv6 socket */
-        VRB(NULL, "Accepted a new connection on [%s]:%" PRIu16 " from [%s]:%" PRIu16 ".", bind->address, bind->port,
+        VRB(NULL, "Accepted a new connection on [%s]:%" PRIu16 " from [%s]:%" PRIu16 ".", address, port,
                 client_address, client_port);
     } else {
         ERR(NULL, "Source host of an unknown protocol family.");
@@ -836,8 +837,8 @@ nc_sock_accept_first(struct pollfd *pfd, uint16_t pfd_count, int *client_sock,
  *
  * @param[in] pollfds FDs to poll for new connections.
  * @param[in] pollfd_count Number of FDs in the pollfds array.
- * @param[in] endpt_map Map of pollfd indices to endpoints (optional, used for logging).
- * @param[in] bind_map Map of pollfd indices to binds (optional, used for logging).
+ * @param[in] addr_map Map of pollfd indices to bind addresses (used for logging).
+ * @param[in] port_map Map of pollfd indices to bind ports (used for logging).
  * @param[in] timeout Timeout for accepting a connection.
  * @param[out] host Hostname or IP address of the connecting client.
  * @param[out] port Port number of the connecting client, if any.
@@ -846,16 +847,14 @@ nc_sock_accept_first(struct pollfd *pfd, uint16_t pfd_count, int *client_sock,
  * @return 1 on success, 0 on timeout, -1 on error.
  */
 static int
-nc_sock_accept_pollfds(struct pollfd *pollfds, uint16_t pollfd_count, struct nc_endpt **endpt_map,
-        struct nc_bind **bind_map, int timeout, char **host, uint16_t *port,
+nc_sock_accept_pollfds(struct pollfd *pollfds, uint16_t pollfd_count, const char **addr_map,
+        const uint16_t *port_map, int timeout, char **host, uint16_t *port,
         uint16_t *fd_idx, int *sock)
 {
     uint16_t client_port = 0, matched_pollfd_idx = 0;
     char *client_address = NULL;
     struct sockaddr_storage client_saddr;
     socklen_t saddr_len = sizeof(client_saddr);
-    struct nc_endpt *endpt;
-    struct nc_bind *bind;
     int client_sock = -1, ret = 1, r, flags;
 
     if (!pollfd_count) {
@@ -883,9 +882,6 @@ nc_sock_accept_pollfds(struct pollfd *pollfds, uint16_t pollfd_count, struct nc_
         goto cleanup;
     }
 
-    bind = bind_map[matched_pollfd_idx];
-    endpt = endpt_map ? endpt_map[matched_pollfd_idx] : NULL;
-
     /* make the socket non-blocking */
     if (((flags = fcntl(client_sock, F_GETFL)) == -1) || (fcntl(client_sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
         ERR(NULL, "Fcntl failed (%s).", strerror(errno));
@@ -899,7 +895,8 @@ nc_sock_accept_pollfds(struct pollfd *pollfds, uint16_t pollfd_count, struct nc_
     }
 
     /* log the new accepted connection */
-    if ((r = nc_sock_log_accepted(&client_saddr, endpt, bind, client_address, client_port))) {
+    if ((r = nc_sock_log_accepted(&client_saddr, addr_map[matched_pollfd_idx], port_map[matched_pollfd_idx],
+            client_address, client_port))) {
         ret = r;
         goto cleanup;
     }
@@ -926,9 +923,15 @@ cleanup:
 }
 
 /**
- * @brief Accept a new connection on any of the server's listening binds.
+ * @brief Accept a new connection on any of the registered listening sockets.
  *
- * @param[in] config Server configuration.
+ * The listening socket registry is only read to build the local poll arrays, the ::poll() itself
+ * and the ::accept() run with no lock held.
+ *
+ * @note A connection accepted on a bind that @p config does not contain is dropped. That can only
+ * happen for a bind registered after @p config was read, in which case the next call accepts it.
+ *
+ * @param[in] config Pinned server configuration used to look the accepting endpoint up.
  * @param[in] timeout Timeout for accepting a connection.
  * @param[out] host Hostname or IP address of the connecting client.
  * @param[out] port Port number of the connecting client, if any.
@@ -937,112 +940,156 @@ cleanup:
  * @return 1 on success, 0 on timeout, -1 on error.
  */
 static int
-nc_server_accept_binds(struct nc_server_config *config, int timeout, char **host,
+nc_server_accept_binds(const struct nc_server_config *config, int timeout, char **host,
         uint16_t *port, LY_ARRAY_COUNT_TYPE *idx, int *sock)
 {
     struct pollfd *pollfds = NULL;
-    uint16_t pollfd_count = 0, fd_idx = 0, bind_count = 0;
-    LY_ARRAY_COUNT_TYPE i;
-    struct nc_endpt *endpt;
-    struct nc_bind *bind;
-    int ret = 1;
-    struct nc_endpt **endpt_map = NULL;
-    struct nc_bind **bind_map = NULL;
+    uint16_t pollfd_count = 0, fd_idx = 0, i, bind_count = 0;
+    LY_ARRAY_COUNT_TYPE u;
+    int ret = 1, binds_locked = 0;
+    char **addr_map = NULL, **name_map = NULL;
+    uint16_t *port_map = NULL;
 
-    /* count the number of valid binds and prepare the pollfd and map parallel arrays */
-    LY_ARRAY_FOR(config->endpts, i) {
-        bind_count += LY_ARRAY_COUNT(config->endpts[i].binds);
+    /* BINDS LOCK */
+    if (nc_mutex_lock(&server_opts.binds_lock, NC_BINDS_LOCK_TIMEOUT, __func__) != 1) {
+        return -1;
     }
+    binds_locked = 1;
+
+    bind_count = LY_ARRAY_COUNT(server_opts.binds);
     if (!bind_count) {
         /* no binds to accept on, treat as a timeout */
         ret = 0;
         goto cleanup;
     }
 
+    /* copy the registry into local arrays, so that the lock can be released before polling */
     pollfds = malloc(bind_count * sizeof *pollfds);
-    NC_CHECK_ERRMEM_RET(!pollfds, -1);
-    endpt_map = malloc(bind_count * sizeof *endpt_map);
-    NC_CHECK_ERRMEM_GOTO(!endpt_map, ret = -1, cleanup);
-    bind_map = malloc(bind_count * sizeof *bind_map);
-    NC_CHECK_ERRMEM_GOTO(!bind_map, ret = -1, cleanup);
+    NC_CHECK_ERRMEM_GOTO(!pollfds, ret = -1, cleanup);
+    addr_map = calloc(bind_count, sizeof *addr_map);
+    NC_CHECK_ERRMEM_GOTO(!addr_map, ret = -1, cleanup);
+    port_map = malloc(bind_count * sizeof *port_map);
+    NC_CHECK_ERRMEM_GOTO(!port_map, ret = -1, cleanup);
+    name_map = calloc(bind_count, sizeof *name_map);
+    NC_CHECK_ERRMEM_GOTO(!name_map, ret = -1, cleanup);
 
-    /* fill the arrays */
-    LY_ARRAY_FOR(config->endpts, struct nc_endpt, endpt) {
-        LY_ARRAY_FOR(endpt->binds, struct nc_bind, bind) {
-            if (bind->sock < 0) {
-                /* invalid socket */
-                continue;
+    for (i = 0; i < bind_count; ++i) {
+        pollfds[pollfd_count].fd = server_opts.binds[i].sock;
+        pollfds[pollfd_count].events = POLLIN;
+        pollfds[pollfd_count].revents = 0;
+
+        /* the registry entries may be freed once the lock is released, so copy the strings */
+        addr_map[pollfd_count] = strdup(server_opts.binds[i].address);
+        NC_CHECK_ERRMEM_GOTO(!addr_map[pollfd_count], ret = -1, cleanup);
+        name_map[pollfd_count] = strdup(server_opts.binds[i].endpt_name);
+        NC_CHECK_ERRMEM_GOTO(!name_map[pollfd_count], ret = -1, cleanup);
+        port_map[pollfd_count] = server_opts.binds[i].port;
+
+        ++pollfd_count;
+    }
+
+    /* BINDS UNLOCK */
+    nc_mutex_unlock(&server_opts.binds_lock, __func__);
+    binds_locked = 0;
+
+    /* accept a new connection on any of the sockets */
+    ret = nc_sock_accept_pollfds(pollfds, pollfd_count, (const char **)addr_map, port_map, timeout, host, port,
+            &fd_idx, sock);
+    if (ret > 0) {
+        /* map the endpoint name back to an endpoint of the pinned configuration */
+        LY_ARRAY_FOR(config->endpts, u) {
+            if (!strcmp(config->endpts[u].name, name_map[fd_idx])) {
+                break;
             }
-
-            pollfds[pollfd_count].fd = bind->sock;
-            pollfds[pollfd_count].events = POLLIN;
-            pollfds[pollfd_count].revents = 0;
-
-            endpt_map[pollfd_count] = endpt;
-            bind_map[pollfd_count] = bind;
-
-            ++pollfd_count;
+        }
+        if (u == LY_ARRAY_COUNT(config->endpts)) {
+            /* the endpoint is not in the configuration we are working with, drop the connection */
+            VRB(NULL, "Endpoint \"%s\" not found, dropping the accepted connection.", name_map[fd_idx]);
+            close(*sock);
+            *sock = -1;
+            if (host) {
+                free(*host);
+                *host = NULL;
+            }
+            ret = 0;
+        } else if (idx) {
+            *idx = u;
         }
     }
 
-    /* accept a new connection on any of the sockets */
-    ret = nc_sock_accept_pollfds(pollfds, pollfd_count, endpt_map, bind_map, timeout, host, port, &fd_idx, sock);
-    if (idx && (ret > 0)) {
-        *idx = endpt_map[fd_idx] - config->endpts;
-    }
-
 cleanup:
+    if (binds_locked) {
+        /* BINDS UNLOCK */
+        nc_mutex_unlock(&server_opts.binds_lock, __func__);
+    }
+    for (i = 0; i < bind_count; ++i) {
+        if (addr_map) {
+            free(addr_map[i]);
+        }
+        if (name_map) {
+            free(name_map[i]);
+        }
+    }
     free(pollfds);
-    free(endpt_map);
-    free(bind_map);
+    free(addr_map);
+    free(port_map);
+    free(name_map);
     return ret;
 }
 
 int
-nc_server_ch_accept_binds(struct nc_bind *binds, uint16_t bind_count, int timeout, char **host,
-        uint16_t *port, uint16_t *bind_idx, int *sock)
+nc_server_ch_accept_binds(const struct nc_bind *binds, const struct nc_client_ch_bind_aux *binds_aux,
+        uint16_t bind_count, int timeout, char **host, uint16_t *port, uint16_t *bind_idx, int *sock)
 {
     struct pollfd *pollfds = NULL;
     uint16_t pollfd_count = 0, fd_idx = 0, i;
     int ret = 1;
-    struct nc_bind **bind_map = NULL;
+    const char **addr_map = NULL;
+    uint16_t *port_map = NULL, *idx_map = NULL;
 
     if (!bind_count) {
         /* no binds to accept on, treat as a timeout */
-        ret = 0;
-        goto cleanup;
+        return 0;
     }
 
     /* prepare the pollfd and map parallel arrays */
     pollfds = malloc(bind_count * sizeof *pollfds);
     NC_CHECK_ERRMEM_RET(!pollfds, -1);
-    bind_map = malloc(bind_count * sizeof *bind_map);
-    NC_CHECK_ERRMEM_GOTO(!bind_map, ret = -1, cleanup);
+    addr_map = malloc(bind_count * sizeof *addr_map);
+    NC_CHECK_ERRMEM_GOTO(!addr_map, ret = -1, cleanup);
+    port_map = malloc(bind_count * sizeof *port_map);
+    NC_CHECK_ERRMEM_GOTO(!port_map, ret = -1, cleanup);
+    idx_map = malloc(bind_count * sizeof *idx_map);
+    NC_CHECK_ERRMEM_GOTO(!idx_map, ret = -1, cleanup);
 
     /* fill the arrays */
     for (i = 0; i < bind_count; ++i) {
-        if (binds[i].sock < 0) {
+        if (binds_aux[i].sock < 0) {
             /* invalid socket */
             continue;
         }
 
-        pollfds[pollfd_count].fd = binds[i].sock;
+        pollfds[pollfd_count].fd = binds_aux[i].sock;
         pollfds[pollfd_count].events = POLLIN;
         pollfds[pollfd_count].revents = 0;
 
-        bind_map[pollfd_count] = &binds[i];
+        addr_map[pollfd_count] = binds[i].address;
+        port_map[pollfd_count] = binds[i].port;
+        idx_map[pollfd_count] = i;
 
         ++pollfd_count;
     }
 
-    ret = nc_sock_accept_pollfds(pollfds, pollfd_count, NULL, bind_map, timeout, host, port, &fd_idx, sock);
+    ret = nc_sock_accept_pollfds(pollfds, pollfd_count, addr_map, port_map, timeout, host, port, &fd_idx, sock);
     if (bind_idx && (ret > 0)) {
-        *bind_idx = bind_map[fd_idx] - binds;
+        *bind_idx = idx_map[fd_idx];
     }
 
 cleanup:
     free(pollfds);
-    free(bind_map);
+    free(addr_map);
+    free(port_map);
+    free(idx_map);
     return ret;
 }
 
@@ -1364,6 +1411,9 @@ nc_server_destroy(void)
         }
     }
 #endif /* NC_ENABLED_SSH_TLS */
+
+    /* stop listening on all the registered sockets */
+    nc_server_binds_destroy();
 
     /* destroy the server configuration */
     nc_server_config_free(&server_opts.config);
@@ -2766,54 +2816,341 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
     nc_ps_unlock(ps, q_id, __func__);
 }
 
-int
-nc_server_bind_and_listen(struct nc_endpt *endpt, struct nc_bind *bind)
+/**
+ * @brief Description of a listening socket required by a server configuration.
+ */
+struct nc_bind_desc {
+    const struct nc_endpt *endpt;   /**< Endpoint the listening socket belongs to. */
+    char *address;                  /**< Resolved address, the full socket path for a UNIX endpoint. */
+    uint16_t port;                  /**< Port number, 0 for a UNIX socket. */
+    int reused;                     /**< Whether an already registered socket is being reused. */
+    int sock;                       /**< Newly opened listening socket, -1 if none was opened. */
+};
+
+/**
+ * @brief Start listening on a socket of an endpoint bind.
+ *
+ * @param[in] endpt Endpoint the bind belongs to.
+ * @param[in] address Address to listen on, the full socket path for a UNIX endpoint.
+ * @param[in] port Port to listen on, 0 for a UNIX endpoint.
+ * @param[out] sock Created listening socket.
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_server_bind_and_listen(const struct nc_endpt *endpt, const char *address, uint16_t port, int *sock)
 {
-    char *unix_path = NULL;
-    int sock = -1, rc = 0;
+#ifndef NC_ENABLED_SSH_TLS
+    /* only UNIX endpoints exist, which have no port */
+    (void)port;
+#endif
 
-    /* start listening on the endpoint */
-    if (endpt->ti == NC_TI_UNIX) {
-        /* get the socket path for this endpoint */
-        unix_path = nc_server_unix_get_socket_path(endpt);
-        NC_CHECK_ERR_GOTO(!unix_path, rc = 1, cleanup);
-        sock = nc_sock_listen_unix(unix_path, endpt->opts.unix);
-    } else {
-        assert(bind->address && bind->port);
-        sock = nc_sock_listen_inet(bind->address, bind->port);
-    }
-    if (sock == -1) {
-        rc = 1;
-        goto cleanup;
-    }
-
-    /* close the old socket if any and store the new one */
-    if (bind->sock > -1) {
-        close(bind->sock);
-    }
-    bind->sock = sock;
+    *sock = -1;
 
     switch (endpt->ti) {
     case NC_TI_UNIX:
-        VRB(NULL, "Listening on %s for UNIX connections.", unix_path);
+        *sock = nc_sock_listen_unix(address, endpt->opts.unix);
+        NC_CHECK_RET(*sock == -1, 1);
+        VRB(NULL, "Listening on %s for UNIX connections.", address);
         break;
 #ifdef NC_ENABLED_SSH_TLS
     case NC_TI_SSH:
-        VRB(NULL, "Listening on %s:%u for SSH connections.", bind->address, bind->port);
+        *sock = nc_sock_listen_inet(address, port);
+        NC_CHECK_RET(*sock == -1, 1);
+        VRB(NULL, "Listening on %s:%" PRIu16 " for SSH connections.", address, port);
         break;
     case NC_TI_TLS:
-        VRB(NULL, "Listening on %s:%u for TLS connections.", bind->address, bind->port);
+        *sock = nc_sock_listen_inet(address, port);
+        NC_CHECK_RET(*sock == -1, 1);
+        VRB(NULL, "Listening on %s:%" PRIu16 " for TLS connections.", address, port);
         break;
 #endif /* NC_ENABLED_SSH_TLS */
     default:
         ERRINT;
-        rc = 1;
-        break;
+        return 1;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief Stop listening on a socket that was opened for a bind description.
+ *
+ * @param[in,out] desc Bind description to close the socket of, no-op if it has none.
+ */
+static void
+nc_server_bind_desc_close(struct nc_bind_desc *desc)
+{
+    if (desc->sock == -1) {
+        return;
+    }
+
+    close(desc->sock);
+    desc->sock = -1;
+    if (desc->endpt->ti == NC_TI_UNIX) {
+        /* remove the socket file we have just created */
+        unlink(desc->address);
+    }
+}
+
+/**
+ * @brief Stop listening on a registered socket and free the registry entry members.
+ *
+ * @note The bind registry lock must be held.
+ *
+ * @param[in] entry Bind registry entry to close.
+ */
+static void
+nc_server_bind_entry_close(struct nc_bind_entry *entry)
+{
+    close(entry->sock);
+    if (entry->ti == NC_TI_UNIX) {
+        /* remove the socket file */
+        unlink(entry->address);
+        VRB(NULL, "Stopped listening on %s.", entry->address);
+    } else {
+        VRB(NULL, "Stopped listening on %s:%" PRIu16 ".", entry->address, entry->port);
+    }
+
+    free(entry->endpt_name);
+    free(entry->address);
+}
+
+/**
+ * @brief Check whether a bind registry entry refers to the same listening socket as a bind description.
+ *
+ * @param[in] entry Bind registry entry.
+ * @param[in] desc Bind description.
+ * @return 1 if they match, 0 otherwise.
+ */
+static int
+nc_server_bind_entry_matches(const struct nc_bind_entry *entry, const struct nc_bind_desc *desc)
+{
+    return (entry->ti == desc->endpt->ti) && (entry->port == desc->port) && !strcmp(entry->address, desc->address);
+}
+
+/**
+ * @brief Collect the listening sockets required by a server configuration.
+ *
+ * @param[in] config Server configuration.
+ * @param[out] descs Bind descriptions (sized-array, see libyang docs).
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_server_bind_descs_get(const struct nc_server_config *config, struct nc_bind_desc **descs)
+{
+    int rc = 0;
+    const struct nc_endpt *endpt;
+    const struct nc_bind *bind;
+    struct nc_bind_desc *desc;
+    LY_ARRAY_COUNT_TYPE u, v;
+    uint32_t count = 0;
+
+    *descs = NULL;
+
+    LY_ARRAY_FOR(config->endpts, u) {
+        count += LY_ARRAY_COUNT(config->endpts[u].binds);
+    }
+    if (!count) {
+        return 0;
+    }
+    LY_ARRAY_CREATE_GOTO(NULL, *descs, count, rc, cleanup);
+
+    LY_ARRAY_FOR(config->endpts, u) {
+        endpt = &config->endpts[u];
+
+        LY_ARRAY_FOR(endpt->binds, v) {
+            bind = &endpt->binds[v];
+
+            desc = &(*descs)[LY_ARRAY_COUNT(*descs)];
+            desc->endpt = endpt;
+            desc->port = bind->port;
+            desc->sock = -1;
+
+            if (endpt->ti == NC_TI_UNIX) {
+                /* the socket path is not stored in the bind, resolve it */
+                desc->address = nc_server_unix_get_socket_path(endpt);
+                NC_CHECK_ERR_GOTO(!desc->address, rc = 1, cleanup);
+            } else {
+                assert(bind->address && bind->port);
+                desc->address = strdup(bind->address);
+                NC_CHECK_ERRMEM_GOTO(!desc->address, rc = 1, cleanup);
+            }
+
+            LY_ARRAY_INCREMENT(*descs);
+        }
     }
 
 cleanup:
-    free(unix_path);
-    return rc;
+    return rc ? 1 : 0;
+}
+
+/**
+ * @brief Free bind descriptions and close all the sockets they still own.
+ *
+ * @param[in] descs Bind descriptions to free.
+ */
+static void
+nc_server_bind_descs_free(struct nc_bind_desc *descs)
+{
+    LY_ARRAY_COUNT_TYPE u;
+
+    LY_ARRAY_FOR(descs, u) {
+        nc_server_bind_desc_close(&descs[u]);
+        free(descs[u].address);
+    }
+    LY_ARRAY_FREE(descs);
+}
+
+int
+nc_server_binds_reconcile(const struct nc_server_config *config)
+{
+    int rc = 0, binds_locked = 0, found;
+    struct nc_bind_desc *descs = NULL;
+    struct nc_bind_entry *entry;
+    char *endpt_name, *address;
+    LY_ARRAY_COUNT_TYPE u, v, added = 0;
+    uint32_t new_count = 0;
+
+    /* collect all the listening sockets the configuration requires, no lock is needed for that */
+    NC_CHECK_GOTO(rc = nc_server_bind_descs_get(config, &descs), cleanup);
+
+    /* BINDS LOCK */
+    if (nc_mutex_lock(&server_opts.binds_lock, NC_BINDS_LOCK_TIMEOUT, __func__) != 1) {
+        rc = 1;
+        goto cleanup;
+    }
+    binds_locked = 1;
+
+    /* keep listening on the sockets that are already registered */
+    LY_ARRAY_FOR(descs, u) {
+        LY_ARRAY_FOR(server_opts.binds, v) {
+            if (!nc_server_bind_entry_matches(&server_opts.binds[v], &descs[u])) {
+                continue;
+            }
+
+            /* the socket stays open, but the endpoint owning it may have been renamed */
+            if (strcmp(server_opts.binds[v].endpt_name, descs[u].endpt->name)) {
+                endpt_name = strdup(descs[u].endpt->name);
+                NC_CHECK_ERRMEM_GOTO(!endpt_name, rc = 1, cleanup);
+                free(server_opts.binds[v].endpt_name);
+                server_opts.binds[v].endpt_name = endpt_name;
+            }
+
+            descs[u].reused = 1;
+            break;
+        }
+
+        if (!descs[u].reused) {
+            ++new_count;
+        }
+    }
+
+    /* BINDS UNLOCK - creating the sockets may take a while */
+    nc_mutex_unlock(&server_opts.binds_lock, __func__);
+    binds_locked = 0;
+
+    /* start listening on the sockets that are not registered yet */
+    LY_ARRAY_FOR(descs, u) {
+        if (descs[u].reused) {
+            continue;
+        }
+
+        NC_CHECK_GOTO(rc = nc_server_bind_and_listen(descs[u].endpt, descs[u].address, descs[u].port,
+                &descs[u].sock), cleanup);
+    }
+
+    /* BINDS LOCK */
+    if (nc_mutex_lock(&server_opts.binds_lock, NC_BINDS_LOCK_TIMEOUT, __func__) != 1) {
+        rc = 1;
+        goto cleanup;
+    }
+    binds_locked = 1;
+
+    /* register the new sockets, reserve the space in advance */
+    if (new_count) {
+        LY_ARRAY_CREATE_GOTO(NULL, server_opts.binds, new_count, rc, cleanup);
+    }
+    LY_ARRAY_FOR(descs, u) {
+        if (descs[u].reused) {
+            continue;
+        }
+
+        endpt_name = strdup(descs[u].endpt->name);
+        NC_CHECK_ERRMEM_GOTO(!endpt_name, rc = 1, cleanup);
+        address = strdup(descs[u].address);
+        NC_CHECK_ERRMEM_GOTO(!address, free(endpt_name); rc = 1, cleanup);
+
+        entry = &server_opts.binds[LY_ARRAY_COUNT(server_opts.binds)];
+        entry->endpt_name = endpt_name;
+        entry->address = address;
+        entry->port = descs[u].port;
+        entry->ti = descs[u].endpt->ti;
+        entry->sock = descs[u].sock;
+
+        /* the socket now belongs to the registry */
+        descs[u].sock = -1;
+        LY_ARRAY_INCREMENT(server_opts.binds);
+        ++added;
+    }
+
+    /* stop listening on the sockets the configuration no longer contains */
+    v = 0;
+    while (v < LY_ARRAY_COUNT(server_opts.binds)) {
+        found = 0;
+        LY_ARRAY_FOR(descs, u) {
+            if (nc_server_bind_entry_matches(&server_opts.binds[v], &descs[u])) {
+                found = 1;
+                break;
+            }
+        }
+        if (found) {
+            ++v;
+            continue;
+        }
+
+        nc_server_bind_entry_close(&server_opts.binds[v]);
+
+        /* swap the last entry into the hole, the order of the registry is irrelevant */
+        server_opts.binds[v] = server_opts.binds[LY_ARRAY_COUNT(server_opts.binds) - 1];
+        LY_ARRAY_DECREMENT_FREE(server_opts.binds);
+    }
+
+cleanup:
+    if (rc) {
+        /* unregister the sockets we have just registered, they are always the last ones */
+        while (added) {
+            entry = &server_opts.binds[LY_ARRAY_COUNT(server_opts.binds) - 1];
+            nc_server_bind_entry_close(entry);
+            LY_ARRAY_DECREMENT_FREE(server_opts.binds);
+            --added;
+        }
+    }
+    if (binds_locked) {
+        /* BINDS UNLOCK */
+        nc_mutex_unlock(&server_opts.binds_lock, __func__);
+    }
+    nc_server_bind_descs_free(descs);
+    return rc ? 1 : 0;
+}
+
+void
+nc_server_binds_destroy(void)
+{
+    LY_ARRAY_COUNT_TYPE u;
+
+    /* BINDS LOCK */
+    if (nc_mutex_lock(&server_opts.binds_lock, NC_BINDS_LOCK_TIMEOUT, __func__) != 1) {
+        return;
+    }
+
+    LY_ARRAY_FOR(server_opts.binds, u) {
+        nc_server_bind_entry_close(&server_opts.binds[u]);
+    }
+    LY_ARRAY_FREE(server_opts.binds);
+    server_opts.binds = NULL;
+
+    /* BINDS UNLOCK */
+    nc_mutex_unlock(&server_opts.binds_lock, __func__);
 }
 
 /**

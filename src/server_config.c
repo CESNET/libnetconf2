@@ -513,7 +513,6 @@ nc_server_config_free(struct nc_server_config *config)
     struct nc_ch_client *ch_client;
     struct nc_ch_endpt *ch_endpt;
     LY_ARRAY_COUNT_TYPE i = 0, j = 0;
-    char *socket_path = NULL;
 
     if (!config) {
         return;
@@ -529,30 +528,13 @@ nc_server_config_free(struct nc_server_config *config)
     LY_ARRAY_FOR(config->endpts, i) {
         endpt = &config->endpts[i];
 
-        if (endpt->ti == NC_TI_UNIX) {
-            /* get the socket path before freeing the name */
-            socket_path = nc_server_unix_get_socket_path(endpt);
-        }
-
         free(endpt->name);
 
-        /* free binds */
+        /* free binds, the listening sockets are owned by the bind registry */
         LY_ARRAY_FOR(endpt->binds, j) {
-            if (endpt->binds[j].sock != -1) {
-                close(endpt->binds[j].sock);
-                if (socket_path) {
-                    /* remove the UNIX socket file */
-                    unlink(socket_path);
-                }
-            }
             free(endpt->binds[j].address);
         }
         LY_ARRAY_FREE(endpt->binds);
-
-        if (endpt->ti == NC_TI_UNIX) {
-            free(socket_path);
-            socket_path = NULL;
-        }
 
         /* free transport specific options */
         switch (endpt->ti) {
@@ -782,8 +764,6 @@ config_local_bind(const struct lyd_node *node, enum nc_operation parent_op, stru
     } else if (op == NC_OP_CREATE) {
         /* create a new bind */
         LY_ARRAY_NEW_RET(LYD_CTX(node), endpt->binds, bind, 1);
-        /* init the new bind */
-        bind->sock = -1;
     } else {
         ERR(NULL, "Unsupported operation of node \"%s\".", LYD_NAME(node));
         return 1;
@@ -3141,7 +3121,7 @@ config_unix_socket_path(const struct lyd_node *node, enum nc_operation parent_op
 
     if (op == NC_OP_DELETE) {
         /* the endpoint must have a single binding, so we can just free it,
-         * the socket will be closed in ::nc_server_config_free() */
+         * the listening socket is closed by the bind registry */
         if (!endpt->binds) {
             ERR(NULL, "No UNIX socket path binding to delete.");
             return 1;
@@ -3160,7 +3140,6 @@ config_unix_socket_path(const struct lyd_node *node, enum nc_operation parent_op
         LY_ARRAY_NEW_RET(LYD_CTX(node), endpt->binds, bind, 1);
         bind->address = strdup(lyd_get_value(node));
         NC_CHECK_ERRMEM_RET(!bind->address, 1);
-        bind->sock = -1;
 
         /* also set the cleartext path flag */
         opts->path_type = NC_UNIX_SOCKET_PATH_FILE;
@@ -3182,7 +3161,7 @@ config_unix_hidden_path(const struct lyd_node *node, enum nc_operation parent_op
 
     if (op == NC_OP_DELETE) {
         /* the endpoint must have a single binding, so we can just free it,
-         * the socket will be closed in ::nc_server_config_free() */
+         * the listening socket is closed by the bind registry */
         if (!endpt->binds) {
             ERR(NULL, "No UNIX socket hidden path binding to delete.");
             return 1;
@@ -3199,7 +3178,6 @@ config_unix_hidden_path(const struct lyd_node *node, enum nc_operation parent_op
             return 1;
         }
         LY_ARRAY_NEW_RET(LYD_CTX(node), endpt->binds, bind, 1);
-        bind->sock = -1;
 
         /* also set the hidden path flag */
         opts->path_type = NC_UNIX_SOCKET_PATH_HIDDEN;
@@ -5396,181 +5374,6 @@ cleanup:
     return rc;
 }
 
-/**
- * @brief Check if two server endpoint bindings match.
- *
- * They match if they use the same transport protocol, address and port.
- *
- * @param[in] e1 First server endpoint.
- * @param[in] b1 First server endpoint binding.
- * @param[in] e2 Second server endpoint.
- * @param[in] b2 Second server endpoint binding.
- * @return 1 if they match, 0 otherwise.
- */
-static int
-nc_server_config_bindings_match(const struct nc_endpt *e1, const struct nc_bind *b1,
-        const struct nc_endpt *e2, const struct nc_bind *b2)
-{
-    int rc = 1;
-    char *addr1 = NULL, *addr2 = NULL;
-
-    if (e1->ti != e2->ti) {
-        /* different transport protocols */
-        return 0;
-    }
-
-    if (e1->ti == NC_TI_UNIX) {
-        /* UNIX sockets may have hidden or cleartext addresses */
-        addr1 = nc_server_unix_get_socket_path(e1);
-        addr2 = nc_server_unix_get_socket_path(e2);
-    } else {
-        addr1 = b1->address;
-        addr2 = b2->address;
-    }
-    if (!addr1 || !addr2) {
-        /* unable to get the address */
-        rc = 0;
-        goto cleanup;
-    }
-
-    if (strcmp(addr1, addr2) || (b1->port != b2->port)) {
-        /* different addresses or ports */
-        rc = 0;
-        goto cleanup;
-    }
-
-cleanup:
-    if (e1->ti == NC_TI_UNIX) {
-        free(addr1);
-        free(addr2);
-    }
-    return rc;
-}
-
-/**
- * @brief Atomically starts listening on new sockets and reuses existing ones.
- *
- * @param[in,out] old_cfg Old, currently active server configuration.
- * @param[in,out] new_cfg New server configuration currently being applied.
- * @return 0 on success, 1 on error.
- */
-static int
-nc_server_config_reconcile_sockets_listen(struct nc_server_config *old_cfg,
-        struct nc_server_config *new_cfg)
-{
-    int rc = 0, found;
-    struct nc_endpt *old_endpt, *new_endpt;
-    struct nc_bind *new_bind, *old_bind;
-
-    /*
-     * == PHASE 1: RECONCILE OLD AND NEW SOCKETS ==
-     * Match existing sockets from old_cfg to new_cfg to reuse them,
-     * then create new sockets for new binds.
-     */
-
-    /* reuse existing sockets from old_cfg */
-    LY_ARRAY_FOR(new_cfg->endpts, struct nc_endpt, new_endpt) {
-        LY_ARRAY_FOR(new_endpt->binds, struct nc_bind, new_bind) {
-            found = 0;
-            LY_ARRAY_FOR(old_cfg->endpts, struct nc_endpt, old_endpt) {
-                LY_ARRAY_FOR(old_endpt->binds, struct nc_bind, old_bind) {
-                    if (nc_server_config_bindings_match(new_endpt, new_bind, old_endpt, old_bind)) {
-                        /* match found, reuse the socket */
-                        new_bind->sock = old_bind->sock;
-                        found = 1;
-                        break;
-                    }
-                }
-                if (found) {
-                    /* break the outer loop as well, we already found a match for this bind */
-                    break;
-                }
-            }
-        }
-    }
-
-    /* create new sockets for new binds */
-    LY_ARRAY_FOR(new_cfg->endpts, struct nc_endpt, new_endpt) {
-        LY_ARRAY_FOR(new_endpt->binds, struct nc_bind, new_bind) {
-            if (new_bind->sock == -1) {
-                /* this bind is new, create a listening socket */
-                if (nc_server_bind_and_listen(new_endpt, new_bind)) {
-                    /* FAILURE! trigger rollback */
-                    rc = 1;
-                    goto rollback;
-                }
-            }
-        }
-    }
-
-    /*
-     * == PHASE 2: COMMIT CHANGES (WRITE TO old_cfg) ==
-     * new_cfg is now fully valid. We can safely modify old_cfg to prevent
-     * reused sockets from being closed by the caller.
-     */
-    LY_ARRAY_FOR(old_cfg->endpts, struct nc_endpt, old_endpt) {
-        LY_ARRAY_FOR(old_endpt->binds, struct nc_bind, old_bind) {
-            found = 0;
-            if (old_bind->sock == -1) {
-                /* already handled or was never active */
-                continue;
-            }
-
-            /* check if this old_bind's socket was reused in the new_cfg */
-            LY_ARRAY_FOR(new_cfg->endpts, struct nc_endpt, new_endpt) {
-                LY_ARRAY_FOR(new_endpt->binds, struct nc_bind, new_bind) {
-                    if (old_bind->sock == new_bind->sock) {
-                        /* match found, invalidate the socket in the old config (dont want to close it) */
-                        old_bind->sock = -1;
-                        found = 1;
-                        break;
-                    }
-                }
-                if (found) {
-                    /* break the outer loop as well, we already found a match for this bind */
-                    break;
-                }
-            }
-        }
-    }
-
-    return 0;
-
-rollback:
-    /*
-     * == ROLLBACK LOGIC ==
-     * An error occurred. We do not want to close the reused sockets, so we can roll back to old_cfg.
-     * So we invalidate all reused sockets in new_cfg, the rest will be closed by the caller later.
-     */
-    LY_ARRAY_FOR(new_cfg->endpts, struct nc_endpt, new_endpt) {
-        LY_ARRAY_FOR(new_endpt->binds, struct nc_bind, new_bind) {
-            found = 0;
-            if (new_bind->sock == -1) {
-                /* this bind was never assigned a socket */
-                continue;
-            }
-
-            /* was this socket reused from the old config? */
-            LY_ARRAY_FOR(old_cfg->endpts, struct nc_endpt, old_endpt) {
-                LY_ARRAY_FOR(old_endpt->binds, struct nc_bind, old_bind) {
-                    if (new_bind->sock == old_bind->sock) {
-                        /* match found, invalidate the socket in the new config */
-                        new_bind->sock = -1;
-                        found = 1;
-                        break;
-                    }
-                }
-                if (found) {
-                    /* break the outer loop as well, we already found a match for this bind */
-                    break;
-                }
-            }
-        }
-    }
-
-    return rc;
-}
-
 #ifdef NC_ENABLED_SSH_TLS
 
 /**
@@ -6232,9 +6035,6 @@ nc_server_config_dup(const struct nc_server_config *src, struct nc_server_config
                 NC_CHECK_ERRMEM_GOTO(!dst_endpt->binds[j].address, rc = 1, cleanup);
             }
             dst_endpt->binds[j].port = src_endpt->binds[j].port;
-
-            /* mark the socket as uninitialized, it will be reassigned in ::nc_server_config_reconcile_sockets_listen() */
-            dst_endpt->binds[j].sock = -1;
             LY_ARRAY_INCREMENT(dst_endpt->binds);
         }
 
@@ -6434,7 +6234,7 @@ nc_server_config_setup_diff(const struct lyd_node *data)
     }
 
     /* start listening on new endpoints */
-    NC_CHECK_ERR_GOTO(ret = nc_server_config_reconcile_sockets_listen(&server_opts.config, &config_copy),
+    NC_CHECK_ERR_GOTO(ret = nc_server_binds_reconcile(&config_copy),
             ERR(NULL, "Starting to listen on new endpoints failed."), cleanup_unlock);
 
 #ifdef NC_ENABLED_SSH_TLS
@@ -6530,7 +6330,7 @@ nc_server_config_setup_data(const struct lyd_node *data)
     }
 
     /* start listening on new endpoints */
-    NC_CHECK_ERR_GOTO(ret = nc_server_config_reconcile_sockets_listen(&server_opts.config, &config),
+    NC_CHECK_ERR_GOTO(ret = nc_server_binds_reconcile(&config),
             ERR(NULL, "Starting to listen on new endpoints failed."), cleanup_unlock);
 
 #ifdef NC_ENABLED_SSH_TLS
