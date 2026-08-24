@@ -90,7 +90,7 @@ nc_ssh_find_auth_client(struct nc_server_ssh_opts *opts, const char *user, struc
 
     /* client not known by the endpt, but it references another one so try it */
     if (opts->referenced_endpt_name) {
-        if (nc_server_endpt_get(opts->referenced_endpt_name, &referenced_endpt)) {
+        if (nc_server_endpt_get(session->opts.server.config, opts->referenced_endpt_name, &referenced_endpt)) {
             ERR(session, "Referenced endpoint \"%s\" not found.", opts->referenced_endpt_name);
             return NULL;
         }
@@ -284,7 +284,8 @@ nc_server_ssh_auth_pubkey_check(struct nc_session *session, ssh_key pubkey,
             pubkey_count = LY_ARRAY_COUNT(auth_client->pubkeys);
         } else if (auth_client->pubkey_store == NC_STORE_TRUSTSTORE) {
             /* need to fetch from the truststore */
-            ret = nc_server_ssh_ts_ref_get_keys(auth_client->ts_ref, &pubkeys, &pubkey_count);
+            ret = nc_server_ssh_ts_ref_get_keys(session->opts.server.config, auth_client->ts_ref,
+                    &pubkeys, &pubkey_count);
             if (ret) {
                 goto cleanup;
             }
@@ -657,15 +658,23 @@ nc_server_ssh_privkey_data_to_tmp_file(const char *in, const char *privkey_forma
 /**
  * @brief Get asymmetric key from the keystore.
  *
+ * @param[in] config Pinned server configuration to search.
  * @param[in] referenced_name Name of the asymmetric key in the keystore.
  * @param[out] askey Referenced asymmetric key.
  * @return 0 on success, 1 on error.
  */
 static int
-nc_server_ssh_ks_ref_get_key(const char *referenced_name, struct nc_asymmetric_key **askey)
+nc_server_ssh_ks_ref_get_key(const struct nc_server_config *config, const char *referenced_name,
+        struct nc_asymmetric_key **askey)
 {
     LY_ARRAY_COUNT_TYPE i;
-    struct nc_keystore *ks = &server_opts.config.keystore;
+    const struct nc_keystore *ks;
+
+    if (!config) {
+        ERR(NULL, "No server configuration to get the keystore entry \"%s\" from.", referenced_name);
+        return 1;
+    }
+    ks = &config->keystore;
 
     *askey = NULL;
 
@@ -680,7 +689,7 @@ nc_server_ssh_ks_ref_get_key(const char *referenced_name, struct nc_asymmetric_k
         return 1;
     }
 
-    *askey = &ks->entries[i].asym_key;
+    *askey = (struct nc_asymmetric_key *)&ks->entries[i].asym_key;
 
     /* check if the referenced public key is SubjectPublicKeyInfo */
     if ((*askey)->pubkey.data && nc_is_pk_subject_public_key_info((*askey)->pubkey.data)) {
@@ -693,14 +702,20 @@ nc_server_ssh_ks_ref_get_key(const char *referenced_name, struct nc_asymmetric_k
 }
 
 int
-nc_server_ssh_ts_ref_get_keys(const char *referenced_name, struct nc_public_key **pubkeys, uint32_t *pubkey_count)
+nc_server_ssh_ts_ref_get_keys(const struct nc_server_config *config, const char *referenced_name,
+        struct nc_public_key **pubkeys, uint32_t *pubkey_count)
 {
-    LY_ARRAY_COUNT_TYPE i;
-    struct nc_public_key *pubkey;
-    struct nc_truststore *ts = &server_opts.config.truststore;
+    LY_ARRAY_COUNT_TYPE i, u;
+    const struct nc_truststore *ts;
 
     *pubkeys = NULL;
     *pubkey_count = 0;
+
+    if (!config) {
+        ERR(NULL, "No server configuration to get the truststore entry \"%s\" from.", referenced_name);
+        return 1;
+    }
+    ts = &config->truststore;
 
     /* lookup name */
     LY_ARRAY_FOR(ts->pubkey_bags, i) {
@@ -714,8 +729,8 @@ nc_server_ssh_ts_ref_get_keys(const char *referenced_name, struct nc_public_key 
     }
 
     /* check if any of the referenced public keys is SubjectPublicKeyInfo */
-    LY_ARRAY_FOR(ts->pubkey_bags[i].pubkeys, struct nc_public_key, pubkey) {
-        if (nc_is_pk_subject_public_key_info(pubkey->data)) {
+    LY_ARRAY_FOR(ts->pubkey_bags[i].pubkeys, u) {
+        if (nc_is_pk_subject_public_key_info(ts->pubkey_bags[i].pubkeys[u].data)) {
             ERR(NULL, "A public key of the referenced public key bag \"%s\" is in the SubjectPublicKeyInfo format, "
                     "which is not allowed in SSH!", referenced_name);
             return 1;
@@ -1663,12 +1678,13 @@ nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, struct nc
 /**
  * @brief Set hostkeys to be used for an SSH bind.
  *
+ * @param[in] config Pinned server configuration the options belong to.
  * @param[in] sbind SSH bind to use.
  * @param[in] opts SSH server options.
  * @return 0 on success, -1 on error.
  */
 static int
-nc_ssh_bind_add_hostkeys(ssh_bind sbind, struct nc_server_ssh_opts *opts)
+nc_ssh_bind_add_hostkeys(const struct nc_server_config *config, ssh_bind sbind, struct nc_server_ssh_opts *opts)
 {
     int rc;
     char *privkey_path;
@@ -1684,7 +1700,7 @@ nc_ssh_bind_add_hostkeys(ssh_bind sbind, struct nc_server_ssh_opts *opts)
             key = &hostkey->key;
         } else {
             /* keystore reference, need to get it */
-            NC_CHECK_RET(nc_server_ssh_ks_ref_get_key(hostkey->ks_ref, &key), -1);
+            NC_CHECK_RET(nc_server_ssh_ks_ref_get_key(config, hostkey->ks_ref, &key), -1);
         }
 
         privkey_path = nc_server_ssh_privkey_data_to_tmp_file(key->privkey.data, nc_privkey_format_to_str(key->privkey.type));
@@ -1852,7 +1868,7 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
     }
 
     /* configure host keys */
-    if (nc_ssh_bind_add_hostkeys(sbind, opts)) {
+    if (nc_ssh_bind_add_hostkeys(session->opts.server.config, sbind, opts)) {
         rc = -1;
         goto cleanup;
     }
@@ -1989,6 +2005,14 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
     }
 
 cleanup:
+#if LIBSSH_0_12
+    /* the transport options belong to a configuration generation that is released once the handshake
+     * is over, the callbacks running afterwards must not reach them */
+    if (session->ti.libssh.cb_data) {
+        ((struct nc_server_ssh_cb_data *)session->ti.libssh.cb_data)->opts = NULL;
+    }
+#endif /* LIBSSH_0_12 */
+
     if (sock > -1) {
         close(sock);
     }

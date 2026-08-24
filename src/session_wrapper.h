@@ -248,10 +248,10 @@ int nc_server_tls_verify_cert(void *cert, int depth, int trusted, struct nc_tls_
  * @brief Check if the peer certificate matches any configured ee certs.
  *
  * @param[in] peer_cert Peer certificate.
- * @param[in] opts TLS options.
+ * @param[in] cb_data Verify callback data with the session and the TLS options.
  * @return 0 on success, non-zero on fail.
  */
-int nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_server_tls_opts *opts);
+int nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_tls_verify_cb_data *cb_data);
 
 /**
  * @brief Get the subject of the certificate.

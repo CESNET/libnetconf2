@@ -1338,11 +1338,10 @@ nc_str_append(char **str, uint32_t *used, uint32_t *size, const char *app_format
  *
  * @param[in] ctx libyang context.
  * @param[in] version YANG version of the schemas to be included in result.
- * @param[in] config_locked Whether the configuration lock is already held or should be acquired.
  * @return Array of capabilities terminated with NULL, NULL on error.
  */
 static char **
-_nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int config_locked)
+_nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
 {
     char **cpblts;
     const struct lys_module *mod;
@@ -1351,8 +1350,12 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
     char *yl_content_id = NULL;
     uint32_t wd_also_supported, wd_basic_mode;
     char *str = NULL;
+    const struct nc_server_config *config;
 
     NC_CHECK_ARG_RET(NULL, ctx, NULL);
+
+    /* pin the configuration, only the ignored module names are needed from it */
+    config = nc_server_config_acquire();
 
     cpblts = malloc(3 * sizeof *cpblts);
     NC_CHECK_ERRMEM_GOTO(!cpblts, , error);
@@ -1456,7 +1459,7 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
     /* models */
     i = 0;
     while ((mod = ly_ctx_get_module_iter(ctx, &i))) {
-        if (nc_server_is_mod_ignored(mod->name, config_locked)) {
+        if (nc_server_is_mod_ignored(config, mod->name)) {
             /* ignored, not part of the cababilities */
             continue;
         }
@@ -1530,6 +1533,7 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version, int
     /* HELLO UNLOCK */
     nc_rwlock_unlock(&server_opts.hello_lock, __func__);
 
+    nc_server_config_release(config);
     free(str);
     return cpblts;
 
@@ -1538,6 +1542,7 @@ unlock_error:
     nc_rwlock_unlock(&server_opts.hello_lock, __func__);
 
 error:
+    nc_server_config_release(config);
     if (cpblts) {
         for (i = 0; cpblts[i]; ++i) {
             free(cpblts[i]);
@@ -1552,13 +1557,13 @@ error:
 API char **
 nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
 {
-    return _nc_server_get_cpblts_version(ctx, version, 0);
+    return _nc_server_get_cpblts_version(ctx, version);
 }
 
 API char **
 nc_server_get_cpblts(const struct ly_ctx *ctx)
 {
-    return _nc_server_get_cpblts_version(ctx, LYS_VERSION_UNDEF, 0);
+    return _nc_server_get_cpblts_version(ctx, LYS_VERSION_UNDEF);
 }
 
 /**
@@ -1664,16 +1669,16 @@ error:
  * @brief Send NETCONF hello message on a session.
  *
  * @param[in] session Session to send the message on.
- * @param[in] config_locked Whether the configuration READ lock is already held (only relevant for server side).
  * @return Sent message type.
  */
 static NC_MSG_TYPE
-nc_send_hello_io(struct nc_session *session, int config_locked)
+nc_send_hello_io(struct nc_session *session)
 {
     NC_MSG_TYPE ret;
     int i, timeout_io;
     char **cpblts;
     uint32_t *sid;
+    uint16_t idle_timeout;
 
     if (session->side == NC_CLIENT) {
         /* client side hello - send only NETCONF base capabilities */
@@ -1685,7 +1690,7 @@ nc_send_hello_io(struct nc_session *session, int config_locked)
         timeout_io = NC_CLIENT_HELLO_TIMEOUT * 1000;
         sid = NULL;
     } else {
-        cpblts = _nc_server_get_cpblts_version(session->ctx, LYS_VERSION_1_0, config_locked);
+        cpblts = _nc_server_get_cpblts_version(session->ctx, LYS_VERSION_1_0);
         if (!cpblts) {
             return NC_MSG_ERROR;
         }
@@ -1693,7 +1698,8 @@ nc_send_hello_io(struct nc_session *session, int config_locked)
         if (session->flags & NC_SESSION_CALLHOME) {
             timeout_io = NC_SERVER_CH_HELLO_TIMEOUT * 1000;
         } else {
-            timeout_io = server_opts.config.idle_timeout ? server_opts.config.idle_timeout * 1000 : -1;
+            idle_timeout = (uint16_t)ATOMIC_LOAD_RELAXED(server_opts.idle_timeout);
+            timeout_io = idle_timeout ? idle_timeout * 1000 : -1;
         }
         sid = &session->id;
     }
@@ -1811,11 +1817,13 @@ nc_server_recv_hello_io(struct nc_session *session)
     struct lyd_node_opaq *node;
     NC_MSG_TYPE rc = NC_MSG_HELLO;
     int r, ver = -1, flag = 0, timeout_io;
+    uint16_t idle_timeout;
 
     if (session->flags & NC_SESSION_CALLHOME) {
         timeout_io = NC_SERVER_CH_HELLO_TIMEOUT * 1000;
     } else {
-        timeout_io = server_opts.config.idle_timeout ? server_opts.config.idle_timeout * 1000 : -1;
+        idle_timeout = (uint16_t)ATOMIC_LOAD_RELAXED(server_opts.idle_timeout);
+        timeout_io = idle_timeout ? idle_timeout * 1000 : -1;
     }
 
     r = nc_read_msg_poll_io(session, timeout_io, &msg);
@@ -1875,7 +1883,7 @@ nc_handshake_io(struct nc_session *session)
 {
     NC_MSG_TYPE type;
 
-    type = nc_send_hello_io(session, 0);
+    type = nc_send_hello_io(session);
     if (type != NC_MSG_HELLO) {
         return type;
     }
@@ -1899,7 +1907,7 @@ nc_ch_handshake_io(struct nc_session *session)
         return NC_MSG_ERROR;
     }
 
-    type = nc_send_hello_io(session, 1);
+    type = nc_send_hello_io(session);
     if (type != NC_MSG_HELLO) {
         return type;
     }

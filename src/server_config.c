@@ -502,11 +502,11 @@ nc_server_config_truststore_free(struct nc_truststore *ts)
 #endif /* NC_ENABLED_SSH_TLS */
 
 /**
- * @brief Free server configuration data.
+ * @brief Free the data of a server configuration generation.
  *
  * @param[in] config Server configuration to free.
  */
-void
+static void
 nc_server_config_free(struct nc_server_config *config)
 {
     struct nc_endpt *endpt;
@@ -599,6 +599,46 @@ nc_server_config_free(struct nc_server_config *config)
 #endif /* NC_ENABLED_SSH_TLS */
 
     memset(config, 0, sizeof(*config));
+}
+
+const struct nc_server_config *
+nc_server_config_acquire(void)
+{
+    struct nc_server_config *config;
+
+    /* CONFIG READ LOCK - only the pointer read and the refcount increment */
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+        return NULL;
+    }
+
+    config = server_opts.config;
+    if (config) {
+        /* the read lock provides the ordering, no new reference to a swapped out generation
+         * can ever be taken because only server_opts.config is ever read here */
+        ATOMIC_INC_RELAXED(config->refcount);
+    }
+
+    /* CONFIG READ UNLOCK */
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    return config;
+}
+
+void
+nc_server_config_release(const struct nc_server_config *config)
+{
+    struct nc_server_config *cfg = (struct nc_server_config *)config;
+
+    if (!cfg) {
+        return;
+    }
+
+    /* acq_rel so that all the reads of this generation are ordered before the free() done
+     * by whoever drops the last reference */
+    if (ATOMIC_DEC_ACQ_REL(cfg->refcount) == 1) {
+        /* we held the last reference */
+        nc_server_config_free(cfg);
+        free(cfg);
+    }
 }
 
 API int
@@ -5377,28 +5417,61 @@ cleanup:
 #ifdef NC_ENABLED_SSH_TLS
 
 /**
- * @brief Check if there are any new Call Home clients created in the new configuration.
+ * @brief Check whether a Call Home client name is present in an array of names.
  *
- * @param[in] old_cfg Old, currently active server configuration.
+ * @param[in] names Array of names (sized-array, see libyang docs).
+ * @param[in] name Name to look for.
+ * @return 1 if @p name is present, 0 otherwise.
+ */
+static int
+nc_server_config_ch_name_found(char **names, const char *name)
+{
+    LY_ARRAY_COUNT_TYPE u;
+
+    LY_ARRAY_FOR(names, u) {
+        if (!strcmp(names[u], name)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * @brief Check whether a server configuration contains a Call Home client of the given name.
+ *
+ * @param[in] config Server configuration.
+ * @param[in] name Name of the Call Home client to look for.
+ * @return 1 if the client is configured, 0 otherwise.
+ */
+static int
+nc_server_config_ch_client_configured(const struct nc_server_config *config, const char *name)
+{
+    LY_ARRAY_COUNT_TYPE u;
+
+    LY_ARRAY_FOR(config->ch_clients, u) {
+        if (!strcmp(config->ch_clients[u].name, name)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * @brief Check if the new configuration contains a Call Home client that has no thread running.
+ *
  * @param[in] new_cfg New server configuration currently being applied.
+ * @param[in] running Names of the Call Home clients with a running thread (sized-array, see libyang docs).
  * @return 1 if there are new CH clients, 0 otherwise.
  */
 static int
-nc_server_config_new_ch_clients_created(struct nc_server_config *old_cfg, struct nc_server_config *new_cfg)
+nc_server_config_new_ch_clients_created(const struct nc_server_config *new_cfg, char **running)
 {
-    struct nc_ch_client *old_ch_client, *new_ch_client;
-    int found;
+    LY_ARRAY_COUNT_TYPE u;
 
-    /* check if there are any new clients */
-    LY_ARRAY_FOR(new_cfg->ch_clients, struct nc_ch_client, new_ch_client) {
-        found = 0;
-        LY_ARRAY_FOR(old_cfg->ch_clients, struct nc_ch_client, old_ch_client) {
-            if (!strcmp(new_ch_client->name, old_ch_client->name)) {
-                found = 1;
-                break;
-            }
-        }
-        if (!found) {
+    LY_ARRAY_FOR(new_cfg->ch_clients, u) {
+        if (!nc_server_config_ch_name_found(running, new_cfg->ch_clients[u].name)) {
             return 1;
         }
     }
@@ -5408,21 +5481,19 @@ nc_server_config_new_ch_clients_created(struct nc_server_config *old_cfg, struct
 }
 
 /**
- * @brief Atomically dispatch new Call Home clients and reuse existing ones.
+ * @brief Atomically dispatch new Call Home clients and keep the already running ones.
  *
- * @param[in,out] old_cfg Old, currently active server configuration.
- * @param[in,out] new_cfg New server configuration currently being applied.
+ * The running clients are learned from the Call Home thread registry, not from any configuration.
+ *
+ * @param[in] new_cfg New server configuration currently being applied.
  * @return 0 on success, 1 on error.
  */
 static int
-nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
-        struct nc_server_config *new_cfg)
+nc_server_config_reconcile_chclients_dispatch(const struct nc_server_config *new_cfg)
 {
     int rc = 0;
-    struct nc_ch_client *old_ch_client, *new_ch_client;
-    int found;
-    LY_ARRAY_COUNT_TYPE i;
-    struct nc_ch_client **started_clients = NULL, **started_client_ptr;
+    LY_ARRAY_COUNT_TYPE u;
+    char **running = NULL, **started = NULL, **started_name;
     struct nc_server_ch_dispatch_data dispatch_data;
     int dispatch_new_clients = 1;
 
@@ -5434,9 +5505,12 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
     /* OPTS READ UNLOCK */
     nc_rwlock_unlock(&server_opts.opts_lock, __func__);
 
+    /* learn which clients are running right now */
+    NC_CHECK_GOTO(rc = nc_server_ch_thread_names_get(&running), cleanup);
+
     if (!dispatch_data.acquire_ctx_cb || !dispatch_data.release_ctx_cb || !dispatch_data.new_session_cb) {
         /* Call Home dispatch callbacks not set, we can't dispatch new clients, but we can still stop deleted ones */
-        if (nc_server_config_new_ch_clients_created(old_cfg, new_cfg)) {
+        if (nc_server_config_new_ch_clients_created(new_cfg, running)) {
             WRN(NULL, "New Call Home clients were created but Call Home dispatch callbacks are not set - "
                     "new clients will not be dispatched automatically.");
         }
@@ -5450,25 +5524,14 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
      */
     if (dispatch_new_clients) {
         /* only dispatch if all required CBs are set */
-        LY_ARRAY_FOR(new_cfg->ch_clients, struct nc_ch_client, new_ch_client) {
-            if (!new_ch_client->thread) {
-                /* the new config may have been built from scratch (::nc_server_config_setup_data()), in which
-                 * case the thread data of an already running client is only present in the old config */
-                LY_ARRAY_FOR(old_cfg->ch_clients, struct nc_ch_client, old_ch_client) {
-                    if (!strcmp(old_ch_client->name, new_ch_client->name)) {
-                        new_ch_client->thread = old_ch_client->thread;
-                        break;
-                    }
-                }
-            }
-
-            if (new_ch_client->thread) {
+        LY_ARRAY_FOR(new_cfg->ch_clients, u) {
+            if (nc_server_config_ch_name_found(running, new_cfg->ch_clients[u].name)) {
                 /* already running */
                 continue;
             }
 
             /* this is a new Call Home client, dispatch it */
-            rc = _nc_connect_ch_client_dispatch(new_ch_client, dispatch_data.acquire_ctx_cb,
+            rc = _nc_connect_ch_client_dispatch(new_cfg->ch_clients[u].name, dispatch_data.acquire_ctx_cb,
                     dispatch_data.release_ctx_cb, dispatch_data.ctx_cb_data,
                     dispatch_data.new_session_cb, dispatch_data.new_session_cb_data);
             if (rc) {
@@ -5476,32 +5539,27 @@ nc_server_config_reconcile_chclients_dispatch(struct nc_server_config *old_cfg,
                 goto rollback;
             }
 
-            /* successfully started, track client for potential rollback */
-            LY_ARRAY_NEW_GOTO(NULL, started_clients, started_client_ptr, rc, rollback);
-            *started_client_ptr = new_ch_client;
+            /* successfully started, track the client for a potential rollback */
+            LY_ARRAY_NEW_GOTO(NULL, started, started_name, rc, rollback);
+            *started_name = strdup(new_cfg->ch_clients[u].name);
+            NC_CHECK_ERRMEM_GOTO(!*started_name, rc = 1, rollback);
         }
     }
 
     /*
      * == PHASE 2: STOP DELETED CLIENTS (COMMIT) ==
-     * All new clients started successfully. Now stop old clients
+     * All new clients started successfully. Now stop the running clients
      * that are not present in the new configuration.
      */
-    LY_ARRAY_FOR(old_cfg->ch_clients, struct nc_ch_client, old_ch_client) {
-        found = 0;
-        LY_ARRAY_FOR(new_cfg->ch_clients, struct nc_ch_client, new_ch_client) {
-            if (!strcmp(old_ch_client->name, new_ch_client->name)) {
-                found = 1;
-                break;
-            }
+    LY_ARRAY_FOR(running, u) {
+        if (nc_server_config_ch_client_configured(new_cfg, running[u])) {
+            continue;
         }
 
-        if (!found && old_ch_client->thread) {
-            /* this Call Home client was deleted, notify it to stop */
-            if ((rc = nc_session_server_ch_client_dispatch_stop(old_ch_client))) {
-                ERR(NULL, "Failed to dispatch stop for Call Home client \"%s\".", old_ch_client->name);
-                goto rollback;
-            }
+        /* this Call Home client was deleted, notify it to stop */
+        if ((rc = nc_session_server_ch_client_dispatch_stop(running[u]))) {
+            ERR(NULL, "Failed to dispatch stop for Call Home client \"%s\".", running[u]);
+            goto rollback;
         }
     }
 
@@ -5515,15 +5573,15 @@ rollback:
      * An error occurred during PHASE 1. Stop any new threads we *just* started
      * to return to the pre-call state.
      */
-    LY_ARRAY_FOR(started_clients, i) {
-        nc_session_server_ch_client_dispatch_stop(started_clients[i]);
+    LY_ARRAY_FOR(started, u) {
+        nc_session_server_ch_client_dispatch_stop(started[u]);
     }
     /* rc is already set to non-zero from the failure point */
 
 cleanup:
-    /* free the tracking list */
-    LY_ARRAY_FREE(started_clients);
-    return rc;
+    nc_server_ch_thread_names_free(running);
+    nc_server_ch_thread_names_free(started);
+    return rc ? 1 : 0;
 }
 
 /**
@@ -6002,6 +6060,8 @@ cleanup:
 /**
  * @brief Create a deep copy of the server configuration.
  *
+ * @note On error, @p dst is left partially filled, freeing it is up to its owner.
+ *
  * @param[in] src Source server configuration to copy from.
  * @param[out] dst Server configuration copy.
  * @return 0 on success, 1 on error.
@@ -6134,8 +6194,6 @@ nc_server_config_dup(const struct nc_server_config *src, struct nc_server_config
         dst_ch_client->max_attempts = src_ch_client->max_attempts;
         dst_ch_client->max_wait = src_ch_client->max_wait;
 
-        dst_ch_client->thread = src_ch_client->thread;
-
         LY_ARRAY_INCREMENT(dst->ch_clients);
     }
 
@@ -6158,10 +6216,6 @@ nc_server_config_dup(const struct nc_server_config *src, struct nc_server_config
 #endif /* NC_ENABLED_SSH_TLS */
 
 cleanup:
-    if (rc) {
-        nc_server_config_free(dst);
-    }
-
     return rc;
 }
 
@@ -6184,11 +6238,51 @@ nc_server_config_cert_exp_notif_thread_wakeup(void)
 
 #endif /* NC_ENABLED_SSH_TLS */
 
+/**
+ * @brief Allocate a new server configuration generation.
+ *
+ * @param[out] config New generation with a single reference held by the caller.
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_server_config_new(struct nc_server_config **config)
+{
+    *config = calloc(1, sizeof **config);
+    NC_CHECK_ERRMEM_RET(!*config, 1);
+
+    /* the applier's reference, transferred to server_opts.config once the generation is published */
+    ATOMIC_STORE_RELAXED((*config)->refcount, 1);
+    return 0;
+}
+
+/**
+ * @brief Publish a new server configuration generation and drop the reference of the old one.
+ *
+ * @note The configuration WRITE lock must be held.
+ *
+ * @param[in] config New generation to publish, its reference is transferred to ::nc_server_opts.config.
+ * @return Old generation, the caller must release it once the lock is released.
+ */
+static struct nc_server_config *
+nc_server_config_publish(struct nc_server_config *config)
+{
+    struct nc_server_config *old_config;
+
+    old_config = server_opts.config;
+    server_opts.config = config;
+
+    /* mirror the idle timeout so that the hello and poll paths do not need the config at all */
+    ATOMIC_STORE_RELAXED(server_opts.idle_timeout, config->idle_timeout);
+
+    return old_config;
+}
+
 API int
 nc_server_config_setup_diff(const struct lyd_node *data)
 {
     int ret = 0;
-    struct nc_server_config config_copy = {0};
+    const struct nc_server_config *cur_config = NULL;
+    struct nc_server_config *config_copy = NULL, *old_config = NULL;
 
     NC_CHECK_ARG_RET(NULL, data, 1);
 
@@ -6202,74 +6296,86 @@ nc_server_config_setup_diff(const struct lyd_node *data)
         return 1;
     }
 
-    /* CONFIG RD LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_APPLY_LOCK_TIMEOUT, __func__) != 1) {
-        ERR(NULL, "Timed out waiting for the configuration lock, the new configuration was not applied.");
-        ret = 1;
-        goto cleanup;
-    }
+    NC_CHECK_GOTO(ret = nc_server_config_new(&config_copy), cleanup);
 
     /* create a copy of the current config to work with, so that we can revert to it in case of error */
-    NC_CHECK_ERR_GOTO(ret = nc_server_config_dup(&server_opts.config, &config_copy),
-            ERR(NULL, "Duplicating current server configuration failed."), cleanup_unlock);
+    cur_config = nc_server_config_acquire();
+    NC_CHECK_ERR_GOTO(!cur_config, ERR(NULL, "Acquiring the current server configuration failed."); ret = 1, cleanup);
 
-    /* UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    NC_CHECK_ERR_GOTO(ret = nc_server_config_dup(cur_config, config_copy),
+            ERR(NULL, "Duplicating current server configuration failed."), cleanup);
+
+    nc_server_config_release(cur_config);
+    cur_config = NULL;
 
 #ifdef NC_ENABLED_SSH_TLS
     /* configure keystore */
-    NC_CHECK_ERR_GOTO(ret = nc_server_config_keystore(data, 1, &config_copy),
+    NC_CHECK_ERR_GOTO(ret = nc_server_config_keystore(data, 1, config_copy),
             ERR(NULL, "Applying ietf-keystore configuration failed."), cleanup);
 
     /* configure truststore */
-    NC_CHECK_ERR_GOTO(ret = nc_server_config_truststore(data, 1, &config_copy),
+    NC_CHECK_ERR_GOTO(ret = nc_server_config_truststore(data, 1, config_copy),
             ERR(NULL, "Applying ietf-truststore configuration failed."), cleanup);
 #endif /* NC_ENABLED_SSH_TLS */
 
     /* configure netconf-server */
-    NC_CHECK_ERR_GOTO(ret = nc_server_config_netconf_server(data, 1, &config_copy),
+    NC_CHECK_ERR_GOTO(ret = nc_server_config_netconf_server(data, 1, config_copy),
             ERR(NULL, "Applying ietf-netconf-server configuration failed."), cleanup);
 
     /* configure libnetconf2-netconf-server */
-    NC_CHECK_ERR_GOTO(ret = nc_server_config_libnetconf2_netconf_server(data, NC_OP_UNKNOWN, &config_copy),
+    NC_CHECK_ERR_GOTO(ret = nc_server_config_libnetconf2_netconf_server(data, NC_OP_UNKNOWN, config_copy),
             ERR(NULL, "Applying libnetconf2-netconf-server configuration failed."), cleanup);
 
-    /* CONFIG WR LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_APPLY_LOCK_TIMEOUT, __func__) != 1) {
-        ERR(NULL, "Timed out waiting for the configuration lock, the new configuration was not applied.");
-        ret = 1;
-        goto cleanup;
-    }
-
     /* start listening on new endpoints */
-    NC_CHECK_ERR_GOTO(ret = nc_server_binds_reconcile(&config_copy),
-            ERR(NULL, "Starting to listen on new endpoints failed."), cleanup_unlock);
+    NC_CHECK_ERR_GOTO(ret = nc_server_binds_reconcile(config_copy),
+            ERR(NULL, "Starting to listen on new endpoints failed."), cleanup);
 
 #ifdef NC_ENABLED_SSH_TLS
     /* dispatch new call-home threads */
-    NC_CHECK_ERR_GOTO(ret = nc_server_config_reconcile_chclients_dispatch(&server_opts.config, &config_copy),
-            ERR(NULL, "Dispatching new call-home threads failed."), cleanup_unlock);
+    NC_CHECK_ERR_GOTO(ret = nc_server_config_reconcile_chclients_dispatch(config_copy),
+            ERR(NULL, "Dispatching new call-home threads failed."), cleanup);
 #endif /* NC_ENABLED_SSH_TLS */
 
-    /* swap: free old, keep new, zero out the copy just in case to avoid double free */
-    nc_server_config_free(&server_opts.config);
-    server_opts.config = config_copy;
-    memset(&config_copy, 0, sizeof config_copy);
+    /* CONFIG WR LOCK - only the pointer swap */
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_APPLY_LOCK_TIMEOUT, __func__) != 1) {
+        ERR(NULL, "Timed out waiting for the configuration lock, the new configuration was not applied.");
+        ret = 1;
+        goto rollback;
+    }
+
+    /* publish the new generation, the reference is transferred to server_opts.config */
+    old_config = nc_server_config_publish(config_copy);
+    config_copy = NULL;
+
+    /* CONFIG UNLOCK */
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+
+    /* the old generation is freed once its last reader releases it */
+    nc_server_config_release(old_config);
 
 #ifdef NC_ENABLED_SSH_TLS
     /* wake up the cert expiration notif thread */
     nc_server_config_cert_exp_notif_thread_wakeup();
 #endif /* NC_ENABLED_SSH_TLS */
 
-cleanup_unlock:
-    /* CONFIG UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    goto cleanup;
+
+rollback:
+    /* the sockets and the Call Home threads were already reconciled with the new generation,
+     * reconcile them back with the one that stays published */
+    cur_config = nc_server_config_acquire();
+    if (cur_config) {
+        nc_server_binds_reconcile(cur_config);
+#ifdef NC_ENABLED_SSH_TLS
+        nc_server_config_reconcile_chclients_dispatch(cur_config);
+#endif /* NC_ENABLED_SSH_TLS */
+    }
 
 cleanup:
-    if (ret) {
-        /* free the new config in case of error */
-        nc_server_config_free(&config_copy);
-    }
+    nc_server_config_release(cur_config);
+
+    /* release the new generation, it was either not published or it is NULL */
+    nc_server_config_release(config_copy);
 
     /* CONFIG UPDATE UNLOCK */
     nc_mutex_unlock(&server_opts.config_update_lock, __func__);
@@ -6281,7 +6387,8 @@ nc_server_config_setup_data(const struct lyd_node *data)
 {
     int ret = 0;
     const struct lyd_node *tree, *iter;
-    struct nc_server_config config = {0};
+    const struct nc_server_config *cur_config = NULL;
+    struct nc_server_config *config = NULL, *old_config = NULL;
 
     NC_CHECK_ARG_RET(NULL, data, 1);
 
@@ -6311,61 +6418,75 @@ nc_server_config_setup_data(const struct lyd_node *data)
      * - if something fails, the old config is still intact
      * - not having to hold the config_lock for a long time while applying the new config
     */
+    NC_CHECK_GOTO(ret = nc_server_config_new(&config), cleanup);
 
 #ifdef NC_ENABLED_SSH_TLS
     /* configure keystore */
-    NC_CHECK_ERR_GOTO(ret = nc_server_config_keystore(data, 0, &config),
+    NC_CHECK_ERR_GOTO(ret = nc_server_config_keystore(data, 0, config),
             ERR(NULL, "Applying ietf-keystore configuration failed."), cleanup);
 
     /* configure truststore */
-    NC_CHECK_ERR_GOTO(ret = nc_server_config_truststore(data, 0, &config),
+    NC_CHECK_ERR_GOTO(ret = nc_server_config_truststore(data, 0, config),
             ERR(NULL, "Applying ietf-truststore configuration failed."), cleanup);
 #endif /* NC_ENABLED_SSH_TLS */
 
     /* configure netconf-server */
-    NC_CHECK_ERR_GOTO(ret = nc_server_config_netconf_server(data, 0, &config),
+    NC_CHECK_ERR_GOTO(ret = nc_server_config_netconf_server(data, 0, config),
             ERR(NULL, "Applying ietf-netconf-server configuration failed."), cleanup);
 
     /* configure libnetconf2-netconf-server */
-    NC_CHECK_ERR_GOTO(ret = nc_server_config_libnetconf2_netconf_server(data, NC_OP_UNKNOWN, &config),
+    NC_CHECK_ERR_GOTO(ret = nc_server_config_libnetconf2_netconf_server(data, NC_OP_UNKNOWN, config),
             ERR(NULL, "Applying libnetconf2-netconf-server configuration failed."), cleanup);
 
-    /* CONFIG LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_APPLY_LOCK_TIMEOUT, __func__) != 1) {
-        ERR(NULL, "Timed out waiting for the configuration lock, the new configuration was not applied.");
-        ret = 1;
-        goto cleanup;
-    }
-
     /* start listening on new endpoints */
-    NC_CHECK_ERR_GOTO(ret = nc_server_binds_reconcile(&config),
-            ERR(NULL, "Starting to listen on new endpoints failed."), cleanup_unlock);
+    NC_CHECK_ERR_GOTO(ret = nc_server_binds_reconcile(config),
+            ERR(NULL, "Starting to listen on new endpoints failed."), cleanup);
 
 #ifdef NC_ENABLED_SSH_TLS
     /* dispatch new call-home connections */
-    NC_CHECK_ERR_GOTO(ret = nc_server_config_reconcile_chclients_dispatch(&server_opts.config, &config),
-            ERR(NULL, "Dispatching new call-home connections failed."), cleanup_unlock);
+    NC_CHECK_ERR_GOTO(ret = nc_server_config_reconcile_chclients_dispatch(config),
+            ERR(NULL, "Dispatching new call-home connections failed."), cleanup);
 #endif /* NC_ENABLED_SSH_TLS */
 
-    /* swap: free old, keep new, zero out the copy just in case to avoid double free */
-    nc_server_config_free(&server_opts.config);
-    server_opts.config = config;
-    memset(&config, 0, sizeof config);
+    /* CONFIG WR LOCK - only the pointer swap */
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_APPLY_LOCK_TIMEOUT, __func__) != 1) {
+        ERR(NULL, "Timed out waiting for the configuration lock, the new configuration was not applied.");
+        ret = 1;
+        goto rollback;
+    }
+
+    /* publish the new generation, the reference is transferred to server_opts.config */
+    old_config = nc_server_config_publish(config);
+    config = NULL;
+
+    /* CONFIG UNLOCK */
+    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+
+    /* the old generation is freed once its last reader releases it */
+    nc_server_config_release(old_config);
 
 #ifdef NC_ENABLED_SSH_TLS
     /* wake up the cert expiration notif thread */
     nc_server_config_cert_exp_notif_thread_wakeup();
 #endif /* NC_ENABLED_SSH_TLS */
 
-cleanup_unlock:
-    /* CONFIG UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    goto cleanup;
+
+rollback:
+    /* the sockets and the Call Home threads were already reconciled with the new generation,
+     * reconcile them back with the one that stays published */
+    cur_config = nc_server_config_acquire();
+    if (cur_config) {
+        nc_server_binds_reconcile(cur_config);
+#ifdef NC_ENABLED_SSH_TLS
+        nc_server_config_reconcile_chclients_dispatch(cur_config);
+#endif /* NC_ENABLED_SSH_TLS */
+        nc_server_config_release(cur_config);
+    }
 
 cleanup:
-    if (ret) {
-        /* free the new config in case of error */
-        nc_server_config_free(&config);
-    }
+    /* release the new generation, it was either not published or it is NULL */
+    nc_server_config_release(config);
 
     /* CONFIG UPDATE UNLOCK */
     nc_mutex_unlock(&server_opts.config_update_lock, __func__);
@@ -6611,27 +6732,28 @@ nc_server_config_oper_get_user_password_last_modified(const char *ch_client, con
         const char *username, time_t *last_modified)
 {
     int rc = 0;
-    LY_ARRAY_COUNT_TYPE i = 0;
+    LY_ARRAY_COUNT_TYPE i = 0, u;
+    const struct nc_server_config *config;
     struct nc_server_ssh_opts *ssh_opts = NULL;
-    struct nc_endpt *endpt = NULL;
-    struct nc_ch_client *client = NULL;
-    struct nc_ch_endpt *ch_endpt = NULL;
+    const struct nc_endpt *endpt = NULL;
+    const struct nc_ch_client *client = NULL;
+    const struct nc_ch_endpt *ch_endpt = NULL;
     time_t found_time = 0;
 
     NC_CHECK_ARG_RET(NULL, endpoint, username, last_modified, 1);
 
     *last_modified = 0;
 
-    /* LOCK */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_READ, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
+    config = nc_server_config_acquire();
+    if (!config) {
         return 1;
     }
 
     if (ch_client) {
         /* find the call-home client */
-        LY_ARRAY_FOR(server_opts.config.ch_clients, i) {
-            if (!strcmp(server_opts.config.ch_clients[i].name, ch_client)) {
-                client = &server_opts.config.ch_clients[i];
+        LY_ARRAY_FOR(config->ch_clients, u) {
+            if (!strcmp(config->ch_clients[u].name, ch_client)) {
+                client = &config->ch_clients[u];
                 break;
             }
         }
@@ -6642,7 +6764,8 @@ nc_server_config_oper_get_user_password_last_modified(const char *ch_client, con
         }
 
         /* find the endpoint */
-        LY_ARRAY_FOR(client->ch_endpts, struct nc_ch_endpt, ch_endpt) {
+        LY_ARRAY_FOR(client->ch_endpts, u) {
+            ch_endpt = &client->ch_endpts[u];
             if (!strcmp(ch_endpt->name, endpoint) && (ch_endpt->ti == NC_TI_SSH)) {
                 ssh_opts = ch_endpt->opts.ssh;
                 break;
@@ -6656,7 +6779,8 @@ nc_server_config_oper_get_user_password_last_modified(const char *ch_client, con
         }
     } else {
         /* no call-home client specified, search in listening endpoints */
-        LY_ARRAY_FOR(server_opts.config.endpts, struct nc_endpt, endpt) {
+        LY_ARRAY_FOR(config->endpts, u) {
+            endpt = &config->endpts[u];
             if (!strcmp(endpt->name, endpoint) && (endpt->ti == NC_TI_SSH)) {
                 ssh_opts = endpt->opts.ssh;
                 break;
@@ -6686,8 +6810,7 @@ nc_server_config_oper_get_user_password_last_modified(const char *ch_client, con
     *last_modified = found_time;
 
 cleanup:
-    /* UNLOCK */
-    nc_rwlock_unlock(&server_opts.config_lock, __func__);
+    nc_server_config_release(config);
     return rc;
 }
 

@@ -36,6 +36,7 @@
 /**
  * @brief Get certificate and private key data from keystore.
  *
+ * @param[in] config Pinned server configuration to search.
  * @param[in] referenced_key_name Name of the asymmetric key in the keystore.
  * @param[in] referenced_cert_name Name of the certificate in the keystore.
  * @param[out] privkey_data Retrieved private key data.
@@ -44,14 +45,20 @@
  * @return 0 on success, -1 on error.
  */
 static int
-nc_server_tls_ks_ref_get_cert_key(const char *referenced_key_name, const char *referenced_cert_name,
-        char **privkey_data, enum nc_privkey_format *privkey_type, char **cert_data)
+nc_server_tls_ks_ref_get_cert_key(const struct nc_server_config *config, const char *referenced_key_name,
+        const char *referenced_cert_name, char **privkey_data, enum nc_privkey_format *privkey_type, char **cert_data)
 {
     LY_ARRAY_COUNT_TYPE i, j;
-    struct nc_keystore *ks = &server_opts.config.keystore;
+    const struct nc_keystore *ks;
 
     *privkey_data = NULL;
     *cert_data = NULL;
+
+    if (!config) {
+        ERR(NULL, "No server configuration to get the keystore entry \"%s\" from.", referenced_key_name);
+        return -1;
+    }
+    ks = &config->keystore;
 
     /* lookup key */
     LY_ARRAY_FOR(ks->entries, i) {
@@ -84,19 +91,27 @@ nc_server_tls_ks_ref_get_cert_key(const char *referenced_key_name, const char *r
 /**
  * @brief Get certificates from truststore.
  *
+ * @param[in] config Pinned server configuration to search.
  * @param[in] referenced_name Name of the certificate bag in the truststore.
  * @param[out] certs Retrieved certificates.
  * @param[out] cert_count Number of retrieved certificates.
  * @return 0 on success, -1 on error.
  */
 static int
-nc_server_tls_truststore_ref_get_certs(const char *referenced_name, struct nc_certificate **certs, uint32_t *cert_count)
+nc_server_tls_truststore_ref_get_certs(const struct nc_server_config *config, const char *referenced_name,
+        struct nc_certificate **certs, uint32_t *cert_count)
 {
     LY_ARRAY_COUNT_TYPE i;
-    struct nc_truststore *ts = &server_opts.config.truststore;
+    const struct nc_truststore *ts;
 
     *certs = NULL;
     *cert_count = 0;
+
+    if (!config) {
+        ERR(NULL, "No server configuration to get the truststore bag \"%s\" from.", referenced_name);
+        return -1;
+    }
+    ts = &config->truststore;
 
     /* lookup name */
     LY_ARRAY_FOR(ts->cert_bags, i) {
@@ -500,13 +515,15 @@ cleanup:
 /**
  * @brief Resolve username from cert-to-name entries of endpoint and referenced endpoint.
  *
+ * @param[in] config Pinned server configuration the options belong to.
  * @param[in] opts TLS options of the endpoint.
  * @param[in] cert_chain Presented certificate chain, peer certificate first.
  * @param[out] username Resolved username.
  * @return 0 on success, 1 if no entry matched, -1 on error.
  */
 static int
-_nc_server_tls_cert_to_name(struct nc_server_tls_opts *opts, void *cert_chain, char **username)
+_nc_server_tls_cert_to_name(const struct nc_server_config *config, struct nc_server_tls_opts *opts,
+        void *cert_chain, char **username)
 {
     int rc = 1;
     struct nc_endpt *referenced_endpt;
@@ -522,7 +539,7 @@ _nc_server_tls_cert_to_name(struct nc_server_tls_opts *opts, void *cert_chain, c
 
     /* do the same for referenced endpoint's ctn entries */
     if (opts->referenced_endpt_name) {
-        if (nc_server_endpt_get(opts->referenced_endpt_name, &referenced_endpt)) {
+        if (nc_server_endpt_get(config, opts->referenced_endpt_name, &referenced_endpt)) {
             ERR(NULL, "Referenced endpoint \"%s\" not found.", opts->referenced_endpt_name);
             ERRINT;
             rc = -1;
@@ -543,7 +560,8 @@ cleanup:
 }
 
 static int
-_nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_server_tls_client_auth *client_auth)
+_nc_server_tls_verify_peer_cert(const struct nc_server_config *config, void *peer_cert,
+        struct nc_server_tls_client_auth *client_auth)
 {
     int rc;
     void *cert;
@@ -556,7 +574,7 @@ _nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_server_tls_client_aut
         cert_count = LY_ARRAY_COUNT(client_auth->ee_certs);
     } else if (client_auth->ee_certs_store == NC_STORE_TRUSTSTORE) {
         /* truststore reference */
-        if (nc_server_tls_truststore_ref_get_certs(client_auth->ee_cert_bag_ts_ref, &certs, &cert_count)) {
+        if (nc_server_tls_truststore_ref_get_certs(config, client_auth->ee_cert_bag_ts_ref, &certs, &cert_count)) {
             ERR(NULL, "Error getting end-entity certificates from the truststore reference \"%s\".", client_auth->ee_cert_bag_ts_ref);
             return -1;
         }
@@ -580,24 +598,26 @@ _nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_server_tls_client_aut
 }
 
 int
-nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_server_tls_opts *opts)
+nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_tls_verify_cb_data *cb_data)
 {
     int rc;
     struct nc_endpt *referenced_endpt;
+    struct nc_server_tls_opts *opts = cb_data->opts;
+    const struct nc_server_config *config = cb_data->session->opts.server.config;
 
-    rc = _nc_server_tls_verify_peer_cert(peer_cert, &opts->client_auth);
+    rc = _nc_server_tls_verify_peer_cert(config, peer_cert, &opts->client_auth);
     if (!rc) {
         return 0;
     }
 
     if (opts->referenced_endpt_name) {
-        if (nc_server_endpt_get(opts->referenced_endpt_name, &referenced_endpt)) {
+        if (nc_server_endpt_get(config, opts->referenced_endpt_name, &referenced_endpt)) {
             ERR(NULL, "Referenced endpoint \"%s\" not found.", opts->referenced_endpt_name);
             ERRINT;
             return -1;
         }
 
-        rc = _nc_server_tls_verify_peer_cert(peer_cert, &referenced_endpt->opts.tls->client_auth);
+        rc = _nc_server_tls_verify_peer_cert(config, peer_cert, &referenced_endpt->opts.tls->client_auth);
         if (!rc) {
             return 0;
         }
@@ -614,6 +634,7 @@ nc_server_tls_verify_cert(void *cert, int depth, int trusted, struct nc_tls_veri
     struct nc_server_tls_opts *opts = cb_data->opts;
     struct nc_session *session = cb_data->session;
     void *cert_chain = cb_data->chain;
+    const struct nc_server_config *config = cb_data->session->opts.server.config;
 
     int (*user_verify_clb)(const struct nc_session *session);
 
@@ -638,7 +659,7 @@ nc_server_tls_verify_cert(void *cert, int depth, int trusted, struct nc_tls_veri
         if (!trusted) {
             /* peer cert is not trusted, so it must match any configured end-entity cert
              * on the given endpoint in order for the client to be authenticated */
-            rc = nc_server_tls_verify_peer_cert(cert, opts);
+            rc = nc_server_tls_verify_peer_cert(cert, cb_data);
             if (rc) {
                 ERR(session, "Cert verify: fail (Client certificate not trusted and does not match any configured end-entity certificate).");
                 goto cleanup;
@@ -649,7 +670,7 @@ nc_server_tls_verify_cert(void *cert, int depth, int trusted, struct nc_tls_veri
          * the whole chain is needed in order to comply with the following issue:
          * https://github.com/CESNET/netopeer2/issues/1596
          */
-        rc = _nc_server_tls_cert_to_name(opts, cert_chain, &session->username);
+        rc = _nc_server_tls_cert_to_name(config, opts, cert_chain, &session->username);
         if (rc == -1) {
             /* fatal error */
             goto cleanup;
@@ -712,7 +733,8 @@ nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *session)
 }
 
 int
-nc_server_tls_load_server_cert_key(struct nc_server_tls_opts *opts, void **srv_cert, void **srv_pkey)
+nc_server_tls_load_server_cert_key(const struct nc_server_config *config, struct nc_server_tls_opts *opts,
+        void **srv_cert, void **srv_pkey)
 {
     char *privkey_data = NULL, *cert_data = NULL;
     enum nc_privkey_format privkey_type;
@@ -729,7 +751,8 @@ nc_server_tls_load_server_cert_key(struct nc_server_tls_opts *opts, void **srv_c
         privkey_type = opts->local.key.privkey.type;
     } else if (opts->cert_store == NC_STORE_KEYSTORE) {
         /* keystore */
-        if (nc_server_tls_ks_ref_get_cert_key(opts->keystore.asym_key_ref, opts->keystore.cert_ref, &privkey_data, &privkey_type, &cert_data)) {
+        if (nc_server_tls_ks_ref_get_cert_key(config, opts->keystore.asym_key_ref, opts->keystore.cert_ref,
+                &privkey_data, &privkey_type, &cert_data)) {
             ERR(NULL, "Getting server certificate from the keystore reference \"%s\" failed.", opts->keystore.asym_key_ref);
             return 1;
         }
@@ -756,7 +779,8 @@ nc_server_tls_load_server_cert_key(struct nc_server_tls_opts *opts, void **srv_c
 }
 
 int
-nc_server_tls_load_trusted_certs(struct nc_server_tls_client_auth *client_auth, void *cert_store)
+nc_server_tls_load_trusted_certs(const struct nc_server_config *config,
+        struct nc_server_tls_client_auth *client_auth, void *cert_store)
 {
     struct nc_certificate *certs;
     uint32_t i, cert_count = 0;
@@ -768,7 +792,7 @@ nc_server_tls_load_trusted_certs(struct nc_server_tls_client_auth *client_auth, 
         cert_count = LY_ARRAY_COUNT(client_auth->ca_certs);
     } else if (client_auth->ca_certs_store == NC_STORE_TRUSTSTORE) {
         /* truststore */
-        if (nc_server_tls_truststore_ref_get_certs(client_auth->ca_cert_bag_ts_ref, &certs, &cert_count)) {
+        if (nc_server_tls_truststore_ref_get_certs(config, client_auth->ca_cert_bag_ts_ref, &certs, &cert_count)) {
             ERR(NULL, "Error getting certificate-authority certificates from the truststore reference \"%s\".", client_auth->ca_cert_bag_ts_ref);
             return 1;
         }
@@ -817,12 +841,14 @@ nc_server_tls_accept_check(int accept_ret, void *tls_session)
 /**
  * @brief Get the number of certificates in a certificate grouping.
  *
+ * @param[in] config Pinned server configuration to resolve truststore references in.
  * @param[in] client_auth Client authentication data to get the number of certificates from.
  * @param[out] cert_count Number of certificates in the grouping.
  * @return 0 on success, -1 on error.
  */
 static int
-nc_server_tls_get_num_certs(struct nc_server_tls_client_auth *client_auth, uint32_t *cert_count)
+nc_server_tls_get_num_certs(const struct nc_server_config *config, struct nc_server_tls_client_auth *client_auth,
+        uint32_t *cert_count)
 {
     uint32_t ca_count = 0, ee_count = 0;
     struct nc_certificate *certs;
@@ -832,7 +858,7 @@ nc_server_tls_get_num_certs(struct nc_server_tls_client_auth *client_auth, uint3
     if (client_auth->ca_certs_store == NC_STORE_LOCAL) {
         ca_count = LY_ARRAY_COUNT(client_auth->ca_certs);
     } else if (client_auth->ca_certs_store == NC_STORE_TRUSTSTORE) {
-        if (nc_server_tls_truststore_ref_get_certs(client_auth->ca_cert_bag_ts_ref, &certs, &ca_count)) {
+        if (nc_server_tls_truststore_ref_get_certs(config, client_auth->ca_cert_bag_ts_ref, &certs, &ca_count)) {
             ERR(NULL, "Getting CA certificates from the truststore reference \"%s\" failed.", client_auth->ca_cert_bag_ts_ref);
             return -1;
         }
@@ -841,7 +867,7 @@ nc_server_tls_get_num_certs(struct nc_server_tls_client_auth *client_auth, uint3
     if (client_auth->ee_certs_store == NC_STORE_LOCAL) {
         ee_count += LY_ARRAY_COUNT(client_auth->ee_certs);
     } else if (client_auth->ee_certs_store == NC_STORE_TRUSTSTORE) {
-        if (nc_server_tls_truststore_ref_get_certs(client_auth->ee_cert_bag_ts_ref, &certs, &ee_count)) {
+        if (nc_server_tls_truststore_ref_get_certs(config, client_auth->ee_cert_bag_ts_ref, &certs, &ee_count)) {
             ERR(NULL, "Getting end-entity certificates from the truststore reference \"%s\" failed.", client_auth->ee_cert_bag_ts_ref);
             return -1;
         }
@@ -860,6 +886,7 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     struct nc_endpt *referenced_endpt;
     void *tls_cfg, *srv_cert, *srv_pkey, *cert_store, *cipher_suites;
     uint32_t cert_count = 0, ref_cert_count = 0;
+    const struct nc_server_config *config = session->opts.server.config;
 
     tls_cfg = srv_cert = srv_pkey = cert_store = cipher_suites = NULL;
 
@@ -880,25 +907,25 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     }
 
     /* load server's key and certificate */
-    if (nc_server_tls_load_server_cert_key(opts, &srv_cert, &srv_pkey)) {
+    if (nc_server_tls_load_server_cert_key(config, opts, &srv_cert, &srv_pkey)) {
         ERR(session, "Loading server certificate and/or private key failed.");
         goto fail;
     }
 
     /* load trusted CA certificates */
-    if (nc_server_tls_load_trusted_certs(&opts->client_auth, cert_store)) {
+    if (nc_server_tls_load_trusted_certs(config, &opts->client_auth, cert_store)) {
         ERR(session, "Loading server CA certs failed.");
         goto fail;
     }
 
     /* load referenced endpoint's trusted CA certs if set */
     if (opts->referenced_endpt_name) {
-        if (nc_server_endpt_get(opts->referenced_endpt_name, &referenced_endpt)) {
+        if (nc_server_endpt_get(config, opts->referenced_endpt_name, &referenced_endpt)) {
             ERR(session, "Referenced endpoint \"%s\" not found.", opts->referenced_endpt_name);
             goto fail;
         }
 
-        if (nc_server_tls_load_trusted_certs(&referenced_endpt->opts.tls->client_auth, cert_store)) {
+        if (nc_server_tls_load_trusted_certs(config, &referenced_endpt->opts.tls->client_auth, cert_store)) {
             ERR(session, "Loading server CA certs from referenced endpoint failed.");
             goto fail;
         }
@@ -906,11 +933,11 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
 
     /* Check if there are no CA/end entity certs configured, which is a valid config.
      * However, that would imply not using TLS for auth, which is not (yet) supported */
-    if (nc_server_tls_get_num_certs(&opts->client_auth, &cert_count)) {
+    if (nc_server_tls_get_num_certs(config, &opts->client_auth, &cert_count)) {
         goto fail;
     }
     if (opts->referenced_endpt_name) {
-        if (nc_server_tls_get_num_certs(&referenced_endpt->opts.tls->client_auth, &ref_cert_count)) {
+        if (nc_server_tls_get_num_certs(config, &referenced_endpt->opts.tls->client_auth, &ref_cert_count)) {
             goto fail;
         }
         cert_count += ref_cert_count;

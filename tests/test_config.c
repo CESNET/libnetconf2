@@ -15,13 +15,17 @@
 
 #define _GNU_SOURCE
 
+#include <arpa/inet.h>
 #include <errno.h>
+#include <netinet/in.h>
 #include <pthread.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <cmocka.h>
@@ -1125,10 +1129,19 @@ test_ordered_list_move(void **state)
 /**
  * @brief Time in seconds the client stalls in its password callback.
  *
- * The server waits for the authentication while holding the configuration READ lock, so this has to be
- * longer than ::NC_CONFIG_LOCK_TIMEOUT (10 s) for the test to be meaningful.
+ * Has to be longer than ::NC_CONFIG_LOCK_TIMEOUT (10 s) so that a configuration update waiting for
+ * the whole authentication would be dropped instead of applied.
  */
 #define TEST_STALL_AUTH_SLEEP 13
+
+/** @brief Time in seconds the client stalls when only an in-flight handshake is needed. */
+#define TEST_STALL_AUTH_SLEEP_SHORT 5
+
+/** @brief Maximum time in msec anything done while a handshake is stalled may take. */
+#define TEST_NO_BLOCK_TIMEOUT 2000
+
+/** @brief Time in seconds the client stalls in its password callback, set by each test. */
+static unsigned int test_stall_auth_sleep = TEST_STALL_AUTH_SLEEP;
 
 /** @brief Time in seconds to wait for a Call Home client to report failed connection attempts. */
 #define TEST_CH_WATCH_TIME 4
@@ -1142,6 +1155,7 @@ struct test_ch_threads {
     pthread_t tids[TEST_CH_TID_MAX];
     uint32_t tid_count;
     char endpt[64];
+    char last_endpt[64];
 };
 
 /* acquire ctx cb for the Call Home dispatch */
@@ -1191,6 +1205,8 @@ test_ch_new_session_fail_cb(const char *client_name, const char *endpt_name, uin
         /* the endpoint of the very first failed attempt is the first one in the configuration */
         strncpy(threads->endpt, endpt_name, sizeof threads->endpt - 1);
     }
+    memset(threads->last_endpt, 0, sizeof threads->last_endpt);
+    strncpy(threads->last_endpt, endpt_name, sizeof threads->last_endpt - 1);
     for (i = 0; i < threads->tid_count; ++i) {
         if (pthread_equal(threads->tids[i], self)) {
             break;
@@ -1390,8 +1406,8 @@ test_stall_auth_password(const char *username, const char *hostname, void *priv)
     (void) hostname;
     (void) priv;
 
-    /* keep the server waiting for the authentication, it holds the configuration READ lock meanwhile */
-    sleep(TEST_STALL_AUTH_SLEEP);
+    /* keep the server waiting for the authentication */
+    sleep(test_stall_auth_sleep);
 
     /* a wrong password, the connection is expected to fail */
     return strdup("wrong");
@@ -1455,6 +1471,10 @@ test_config_update_during_auth(void **state)
     struct lyd_node *tree = NULL, *diff = NULL;
     struct ln2_test_ctx *test_ctx = *state;
     const struct lys_module *yang_mod;
+    struct timespec ts_start, ts_end;
+    int64_t elapsed_ms;
+
+    test_stall_auth_sleep = TEST_STALL_AUTH_SLEEP;
 
     yang_mod = ly_ctx_get_module_implemented(test_ctx->ctx, "yang");
     assert_non_null(yang_mod);
@@ -1489,15 +1509,320 @@ test_config_update_during_auth(void **state)
      * while holding the configuration READ lock */
     sleep(2);
 
-    /* this must not be silently dropped */
+    /* this must neither be silently dropped nor wait out the stalled authentication */
+    clock_gettime(CLOCK_MONOTONIC, &ts_start);
     ret = nc_server_config_setup_diff(diff);
     assert_int_equal(ret, 0);
+    clock_gettime(CLOCK_MONOTONIC, &ts_end);
+
+    elapsed_ms = ((int64_t)(ts_end.tv_sec - ts_start.tv_sec) * 1000) +
+            ((ts_end.tv_nsec - ts_start.tv_nsec) / 1000000);
+    assert_true(elapsed_ms < TEST_NO_BLOCK_TIMEOUT);
 
     for (i = 0; i < 2; i++) {
         pthread_join(tids[i], NULL);
     }
 
     lyd_free_all(diff);
+    lyd_free_all(tree);
+}
+
+/**
+ * @brief Create the YANG data of a listening SSH endpoint with a password-authenticated user.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Name of the endpoint.
+ * @param[in] port Port to listen on.
+ * @param[out] tree Created YANG data.
+ */
+static void
+test_create_stall_endpt_data(const struct ly_ctx *ctx, const char *endpt_name, uint16_t port,
+        struct lyd_node **tree)
+{
+    int ret;
+
+    ret = nc_server_config_add_address_port(ctx, endpt_name, NC_TI_SSH, "127.0.0.1", port, tree);
+    assert_int_equal(ret, 0);
+    ret = nc_server_config_add_ssh_hostkey(ctx, endpt_name, "hostkey", TESTS_DIR "/data/key_ecdsa",
+            NULL, tree);
+    assert_int_equal(ret, 0);
+    ret = nc_server_config_add_ssh_user_password(ctx, endpt_name, "stall", "correct", tree);
+    assert_int_equal(ret, 0);
+
+    /* add all the default nodes, the authentication timeout has to be longer than the stall */
+    ret = lyd_new_implicit_tree(*tree, LYD_IMPLICIT_NO_STATE, NULL);
+    assert_int_equal(ret, 0);
+}
+
+/**
+ * @brief Try to establish a TCP connection to a local port.
+ *
+ * @param[in] port Port to connect to.
+ * @return 0 if the connection was established, -1 if it was refused.
+ */
+static int
+test_tcp_connect(uint16_t port)
+{
+    int sock, r;
+    struct sockaddr_in addr = {0};
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    assert_true(sock > -1);
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    r = connect(sock, (struct sockaddr *)&addr, sizeof addr);
+    close(sock);
+
+    return r ? -1 : 0;
+}
+
+/**
+ * @brief Removing an endpoint must stop its listening socket right away.
+ *
+ * A stalled handshake keeps a reference to the configuration generation the endpoint belongs to, but
+ * the listening socket lives outside of it, so it is closed as soon as the update is applied.
+ */
+static void
+test_removed_endpt_stops_listening(void **state)
+{
+    int ret, i;
+    pthread_t tids[2];
+    struct lyd_node *tree = NULL;
+    struct ln2_test_ctx *test_ctx = *state;
+
+    test_stall_auth_sleep = TEST_STALL_AUTH_SLEEP_SHORT;
+
+    test_create_stall_endpt_data(test_ctx->ctx, "endpt", TEST_PORT, &tree);
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    /* the endpoint is listening now */
+    assert_int_equal(test_tcp_connect(TEST_PORT), 0);
+
+    ret = pthread_create(&tids[0], NULL, test_stall_auth_client_thread, test_ctx);
+    assert_int_equal(ret, 0);
+    ret = pthread_create(&tids[1], NULL, test_stall_auth_server_thread, test_ctx);
+    assert_int_equal(ret, 0);
+
+    /* let the key exchange finish, the server is now stalled in the authentication */
+    sleep(2);
+
+    /* remove all the endpoints, only the keystore and the truststore are left */
+    ret = nc_server_config_setup_data(test_ctx->test_data);
+    assert_int_equal(ret, 0);
+
+    /* the socket must be gone even though the stalled handshake still uses the old generation */
+    assert_int_equal(test_tcp_connect(TEST_PORT), -1);
+
+    for (i = 0; i < 2; i++) {
+        pthread_join(tids[i], NULL);
+    }
+
+    lyd_free_all(tree);
+}
+
+/**
+ * @brief The API-settable options must be settable while a handshake is in flight.
+ */
+static void
+test_api_setters_during_auth(void **state)
+{
+    int ret, i;
+    pthread_t tids[2];
+    struct lyd_node *tree = NULL;
+    struct ln2_test_ctx *test_ctx = *state;
+    struct timespec ts_start, ts_end;
+    int64_t elapsed_ms;
+
+    test_stall_auth_sleep = TEST_STALL_AUTH_SLEEP_SHORT;
+
+    test_create_stall_endpt_data(test_ctx->ctx, "endpt", TEST_PORT, &tree);
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    ret = pthread_create(&tids[0], NULL, test_stall_auth_client_thread, test_ctx);
+    assert_int_equal(ret, 0);
+    ret = pthread_create(&tids[1], NULL, test_stall_auth_server_thread, test_ctx);
+    assert_int_equal(ret, 0);
+
+    /* let the key exchange finish, the server is now stalled in the authentication */
+    sleep(2);
+
+    clock_gettime(CLOCK_MONOTONIC, &ts_start);
+
+    ret = nc_server_ssh_set_protocol_string("test");
+    assert_int_equal(ret, 0);
+    nc_server_tls_set_verify_clb(NULL);
+    /* returns an error without libpam support, which is fine, it must just not block */
+    nc_server_ssh_set_pam_conf_filename("netconf");
+    ret = nc_server_ssh_set_authkey_path_format("/tmp/%u/authorized_keys");
+    assert_int_equal(ret, 0);
+    ret = nc_server_set_unix_socket_dir("/tmp");
+    assert_int_equal(ret, 0);
+
+    clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    elapsed_ms = ((int64_t)(ts_end.tv_sec - ts_start.tv_sec) * 1000) +
+            ((ts_end.tv_nsec - ts_start.tv_nsec) / 1000000);
+    assert_true(elapsed_ms < TEST_NO_BLOCK_TIMEOUT);
+
+    for (i = 0; i < 2; i++) {
+        pthread_join(tids[i], NULL);
+    }
+
+    lyd_free_all(tree);
+}
+
+/**
+ * @brief Wait until the Call Home client reports a failed attempt on the given endpoint.
+ *
+ * @param[in] threads Call Home thread tracking data.
+ * @param[in] endpt_name Expected endpoint name.
+ */
+static void
+test_ch_wait_for_endpt(struct test_ch_threads *threads, const char *endpt_name)
+{
+    int ret;
+    struct timespec ts;
+
+    pthread_mutex_lock(&threads->lock);
+    while (strcmp(threads->last_endpt, endpt_name)) {
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 10;
+        ret = pthread_cond_timedwait(&threads->cond, &threads->lock, &ts);
+        assert_int_equal(ret, 0);
+    }
+    pthread_mutex_unlock(&threads->lock);
+}
+
+/**
+ * @brief A running Call Home thread must survive a configuration swap and pick up the new endpoints.
+ */
+static void
+test_ch_survives_config_swap(void **state)
+{
+    int ret;
+    uint32_t tid_count;
+    struct lyd_node *tree = NULL, *tree2 = NULL;
+    struct ln2_test_ctx *test_ctx = *state;
+    struct test_ch_threads threads = {0};
+
+    pthread_mutex_init(&threads.lock, NULL);
+    pthread_cond_init(&threads.cond, NULL);
+
+    /* a client with a single endpoint that can never connect anywhere */
+    test_create_ch_endpt_data(test_ctx->ctx, "ch", "first", &tree);
+    ret = nc_server_config_add_ch_persistent(test_ctx->ctx, "ch", &tree);
+    assert_int_equal(ret, 0);
+    ret = nc_server_config_add_ch_reconnect_strategy(test_ctx->ctx, "ch", NC_CH_FIRST_LISTED, 1, 3, &tree);
+    assert_int_equal(ret, 0);
+
+    nc_server_ch_set_dispatch_data(test_ch_acquire_ctx_cb, test_ch_release_ctx_cb, test_ctx,
+            test_ch_new_session_cb, NULL);
+    nc_server_ch_set_new_session_fail_cb(test_ch_new_session_fail_cb, &threads);
+
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    /* the thread is running and attempting to connect to the only endpoint */
+    test_ch_wait_for_endpt(&threads, "first");
+
+    pthread_mutex_lock(&threads.lock);
+    assert_int_equal(threads.tid_count, 1);
+    pthread_mutex_unlock(&threads.lock);
+
+    /* replace the whole configuration, the client keeps its name but gets a different endpoint */
+    test_create_ch_endpt_data(test_ctx->ctx, "ch", "second", &tree2);
+    ret = nc_server_config_add_ch_persistent(test_ctx->ctx, "ch", &tree2);
+    assert_int_equal(ret, 0);
+    ret = nc_server_config_add_ch_reconnect_strategy(test_ctx->ctx, "ch", NC_CH_FIRST_LISTED, 1, 3, &tree2);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_data(tree2);
+    assert_int_equal(ret, 0);
+
+    /* the very same thread must pick the new endpoint up */
+    test_ch_wait_for_endpt(&threads, "second");
+
+    pthread_mutex_lock(&threads.lock);
+    tid_count = threads.tid_count;
+    pthread_mutex_unlock(&threads.lock);
+    assert_int_equal(tid_count, 1);
+
+    lyd_free_all(tree2);
+    lyd_free_all(tree);
+    pthread_cond_destroy(&threads.cond);
+    pthread_mutex_destroy(&threads.lock);
+}
+
+/** @brief Number of threads applying the configuration concurrently. */
+#define TEST_APPLY_THREAD_COUNT 4
+
+/** @brief Number of configuration updates each applying thread performs. */
+#define TEST_APPLY_COUNT 10
+
+struct test_apply_arg {
+    struct ln2_test_ctx *test_ctx;
+    struct lyd_node *tree;
+};
+
+static void *
+test_apply_thread(void *arg)
+{
+    struct test_apply_arg *apply_arg = arg;
+    int ret, i;
+
+    for (i = 0; i < TEST_APPLY_COUNT; ++i) {
+        ret = nc_server_config_setup_data(apply_arg->tree);
+        assert_int_equal(ret, 0);
+    }
+
+    return NULL;
+}
+
+/**
+ * @brief Several threads applying the configuration while a handshake is stalled.
+ *
+ * Every apply publishes a new configuration generation while the stalled handshake holds a reference
+ * to an older one, so the valgrind twin of this test is what actually checks the refcounting.
+ */
+static void
+test_concurrent_apply_and_accept(void **state)
+{
+    int ret, i;
+    pthread_t tids[2 + TEST_APPLY_THREAD_COUNT];
+    struct lyd_node *tree = NULL;
+    struct ln2_test_ctx *test_ctx = *state;
+    struct test_apply_arg apply_arg;
+
+    test_stall_auth_sleep = TEST_STALL_AUTH_SLEEP_SHORT;
+
+    test_create_stall_endpt_data(test_ctx->ctx, "endpt", TEST_PORT, &tree);
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    apply_arg.test_ctx = test_ctx;
+    apply_arg.tree = tree;
+
+    ret = pthread_create(&tids[0], NULL, test_stall_auth_client_thread, test_ctx);
+    assert_int_equal(ret, 0);
+    ret = pthread_create(&tids[1], NULL, test_stall_auth_server_thread, test_ctx);
+    assert_int_equal(ret, 0);
+
+    /* let the key exchange finish, the server is now stalled in the authentication */
+    sleep(2);
+
+    for (i = 0; i < TEST_APPLY_THREAD_COUNT; ++i) {
+        ret = pthread_create(&tids[2 + i], NULL, test_apply_thread, &apply_arg);
+        assert_int_equal(ret, 0);
+    }
+
+    for (i = 0; i < 2 + TEST_APPLY_THREAD_COUNT; i++) {
+        pthread_join(tids[i], NULL);
+    }
+
     lyd_free_all(tree);
 }
 
@@ -1559,6 +1884,10 @@ main(void)
         cmocka_unit_test_setup_teardown(test_ch_dispatch_not_duplicated, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_ch_endpoint_order, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_config_update_during_auth, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_removed_endpt_stops_listening, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_api_setters_during_auth, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_ch_survives_config_swap, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_concurrent_apply_and_accept, setup_f, ln2_glob_test_teardown),
     };
 
     /* try to get ports from the environment, otherwise use the default */
