@@ -805,14 +805,17 @@ nc_server_tls_accept_check(int accept_ret, void *tls_session)
 /**
  * @brief Get the number of certificates in a certificate grouping.
  *
- * @param[in] certs_grp Certificate grouping to get the number of certificates from.
- * @return Number of certificates in the grouping, or -1 on error.
+ * @param[in] client_auth Client authentication data to get the number of certificates from.
+ * @param[out] cert_count Number of certificates in the grouping.
+ * @return 0 on success, -1 on error.
  */
-static uint32_t
-nc_server_tls_get_num_certs(struct nc_server_tls_client_auth *client_auth)
+static int
+nc_server_tls_get_num_certs(struct nc_server_tls_client_auth *client_auth, uint32_t *cert_count)
 {
     uint32_t ca_count = 0, ee_count = 0;
     struct nc_certificate *certs;
+
+    *cert_count = 0;
 
     if (client_auth->ca_certs_store == NC_STORE_LOCAL) {
         ca_count = LY_ARRAY_COUNT(client_auth->ca_certs);
@@ -832,7 +835,8 @@ nc_server_tls_get_num_certs(struct nc_server_tls_client_auth *client_auth)
         }
     }
 
-    return ca_count + ee_count;
+    *cert_count = ca_count + ee_count;
+    return 0;
 }
 
 int
@@ -843,7 +847,7 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     struct nc_tls_verify_cb_data cb_data = {0};
     struct nc_endpt *referenced_endpt;
     void *tls_cfg, *srv_cert, *srv_pkey, *cert_store, *cipher_suites;
-    uint32_t cert_count = 0;
+    uint32_t cert_count = 0, ref_cert_count = 0;
 
     tls_cfg = srv_cert = srv_pkey = cert_store = cipher_suites = NULL;
 
@@ -890,12 +894,16 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
 
     /* Check if there are no CA/end entity certs configured, which is a valid config.
      * However, that would imply not using TLS for auth, which is not (yet) supported */
-    if (!opts->referenced_endpt_name) {
-        cert_count = nc_server_tls_get_num_certs(&opts->client_auth);
-    } else {
-        cert_count = nc_server_tls_get_num_certs(&opts->client_auth) + nc_server_tls_get_num_certs(&referenced_endpt->opts.tls->client_auth);
+    if (nc_server_tls_get_num_certs(&opts->client_auth, &cert_count)) {
+        goto fail;
     }
-    if (cert_count <= 0) {
+    if (opts->referenced_endpt_name) {
+        if (nc_server_tls_get_num_certs(&referenced_endpt->opts.tls->client_auth, &ref_cert_count)) {
+            goto fail;
+        }
+        cert_count += ref_cert_count;
+    }
+    if (!cert_count) {
         ERR(session, "Neither CA nor end-entity certificates configured.");
         goto fail;
     }
