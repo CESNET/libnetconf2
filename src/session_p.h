@@ -1447,7 +1447,7 @@ int nc_sock_bind_inet(int sock, const char *address, uint16_t port, int is_ipv4)
  * @return Connected socket or -1 on error.
  */
 int nc_sock_connect(const char *src_addr, uint16_t src_port, const char *dst_addr, uint16_t dst_port, int timeout_ms,
-        struct nc_keepalives *ka, int *sock_pending, char **ip_host);
+        const struct nc_keepalives *ka, int *sock_pending, char **ip_host);
 
 /**
  * @brief Accept a new socket connection.
@@ -1503,7 +1503,7 @@ int nc_connect_unix_session(struct nc_session *session, int sock, const char *us
  * @param[out] endpt Pointer to the endpoint structure.
  * @return 0 on success, 1 on failure.
  */
-int nc_server_endpt_get(const struct nc_server_config *config, const char *name, struct nc_endpt **endpt);
+int nc_server_endpt_get(const struct nc_server_config *config, const char *name, const struct nc_endpt **endpt);
 
 /**
  * @brief Add a client Call Home bind, listen on it.

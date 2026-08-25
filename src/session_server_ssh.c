@@ -75,7 +75,7 @@ nc_ssh_check_local_user_support(struct nc_session *session)
 struct nc_auth_client *
 nc_ssh_find_auth_client(struct nc_server_ssh_opts *opts, const char *user, struct nc_session *session)
 {
-    struct nc_endpt *referenced_endpt;
+    const struct nc_endpt *referenced_endpt;
     LY_ARRAY_COUNT_TYPE u;
 
     if (!user) {

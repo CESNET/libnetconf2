@@ -526,7 +526,7 @@ _nc_server_tls_cert_to_name(const struct nc_server_config *config, struct nc_ser
         void *cert_chain, char **username)
 {
     int rc = 1;
-    struct nc_endpt *referenced_endpt;
+    const struct nc_endpt *referenced_endpt;
     struct nc_ctn *ctn;
 
     for (ctn = opts->ctn; ctn; ctn = ctn->next) {
@@ -601,7 +601,7 @@ int
 nc_server_tls_verify_peer_cert(void *peer_cert, struct nc_tls_verify_cb_data *cb_data)
 {
     int rc;
-    struct nc_endpt *referenced_endpt;
+    const struct nc_endpt *referenced_endpt;
     struct nc_server_tls_opts *opts = cb_data->opts;
     const struct nc_server_config *config = cb_data->session->opts.server.config;
 
@@ -883,7 +883,7 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     int rc, timeouted = 0;
     struct timespec ts_timeout;
     struct nc_tls_verify_cb_data cb_data = {0};
-    struct nc_endpt *referenced_endpt;
+    const struct nc_endpt *referenced_endpt;
     void *tls_cfg, *srv_cert, *srv_pkey, *cert_store, *cipher_suites;
     uint32_t cert_count = 0, ref_cert_count = 0;
     const struct nc_server_config *config = session->opts.server.config;

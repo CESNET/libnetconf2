@@ -1665,7 +1665,7 @@ cleanup:
 
 int
 nc_sock_connect(const char *src_addr, uint16_t src_port, const char *dst_addr, uint16_t dst_port, int timeout_ms,
-        struct nc_keepalives *ka, int *sock_pending, char **ip_host)
+        const struct nc_keepalives *ka, int *sock_pending, char **ip_host)
 {
     int i, opt;
     int sock = sock_pending ? *sock_pending : -1;
