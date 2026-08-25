@@ -251,7 +251,7 @@ nc_server_ch_client_get_pinned(const struct nc_server_config *config, const char
 #endif /* NC_ENABLED_SSH_TLS */
 
 int
-nc_server_endpt_get(const struct nc_server_config *config, const char *name, struct nc_endpt **endpt)
+nc_server_endpt_get(const struct nc_server_config *config, const char *name, const struct nc_endpt **endpt)
 {
     LY_ARRAY_COUNT_TYPE u;
 
@@ -263,7 +263,7 @@ nc_server_endpt_get(const struct nc_server_config *config, const char *name, str
 
     LY_ARRAY_FOR(config->endpts, u) {
         if (config->endpts[u].name && !strcmp(config->endpts[u].name, name)) {
-            *endpt = (struct nc_endpt *)&config->endpts[u];
+            *endpt = &config->endpts[u];
             return 0;
         }
     }
@@ -3644,7 +3644,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
     }
 
     /* configure keepalives */
-    if (nc_sock_configure_ka(sock, (struct nc_keepalives *)&config->endpts[endpt_idx].ka)) {
+    if (nc_sock_configure_ka(sock, &config->endpts[endpt_idx].ka)) {
         msgtype = NC_MSG_ERROR;
         goto cleanup;
     }
@@ -3827,7 +3827,7 @@ nc_connect_ch_endpt(const struct nc_server_config *config, const struct nc_ch_en
     char *ip_host = NULL;
 
     sock = nc_sock_connect(endpt->src_addr, endpt->src_port, endpt->dst_addr, endpt->dst_port,
-            NC_CH_CONNECT_TIMEOUT, (struct nc_keepalives *)&endpt->ka, cur_sock_pending, &ip_host);
+            NC_CH_CONNECT_TIMEOUT, &endpt->ka, cur_sock_pending, &ip_host);
     if (sock < 0) {
         return NC_MSG_ERROR;
     }
