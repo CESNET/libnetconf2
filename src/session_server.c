@@ -987,6 +987,12 @@ nc_sock_accept_first(struct pollfd *pfd, uint16_t pfd_count, int *client_sock,
                     /* another thread already accepted the connection, try another one */
                     continue;
                 }
+                if ((errno == EBADF) || (errno == ENOTSOCK)) {
+                    /* the listening socket was closed by a configuration apply after we copied it
+                     * out of the registry, which is a normal outcome here, try another one */
+                    DBG(NULL, "Accept on an already closed listening socket, skipping it.");
+                    continue;
+                }
                 ERR(NULL, "Accept failed (%s).", strerror(errno));
                 return -1;
             }
@@ -1103,8 +1109,16 @@ cleanup:
  * The listening socket registry is only read to build the local poll arrays, the ::poll() itself
  * and the ::accept() run with no lock held.
  *
- * @note A connection accepted on a bind that @p config does not contain is dropped. That can only
- * happen for a bind registered after @p config was read, in which case the next call accepts it.
+ * @note Only the sockets of endpoints that @p config contains are polled. A socket registered for
+ * an endpoint that @p config does not know (it was registered or its endpoint renamed after
+ * @p config was read) is skipped, its pending connections are left in the listen backlog for a
+ * call with a newer configuration pinned. That way no connection is ever accepted just to be
+ * dropped again because there is no endpoint to serve it with.
+ *
+ * @note Since the registry lock is not held while polling, a configuration apply may close one of
+ * the sockets meanwhile. Polling and accepting a closed descriptor is handled (the socket is simply
+ * skipped), but the descriptor number may also have been reused by then, in which case the
+ * connection is accepted on and logged with whatever the endpoint of the new socket is.
  *
  * @param[in] config Pinned server configuration used to look the accepting endpoint up.
  * @param[in] timeout Timeout for accepting a connection.
@@ -1122,8 +1136,9 @@ nc_server_accept_binds(const struct nc_server_config *config, int timeout, char 
     uint16_t pollfd_count = 0, fd_idx = 0, i, bind_count = 0;
     LY_ARRAY_COUNT_TYPE u;
     int ret = 1, binds_locked = 0;
-    char **addr_map = NULL, **name_map = NULL;
+    char **addr_map = NULL;
     uint16_t *port_map = NULL;
+    LY_ARRAY_COUNT_TYPE *endpt_map = NULL;
 
     /* BINDS LOCK */
     if (nc_mutex_lock(&server_opts.binds_lock, NC_BINDS_LOCK_TIMEOUT, __func__) != 1) {
@@ -1145,19 +1160,30 @@ nc_server_accept_binds(const struct nc_server_config *config, int timeout, char 
     NC_CHECK_ERRMEM_GOTO(!addr_map, ret = -1, cleanup);
     port_map = malloc(bind_count * sizeof *port_map);
     NC_CHECK_ERRMEM_GOTO(!port_map, ret = -1, cleanup);
-    name_map = calloc(bind_count, sizeof *name_map);
-    NC_CHECK_ERRMEM_GOTO(!name_map, ret = -1, cleanup);
+    endpt_map = malloc(bind_count * sizeof *endpt_map);
+    NC_CHECK_ERRMEM_GOTO(!endpt_map, ret = -1, cleanup);
 
     for (i = 0; i < bind_count; ++i) {
+        /* resolve the endpoint of the bind in the pinned configuration, it is immutable so the
+         * index stays valid for as long as the configuration is pinned */
+        LY_ARRAY_FOR(config->endpts, u) {
+            if (!strcmp(config->endpts[u].name, server_opts.binds[i].endpt_name)) {
+                break;
+            }
+        }
+        if (u == LY_ARRAY_COUNT(config->endpts)) {
+            /* we would have no endpoint to serve a connection accepted here with, do not poll it */
+            continue;
+        }
+        endpt_map[pollfd_count] = u;
+
         pollfds[pollfd_count].fd = server_opts.binds[i].sock;
         pollfds[pollfd_count].events = POLLIN;
         pollfds[pollfd_count].revents = 0;
 
-        /* the registry entries may be freed once the lock is released, so copy the strings */
+        /* the registry entries may be freed once the lock is released, so copy the address */
         addr_map[pollfd_count] = strdup(server_opts.binds[i].address);
         NC_CHECK_ERRMEM_GOTO(!addr_map[pollfd_count], ret = -1, cleanup);
-        name_map[pollfd_count] = strdup(server_opts.binds[i].endpt_name);
-        NC_CHECK_ERRMEM_GOTO(!name_map[pollfd_count], ret = -1, cleanup);
         port_map[pollfd_count] = server_opts.binds[i].port;
 
         ++pollfd_count;
@@ -1167,29 +1193,19 @@ nc_server_accept_binds(const struct nc_server_config *config, int timeout, char 
     nc_mutex_unlock(&server_opts.binds_lock, __func__);
     binds_locked = 0;
 
+    if (!pollfd_count) {
+        /* every registered socket belongs to an endpoint the pinned configuration does not have,
+         * report a timeout right away and let the caller retry with a newer configuration */
+        VRB(NULL, "No listening socket of the pinned configuration to accept on.");
+        ret = 0;
+        goto cleanup;
+    }
+
     /* accept a new connection on any of the sockets */
     ret = nc_sock_accept_pollfds(pollfds, pollfd_count, (const char **)addr_map, port_map, timeout, host, port,
             &fd_idx, sock);
-    if (ret > 0) {
-        /* map the endpoint name back to an endpoint of the pinned configuration */
-        LY_ARRAY_FOR(config->endpts, u) {
-            if (!strcmp(config->endpts[u].name, name_map[fd_idx])) {
-                break;
-            }
-        }
-        if (u == LY_ARRAY_COUNT(config->endpts)) {
-            /* the endpoint is not in the configuration we are working with, drop the connection */
-            VRB(NULL, "Endpoint \"%s\" not found, dropping the accepted connection.", name_map[fd_idx]);
-            close(*sock);
-            *sock = -1;
-            if (host) {
-                free(*host);
-                *host = NULL;
-            }
-            ret = 0;
-        } else if (idx) {
-            *idx = u;
-        }
+    if ((ret > 0) && idx) {
+        *idx = endpt_map[fd_idx];
     }
 
 cleanup:
@@ -1197,18 +1213,15 @@ cleanup:
         /* BINDS UNLOCK */
         nc_mutex_unlock(&server_opts.binds_lock, __func__);
     }
-    for (i = 0; i < bind_count; ++i) {
-        if (addr_map) {
+    if (addr_map) {
+        for (i = 0; i < bind_count; ++i) {
             free(addr_map[i]);
-        }
-        if (name_map) {
-            free(name_map[i]);
         }
     }
     free(pollfds);
     free(addr_map);
     free(port_map);
-    free(name_map);
+    free(endpt_map);
     return ret;
 }
 
@@ -3025,17 +3038,6 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
 }
 
 /**
- * @brief Description of a listening socket required by a server configuration.
- */
-struct nc_bind_desc {
-    const struct nc_endpt *endpt;   /**< Endpoint the listening socket belongs to. */
-    char *address;                  /**< Resolved address, the full socket path for a UNIX endpoint. */
-    uint16_t port;                  /**< Port number, 0 for a UNIX socket. */
-    int reused;                     /**< Whether an already registered socket is being reused. */
-    int sock;                       /**< Newly opened listening socket, -1 if none was opened. */
-};
-
-/**
  * @brief Start listening on a socket of an endpoint bind.
  *
  * @param[in] endpt Endpoint the bind belongs to.
@@ -3205,6 +3207,7 @@ nc_server_bind_descs_free(struct nc_bind_desc *descs)
     LY_ARRAY_FOR(descs, u) {
         nc_server_bind_desc_close(&descs[u]);
         free(descs[u].address);
+        free(descs[u].rename);
     }
     LY_ARRAY_FREE(descs);
 }
@@ -3236,15 +3239,15 @@ nc_server_binds_reconcile(const struct nc_server_config *config)
                 continue;
             }
 
-            /* the socket stays open, but the endpoint owning it may have been renamed */
-            if (strcmp(server_opts.binds[v].endpt_name, descs[u].endpt->name)) {
-                endpt_name = strdup(descs[u].endpt->name);
-                NC_CHECK_ERRMEM_GOTO(!endpt_name, rc = 1, cleanup);
-                free(server_opts.binds[v].endpt_name);
-                server_opts.binds[v].endpt_name = endpt_name;
-            }
-
             descs[u].reused = 1;
+            descs[u].entry_idx = v;
+
+            /* the socket stays open, but the endpoint owning it may have been renamed, prepare the
+             * new name and store it only once nothing can fail anymore */
+            if (strcmp(server_opts.binds[v].endpt_name, descs[u].endpt->name)) {
+                descs[u].rename = strdup(descs[u].endpt->name);
+                NC_CHECK_ERRMEM_GOTO(!descs[u].rename, rc = 1, cleanup);
+            }
             break;
         }
 
@@ -3299,6 +3302,18 @@ nc_server_binds_reconcile(const struct nc_server_config *config)
         descs[u].sock = -1;
         LY_ARRAY_INCREMENT(server_opts.binds);
         ++added;
+    }
+
+    /* the registry entries did not move, so store the new endpoint names now that nothing can fail */
+    LY_ARRAY_FOR(descs, u) {
+        if (!descs[u].rename) {
+            continue;
+        }
+
+        entry = &server_opts.binds[descs[u].entry_idx];
+        free(entry->endpt_name);
+        entry->endpt_name = descs[u].rename;
+        descs[u].rename = NULL;
     }
 
     /* stop listening on the sockets the configuration no longer contains */

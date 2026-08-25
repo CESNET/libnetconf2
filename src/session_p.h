@@ -848,10 +848,11 @@ struct nc_server_opts {
     pthread_mutex_t binds_lock;         /**< Lock for the listening socket registry. */
 
     /**
-     * @brief Entry of the listening socket registry.
+     * @brief Entry of the listening socket registry, one per socket the server is listening on.
      *
      * A listening socket is runtime state, not configuration, so it is kept out of
      * ::nc_server_config, which must not be written to while it is being read by an accept path.
+     * See ::nc_bind_desc for the difference between a registry entry and a bind description.
      */
     struct nc_bind_entry {
         char *endpt_name;       /**< Name of the endpoint the listening socket belongs to. */
@@ -931,6 +932,42 @@ struct nc_server_opts {
     /* ACCESS locked - separate lock to allow concurrent reads of the config while an update is being applied */
     pthread_mutex_t config_update_lock; /**< Lock for synchronizing configuration updates, used to wait for pending
                                              configuration update to complete before accepting a new one. */
+};
+
+/**
+ * @brief Description of a single listening socket required by a server configuration generation.
+ *
+ * There are three representations of a listening socket in the server, each with a different
+ * lifetime and owner:
+ *
+ * - ::nc_bind is the configured one. It is part of ::nc_server_config, so it is immutable and it
+ *   only holds what the YANG data say - for a UNIX endpoint that is a possibly relative socket path
+ *   and no port at all.
+ * - ::nc_bind_entry is the live one. It is an entry of the listening socket registry in
+ *   ::nc_server_opts.binds and it owns the open socket FD. Since sockets must survive a
+ *   configuration change untouched (a session may be in the middle of being accepted on one), they
+ *   cannot live in a configuration generation that is replaced on every apply.
+ * - ::nc_bind_desc, this structure, is the transient one. It is the resolved and flattened form of
+ *   all the ::nc_bind of a single generation, built by an applier and thrown away once the apply is
+ *   over.
+ *
+ * The description exists because reconciling the registry with a new generation needs data that a
+ * ::nc_bind does not have and that must not be computed with the registry lock held.
+ *
+ * So an apply (::nc_server_binds_reconcile()) builds the descriptions of the new generation with no lock held, matches
+ * them against the registry entries, opens the sockets that are missing and closes the entries that no description matches.
+ * Everything that can fail is done into the descriptions first, the registry itself is only ever modified by steps
+ * that cannot fail anymore, so a failed apply leaves the registry exactly as it was.
+ */
+struct nc_bind_desc {
+    const struct nc_endpt *endpt;   /**< Endpoint the listening socket belongs to. */
+    char *address;                  /**< Resolved address, the full socket path for a UNIX endpoint. */
+    uint16_t port;                  /**< Port number, 0 for a UNIX socket. */
+    int reused;                     /**< Whether an already registered socket is being reused. */
+    LY_ARRAY_COUNT_TYPE entry_idx;  /**< Index of the reused registry entry, valid only if @p reused. */
+    char *rename;                   /**< New endpoint name to store into the reused registry entry,
+                                         NULL if the endpoint was not renamed. */
+    int sock;                       /**< Newly opened listening socket, -1 if none was opened. */
 };
 
 /**
