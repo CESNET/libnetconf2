@@ -821,7 +821,7 @@ nc_server_ssh_str_append(const char src_c, const char *src_str, int *size, int *
 static int
 nc_server_ssh_get_system_keys_path(const char *username, char **out_path)
 {
-    int ret = 0, i, have_percent = 0, size = 0, idx = 0;
+    int ret = 0, i, have_percent = 0, size = 0, idx = 0, fmt_set = 0;
     char *path_fmt = NULL;
     char *path = NULL, *buf = NULL, *uid = NULL;
     struct passwd *pw, pw_buf;
@@ -832,15 +832,17 @@ nc_server_ssh_get_system_keys_path(const char *username, char **out_path)
         return 1;
     }
     if (server_opts.authkey_path_fmt) {
+        fmt_set = 1;
         path_fmt = strdup(server_opts.authkey_path_fmt);
     }
     /* OPTS READ UNLOCK */
     nc_rwlock_unlock(&server_opts.opts_lock, __func__);
 
-    if (!path_fmt) {
+    if (!fmt_set) {
         ERR(NULL, "System public keys path format not set.");
         return 1;
     }
+    NC_CHECK_ERRMEM_RET(!path_fmt, 1);
 
     /* check if the path format contains any tokens */
     if (strstr(path_fmt, "%h") || strstr(path_fmt, "%U") || strstr(path_fmt, "%u") || strstr(path_fmt, "%%")) {

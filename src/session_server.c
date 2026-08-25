@@ -578,25 +578,25 @@ fail:
 /**
  * @brief Construct the full path to the UNIX socket.
  *
- * @note The options read lock must be held.
+ * @note Resolves the paths on the filesystem, so no lock may be held.
  *
+ * @param[in] dir Base directory the socket must reside in, NULL if none is set.
  * @param[in] filename Name of the socket file.
  * @param[out] path Constructed full path to the UNIX socket (must be freed by the caller).
  * @return 0 on success, 1 on error.
  */
 static int
-nc_session_unix_construct_socket_path(const char *filename, char **path)
+nc_session_unix_construct_socket_path(const char *dir, const char *filename, char **path)
 {
     int rc = 0, is_prefix, is_subdir, is_exact;
     char *full_path = NULL, *real_base_dir = NULL, *last_slash = NULL, *sock_dir_path = NULL;
     char *real_target_dir = NULL;
     struct sockaddr_un sun;
     size_t dir_len, base_len;
-    const char *dir = server_opts.unix_socket_dir;
 
     if (!dir) {
         ERR(NULL, "Cannot construct UNIX socket path \"%s\""
-                " (no base directory set, see nc_set_unix_socket_dir()).", filename);
+                " (no base directory set, see nc_server_set_unix_socket_dir()).", filename);
         return 1;
     }
 
@@ -686,27 +686,28 @@ cleanup:
 static char *
 nc_server_unix_get_socket_path(const struct nc_endpt *endpt)
 {
+    int rc = 0;
     LY_ARRAY_COUNT_TYPE i;
     const char *p = NULL;
-    char *path = NULL;
+    char *path = NULL, *sock_dir = NULL;
 
     /* OPTS READ LOCK */
     if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_READ, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
         return NULL;
     }
 
-    /* check the endpoints options for type of socket path */
-    if (endpt->opts.unix->path_type == NC_UNIX_SOCKET_PATH_FILE) {
-        /* UNIX socket endpoints always have only one bind, get its address */
-        p = endpt->binds[0].address;
-
-        /* it is relative, we need to construct the full path */
-        if (nc_session_unix_construct_socket_path(p, &path)) {
-            path = NULL;
-            goto cleanup;
+    /* only copy what is needed out of the options, resolving the path touches the filesystem and
+     * the options lock must not be held for that */
+    switch (endpt->opts.unix->path_type) {
+    case NC_UNIX_SOCKET_PATH_FILE:
+        /* the address in the bind is relative to the base directory */
+        if (server_opts.unix_socket_dir) {
+            sock_dir = strdup(server_opts.unix_socket_dir);
+            NC_CHECK_ERRMEM_GOTO(!sock_dir, rc = 1, cleanup);
         }
-    } else if (endpt->opts.unix->path_type == NC_UNIX_SOCKET_PATH_HIDDEN) {
-        /* search the mappings, no need to construct the path */
+        break;
+    case NC_UNIX_SOCKET_PATH_HIDDEN:
+        /* search the mappings, they store the full path so there is nothing to construct */
         LY_ARRAY_FOR(server_opts.unix_paths, i) {
             if (!strcmp(server_opts.unix_paths[i].endpt_name, endpt->name)) {
                 p = server_opts.unix_paths[i].path;
@@ -715,18 +716,38 @@ nc_server_unix_get_socket_path(const struct nc_endpt *endpt)
         }
         if (!p) {
             ERR(NULL, "UNIX socket path mapping for endpoint \"%s\" not found.", endpt->name);
+            rc = 1;
             goto cleanup;
         }
 
         path = strdup(p);
-        NC_CHECK_ERRMEM_GOTO(!path, path = NULL, cleanup);
-    } else {
+        NC_CHECK_ERRMEM_GOTO(!path, rc = 1, cleanup);
+        break;
+    default:
         ERRINT;
+        rc = 1;
+        break;
     }
 
 cleanup:
     /* OPTS READ UNLOCK */
     nc_rwlock_unlock(&server_opts.opts_lock, __func__);
+
+    if (rc) {
+        free(sock_dir);
+        free(path);
+        return NULL;
+    }
+    if (path) {
+        /* the hidden path is used as it is */
+        return path;
+    }
+
+    /* UNIX socket endpoints always have only one bind, its address is the socket file name */
+    if (nc_session_unix_construct_socket_path(sock_dir, endpt->binds[0].address, &path)) {
+        path = NULL;
+    }
+    free(sock_dir);
     return path;
 }
 
@@ -1533,7 +1554,7 @@ nc_server_init(void)
 
     if (nc_tls_backend_init_wrap()) {
         ERR(NULL, "%s: failed to init the SSL library backend.", __func__);
-        return -1;
+        goto error;
     }
 
     /* optional for dynamic library, mandatory for static */
@@ -1558,6 +1579,10 @@ nc_server_init(void)
     return 0;
 
 error:
+    /* the server is not initialized, do not leave a configuration generation behind */
+    nc_server_config_release(server_opts.config);
+    server_opts.config = NULL;
+    ATOMIC_STORE_RELAXED(server_opts.new_session_id, 0);
     return -1;
 }
 
@@ -5595,6 +5620,8 @@ nc_server_set_unix_socket_dir(const char *dir)
 {
     int rc = 0;
 
+    NC_CHECK_ARG_RET(NULL, dir, 1);
+
     /* OPTS WRITE LOCK */
     if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_WRITE, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
         return 1;
@@ -5614,6 +5641,8 @@ API int
 nc_server_get_unix_socket_dir(char **dir)
 {
     int rc = 0;
+
+    NC_CHECK_ARG_RET(NULL, dir, 1);
 
     *dir = NULL;
 

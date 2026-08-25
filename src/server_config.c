@@ -504,6 +504,9 @@ nc_server_config_truststore_free(struct nc_truststore *ts)
 /**
  * @brief Free the data of a server configuration generation.
  *
+ * @note Never call this directly on a published generation, dropping the last reference with
+ * ::nc_server_config_release() is the only way a generation may be freed.
+ *
  * @param[in] config Server configuration to free.
  */
 static void
@@ -6348,9 +6351,10 @@ nc_server_config_setup_diff(const struct lyd_node *data)
             ERR(NULL, "Starting to listen on new endpoints failed."), cleanup);
 
 #ifdef NC_ENABLED_SSH_TLS
-    /* dispatch new call-home threads */
+    /* dispatch new call-home threads, the listening sockets are already reconciled with the new
+     * generation so a failure here has to be rolled back */
     NC_CHECK_ERR_GOTO(ret = nc_server_config_reconcile_chclients_dispatch(config_copy),
-            ERR(NULL, "Dispatching new call-home threads failed."), cleanup);
+            ERR(NULL, "Dispatching new call-home threads failed."), rollback);
 #endif /* NC_ENABLED_SSH_TLS */
 
     /* CONFIG WR LOCK - only the pointer swap */
@@ -6460,9 +6464,10 @@ nc_server_config_setup_data(const struct lyd_node *data)
             ERR(NULL, "Starting to listen on new endpoints failed."), cleanup);
 
 #ifdef NC_ENABLED_SSH_TLS
-    /* dispatch new call-home connections */
+    /* dispatch new call-home connections, the listening sockets are already reconciled with the new
+     * generation so a failure here has to be rolled back */
     NC_CHECK_ERR_GOTO(ret = nc_server_config_reconcile_chclients_dispatch(config),
-            ERR(NULL, "Dispatching new call-home connections failed."), cleanup);
+            ERR(NULL, "Dispatching new call-home connections failed."), rollback);
 #endif /* NC_ENABLED_SSH_TLS */
 
     /* CONFIG WR LOCK - only the pointer swap */
@@ -6498,10 +6503,11 @@ rollback:
 #ifdef NC_ENABLED_SSH_TLS
         nc_server_config_reconcile_chclients_dispatch(cur_config);
 #endif /* NC_ENABLED_SSH_TLS */
-        nc_server_config_release(cur_config);
     }
 
 cleanup:
+    nc_server_config_release(cur_config);
+
     /* release the new generation, it was either not published or it is NULL */
     nc_server_config_release(config);
 

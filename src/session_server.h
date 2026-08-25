@@ -144,6 +144,13 @@ int nc_server_init(void);
 /**
  * @brief Destroy any dynamically allocated libssh and/or libssl/libcrypto and server resources.
  *
+ * No other server API call may run concurrently with this function and there must be no session
+ * being accepted or authenticated. Established sessions are not affected, but the data of the
+ * user callbacks set through the API (::nc_server_ssh_set_interactive_auth_clb(),
+ * ::nc_server_ch_set_dispatch_data(), ...) is released here, so an authentication still running in
+ * one of them would use freed data. Call Home client threads are stopped, but only the ones
+ * dispatched before this call.
+ *
  * @return 0 on success, 1 on error - failed to synchronize with other threads
  *         (timed out waiting for locks or failed to join threads). Safe to call
  *         again to retry freeing resources.
