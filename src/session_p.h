@@ -824,14 +824,33 @@ struct nc_server_opts {
     void *content_id_data;                      /**< Data passed to the content_id_clb callback. */
     void (*content_id_data_free)(void *data);   /**< Callback to free the content_id_data. */
 
-    /* ACCESS locked - the published configuration pointer is swapped under the WRITE lock,
-     *               - a reference to it is acquired under the READ lock */
+    /**
+     * @brief Lock for the ::nc_server_opts.config pointer.
+     *
+     * ACCESS locked - the published configuration pointer is swapped under the WRITE lock,
+     *               - a reference to it is acquired under the READ lock.
+     *
+     * Acquiring a new config generation is: a load of the pointer followed by an increment
+     * of the refcount of what was loaded and these two steps must not be split.
+     */
     pthread_rwlock_t config_lock;       /**< Lock for the ::nc_server_opts.config pointer. */
     struct nc_server_config *config;    /**< Currently published YANG server configuration generation,
                                              NULL until ::nc_server_init(). */
 
-    /* ACCESS unlocked - mirror of the published config->idle_timeout, stored under the config WRITE lock */
-    ATOMIC_T idle_timeout;              /**< Idle timeout of the server sessions in seconds, 0 for none. */
+    /**
+     * @brief Idle timeout of the server sessions in seconds, 0 for none.
+     *
+     * ACCESS unlocked - mirror of the published config->idle_timeout, stored under the config
+     * WRITE lock so that it always matches the generation in ::nc_server_opts.config.
+     *
+     * It is the only piece of the configuration the session poll and <hello> paths need, and
+     * ::nc_ps_poll() reads it for every session on every iteration. Acquiring and releasing a
+     * whole generation (config lock plus two atomic refcount updates) just to read a single scalar
+     * that often is needlessly expensive, and mirroring it keeps the configuration out of the poll
+     * path completely. Reading a value one generation old is harmless here, it costs at most one
+     * extra poll iteration before the session times out.
+     */
+    ATOMIC_T idle_timeout;
 
     /* ACCESS locked - CH threads lock - leaf lock, never acquire another lock while holding it */
     pthread_mutex_t ch_threads_lock;    /**< Lock for the Call Home thread registry. */

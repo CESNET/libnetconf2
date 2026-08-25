@@ -1354,7 +1354,8 @@ _nc_server_get_cpblts_version(const struct ly_ctx *ctx, LYS_VERSION version)
 
     NC_CHECK_ARG_RET(NULL, ctx, NULL);
 
-    /* pin the configuration, only the ignored module names are needed from it */
+    /* pin the configuration, only the ignored module names are needed from it, so if there is none
+     * (the server is not initialized) simply no module is ignored */
     config = nc_server_config_acquire();
 
     cpblts = malloc(3 * sizeof *cpblts);
