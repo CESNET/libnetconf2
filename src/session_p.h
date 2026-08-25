@@ -871,11 +871,11 @@ struct nc_server_opts {
      * ::nc_server_opts.ssh_protocol_string, ::nc_server_opts.user_verify_clb,
      * ::nc_server_opts.unix_socket_dir and ::nc_server_opts.unix_paths.
      *
-     * It is a leaf lock, never acquire another lock while holding it. Only ::nc_server_opts.config_lock
-     * may be held while acquiring it, never the other way around. Since it is also held on the
-     * authentication path, it must never be held across anything slow and, most importantly, never
-     * across a call to a user callback - read the callback and its data pointer as a pair, unlock,
-     * and only then call it.
+     * It is a leaf lock, never acquire another lock while holding it, and no other lock is held
+     * while acquiring it either. Since it is also held on the authentication path, it must never be
+     * held across anything slow (not even filesystem access) and, most importantly, never across a
+     * call to a user callback - read the callback and its data pointer as a pair, unlock, and only
+     * then call it.
      */
     pthread_rwlock_t opts_lock;
 
