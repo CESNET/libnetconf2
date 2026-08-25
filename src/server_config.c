@@ -5481,9 +5481,15 @@ nc_server_config_new_ch_clients_created(const struct nc_server_config *new_cfg, 
 }
 
 /**
- * @brief Atomically dispatch new Call Home clients and keep the already running ones.
+ * @brief Dispatch new Call Home clients, keep the already running ones and stop the removed ones.
  *
  * The running clients are learned from the Call Home thread registry, not from any configuration.
+ *
+ * Starting the new clients is atomic - if any of them fails to start, the ones started by this call
+ * are stopped again and no client is stopped at all. Stopping the removed clients afterwards is
+ * not: if it fails halfway through, some removed clients are already stopped and the error is
+ * simply returned. That is enough because the only caller reacts to the error by reconciling
+ * against the generation that stays published, which dispatches the stopped clients again.
  *
  * @param[in] new_cfg New server configuration currently being applied.
  * @return 0 on success, 1 on error.
@@ -5493,7 +5499,7 @@ nc_server_config_reconcile_chclients_dispatch(const struct nc_server_config *new
 {
     int rc = 0;
     LY_ARRAY_COUNT_TYPE u;
-    char **running = NULL, **started = NULL, **started_name;
+    char **running = NULL, **started = NULL, **started_name, *name = NULL;
     struct nc_server_ch_dispatch_data dispatch_data;
     int dispatch_new_clients = 1;
 
@@ -5534,15 +5540,25 @@ nc_server_config_reconcile_chclients_dispatch(const struct nc_server_config *new
             rc = _nc_connect_ch_client_dispatch(new_cfg->ch_clients[u].name, dispatch_data.acquire_ctx_cb,
                     dispatch_data.release_ctx_cb, dispatch_data.ctx_cb_data,
                     dispatch_data.new_session_cb, dispatch_data.new_session_cb_data);
-            if (rc) {
+            if (rc == 1) {
+                /* the client was dispatched through the API right after we learned the running ones,
+                 * which is exactly the state we wanted, so leave the thread to its dispatcher */
+                VRB(NULL, "Call Home client \"%s\" already has a running thread, skipping its dispatch.",
+                        new_cfg->ch_clients[u].name);
+                rc = 0;
+                continue;
+            } else if (rc) {
                 /* FAILURE! trigger rollback */
                 goto rollback;
             }
 
-            /* successfully started, track the client for a potential rollback */
+            /* successfully started, track the client for a potential rollback, the name must be
+             * ready before the array grows so that the rollback never sees a NULL entry */
+            name = strdup(new_cfg->ch_clients[u].name);
+            NC_CHECK_ERRMEM_GOTO(!name, rc = 1, rollback);
             LY_ARRAY_NEW_GOTO(NULL, started, started_name, rc, rollback);
-            *started_name = strdup(new_cfg->ch_clients[u].name);
-            NC_CHECK_ERRMEM_GOTO(!*started_name, rc = 1, rollback);
+            *started_name = name;
+            name = NULL;
         }
     }
 
@@ -5579,6 +5595,7 @@ rollback:
     /* rc is already set to non-zero from the failure point */
 
 cleanup:
+    free(name);
     nc_server_ch_thread_names_free(running);
     nc_server_ch_thread_names_free(started);
     return rc ? 1 : 0;
