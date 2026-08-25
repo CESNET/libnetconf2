@@ -67,33 +67,32 @@ static nc_rpc_clb global_rpc_clb = NULL;
 #ifdef NC_ENABLED_SSH_TLS
 
 /**
- * @brief Add a Call Home thread argument to the thread registry.
+ * @brief Free a Call Home thread argument.
  *
- * @param[in] thread_arg Thread argument to register.
- * @return 0 on success, 1 on error.
+ * @param[in] thread_arg Thread argument to free, may be NULL.
  */
-static int
-nc_server_ch_thread_reg_add(struct nc_server_ch_thread_arg *thread_arg)
+static void
+nc_server_ch_thread_arg_free(struct nc_server_ch_thread_arg *thread_arg)
 {
-    int rc = 0;
-    struct nc_server_ch_thread_arg **item;
-
-    /* CH THREADS LOCK */
-    if (nc_mutex_lock(&server_opts.ch_threads_lock, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
-        return 1;
+    if (!thread_arg) {
+        return;
     }
 
-    LY_ARRAY_NEW_GOTO(NULL, server_opts.ch_threads, item, rc, cleanup);
-    *item = thread_arg;
-
-cleanup:
-    /* CH THREADS UNLOCK */
-    nc_mutex_unlock(&server_opts.ch_threads_lock, __func__);
-    return rc ? 1 : 0;
+    free(thread_arg->client_name);
+    if (thread_arg->notify_pipe[0] != -1) {
+        close(thread_arg->notify_pipe[0]);
+    }
+    if (thread_arg->notify_pipe[1] != -1) {
+        close(thread_arg->notify_pipe[1]);
+    }
+    free(thread_arg);
 }
 
 /**
  * @brief Remove a Call Home thread argument from the thread registry.
+ *
+ * The registry entry is the ownership token of the thread argument, whoever removes it becomes
+ * responsible for terminating the thread and freeing the argument.
  *
  * @param[in] client_name Name of the Call Home client to unregister the thread of.
  * @param[out] thread_arg Unregistered thread argument, NULL if the client had no thread registered.
@@ -127,6 +126,58 @@ nc_server_ch_thread_reg_del(const char *client_name, struct nc_server_ch_thread_
     /* CH THREADS UNLOCK */
     nc_mutex_unlock(&server_opts.ch_threads_lock, __func__);
     return 0;
+}
+
+/**
+ * @brief Unregister a Call Home thread that is terminating on its own and free its argument.
+ *
+ * Called by the Call Home thread itself right before it returns. Normally the thread only ever
+ * terminates because ::nc_session_server_ch_client_dispatch_stop() told it to, in which case the
+ * stopper has already removed the registry entry and does all the cleanup itself. If the thread
+ * terminates for any other reason (an unrecoverable error), it has to take itself out of the
+ * registry, otherwise every later configuration apply would believe the client is still running
+ * and would never dispatch it again.
+ *
+ * The registry entry is the ownership token of the thread argument, so the entry removal decides
+ * who cleans up and the ::nc_server_opts.ch_threads_lock makes that decision atomic.
+ *
+ * @param[in] thread_arg Argument of the calling thread.
+ */
+static void
+nc_server_ch_thread_unreg_self(struct nc_server_ch_thread_arg *thread_arg)
+{
+    LY_ARRAY_COUNT_TYPE u;
+    int found = 0;
+
+    /* CH THREADS LOCK */
+    if (nc_mutex_lock(&server_opts.ch_threads_lock, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
+        return;
+    }
+
+    LY_ARRAY_FOR(server_opts.ch_threads, u) {
+        if (server_opts.ch_threads[u] != thread_arg) {
+            continue;
+        }
+
+        found = 1;
+
+        /* swap the last entry into the hole, the order of the registry is irrelevant */
+        server_opts.ch_threads[u] = server_opts.ch_threads[LY_ARRAY_COUNT(server_opts.ch_threads) - 1];
+        LY_ARRAY_DECREMENT_FREE(server_opts.ch_threads);
+        break;
+    }
+
+    /* CH THREADS UNLOCK */
+    nc_mutex_unlock(&server_opts.ch_threads_lock, __func__);
+
+    if (!found) {
+        /* someone else owns us now and will join us, nothing to do */
+        return;
+    }
+
+    /* nobody is going to join us anymore, so make sure our resources are reclaimed */
+    pthread_detach(thread_arg->tid);
+    nc_server_ch_thread_arg_free(thread_arg);
 }
 
 void
@@ -4064,36 +4115,45 @@ nc_server_ch_client_thread_wait(struct nc_session *session, struct nc_server_ch_
  * @brief Acquire a configuration in which the Call Home client has at least one endpoint defined.
  *
  * A client that is missing from the published configuration is waited for the same way as a client
- * with no endpoints - it may simply not have been published yet. The thread only ever stops because
- * ::nc_server_ch_thread_arg.thread_running was cleared.
+ * with no endpoints - it may simply not have been published yet, so the thread is normally only
+ * ever stopped by clearing ::nc_server_ch_thread_arg.thread_running. A configuration that cannot be
+ * acquired at all is retried a few times as well, but not forever - it means either a wedged
+ * configuration lock or a server destroyed without stopping this thread first.
  *
  * @param[in] data Call Home client thread argument.
  * @param[out] client Found Call Home client of the returned configuration.
  * @return Pinned server configuration, the caller must release it.
- * @return NULL if the thread should stop running or the configuration could not be acquired.
+ * @return NULL if the thread should stop running.
  */
 static const struct nc_server_config *
 nc_server_ch_client_acquire_with_endpt(struct nc_server_ch_thread_arg *data, const struct nc_ch_client **client)
 {
     const struct nc_server_config *config;
+    uint32_t failed_attempts = 0;
 
     *client = NULL;
 
     while (ATOMIC_LOAD_RELAXED(data->thread_running)) {
         config = nc_server_config_acquire();
-        if (!config) {
+        if (config) {
+            failed_attempts = 0;
+
+            *client = nc_server_ch_client_get_pinned(config, data->client_name);
+            if (*client && (*client)->ch_endpts) {
+                /* the client is configured and has at least one endpoint */
+                return config;
+            }
+
+            /* not configured (yet) or no endpoints defined yet */
+            nc_server_config_release(config);
+            *client = NULL;
+        } else if (++failed_attempts == NC_CH_CONFIG_ACQUIRE_ATTEMPTS) {
+            ERR(NULL, "Call Home client \"%s\" failed to acquire the server configuration %d times, "
+                    "terminating its thread.", data->client_name, NC_CH_CONFIG_ACQUIRE_ATTEMPTS);
             return NULL;
         }
 
-        *client = nc_server_ch_client_get_pinned(config, data->client_name);
-        if (*client && (*client)->ch_endpts) {
-            /* the client is configured and has at least one endpoint */
-            return config;
-        }
-
-        /* not configured (yet) or no endpoints defined yet, wait a little bit */
-        nc_server_config_release(config);
-        *client = NULL;
+        /* the configuration is not usable (yet), wait a little bit and try again */
         usleep(NC_CH_NO_ENDPT_WAIT * 1000);
     }
 
@@ -4103,6 +4163,9 @@ nc_server_ch_client_acquire_with_endpt(struct nc_server_ch_thread_arg *data, con
 
 /**
  * @brief Call Home client management thread.
+ *
+ * Runs until ::nc_server_ch_thread_arg.thread_running is cleared or an unrecoverable error occurs.
+ * In the latter case it unregisters itself, see ::nc_server_ch_thread_unreg_self().
  *
  * @param[in] arg CH client thread argument.
  * @return NULL.
@@ -4230,6 +4293,9 @@ nc_ch_client_thread(void *arg)
         } else {
             /* session was not created, wait a little bit and try again */
             ++cur_attempts;
+
+            /* copy what is needed after the configuration is released, the user callback and the
+             * wait must not run with a generation pinned */
             max_wait = client->max_wait;
             max_attempts = client->max_attempts;
 
@@ -4313,12 +4379,18 @@ nc_ch_client_thread(void *arg)
     }
 
 cleanup:
-    VRB(session, "Call Home client \"%s\" thread exit.", data->client_name);
+    /* the session, if there still is one, belongs to the user and may have been freed already,
+     * so it must not be logged through */
+    VRB(NULL, "Call Home client \"%s\" thread exit.", data->client_name);
     nc_server_config_release(config);
     free(cur_endpt_name);
     if (cur_sock_pending != -1) {
         close(cur_sock_pending);
     }
+
+    /* if we are terminating on our own, take ourselves out of the registry so that the client can
+     * be dispatched again, otherwise this is a no-op and whoever stopped us cleans up after us */
+    nc_server_ch_thread_unreg_self(data);
 
     return NULL;
 }
@@ -4357,11 +4429,8 @@ nc_session_server_ch_client_dispatch_stop(const char *client_name)
         return 1;
     }
 
-    /* free the thread data */
-    free(thread_arg->client_name);
-    close(thread_arg->notify_pipe[0]);
-    close(thread_arg->notify_pipe[1]);
-    free(thread_arg);
+    /* the registry entry was ours, so is the cleanup */
+    nc_server_ch_thread_arg_free(thread_arg);
 
     return 0;
 }
@@ -4407,7 +4476,9 @@ _nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acq
 {
     int rc = 0, r;
     int flags;
-    struct nc_server_ch_thread_arg *arg = NULL;
+    LY_ERR lyrc = LY_SUCCESS;
+    struct nc_server_ch_thread_arg *arg = NULL, **item;
+    LY_ARRAY_COUNT_TYPE u;
 
     /* create the thread argument */
     arg = calloc(1, sizeof *arg);
@@ -4452,44 +4523,46 @@ _nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acq
     /* mark the thread as running before it is created, so that it can be stopped right away */
     ATOMIC_STORE_RELAXED(arg->thread_running, 1);
 
-    /* create the CH thread */
-    if ((r = pthread_create(&arg->tid, NULL, nc_ch_client_thread, arg))) {
-        ERR(NULL, "Creating a new thread failed (%s).", strerror(r));
+    /* CH THREADS LOCK - the registration and the thread creation must be atomic, the registry entry
+     * is what makes the thread findable and joinable, so it must exist before the thread does but
+     * it must never refer to a thread that was not created yet */
+    if (nc_mutex_lock(&server_opts.ch_threads_lock, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
         rc = -1;
         goto cleanup;
     }
 
-    /* register the thread, only now can anyone else find and stop it */
-    if (nc_server_ch_thread_reg_add(arg)) {
-        /* stop the thread we have just created */
-        ATOMIC_STORE_RELAXED(arg->thread_running, 0);
-        if (write(arg->notify_pipe[1], "x", 1) == -1) {
-            if (errno != EAGAIN) {
-                ERR(NULL, "Writing to the notify pipe failed (%s).", strerror(errno));
-            }
+    /* there must never be two threads dispatched for a single Call Home client */
+    LY_ARRAY_FOR(server_opts.ch_threads, u) {
+        if (!strcmp(server_opts.ch_threads[u]->client_name, client_name)) {
+            rc = 1;
+            goto unlock;
         }
-        if (pthread_join(arg->tid, NULL)) {
-            /* cannot free the thread data safely */
-            arg = NULL;
-        }
+    }
+
+    /* register the thread first, the array cannot fail to grow once the thread is running */
+    LY_ARRAY_NEW_GOTO(NULL, server_opts.ch_threads, item, lyrc, unlock);
+    *item = arg;
+
+    /* create the CH thread */
+    if ((r = pthread_create(&arg->tid, NULL, nc_ch_client_thread, arg))) {
+        ERR(NULL, "Creating a new thread failed (%s).", strerror(r));
+        LY_ARRAY_DECREMENT_FREE(server_opts.ch_threads);
         rc = -1;
-        goto cleanup;
+        goto unlock;
     }
 
     /* arg is now owned by the thread and the registry */
     arg = NULL;
 
-cleanup:
-    if (arg) {
-        free(arg->client_name);
-        if (arg->notify_pipe[0] != -1) {
-            close(arg->notify_pipe[0]);
-        }
-        if (arg->notify_pipe[1] != -1) {
-            close(arg->notify_pipe[1]);
-        }
-        free(arg);
+unlock:
+    /* CH THREADS UNLOCK */
+    nc_mutex_unlock(&server_opts.ch_threads_lock, __func__);
+    if (lyrc) {
+        rc = -1;
     }
+
+cleanup:
+    nc_server_ch_thread_arg_free(arg);
     return rc;
 }
 
@@ -4519,6 +4592,11 @@ nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acqu
 
     rc = _nc_connect_ch_client_dispatch(client_name, acquire_ctx_cb, release_ctx_cb, ctx_cb_data,
             new_session_cb, new_session_cb_data);
+    if (rc == 1) {
+        /* a thread is already running for this client, do not silently ignore that */
+        ERR(NULL, "Call Home client \"%s\" is already being dispatched.", client_name);
+        rc = -1;
+    }
 
 cleanup:
     nc_server_config_release(config);

@@ -106,6 +106,13 @@ extern struct nc_server_opts server_opts;
 #define NC_CH_NO_ENDPT_WAIT 1000
 
 /**
+ * Number of consecutive failed attempts to acquire the server configuration after which a Call Home
+ * client thread gives up and terminates. A single failed attempt means the configuration lock timed
+ * out or the server was destroyed without stopping the thread first.
+ */
+#define NC_CH_CONFIG_ACQUIRE_ATTEMPTS 3
+
+/**
  * Time slept in msec between Call Home thread session idle timeout checks.
  */
 #define NC_CH_THREAD_IDLE_TIMEOUT_SLEEP 1000
@@ -1532,13 +1539,19 @@ int nc_session_server_ch_client_dispatch_stop(const char *client_name);
 /**
  * @brief Dispatch a thread connecting to a listening NETCONF client and creating Call Home sessions.
  *
+ * The thread is added to the Call Home thread registry and created atomically, so it is findable by
+ * ::nc_session_server_ch_client_dispatch_stop() and by a concurrent configuration apply from the
+ * moment it exists. There is never more than one thread per Call Home client.
+ *
  * @param[in] client_name Name of the Call Home client to dispatch the thread for.
  * @param[in] acquire_ctx_cb Callback for acquiring new session context.
  * @param[in] release_ctx_cb Callback for releasing session context.
  * @param[in] ctx_cb_data Arbitrary user data passed to @p acquire_ctx_cb and @p release_ctx_cb.
  * @param[in] new_session_cb Callback called for every established session on the client.
  * @param[in] new_session_cb_data Arbitrary user data passed to @p new_session_cb.
- * @return 0 if the thread was successfully created, -1 on error.
+ * @return 0 if the thread was successfully created.
+ * @return 1 if a thread is already running for the client and nothing was done.
+ * @return -1 on error.
  */
 int _nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
         nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,

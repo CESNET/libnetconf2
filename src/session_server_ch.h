@@ -106,6 +106,10 @@ typedef void (*nc_server_ch_new_session_fail_cb)(const char *client_name, const 
 /**
  * @brief Dispatch a thread connecting to a listening NETCONF client and creating Call Home sessions.
  *
+ * There is at most one thread per Call Home client, so dispatching a client that already has a
+ * running thread (either from a previous call or automatically, when its configuration was applied)
+ * does nothing and is reported as an error.
+ *
  * @param[in] client_name Existing client name.
  * @param[in] acquire_ctx_cb Callback for acquiring new session context.
  * @param[in] release_ctx_cb Callback for releasing session context.
