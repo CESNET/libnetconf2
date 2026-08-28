@@ -1171,17 +1171,24 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     session->status = NC_STATUS_CLOSING;
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CH_THREAD)) {
+        /* signaling a condition does not require its mutex to be held */
         pthread_cond_signal(&session->opts.server.ch_cond);
 
-        nc_timeouttime_get(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
+        if (ch_locked) {
+            nc_timeouttime_get(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
 
-        /* wait for CH thread to actually wake up and terminate */
-        r = 0;
-        while (!r && (session->flags & NC_SESSION_CH_THREAD)) {
-            r = pthread_cond_clockwait(&session->opts.server.ch_cond, &session->opts.server.ch_lock, COMPAT_CLOCK_ID, &ts);
-        }
-        if (r) {
-            ERR(session, "Waiting for Call Home thread failed (%s).", strerror(r));
+            /* wait for CH thread to actually wake up and terminate */
+            r = 0;
+            while (!r && (session->flags & NC_SESSION_CH_THREAD)) {
+                r = pthread_cond_clockwait(&session->opts.server.ch_cond, &session->opts.server.ch_lock, COMPAT_CLOCK_ID, &ts);
+            }
+            if (r) {
+                ERR(session, "Waiting for Call Home thread failed (%s).", strerror(r));
+            }
+        } else {
+            /* waiting on a condition requires its mutex to be held by the caller, so there is no
+             * way to wait for the Call Home thread without ch_lock */
+            ERR(session, "Freeing a Call Home session without its lock, not waiting for its thread.");
         }
     }
 
