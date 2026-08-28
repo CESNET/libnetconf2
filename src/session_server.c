@@ -1622,7 +1622,7 @@ nc_server_destroy(void)
 
     /* CONFIG UPDATE LOCK - the same timeout as the appliers use, destroying the server must not
      * fail just because a legitimate configuration apply is in progress */
-    if (nc_mutex_lock(&server_opts.config_update_lock, NC_CONFIG_APPLY_LOCK_TIMEOUT, __func__) != 1) {
+    if (nc_mutex_lock(&server_opts.config_update_lock, NC_CONFIG_UPDATE_LOCK_TIMEOUT, __func__) != 1) {
         rc = 1;
         goto cleanup;
     }
