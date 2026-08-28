@@ -1149,6 +1149,9 @@ static unsigned int test_stall_auth_sleep = TEST_STALL_AUTH_SLEEP;
 /** @brief Maximum number of distinct Call Home threads the test keeps track of. */
 #define TEST_CH_TID_MAX 8
 
+/** @brief Time in seconds to wait for a Call Home client to report what a test is waiting for. */
+#define TEST_CH_WAIT_TIME 10
+
 struct test_ch_threads {
     pthread_mutex_t lock;
     pthread_cond_t cond;
@@ -1295,15 +1298,21 @@ test_ch_dispatch_not_duplicated(void **state)
     ret = nc_server_config_setup_data(tree);
     assert_int_equal(ret, 0);
 
-    /* wait until its thread reports a failed connection attempt */
+    /* wait until its thread reports a failed connection attempt, the deadline is absolute so that
+     * repeated wakeups cannot extend the wait indefinitely */
+    ret = 0;
     pthread_mutex_lock(&threads.lock);
-    while (!threads.tid_count) {
-        clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec += 10;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += TEST_CH_WAIT_TIME;
+    while (!threads.tid_count && !ret) {
         ret = pthread_cond_timedwait(&threads.cond, &threads.lock, &ts);
-        assert_int_equal(ret, 0);
     }
+    tid_count = threads.tid_count;
     pthread_mutex_unlock(&threads.lock);
+
+    /* only report the failure once the lock is released */
+    assert_int_equal(ret, 0);
+    assert_int_not_equal(tid_count, 0);
 
     /* apply the very same data again, the client is already running */
     ret = nc_server_config_setup_data(tree);
@@ -1334,6 +1343,7 @@ static void
 test_ch_endpoint_order(void **state)
 {
     int ret;
+    char endpt[64] = {0};
     struct lyd_node *tree = NULL, *diff = NULL;
     struct ln2_test_ctx *test_ctx = *state;
     struct test_ch_threads threads = {0};
@@ -1381,16 +1391,21 @@ test_ch_endpoint_order(void **state)
             test_ch_new_session_cb, NULL);
     assert_int_equal(ret, 0);
 
-    /* wait for the first failed connection attempt */
+    /* wait for the first failed connection attempt, the deadline is absolute so that repeated
+     * wakeups cannot extend the wait indefinitely */
+    ret = 0;
     pthread_mutex_lock(&threads.lock);
-    while (!threads.endpt[0]) {
-        clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec += 10;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += TEST_CH_WAIT_TIME;
+    while (!threads.endpt[0] && !ret) {
         ret = pthread_cond_timedwait(&threads.cond, &threads.lock, &ts);
-        assert_int_equal(ret, 0);
     }
-    assert_string_equal(threads.endpt, "second");
+    strncpy(endpt, threads.endpt, sizeof endpt - 1);
     pthread_mutex_unlock(&threads.lock);
+
+    /* only report the failure once the lock is released */
+    assert_int_equal(ret, 0);
+    assert_string_equal(endpt, "second");
 
     lyd_free_all(diff);
     lyd_free_all(tree);
@@ -1687,14 +1702,18 @@ test_ch_wait_for_endpt(struct test_ch_threads *threads, const char *endpt_name)
     int ret;
     struct timespec ts;
 
+    /* the deadline is absolute so that repeated wakeups cannot extend the wait indefinitely */
+    ret = 0;
     pthread_mutex_lock(&threads->lock);
-    while (strcmp(threads->last_endpt, endpt_name)) {
-        clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec += 10;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += TEST_CH_WAIT_TIME;
+    while (strcmp(threads->last_endpt, endpt_name) && !ret) {
         ret = pthread_cond_timedwait(&threads->cond, &threads->lock, &ts);
-        assert_int_equal(ret, 0);
     }
     pthread_mutex_unlock(&threads->lock);
+
+    /* only report the failure once the lock is released */
+    assert_int_equal(ret, 0);
 }
 
 /**
