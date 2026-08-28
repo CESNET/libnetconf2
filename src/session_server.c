@@ -3991,6 +3991,10 @@ nc_server_ch_client_get_idle_timeout(const char *client_name, uint32_t *idle_tim
 /**
  * @brief Wait for any event after a NC session was established on a CH client.
  *
+ * The session is given to the user by ::nc_server_ch_thread_arg.new_session_cb. Until that
+ * succeeds the session still belongs to the Call Home thread, so it is freed here on any error.
+ * Afterwards it belongs to the user and is never freed here.
+ *
  * @param[in] data CH client thread argument.
  * @param[in] session New NC session. The session is invalid upon being freed (= function exit).
  * @return 0 if session was terminated normally,
@@ -4006,6 +4010,9 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *dat
 
     /* CH LOCK */
     if (nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__) != 1) {
+        /* the session has not been given to the user yet, so it is still ours to free */
+        nc_session_free(session, NULL);
+        data->release_ctx_cb(data->ctx_cb_data);
         return -1;
     }
 
@@ -4292,7 +4299,11 @@ nc_ch_client_thread(void *arg)
             cur_endpt = NULL;
 
             if (!ATOMIC_LOAD_RELAXED(data->thread_running)) {
-                /* thread should stop running */
+                /* thread should stop running, the session has not been given to the user yet,
+                 * so it is still ours to free */
+                nc_session_free(session, NULL);
+                session = NULL;
+                data->release_ctx_cb(data->ctx_cb_data);
                 goto cleanup;
             }
 
