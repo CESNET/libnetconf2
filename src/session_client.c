@@ -1847,7 +1847,7 @@ nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL ti)
 API int
 nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
 {
-    int ret, sock;
+    int ret, sock = -1;
     char *host = NULL;
     uint16_t port, bind_idx = 0;
 
