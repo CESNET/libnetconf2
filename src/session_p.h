@@ -161,18 +161,23 @@ extern struct nc_server_opts server_opts;
 
 /**
  * @brief Timeout in msec for acquiring the config_lock
- * (only a pointer read plus a refcount increment)
+ * (only a pointer read plus a refcount increment on the read side, only the pointer swap on the
+ * write side, so this can never fire unless something is broken)
  */
-#define NC_CONFIG_LOCK_TIMEOUT 10000
+#define NC_CONFIG_LOCK_TIMEOUT 1000
 
 /**
- * @brief Timeout in msec for the locks acquired while applying a new configuration.
+ * @brief Timeout in msec for acquiring the config_update_lock.
  *
- * The config_lock is only ever held for the pointer swap now, so this can never fire. It is kept as
- * a safety net because giving up here means losing the configuration change, which the caller
- * generally cannot recover from.
+ * Unlike the other locks this one is held for a whole configuration apply, which includes joining
+ * the threads of the removed Call Home clients. A thread with an established session only notices
+ * that it should stop every ::NC_CH_THREAD_IDLE_TIMEOUT_SLEEP and a thread stuck in a transport
+ * handshake does not notice at all until the endpoint's auth-timeout elapses, which is configurable
+ * and unlimited when set to 0. So a legitimate apply can take a long time and this timeout is only
+ * a last resort - giving up here means losing the configuration change, which the caller generally
+ * cannot recover from.
  */
-#define NC_CONFIG_APPLY_LOCK_TIMEOUT 300000
+#define NC_CONFIG_UPDATE_LOCK_TIMEOUT 300000
 
 /**
  * @brief Timeout in msec for acquiring session's ch_lock

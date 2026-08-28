@@ -6125,7 +6125,7 @@ nc_server_config_setup_diff(const struct lyd_node *data)
      * - avoids concurrent updates
      * - readers are still allowed to read the old config while we are applying the new one
      */
-    if (nc_mutex_lock(&server_opts.config_update_lock, NC_CONFIG_APPLY_LOCK_TIMEOUT, __func__) != 1) {
+    if (nc_mutex_lock(&server_opts.config_update_lock, NC_CONFIG_UPDATE_LOCK_TIMEOUT, __func__) != 1) {
         ERR(NULL, "Timed out waiting for another configuration update to finish, "
                 "the new configuration was not applied.");
         return 1;
@@ -6173,7 +6173,7 @@ nc_server_config_setup_diff(const struct lyd_node *data)
 #endif /* NC_ENABLED_SSH_TLS */
 
     /* CONFIG WR LOCK - only the pointer swap */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_APPLY_LOCK_TIMEOUT, __func__) != 1) {
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
         ERR(NULL, "Timed out waiting for the configuration lock, the new configuration was not applied.");
         ret = 1;
         goto rollback;
@@ -6232,7 +6232,7 @@ nc_server_config_setup_data(const struct lyd_node *data)
      * - avoids concurrent updates
      * - readers are still allowed to read the old config while we are applying the new one
      */
-    if (nc_mutex_lock(&server_opts.config_update_lock, NC_CONFIG_APPLY_LOCK_TIMEOUT, __func__) != 1) {
+    if (nc_mutex_lock(&server_opts.config_update_lock, NC_CONFIG_UPDATE_LOCK_TIMEOUT, __func__) != 1) {
         ERR(NULL, "Timed out waiting for another configuration update to finish, "
                 "the new configuration was not applied.");
         return 1;
@@ -6286,7 +6286,7 @@ nc_server_config_setup_data(const struct lyd_node *data)
 #endif /* NC_ENABLED_SSH_TLS */
 
     /* CONFIG WR LOCK - only the pointer swap */
-    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_APPLY_LOCK_TIMEOUT, __func__) != 1) {
+    if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
         ERR(NULL, "Timed out waiting for the configuration lock, the new configuration was not applied.");
         ret = 1;
         goto rollback;
