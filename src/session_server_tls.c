@@ -997,6 +997,12 @@ nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opt
     /* do the handshake */
     nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_HANDSHAKE_TIMEOUT);
     while ((rc = nc_server_tls_handshake_step_wrap(session->ti.tls.session)) == 0) {
+        if (nc_session_handshake_interrupted(session)) {
+            VRB(session, "TLS handshake interrupted, the Call Home thread is terminating.");
+            timeouted = 1;
+            goto fail;
+        }
+
         usleep(NC_TIMEOUT_STEP);
         if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
             ERR(session, "TLS accept timeout.");

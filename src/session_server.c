@@ -3744,6 +3744,35 @@ cleanup:
 
 #ifdef NC_ENABLED_SSH_TLS
 
+int
+nc_session_handshake_interrupted(const struct nc_session *session)
+{
+    ATOMIC_T *ch_thread_running = session->opts.server.ch_thread_running;
+
+    if (!ch_thread_running) {
+        /* not a Call Home handshake, there is nobody to interrupt it */
+        return 0;
+    }
+
+    return !ATOMIC_LOAD_RELAXED(*ch_thread_running);
+}
+
+int32_t
+nc_session_handshake_poll_timeout(const struct nc_session *session, int32_t timeout)
+{
+    if (!session->opts.server.ch_thread_running) {
+        /* nothing can interrupt the handshake, there is no reason to wake up early */
+        return timeout;
+    }
+
+    /* a negative timeout means waiting indefinitely, which must not happen if we have to notice an interrupt */
+    if ((timeout < 0) || (timeout > NC_HANDSHAKE_INTERRUPT_STEP)) {
+        return NC_HANDSHAKE_INTERRUPT_STEP;
+    }
+
+    return timeout;
+}
+
 API int
 nc_server_ch_is_client(const char *name)
 {
@@ -3808,6 +3837,8 @@ cleanup:
  * @param[in] config Pinned server configuration @p endpt belongs to, pinned into the created session
  * for the duration of the transport handshake.
  * @param[in] endpt Endpoint to use.
+ * @param[in] ch_thread_running Running flag of the calling Call Home thread, the transport handshake
+ * is aborted as soon as it becomes 0.
  * @param[in,out] cur_sock_pending Current pending socket for the connection.
  * @param[in] acquire_ctx_cb Callback for acquiring the libyang context.
  * @param[in] release_ctx_cb Callback for releasing the libyang context.
@@ -3816,9 +3847,9 @@ cleanup:
  * @return NC_MSG values.
  */
 static NC_MSG_TYPE
-nc_connect_ch_endpt(const struct nc_server_config *config, const struct nc_ch_endpt *endpt, int *cur_sock_pending,
-        nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb, nc_server_ch_session_release_ctx_cb release_ctx_cb,
-        void *ctx_cb_data, struct nc_session **session)
+nc_connect_ch_endpt(const struct nc_server_config *config, const struct nc_ch_endpt *endpt,
+        ATOMIC_T *ch_thread_running, int *cur_sock_pending, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
+        nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, struct nc_session **session)
 {
     NC_MSG_TYPE msgtype;
     const struct ly_ctx *ctx = NULL;
@@ -3856,6 +3887,9 @@ nc_connect_ch_endpt(const struct nc_server_config *config, const struct nc_ch_en
     /* pin the configuration for the duration of the transport handshake, it is a borrowed pointer */
     (*session)->opts.server.config = config;
 
+    /* let the handshake be aborted as soon as this thread is told to stop, also a borrowed pointer */
+    (*session)->opts.server.ch_thread_running = ch_thread_running;
+
     /* sock gets assigned to session or closed */
     if (endpt->ti == NC_TI_SSH) {
         ret = nc_accept_ssh_session(*session, endpt->opts.ssh, sock);
@@ -3887,8 +3921,10 @@ nc_connect_ch_endpt(const struct nc_server_config *config, const struct nc_ch_en
         goto fail;
     }
 
-    /* the transport handshake is over, the configuration must not be reached through the session anymore */
+    /* the transport handshake is over, neither the configuration nor the running flag must be
+     * reached through the session anymore */
     (*session)->opts.server.config = NULL;
+    (*session)->opts.server.ch_thread_running = NULL;
 
     /* assign new SID atomically */
     (*session)->id = ATOMIC_INC_RELAXED(server_opts.new_session_id);
@@ -3910,6 +3946,7 @@ nc_connect_ch_endpt(const struct nc_server_config *config, const struct nc_ch_en
 fail:
     if (*session) {
         (*session)->opts.server.config = NULL;
+        (*session)->opts.server.ch_thread_running = NULL;
     }
     nc_session_free(*session, NULL);
     *session = NULL;
@@ -4245,8 +4282,8 @@ nc_ch_client_thread(void *arg)
         }
 
         /* try to connect to the endpoint, the configuration stays pinned for the whole handshake */
-        msgtype = nc_connect_ch_endpt(config, cur_endpt, &cur_sock_pending, data->acquire_ctx_cb,
-                data->release_ctx_cb, data->ctx_cb_data, &session);
+        msgtype = nc_connect_ch_endpt(config, cur_endpt, &data->thread_running, &cur_sock_pending,
+                data->acquire_ctx_cb, data->release_ctx_cb, data->ctx_cb_data, &session);
         if (msgtype == NC_MSG_HELLO) {
             /* session established, the configuration is not needed anymore */
             nc_server_config_release(config);
@@ -4331,6 +4368,12 @@ nc_ch_client_thread(void *arg)
             }
             cur_attempts = 0;
         } else {
+            if (!ATOMIC_LOAD_RELAXED(data->thread_running)) {
+                /* the handshake was interrupted because this thread should stop, do not count it as
+                 * a failed attempt and do not bother the user with it */
+                goto cleanup;
+            }
+
             /* session was not created, wait a little bit and try again */
             ++cur_attempts;
 

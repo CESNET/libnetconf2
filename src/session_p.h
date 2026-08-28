@@ -74,6 +74,11 @@ extern struct nc_server_opts server_opts;
 #define NC_TRANSPORT_MSG_TIMEOUT 2000
 
 /**
+ * Maximum time in msec a transport handshake may block before it checks whether it was interrupted.
+ */
+#define NC_HANDSHAKE_INTERRUPT_STEP 100
+
+/**
  * Timeout in msec for acquiring a lock of a session (used with a condition, so higher numbers could be required
  * only in case of extreme concurrency).
  */
@@ -1120,6 +1125,16 @@ struct nc_session {
             const struct nc_server_config *config;
 
 #ifdef NC_ENABLED_SSH_TLS
+            /**
+             * @brief Running flag of the Call Home thread performing the transport handshake.
+             *
+             * A borrowed pointer to ::nc_server_ch_thread_arg.thread_running, NOT owned by the
+             * session - the handshake is aborted as soon as it becomes 0. NULL for a handshake that
+             * cannot be interrupted, which is every handshake done by ::nc_accept(). Set and cleared
+             * by ::nc_connect_ch_endpt() exactly like ::nc_session.opts.server.config.
+             */
+            ATOMIC_T *ch_thread_running;
+
             uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
             void *client_cert;                /**< TLS client certificate if used for authentication */
 #endif /* NC_ENABLED_SSH_TLS */
@@ -1656,12 +1671,35 @@ int _nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session
 struct nc_session *nc_accept_callhome_ssh_sock(int sock, const char *host, uint16_t port, struct ly_ctx *ctx);
 
 /**
+ * @brief Check whether the transport handshake of a session should be aborted.
+ *
+ * Only a handshake performed by a Call Home thread can be interrupted, see
+ * ::nc_session.opts.server.ch_thread_running. Handshakes of accepted sessions are never interrupted.
+ *
+ * @param[in] session Session performing a transport handshake.
+ * @return 1 if the handshake should be aborted, 0 otherwise.
+ */
+int nc_session_handshake_interrupted(const struct nc_session *session);
+
+/**
+ * @brief Cap a transport handshake poll timeout so that an interrupt is noticed in time.
+ *
+ * A handshake that cannot be interrupted gets @p timeout unchanged, there is nothing it could
+ * notice by waking up before the data it is waiting for arrive.
+ *
+ * @param[in] session Session performing a transport handshake.
+ * @param[in] timeout Timeout in msec the handshake would like to wait for, negative means indefinitely.
+ * @return Timeout in msec to actually use, never negative for an interruptible handshake.
+ */
+int32_t nc_session_handshake_poll_timeout(const struct nc_session *session, int32_t timeout);
+
+/**
  * @brief Establish SSH transport on a socket.
  *
  * @param[in] session Session structure of the new connection.
  * @param[in] opts SSH server options to use.
  * @param[in] sock Socket of the new connection, closed if not set to the session.
- * @return 1 on success, 0 on timeout, -1 on error.
+ * @return 1 on success, 0 on timeout or interrupt, -1 on error.
  */
 int nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opts, int sock);
 
@@ -1677,7 +1715,7 @@ struct nc_session *nc_accept_callhome_tls_sock(int sock, const char *host, uint1
  * @param[in] session Session structure of the new connection.
  * @param[in] sock Socket of the new connection.
  * @param[in] timeout Transport operations timeout in msec.
- * @return 1 on success, 0 on timeout, -1 on error.
+ * @return 1 on success, 0 on timeout or interrupt, -1 on error.
  */
 int nc_accept_tls_session(struct nc_session *session, struct nc_server_tls_opts *opts, int sock);
 

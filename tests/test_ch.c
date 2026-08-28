@@ -15,13 +15,18 @@
 
 #define _GNU_SOURCE
 
+#include <arpa/inet.h>
 #include <errno.h>
+#include <netinet/in.h>
 #include <pthread.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <time.h>
+#include <unistd.h>
 
 #include <cmocka.h>
 
@@ -758,6 +763,214 @@ test_nc_ch_two_simultaneous(void **state)
     }
 }
 
+/*
+ * Test: a stalled transport handshake must not block a configuration apply
+ *
+ * The Call Home client connects to a plain TCP listener that accepts the connection and then stays
+ * silent, so the thread ends up stuck in the transport handshake. Deleting the client from the
+ * configuration has to interrupt the handshake, otherwise the apply waits for the whole
+ * NC_TRANSPORT_HANDSHAKE_TIMEOUT (10 seconds by default) before the thread can be joined.
+ */
+
+/* maximum time in msec the apply may take, an order of magnitude below the handshake timeout */
+#define TEST_CH_INTERRUPT_LIMIT 3000
+
+static int interrupt_listen_sock = -1;
+static char interrupt_port_str[16];
+
+/**
+ * @brief Start listening on a loopback port without ever speaking any protocol on it.
+ *
+ * @return Listening socket.
+ */
+static int
+test_ch_silent_listen(void)
+{
+    int sock, opt = 1;
+    struct sockaddr_in saddr = {0};
+    socklen_t saddr_len = sizeof saddr;
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    assert_int_not_equal(sock, -1);
+    assert_int_equal(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof opt), 0);
+
+    saddr.sin_family = AF_INET;
+    saddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    /* an ephemeral port, so that this never collides with the ports assigned by CTest */
+    saddr.sin_port = 0;
+    assert_int_equal(bind(sock, (struct sockaddr *)&saddr, sizeof saddr), 0);
+    assert_int_equal(listen(sock, 1), 0);
+
+    assert_int_equal(getsockname(sock, (struct sockaddr *)&saddr, &saddr_len), 0);
+    sprintf(interrupt_port_str, "%" PRIu16, ntohs(saddr.sin_port));
+
+    return sock;
+}
+
+/**
+ * @brief Let the Call Home client connect, then delete it and measure how long the apply took.
+ *
+ * @param[in] state Test state.
+ */
+static void
+test_ch_interrupt_apply(void **state)
+{
+    int ret, sock;
+    int64_t elapsed_ms;
+    struct timespec ts_start, ts_end;
+    struct nc_pollsession *ps;
+    struct ln2_test_ctx *test_ctx = *state;
+    struct test_ch_data *test_data = test_ctx->test_data;
+
+    assert_non_null(state);
+
+    ps = nc_ps_new();
+    assert_non_null(ps);
+
+    /* start the Call Home thread, it connects to the silent listener */
+    ret = nc_connect_ch_client_dispatch("ch_interrupt", ch_session_acquire_ctx_cb,
+            ch_session_release_ctx_cb, test_ctx, ch_new_session_cb, ps);
+    assert_int_equal(ret, 0);
+
+    /* accept the connection but do not say anything, the thread is now in the transport handshake */
+    sock = accept(interrupt_listen_sock, NULL, NULL);
+    assert_int_not_equal(sock, -1);
+
+    /* make sure the thread really got into the handshake loop */
+    usleep(100000);
+
+    /* delete the client, this joins its thread */
+    clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    ret = nc_server_config_setup_data(test_data->tree);
+    assert_int_equal(ret, 0);
+    clock_gettime(CLOCK_MONOTONIC, &ts_end);
+
+    elapsed_ms = ((int64_t)ts_end.tv_sec - ts_start.tv_sec) * 1000 +
+            ((int64_t)ts_end.tv_nsec - ts_start.tv_nsec) / 1000000;
+    printf("apply with a stalled handshake took %" PRId64 " ms\n", elapsed_ms);
+    assert_true(elapsed_ms < TEST_CH_INTERRUPT_LIMIT);
+
+    close(sock);
+    close(interrupt_listen_sock);
+    interrupt_listen_sock = -1;
+
+    nc_ps_clear(ps, 1, NULL);
+    nc_ps_free(ps);
+}
+
+static int
+setup_interrupt_ssh(void **state)
+{
+    int ret;
+    struct lyd_node *tree = NULL;
+    struct ln2_test_ctx *test_ctx;
+    struct test_ch_data *test_data;
+
+    ret = ln2_glob_test_setup(&test_ctx);
+    assert_int_equal(ret, 0);
+
+    test_data = calloc(1, sizeof *test_data);
+    assert_non_null(test_data);
+
+    test_ctx->test_data = test_data;
+    test_ctx->free_test_data = test_nc_ch_free_test_data;
+    *state = test_ctx;
+
+    interrupt_listen_sock = test_ch_silent_listen();
+
+    ret = nc_server_config_add_ch_address_port(test_ctx->ctx, "ch_interrupt", "endpt", NC_TI_SSH,
+            "127.0.0.1", interrupt_port_str, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_persistent(test_ctx->ctx, "ch_interrupt", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_ssh_hostkey(test_ctx->ctx, "ch_interrupt", "endpt", "hostkey",
+            TESTS_DIR "/data/key_ecdsa", NULL, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_ssh_user_pubkey(test_ctx->ctx, "ch_interrupt", "endpt", "test_ch_interrupt",
+            "pubkey", TESTS_DIR "/data/id_ed25519.pub", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    /* prepare the configuration without the client, applied by the test itself */
+    ret = nc_server_config_del_ch_client("ch_interrupt", &tree);
+    assert_int_equal(ret, 0);
+
+    test_data->tree = tree;
+    return 0;
+}
+
+static int
+setup_interrupt_tls(void **state)
+{
+    int ret;
+    struct lyd_node *tree = NULL;
+    struct ln2_test_ctx *test_ctx;
+    struct test_ch_data *test_data;
+
+    ret = ln2_glob_test_setup(&test_ctx);
+    assert_int_equal(ret, 0);
+
+    test_data = calloc(1, sizeof *test_data);
+    assert_non_null(test_data);
+
+    test_ctx->test_data = test_data;
+    test_ctx->free_test_data = test_nc_ch_free_test_data;
+    *state = test_ctx;
+
+    interrupt_listen_sock = test_ch_silent_listen();
+
+    ret = nc_server_config_add_ch_address_port(test_ctx->ctx, "ch_interrupt", "endpt", NC_TI_TLS,
+            "127.0.0.1", interrupt_port_str, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_persistent(test_ctx->ctx, "ch_interrupt", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_tls_server_cert(test_ctx->ctx, "ch_interrupt", "endpt",
+            TESTS_DIR "/data/server.key", NULL, TESTS_DIR "/data/server.crt", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_tls_client_cert(test_ctx->ctx, "ch_interrupt", "endpt", "ee-cert",
+            TESTS_DIR "/data/client.crt", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_tls_ca_cert(test_ctx->ctx, "ch_interrupt", "endpt", "ca-cert",
+            TESTS_DIR "/data/serverca.pem", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ch_tls_ctn(test_ctx->ctx, "ch_interrupt", "endpt", 1,
+            "04:85:6B:75:D1:1A:86:E0:D8:FE:5B:BD:72:F5:73:1D:07:EA:32:BF:09:11:21:6A:6E:23:78:8E:B6:D5:73:C3:2D",
+            NC_TLS_CTN_SPECIFIED, "ch_client_tls", &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    /* prepare the configuration without the client, applied by the test itself */
+    ret = nc_server_config_del_ch_client("ch_interrupt", &tree);
+    assert_int_equal(ret, 0);
+
+    test_data->tree = tree;
+    return 0;
+}
+
+static void
+test_nc_ch_interrupt_ssh_handshake(void **state)
+{
+    test_ch_interrupt_apply(state);
+}
+
+static void
+test_nc_ch_interrupt_tls_handshake(void **state)
+{
+    test_ch_interrupt_apply(state);
+}
+
 int
 main(void)
 {
@@ -766,6 +979,8 @@ main(void)
         cmocka_unit_test_setup_teardown(test_nc_ch_tls, setup_tls, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_nc_ch_delete_client_while_session, setup_delete_while_session, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_nc_ch_two_simultaneous, setup_two_simultaneous, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_nc_ch_interrupt_ssh_handshake, setup_interrupt_ssh, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_nc_ch_interrupt_tls_handshake, setup_interrupt_tls, ln2_glob_test_teardown),
     };
 
     if (ln2_glob_test_get_ports(4, &TEST_PORT, &TEST_PORT_STR, &TEST_PORT_2, &TEST_PORT_2_STR,
