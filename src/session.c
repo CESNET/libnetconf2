@@ -2108,6 +2108,12 @@ nc_session_curl_init(CURL **handle, struct nc_curl_data *data)
         return 1;
     }
 
+    /* limit the whole transfer, a host that connects and then stalls would block the TLS handshake */
+    if (curl_easy_setopt(*handle, CURLOPT_TIMEOUT_MS, NC_CURL_TIMEOUT_MS)) {
+        ERR(NULL, "Setting curl transfer timeout failed.");
+        return 1;
+    }
+
     /* do not use signals for timeouts, required for thread safety */
     if (curl_easy_setopt(*handle, CURLOPT_NOSIGNAL, 1L)) {
         ERR(NULL, "Setting CURLOPT_NOSIGNAL failed.");

@@ -135,6 +135,16 @@ extern struct nc_server_opts server_opts;
 #define NC_CURL_CONNECT_TIMEOUT_MS 2000
 
 /**
+ * @brief Timeout in msec for a whole CRL download.
+ *
+ * The connection timeout alone does not bound a CRL distribution point that accepts the connection
+ * and then sends data very slowly or not at all. Since the download happens in the middle of a TLS
+ * handshake, and a Call Home handshake blocks a configuration apply, the whole transfer has to be
+ * bounded as well.
+ */
+#define NC_CURL_TIMEOUT_MS 10000
+
+/**
  * @brief Timeout in msec for acquiring the hello_lock
  * (iterating through all YANG modules + building capability strings)
  */
