@@ -1625,6 +1625,11 @@ nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, struct nc
             return -1;
         }
 
+        if (nc_session_handshake_interrupted(session)) {
+            VRB(session, "Waiting for the \"netconf\" SSH subsystem interrupted, the Call Home thread is terminating.");
+            return 0;
+        }
+
         time_diff = nc_timeouttime_cur_diff(&ts_timeout);
         if (time_diff < 1) {
             /* timeout */
@@ -1633,14 +1638,13 @@ nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, struct nc
         }
 
         /* This functions listens to the network and automatically calls callback funcitons. */
-        ret = ssh_event_dopoll(session->ti.libssh.event, time_diff);
+        ret = ssh_event_dopoll(session->ti.libssh.event, nc_session_handshake_poll_timeout(session, time_diff));
         if (ret == SSH_ERROR) {
             ERR(session, "Failed to poll SSH event (%s).", ssh_get_error(session->ti.libssh.session));
             return -1;
-        } else if (ret == SSH_AGAIN) {
-            /* Timeout reached */
-            break;
         }
+        /* SSH_AGAIN only means the poll timeout elapsed, which may have been shortened to notice an
+         * interrupt, so ts_timeout checked at the top of the loop is the only authority */
     }
 
     if (session->flags & NC_SESSION_SSH_SUBSYS_NETCONF) {
@@ -1664,6 +1668,11 @@ nc_accept_ssh_session_open_netconf_channel(struct nc_session *session, struct nc
 
         if (session->ti.libssh.channel && session->flags & NC_SESSION_SSH_SUBSYS_NETCONF) {
             return 1;
+        }
+
+        if (nc_session_handshake_interrupted(session)) {
+            VRB(session, "Waiting for the \"netconf\" SSH subsystem interrupted, the Call Home thread is terminating.");
+            return 0;
         }
 
         usleep(NC_TIMEOUT_STEP);
@@ -1761,6 +1770,11 @@ nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts
             return -1;
         }
 
+        if (nc_session_handshake_interrupted(session)) {
+            VRB(session, "SSH authentication interrupted, the Call Home thread is terminating.");
+            return 0;
+        }
+
         if (opts->auth_timeout) {
             time_diff = nc_timeouttime_cur_diff(&ts_timeout);
             if (time_diff < 1) {
@@ -1773,14 +1787,13 @@ nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts
         }
 
         /* This functions listens to the network and automatically calls callback funcitons. */
-        ret = ssh_event_dopoll(event, time_diff);
+        ret = ssh_event_dopoll(event, nc_session_handshake_poll_timeout(session, time_diff));
         if (ret == SSH_ERROR) {
             ERR(session, "Failed to poll SSH event (%s).", ssh_get_error(session->ti.libssh.session));
             return -1;
-        } else if (ret == SSH_AGAIN) {
-            /* Timeout reached */
-            break;
         }
+        /* SSH_AGAIN only means the poll timeout elapsed, which may have been shortened to notice an
+         * interrupt, so ts_timeout checked at the top of the loop is the only authority */
     }
 #else
     while (1) {
@@ -1799,6 +1812,11 @@ nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts
 
         if (session->flags & NC_SESSION_SSH_AUTHENTICATED) {
             break;
+        }
+
+        if (nc_session_handshake_interrupted(session)) {
+            VRB(session, "SSH authentication interrupted, the Call Home thread is terminating.");
+            return 0;
         }
 
         usleep(NC_TIMEOUT_STEP);
@@ -1964,6 +1982,12 @@ nc_accept_ssh_session(struct nc_session *session, struct nc_server_ssh_opts *opt
     DBG(session, "Performing SSH key exchange...");
     nc_timeouttime_get(&ts_timeout, NC_TRANSPORT_HANDSHAKE_TIMEOUT);
     while ((r = ssh_handle_key_exchange(session->ti.libssh.session)) == SSH_AGAIN) {
+        if (nc_session_handshake_interrupted(session)) {
+            VRB(session, "SSH key exchange interrupted, the Call Home thread is terminating.");
+            rc = 0;
+            goto cleanup;
+        }
+
         /* this tends to take longer */
         usleep(NC_TIMEOUT_STEP * 20);
         if (nc_timeouttime_cur_diff(&ts_timeout) < 1) {
