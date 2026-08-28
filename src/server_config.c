@@ -5420,191 +5420,6 @@ cleanup:
 #ifdef NC_ENABLED_SSH_TLS
 
 /**
- * @brief Check whether a Call Home client name is present in an array of names.
- *
- * @param[in] names Array of names (sized-array, see libyang docs).
- * @param[in] name Name to look for.
- * @return 1 if @p name is present, 0 otherwise.
- */
-static int
-nc_server_config_ch_name_found(char **names, const char *name)
-{
-    LY_ARRAY_COUNT_TYPE u;
-
-    LY_ARRAY_FOR(names, u) {
-        if (!strcmp(names[u], name)) {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
-/**
- * @brief Check whether a server configuration contains a Call Home client of the given name.
- *
- * @param[in] config Server configuration.
- * @param[in] name Name of the Call Home client to look for.
- * @return 1 if the client is configured, 0 otherwise.
- */
-static int
-nc_server_config_ch_client_configured(const struct nc_server_config *config, const char *name)
-{
-    LY_ARRAY_COUNT_TYPE u;
-
-    LY_ARRAY_FOR(config->ch_clients, u) {
-        if (!strcmp(config->ch_clients[u].name, name)) {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
-/**
- * @brief Check if the new configuration contains a Call Home client that has no thread running.
- *
- * @param[in] new_cfg New server configuration currently being applied.
- * @param[in] running Names of the Call Home clients with a running thread (sized-array, see libyang docs).
- * @return 1 if there are new CH clients, 0 otherwise.
- */
-static int
-nc_server_config_new_ch_clients_created(const struct nc_server_config *new_cfg, char **running)
-{
-    LY_ARRAY_COUNT_TYPE u;
-
-    LY_ARRAY_FOR(new_cfg->ch_clients, u) {
-        if (!nc_server_config_ch_name_found(running, new_cfg->ch_clients[u].name)) {
-            return 1;
-        }
-    }
-
-    /* no differences found */
-    return 0;
-}
-
-/**
- * @brief Dispatch new Call Home clients, keep the already running ones and stop the removed ones.
- *
- * The running clients are learned from the Call Home thread registry, not from any configuration.
- *
- * Starting the new clients is atomic - if any of them fails to start, the ones started by this call
- * are stopped again and no client is stopped at all. Stopping the removed clients afterwards is
- * not: if it fails halfway through, some removed clients are already stopped and the error is
- * simply returned. That is enough because the only caller reacts to the error by reconciling
- * against the generation that stays published, which dispatches the stopped clients again.
- *
- * @param[in] new_cfg New server configuration currently being applied.
- * @return 0 on success, 1 on error.
- */
-static int
-nc_server_config_reconcile_chclients_dispatch(const struct nc_server_config *new_cfg)
-{
-    int rc = 0;
-    LY_ARRAY_COUNT_TYPE u;
-    char **running = NULL, **started = NULL, **started_name, *name = NULL;
-    struct nc_server_ch_dispatch_data dispatch_data;
-    int dispatch_new_clients = 1;
-
-    /* OPTS READ LOCK */
-    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_READ, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
-        return 1;
-    }
-    dispatch_data = server_opts.ch_dispatch_data;
-    /* OPTS READ UNLOCK */
-    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
-
-    /* learn which clients are running right now */
-    NC_CHECK_GOTO(rc = nc_server_ch_thread_names_get(&running), cleanup);
-
-    if (!dispatch_data.acquire_ctx_cb || !dispatch_data.release_ctx_cb || !dispatch_data.new_session_cb) {
-        /* Call Home dispatch callbacks not set, we can't dispatch new clients, but we can still stop deleted ones */
-        if (nc_server_config_new_ch_clients_created(new_cfg, running)) {
-            WRN(NULL, "New Call Home clients were created but Call Home dispatch callbacks are not set - "
-                    "new clients will not be dispatched automatically.");
-        }
-        dispatch_new_clients = 0;
-    }
-
-    /*
-     * == PHASE 1: START NEW CLIENTS ==
-     * Start clients present in new_cfg that are not already running.
-     * Track successfully started threads for potential rollback.
-     */
-    if (dispatch_new_clients) {
-        /* only dispatch if all required CBs are set */
-        LY_ARRAY_FOR(new_cfg->ch_clients, u) {
-            if (nc_server_config_ch_name_found(running, new_cfg->ch_clients[u].name)) {
-                /* already running */
-                continue;
-            }
-
-            /* this is a new Call Home client, dispatch it */
-            rc = _nc_connect_ch_client_dispatch(new_cfg->ch_clients[u].name, dispatch_data.acquire_ctx_cb,
-                    dispatch_data.release_ctx_cb, dispatch_data.ctx_cb_data,
-                    dispatch_data.new_session_cb, dispatch_data.new_session_cb_data);
-            if (rc == 1) {
-                /* the client was dispatched through the API right after we learned the running ones,
-                 * which is exactly the state we wanted, so leave the thread to its dispatcher */
-                VRB(NULL, "Call Home client \"%s\" already has a running thread, skipping its dispatch.",
-                        new_cfg->ch_clients[u].name);
-                rc = 0;
-                continue;
-            } else if (rc) {
-                /* FAILURE! trigger rollback */
-                goto rollback;
-            }
-
-            /* successfully started, track the client for a potential rollback, the name must be
-             * ready before the array grows so that the rollback never sees a NULL entry */
-            name = strdup(new_cfg->ch_clients[u].name);
-            NC_CHECK_ERRMEM_GOTO(!name, rc = 1, rollback);
-            LY_ARRAY_NEW_GOTO(NULL, started, started_name, rc, rollback);
-            *started_name = name;
-            name = NULL;
-        }
-    }
-
-    /*
-     * == PHASE 2: STOP DELETED CLIENTS (COMMIT) ==
-     * All new clients started successfully. Now stop the running clients
-     * that are not present in the new configuration.
-     */
-    LY_ARRAY_FOR(running, u) {
-        if (nc_server_config_ch_client_configured(new_cfg, running[u])) {
-            continue;
-        }
-
-        /* this Call Home client was deleted, notify it to stop */
-        if ((rc = nc_session_server_ch_client_dispatch_stop(running[u]))) {
-            ERR(NULL, "Failed to dispatch stop for Call Home client \"%s\".", running[u]);
-            goto rollback;
-        }
-    }
-
-    /* success */
-    rc = 0;
-    goto cleanup;
-
-rollback:
-    /*
-     * == ROLLBACK LOGIC ==
-     * An error occurred during PHASE 1. Stop any new threads we *just* started
-     * to return to the pre-call state.
-     */
-    LY_ARRAY_FOR(started, u) {
-        nc_session_server_ch_client_dispatch_stop(started[u]);
-    }
-    /* rc is already set to non-zero from the failure point */
-
-cleanup:
-    free(name);
-    nc_server_ch_thread_names_free(running);
-    nc_server_ch_thread_names_free(started);
-    return rc ? 1 : 0;
-}
-
-/**
  * @brief Create a deep copy of the SSH server options.
  *
  * @param[in] src Source SSH server options to copy from.
@@ -6353,7 +6168,7 @@ nc_server_config_setup_diff(const struct lyd_node *data)
 #ifdef NC_ENABLED_SSH_TLS
     /* dispatch new call-home threads, the listening sockets are already reconciled with the new
      * generation so a failure here has to be rolled back */
-    NC_CHECK_ERR_GOTO(ret = nc_server_config_reconcile_chclients_dispatch(config_copy),
+    NC_CHECK_ERR_GOTO(ret = nc_server_ch_clients_reconcile(config_copy),
             ERR(NULL, "Dispatching new call-home threads failed."), rollback);
 #endif /* NC_ENABLED_SSH_TLS */
 
@@ -6388,7 +6203,7 @@ rollback:
     if (cur_config) {
         nc_server_binds_reconcile(cur_config);
 #ifdef NC_ENABLED_SSH_TLS
-        nc_server_config_reconcile_chclients_dispatch(cur_config);
+        nc_server_ch_clients_reconcile(cur_config);
 #endif /* NC_ENABLED_SSH_TLS */
     }
 
@@ -6466,7 +6281,7 @@ nc_server_config_setup_data(const struct lyd_node *data)
 #ifdef NC_ENABLED_SSH_TLS
     /* dispatch new call-home connections, the listening sockets are already reconciled with the new
      * generation so a failure here has to be rolled back */
-    NC_CHECK_ERR_GOTO(ret = nc_server_config_reconcile_chclients_dispatch(config),
+    NC_CHECK_ERR_GOTO(ret = nc_server_ch_clients_reconcile(config),
             ERR(NULL, "Dispatching new call-home connections failed."), rollback);
 #endif /* NC_ENABLED_SSH_TLS */
 
@@ -6501,7 +6316,7 @@ rollback:
     if (cur_config) {
         nc_server_binds_reconcile(cur_config);
 #ifdef NC_ENABLED_SSH_TLS
-        nc_server_config_reconcile_chclients_dispatch(cur_config);
+        nc_server_ch_clients_reconcile(cur_config);
 #endif /* NC_ENABLED_SSH_TLS */
     }
 

@@ -1255,6 +1255,32 @@ int nc_server_binds_reconcile(const struct nc_server_config *config);
  */
 void nc_server_binds_destroy(void);
 
+#ifdef NC_ENABLED_SSH_TLS
+
+/**
+ * @brief Reconcile the Call Home thread registry with the given server configuration.
+ *
+ * Dispatches a thread for every Call Home client of @p config that has none yet, keeps the already
+ * running ones and stops the threads of the clients @p config no longer contains. The running
+ * clients are learned from the registry itself, not from any configuration. Nothing is written
+ * to @p config.
+ *
+ * Starting the new clients is atomic - if any of them fails to start, the ones started by this call
+ * are stopped again and no client is stopped at all. Stopping the removed clients afterwards is
+ * not: if it fails halfway through, some removed clients are already stopped and the error is
+ * simply returned. That is enough because the callers react to the error by reconciling against
+ * the generation that stays published, which dispatches the stopped clients again.
+ *
+ * @note Only one thread may reconcile the registry at a time, the callers must be serialized by
+ * ::nc_server_opts.config_update_lock.
+ *
+ * @param[in] config Server configuration to reconcile the registry with.
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_ch_clients_reconcile(const struct nc_server_config *config);
+
+#endif /* NC_ENABLED_SSH_TLS */
+
 /**
  * @brief Acquire a reference to the currently published server configuration generation.
  *
