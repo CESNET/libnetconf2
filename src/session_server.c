@@ -4643,6 +4643,177 @@ cleanup:
     return rc;
 }
 
+/**
+ * @brief Check whether a Call Home client name is present in an array of names.
+ *
+ * @param[in] names Array of names (sized-array, see libyang docs).
+ * @param[in] name Name to look for.
+ * @return 1 if @p name is present, 0 otherwise.
+ */
+static int
+nc_server_ch_name_found(char **names, const char *name)
+{
+    LY_ARRAY_COUNT_TYPE u;
+
+    LY_ARRAY_FOR(names, u) {
+        if (!strcmp(names[u], name)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * @brief Check whether a server configuration contains a Call Home client of the given name.
+ *
+ * @param[in] config Server configuration.
+ * @param[in] name Name of the Call Home client to look for.
+ * @return 1 if the client is configured, 0 otherwise.
+ */
+static int
+nc_server_ch_client_configured(const struct nc_server_config *config, const char *name)
+{
+    LY_ARRAY_COUNT_TYPE u;
+
+    LY_ARRAY_FOR(config->ch_clients, u) {
+        if (!strcmp(config->ch_clients[u].name, name)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * @brief Check if the new configuration contains a Call Home client that has no thread running.
+ *
+ * @param[in] config New server configuration currently being applied.
+ * @param[in] running Names of the Call Home clients with a running thread (sized-array, see libyang docs).
+ * @return 1 if there are new CH clients, 0 otherwise.
+ */
+static int
+nc_server_ch_new_clients_created(const struct nc_server_config *config, char **running)
+{
+    LY_ARRAY_COUNT_TYPE u;
+
+    LY_ARRAY_FOR(config->ch_clients, u) {
+        if (!nc_server_ch_name_found(running, config->ch_clients[u].name)) {
+            return 1;
+        }
+    }
+
+    /* no differences found */
+    return 0;
+}
+
+int
+nc_server_ch_clients_reconcile(const struct nc_server_config *config)
+{
+    int rc = 0;
+    LY_ARRAY_COUNT_TYPE u;
+    char **running = NULL, **started = NULL, **started_name, *name = NULL;
+    struct nc_server_ch_dispatch_data dispatch_data;
+    int dispatch_new_clients = 1;
+
+    /* OPTS READ LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_READ, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
+    dispatch_data = server_opts.ch_dispatch_data;
+    /* OPTS READ UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
+
+    /* learn which clients are running right now */
+    NC_CHECK_GOTO(rc = nc_server_ch_thread_names_get(&running), cleanup);
+
+    if (!dispatch_data.acquire_ctx_cb || !dispatch_data.release_ctx_cb || !dispatch_data.new_session_cb) {
+        /* Call Home dispatch callbacks not set, we can't dispatch new clients, but we can still stop deleted ones */
+        if (nc_server_ch_new_clients_created(config, running)) {
+            WRN(NULL, "New Call Home clients were created but Call Home dispatch callbacks are not set - "
+                    "new clients will not be dispatched automatically.");
+        }
+        dispatch_new_clients = 0;
+    }
+
+    /*
+     * == PHASE 1: START NEW CLIENTS ==
+     * Start clients present in config that are not already running.
+     * Track successfully started threads for potential rollback.
+     */
+    if (dispatch_new_clients) {
+        /* only dispatch if all required CBs are set */
+        LY_ARRAY_FOR(config->ch_clients, u) {
+            if (nc_server_ch_name_found(running, config->ch_clients[u].name)) {
+                /* already running */
+                continue;
+            }
+
+            /* this is a new Call Home client, dispatch it */
+            rc = _nc_connect_ch_client_dispatch(config->ch_clients[u].name, dispatch_data.acquire_ctx_cb,
+                    dispatch_data.release_ctx_cb, dispatch_data.ctx_cb_data,
+                    dispatch_data.new_session_cb, dispatch_data.new_session_cb_data);
+            if (rc == 1) {
+                /* the client was dispatched through the API right after we learned the running ones,
+                 * which is exactly the state we wanted, so leave the thread to its dispatcher */
+                VRB(NULL, "Call Home client \"%s\" already has a running thread, skipping its dispatch.",
+                        config->ch_clients[u].name);
+                rc = 0;
+                continue;
+            } else if (rc) {
+                /* FAILURE! trigger rollback */
+                goto rollback;
+            }
+
+            /* successfully started, track the client for a potential rollback, the name must be
+             * ready before the array grows so that the rollback never sees a NULL entry */
+            name = strdup(config->ch_clients[u].name);
+            NC_CHECK_ERRMEM_GOTO(!name, rc = 1, rollback);
+            LY_ARRAY_NEW_GOTO(NULL, started, started_name, rc, rollback);
+            *started_name = name;
+            name = NULL;
+        }
+    }
+
+    /*
+     * == PHASE 2: STOP DELETED CLIENTS (COMMIT) ==
+     * All new clients started successfully. Now stop the running clients
+     * that are not present in the new configuration.
+     */
+    LY_ARRAY_FOR(running, u) {
+        if (nc_server_ch_client_configured(config, running[u])) {
+            continue;
+        }
+
+        /* this Call Home client was deleted, notify it to stop */
+        if ((rc = nc_session_server_ch_client_dispatch_stop(running[u]))) {
+            ERR(NULL, "Failed to dispatch stop for Call Home client \"%s\".", running[u]);
+            goto rollback;
+        }
+    }
+
+    /* success */
+    rc = 0;
+    goto cleanup;
+
+rollback:
+    /*
+     * == ROLLBACK LOGIC ==
+     * An error occurred during PHASE 1. Stop any new threads we *just* started
+     * to return to the pre-call state.
+     */
+    LY_ARRAY_FOR(started, u) {
+        nc_session_server_ch_client_dispatch_stop(started[u]);
+    }
+    /* rc is already set to non-zero from the failure point */
+
+cleanup:
+    free(name);
+    nc_server_ch_thread_names_free(running);
+    nc_server_ch_thread_names_free(started);
+    return rc ? 1 : 0;
+}
+
 #endif /* NC_ENABLED_SSH_TLS */
 
 API struct timespec
