@@ -1087,6 +1087,7 @@ nc_sock_accept_pollfds(struct pollfd *pollfds, uint16_t pollfd_count, const char
     /* make the socket non-blocking */
     if (((flags = fcntl(client_sock, F_GETFL)) == -1) || (fcntl(client_sock, F_SETFL, flags | O_NONBLOCK) == -1)) {
         ERR(NULL, "Fcntl failed (%s).", strerror(errno));
+        ret = -1;
         goto cleanup;
     }
 
