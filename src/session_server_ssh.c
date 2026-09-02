@@ -518,7 +518,7 @@ nc_server_ssh_channel_subsys_check(struct nc_session *session, ssh_channel chann
 
     if (session->ti.libssh.channel == channel) {
         /* first channel requested */
-        if (session->ti.libssh.next || (session->status != NC_STATUS_STARTING)) {
+        if (session->ti.libssh.next || (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
             ERRINT;
             return -1;
         }
@@ -551,7 +551,7 @@ nc_server_ssh_new_channel_session(struct nc_session *session, ssh_channel channe
     new_session = nc_new_session(NC_SERVER, 1);
     NC_CHECK_ERRMEM_RET(!new_session, NULL);
 
-    new_session->status = NC_STATUS_STARTING;
+    NC_SESSION_STATUS_SET(new_session, NC_STATUS_STARTING);
     new_session->ti_type = NC_TI_SSH;
     new_session->io_lock = session->io_lock;
     new_session->ti.libssh.channel = channel;
@@ -2056,12 +2056,12 @@ nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session
 
     NC_CHECK_ARG_RET(orig_session, orig_session, session, NC_MSG_ERROR);
 
-    if ((orig_session->status == NC_STATUS_RUNNING) && (orig_session->ti_type == NC_TI_SSH) &&
+    if ((NC_SESSION_STATUS_GET(orig_session) == NC_STATUS_RUNNING) && (orig_session->ti_type == NC_TI_SSH) &&
             orig_session->ti.libssh.next) {
         for (new_session = orig_session->ti.libssh.next;
                 new_session != orig_session;
                 new_session = new_session->ti.libssh.next) {
-            if ((new_session->status == NC_STATUS_STARTING) && new_session->ti.libssh.channel &&
+            if ((NC_SESSION_STATUS_GET(new_session) == NC_STATUS_STARTING) && new_session->ti.libssh.channel &&
                     (new_session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
                 /* we found our session */
                 break;
@@ -2090,7 +2090,7 @@ nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session
     new_session->opts.server.session_start = ts_cur;
     nc_timeouttime_get(&ts_cur, 0);
     new_session->opts.server.last_rpc = ts_cur.tv_sec;
-    new_session->status = NC_STATUS_RUNNING;
+    NC_SESSION_STATUS_SET(new_session, NC_STATUS_RUNNING);
     *session = new_session;
 
     return msgtype;
@@ -2114,13 +2114,13 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
 
     for (i = 0; i < ps->session_count; ++i) {
         cur_session = ps->sessions[i]->session;
-        if ((cur_session->status == NC_STATUS_RUNNING) && (cur_session->ti_type == NC_TI_SSH) &&
+        if ((NC_SESSION_STATUS_GET(cur_session) == NC_STATUS_RUNNING) && (cur_session->ti_type == NC_TI_SSH) &&
                 cur_session->ti.libssh.next) {
             /* an SSH session with more channels */
             for (new_session = cur_session->ti.libssh.next;
                     new_session != cur_session;
                     new_session = new_session->ti.libssh.next) {
-                if ((new_session->status == NC_STATUS_STARTING) && new_session->ti.libssh.channel &&
+                if ((NC_SESSION_STATUS_GET(new_session) == NC_STATUS_STARTING) && new_session->ti.libssh.channel &&
                         (new_session->flags & NC_SESSION_SSH_SUBSYS_NETCONF)) {
                     /* we found our session */
                     break;
@@ -2155,7 +2155,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     new_session->opts.server.session_start = ts_cur;
     nc_timeouttime_get(&ts_cur, 0);
     new_session->opts.server.last_rpc = ts_cur.tv_sec;
-    new_session->status = NC_STATUS_RUNNING;
+    NC_SESSION_STATUS_SET(new_session, NC_STATUS_RUNNING);
     *session = new_session;
 
     return msgtype;

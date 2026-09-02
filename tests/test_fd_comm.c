@@ -134,7 +134,7 @@ setup_sessions(void **state)
 
     /* create server session */
     server_session = test_new_session(NC_SERVER);
-    server_session->status = NC_STATUS_RUNNING;
+    NC_SESSION_STATUS_SET(server_session, NC_STATUS_RUNNING);
     server_session->id = 1;
     server_session->ti_type = NC_TI_FD;
     server_session->ti.fd.in = sock[0];
@@ -144,7 +144,7 @@ setup_sessions(void **state)
 
     /* create client session */
     client_session = test_new_session(NC_CLIENT);
-    client_session->status = NC_STATUS_RUNNING;
+    NC_SESSION_STATUS_SET(client_session, NC_STATUS_RUNNING);
     client_session->id = 1;
     client_session->ti_type = NC_TI_FD;
     client_session->ti.fd.in = sock[1];

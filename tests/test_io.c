@@ -64,7 +64,7 @@ setup_write(void **state)
 
     assert_return_code(pipe(pipes), errno);
 
-    w->session->status = NC_STATUS_RUNNING;
+    NC_SESSION_STATUS_SET(w->session, NC_STATUS_RUNNING);
     w->session->version = NC_PROT_VERSION_10;
     w->session->opts.client.msgid = 999;
     w->session->ti_type = NC_TI_FD;

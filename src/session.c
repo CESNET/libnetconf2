@@ -562,7 +562,7 @@ nc_session_get_status(const struct nc_session *session)
 {
     NC_CHECK_ARG_RET(session, session, NC_STATUS_ERR);
 
-    return session->status;
+    return NC_SESSION_STATUS_GET(session);
 }
 
 API NC_SESSION_TERM_REASON
@@ -570,7 +570,7 @@ nc_session_get_term_reason(const struct nc_session *session)
 {
     NC_CHECK_ARG_RET(session, session, NC_SESSION_TERM_ERR);
 
-    return session->term_reason;
+    return NC_SESSION_TERM_REASON_GET(session);
 }
 
 API uint32_t
@@ -943,7 +943,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
 
         if (session->ti.libssh.channel) {
             if ((session->side == NC_CLIENT) ||
-                    ((session->side == NC_SERVER) && (session->term_reason == NC_SESSION_TERM_CLOSED))) {
+                    ((session->side == NC_SERVER) && (NC_SESSION_TERM_REASON_GET(session) == NC_SESSION_TERM_CLOSED))) {
                 /* NC_SERVER: session was properly closed by the client, so he should have sent SSH channel EOF.
                  * Polling here should properly set libssh internal state and avoid libssh WRN log about writing
                  * to a closed channel in ssh_channel_free().
@@ -959,7 +959,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
 
         if (session->ti.libssh.next) {
             for (siter = session->ti.libssh.next; siter != session; siter = siter->ti.libssh.next) {
-                if (siter->status != NC_STATUS_STARTING) {
+                if (NC_SESSION_STATUS_GET(siter) != NC_STATUS_STARTING) {
                     *multisession = 1;
                     break;
                 }
@@ -1100,7 +1100,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     /* store status, so we can check if this session is already closing */
-    status = session->status;
+    status = NC_SESSION_STATUS_GET(session);
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
         /* CH UNLOCK */
@@ -1147,9 +1147,9 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     /* notify the peer that we're closing the session, either if:
      * - session running - normal disconnect from client
      * - session invalid - client disconnected from a Call Home session */
-    if ((session->status == NC_STATUS_RUNNING) ||
+    if ((NC_SESSION_STATUS_GET(session) == NC_STATUS_RUNNING) ||
             ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME) &&
-            (session->status == NC_STATUS_INVALID) && (session->term_reason == NC_SESSION_TERM_CLOSED))) {
+            (NC_SESSION_STATUS_GET(session) == NC_STATUS_INVALID) && (NC_SESSION_TERM_REASON_GET(session) == NC_SESSION_TERM_CLOSED))) {
         if (session->side == NC_CLIENT) {
             /* graceful close: <close-session> + transport shutdown indication */
             nc_session_free_client_close_graceful(session);
@@ -1168,7 +1168,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     /* mark session for closing */
-    session->status = NC_STATUS_CLOSING;
+    NC_SESSION_STATUS_SET(session, NC_STATUS_CLOSING);
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CH_THREAD)) {
         /* signaling a condition does not require its mutex to be held */

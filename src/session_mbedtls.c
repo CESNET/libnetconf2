@@ -1543,14 +1543,14 @@ nc_tls_read_wrap(struct nc_session *session, unsigned char *buf, size_t size)
             break;
         case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
             nc_mbedtls_strerr(session, rc, "Communication socket unexpectedly closed");
-            session->status = NC_STATUS_INVALID;
-            session->term_reason = NC_SESSION_TERM_DROPPED;
+            NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+            NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_DROPPED);
             rc = -1;
             break;
         default:
             nc_mbedtls_strerr(session, rc, "TLS communication error occurred");
-            session->status = NC_STATUS_INVALID;
-            session->term_reason = NC_SESSION_TERM_OTHER;
+            NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+            NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
             rc = -1;
             break;
         }

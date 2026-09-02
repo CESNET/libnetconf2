@@ -850,7 +850,7 @@ cleanup:
     lyd_free_tree(envp);
     lyd_free_tree(op);
 
-    if (session->status != NC_STATUS_RUNNING) {
+    if (NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) {
         /* something bad happened, discard the session */
         ERR(session, "Invalid session, discarding.");
         ret = -1;
@@ -1090,7 +1090,7 @@ nc_ctx_fill(struct nc_session *session, struct module_info *modules, ly_module_i
                 user_clb, user_data, has_get_schema, &mod);
 
         if (!mod) {
-            if (session->status != NC_STATUS_RUNNING) {
+            if (NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) {
                 /* something bad heppened, discard the session */
                 ERR(session, "Invalid session, discarding.");
                 goto cleanup;
@@ -1323,7 +1323,7 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
     NC_CHECK_ERRMEM_RET(!session, NULL);
-    session->status = NC_STATUS_STARTING;
+    NC_SESSION_STATUS_SET(session, NC_STATUS_STARTING);
 
     /* transport specific data */
     session->ti_type = NC_TI_FD;
@@ -1339,7 +1339,7 @@ nc_connect_inout(int fdin, int fdout, struct ly_ctx *ctx)
     if (nc_handshake_io(session) != NC_MSG_HELLO) {
         goto fail;
     }
-    session->status = NC_STATUS_RUNNING;
+    NC_SESSION_STATUS_SET(session, NC_STATUS_RUNNING);
 
     if (nc_ctx_check_and_fill(session) == -1) {
         goto fail;
@@ -1435,7 +1435,7 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
     NC_CHECK_ERRMEM_GOTO(!session, , fail);
-    session->status = NC_STATUS_STARTING;
+    NC_SESSION_STATUS_SET(session, NC_STATUS_STARTING);
 
     /* transport specific data */
     session->ti_type = NC_TI_UNIX;
@@ -1478,7 +1478,7 @@ nc_connect_unix(const char *address, struct ly_ctx *ctx)
     if (nc_handshake_io(session) != NC_MSG_HELLO) {
         goto fail;
     }
-    session->status = NC_STATUS_RUNNING;
+    NC_SESSION_STATUS_SET(session, NC_STATUS_RUNNING);
 
     if (nc_ctx_check_and_fill(session) == -1) {
         goto fail;
@@ -2372,7 +2372,7 @@ nc_recv_reply(struct nc_session *session, struct nc_rpc *rpc, uint64_t msgid, in
 
     NC_CHECK_ARG_RET(session, session, rpc, envp, op, NC_MSG_ERROR);
 
-    if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
+    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR(session, "Invalid session to receive RPC replies.");
         return NC_MSG_ERROR;
     }
@@ -2431,7 +2431,7 @@ nc_recv_notif(struct nc_session *session, int timeout, struct lyd_node **envp, s
 {
     NC_CHECK_ARG_RET(session, session, envp, op, NC_MSG_ERROR);
 
-    if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
+    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR(session, "Invalid session to receive Notifications.");
         return NC_MSG_ERROR;
     }
@@ -2473,7 +2473,7 @@ nc_recv_notif_thread(void *arg)
             }
             lyd_free_all(envp);
             lyd_free_all(op);
-        } else if ((msgtype == NC_MSG_ERROR) && (session->status != NC_STATUS_RUNNING)) {
+        } else if ((msgtype == NC_MSG_ERROR) && (NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING)) {
             /* quit this thread once the session is broken */
             break;
         }
@@ -2506,7 +2506,7 @@ nc_recv_notif_dispatch_data(struct nc_session *session, nc_notif_dispatch_clb no
 
     NC_CHECK_ARG_RET(session, session, notif_clb, -1);
 
-    if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
+    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR(session, "Invalid session to receive Notifications.");
         return -1;
     }
@@ -2545,7 +2545,7 @@ nc_recv_msg(struct nc_session *session, int timeout, char **msg)
 
     NC_CHECK_ARG_RET(session, session, msg, NC_MSG_ERROR);
 
-    if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
+    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR(session, "Invalid session to receive RPC replies.");
         return NC_MSG_ERROR;
     }
@@ -2644,7 +2644,7 @@ nc_send_rpc(struct nc_session *session, struct nc_rpc *rpc, int timeout, uint64_
 
     NC_CHECK_ARG_RET(session, session, rpc, msgid, NC_MSG_ERROR);
 
-    if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
+    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR(session, "Invalid session to send RPCs.");
         return NC_MSG_ERROR;
     }
@@ -3227,7 +3227,7 @@ nc_send_msg(struct nc_session *session, const char *msg, uint32_t msg_len, int t
 
     NC_CHECK_ARG_RET(session, session, msg, NC_MSG_ERROR);
 
-    if ((session->status != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
+    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) || (session->side != NC_CLIENT)) {
         ERR(session, "Invalid session to send RPCs.");
         return NC_MSG_ERROR;
     }
@@ -3442,8 +3442,8 @@ nc_client_monitoring_thread(void *arg)
             if (mtarg->pfds[i].revents & (POLLHUP | POLLNVAL)) {
                 /* save the session and stop monitoring it, callback will be called outside of the lock */
                 session = mtarg->sessions[i];
-                session->status = NC_STATUS_INVALID;
-                session->term_reason = NC_SESSION_TERM_DROPPED;
+                NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+                NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_DROPPED);
                 nc_client_monitoring_session_stop(session, 0);
                 break;
             }

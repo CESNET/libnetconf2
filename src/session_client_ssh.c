@@ -1684,7 +1684,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
     NC_CHECK_ERRMEM_RET(!session, NULL);
-    session->status = NC_STATUS_STARTING;
+    NC_SESSION_STATUS_SET(session, NC_STATUS_STARTING);
     session->ti_type = NC_TI_SSH;
     session->ti.libssh.session = ssh_session;
 
@@ -1774,7 +1774,7 @@ _nc_connect_libssh(ssh_session ssh_session, struct ly_ctx *ctx, struct nc_keepal
     if (nc_handshake_io(session) != NC_MSG_HELLO) {
         goto fail;
     }
-    session->status = NC_STATUS_RUNNING;
+    NC_SESSION_STATUS_SET(session, NC_STATUS_RUNNING);
 
     if (nc_ctx_check_and_fill(session) == -1) {
         goto fail;
@@ -1833,7 +1833,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
     NC_CHECK_ERRMEM_GOTO(!session, , fail);
-    session->status = NC_STATUS_STARTING;
+    NC_SESSION_STATUS_SET(session, NC_STATUS_STARTING);
 
     /* transport-specific data */
     session->ti_type = NC_TI_SSH;
@@ -1883,7 +1883,7 @@ nc_connect_ssh(const char *host, uint16_t port, struct ly_ctx *ctx)
     if (nc_handshake_io(session) != NC_MSG_HELLO) {
         goto fail;
     }
-    session->status = NC_STATUS_RUNNING;
+    NC_SESSION_STATUS_SET(session, NC_STATUS_RUNNING);
 
     if (nc_ctx_check_and_fill(session) == -1) {
         goto fail;
@@ -1925,7 +1925,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     /* prepare session structure */
     new_session = nc_new_session(NC_CLIENT, 1);
     NC_CHECK_ERRMEM_RET(!new_session, NULL);
-    new_session->status = NC_STATUS_STARTING;
+    NC_SESSION_STATUS_SET(new_session, NC_STATUS_STARTING);
 
     /* share some parameters including the IO lock (we are using one socket for both sessions) */
     new_session->ti_type = NC_TI_SSH;
@@ -1960,7 +1960,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     if (nc_handshake_io(new_session) != NC_MSG_HELLO) {
         goto fail;
     }
-    new_session->status = NC_STATUS_RUNNING;
+    NC_SESSION_STATUS_SET(new_session, NC_STATUS_RUNNING);
 
     if (nc_ctx_check_and_fill(new_session) == -1) {
         goto fail;

@@ -122,7 +122,7 @@ nc_proxy_read_msg(int fd, NC_PROT_VERSION version, int timeout_ms, char **buf, u
     }
 
     /* fill dummy session (id 0 causes session not to be included in log messages) */
-    sess.status = NC_STATUS_RUNNING;
+    NC_SESSION_STATUS_SET(&sess, NC_STATUS_RUNNING);
     sess.version = version;
     sess.ti_type = NC_TI_UNIX;
     sess.ti.unixsock.sock = fd;
@@ -154,7 +154,7 @@ nc_proxy_write_msg(int fd, NC_PROT_VERSION version, const char *buf, uint32_t bu
     struct nc_wclb_arg warg = {.session = &sess};
 
     /* fill dummy session (id 0 causes session not to be included in log messages) */
-    sess.status = NC_STATUS_RUNNING;
+    NC_SESSION_STATUS_SET(&sess, NC_STATUS_RUNNING);
     sess.version = version;
     sess.ti_type = NC_TI_UNIX;
     sess.ti.unixsock.sock = fd;
