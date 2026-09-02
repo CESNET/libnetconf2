@@ -1086,31 +1086,13 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     int r, i, rpc_locked = 0, ch_locked = 0;
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
     struct timespec ts;
-    NC_STATUS status;
 
     if (!session) {
         return;
     }
 
-    if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
-        /* CH LOCK, continue on error */
-        if (nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__) == 1) {
-            ch_locked = 1;
-        }
-    }
-
-    /* store status, so we can check if this session is already closing */
-    status = NC_SESSION_STATUS_GET(session);
-
-    if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
-        /* CH UNLOCK */
-        if (ch_locked) {
-            /* only if we locked it */
-            nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
-        }
-    }
-
-    if (status == NC_STATUS_CLOSING) {
+    /* check whether this session is already closing */
+    if (NC_SESSION_STATUS_GET(session) == NC_STATUS_CLOSING) {
         return;
     }
 
@@ -1160,8 +1142,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     }
 
     if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
-        /* CH LOCK */
-        ch_locked = 0;
+        /* CH LOCK, continue on error */
         if (nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__) == 1) {
             ch_locked = 1;
         }
@@ -1170,33 +1151,26 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     /* mark session for closing */
     NC_SESSION_STATUS_SET(session, NC_STATUS_CLOSING);
 
-    if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CH_THREAD)) {
-        /* signaling a condition does not require its mutex to be held */
+    if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
+        /* wake up the Call Home thread so that it learns the session is closing, done while holding
+         * ch_lock (if we got it) so that a thread about to wait on the condition cannot miss it */
         pthread_cond_signal(&session->opts.server.ch_cond);
 
-        if (ch_locked) {
-            nc_timeouttime_get(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
-
-            /* wait for CH thread to actually wake up and terminate */
-            r = 0;
-            while (!r && (session->flags & NC_SESSION_CH_THREAD)) {
-                r = pthread_cond_clockwait(&session->opts.server.ch_cond, &session->opts.server.ch_lock, COMPAT_CLOCK_ID, &ts);
-            }
-            if (r) {
-                ERR(session, "Waiting for Call Home thread failed (%s).", strerror(r));
-            }
-        } else {
-            /* waiting on a condition requires its mutex to be held by the caller, so there is no
-             * way to wait for the Call Home thread without ch_lock */
-            ERR(session, "Freeing a Call Home session without its lock, not waiting for its thread.");
-        }
-    }
-
-    if ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME)) {
         /* CH UNLOCK */
         if (ch_locked) {
             /* only if we locked it */
             nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
+        }
+
+        /* wait for the Call Home thread to stop using the session, it needs ch_lock to get there
+         * so this must not be done while holding it */
+        nc_timeouttime_get(&ts, NC_SESSION_FREE_LOCK_TIMEOUT);
+        while (ATOMIC_LOAD_ACQUIRE(session->opts.server.ch_thread_active)) {
+            if (nc_timeouttime_cur_diff(&ts) < 1) {
+                ERR(session, "Waiting for the Call Home thread timed out.");
+                break;
+            }
+            usleep(NC_TIMEOUT_STEP);
         }
     }
 
