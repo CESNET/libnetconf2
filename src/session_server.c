@@ -4009,29 +4009,13 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *dat
     uint32_t idle_timeout;
     struct timespec ts;
 
-    /* CH LOCK */
-    if (nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__) != 1) {
-        /* the session has not been given to the user yet, so it is still ours to free */
-        nc_session_free(session, NULL);
-        data->release_ctx_cb(data->ctx_cb_data);
-        return -1;
-    }
-
-    session->flags |= NC_SESSION_CH_THREAD;
-
-    /* CH UNLOCK */
-    nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
+    /* claim the session, ::nc_session_free() waits for this to be cleared */
+    ATOMIC_STORE_RELAXED(session->opts.server.ch_thread_active, 1);
 
     /* give the session to the user */
     if (data->new_session_cb(data->client_name, session, data->new_session_cb_data)) {
-        /* CH LOCK, continue on error */
-        nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__);
-
-        /* something is wrong, free the session */
-        session->flags &= ~NC_SESSION_CH_THREAD;
-
-        /* CH UNLOCK */
-        nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
+        /* something is wrong, we are done with the session */
+        ATOMIC_STORE_RELEASE(session->opts.server.ch_thread_active, 0);
 
         /* session terminated, free it and release its context */
         nc_session_free(session, NULL);
@@ -4041,6 +4025,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *dat
 
     /* CH LOCK */
     if (nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__) != 1) {
+        ATOMIC_STORE_RELEASE(session->opts.server.ch_thread_active, 0);
         return -1;
     }
 
@@ -4079,6 +4064,7 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *dat
 
         /* CH LOCK */
         if (nc_mutex_lock(&session->opts.server.ch_lock, NC_SESSION_CH_LOCK_TIMEOUT, __func__) != 1) {
+            ATOMIC_STORE_RELEASE(session->opts.server.ch_thread_active, 0);
             return -1;
         }
 
@@ -4102,12 +4088,11 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *dat
                 data->client_name);
     }
 
-    /* signal to nc_session_free() that CH thread is terminating */
-    session->flags &= ~NC_SESSION_CH_THREAD;
-    pthread_cond_signal(&session->opts.server.ch_cond);
-
     /* CH UNLOCK */
     nc_mutex_unlock(&session->opts.server.ch_lock, __func__);
+
+    /* release the session, ::nc_session_free() may tear it down as soon as this is observed */
+    ATOMIC_STORE_RELEASE(session->opts.server.ch_thread_active, 0);
 
     return rc;
 }

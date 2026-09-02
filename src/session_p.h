@@ -1090,7 +1090,7 @@ struct nc_session {
 /* shared flags */
 #define NC_SESSION_SHAREDCTX 0x01   /**< context is shared */
 #define NC_SESSION_CALLHOME 0x02    /**< session is Call Home and ch_lock is initialized */
-#define NC_SESSION_CH_THREAD 0x04   /**< protected by ch_lock */
+/* 0x04 is free, it used to be NC_SESSION_CH_THREAD, see ::nc_session.opts.server.ch_thread_active */
 
 /* client flags */
 #define NC_SESSION_CLIENT_NOT_STRICT 0x08   /**< some server modules failed to load so the data from
@@ -1126,7 +1126,19 @@ struct nc_session {
                                               rpc_cond and rpc_lock) */
 
             pthread_mutex_t ch_lock;       /**< Call Home thread lock */
-            pthread_cond_t ch_cond;        /**< Call Home thread condition */
+            pthread_cond_t ch_cond;        /**< Call Home thread condition, signalled by ::nc_session_free()
+                                                to tell the Call Home thread the session is closing */
+
+            /**
+             * @brief Non-zero while a Call Home thread is using this session.
+             *
+             * Set before the session is given to the user and cleared once the Call Home thread is done
+             * with it, which ::nc_session_free() waits for before tearing the session down. Deliberately
+             * not protected by @p ch_lock: the Call Home thread has to be able to clear it on the error
+             * paths where it failed to acquire the lock. Cleared with a release store so that everything
+             * the Call Home thread did to the session is published to ::nc_session_free().
+             */
+            ATOMIC_T ch_thread_active;
 
             /**
              * @brief Configuration generation pinned for the duration of the transport handshake.
