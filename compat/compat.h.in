@@ -124,6 +124,8 @@
 # define ATOMIC_DEC_RELAXED(var) atomic_fetch_sub_explicit(&(var), 1, memory_order_relaxed)
 # define ATOMIC_DEC_ACQ_REL(var) atomic_fetch_sub_explicit(&(var), 1, memory_order_acq_rel)
 # define ATOMIC_SUB_RELAXED(var, x) atomic_fetch_sub_explicit(&(var), x, memory_order_relaxed)
+# define ATOMIC_STORE_RELEASE(var, x) atomic_store_explicit(&(var), x, memory_order_release)
+# define ATOMIC_LOAD_ACQUIRE(var) atomic_load_explicit(&(var), memory_order_acquire)
 
 # define ATOMIC_PTR_COMPARE_EXCHANGE_RELAXED(var, exp, des, result) \
         result = atomic_compare_exchange_strong_explicit((ATOMIC_PTR_T *)&(var), &(exp), des, memory_order_relaxed, \
@@ -148,6 +150,10 @@
 /* __sync_fetch_and_sub() is already a full barrier */
 # define ATOMIC_DEC_ACQ_REL(var) __sync_fetch_and_sub(&(var), 1)
 # define ATOMIC_SUB_RELAXED(var, x) __sync_fetch_and_sub(&(var), x)
+/* there are no __sync load/store builtins, so a release store is an explicit barrier followed by a plain
+ * store and an acquire load is a no-op RMW, which is already a full barrier */
+# define ATOMIC_STORE_RELEASE(var, x) (__sync_synchronize(), (var) = (x))
+# define ATOMIC_LOAD_ACQUIRE(var) __sync_fetch_and_add(&(var), 0)
 
 # define ATOMIC_PTR_COMPARE_EXCHANGE_RELAXED(var, exp, des, result) \
         { \
