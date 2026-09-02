@@ -353,7 +353,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
     NC_CHECK_ERRMEM_RET(!session, NULL);
-    session->status = NC_STATUS_STARTING;
+    NC_SESSION_STATUS_SET(session, NC_STATUS_STARTING);
 
     /* create and assign socket */
     sock = nc_sock_connect(NULL, 0, host, port, -1, &client_opts.ka, NULL, &ip_host);
@@ -381,7 +381,7 @@ nc_connect_tls(const char *host, unsigned short port, struct ly_ctx *ctx)
     if (nc_handshake_io(session) != NC_MSG_HELLO) {
         goto fail;
     }
-    session->status = NC_STATUS_RUNNING;
+    NC_SESSION_STATUS_SET(session, NC_STATUS_RUNNING);
 
     if (nc_ctx_check_and_fill(session) == -1) {
         goto fail;
@@ -416,7 +416,7 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
     /* prepare session structure */
     session = nc_new_session(NC_CLIENT, 0);
     NC_CHECK_ERRMEM_RET(!session, NULL);
-    session->status = NC_STATUS_STARTING;
+    NC_SESSION_STATUS_SET(session, NC_STATUS_STARTING);
 
     /* fill the session */
     session->ti_type = NC_TI_TLS;
@@ -437,7 +437,7 @@ nc_accept_callhome_tls_sock(int sock, const char *host, uint16_t port, struct ly
     if (nc_handshake_io(session) != NC_MSG_HELLO) {
         goto fail;
     }
-    session->status = NC_STATUS_RUNNING;
+    NC_SESSION_STATUS_SET(session, NC_STATUS_RUNNING);
 
     if (nc_ctx_check_and_fill(session) == -1) {
         goto fail;

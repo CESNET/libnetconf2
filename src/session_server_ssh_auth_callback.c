@@ -504,8 +504,8 @@ nc_server_ssh_cb_auth_common_setup(struct nc_server_ssh_cb_data *cb_data, const 
     } else if (strcmp(user, session->username)) {
         /* changing username not allowed */
         ERR(session, "User \"%s\" changed its username to \"%s\".", session->username, user);
-        session->status = NC_STATUS_INVALID;
-        session->term_reason = NC_SESSION_TERM_OTHER;
+        NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+        NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
         nc_server_ssh_auth_attempt_failed(session);
         return -1;
     }
@@ -788,7 +788,7 @@ nc_server_ssh_cb_channel_open_request_session(ssh_session libssh_sess, void *use
     struct nc_ssh_channel_cb_data *channel_data;
 
     /* first channel request */
-    if (!session->ti.libssh.channel && (session->status != NC_STATUS_STARTING)) {
+    if (!session->ti.libssh.channel && (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
         ERRINT;
         return NULL;
     }

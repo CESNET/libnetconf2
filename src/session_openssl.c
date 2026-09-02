@@ -1225,28 +1225,28 @@ nc_tls_read_wrap(struct nc_session *session, unsigned char *buf, size_t size)
             break;
         case SSL_ERROR_ZERO_RETURN:
             ERR(session, "Communication socket unexpectedly closed (OpenSSL).");
-            session->status = NC_STATUS_INVALID;
-            session->term_reason = NC_SESSION_TERM_DROPPED;
+            NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+            NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_DROPPED);
             rc = -1;
             break;
         case SSL_ERROR_SYSCALL:
             ERR(session, "TLS socket error (%s).", errno ? strerror(errno) : "unexpected EOF");
-            session->status = NC_STATUS_INVALID;
-            session->term_reason = NC_SESSION_TERM_OTHER;
+            NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+            NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
             rc = -1;
             break;
         case SSL_ERROR_SSL:
             reasons = nc_tls_get_err_reasons();
             ERR(session, "TLS communication error (%s).", reasons);
             free(reasons);
-            session->status = NC_STATUS_INVALID;
-            session->term_reason = NC_SESSION_TERM_OTHER;
+            NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+            NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
             rc = -1;
             break;
         default:
             ERR(session, "Unknown TLS error occurred (err code %d).", err);
-            session->status = NC_STATUS_INVALID;
-            session->term_reason = NC_SESSION_TERM_OTHER;
+            NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+            NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
             rc = -1;
             break;
         }

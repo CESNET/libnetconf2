@@ -1030,8 +1030,12 @@ struct nc_msg_cont {
  * @brief NETCONF session structure
  */
 struct nc_session {
-    NC_STATUS status;            /**< status of the session */
-    NC_SESSION_TERM_REASON term_reason; /**< reason of termination, if status is NC_STATUS_INVALID */
+    ATOMIC_T status;             /**< status of the session (::NC_STATUS), read/written by any thread using
+                                      the session without any lock, so always access it with ::NC_SESSION_STATUS_GET()
+                                      and ::NC_SESSION_STATUS_SET() */
+    ATOMIC_T term_reason;        /**< reason of termination (::NC_SESSION_TERM_REASON), if status is
+                                      NC_STATUS_INVALID, accessed lock-free just like @p status, so always use
+                                      ::NC_SESSION_TERM_REASON_GET() and ::NC_SESSION_TERM_REASON_SET() */
     uint32_t killed_by;          /**< session responsible for termination, if term_reason is NC_SESSION_TERM_KILLED */
     NC_SIDE side;                /**< side of the session: client or server */
 
@@ -1151,6 +1155,46 @@ struct nc_session {
         } server;
     } opts;
 };
+
+/**
+ * @brief Get the status of a session.
+ *
+ * ::nc_session.status is read and written by every thread that uses the session (a poll thread, the user
+ * thread freeing it, a Call Home thread) and there is no single lock held by all of them, so it must
+ * always be accessed atomically.
+ *
+ * @param[in] session Session to read the status of.
+ * @return Current session status.
+ */
+#define NC_SESSION_STATUS_GET(session) \
+        ((NC_STATUS)ATOMIC_LOAD_RELAXED(((struct nc_session *)(session))->status))
+
+/**
+ * @brief Set the status of a session.
+ *
+ * @param[in] session Session to set the status of.
+ * @param[in] st Status (::NC_STATUS) to set.
+ */
+#define NC_SESSION_STATUS_SET(session, st) ATOMIC_STORE_RELAXED((session)->status, (uint32_t)(st))
+
+/**
+ * @brief Get the termination reason of a session.
+ *
+ * Accessed by the same set of threads as ::nc_session.status, see ::NC_SESSION_STATUS_GET().
+ *
+ * @param[in] session Session to read the termination reason of.
+ * @return Current session termination reason.
+ */
+#define NC_SESSION_TERM_REASON_GET(session) \
+        ((NC_SESSION_TERM_REASON)ATOMIC_LOAD_RELAXED(((struct nc_session *)(session))->term_reason))
+
+/**
+ * @brief Set the termination reason of a session.
+ *
+ * @param[in] session Session to set the termination reason of.
+ * @param[in] reason Termination reason (::NC_SESSION_TERM_REASON) to set.
+ */
+#define NC_SESSION_TERM_REASON_SET(session, reason) ATOMIC_STORE_RELAXED((session)->term_reason, (uint32_t)(reason))
 
 enum nc_ps_session_state {
     NC_PS_STATE_NONE = 0,      /**< session is not being worked with */

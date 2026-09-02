@@ -324,7 +324,7 @@ nc_server_ssh_msg_channel_open(struct nc_session *session, ssh_message msg)
 
     /* first channel request */
     if (!session->ti.libssh.channel) {
-        if (session->status != NC_STATUS_STARTING) {
+        if (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING) {
             ERRINT;
             return -1;
         }
@@ -415,8 +415,8 @@ nc_server_ssh_msg_auth(struct nc_session *session, struct nc_server_ssh_opts *op
     } else if (strcmp(username, session->username)) {
         /* changing username not allowed */
         ERR(session, "User \"%s\" changed its username to \"%s\".", session->username, username);
-        session->status = NC_STATUS_INVALID;
-        session->term_reason = NC_SESSION_TERM_OTHER;
+        NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+        NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
         nc_server_ssh_auth_attempt_failed(session);
         return 1;
     }
@@ -593,11 +593,11 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
     }
 
     VRB(session, "Received an SSH message \"%s\" of subtype \"%s\".", str_type, str_subtype);
-    if (!session || (session->status == NC_STATUS_CLOSING) || (session->status == NC_STATUS_INVALID)) {
+    if (!session || (NC_SESSION_STATUS_GET(session) == NC_STATUS_CLOSING) || (NC_SESSION_STATUS_GET(session) == NC_STATUS_INVALID)) {
         /* "valid" situation if, for example, receiving some auth or channel request timeouted,
          * but we got it now, during session free */
         VRB(session, "SSH message arrived on a %s session, the request will be denied.",
-                (session && session->status == NC_STATUS_CLOSING ? "closing" : "invalid"));
+                (session && NC_SESSION_STATUS_GET(session) == NC_STATUS_CLOSING ? "closing" : "invalid"));
         ssh_message_reply_default(msg);
         return 0;
     }

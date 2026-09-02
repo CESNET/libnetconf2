@@ -80,7 +80,7 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
     assert(session);
     assert(buf);
 
-    if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
+    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) && (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
         return -1;
     }
 
@@ -110,14 +110,14 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
                     break;
                 } else {
                     ERR(session, "Reading from file descriptor (%d) failed (%s).", fd, strerror(errno));
-                    session->status = NC_STATUS_INVALID;
-                    session->term_reason = NC_SESSION_TERM_OTHER;
+                    NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+                    NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
                     return -1;
                 }
             } else if (r == 0) {
                 ERR(session, "Communication file descriptor (%d) unexpectedly closed.", fd);
-                session->status = NC_STATUS_INVALID;
-                session->term_reason = NC_SESSION_TERM_DROPPED;
+                NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+                NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_DROPPED);
                 return -1;
             }
             break;
@@ -131,14 +131,14 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
                 break;
             } else if (r == SSH_ERROR) {
                 ERR(session, "Reading from the SSH channel failed (%s).", ssh_get_error(session->ti.libssh.session));
-                session->status = NC_STATUS_INVALID;
-                session->term_reason = NC_SESSION_TERM_OTHER;
+                NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+                NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
                 return -1;
             } else if (r == 0) {
                 if (ssh_channel_is_eof(session->ti.libssh.channel)) {
                     ERR(session, "SSH channel unexpected EOF.");
-                    session->status = NC_STATUS_INVALID;
-                    session->term_reason = NC_SESSION_TERM_DROPPED;
+                    NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+                    NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_DROPPED);
                     return -1;
                 }
                 break;
@@ -166,8 +166,8 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
                 } else {
                     ERR(session, "Active read timeout elapsed.");
                 }
-                session->status = NC_STATUS_INVALID;
-                session->term_reason = NC_SESSION_TERM_OTHER;
+                NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+                NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
                 return -1;
             }
         } else {
@@ -271,7 +271,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, int passing_io_lock, 
     /* use timeout in milliseconds instead seconds */
     inact_timeout = NC_READ_INACT_TIMEOUT * 1000;
 
-    if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
+    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) && (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
         ERR(session, "Invalid session to read from.");
         ret = -1;
         goto cleanup;
@@ -386,7 +386,7 @@ nc_read_poll(struct nc_session *session, int io_timeout)
     int ret = -2;
     struct pollfd fds;
 
-    if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
+    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) && (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
         ERR(session, "Invalid session to poll.");
         return -1;
     }
@@ -403,13 +403,13 @@ nc_read_poll(struct nc_session *session, int io_timeout)
         ret = ssh_channel_poll_timeout(session->ti.libssh.channel, io_timeout, 0);
         if (ret == SSH_ERROR) {
             ERR(session, "SSH channel poll error (%s).", ssh_get_error(session->ti.libssh.session));
-            session->status = NC_STATUS_INVALID;
-            session->term_reason = NC_SESSION_TERM_OTHER;
+            NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+            NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
             return -1;
         } else if (ret == SSH_EOF) {
             ERR(session, "SSH channel unexpected EOF.");
-            session->status = NC_STATUS_INVALID;
-            session->term_reason = NC_SESSION_TERM_DROPPED;
+            NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+            NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_DROPPED);
             return -1;
         } else if (ret > 0) {
             /* fake it */
@@ -454,23 +454,23 @@ nc_read_poll(struct nc_session *session, int io_timeout)
     if (ret < 0) {
         /* poll failed - something really bad happened, close the session */
         ERR(session, "poll error (%s).", strerror(errno));
-        session->status = NC_STATUS_INVALID;
-        session->term_reason = NC_SESSION_TERM_OTHER;
+        NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+        NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
         return -1;
     } else {
         /* in case of standard (non-libssh) poll, there still can be an error */
         if (fds.revents & POLLERR) {
             ERR(session, "Communication channel error.");
-            session->status = NC_STATUS_INVALID;
-            session->term_reason = NC_SESSION_TERM_OTHER;
+            NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+            NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
             return -1;
         }
         /* Some poll() implementations may return POLLHUP|POLLIN when the other
          * side has closed but there is data left to read in the buffer. */
         if ((fds.revents & POLLHUP) && !(fds.revents & POLLIN)) {
             ERR(session, "Communication channel unexpectedly closed.");
-            session->status = NC_STATUS_INVALID;
-            session->term_reason = NC_SESSION_TERM_DROPPED;
+            NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+            NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_DROPPED);
             return -1;
         }
     }
@@ -488,7 +488,7 @@ nc_read_msg_poll_io(struct nc_session *session, int io_timeout, struct ly_in **m
     assert(msg);
     *msg = NULL;
 
-    if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
+    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) && (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
         ERR(session, "Invalid session to read from.");
         return -1;
     }
@@ -588,15 +588,15 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
     int c, fd, interrupted;
     uint32_t written = 0;
 
-    if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
+    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) && (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
         return -1;
     }
 
     /* prevent SIGPIPE this way */
     if (!nc_session_is_connected(session)) {
         ERR(session, "Communication socket unexpectedly closed.");
-        session->status = NC_STATUS_INVALID;
-        session->term_reason = NC_SESSION_TERM_DROPPED;
+        NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+        NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_DROPPED);
         return -1;
     }
 
@@ -624,8 +624,8 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
         case NC_TI_SSH:
             if (ssh_channel_is_closed(session->ti.libssh.channel)) {
                 ERR(session, "SSH channel unexpectedly closed.");
-                session->status = NC_STATUS_INVALID;
-                session->term_reason = NC_SESSION_TERM_DROPPED;
+                NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+                NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_DROPPED);
                 return -1;
             }
             c = ssh_channel_write(session->ti.libssh.channel, (char *)buf + written, count - written);
@@ -854,7 +854,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
 
     assert(session);
 
-    if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
+    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) && (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
         ERR(session, "Invalid session to write to.");
         return NC_MSG_ERROR;
     }
@@ -1078,7 +1078,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
     /* flush message */
     nc_write_clb((void *)&arg, NULL, 0, 0);
 
-    if ((session->status != NC_STATUS_RUNNING) && (session->status != NC_STATUS_STARTING)) {
+    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) && (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
         /* error was already written */
         ret = NC_MSG_ERROR;
     } else {
