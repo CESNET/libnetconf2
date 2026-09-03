@@ -183,18 +183,6 @@ to arrive in its entirety once a beginning is read. The default is 300 (5 minute
 $ cmake -D READ_ACTIVE_TIMEOUT:String="300" ..
 ```
 
-### PSPoll Thread Count
-
-This value limits the maximum number of threads that can concurrently access
-(wait for access) a single pspoll structure. To simplify, how many threads could
-simultaneously call a function whose parameter is one and the same pspoll structure.
-If using **netopeer2-server**, it will warn that this value needs to be adjusted if
-too small.
-
-```
-$ cmake -D MAX_PSPOLL_THREAD_COUNT:String="6" ..
-```
-
 ### Code Coverage
 
 Based on the tests run, it is possible to generate code coverage report. But

@@ -2099,7 +2099,6 @@ nc_session_accept_ssh_channel(struct nc_session *orig_session, struct nc_session
 API NC_MSG_TYPE
 nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
 {
-    uint8_t q_id;
     NC_MSG_TYPE msgtype;
     struct nc_session *new_session = NULL, *cur_session;
     struct timespec ts_cur;
@@ -2108,7 +2107,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     NC_CHECK_ARG_RET(NULL, ps, session, NC_MSG_ERROR);
 
     /* LOCK */
-    if (nc_ps_lock(ps, &q_id, __func__)) {
+    if (nc_ps_lock(ps, 1, __func__)) {
         return NC_MSG_ERROR;
     }
 
@@ -2135,7 +2134,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     }
 
     /* UNLOCK */
-    nc_ps_unlock(ps, q_id, __func__);
+    nc_ps_unlock(ps, __func__);
 
     if (!new_session) {
         ERR(NULL, "No session with a NETCONF SSH channel ready was found.");

@@ -64,6 +64,7 @@ libnetconf2_test(NAME test_client_messages)
 libnetconf2_test(NAME test_client_thread)
 libnetconf2_test(NAME test_fd_comm)
 libnetconf2_test(NAME test_io)
+libnetconf2_test(NAME test_ps_poll)
 libnetconf2_test(NAME test_thread_messages)
 libnetconf2_test(NAME test_unix_socket)
 
