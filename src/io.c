@@ -76,11 +76,13 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
     ssize_t r = -1;
     int fd, interrupted;
     struct timespec ts_inact_timeout;
+    NC_STATUS status;
 
     assert(session);
     assert(buf);
 
-    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) && (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
+    status = NC_SESSION_STATUS_GET(session);
+    if ((status != NC_STATUS_RUNNING) && (status != NC_STATUS_STARTING)) {
         return -1;
     }
 
@@ -265,13 +267,15 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, int passing_io_lock, 
     char *frame_size_buf = NULL;
     uint32_t inact_timeout, frame_buf_len, chunk_len, buf_used = 0;
     struct timespec ts_act_timeout;
+    NC_STATUS status;
 
     assert(session && buf && buf_len);
 
     /* use timeout in milliseconds instead seconds */
     inact_timeout = NC_READ_INACT_TIMEOUT * 1000;
 
-    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) && (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
+    status = NC_SESSION_STATUS_GET(session);
+    if ((status != NC_STATUS_RUNNING) && (status != NC_STATUS_STARTING)) {
         ERR(session, "Invalid session to read from.");
         ret = -1;
         goto cleanup;
@@ -385,8 +389,10 @@ nc_read_poll(struct nc_session *session, int io_timeout)
 {
     int ret = -2;
     struct pollfd fds;
+    NC_STATUS status;
 
-    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) && (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
+    status = NC_SESSION_STATUS_GET(session);
+    if ((status != NC_STATUS_RUNNING) && (status != NC_STATUS_STARTING)) {
         ERR(session, "Invalid session to poll.");
         return -1;
     }
@@ -484,11 +490,13 @@ nc_read_msg_poll_io(struct nc_session *session, int io_timeout, struct ly_in **m
     int ret;
     uint32_t buf_len = 0;
     char *buf = NULL;
+    NC_STATUS status;
 
     assert(msg);
     *msg = NULL;
 
-    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) && (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
+    status = NC_SESSION_STATUS_GET(session);
+    if ((status != NC_STATUS_RUNNING) && (status != NC_STATUS_STARTING)) {
         ERR(session, "Invalid session to read from.");
         return -1;
     }
@@ -587,8 +595,10 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
 {
     int c, fd, interrupted;
     uint32_t written = 0;
+    NC_STATUS status;
 
-    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) && (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
+    status = NC_SESSION_STATUS_GET(session);
+    if ((status != NC_STATUS_RUNNING) && (status != NC_STATUS_STARTING)) {
         return -1;
     }
 
@@ -851,10 +861,12 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
     const char **capabilities;
     uint32_t *sid = NULL, i, wd = 0, str_len;
     LY_ERR lyrc;
+    NC_STATUS status;
 
     assert(session);
 
-    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) && (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
+    status = NC_SESSION_STATUS_GET(session);
+    if ((status != NC_STATUS_RUNNING) && (status != NC_STATUS_STARTING)) {
         ERR(session, "Invalid session to write to.");
         return NC_MSG_ERROR;
     }
@@ -1078,7 +1090,8 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
     /* flush message */
     nc_write_clb((void *)&arg, NULL, 0, 0);
 
-    if ((NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) && (NC_SESSION_STATUS_GET(session) != NC_STATUS_STARTING)) {
+    status = NC_SESSION_STATUS_GET(session);
+    if ((status != NC_STATUS_RUNNING) && (status != NC_STATUS_STARTING)) {
         /* error was already written */
         ret = NC_MSG_ERROR;
     } else {

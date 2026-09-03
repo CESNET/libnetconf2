@@ -1086,6 +1086,7 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     int r, i, rpc_locked = 0, ch_locked = 0;
     int multisession = 0; /* flag for more NETCONF sessions on a single SSH session */
     struct timespec ts;
+    NC_STATUS status;
 
     if (!session) {
         return;
@@ -1129,9 +1130,10 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
     /* notify the peer that we're closing the session, either if:
      * - session running - normal disconnect from client
      * - session invalid - client disconnected from a Call Home session */
-    if ((NC_SESSION_STATUS_GET(session) == NC_STATUS_RUNNING) ||
+    status = NC_SESSION_STATUS_GET(session);
+    if ((status == NC_STATUS_RUNNING) ||
             ((session->side == NC_SERVER) && (session->flags & NC_SESSION_CALLHOME) &&
-            (NC_SESSION_STATUS_GET(session) == NC_STATUS_INVALID) && (NC_SESSION_TERM_REASON_GET(session) == NC_SESSION_TERM_CLOSED))) {
+            (status == NC_STATUS_INVALID) && (NC_SESSION_TERM_REASON_GET(session) == NC_SESSION_TERM_CLOSED))) {
         if (session->side == NC_CLIENT) {
             /* graceful close: <close-session> + transport shutdown indication */
             nc_session_free_client_close_graceful(session);
