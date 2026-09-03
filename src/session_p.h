@@ -95,9 +95,15 @@ extern struct nc_server_opts server_opts;
 #define NC_SESSION_FREE_SSH_POLL_EOF_TIMEOUT 100
 
 /**
- * Timeout in msec for a thread to wait for its turn to work with a pollsession structure.
+ * Initial number of threads the queue of a pollsession structure is allocated for, it grows on demand.
  */
-#define NC_PS_QUEUE_TIMEOUT 5000
+#define NC_PS_QUEUE_INIT_SIZE 6
+
+/**
+ * Timeout in msec for a thread to get the pollsession lock and its turn.
+ * Only the session array is walked, so waiting this long means the ps queue is jammed.
+ */
+#define NC_PS_TIMEOUT 500
 
 /**
  * @brief Maximum time (in seconds) to wait for a pending configuration
@@ -199,12 +205,6 @@ extern struct nc_server_opts server_opts;
  * (just simple session flag checks and updates)
  */
 #define NC_SESSION_CH_LOCK_TIMEOUT 1000
-
-/**
- * @brief Timeout in msec for acquiring the pollsession's lock
- * (only O(n) array manipulation, where n is number of sessions (small usually))
- */
-#define NC_PS_LOCK_TIMEOUT 1000
 
 /**
  * @brief Timeout in msec for acquiring the notification status lock
@@ -1225,11 +1225,14 @@ struct nc_pollsession {
     uint16_t session_count;
     uint16_t last_event_session;
 
-    pthread_cond_t cond;
-    pthread_mutex_t lock;
-    uint8_t queue[NC_PS_QUEUE_SIZE]; /**< round buffer, queue is empty when queue_len == 0 */
-    uint8_t queue_begin;             /**< queue starts on queue[queue_begin] */
-    uint8_t queue_len;               /**< queue ends on queue[(queue_begin + queue_len - 1) % NC_PS_QUEUE_SIZE] */
+    pthread_cond_t cond;    /**< broadcasted whenever a pollsession turn is given up */
+    pthread_mutex_t lock;   /**< lock for the cond and the queue */
+    pthread_t *queue;       /**< round buffer, queue is empty when queue_len == 0 */
+    uint8_t queue_size;     /**< allocated size of queue, 0 until the first thread queues up */
+    uint8_t queue_begin;    /**< queue starts on queue[queue_begin], that thread gets the turn next */
+    uint8_t queue_len;      /**< queue ends on queue[(queue_begin + queue_len - 1) % queue_size] */
+    int busy;               /**< whether a thread is working with the pollsession, the thread at the
+                                 beginning of the queue only gets the turn once this is 0 */
 };
 
 struct nc_ntf_thread_arg {
@@ -1496,6 +1499,21 @@ int nc_rwlock_lock(pthread_rwlock_t *rwlock, enum nc_rwlock_mode mode, int timeo
 void nc_rwlock_unlock(pthread_rwlock_t *rwlock, const char *func_name);
 
 /**
+ * @brief Lock a pthread_mutex until a deadline.
+ *
+ * @note Does not log a timeout, the caller knows the deadline it set and can describe it better.
+ *
+ * @param[in] mutex Mutex to be acquired.
+ * @param[in] ts_deadline Absolute time to wait for the lock until, NULL to wait indefinitely.
+ * An already expired deadline still acquires a free mutex, meaning it behaves as a trylock.
+ * @param[in] func_name Caller function name for logging purposes.
+ * @return 1 on success (lock acquired);
+ * @return 0 on timeout;
+ * @return -1 on error.
+ */
+int nc_mutex_clocklock(pthread_mutex_t *mutex, const struct timespec *ts_deadline, const char *func_name);
+
+/**
  * @brief Lock a pthread_mutex with timeout support.
  *
  * @param[in] mutex Mutex to be acquired.
@@ -1518,9 +1536,30 @@ int nc_mutex_lock(pthread_mutex_t *mutex, int timeout, const char *func_name);
  */
 void nc_mutex_unlock(pthread_mutex_t *mutex, const char *func_name);
 
-int nc_ps_lock(struct nc_pollsession *ps, uint8_t *id, const char *func);
+/**
+ * @brief Wait for the turn of this thread to work with a pollsession.
+ *
+ * @param[in,out] ps Pollsession structure.
+ * @param[in] preempt Whether this thread preempts the poll thread that currently has the turn,
+ * meaning it is queued up in front of it. Set for every operation that only walks the session
+ * array, clear for ::nc_ps_poll() which polls for a whole poll interval.
+ * @param[in] timeout_ms Timeout in msec used for the lock and for waiting for the turn, 0 for no
+ * waiting, -1 for no timeout.
+ * @param[in] func Caller function name for logging.
+ * @return 1 on success and the turn is taken.
+ * @return 0 on timeout.
+ * @return -1 on error.
+ */
+int nc_ps_lock(struct nc_pollsession *ps, int preempt, int timeout_ms, const char *func);
 
-int nc_ps_unlock(struct nc_pollsession *ps, uint8_t id, const char *func);
+/**
+ * @brief Give up the pollsession turn of this thread.
+ *
+ * @param[in,out] ps Pollsession structure.
+ * @param[in] func Caller function name for logging.
+ * @return 0 on success, -1 on error.
+ */
+int nc_ps_unlock(struct nc_pollsession *ps, const char *func);
 
 int nc_client_session_new_ctx(struct nc_session *session, struct ly_ctx *ctx);
 

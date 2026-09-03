@@ -501,6 +501,37 @@ nc_rwlock_unlock(pthread_rwlock_t *rwlock, const char *func_name)
 }
 
 int
+nc_mutex_clocklock(pthread_mutex_t *mutex, const struct timespec *ts_deadline, const char *func_name)
+{
+    int r;
+
+    if (!mutex) {
+        ERRINT;
+        return -1;
+    }
+
+    if (ts_deadline) {
+        /* acquire the lock until the deadline, an expired one still locks a free mutex */
+        r = pthread_mutex_clocklock(mutex, COMPAT_CLOCK_ID, ts_deadline);
+    } else {
+        /* acquire the lock without any timeout */
+        r = pthread_mutex_lock(mutex);
+    }
+
+    if (r) {
+        if ((r == EBUSY) || (r == ETIMEDOUT)) {
+            /* timeout, the caller knows what it asked for so it logs the details */
+            return 0;
+        }
+
+        ERR(NULL, "%s: failed to lock mutex (%s).", func_name, strerror(r));
+        return -1;
+    }
+
+    return 1;
+}
+
+int
 nc_mutex_lock(pthread_mutex_t *mutex, int timeout, const char *func_name)
 {
     int ret;
