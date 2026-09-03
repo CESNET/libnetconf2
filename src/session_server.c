@@ -3003,7 +3003,8 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
             ret |= nc_server_send_reply_io(cur_session, timeout, rpc);
             if (NC_SESSION_STATUS_GET(cur_session) != NC_STATUS_RUNNING) {
                 ret |= NC_PSPOLL_SESSION_TERM;
-                if (!(NC_SESSION_TERM_REASON_GET(cur_session) & (NC_SESSION_TERM_CLOSED | NC_SESSION_TERM_KILLED))) {
+                if ((NC_SESSION_TERM_REASON_GET(cur_session) != NC_SESSION_TERM_CLOSED) &&
+                        (NC_SESSION_TERM_REASON_GET(cur_session) != NC_SESSION_TERM_KILLED)) {
                     ret |= NC_PSPOLL_SESSION_ERROR;
                 }
                 cur_ps_session->state = NC_PS_STATE_INVALID;
