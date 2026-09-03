@@ -2526,8 +2526,10 @@ nc_server_notif_send(struct nc_session *session, struct nc_server_notif *notif, 
 }
 
 /**
- * @brief Send a reply acquiring IO lock as needed.
- * Session RPC lock must be held!
+ * @brief Send a reply to an RPC.
+ *
+ * The session IO lock is acquired internally, the caller must not hold it. The caller must,
+ * however, hold the session RPC lock.
  *
  * @param[in] session Session to use.
  * @param[in] io_timeout Timeout to use for acquiring IO lock.
@@ -2634,8 +2636,10 @@ nc_ps_ssh_find_new_channel(struct nc_session *session)
 #endif /* NC_ENABLED_SSH_TLS */
 
 /**
- * @brief Poll a session from pspoll acquiring IO lock as needed.
- * Session must be running and session RPC lock held!
+ * @brief Poll a session from pspoll.
+ *
+ * The session IO lock is acquired internally, the caller must not hold it. The caller must,
+ * however, hold the session RPC lock and the session must be running.
  *
  * @param[in] session Session to use.
  * @param[in] io_timeout Timeout to use for acquiring IO lock.
