@@ -4029,8 +4029,10 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *dat
         return -1;
     }
 
-    /* entering the loop with locked ch_lock */
-    do {
+    /* entering the loop with locked ch_lock, the status must be checked before waiting on the
+     * condition, otherwise a session closed before we got the lock is missed and we sleep until
+     * the wait times out, by which point ::nc_session_free() may have given up on us */
+    while (NC_SESSION_STATUS_GET(session) == NC_STATUS_RUNNING) {
         nc_timeouttime_get(&ts, NC_CH_THREAD_IDLE_TIMEOUT_SLEEP);
 
         /* CH COND WAIT */
@@ -4079,8 +4081,8 @@ nc_server_ch_client_thread_session_cond_wait(struct nc_server_ch_thread_arg *dat
             NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
             NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_TIMEOUT);
         }
-    } while (NC_SESSION_STATUS_GET(session) == NC_STATUS_RUNNING);
-    /* broke out of the loop, but still holding the ch_lock */
+    }
+    /* left the loop, but still holding the ch_lock */
 
     if (NC_SESSION_STATUS_GET(session) == NC_STATUS_RUNNING) {
         /* thread is terminating but the session is still running, so just log it */
