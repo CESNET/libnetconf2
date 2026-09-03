@@ -480,6 +480,7 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
 {
     const char *str_type, *str_subtype = NULL;
     int subtype, type, local_users_supported;
+    NC_STATUS status;
 
     type = ssh_message_type(msg);
     subtype = ssh_message_subtype(msg);
@@ -593,11 +594,12 @@ nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, 
     }
 
     VRB(session, "Received an SSH message \"%s\" of subtype \"%s\".", str_type, str_subtype);
-    if (!session || (NC_SESSION_STATUS_GET(session) == NC_STATUS_CLOSING) || (NC_SESSION_STATUS_GET(session) == NC_STATUS_INVALID)) {
+    status = session ? NC_SESSION_STATUS_GET(session) : NC_STATUS_ERR;
+    if (!session || (status == NC_STATUS_CLOSING) || (status == NC_STATUS_INVALID)) {
         /* "valid" situation if, for example, receiving some auth or channel request timeouted,
          * but we got it now, during session free */
         VRB(session, "SSH message arrived on a %s session, the request will be denied.",
-                (session && NC_SESSION_STATUS_GET(session) == NC_STATUS_CLOSING ? "closing" : "invalid"));
+                (status == NC_STATUS_CLOSING) ? "closing" : "invalid");
         ssh_message_reply_default(msg);
         return 0;
     }
