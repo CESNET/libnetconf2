@@ -71,11 +71,6 @@
 #define NC_READ_ACT_TIMEOUT @READ_ACTIVE_TIMEOUT@
 
 /*
- * pspoll structure queue size (also found in nc_server.h)
- */
-#define NC_PS_QUEUE_SIZE @MAX_PSPOLL_THREAD_COUNT@
-
-/*
  * Timeout in msec for transport layer connection handshake/key exchange.
  * It can be quite a lot on slow machines (waiting for TLS cert-to-name resolution, SSH key cryptography, ...).
  */
