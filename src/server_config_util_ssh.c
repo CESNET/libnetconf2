@@ -490,9 +490,15 @@ nc_server_config_ch_del_ssh_user_authkey(const char *client_name, const char *en
             "public-keys/libnetconf2-netconf-server:use-system-keys", client_name, endpt_name, user_name);
 }
 
+/**
+ * @brief Hash a clear-text password into a crypt(3) SHA-512 digest.
+ *
+ * @param[in] password Clear-text password to hash.
+ * @param[out] hashed_password Generated "$6$<salt>$<digest>" value.
+ * @return 0 on success, non-zero otherwise.
+ */
 static int
-_nc_server_config_add_ssh_user_password(const struct ly_ctx *ctx, const char *tree_path,
-        const char *password, struct lyd_node **config)
+nc_server_config_crypt_password(const char *password, char **hashed_password)
 {
     int ret = 0;
     size_t i;
@@ -501,6 +507,8 @@ _nc_server_config_add_ssh_user_password(const struct ly_ctx *ctx, const char *tr
     struct crypt_data *cdata = NULL;
     unsigned char rnd[16];
     static const char itoa64[] = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+    *hashed_password = NULL;
 
     cdata = calloc(1, sizeof *cdata);
     NC_CHECK_ERRMEM_GOTO(!cdata, ret = 1, cleanup);
@@ -527,13 +535,44 @@ _nc_server_config_add_ssh_user_password(const struct ly_ctx *ctx, const char *tr
         goto cleanup;
     }
 
-    ret = nc_server_config_append(ctx, tree_path, "hashed-password", hashed_pw, config);
-    if (ret) {
-        goto cleanup;
-    }
+    /* crypt_r() returns a pointer into cdata, which is freed below */
+    *hashed_password = strdup(hashed_pw);
+    NC_CHECK_ERRMEM_GOTO(!*hashed_password, ret = 1, cleanup);
 
 cleanup:
     free(cdata);
+    return ret;
+}
+
+API int
+nc_server_config_hash_password(const char *crypt_hash, char **hashed_password)
+{
+    NC_CHECK_ARG_RET(NULL, crypt_hash, hashed_password, 1);
+
+    *hashed_password = NULL;
+
+    if (strncmp(crypt_hash, "$0$", 3)) {
+        /* not a clear-text password, nothing to do */
+        return 0;
+    }
+
+    return nc_server_config_crypt_password(crypt_hash + 3, hashed_password);
+}
+
+static int
+_nc_server_config_add_ssh_user_password(const struct ly_ctx *ctx, const char *tree_path,
+        const char *password, struct lyd_node **config)
+{
+    int ret = 0;
+    char *hashed_pw = NULL;
+
+    if (nc_server_config_crypt_password(password, &hashed_pw)) {
+        return 1;
+    }
+
+    ret = nc_server_config_append(ctx, tree_path, "hashed-password", hashed_pw, config);
+
+    free(hashed_pw);
     return ret;
 }
 
