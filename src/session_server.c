@@ -1619,6 +1619,9 @@ nc_server_destroy(void)
         ERR(NULL, "%s: failed to stop certificate expiration notification thread.", __func__);
         goto cleanup;
     }
+
+    /* free the password authentication lockout tally, the state file it mirrors is kept */
+    nc_server_ssh_authlock_free();
 #endif /* NC_ENABLED_SSH_TLS */
 
     /* CONFIG UPDATE LOCK - the same timeout as the appliers use, destroying the server must not
