@@ -2512,6 +2512,110 @@ cleanup:
 
 #endif /* NC_ENABLED_SSH_TLS */
 
+/**
+ * @brief Initialize or destroy the global state of the libraries used by libnetconf2.
+ *
+ * @param[in] side Side that is being initialized/destroyed.
+ * @param[in] destroy Whether to destroy the global state instead of initializing it.
+ * @return 0 on success, -1 on error.
+ */
+static int
+nc_global_init_destroy(NC_SIDE side, int destroy)
+{
+#ifdef NC_ENABLED_SSH_TLS
+    /* lock protecting the init flags and the global init of the libraries, which is not thread-safe */
+    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+    /* whether the client/server side has the libraries initialized */
+    static int init_client = 0, init_server = 0;
+
+    int rc = 0, curl_inited = 0, tls_inited = 0, *inited;
+
+    inited = (side == NC_CLIENT) ? &init_client : &init_server;
+
+    /* GLOBAL INIT LOCK */
+    pthread_mutex_lock(&lock);
+
+    if (destroy) {
+        if (!*inited) {
+            /* this side has not initialized the libraries */
+            goto cleanup;
+        }
+        *inited = 0;
+
+        if (!init_client && !init_server) {
+            /* the last side using the libraries, destroy them in the reverse order */
+            ssh_finalize();
+            nc_tls_backend_destroy_wrap();
+            curl_global_cleanup();
+        }
+        goto cleanup;
+    }
+
+    if (init_client || init_server) {
+        /* the libraries are already initialized by the other side */
+        *inited = 1;
+        goto cleanup;
+    }
+
+    if (curl_global_init(CURL_GLOBAL_SSL | CURL_GLOBAL_ACK_EINTR)) {
+        ERR(NULL, "%s: failed to init CURL.", __func__);
+        rc = -1;
+        goto cleanup;
+    }
+    curl_inited = 1;
+
+    if (nc_tls_backend_init_wrap()) {
+        ERR(NULL, "%s: failed to init the SSL library backend.", __func__);
+        rc = -1;
+        goto cleanup;
+    }
+    tls_inited = 1;
+
+    /* optional for dynamic library, mandatory for static */
+    if (ssh_init()) {
+        ERR(NULL, "%s: failed to init libssh.", __func__);
+        rc = -1;
+        goto cleanup;
+    }
+
+    *inited = 1;
+
+cleanup:
+    if (rc) {
+        /* leave no library initialized behind */
+        if (tls_inited) {
+            nc_tls_backend_destroy_wrap();
+        }
+        if (curl_inited) {
+            curl_global_cleanup();
+        }
+    }
+
+    /* GLOBAL INIT UNLOCK */
+    pthread_mutex_unlock(&lock);
+
+    return rc;
+#else
+    (void)side;
+    (void)destroy;
+
+    return 0;
+#endif /* NC_ENABLED_SSH_TLS */
+}
+
+int
+nc_global_init(NC_SIDE side)
+{
+    return nc_global_init_destroy(side, 0);
+}
+
+void
+nc_global_destroy(NC_SIDE side)
+{
+    nc_global_init_destroy(side, 1);
+}
+
 API const char *
 nc_yang_module_dir(void)
 {

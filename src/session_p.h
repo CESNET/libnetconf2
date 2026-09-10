@@ -1462,6 +1462,21 @@ int nc_poll(struct pollfd *pfd, uint16_t pfd_count, int timeout);
  */
 int nc_sock_configure_ka(int sock, const struct nc_keepalives *ka);
 
+/**
+ * @brief Initialize the global state of the libraries used by libnetconf2.
+ *
+ * @param[in] side Side that is being initialized.
+ * @return 0 on success, -1 on error.
+ */
+int nc_global_init(NC_SIDE side);
+
+/**
+ * @brief Destroy the global state of the libraries used by libnetconf2.
+ *
+ * @param[in] side Side that is being destroyed.
+ */
+void nc_global_destroy(NC_SIDE side);
+
 struct nc_session *nc_new_session(NC_SIDE side, int shared_ti);
 
 int nc_session_rpc_lock(struct nc_session *session, int timeout, const char *func);

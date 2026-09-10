@@ -1524,6 +1524,8 @@ cleanup:
 API int
 nc_server_init(void)
 {
+    int glob_inited = 0;
+
 #ifdef NC_ENABLED_SSH_TLS
     int r;
 #endif /* NC_ENABLED_SSH_TLS */
@@ -1547,23 +1549,13 @@ nc_server_init(void)
     ATOMIC_STORE_RELAXED(server_opts.config->refcount, 1);
     ATOMIC_STORE_RELAXED(server_opts.idle_timeout, 0);
 
+    /* initialize the global state of the used libraries, shared with the client side */
+    if (nc_global_init(NC_SERVER)) {
+        goto error;
+    }
+    glob_inited = 1;
+
 #ifdef NC_ENABLED_SSH_TLS
-    if (curl_global_init(CURL_GLOBAL_SSL | CURL_GLOBAL_ACK_EINTR)) {
-        ERR(NULL, "%s: failed to init CURL.", __func__);
-        goto error;
-    }
-
-    if (nc_tls_backend_init_wrap()) {
-        ERR(NULL, "%s: failed to init the SSL library backend.", __func__);
-        goto error;
-    }
-
-    /* optional for dynamic library, mandatory for static */
-    if (ssh_init()) {
-        ERR(NULL, "%s: failed to init libssh.", __func__);
-        goto error;
-    }
-
     if ((r = pthread_mutex_init(&server_opts.cert_exp_notif.lock, NULL))) {
         ERR(NULL, "%s: failed to init certificate expiration notification thread lock(%s).", __func__, strerror(r));
         goto error;
@@ -1584,6 +1576,9 @@ error:
     nc_server_config_release(server_opts.config);
     server_opts.config = NULL;
     ATOMIC_STORE_RELAXED(server_opts.new_session_id, 0);
+    if (glob_inited) {
+        nc_global_destroy(NC_SERVER);
+    }
     return -1;
 }
 
@@ -1701,16 +1696,14 @@ nc_server_destroy(void)
     nc_server_config_release(config);
 
 #ifdef NC_ENABLED_SSH_TLS
-    curl_global_cleanup();
-    nc_tls_backend_destroy_wrap();
-    ssh_finalize();
-
     /* close the TLS keylog file */
     if (server_opts.tls_keylog_file) {
         fclose(server_opts.tls_keylog_file);
         server_opts.tls_keylog_file = NULL;
     }
 #endif /* NC_ENABLED_SSH_TLS */
+
+    nc_global_destroy(NC_SERVER);
 
 cleanup:
     if (opts_locked) {
