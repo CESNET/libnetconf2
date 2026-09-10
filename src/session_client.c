@@ -1908,18 +1908,7 @@ nc_session_ntf_thread_running(const struct nc_session *session)
 API int
 nc_client_init(void)
 {
-#ifdef NC_ENABLED_SSH_TLS
-    if (nc_tls_backend_init_wrap()) {
-        ERR(NULL, "%s: failed to init the SSL library backend.", __func__);
-        return -1;
-    }
-    if (ssh_init()) {
-        ERR(NULL, "%s: failed to init libssh.", __func__);
-        return -1;
-    }
-#endif
-
-    return 0;
+    return nc_global_init(NC_CLIENT);
 }
 
 API void
@@ -1931,9 +1920,9 @@ nc_client_destroy(void)
     nc_client_ch_del_bind(NULL, 0, 0);
     nc_client_ssh_destroy_opts();
     nc_client_tls_destroy_opts();
-    nc_tls_backend_destroy_wrap();
-    ssh_finalize();
 #endif /* NC_ENABLED_SSH_TLS */
+
+    nc_global_destroy(NC_CLIENT);
 }
 
 static NC_MSG_TYPE
