@@ -116,6 +116,7 @@ server_thread(void *arg)
     pthread_barrier_wait(&barrier);
 
     nc_server_notif_free(notif);
+    nc_assert(!nc_server_destroy());
     return arg;
 }
 
@@ -227,6 +228,7 @@ main(void)
 
     /* cleanup */
     nc_session_free(sess, NULL);
+    nc_client_destroy();
     ly_ctx_destroy(server_ctx);
     ly_ctx_destroy(client_ctx);
     for (uint8_t i = 0; i < 4; i++) {
