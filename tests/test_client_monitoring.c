@@ -130,11 +130,19 @@ server_thread(void *arg)
 
     /* poll until the client stops sending messages */
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+        if (ret & NC_PSPOLL_SESSION_TERM) {
+            /* the session was removed from ps and we own it now */
+            break;
+        }
     } while ((ret & NC_PSPOLL_RPC));
 
     /* free the session (it will close the socket -> client needs to detect this) */
-    nc_ps_clear(ps, 1, NULL);
+    if (ret & NC_PSPOLL_SESSION_TERM) {
+        nc_session_free(session, NULL);
+    } else {
+        nc_ps_clear(ps, 1, NULL);
+    }
     nc_ps_free(ps);
     return NULL;
 }

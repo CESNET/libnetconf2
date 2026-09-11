@@ -315,10 +315,12 @@ auth_server_thread(void *arg)
     ret = nc_ps_add_session(ps, session);
     assert_int_equal(ret, 0);
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
         assert_true(ret & NC_PSPOLL_RPC);
     } while (!(ret & NC_PSPOLL_SESSION_TERM));
-    nc_ps_clear(ps, 1, NULL);
+
+    /* the terminated session was removed from ps and we own it now */
+    nc_session_free(session, NULL);
     nc_ps_free(ps);
 
     return NULL;

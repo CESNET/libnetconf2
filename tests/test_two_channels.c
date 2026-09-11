@@ -55,7 +55,7 @@ server_thread(void *arg)
         ret = nc_ps_poll(ps, 0, &session);
 
         if (ret & NC_PSPOLL_SESSION_TERM) {
-            nc_ps_del_session(ps, session);
+            /* the session was removed from ps and we own it now */
             nc_session_free(session, NULL);
             del_session_count++;
         } else if (ret & NC_PSPOLL_SSH_CHANNEL) {

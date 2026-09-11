@@ -16,7 +16,6 @@
 #define _GNU_SOURCE
 #include "example.h"
 
-#include <assert.h>
 #include <getopt.h>
 #include <signal.h>
 #include <stdint.h>
@@ -370,10 +369,8 @@ main(int argc, char **argv)
             ERR_MSG_CLEANUP("Error polling RPCs\n");
         }
 
-        /* a session was terminated, so remove it from the ps structure and free it */
+        /* a session was terminated, it is no longer in the ps structure and we own it now */
         if (r & NC_PSPOLL_SESSION_TERM) {
-            r = nc_ps_del_session(ps, new_session);
-            assert(!r);
             nc_session_free(new_session, NULL);
         }
 
