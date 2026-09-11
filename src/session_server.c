@@ -2148,18 +2148,12 @@ nc_ps_new(void)
 API void
 nc_ps_free(struct nc_pollsession *ps)
 {
-    uint16_t i;
-
     if (!ps) {
         return;
     }
 
     if (ps->queue_len) {
         ERR(NULL, "FATAL: Freeing a pollsession structure that is currently being worked with!");
-    }
-
-    for (i = 0; i < ps->session_count; i++) {
-        free(ps->sessions[i]);
     }
 
     free(ps->sessions);
@@ -2173,7 +2167,7 @@ nc_ps_free(struct nc_pollsession *ps)
 API int
 nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
 {
-    struct nc_ps_session **sessions;
+    struct nc_session **sessions;
 
     NC_CHECK_ARG_RET(session, ps, session, -1);
 
@@ -2186,24 +2180,13 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
     sessions = realloc(ps->sessions, (ps->session_count + 1) * sizeof *ps->sessions);
     if (!sessions) {
         ERRMEM;
+
         /* UNLOCK */
         nc_ps_unlock(ps, __func__);
         return -1;
     }
     ps->sessions = sessions;
-
-    ps->sessions[ps->session_count] = calloc(1, sizeof **ps->sessions);
-    if (!ps->sessions[ps->session_count]) {
-        ERRMEM;
-        /* UNLOCK */
-        nc_ps_unlock(ps, __func__);
-        return -1;
-    }
-    ps->sessions[ps->session_count]->session = session;
-    ps->sessions[ps->session_count]->state = NC_PS_STATE_NONE;
-
-    /* the session is in, only now does it count */
-    ++ps->session_count;
+    ps->sessions[ps->session_count++] = session;
 
     /* UNLOCK */
     return nc_ps_unlock(ps, __func__);
@@ -2214,20 +2197,16 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
  *
  * @note The pollsession turn MUST be held.
  *
- * The removed pspoll session is not freed, the caller becomes its owner. It must not be freed
- * before ::nc_session_free() of its NETCONF session returns because a poll thread that has given
- * up the turn may still be working with it until it releases the session RPC lock.
+ * The session itself is not freed, the caller becomes its owner.
  *
  * @param[in,out] ps Pollsession structure to remove from.
  * @param[in] session NETCONF session to remove, used only if @p index is negative.
  * @param[in] index Index of the session to remove, negative to look @p session up.
- * @param[out] ps_session Removed pspoll session, to be freed by the caller, set only on success.
  * @return 0 on success.
  * @return -1 if @p session was not found.
  */
 static int
-_nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session, int index,
-        struct nc_ps_session **ps_session)
+_nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session, int index)
 {
     uint16_t i;
 
@@ -2236,10 +2215,9 @@ _nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session, int in
         goto remove;
     }
     for (i = 0; i < ps->session_count; ++i) {
-        if (ps->sessions[i]->session == session) {
+        if (ps->sessions[i] == session) {
 remove:
             --ps->session_count;
-            *ps_session = ps->sessions[i];
             ps->sessions[i] = ps->sessions[ps->session_count];
             if (!ps->session_count) {
                 free(ps->sessions);
@@ -2257,7 +2235,6 @@ API int
 nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
 {
     int ret, ret2;
-    struct nc_ps_session *ps_session = NULL;
 
     NC_CHECK_ARG_RET(session, ps, session, -1);
 
@@ -2266,13 +2243,10 @@ nc_ps_del_session(struct nc_pollsession *ps, struct nc_session *session)
         return -1;
     }
 
-    ret = _nc_ps_del_session(ps, session, -1, &ps_session);
+    ret = _nc_ps_del_session(ps, session, -1);
 
     /* UNLOCK */
     ret2 = nc_ps_unlock(ps, __func__);
-
-    /* we are the owner of the removed pspoll session */
-    free(ps_session);
 
     return ret || ret2 ? -1 : 0;
 }
@@ -2290,7 +2264,7 @@ nc_ps_get_session(const struct nc_pollsession *ps, uint16_t idx)
     }
 
     if (idx < ps->session_count) {
-        ret = ps->sessions[idx]->session;
+        ret = ps->sessions[idx];
     }
 
     /* UNLOCK */
@@ -2313,8 +2287,8 @@ nc_ps_find_session(const struct nc_pollsession *ps, nc_ps_session_match_cb match
     }
 
     for (i = 0; i < ps->session_count; ++i) {
-        if (match_cb(ps->sessions[i]->session, cb_data)) {
-            ret = ps->sessions[i]->session;
+        if (match_cb(ps->sessions[i], cb_data)) {
+            ret = ps->sessions[i];
             break;
         }
     }
@@ -2958,7 +2932,7 @@ nc_ps_poll_session_io(struct nc_session *session, time_t now_mono, char *msg)
 /**
  * @brief Poll a single pspoll session.
  *
- * @param[in] ps_session pspoll session to poll.
+ * @param[in] session Session to poll.
  * @param[in] now_mono Current monotonic timestamp.
  * @return NC_PSPOLL_RPC if some application data are available.
  * @return NC_PSPOLL_TIMEOUT if there is nothing to do with the session right now, it is polled
@@ -2969,59 +2943,26 @@ nc_ps_poll_session_io(struct nc_session *session, time_t now_mono, char *msg)
  * @return NC_PSPOLL_ERROR on other fatal errors.
  */
 static int
-nc_ps_poll_sess(struct nc_ps_session *ps_session, time_t now_mono)
+nc_ps_poll_sess(struct nc_session *session, time_t now_mono)
 {
-    int ret = NC_PSPOLL_ERROR;
+    int rc = NC_PSPOLL_ERROR;
     char msg[256];
 
-    switch (ps_session->state) {
-    case NC_PS_STATE_NONE:
-        if (NC_SESSION_STATUS_GET(ps_session->session) == NC_STATUS_RUNNING) {
-            /* session is fine, work with it, no configuration is accessed */
-            ps_session->state = NC_PS_STATE_BUSY;
-            ret = nc_ps_poll_session_io(ps_session->session, now_mono, msg);
-
-            switch (ret) {
-            case NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR:
-                ERR(ps_session->session, "%s.", msg);
-                ps_session->state = NC_PS_STATE_INVALID;
-                break;
-            case NC_PSPOLL_ERROR:
-                ERR(ps_session->session, "%s.", msg);
-                ps_session->state = NC_PS_STATE_NONE;
-                break;
-            case NC_PSPOLL_TIMEOUT:
-#ifdef NC_ENABLED_SSH_TLS
-            case NC_PSPOLL_SSH_CHANNEL:
-            case NC_PSPOLL_SSH_MSG:
-#endif /* NC_ENABLED_SSH_TLS */
-                ps_session->state = NC_PS_STATE_NONE;
-                break;
-            case NC_PSPOLL_RPC:
-                /* let's keep the state busy, we are not done with this session */
-                break;
-            }
-        } else {
-            /* session is not fine, let the caller know */
-            ret = NC_PSPOLL_SESSION_TERM;
-            if (NC_SESSION_TERM_REASON_GET(ps_session->session) != NC_SESSION_TERM_CLOSED) {
-                ret |= NC_PSPOLL_SESSION_ERROR;
-            }
-            ps_session->state = NC_PS_STATE_INVALID;
+    if (NC_SESSION_STATUS_GET(session) != NC_STATUS_RUNNING) {
+        /* session is not fine, let the caller know, it is removed from the pollsession by it */
+        rc = NC_PSPOLL_SESSION_TERM;
+        if (NC_SESSION_TERM_REASON_GET(session) != NC_SESSION_TERM_CLOSED) {
+            rc |= NC_PSPOLL_SESSION_ERROR;
         }
-        break;
-    case NC_PS_STATE_BUSY:
-        /* it definitely should not be busy because we have the lock */
-        ERRINT;
-        ret = NC_PSPOLL_ERROR;
-        break;
-    case NC_PS_STATE_INVALID:
-        /* we got it locked, but it will be freed, let it be */
-        ret = NC_PSPOLL_TIMEOUT;
-        break;
+    } else {
+        /* session is fine, work with it, no configuration is accessed */
+        rc = nc_ps_poll_session_io(session, now_mono, msg);
+        if ((rc == NC_PSPOLL_ERROR) || (rc == (NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR))) {
+            ERR(session, "%s.", msg);
+        }
     }
 
-    return ret;
+    return rc;
 }
 
 API int
@@ -3032,7 +2973,6 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
     struct timespec ts_timeout, ts_cur;
     const struct timespec *ts_deadline = NULL;
     struct nc_session *cur_session;
-    struct nc_ps_session *cur_ps_session;
     struct nc_server_rpc *rpc = NULL;
     NC_SESSION_TERM_REASON term_reason;
 
@@ -3072,8 +3012,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
             i = j = ps->last_event_session + 1;
         }
         do {
-            cur_ps_session = ps->sessions[i];
-            cur_session = cur_ps_session->session;
+            cur_session = ps->sessions[i];
 
             /* SESSION RPC LOCK */
             r = nc_session_rpc_lock(cur_session, 0, __func__);
@@ -3081,7 +3020,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                 ret = NC_PSPOLL_ERROR;
             } else if (r == 1) {
                 /* no one else is currently working with the session, so we can, otherwise skip it */
-                ret = nc_ps_poll_sess(cur_ps_session, ts_cur.tv_sec);
+                ret = nc_ps_poll_sess(cur_session, ts_cur.tv_sec);
 
                 /* keep RPC lock in this one case */
                 if (ret != NC_PSPOLL_RPC) {
@@ -3125,9 +3064,19 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
 
     /* do we want to return the session? */
     switch (ret) {
-    case NC_PSPOLL_RPC:
     case NC_PSPOLL_SESSION_TERM:
     case NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR:
+        /* the session is dead, remove it from ps while we still have the turn so that it is
+         * reported exactly once, the caller becomes its owner */
+        _nc_ps_del_session(ps, NULL, i);
+
+        /* not setting last_event_session as below, index i may be out of bounds after the removal and the
+         * removal restarted the round-robin anyway */
+        if (session) {
+            *session = cur_session;
+        }
+        break;
+    case NC_PSPOLL_RPC:
 #ifdef NC_ENABLED_SSH_TLS
     case NC_PSPOLL_SSH_CHANNEL:
     case NC_PSPOLL_SSH_MSG:
@@ -3151,14 +3100,8 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
             /* error, do not send a reply */
             if (NC_SESSION_STATUS_GET(cur_session) != NC_STATUS_RUNNING) {
                 ret |= NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
-                cur_ps_session->state = NC_PS_STATE_INVALID;
-            } else {
-                cur_ps_session->state = NC_PS_STATE_NONE;
             }
-        } else if (ret & NC_PSPOLL_REPLY_ERROR) {
-            /* error reply has been sent */
-            cur_ps_session->state = NC_PS_STATE_NONE;
-        } else {
+        } else if (!(ret & NC_PSPOLL_REPLY_ERROR)) {
             cur_session->opts.server.last_rpc = ts_cur.tv_sec;
 
             /* process RPC and send a reply */
@@ -3169,12 +3112,27 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
                 if ((term_reason != NC_SESSION_TERM_CLOSED) && (term_reason != NC_SESSION_TERM_KILLED)) {
                     ret |= NC_PSPOLL_SESSION_ERROR;
                 }
-                cur_ps_session->state = NC_PS_STATE_INVALID;
-            } else {
-                cur_ps_session->state = NC_PS_STATE_NONE;
             }
         }
         nc_server_rpc_free(rpc);
+
+        if (ret & NC_PSPOLL_SESSION_TERM) {
+            /* the session died during the RPC, when the turn was not held, take it back and remove
+             * the session before handing it over to the caller */
+            if (nc_ps_lock(ps, 1, NC_PS_TIMEOUT, __func__) == 1) {
+                r = _nc_ps_del_session(ps, cur_session, -1);
+
+                /* PS UNLOCK */
+                nc_ps_unlock(ps, __func__);
+            } else {
+                r = -1;
+            }
+            if (r) {
+                /* either another thread removed the session and owns it now, or the turn timed out
+                 * and the session is still in ps for a later poll to report, not ours to hand over */
+                ret &= ~(NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR);
+            }
+        }
 
         /* SESSION RPC UNLOCK */
         nc_session_rpc_unlock(cur_session, NC_SESSION_LOCK_TIMEOUT, __func__);
@@ -3187,7 +3145,7 @@ API void
 nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
 {
     uint16_t i, count = 0;
-    struct nc_ps_session **ps_sessions = NULL;
+    struct nc_session **sessions = NULL;
 
     if (!ps) {
         ERRARG(NULL, "ps");
@@ -3201,13 +3159,13 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
 
     if (ps->session_count) {
         /* freeing a session takes a while, so only collect them here and free them once the turn is given up */
-        ps_sessions = malloc(ps->session_count * sizeof *ps_sessions);
-        NC_CHECK_ERRMEM_GOTO(!ps_sessions, , cleanup);
+        sessions = malloc(ps->session_count * sizeof *sessions);
+        NC_CHECK_ERRMEM_GOTO(!sessions, , cleanup);
     }
 
     if (all) {
         for (i = 0; i < ps->session_count; i++) {
-            ps_sessions[i] = ps->sessions[i];
+            sessions[i] = ps->sessions[i];
         }
         count = ps->session_count;
 
@@ -3217,9 +3175,9 @@ nc_ps_clear(struct nc_pollsession *ps, int all, void (*data_free)(void *))
         ps->last_event_session = 0;
     } else {
         for (i = 0; i < ps->session_count; ) {
-            if (NC_SESSION_STATUS_GET(ps->sessions[i]->session) != NC_STATUS_RUNNING) {
-                _nc_ps_del_session(ps, NULL, i, &ps_sessions[count]);
-                ++count;
+            if (NC_SESSION_STATUS_GET(ps->sessions[i]) != NC_STATUS_RUNNING) {
+                sessions[count++] = ps->sessions[i];
+                _nc_ps_del_session(ps, NULL, i);
                 continue;
             }
 
@@ -3232,12 +3190,12 @@ cleanup:
     nc_ps_unlock(ps, __func__);
 
     /* free the sessions only once the turn was given up, ::nc_session_free() waits for the session
-     * RPC lock, which a poll thread keeps while it no longer has the turn */
+     * RPC lock, which a poll thread keeps while it no longer has the turn, and which it needs to
+     * take the turn back in ::nc_ps_poll() */
     for (i = 0; i < count; i++) {
-        nc_session_free(ps_sessions[i]->session, data_free);
-        free(ps_sessions[i]);
+        nc_session_free(sessions[i], data_free);
     }
-    free(ps_sessions);
+    free(sessions);
 }
 
 /**

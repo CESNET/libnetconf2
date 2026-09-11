@@ -2112,7 +2112,7 @@ nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session)
     }
 
     for (i = 0; i < ps->session_count; ++i) {
-        cur_session = ps->sessions[i]->session;
+        cur_session = ps->sessions[i];
         if ((NC_SESSION_STATUS_GET(cur_session) == NC_STATUS_RUNNING) && (cur_session->ti_type == NC_TI_SSH) &&
                 cur_session->ti.libssh.next) {
             /* an SSH session with more channels */

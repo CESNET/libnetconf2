@@ -327,7 +327,7 @@ static void
 test_idle_timeout(void **state)
 {
     struct nc_pollsession *ps;
-    struct nc_session *sess;
+    struct nc_session *sess, *term_sess;
     struct timespec ts, ts_start;
     int ret;
     int32_t elapsed;
@@ -346,7 +346,7 @@ test_idle_timeout(void **state)
     ATOMIC_STORE_RELAXED(server_opts.idle_timeout, 2);
 
     nc_timeouttime_get(&ts_start, 0);
-    ret = nc_ps_poll(ps, 2500, NULL);
+    ret = nc_ps_poll(ps, 2500, &term_sess);
     elapsed = -nc_timeouttime_cur_diff(&ts_start);
 
     assert_int_equal(ret, NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR);
@@ -354,7 +354,10 @@ test_idle_timeout(void **state)
     assert_int_equal(NC_SESSION_TERM_REASON_GET(sess), NC_SESSION_TERM_TIMEOUT);
     assert_true(elapsed >= 1000);
 
-    assert_int_equal(nc_ps_del_session(ps, sess), 0);
+    /* the session was handed over to us, it is no longer in ps */
+    assert_ptr_equal(term_sess, sess);
+    assert_int_equal(nc_ps_session_count(ps), 0);
+    assert_int_equal(nc_ps_del_session(ps, sess), -1);
     test_free_session(sess);
 
     /* a session that really has been idle for too long is terminated right away */
@@ -365,7 +368,7 @@ test_idle_timeout(void **state)
     assert_int_equal(nc_ps_add_session(ps, sess), 0);
 
     nc_timeouttime_get(&ts_start, 0);
-    ret = nc_ps_poll(ps, 2500, NULL);
+    ret = nc_ps_poll(ps, 2500, &term_sess);
     elapsed = -nc_timeouttime_cur_diff(&ts_start);
 
     assert_int_equal(ret, NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR);
@@ -375,8 +378,64 @@ test_idle_timeout(void **state)
 
     ATOMIC_STORE_RELAXED(server_opts.idle_timeout, 0);
 
-    assert_int_equal(nc_ps_del_session(ps, sess), 0);
+    assert_ptr_equal(term_sess, sess);
+    assert_int_equal(nc_ps_session_count(ps), 0);
     test_free_session(sess);
+    nc_ps_free(ps);
+}
+
+/**
+ * @brief Terminating the last session in the array must not corrupt the round-robin index.
+ *
+ * ::nc_ps_poll() reports a terminated session and removes it from the pollsession in one step,
+ * so the index it was found on no longer exists. Remembering it as the last event index made
+ * the next poll start one past the end of the session array.
+ */
+static void
+test_term_last_session(void **state)
+{
+    struct nc_pollsession *ps;
+    struct nc_session *sess[3], *term_sess;
+    struct timespec ts;
+    uint16_t i;
+    int ret;
+
+    (void)state;
+
+    ps = nc_ps_new();
+    assert_non_null(ps);
+
+    for (i = 0; i < 3; ++i) {
+        sess[i] = test_new_session(i + 1);
+        assert_non_null(sess[i]);
+    }
+
+    /* the last session in the array has been idle for too long, the other two are fine */
+    nc_timeouttime_get(&ts, 0);
+    sess[2]->opts.server.last_rpc = ts.tv_sec - 3;
+    for (i = 0; i < 3; ++i) {
+        assert_int_equal(nc_ps_add_session(ps, sess[i]), 0);
+    }
+    ATOMIC_STORE_RELAXED(server_opts.idle_timeout, 2);
+
+    /* the last session is terminated, removed and handed over */
+    ret = nc_ps_poll(ps, 0, &term_sess);
+    assert_int_equal(ret, NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR);
+    assert_ptr_equal(term_sess, sess[2]);
+    assert_int_equal(nc_ps_session_count(ps), 2);
+    test_free_session(sess[2]);
+
+    /* the next poll must stay inside the session array */
+    ret = nc_ps_poll(ps, 0, &term_sess);
+    assert_int_equal(ret, NC_PSPOLL_TIMEOUT);
+    assert_int_equal(nc_ps_session_count(ps), 2);
+
+    ATOMIC_STORE_RELAXED(server_opts.idle_timeout, 0);
+
+    for (i = 0; i < 2; ++i) {
+        assert_int_equal(nc_ps_del_session(ps, sess[i]), 0);
+        test_free_session(sess[i]);
+    }
     nc_ps_free(ps);
 }
 
@@ -387,6 +446,7 @@ main(void)
         cmocka_unit_test_setup_teardown(test_add_session_not_blocked, setup_f, teardown_f),
         cmocka_unit_test_setup_teardown(test_del_session_not_blocked, setup_f, teardown_f),
         cmocka_unit_test(test_idle_timeout),
+        cmocka_unit_test(test_term_last_session),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

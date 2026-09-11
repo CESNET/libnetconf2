@@ -270,6 +270,10 @@ int nc_session_is_callhome(const struct nc_session *session);
 /**
  * @brief Free the NETCONF session object.
  *
+ * @warning The session must not be in any pollsession structure. A session terminated by
+ * ::nc_ps_poll() has been removed from it already, any other one has to be removed with
+ * ::nc_ps_del_session() first.
+ *
  * @param[in] session Object to free.
  * @param[in] data_free Session user data destructor.
  */

@@ -90,6 +90,7 @@ static void *
 server_thread_ssh(void *arg)
 {
     int ret;
+    struct nc_session *session;
     struct nc_pollsession *ps;
     struct ln2_test_ctx *test_ctx = arg;
     struct test_ch_data *test_data = test_ctx->test_data;
@@ -115,8 +116,11 @@ server_thread_ssh(void *arg)
 
     /* poll */
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
-        if (ret & (NC_PSPOLL_TIMEOUT | NC_PSPOLL_NOSESSIONS)) {
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+        if (ret & NC_PSPOLL_SESSION_TERM) {
+            /* the session was removed from ps and we own it now */
+            nc_session_free(session, NULL);
+        } else if (ret & (NC_PSPOLL_TIMEOUT | NC_PSPOLL_NOSESSIONS)) {
             usleep(500);
         }
     } while (!strlen(buffer));
@@ -254,6 +258,7 @@ static void *
 server_thread_tls(void *arg)
 {
     int ret;
+    struct nc_session *session;
     struct nc_pollsession *ps;
     struct ln2_test_ctx *test_ctx = arg;
     struct test_ch_data *test_data = test_ctx->test_data;
@@ -274,8 +279,11 @@ server_thread_tls(void *arg)
 
     /* poll */
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
-        if (ret & (NC_PSPOLL_TIMEOUT | NC_PSPOLL_NOSESSIONS)) {
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+        if (ret & NC_PSPOLL_SESSION_TERM) {
+            /* the session was removed from ps and we own it now */
+            nc_session_free(session, NULL);
+        } else if (ret & (NC_PSPOLL_TIMEOUT | NC_PSPOLL_NOSESSIONS)) {
             usleep(500);
         }
     } while (!(ret & NC_PSPOLL_SESSION_TERM));
@@ -419,6 +427,7 @@ static void *
 server_thread_delete_while_session(void *arg)
 {
     int ret;
+    struct nc_session *session;
     struct nc_pollsession *ps;
     struct ln2_test_ctx *test_ctx = arg;
     struct test_ch_data *test_data = test_ctx->test_data;
@@ -441,8 +450,11 @@ server_thread_delete_while_session(void *arg)
     }
 
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
-        if (ret & (NC_PSPOLL_TIMEOUT | NC_PSPOLL_NOSESSIONS)) {
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+        if (ret & NC_PSPOLL_SESSION_TERM) {
+            /* the session was removed from ps and we own it now */
+            nc_session_free(session, NULL);
+        } else if (ret & (NC_PSPOLL_TIMEOUT | NC_PSPOLL_NOSESSIONS)) {
             usleep(500);
         }
     } while (ret & NC_PSPOLL_RPC);
@@ -595,6 +607,7 @@ static void *
 server_thread_two_ch(void *arg)
 {
     int ret;
+    struct nc_session *session;
     struct nc_pollsession *ps;
     struct ch_thread_arg *ch_arg = arg;
 
@@ -615,8 +628,11 @@ server_thread_two_ch(void *arg)
         }
         pthread_mutex_unlock(&session_count_mutex);
 
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
-        if (ret & (NC_PSPOLL_TIMEOUT | NC_PSPOLL_NOSESSIONS)) {
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+        if (ret & NC_PSPOLL_SESSION_TERM) {
+            /* the session was removed from ps and we own it now */
+            nc_session_free(session, NULL);
+        } else if (ret & (NC_PSPOLL_TIMEOUT | NC_PSPOLL_NOSESSIONS)) {
             usleep(10000);
         }
     }
