@@ -2183,7 +2183,6 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
         return -1;
     }
 
-    /* plain realloc(), ::nc_realloc() frees the array on failure and would leave ps unusable */
     sessions = realloc(ps->sessions, (ps->session_count + 1) * sizeof *ps->sessions);
     if (!sessions) {
         ERRMEM;
@@ -3126,7 +3125,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
         if (ret & NC_PSPOLL_SESSION_TERM) {
             /* the session died during the RPC, when the turn was not held, take it back and remove
              * the session before handing it over to the caller */
-            if (nc_ps_lock(ps, 1, NC_PS_TIMEOUT, __func__) == 1) {
+            if (nc_ps_lock(ps, 1, timeout, __func__) == 1) {
                 r = _nc_ps_del_session(ps, cur_session, -1);
 
                 /* PS UNLOCK */
