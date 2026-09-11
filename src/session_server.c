@@ -2180,6 +2180,7 @@ nc_ps_free(struct nc_pollsession *ps)
 API int
 nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
 {
+    struct nc_ps_session **sessions;
 
     NC_CHECK_ARG_RET(session, ps, session, -1);
 
@@ -2188,24 +2189,28 @@ nc_ps_add_session(struct nc_pollsession *ps, struct nc_session *session)
         return -1;
     }
 
+    /* plain realloc(), ::nc_realloc() frees the array on failure and would leave ps unusable */
+    sessions = realloc(ps->sessions, (ps->session_count + 1) * sizeof *ps->sessions);
+    if (!sessions) {
+        ERRMEM;
+        /* UNLOCK */
+        nc_ps_unlock(ps, __func__);
+        return -1;
+    }
+    ps->sessions = sessions;
+
+    ps->sessions[ps->session_count] = calloc(1, sizeof **ps->sessions);
+    if (!ps->sessions[ps->session_count]) {
+        ERRMEM;
+        /* UNLOCK */
+        nc_ps_unlock(ps, __func__);
+        return -1;
+    }
+    ps->sessions[ps->session_count]->session = session;
+    ps->sessions[ps->session_count]->state = NC_PS_STATE_NONE;
+
+    /* the session is in, only now does it count */
     ++ps->session_count;
-    ps->sessions = nc_realloc(ps->sessions, ps->session_count * sizeof *ps->sessions);
-    if (!ps->sessions) {
-        ERRMEM;
-        /* UNLOCK */
-        nc_ps_unlock(ps, __func__);
-        return -1;
-    }
-    ps->sessions[ps->session_count - 1] = calloc(1, sizeof **ps->sessions);
-    if (!ps->sessions[ps->session_count - 1]) {
-        ERRMEM;
-        --ps->session_count;
-        /* UNLOCK */
-        nc_ps_unlock(ps, __func__);
-        return -1;
-    }
-    ps->sessions[ps->session_count - 1]->session = session;
-    ps->sessions[ps->session_count - 1]->state = NC_PS_STATE_NONE;
 
     /* UNLOCK */
     return nc_ps_unlock(ps, __func__);
