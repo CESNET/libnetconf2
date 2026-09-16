@@ -340,6 +340,13 @@ int nc_server_ssh_compare_password(const char *stored_pw, const char *received_p
 void nc_server_ssh_auth_attempt_failed(struct nc_session *session);
 
 /**
+ * @brief Free the password authentication lockout tally.
+ *
+ * The state file it mirrors is kept, so a lockout survives the server being restarted.
+ */
+void nc_server_ssh_authlock_free(void);
+
+/**
  * @brief Authenticate user with password (retrieves stored hash and compares).
  *
  * @param[in] session NETCONF session.
