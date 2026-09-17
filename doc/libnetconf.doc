@@ -467,8 +467,9 @@
  *
  * You may also choose to use a Certificate Revocation List. These lists
  * are downloaded from the URIs specified in the x509 CRLDistributionPoints extensions.
- * Be mindful that if any CRL is successfully downloaded and set, then at least one of them has to belong
- * to the peer (e.g. the client) certificate (in other words it has to be issued by peer's CA).
+ * Every certificate in the peer's chain that a CRL was obtained for is then checked for revocation.
+ * Be mindful that a certificate issued by a CA which publishes no CRL, or whose CRL could not be
+ * downloaded, is accepted with a warning, because its revocation status can not be determined.
  *
  * Functions List
  * --------------

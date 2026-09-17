@@ -780,13 +780,17 @@ void *nc_tls_get_peer_cert_chain_wrap(void *tls_session);
 /**
  * @brief Verify a certificate chain against CRLs.
  *
- * For OpenSSL, uses X509_STORE_CTX with X509_V_FLAG_CRL_CHECK |
- * X509_V_FLAG_CRL_CHECK_ALL to verify the chain including CRL signature checks.
+ * Every certificate in the chain that a CRL was obtained for is checked, including its
+ * CRL signature. Certificates with no CRL available are left unchecked, since publishing
+ * a CRL is optional for a CA.
+ *
+ * For OpenSSL, uses X509_STORE_CTX with X509_V_FLAG_CRL_CHECK | X509_V_FLAG_CRL_CHECK_ALL
+ * and a verification callback tolerating the certificates with no CRL available.
  * cert_store must contain both CAs and CRLs. crl_store is unused.
  *
  * For MbedTLS, uses mbedtls_x509_crt_verify with the CRL store, which verifies
- * CRL signatures as part of chain verification. Both cert_store (CA certs)
- * and crl_store (CRLs) are required.
+ * CRL signatures as part of chain verification and skips the CAs with no CRL on its own.
+ * Both cert_store (CA certs) and crl_store (CRLs) are required.
  *
  * @param[in] cert_chain Peer's certificate chain.
  * @param[in] cert_store Certificate store (OpenSSL: contains CAs + CRLs, MbedTLS: CA certs).

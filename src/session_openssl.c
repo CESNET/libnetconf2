@@ -831,6 +831,47 @@ nc_tls_get_peer_cert_chain_wrap(void *tls_session)
     return SSL_get0_verified_chain(tls_session);
 }
 
+/**
+ * @brief Certificate chain verification callback tolerating missing CRLs.
+ *
+ * CRL checking is enabled for the whole chain, but not every CA in a chain publishes a CRL
+ * (offline root CAs typically do not and intermediate certificates often have no CRL distribution
+ * point at all). Treat a certificate with no CRL available as unchecked instead of failing the
+ * whole verification, so that revocation is still enforced for every certificate a CRL was
+ * obtained for.
+ *
+ * @param[in] ok Whether the current verification step succeeded.
+ * @param[in,out] ctx Certificate store context of the verification.
+ * @return 1 to continue the verification, 0 to fail it.
+ */
+static int
+nc_tls_verify_crl_cb(int ok, X509_STORE_CTX *ctx)
+{
+    char *subject;
+    int depth;
+
+    if (ok || (X509_STORE_CTX_get_error(ctx) != X509_V_ERR_UNABLE_TO_GET_CRL)) {
+        return ok;
+    }
+
+    subject = nc_server_tls_get_subject_wrap(X509_STORE_CTX_get_current_cert(ctx));
+    depth = X509_STORE_CTX_get_error_depth(ctx);
+    if (depth) {
+        /* publishing a CRL is optional for a CA, so this is an expected static property of the deployed PKI */
+        VRB(NULL, "No CRL available for CA certificate \"%s\" (depth %d).", subject ? subject : "", depth);
+    } else {
+        /* either we failed to download it or there was another cert in the chain that had a CRL dist point,
+         * either way, not knowing the revocation status is a high risk for the peer certificate, so we log a warning */
+        WRN(NULL, "No CRL available for the peer certificate \"%s\", its revocation status is unknown.",
+                subject ? subject : "");
+    }
+    free(subject);
+
+    /* clear the error so that it is not reported once the verification finishes */
+    X509_STORE_CTX_set_error(ctx, X509_V_OK);
+    return 1;
+}
+
 int
 nc_tls_verify_cert_chain_crl_wrap(void *cert_chain, void *cert_store, void *UNUSED(crl_store))
 {
@@ -892,8 +933,10 @@ nc_tls_verify_cert_chain_crl_wrap(void *cert_chain, void *cert_store, void *UNUS
         untrusted = NULL;
     }
 
-    /* enable CRL checks for all certificates in the chain */
+    /* enable CRL checks for all the certificates in the chain, certificates without an available
+     * CRL are tolerated by the callback */
     X509_STORE_CTX_set_flags(verify_ctx, X509_V_FLAG_CRL_CHECK | X509_V_FLAG_CRL_CHECK_ALL);
+    X509_STORE_CTX_set_verify_cb(verify_ctx, nc_tls_verify_crl_cb);
 
     ret = X509_verify_cert(verify_ctx);
     if (ret != 1) {
