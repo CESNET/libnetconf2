@@ -1258,6 +1258,8 @@ nc_tls_verify_cert_chain_crl_wrap(void *cert_chain, void *cert_store, void *crl_
         return 0;
     }
 
+    /* CAs with no CRL in the store are silently left unchecked by MbedTLS, which is the
+     * behavior the OpenSSL backend emulates with its verification callback */
     ret = mbedtls_x509_crt_verify((mbedtls_x509_crt *)peer_chain,
             (mbedtls_x509_crt *)trust_ca, (mbedtls_x509_crl *)ca_crl,
             NULL, &flags, NULL, NULL);
