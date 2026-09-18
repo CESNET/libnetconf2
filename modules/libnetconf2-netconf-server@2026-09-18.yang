@@ -31,6 +31,10 @@ module libnetconf2-netconf-server {
     prefix tlss;
   }
 
+  revision "2026-09-18" {
+    description "Added password authentication lockout configuration.";
+  }
+
   revision "2026-04-17" {
     description "Change SSH banner description, reference and string length to reflect its correct purpose.";
   }
@@ -158,6 +162,67 @@ module libnetconf2-netconf-server {
       units "seconds";
       description
         "Represents the maximum amount of seconds an authentication can go on for.";
+    }
+
+    leaf max-auth-attempts {
+      type uint16;
+      default 0;
+      description
+        "Maximum number of failed authentication attempts allowed within a single SSH session,
+         after which the session is disconnected. Every rejected credential counts, including
+         every public key a client offers that the server does not accept, so this must be set
+         high enough for clients whose SSH agent holds several keys.
+
+         The value 0 means no limit, in which case only auth-timeout bounds a single session.";
+    }
+
+    container lockout {
+      presence
+        "Enables locking an account out of password authentication after repeated failures.";
+
+      description
+        "Locks an account out of password authentication once it fails too many times in a row.
+         Failures are counted per (username, client address) pair across connections, so that a
+         client that cannot reach the account from its own address cannot lock the account out for
+         anyone else. The tally is shared by every password-based method the server offers, which
+         are the configured password, keyboard-interactive and PAM. Public key authentication is
+         not counted and never refused, so a locked out deployment stays reachable.
+
+         The policy configured here is the one of the endpoint the connection arrived on; it is not
+         re-evaluated when authentication falls through to a referenced endpoint.
+
+         The tally is kept in memory. It additionally survives a server restart if the server was
+         built with the AUTHLOCK_FILE option or the application set a path with the
+         nc_server_ssh_set_authlock_path() API call.";
+
+      reference
+        "3GPP TS 33.117: Catalogue of general security assurance requirements, section 4.2.3.4.3.1";
+
+      leaf max-fails {
+        type uint16 {
+          range "1..max";
+        }
+        default 5;
+        description
+          "Number of consecutive failed password authentications that lock the account out.";
+      }
+
+      leaf lock-time {
+        type uint16;
+        default 300;
+        units "seconds";
+        description
+          "How long the account stays locked out of password authentication.";
+      }
+
+      leaf fail-window {
+        type uint16;
+        default 900;
+        units "seconds";
+        description
+          "Two consecutive failures further apart than this do not count towards the same tally,
+           so that occasional typos spread over a long time never lock an account out.";
+      }
     }
   }
 

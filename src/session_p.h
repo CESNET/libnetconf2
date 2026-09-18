@@ -411,6 +411,42 @@ struct nc_hostkey {
 };
 
 /**
+ * @brief Number of (username, client address) pairs the password authentication lockout tracks.
+ *
+ * A pair is only ever added by a failed password authentication, and one that is currently locked
+ * out is never evicted, so the bound is on how many distinct pairs may be counted towards a lockout
+ * at the same time, not on how many may be locked out.
+ */
+#define NC_AUTHLOCK_MAX_ENTRIES 64
+
+/**
+ * @brief Password authentication lockout policy of an SSH endpoint.
+ */
+struct nc_authlock_opts {
+    uint16_t session_max_fails; /**< failed authentication attempts allowed within a single SSH session,
+                                     0 for no limit */
+    uint16_t max_fails;         /**< consecutive failed password authentications that lock an account out,
+                                     0 if the lockout is disabled */
+    uint16_t lock_time;         /**< how long an account stays locked out, seconds */
+    uint16_t fail_window;       /**< failures further apart than this start a new tally, seconds */
+};
+
+/**
+ * @brief Failed password authentication tally of a single (username, client address) pair.
+ *
+ * Keyed on the client address as well as the username because the username is entirely
+ * attacker-controlled: keyed on the username alone, anyone able to reach the server could keep any
+ * account permanently locked out.
+ */
+struct nc_authlock_entry {
+    char *username;             /**< account the tally belongs to */
+    char *host;                 /**< client address the tally belongs to, NULL if it was not known */
+    uint32_t fails;             /**< consecutive failed password authentications */
+    time_t last_fail;           /**< when the last one was */
+    time_t locked_until;        /**< no password authentication before this, 0 if not locked out */
+};
+
+/**
  * @brief Server options for configuring the SSH transport protocol.
  */
 struct nc_server_ssh_opts {
@@ -428,6 +464,8 @@ struct nc_server_ssh_opts {
     char *banner;                           /**< SSH banner message, sent before authentication. */
 
     uint16_t auth_timeout;                  /**< Authentication timeout. */
+
+    struct nc_authlock_opts authlock;        /**< Password authentication lockout policy. */
 };
 
 /**
@@ -1162,6 +1200,16 @@ struct nc_session {
             ATOMIC_T *ch_thread_running;
 
             uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
+
+            /**
+             * @brief Password authentication lockout policy of the endpoint the session arrived on.
+             *
+             * Copied out of ::nc_server_ssh_opts before the authentication starts, because the
+             * credential checks are reached from libssh callbacks that are not given the endpoint
+             * options. Not re-evaluated when authentication falls through to a referenced endpoint.
+             */
+            struct nc_authlock_opts authlock;
+
             void *client_cert;                /**< TLS client certificate if used for authentication */
 #endif /* NC_ENABLED_SSH_TLS */
         } server;
@@ -1693,6 +1741,14 @@ void nc_server_ch_thread_names_free(char **names);
  * @return 0 on success, 1 on error.
  */
 int nc_server_ch_threads_destroy(void);
+
+/**
+ * @brief Free the password authentication lockout tally.
+ *
+ * The state file it mirrors, if one is configured, is kept, so a lockout survives the server being
+ * restarted. Must not be called before every thread that may authenticate a client has been joined.
+ */
+void nc_server_ssh_authlock_free(void);
 
 /**
  * @brief Stop a dispatched Call Home client thread, if such thread was dispatched for the given client.

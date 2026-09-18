@@ -22,6 +22,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <libssh/libssh.h>
 #include <libssh/server.h>
 #include <libyang/libyang.h>
@@ -53,36 +54,28 @@
 /*
  * Password authentication lockout.
  *
- * Consecutive failed password authentications are counted per account across
- * connections, and the account is refused password authentication for
- * NC_AUTHLOCK_TIME seconds once NC_AUTHLOCK_MAX_FAILS is reached. The tally is
- * mirrored to a state file so that restarting the server does not clear a
- * lockout. Public key and certificate authentication are deliberately left
- * alone: the lockout is on guessing a password, and leaving key auth open keeps
- * a locked-out deployment recoverable.
+ * Consecutive failed password authentications are counted per (username, client address) pair
+ * across connections, and the pair is refused password authentication for lock_time seconds once
+ * max_fails is reached. The client address is part of the key because the username is entirely
+ * attacker-controlled: keyed on the username alone, anyone able to reach the server could keep any
+ * account permanently locked out by failing to authenticate as it.
+ *
+ * The policy is per SSH endpoint and off unless configured, see the lockout container in
+ * libnetconf2-netconf-server. The tally is mirrored to a state file when one is configured, so that
+ * restarting the server does not clear a lockout. Public key and certificate authentication are
+ * deliberately left alone: the lockout is on guessing a password, and leaving key auth open keeps a
+ * locked-out deployment recoverable.
  */
-#define NC_AUTHLOCK_MAX_FAILS 5             /**< consecutive failures that lock an account out */
-#define NC_AUTHLOCK_TIME 300                /**< how long an account stays locked out, seconds */
-#define NC_AUTHLOCK_FAIL_INTERVAL 900       /**< failures further apart than this start a new tally, seconds */
-#define NC_AUTHLOCK_SESSION_MAX_FAILS 6     /**< failed attempts allowed within a single SSH session */
-#define NC_AUTHLOCK_MAX_ENTRIES 64          /**< tracked accounts, the one that failed longest ago is evicted */
-#define NC_AUTHLOCK_FILE "/var/lib/netconf-authlock/failures"
-
-struct nc_authlock_entry {
-    char *username;             /**< account the tally belongs to */
-    uint32_t fails;             /**< consecutive failed password authentications */
-    time_t last_fail;           /**< when the last one was */
-    time_t locked_until;        /**< no password authentication before this, 0 if not locked out */
-};
-
 static struct {
     pthread_mutex_t lock;
     struct nc_authlock_entry entries[NC_AUTHLOCK_MAX_ENTRIES];
     uint32_t entry_count;
+    char *path;                 /**< state file the tally is mirrored to, NULL to keep it in memory only */
+    int path_set;               /**< whether @p path was resolved already */
     int loaded;                 /**< whether the state file was read already */
     ino_t loaded_ino;           /**< inode of the state file revision the tally came from */
     struct timespec loaded_mtim; /**< mtime of the state file revision the tally came from */
-    int store_failed;           /**< whether a failure to write the state file was logged already */
+    int store_failed;           /**< whether the state file turned out to be unusable, disables persistence */
 } authlock = {.lock = PTHREAD_MUTEX_INITIALIZER};
 
 /**
@@ -95,39 +88,83 @@ nc_authlock_clear(void)
 
     for (i = 0; i < authlock.entry_count; ++i) {
         free(authlock.entries[i].username);
+        free(authlock.entries[i].host);
     }
     authlock.entry_count = 0;
 }
 
 /**
- * @brief Get the path of the lockout state file.
+ * @brief Get the path of the lockout state file. Expects the lock to be held.
  *
- * @return Path from $NC_AUTHLOCK_FILE, or the compiled-in default.
+ * @return Path set by ::nc_server_ssh_set_authlock_path() or the compiled-in default, NULL if
+ * neither is set or the file turned out to be unusable, in which case the tally is memory-only.
  */
 static const char *
 nc_authlock_path(void)
 {
-    const char *path = getenv("NC_AUTHLOCK_FILE");
+    if (authlock.store_failed) {
+        return NULL;
+    }
 
-    return (path && path[0]) ? path : NC_AUTHLOCK_FILE;
+    if (!authlock.path_set) {
+        authlock.path_set = 1;
+        if (NC_AUTHLOCK_FILE_DEFAULT[0]) {
+            authlock.path = strdup(NC_AUTHLOCK_FILE_DEFAULT);
+            if (!authlock.path) {
+                ERRMEM;
+            }
+        }
+    }
+
+    return authlock.path;
+}
+
+API int
+nc_server_ssh_set_authlock_path(const char *path)
+{
+    char *dup = NULL;
+
+    if (path && path[0]) {
+        dup = strdup(path);
+        NC_CHECK_ERRMEM_RET(!dup, 1);
+    }
+
+    pthread_mutex_lock(&authlock.lock);
+
+    free(authlock.path);
+    authlock.path = dup;
+    authlock.path_set = 1;
+    authlock.store_failed = 0;
+
+    /* the tally in memory is the one of the previous file, re-read it from the new one */
+    nc_authlock_clear();
+    authlock.loaded = 0;
+    authlock.loaded_ino = 0;
+    memset(&authlock.loaded_mtim, 0, sizeof authlock.loaded_mtim);
+
+    pthread_mutex_unlock(&authlock.lock);
+    return 0;
 }
 
 /**
  * @brief Read the lockout state file into the tally. Expects the lock to be held.
+ *
+ * @param[in] path State file to read.
  */
 static void
-nc_authlock_load(void)
+nc_authlock_load(const char *path)
 {
-    char line[512], *username;
-    unsigned int fails;
+    char line[512], host[256], *username;
+    uint32_t fails;
     long long locked_until, last_fail;
+    struct nc_authlock_entry *entry;
     struct stat st;
     int offset;
     FILE *f;
 
     authlock.loaded = 1;
 
-    f = fopen(nc_authlock_path(), "r");
+    f = fopen(path, "r");
     if (!f) {
         return;
     }
@@ -141,7 +178,8 @@ nc_authlock_load(void)
 
     /* the username is the rest of the line so that it may contain spaces */
     while ((authlock.entry_count < NC_AUTHLOCK_MAX_ENTRIES) && fgets(line, sizeof line, f)) {
-        if (sscanf(line, "%u %lld %lld %n", &fails, &locked_until, &last_fail, &offset) != 3) {
+        if (sscanf(line, "%" SCNu32 " %lld %lld %255s %n",
+                &fails, &locked_until, &last_fail, host, &offset) != 4) {
             continue;
         }
         username = line + offset;
@@ -150,13 +188,24 @@ nc_authlock_load(void)
             continue;
         }
 
-        authlock.entries[authlock.entry_count].username = strdup(username);
-        if (!authlock.entries[authlock.entry_count].username) {
+        entry = &authlock.entries[authlock.entry_count];
+        memset(entry, 0, sizeof *entry);
+
+        entry->username = strdup(username);
+        if (!entry->username) {
             break;
         }
-        authlock.entries[authlock.entry_count].fails = fails;
-        authlock.entries[authlock.entry_count].locked_until = locked_until;
-        authlock.entries[authlock.entry_count].last_fail = last_fail;
+        /* "-" is what an entry with no known client address is written as */
+        if (strcmp(host, "-")) {
+            entry->host = strdup(host);
+            if (!entry->host) {
+                free(entry->username);
+                break;
+            }
+        }
+        entry->fails = fails;
+        entry->locked_until = locked_until;
+        entry->last_fail = last_fail;
         ++authlock.entry_count;
     }
 
@@ -165,11 +214,12 @@ nc_authlock_load(void)
 
 /**
  * @brief Write the tally to the lockout state file. Expects the lock to be held.
+ *
+ * @param[in] path State file to write.
  */
 static void
-nc_authlock_store(void)
+nc_authlock_store(const char *path)
 {
-    const char *path = nc_authlock_path();
     char *tmp_path = NULL;
     FILE *f = NULL;
     struct stat st;
@@ -192,13 +242,19 @@ nc_authlock_store(void)
     }
 
     for (i = 0; i < authlock.entry_count; ++i) {
-        /* a username with a newline in it would break the line format, keep that one in memory only */
-        if (strchr(authlock.entries[i].username, '\n')) {
+        /* only a lockout is worth persisting, a tally that has not reached one yet is not written
+         * so that a failed authentication does not have to rewrite the file */
+        if (!authlock.entries[i].locked_until) {
             continue;
         }
-        fprintf(f, "%u %lld %lld %s\n", authlock.entries[i].fails,
+        /* a username with whitespace of its own would break the line format, keep that one in
+         * memory only */
+        if (strpbrk(authlock.entries[i].username, "\r\n")) {
+            continue;
+        }
+        fprintf(f, "%" PRIu32 " %lld %lld %s %s\n", authlock.entries[i].fails,
                 (long long)authlock.entries[i].locked_until, (long long)authlock.entries[i].last_fail,
-                authlock.entries[i].username);
+                authlock.entries[i].host ? authlock.entries[i].host : "-", authlock.entries[i].username);
     }
 
     if (fclose(f)) {
@@ -217,11 +273,11 @@ nc_authlock_store(void)
     return;
 
 fail:
-    if (!authlock.store_failed) {
-        WRN(NULL, "Failed to store the authentication failure tally in \"%s\" (%s), lockouts will not "
-                "survive a restart.", path, strerror(errno));
-        authlock.store_failed = 1;
-    }
+    /* the path is a deployment setting, so this is a misconfiguration rather than a transient
+     * error; say so once and keep the tally in memory from here on */
+    ERR(NULL, "Failed to store the authentication failure tally in \"%s\" (%s), its directory has to "
+            "exist and be writable. Lockouts will not survive a restart.", path, strerror(errno));
+    authlock.store_failed = 1;
     unlink(tmp_path);
     free(tmp_path);
 }
@@ -236,9 +292,20 @@ fail:
 static void
 nc_authlock_sync(void)
 {
+    const char *path = nc_authlock_path();
     struct stat st;
 
-    if (stat(nc_authlock_path(), &st)) {
+    if (!path) {
+        /* no state file configured, the tally is memory-only */
+        return;
+    }
+
+    if (stat(path, &st)) {
+        if (errno != ENOENT) {
+            /* the file may well be there and only be unreadable right now, dropping the tally on
+             * that would unlock every account */
+            return;
+        }
         /* no state file, so nothing is locked out; it was either never written or removed to clear
          * the lockouts */
         nc_authlock_clear();
@@ -256,22 +323,41 @@ nc_authlock_sync(void)
     }
 
     nc_authlock_clear();
-    nc_authlock_load();
+    nc_authlock_load(path);
 }
 
 /**
- * @brief Find the tally of an account. Expects the lock to be held.
+ * @brief Compare the client address of an entry with the one of a connection.
+ *
+ * @param[in] entry_host Client address of the entry, may be NULL.
+ * @param[in] host Client address of the connection, may be NULL.
+ * @return Non-zero if they are the same address, 0 otherwise.
+ */
+static int
+nc_authlock_same_host(const char *entry_host, const char *host)
+{
+    if (!entry_host || !host) {
+        return !entry_host && !host;
+    }
+
+    return !strcmp(entry_host, host);
+}
+
+/**
+ * @brief Find the tally of a (username, client address) pair. Expects the lock to be held.
  *
  * @param[in] username Account to look for.
+ * @param[in] host Client address to look for, may be NULL if it is not known.
  * @return Its entry, NULL if it has none.
  */
 static struct nc_authlock_entry *
-nc_authlock_find(const char *username)
+nc_authlock_find(const char *username, const char *host)
 {
     uint32_t i;
 
     for (i = 0; i < authlock.entry_count; ++i) {
-        if (!strcmp(authlock.entries[i].username, username)) {
+        if (!strcmp(authlock.entries[i].username, username) &&
+                nc_authlock_same_host(authlock.entries[i].host, host)) {
             return &authlock.entries[i];
         }
     }
@@ -280,57 +366,84 @@ nc_authlock_find(const char *username)
 }
 
 /**
- * @brief Find or create the tally of an account. Expects the lock to be held.
+ * @brief Find or create the tally of a (username, client address) pair. Expects the lock to be held.
  *
  * @param[in] username Account to look for.
- * @return Its entry, NULL on allocation failure.
+ * @param[in] host Client address to look for, may be NULL if it is not known.
+ * @param[in] now Current time.
+ * @return Its entry, NULL if the table is full of lockouts or on allocation failure.
  */
 static struct nc_authlock_entry *
-nc_authlock_get(const char *username)
+nc_authlock_get(const char *username, const char *host, time_t now)
 {
     struct nc_authlock_entry *entry;
     uint32_t i, slot;
-    char *name;
+    char *name, *addr = NULL;
 
-    entry = nc_authlock_find(username);
+    entry = nc_authlock_find(username, host);
     if (entry) {
         return entry;
     }
 
-    name = strdup(username);
-    if (!name) {
-        return NULL;
-    }
-
     if (authlock.entry_count < NC_AUTHLOCK_MAX_ENTRIES) {
-        slot = authlock.entry_count++;
+        slot = authlock.entry_count;
     } else {
-        /* full, reuse the entry that failed longest ago. With local users configured only accounts
-         * known to the endpoint reach the authentication dispatch, so this bound is about memory
-         * rather than about an attacker flooding the tally with invented names. */
-        slot = 0;
-        for (i = 1; i < authlock.entry_count; ++i) {
-            if (authlock.entries[i].last_fail < authlock.entries[slot].last_fail) {
+        /* full, reuse the entry that failed longest ago among those that are not locked out. An
+         * entry that is locked out is never evicted, otherwise filling the table would be all it
+         * takes to lift a lockout. */
+        slot = NC_AUTHLOCK_MAX_ENTRIES;
+        for (i = 0; i < authlock.entry_count; ++i) {
+            if (authlock.entries[i].locked_until > now) {
+                continue;
+            }
+            if ((slot == NC_AUTHLOCK_MAX_ENTRIES) ||
+                    (authlock.entries[i].last_fail < authlock.entries[slot].last_fail)) {
                 slot = i;
             }
         }
+        if (slot == NC_AUTHLOCK_MAX_ENTRIES) {
+            /* every tracked pair is locked out, so refuse to track another one rather than drop a
+             * lockout; the pairs that are locked out keep being refused either way */
+            WRN(NULL, "Authentication failure tally full of locked out users, not counting the "
+                    "failures of user \"%s\" for now.", username);
+            return NULL;
+        }
+    }
+
+    name = strdup(username);
+    NC_CHECK_ERRMEM_RET(!name, NULL);
+    if (host) {
+        addr = strdup(host);
+        if (!addr) {
+            ERRMEM;
+            free(name);
+            return NULL;
+        }
+    }
+
+    if (slot == authlock.entry_count) {
+        ++authlock.entry_count;
+    } else {
         free(authlock.entries[slot].username);
+        free(authlock.entries[slot].host);
     }
 
     memset(&authlock.entries[slot], 0, sizeof authlock.entries[slot]);
     authlock.entries[slot].username = name;
+    authlock.entries[slot].host = addr;
 
     return &authlock.entries[slot];
 }
 
 /**
- * @brief Get how much longer an account is locked out of password authentication.
+ * @brief Get how much longer a client is locked out of password authentication.
  *
  * @param[in] username Account to check.
+ * @param[in] host Client address to check, may be NULL if it is not known.
  * @return Seconds until it may authenticate again, 0 if it is not locked out.
  */
 static time_t
-nc_authlock_remaining(const char *username)
+nc_authlock_remaining(const char *username, const char *host)
 {
     struct nc_authlock_entry *entry;
     time_t now = time(NULL), remaining = 0;
@@ -339,7 +452,7 @@ nc_authlock_remaining(const char *username)
 
     nc_authlock_sync();
 
-    entry = nc_authlock_find(username);
+    entry = nc_authlock_find(username, host);
     if (entry && (entry->locked_until > now)) {
         remaining = entry->locked_until - now;
     }
@@ -350,43 +463,56 @@ nc_authlock_remaining(const char *username)
 }
 
 /**
- * @brief Record the outcome of a password authentication against an account.
+ * @brief Record the outcome of a password authentication.
  *
- * @param[in] session NETCONF session, for the log message.
+ * Does nothing unless the endpoint the session arrived on has the lockout configured.
+ *
+ * @param[in] session NETCONF session, for the policy, the client address and the log message.
  * @param[in] username Account that authenticated.
  * @param[in] success Whether it succeeded, which clears the tally.
  */
 static void
 nc_authlock_record(struct nc_session *session, const char *username, int success)
 {
+    const struct nc_authlock_opts *opts = &session->opts.server.authlock;
     struct nc_authlock_entry *entry;
-    time_t now = time(NULL);
+    const char *path, *host = session->host;
+    time_t now = time(NULL), was_locked_until;
+
+    if (!opts->max_fails || !username) {
+        /* the lockout is not configured for this endpoint */
+        return;
+    }
 
     pthread_mutex_lock(&authlock.lock);
 
     nc_authlock_sync();
 
+    entry = nc_authlock_find(username, host);
     if (success) {
-        entry = nc_authlock_find(username);
         if (!entry || (!entry->fails && !entry->locked_until)) {
-            /* nothing recorded for this account, no need to rewrite the state file */
+            /* nothing recorded for this client, no need to rewrite the state file */
             goto cleanup;
         }
+        was_locked_until = entry->locked_until;
         entry->fails = 0;
         entry->last_fail = 0;
         entry->locked_until = 0;
     } else {
-        entry = nc_authlock_get(username);
         if (!entry) {
-            goto cleanup;
+            entry = nc_authlock_get(username, host, now);
+            if (!entry) {
+                goto cleanup;
+            }
         }
+        was_locked_until = entry->locked_until;
 
         if (entry->locked_until && (entry->locked_until <= now)) {
             /* the lockout expired, this failure starts a fresh tally rather than immediately
-             * locking the account out again */
+             * locking the client out again */
             entry->fails = 0;
             entry->locked_until = 0;
-        } else if (entry->fails && ((now - entry->last_fail) > NC_AUTHLOCK_FAIL_INTERVAL)) {
+        } else if (entry->fails && ((now - entry->last_fail) > opts->fail_window)) {
             /* the previous failures are too old to count towards this one */
             entry->fails = 0;
         }
@@ -394,37 +520,50 @@ nc_authlock_record(struct nc_session *session, const char *username, int success
         ++entry->fails;
         entry->last_fail = now;
 
-        if (entry->fails >= NC_AUTHLOCK_MAX_FAILS) {
-            entry->locked_until = now + NC_AUTHLOCK_TIME;
-            WRN(session, "User \"%s\" locked out of password authentication for %d s after %u consecutive "
-                    "failed attempts.", username, NC_AUTHLOCK_TIME, entry->fails);
+        if (entry->fails >= opts->max_fails) {
+            entry->locked_until = now + opts->lock_time;
+            WRN(session, "User \"%s\" locked out of password authentication for %" PRIu16 " s after "
+                    "%" PRIu32 " consecutive failed attempts.", username, opts->lock_time, entry->fails);
         }
     }
 
-    nc_authlock_store();
+    /* the state file only holds lockouts, so it is only rewritten when one starts or ends; a tally
+     * that has not reached a lockout yet is not worth making every failed attempt wait for a write */
+    if (entry->locked_until != was_locked_until) {
+        path = nc_authlock_path();
+        if (path) {
+            nc_authlock_store(path);
+        }
+    }
 
 cleanup:
     pthread_mutex_unlock(&authlock.lock);
 }
 
-/**
- * @brief Free the authentication lockout tally, called from nc_server_destroy().
- */
 void
 nc_server_ssh_authlock_free(void)
 {
     pthread_mutex_lock(&authlock.lock);
 
     nc_authlock_clear();
+    free(authlock.path);
+    authlock.path = NULL;
+    authlock.path_set = 0;
+    authlock.store_failed = 0;
     authlock.loaded = 0;
+    authlock.loaded_ino = 0;
+    memset(&authlock.loaded_mtim, 0, sizeof authlock.loaded_mtim);
 
     pthread_mutex_unlock(&authlock.lock);
 }
 
 /**
- * @brief Check whether an account is locked out of password authentication and log it if it is.
+ * @brief Check whether a client is locked out of password authentication and log it if it is.
  *
- * @param[in] session NETCONF session, for the log message.
+ * Always allows the authentication unless the endpoint the session arrived on has the lockout
+ * configured.
+ *
+ * @param[in] session NETCONF session, for the policy, the client address and the log message.
  * @param[in] username Account to check.
  * @return 0 if it may authenticate, 1 if it is locked out.
  */
@@ -433,11 +572,11 @@ nc_authlock_denied(struct nc_session *session, const char *username)
 {
     time_t remaining;
 
-    if (!username) {
+    if (!session->opts.server.authlock.max_fails || !username) {
         return 0;
     }
 
-    remaining = nc_authlock_remaining(username);
+    remaining = nc_authlock_remaining(username, session->host);
     if (!remaining) {
         return 0;
     }
@@ -556,21 +695,25 @@ nc_ssh_auth_success(struct nc_session *session, struct nc_auth_state *auth_state
 void
 nc_server_ssh_auth_attempt_failed(struct nc_session *session)
 {
+    uint16_t max_fails = session->opts.server.authlock.session_max_fails;
+
     ++session->opts.server.ssh_auth_attempts;
-    VRB(session, "Failed user \"%s\" authentication attempt (#%d).",
+    VRB(session, "Failed user \"%s\" authentication attempt (#%" PRIu16 ").",
             session->username ? session->username : "unknown", session->opts.server.ssh_auth_attempts);
 
-    if (session->opts.server.ssh_auth_attempts < NC_AUTHLOCK_SESSION_MAX_FAILS) {
+    /* every rejected credential gets here, including every public key the client offers that is not
+     * accepted, so the cap is off unless the endpoint configures max-auth-attempts */
+    if (!max_fails || (session->opts.server.ssh_auth_attempts < max_fails)) {
         return;
     }
 
     /* the per-session cap, which bounds what a single connection may try; the accept loops end on a
      * session that is no longer connected */
     if (NC_SESSION_STATUS_GET(session) != NC_STATUS_INVALID) {
-        ERR(session, "Too many failed authentication attempts (%d) in a single session, disconnecting.",
+        ERR(session, "Too many failed authentication attempts (%" PRIu16 ") in a single session, disconnecting.",
                 session->opts.server.ssh_auth_attempts);
         NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
-        ATOMIC_STORE_RELAXED(session->term_reason, NC_SESSION_TERM_OTHER);
+        NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
         ssh_disconnect(session->ti.libssh.session);
     }
 }
@@ -901,8 +1044,19 @@ nc_server_ssh_pam_authenticate(struct nc_session *session, const char *username,
         } else {
             VRB(session, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
         }
+
+        /* only a rejected credential counts towards the lockout; an aborted, unavailable or
+         * misconfigured PAM stack is not the client getting the password wrong */
+        if ((ret == PAM_AUTH_ERR) || (ret == PAM_USER_UNKNOWN) || (ret == PAM_CRED_INSUFFICIENT) ||
+                (ret == PAM_MAXTRIES)) {
+            nc_authlock_record(session, username, 0);
+        }
         goto cleanup;
     }
+
+    /* the credential was accepted, which clears the tally whatever the account management below
+     * has to say about the account */
+    nc_authlock_record(session, username, 1);
 
     /* correct token entered, check other requirements (the time of the day, expired token, ...) */
     ret = pam_acct_mgmt(pam_h, 0);
@@ -928,8 +1082,6 @@ cleanup:
         ERR(NULL, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
     }
     free(pam_config_name);
-
-    nc_authlock_record(session, username, (ret == PAM_SUCCESS) ? 1 : 0);
 
     return ret;
 }
@@ -2179,6 +2331,10 @@ nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts
 #endif
 
     DBG(session, "SSH authentication...");
+
+    /* the credential checks are reached from libssh callbacks that are not given @p opts, so the
+     * lockout policy of this endpoint has to be on the session before the first one runs */
+    session->opts.server.authlock = opts->authlock;
 
     /* authenticate */
     if (opts->auth_timeout) {

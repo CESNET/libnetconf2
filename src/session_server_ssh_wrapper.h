@@ -335,16 +335,13 @@ int nc_server_ssh_compare_password(const char *stored_pw, const char *received_p
 /**
  * @brief Increase the failed authentication attempt counter and log the attempt.
  *
+ * Disconnects the session once the counter reaches the endpoint's max-auth-attempts, which is
+ * unlimited unless configured. Every rejected credential is counted, including every public key
+ * the client offers that the server does not accept.
+ *
  * @param[in] session NETCONF session.
  */
 void nc_server_ssh_auth_attempt_failed(struct nc_session *session);
-
-/**
- * @brief Free the password authentication lockout tally.
- *
- * The state file it mirrors is kept, so a lockout survives the server being restarted.
- */
-void nc_server_ssh_authlock_free(void);
 
 /**
  * @brief Authenticate user with password (retrieves stored hash and compares).

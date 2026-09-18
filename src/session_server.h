@@ -603,6 +603,27 @@ int nc_server_ssh_kbdint_get_nanswers(const struct nc_session *session, ssh_sess
 int nc_server_ssh_set_pam_conf_filename(const char *filename);
 
 /**
+ * @brief Set the file the SSH password authentication lockout tally is mirrored to.
+ *
+ * The lockout counts consecutive failed password authentications per (username, client address)
+ * pair and is configured per SSH endpoint, see the `lockout` container in the
+ * `libnetconf2-netconf-server` YANG module. The tally is always kept in memory; setting a file here
+ * additionally makes a lockout survive the server being restarted, and lets an operator clear one
+ * early by removing the file or editing the entry out of it.
+ *
+ * The directory of the file has to exist and be writable by the server, it is not created. If the
+ * file cannot be written, an error is logged once and the tally stays in memory only.
+ *
+ * Overrides the path the library was built with (the `AUTHLOCK_FILE` CMake option), which is unset
+ * by default. Calling this discards the tally currently in memory.
+ *
+ * @param[in] path Path of the state file, NULL or an empty string to keep the tally in memory only.
+ *
+ * @return 0 on success, 1 on error.
+ */
+int nc_server_ssh_set_authlock_path(const char *path);
+
+/**
  * @brief Set the SSH protocol identification string.
  *
  * Creates an SSH identification string (per RFC 4253 Section 4.2) in the format:
