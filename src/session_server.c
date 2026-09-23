@@ -3439,7 +3439,7 @@ nc_server_binds_reconcile(const struct nc_server_config *config)
 
     /* register the new sockets, reserve the space in advance */
     if (new_count) {
-        LYA_PREALLOC(server_opts.binds, new_count, ERRMEM; rc = 1; goto cleanup);
+        LYA_PREALLOC(server_opts.binds, LYA_COUNT(server_opts.binds) + new_count, ERRMEM; rc = 1; goto cleanup);
     }
     LYA_FOR(descs, u) {
         if (descs[u].reused) {
