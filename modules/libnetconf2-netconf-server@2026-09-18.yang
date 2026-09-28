@@ -31,6 +31,10 @@ module libnetconf2-netconf-server {
     prefix tlss;
   }
 
+  revision "2026-09-18" {
+    description "Added max-auth-attempts and password-based authentication lockout configuration.";
+  }
+
   revision "2026-04-17" {
     description "Change SSH banner description, reference and string length to reflect its correct purpose.";
   }
@@ -158,6 +162,19 @@ module libnetconf2-netconf-server {
       units "seconds";
       description
         "Represents the maximum amount of seconds an authentication can go on for.";
+    }
+
+    leaf max-auth-attempts {
+      type uint16;
+      default 0;
+      description
+        "Maximum number of failed authentication attempts allowed within a single SSH session,
+         after which the session is disconnected. Every rejected authentication request counts,
+         including the initial 'none' request most clients send and every public key a client
+         offers that the server does not accept, so this must be set high enough not to
+         disconnect legitimate clients.
+
+         The value 0 means no limit.";
     }
   }
 
@@ -458,6 +475,58 @@ module libnetconf2-netconf-server {
             "The period of the notification. The period is the time
              between two notifications within the given time interval.";
         }
+      }
+    }
+
+    container ssh-password-lockout {
+      presence
+        "Enables locking a user out of password-based authentication after repeated failures.";
+
+      description
+        "Temporarily locks a user out of password-based authentication after too many consecutive
+         failures. Applies to all SSH endpoints, both listening and Call Home.
+
+         Password-based authentication is the 'password' method and the 'keyboard-interactive'
+         method with 'use-system-auth'.
+
+         While locked out, even the correct password is rejected. A successful password-based
+         authentication resets the count.
+
+         Public key authentication is not affected.";
+
+      reference
+        "3GPP TS 33.117: Catalogue of general security assurance requirements,
+         section 4.2.3.4.5 Policy regarding consecutive failed login attempts and
+         section 4.2.3.4.3.3 Protection against brute force and dictionary attacks";
+
+      leaf max-consecutive-failures {
+        type uint16 {
+          range "1..max";
+        }
+        default 5;
+        description
+          "Number of consecutive failed password-based authentications of a user after which the
+           user is locked out.";
+      }
+
+      leaf duration {
+        type uint16 {
+          range "1..max";
+        }
+        default 300;
+        units "seconds";
+        description
+          "How long a user stays locked out.";
+      }
+
+      leaf reset-interval {
+        type uint16 {
+          range "1..max";
+        }
+        default 900;
+        units "seconds";
+        description
+          "The count of consecutive failures of a user is reset if no failure occurs for this long.";
       }
     }
 

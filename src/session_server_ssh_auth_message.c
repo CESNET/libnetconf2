@@ -417,7 +417,7 @@ nc_server_ssh_msg_auth(struct nc_session *session, struct nc_server_ssh_opts *op
         ERR(session, "User \"%s\" changed its username to \"%s\".", session->username, username);
         NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
         NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
-        nc_server_ssh_auth_attempt_failed(session);
+        nc_server_ssh_auth_attempt_failed(session, opts);
         return 1;
     }
 
@@ -429,7 +429,7 @@ nc_server_ssh_msg_auth(struct nc_session *session, struct nc_server_ssh_opts *op
              * there is no interaction and it will simply be denied */
             ERR(session, "User \"%s\" not known by the server.", username);
             ssh_set_auth_methods(session->ti.libssh.session, SSH_AUTH_METHOD_PUBLICKEY);
-            nc_server_ssh_auth_attempt_failed(session);
+            nc_server_ssh_auth_attempt_failed(session, opts);
             ssh_message_reply_default(msg);
             return 0;
         }
@@ -452,8 +452,8 @@ nc_server_ssh_msg_auth(struct nc_session *session, struct nc_server_ssh_opts *op
     } else if (method == SSH_AUTH_METHOD_INTERACTIVE) {
         ret = nc_server_ssh_msg_auth_kbdint(session, local_users_supported, auth_client, msg);
     } else {
-        ++session->opts.server.ssh_auth_attempts;
         VRB(session, "Authentication method \"%s\" not supported.", str_method);
+        nc_server_ssh_auth_attempt_failed(session, opts);
         ssh_message_reply_default(msg);
         return 0;
     }
@@ -468,7 +468,7 @@ nc_server_ssh_msg_auth(struct nc_session *session, struct nc_server_ssh_opts *op
         }
     } else if (ret == 1) {
         /* failed attempt, msg wasnt yet replied to */
-        nc_server_ssh_auth_attempt_failed(session);
+        nc_server_ssh_auth_attempt_failed(session, opts);
         ssh_message_reply_default(msg);
     }
 

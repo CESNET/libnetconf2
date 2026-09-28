@@ -132,8 +132,8 @@ struct nc_server_ssh_cb_data {
     /**
      * @brief SSH server options, a pointer into a configuration generation.
      *
-     * Only valid during the transport handshake - it is dereferenced solely by
-     * ::nc_server_ssh_cb_auth_common_setup(), reached only from the four authentication callbacks.
+     * Only valid during the transport handshake - it is dereferenced solely from the four
+     * authentication callbacks.
      * The long-lived channel callbacks use only @p session. It is cleared at the end of the
      * handshake so that a later dereference fails immediately instead of reading freed memory.
      */
@@ -335,9 +335,14 @@ int nc_server_ssh_compare_password(const char *stored_pw, const char *received_p
 /**
  * @brief Increase the failed authentication attempt counter and log the attempt.
  *
+ * Disconnects the session once the counter reaches the endpoint's max-auth-attempts, which is
+ * unlimited unless configured. Every rejected credential is counted, including every public key
+ * the client offers that the server does not accept.
+ *
  * @param[in] session NETCONF session.
+ * @param[in] opts SSH server options of the endpoint.
  */
-void nc_server_ssh_auth_attempt_failed(struct nc_session *session);
+void nc_server_ssh_auth_attempt_failed(struct nc_session *session, const struct nc_server_ssh_opts *opts);
 
 /**
  * @brief Authenticate user with password (retrieves stored hash and compares).
