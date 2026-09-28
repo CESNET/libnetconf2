@@ -21,6 +21,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <libssh/libssh.h>
 #include <libssh/server.h>
 #include <libyang/libyang.h>
@@ -47,6 +48,198 @@
 #include "session_p.h"
 #include "session_server_ssh_wrapper.h"
 #include "session_wrapper.h"
+
+/*
+ * Password-based authentication lockout.
+ *
+ * Consecutive failed password-based authentications are counted per user across connections and
+ * all the SSH endpoints, and the user is refused password-based authentication for a while once too
+ * many fail in a row. The policy is server-wide, in ::nc_server_config. The tally only ever holds
+ * users the server knows: with local users, unknown users are rejected before any credential check,
+ * and without them only the failures of users that exist on the system are counted.
+ *
+ * Password-based authentication is the password method and the system keyboard-interactive method.
+ * A custom keyboard-interactive callback is not covered, what it verifies is up to the application.
+ * Public key and certificate authentication are deliberately left alone, which keeps a locked out
+ * deployment recoverable.
+ */
+
+/**
+ * @brief Find the password-based authentication lockout tally of a user. Expects the lock to be held.
+ *
+ * @param[in] username User to look for.
+ * @return Its entry, NULL if it has none.
+ */
+static struct nc_authlock_entry *
+nc_authlock_find(const char *username)
+{
+    LYA_COUNT_T u;
+
+    LYA_FOR(server_opts.authlock, u) {
+        if (!strcmp(server_opts.authlock[u].username, username)) {
+            return &server_opts.authlock[u];
+        }
+    }
+
+    return NULL;
+}
+
+/**
+ * @brief Remove a password-based authentication lockout tally. Expects the lock to be held.
+ *
+ * @param[in] entry Entry to remove.
+ */
+static void
+nc_authlock_remove(struct nc_authlock_entry *entry)
+{
+    struct nc_authlock_entry *last = &server_opts.authlock[LYA_COUNT(server_opts.authlock) - 1];
+
+    free(entry->username);
+    if (entry != last) {
+        *entry = *last;
+    }
+    LYA_DECREMENT_FREE(server_opts.authlock);
+}
+
+/**
+ * @brief Remove the tallies that are neither locked out nor recent enough to count towards a lockout.
+ * Expects the lock to be held.
+ *
+ * Also drops the tallies of users removed from the configuration, once they expire.
+ *
+ * @param[in] reset_interval Failures further apart than this do not count towards the same tally, seconds.
+ * @param[in] now Current time.
+ */
+static void
+nc_authlock_prune(uint16_t reset_interval, time_t now)
+{
+    LYA_COUNT_T u = 0;
+
+    while (u < LYA_COUNT(server_opts.authlock)) {
+        if ((server_opts.authlock[u].locked_until <= now) &&
+                ((now - server_opts.authlock[u].last_fail) > reset_interval)) {
+            /* the last item takes its place */
+            nc_authlock_remove(&server_opts.authlock[u]);
+        } else {
+            ++u;
+        }
+    }
+}
+
+/**
+ * @brief Record the outcome of a password-based authentication.
+ *
+ * Does nothing unless the lockout is configured.
+ *
+ * @param[in] session NETCONF session, for the policy and the log message.
+ * @param[in] username User that authenticated.
+ * @param[in] success Whether it succeeded, which resets the count.
+ */
+static void
+nc_authlock_record(struct nc_session *session, const char *username, int success)
+{
+    const struct nc_authlock_opts *opts = &session->opts.server.config->authlock;
+    struct nc_authlock_entry *entry;
+    time_t now = time(NULL);
+    char *name;
+
+    if (!opts->max_fails) {
+        /* the lockout is not configured */
+        return;
+    }
+
+    /* AUTHLOCK LOCK */
+    pthread_mutex_lock(&server_opts.authlock_lock);
+
+    if (success) {
+        entry = nc_authlock_find(username);
+        if (entry) {
+            nc_authlock_remove(entry);
+        }
+        goto cleanup;
+    }
+
+    nc_authlock_prune(opts->reset_interval, now);
+
+    entry = nc_authlock_find(username);
+    if (!entry) {
+        name = strdup(username);
+        if (!name) {
+            ERRMEM;
+            goto cleanup;
+        }
+        LYA_ADD_ITEM(server_opts.authlock, entry, ERRMEM; free(name); goto cleanup);
+        entry->username = name;
+    } else if (entry->locked_until && (entry->locked_until <= now)) {
+        /* the lockout expired, this failure starts a new count rather than locking the user out again */
+        entry->fails = 0;
+        entry->locked_until = 0;
+    }
+
+    ++entry->fails;
+    entry->last_fail = now;
+
+    if (entry->fails >= opts->max_fails) {
+        entry->locked_until = now + opts->duration;
+        WRN(session, "User \"%s\" locked out of password-based authentication for %" PRIu16 " s after %" PRIu32
+                " consecutive failures.", username, opts->duration, entry->fails);
+    }
+
+cleanup:
+    /* AUTHLOCK UNLOCK */
+    pthread_mutex_unlock(&server_opts.authlock_lock);
+}
+
+void
+nc_server_ssh_authlock_free(void)
+{
+    LYA_COUNT_T u;
+
+    LYA_FOR(server_opts.authlock, u) {
+        free(server_opts.authlock[u].username);
+    }
+    LYA_FREE(server_opts.authlock);
+    server_opts.authlock = NULL;
+}
+
+/**
+ * @brief Check whether a user is locked out of password-based authentication and log it if it is.
+ *
+ * Always allows the authentication unless the lockout is configured.
+ *
+ * @param[in] session NETCONF session, for the policy and the log message.
+ * @param[in] username User to check.
+ * @return 0 if it may authenticate, 1 if it is locked out.
+ */
+static int
+nc_authlock_denied(struct nc_session *session, const char *username)
+{
+    struct nc_authlock_entry *entry;
+    time_t now = time(NULL), remaining = 0;
+
+    if (!session->opts.server.config->authlock.max_fails) {
+        return 0;
+    }
+
+    /* AUTHLOCK LOCK */
+    pthread_mutex_lock(&server_opts.authlock_lock);
+
+    entry = nc_authlock_find(username);
+    if (entry && (entry->locked_until > now)) {
+        remaining = entry->locked_until - now;
+    }
+
+    /* AUTHLOCK UNLOCK */
+    pthread_mutex_unlock(&server_opts.authlock_lock);
+
+    if (!remaining) {
+        return 0;
+    }
+
+    WRN(session, "User \"%s\" is locked out of password-based authentication for another %lld s.",
+            username, (long long)remaining);
+    return 1;
+}
 
 int
 nc_ssh_check_local_user_support(struct nc_session *session)
@@ -155,11 +348,29 @@ nc_ssh_auth_success(struct nc_session *session, struct nc_auth_state *auth_state
 }
 
 void
-nc_server_ssh_auth_attempt_failed(struct nc_session *session)
+nc_server_ssh_auth_attempt_failed(struct nc_session *session, const struct nc_server_ssh_opts *opts)
 {
+    uint16_t max_fails = opts->max_auth_attempts;
+
     ++session->opts.server.ssh_auth_attempts;
-    VRB(session, "Failed user \"%s\" authentication attempt (#%d).",
+    VRB(session, "Failed user \"%s\" authentication attempt (#%" PRIu16 ").",
             session->username ? session->username : "unknown", session->opts.server.ssh_auth_attempts);
+
+    /* every rejected credential gets here, including every public key the client offers that is not
+     * accepted, so the cap is off unless the endpoint configures max-auth-attempts */
+    if (!max_fails || (session->opts.server.ssh_auth_attempts < max_fails)) {
+        return;
+    }
+
+    /* the per-session cap, which bounds what a single connection may try; the accept loops end on a
+     * session that is no longer connected */
+    if (NC_SESSION_STATUS_GET(session) != NC_STATUS_INVALID) {
+        ERR(session, "Too many failed authentication attempts (%" PRIu16 ") in a single session, disconnecting.",
+                session->opts.server.ssh_auth_attempts);
+        NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+        NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
+        ssh_disconnect(session->ti.libssh.session);
+    }
 }
 
 int
@@ -170,6 +381,11 @@ nc_server_ssh_auth_password_check(struct nc_session *session, const char *user,
     char *stored_password = NULL;
 
     assert(!local_users_supported || auth_client);
+
+    /* refuse a user that failed password-based authentication too many times */
+    if (nc_authlock_denied(session, user)) {
+        return 1;
+    }
 
     /* Get the stored password */
     if (local_users_supported) {
@@ -198,6 +414,9 @@ nc_server_ssh_auth_password_check(struct nc_session *session, const char *user,
     if (!local_users_supported) {
         free(stored_password);
     }
+
+    /* a password that worked resets the user's count, one that did not counts against it */
+    nc_authlock_record(session, user, rc ? 0 : 1);
 
     return rc;
 }
@@ -447,8 +666,16 @@ nc_server_ssh_pam_authenticate(struct nc_session *session, const char *username,
         const struct pam_conv *conv)
 {
     pam_handle_t *pam_h = NULL;
-    char *pam_config_name = NULL;
+    char *pam_config_name = NULL, *pw_str = NULL;
+    struct passwd pw;
+    size_t pw_str_size = 0;
     int ret;
+
+    /* refuse a user that failed password-based authentication too many times; pam_faillock, where it
+     * is configured, only sees the PAM methods, this tally is shared with the other ones */
+    if (nc_authlock_denied(session, username)) {
+        return 1;
+    }
 
     /* get the PAM configuration, PAM must not be called with the lock held */
     if (nc_server_ssh_get_pam_conf_filename(&pam_config_name)) {
@@ -474,8 +701,21 @@ nc_server_ssh_pam_authenticate(struct nc_session *session, const char *username,
         } else {
             VRB(session, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
         }
+
+        /* only a rejected credential counts towards the lockout; an aborted, unavailable or
+         * misconfigured PAM stack is not the client getting the password wrong. Without local users
+         * any username reaches PAM, which commonly rejects a nonexistent user the same way, so only
+         * a user that exists gets a tally. */
+        if (((ret == PAM_AUTH_ERR) || (ret == PAM_CRED_INSUFFICIENT) || (ret == PAM_MAXTRIES)) &&
+                session->opts.server.config->authlock.max_fails && nc_getpw(0, username, &pw, &pw_str, &pw_str_size)) {
+            nc_authlock_record(session, username, 0);
+        }
         goto cleanup;
     }
+
+    /* the credential was accepted, which resets the count whatever the account management below
+     * has to say about the user */
+    nc_authlock_record(session, username, 1);
 
     /* correct token entered, check other requirements (the time of the day, expired token, ...) */
     ret = pam_acct_mgmt(pam_h, 0);
@@ -501,6 +741,7 @@ cleanup:
         ERR(NULL, "PAM error occurred (%s).", pam_strerror(pam_h, ret));
     }
     free(pam_config_name);
+    free(pw_str);
     return ret;
 }
 
@@ -1186,6 +1427,10 @@ nc_server_ssh_kbdint_verify_passwd(struct nc_session *session, const char *usern
     const char *answer;
     int rc;
 
+    if (nc_authlock_denied(session, username)) {
+        return 1;
+    }
+
     if (n_answers != 1) {
         ERR(session, "Unexpected amount of answers in system auth. Expected 1, got \"%d\".", n_answers);
         return 1;
@@ -1212,6 +1457,8 @@ nc_server_ssh_kbdint_verify_passwd(struct nc_session *session, const char *usern
     rc = nc_server_ssh_compare_password(pw, received_pw);
     free(pw);
     free(received_pw);
+
+    nc_authlock_record(session, username, rc ? 0 : 1);
 
     return rc;
 }
@@ -1766,7 +2013,10 @@ nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts
     /* Run the event loop instead of ssh_message_get() */
     while (!(session->flags & NC_SESSION_SSH_AUTHENTICATED)) {
         if (!ssh_is_connected(session->ti.libssh.session)) {
-            ERR(session, "Communication SSH socket unexpectedly closed.");
+            if (NC_SESSION_STATUS_GET(session) != NC_STATUS_INVALID) {
+                /* not disconnected by the server, which already logged the reason */
+                ERR(session, "Communication SSH socket unexpectedly closed.");
+            }
             return -1;
         }
 
@@ -1798,7 +2048,10 @@ nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts
 #else
     while (1) {
         if (!ssh_is_connected(session->ti.libssh.session)) {
-            ERR(session, "Communication SSH socket unexpectedly closed while waiting for authentication.");
+            if (NC_SESSION_STATUS_GET(session) != NC_STATUS_INVALID) {
+                /* not disconnected by the server, which already logged the reason */
+                ERR(session, "Communication SSH socket unexpectedly closed while waiting for authentication.");
+            }
             return -1;
         }
 

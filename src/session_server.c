@@ -60,6 +60,9 @@ struct nc_server_opts server_opts = {
     .binds_lock = PTHREAD_MUTEX_INITIALIZER,
     .opts_lock = PTHREAD_RWLOCK_INITIALIZER,
     .ch_threads_lock = PTHREAD_MUTEX_INITIALIZER,
+#ifdef NC_ENABLED_SSH_TLS
+    .authlock_lock = PTHREAD_MUTEX_INITIALIZER,
+#endif /* NC_ENABLED_SSH_TLS */
 };
 
 static nc_rpc_clb global_rpc_clb = NULL;
@@ -1696,6 +1699,10 @@ nc_server_destroy(void)
     nc_server_config_release(config);
 
 #ifdef NC_ENABLED_SSH_TLS
+    /* free the password-based authentication lockout tally; only safe here, once the Call Home and
+     * accept threads that authenticate clients have been joined */
+    nc_server_ssh_authlock_free();
+
     /* close the TLS keylog file */
     if (server_opts.tls_keylog_file) {
         fclose(server_opts.tls_keylog_file);

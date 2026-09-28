@@ -490,7 +490,7 @@ nc_server_ssh_cb_auth_common_setup(struct nc_server_ssh_cb_data *cb_data, const 
     *auth_client = NULL;
 
     if (!user) {
-        nc_server_ssh_auth_attempt_failed(session);
+        nc_server_ssh_auth_attempt_failed(session, opts);
         return -1;
     }
 
@@ -506,7 +506,7 @@ nc_server_ssh_cb_auth_common_setup(struct nc_server_ssh_cb_data *cb_data, const 
         ERR(session, "User \"%s\" changed its username to \"%s\".", session->username, user);
         NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
         NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
-        nc_server_ssh_auth_attempt_failed(session);
+        nc_server_ssh_auth_attempt_failed(session, opts);
         return -1;
     }
 
@@ -514,7 +514,7 @@ nc_server_ssh_cb_auth_common_setup(struct nc_server_ssh_cb_data *cb_data, const 
     *local_users_supported = nc_ssh_check_local_user_support(session);
     if (*local_users_supported < 0) {
         /* fatal error checking local users support */
-        nc_server_ssh_auth_attempt_failed(session);
+        nc_server_ssh_auth_attempt_failed(session, opts);
         return -1;
     }
 
@@ -526,7 +526,7 @@ nc_server_ssh_cb_auth_common_setup(struct nc_server_ssh_cb_data *cb_data, const 
             ERR(session, "User \"%s\" not known by the server.", user);
             /* advertise only publickey so there is no interaction and it is simply denied */
             ssh_set_auth_methods(session->ti.libssh.session, SSH_AUTH_METHOD_PUBLICKEY);
-            nc_server_ssh_auth_attempt_failed(session);
+            nc_server_ssh_auth_attempt_failed(session, opts);
             return -1;
         }
     }
@@ -554,7 +554,7 @@ nc_server_ssh_cb_auth_none(ssh_session UNUSED(libssh_sess), const char *user, vo
         return nc_ssh_auth_success(session, &cb_data->auth_state, SSH_AUTH_METHOD_NONE);
     }
 
-    nc_server_ssh_auth_attempt_failed(session);
+    nc_server_ssh_auth_attempt_failed(session, cb_data->opts);
     return SSH_AUTH_DENIED;
 }
 
@@ -576,7 +576,7 @@ nc_server_ssh_cb_auth_password(ssh_session UNUSED(libssh_sess), const char *user
     if (rc == 0) {
         return nc_ssh_auth_success(session, &cb_data->auth_state, SSH_AUTH_METHOD_PASSWORD);
     } else {
-        nc_server_ssh_auth_attempt_failed(session);
+        nc_server_ssh_auth_attempt_failed(session, cb_data->opts);
         return SSH_AUTH_DENIED;
     }
 }
@@ -604,11 +604,11 @@ nc_server_ssh_cb_auth_pubkey(ssh_session UNUSED(libssh_sess), const char *user, 
             return nc_ssh_auth_success(session, &cb_data->auth_state, SSH_AUTH_METHOD_PUBLICKEY);
         } else {
             VRB(session, "User \"%s\" tried to use an invalid public key signature.", session->username);
-            nc_server_ssh_auth_attempt_failed(session);
+            nc_server_ssh_auth_attempt_failed(session, cb_data->opts);
             return SSH_AUTH_DENIED;
         }
     } else {
-        nc_server_ssh_auth_attempt_failed(session);
+        nc_server_ssh_auth_attempt_failed(session, cb_data->opts);
         return SSH_AUTH_DENIED;
     }
 }
@@ -682,7 +682,7 @@ nc_server_ssh_cb_auth_kbdint(ssh_message message, ssh_session UNUSED(libssh_sess
     /* select the kbdint backend based on the configuration */
     if (nc_server_ssh_kbdint_select_method(session, local_users_supported, auth_client, &backend)) {
         /* denied, the reason was already logged */
-        nc_server_ssh_auth_attempt_failed(session);
+        nc_server_ssh_auth_attempt_failed(session, cb_data->opts);
 #ifdef HAVE_LIBPAM
         /* cancel any in-progress PAM exchange before denying */
         nc_server_ssh_cb_kbdint_pam_cancel_stored(cb_data);
@@ -693,13 +693,13 @@ nc_server_ssh_cb_auth_kbdint(ssh_message message, ssh_session UNUSED(libssh_sess
     if (backend == NC_KBDINT_BACKEND_CUSTOM_CLB) {
         /* custom interactive auth callback, it must not be called with the options lock held */
         if (nc_server_ssh_get_interactive_auth_clb(&interactive_auth_clb, &interactive_auth_data)) {
-            nc_server_ssh_auth_attempt_failed(session);
+            nc_server_ssh_auth_attempt_failed(session, cb_data->opts);
             return SSH_AUTH_DENIED;
         }
         if (!interactive_auth_clb) {
             /* the callback was unset in the meantime */
             ERR(session, "Custom keyboard-interactive authentication callback not set.");
-            nc_server_ssh_auth_attempt_failed(session);
+            nc_server_ssh_auth_attempt_failed(session, cb_data->opts);
             return SSH_AUTH_DENIED;
         }
 
@@ -719,7 +719,7 @@ nc_server_ssh_cb_auth_kbdint(ssh_message message, ssh_session UNUSED(libssh_sess
         return nc_ssh_auth_success(session, &cb_data->auth_state, SSH_AUTH_METHOD_INTERACTIVE);
     } else {
         VRB(session, "User \"%s\" authentication denied via keyboard-interactive.", user);
-        nc_server_ssh_auth_attempt_failed(session);
+        nc_server_ssh_auth_attempt_failed(session, cb_data->opts);
         return SSH_AUTH_DENIED;
     }
 }

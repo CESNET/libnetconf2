@@ -35,6 +35,7 @@ struct test_ssh_data {
     const char *privkey_path;
     int check_protocol_string;
     int expect_fail;
+    int bad_password;
 };
 
 int TEST_PORT = 10050;
@@ -69,12 +70,13 @@ __wrap_ssh_get_issue_banner(ssh_session session)
 static char *
 auth_password(const char *username, const char *hostname, void *priv)
 {
+    const struct test_ssh_data *test_data = priv;
+
     (void) hostname;
-    (void) priv;
 
     /* set the reply to password authentication */
     if (!strcmp(username, "test_pw")) {
-        return strdup("testpw");
+        return strdup((test_data && test_data->bad_password) ? "not-testpw" : "testpw");
     } else {
         return NULL;
     }
@@ -119,7 +121,7 @@ client_thread_ssh(void *arg)
         ret = nc_client_ssh_add_keypair(test_data->pubkey_path, test_data->privkey_path);
         assert_int_equal(ret, 0);
     } else {
-        nc_client_ssh_set_auth_password_clb(auth_password, NULL);
+        nc_client_ssh_set_auth_password_clb(auth_password, test_data);
     }
 
     /* wait for the server to be ready */
@@ -161,6 +163,50 @@ test_password(void **state)
 
     for (i = 0; i < 2; i++) {
         pthread_join(tids[i], NULL);
+    }
+}
+
+static int setup_ssh(void **state);
+
+/** @brief Whether ::setup_ssh() configures the password-based authentication lockout on the endpoint. */
+static int setup_ssh_with_lockout;
+
+static int
+setup_ssh_lockout(void **state)
+{
+    int ret;
+
+    setup_ssh_with_lockout = 1;
+    ret = setup_ssh(state);
+    setup_ssh_with_lockout = 0;
+
+    return ret;
+}
+
+static void
+test_password_lockout(void **state)
+{
+    int ret, i, round;
+    pthread_t tids[2];
+    struct ln2_test_ctx *test_ctx = *state;
+    struct test_ssh_data *test_data = test_ctx->test_data;
+
+    test_data->username = "test_pw";
+    test_data->expect_fail = 1;
+
+    /* the first round is refused because the password is wrong, the second one because that single
+     * failure locked the user out - the password the client sends there is the correct one */
+    for (round = 0; round < 2; ++round) {
+        test_data->bad_password = (round == 0);
+
+        ret = pthread_create(&tids[0], NULL, client_thread_ssh, *state);
+        assert_int_equal(ret, 0);
+        ret = pthread_create(&tids[1], NULL, ln2_glob_test_server_thread_fail, *state);
+        assert_int_equal(ret, 0);
+
+        for (i = 0; i < 2; i++) {
+            pthread_join(tids[i], NULL);
+        }
     }
 }
 
@@ -709,7 +755,7 @@ static int
 setup_ssh(void **state)
 {
     int ret;
-    struct lyd_node *tree = NULL;
+    struct lyd_node *tree = NULL, *lockout;
     struct ln2_test_ctx *test_ctx;
     struct test_ssh_data *test_data;
 
@@ -751,6 +797,18 @@ setup_ssh(void **state)
             "ssh-server-parameters/client-authentication/users/user[name='test_none']/none", NULL, 0, NULL);
     assert_int_equal(ret, 0);
 
+    if (setup_ssh_with_lockout) {
+        /* one failed password is enough to lock the user out, so that the test does not depend on
+         * how many times the client retries within a single connection */
+        ret = lyd_new_path(tree, test_ctx->ctx, "/libnetconf2-netconf-server:ln2-netconf-server/ssh-password-lockout/"
+                "max-consecutive-failures", "1", 0, &lockout);
+        assert_int_equal(ret, 0);
+
+        /* a sibling of the tree, so the implicit nodes below do not reach it */
+        ret = lyd_new_implicit_tree(lockout, LYD_IMPLICIT_NO_STATE, NULL);
+        assert_int_equal(ret, 0);
+    }
+
     /* add all the default nodes/np containers */
     ret = lyd_new_implicit_tree(tree, LYD_IMPLICIT_NO_STATE, NULL);
     assert_int_equal(ret, 0);
@@ -769,6 +827,7 @@ main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_password, setup_ssh, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_password_lockout, setup_ssh_lockout, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_none, setup_ssh, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_rsa_pubkey, setup_ssh, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_ec256_pubkey, setup_ssh, ln2_glob_test_teardown),

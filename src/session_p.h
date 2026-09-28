@@ -411,6 +411,16 @@ struct nc_hostkey {
 };
 
 /**
+ * @brief Password-based authentication lockout policy of the server, shared by all the SSH endpoints.
+ */
+struct nc_authlock_opts {
+    uint16_t max_fails;         /**< consecutive failed password-based authentications that lock a user out,
+                                     0 if the lockout is disabled */
+    uint16_t duration;          /**< how long a user stays locked out, seconds */
+    uint16_t reset_interval;    /**< the count of a user is reset if no failure occurs for this long, seconds */
+};
+
+/**
  * @brief Server options for configuring the SSH transport protocol.
  */
 struct nc_server_ssh_opts {
@@ -428,6 +438,9 @@ struct nc_server_ssh_opts {
     char *banner;                           /**< SSH banner message, sent before authentication. */
 
     uint16_t auth_timeout;                  /**< Authentication timeout. */
+
+    uint16_t max_auth_attempts;             /**< Failed authentication attempts allowed within a single session,
+                                                 0 for no limit. */
 };
 
 /**
@@ -828,6 +841,8 @@ struct nc_server_config {
         struct nc_cert_exp_time anchor; /**< Lower bound of the given interval. */
         struct nc_cert_exp_time period; /**< Period of the given interval. */
     } *cert_exp_notif_intervals;        /**< Certificate expiration notification intervals (sized-array, see libyang docs). */
+
+    struct nc_authlock_opts authlock;   /**< SSH password-based authentication lockout policy. */
 #endif /* NC_ENABLED_SSH_TLS */
 };
 
@@ -947,6 +962,22 @@ struct nc_server_opts {
         pthread_mutex_t lock;       /**< Certificate expiration notification thread's data and cond lock. */
         pthread_cond_t cond;        /**< Condition for the certificate expiration notification thread. */
     } cert_exp_notif;
+
+    /* ACCESS locked - authlock lock - leaf lock, never acquire another lock while holding it */
+    pthread_mutex_t authlock_lock;      /**< Lock for the password-based authentication lockout tally. */
+
+    /**
+     * @brief Failed password-based authentication tally of a single user.
+     *
+     * Shared by all the SSH endpoints, an entry is created on the first failure of a user. Only users
+     * known to the server ever get one, so the tally is bounded by the number of users.
+     */
+    struct nc_authlock_entry {
+        char *username;         /**< User the tally belongs to. */
+        uint32_t fails;         /**< Consecutive failed password-based authentications. */
+        time_t last_fail;       /**< When the last one was. */
+        time_t locked_until;    /**< No password-based authentication before this, 0 if not locked out. */
+    } *authlock;    /**< Password-based authentication lockout tally (sized-array, see libyang docs). */
 #endif /* NC_ENABLED_SSH_TLS */
 
     /**
@@ -1162,6 +1193,7 @@ struct nc_session {
             ATOMIC_T *ch_thread_running;
 
             uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
+
             void *client_cert;                /**< TLS client certificate if used for authentication */
 #endif /* NC_ENABLED_SSH_TLS */
         } server;
@@ -1737,6 +1769,13 @@ void nc_server_ch_thread_names_free(char **names);
  * @return 0 on success, 1 on error.
  */
 int nc_server_ch_threads_destroy(void);
+
+/**
+ * @brief Free the password-based authentication lockout tally.
+ *
+ * Must not be called before every thread that may authenticate a client has been joined.
+ */
+void nc_server_ssh_authlock_free(void);
 
 /**
  * @brief Stop a dispatched Call Home client thread, if such thread was dispatched for the given client.
