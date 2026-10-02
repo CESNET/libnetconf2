@@ -501,7 +501,7 @@ int nc_server_config_del_ssh_user_authkey(const char *endpt_name, const char *us
 /**
  * @brief Hashes a clear-text 'iana-crypt-hash' password the way the server stores it in its configuration.
  *
- * Only "$0$<clear-text>" is a clear-text password, which is hashed into a crypt(3) SHA-512 digest
+ * Only "$0$<clear-text>" is a clear-text password, which is hashed into a SHA-512 digest
  * under a freshly generated random salt ("$6$<salt>$<digest>"). Any other @p crypt_hash is already
  * hashed, so nothing is done and NULL is returned in @p hashed_password.
  *

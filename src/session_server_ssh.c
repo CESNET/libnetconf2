@@ -42,6 +42,7 @@
 #endif
 
 #include "compat.h"
+#include "crypt_p.h"
 #include "log_p.h"
 #include "nc_version.h"
 #include "session.h"
@@ -1468,8 +1469,7 @@ nc_server_ssh_kbdint_verify_passwd(struct nc_session *session, const char *usern
 int
 nc_server_ssh_compare_password(const char *stored_pw, const char *received_pw)
 {
-    char *received_pw_hash = NULL;
-    struct crypt_data *cdata;
+    struct nc_crypt cdata = {0};
     int ret;
 
     NC_CHECK_ARG_RET(NULL, stored_pw, received_pw, 1);
@@ -1490,18 +1490,15 @@ nc_server_ssh_compare_password(const char *stored_pw, const char *received_pw)
         return strcmp(stored_pw + 3, received_pw);
     }
 
-    cdata = calloc(1, sizeof *cdata);
-    NC_CHECK_ERRMEM_RET(!cdata, 1);
+    cdata.action = NC_CRYPT_VERIFY;
 
-    received_pw_hash = crypt_r(received_pw, stored_pw, cdata);
-    if (!received_pw_hash) {
-        ERR(NULL, "Hashing the password failed (%s).", strerror(errno));
-        free(cdata);
+    ret = nc_crypt(received_pw, stored_pw, &cdata);
+    if (ret) {
+        ERR(NULL, "Verifying the password failed (%s).", nc_crypt_strerr(ret));
         return 1;
     }
 
-    ret = strcmp(received_pw_hash, stored_pw);
-    free(cdata);
+    ret = cdata.match;
 
     return ret;
 }

@@ -27,6 +27,7 @@
 
 #include "compat.h"
 #include "config.h"
+#include "crypt_p.h"
 #include "log_p.h"
 #include "server_config.h"
 #include "session_p.h"
@@ -491,7 +492,7 @@ nc_server_config_ch_del_ssh_user_authkey(const char *client_name, const char *en
 }
 
 /**
- * @brief Hash a clear-text password into a crypt(3) SHA-512 digest.
+ * @brief Hash a clear-text password into a SHA-512 digest.
  *
  * @param[in] password Clear-text password to hash.
  * @param[out] hashed_password Generated "$6$<salt>$<digest>" value.
@@ -502,16 +503,16 @@ nc_server_config_crypt_password(const char *password, char **hashed_password)
 {
     int ret = 0;
     size_t i;
-    char *hashed_pw = NULL;
     char salt[3 /* "$6$" */ + 16 /* random chars */ + 1 /* trailing '$' */ + 1 /* NUL */];
-    struct crypt_data *cdata = NULL;
+    struct nc_crypt cdata = {0};
+    char output[NC_CRYPT_BUFSIZE];
     unsigned char rnd[16];
     static const char itoa64[] = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
     *hashed_password = NULL;
-
-    cdata = calloc(1, sizeof *cdata);
-    NC_CHECK_ERRMEM_GOTO(!cdata, ret = 1, cleanup);
+    cdata.output = output;
+    cdata.output_len = NC_CRYPT_BUFSIZE;
+    cdata.action = NC_CRYPT_CREATE;
 
     /* generate a random salt compatible with crypt SHA-512: "$6$<salt>$" */
     if (nc_tls_generate_random_bytes_wrap(rnd, sizeof rnd)) {
@@ -528,19 +529,17 @@ nc_server_config_crypt_password(const char *password, char **hashed_password)
     salt[3 + sizeof rnd] = '$';
     salt[3 + sizeof rnd + 1] = '\0';
 
-    hashed_pw = crypt_r(password, salt, cdata);
-    if (!hashed_pw) {
-        ERR(NULL, "Hashing password failed (%s).", strerror(errno));
+    ret = nc_crypt(password, salt, &cdata);
+    if (ret) {
+        ERR(NULL, "Hashing password failed (%s).", nc_crypt_strerr(ret));
         ret = 1;
         goto cleanup;
     }
 
-    /* crypt_r() returns a pointer into cdata, which is freed below */
-    *hashed_password = strdup(hashed_pw);
+    *hashed_password = strdup(cdata.output);
     NC_CHECK_ERRMEM_GOTO(!*hashed_password, ret = 1, cleanup);
 
 cleanup:
-    free(cdata);
     return ret;
 }
 

@@ -69,20 +69,6 @@ macro(USE_COMPAT)
 
     check_include_file("alloca.h" HAVE_ALLOCA_H)
 
-    # crypt
-    check_include_file("crypt.h" HAVE_CRYPT_H)
-
-    if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
-        list(APPEND CMAKE_REQUIRED_LIBRARIES -llogin)
-    elseif(NOT APPLE)
-        list(APPEND CMAKE_REQUIRED_LIBRARIES -lcrypt)
-    endif()
-    if(HAVE_CRYPT_H)
-        check_symbol_exists(crypt_r "crypt.h" HAVE_CRYPT_R)
-    else()
-        check_symbol_exists(crypt_r "unistd.h" HAVE_CRYPT_R)
-    endif()
-
     # unsock_get_uid
     check_symbol_exists(SO_PEERCRED "sys/socket.h" HAVE_SO_PEERCRED)
     if(NOT HAVE_SO_PEERCRED)

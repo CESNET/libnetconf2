@@ -17,11 +17,6 @@
 
 #define _GNU_SOURCE /* pthread_rwlock_t */
 
-#cmakedefine HAVE_CRYPT_H
-#ifdef HAVE_CRYPT_H
-# include <crypt.h>
-#endif
-
 #cmakedefine HAVE_ALLOCA_H
 #ifdef HAVE_ALLOCA_H
 # include <alloca.h>
@@ -80,7 +75,6 @@
 #cmakedefine HAVE_STRCHRNUL
 #cmakedefine HAVE_GET_CURRENT_DIR_NAME
 #cmakedefine HAVE_TIMEGM
-#cmakedefine HAVE_CRYPT_R
 #cmakedefine HAVE_SO_PEERCRED
 #cmakedefine HAVE_GETPEEREID
 
@@ -226,16 +220,6 @@ char *strchrnul(const char *s, int c);
 
 #ifndef HAVE_GET_CURRENT_DIR_NAME
 char *get_current_dir_name(void);
-#endif
-
-#ifndef HAVE_CRYPT_R
-
-/* unused anyway */
-struct crypt_data {
-    char a;
-};
-
-char *crypt_r(const char *phrase, const char *setting, struct crypt_data *data);
 #endif
 
 #ifndef HAVE_TIMEGM
