@@ -36,29 +36,29 @@
 
 #include "ln2_test.h"
 
-struct nc_session *server_session;
-struct nc_session *client_session;
-struct ly_ctx *ctx;
-pthread_mutex_t state_lock = PTHREAD_MUTEX_INITIALIZER;
-pthread_barrier_t barrier;
-int glob_state;
+struct state {
+    struct nc_session *server_session;
+    struct nc_session *client_session;
+    struct ly_ctx *ctx;
+    pthread_mutex_t state_lock;
+    pthread_barrier_t barrier;
+    int glob_state;
+};
 
-struct nc_server_reply *
-my_get_rpc_clb(struct lyd_node *rpc, struct nc_session *session)
+static struct nc_server_reply *
+my_get_rpc_clb(struct lyd_node *rpc, struct nc_session *UNUSED(session))
 {
     assert_string_equal(rpc->schema->name, "get");
-    assert_ptr_equal(session, server_session);
 
     return nc_server_reply_ok();
 }
 
-struct nc_server_reply *
+static struct nc_server_reply *
 my_getconfig_rpc_clb(struct lyd_node *rpc, struct nc_session *session)
 {
     struct lyd_node *data;
 
     assert_string_equal(rpc->schema->name, "get-config");
-    assert_ptr_equal(session, server_session);
 
     lyd_new_path(NULL, session->ctx, "/ietf-netconf:get-config/data", NULL, LYD_NEW_VAL_OUTPUT, &data);
     assert_non_null(data);
@@ -66,25 +66,91 @@ my_getconfig_rpc_clb(struct lyd_node *rpc, struct nc_session *session)
     return nc_server_reply_data(data, NC_WD_EXPLICIT, NC_PARAMTYPE_FREE);
 }
 
-struct nc_server_reply *
+static struct nc_server_reply *
 my_commit_rpc_clb(struct lyd_node *rpc, struct nc_session *session)
 {
+    struct state *st = nc_session_get_data(session);
+
     assert_string_equal(rpc->schema->name, "commit");
-    assert_ptr_equal(session, server_session);
+    assert_ptr_equal(session, st->server_session);
 
     /* update state */
-    pthread_mutex_lock(&state_lock);
-    glob_state = 1;
+    pthread_mutex_lock(&st->state_lock);
+    st->glob_state = 1;
 
     /* wait until the client receives the notification */
-    while (glob_state != 3) {
-        pthread_mutex_unlock(&state_lock);
+    while (st->glob_state != 3) {
+        pthread_mutex_unlock(&st->state_lock);
         usleep(100000);
-        pthread_mutex_lock(&state_lock);
+        pthread_mutex_lock(&st->state_lock);
     }
-    pthread_mutex_unlock(&state_lock);
+    pthread_mutex_unlock(&st->state_lock);
 
     return nc_server_reply_ok();
+}
+
+static int
+setup_f(void **state)
+{
+    struct state *st;
+    const struct lys_module *module;
+    struct lysc_node *node;
+    const char *nc_features[] = {"candidate", NULL};
+
+    st = calloc(1, sizeof *st);
+    if (!st) {
+        return 1;
+    }
+
+    pthread_mutex_init(&st->state_lock, NULL);
+    pthread_barrier_init(&st->barrier, NULL, 2);
+
+    /* create ctx */
+    ly_ctx_new(ly_yang_module_dir(), 0, &st->ctx);
+    assert_non_null(st->ctx);
+    ly_ctx_set_searchdir(st->ctx, TESTS_DIR "/data/modules");
+
+    /* load modules */
+    module = ly_ctx_load_module(st->ctx, "ietf-netconf-acm", NULL, NULL);
+    assert_non_null(module);
+
+    module = ly_ctx_load_module(st->ctx, "ietf-netconf", NULL, nc_features);
+    assert_non_null(module);
+
+    module = ly_ctx_load_module(st->ctx, "nc-notifications", NULL, NULL);
+    assert_non_null(module);
+
+    /* set RPC callbacks */
+    node = (struct lysc_node *)lys_find_path(module->ctx, NULL, "/ietf-netconf:get", 0);
+    assert_non_null(node);
+    node->priv = my_get_rpc_clb;
+
+    node = (struct lysc_node *)lys_find_path(module->ctx, NULL, "/ietf-netconf:get-config", 0);
+    assert_non_null(node);
+    node->priv = my_getconfig_rpc_clb;
+
+    node = (struct lysc_node *)lys_find_path(module->ctx, NULL, "/ietf-netconf:commit", 0);
+    assert_non_null(node);
+    node->priv = my_commit_rpc_clb;
+
+    nc_server_init();
+
+    *state = st;
+    return 0;
+}
+
+static int
+teardown_f(void **state)
+{
+    struct state *st = *state;
+
+    nc_server_destroy();
+    ly_ctx_destroy(st->ctx);
+    pthread_mutex_destroy(&st->state_lock);
+    pthread_barrier_destroy(&st->barrier);
+    free(st);
+
+    return 0;
 }
 
 static struct nc_session *
@@ -128,32 +194,34 @@ error:
 static int
 setup_sessions(void **state)
 {
-    (void)state;
+    struct state *st = *state;
     int sock[2];
 
     /* create communication channel */
     socketpair(AF_UNIX, SOCK_STREAM, 0, sock);
 
     /* create server session */
-    server_session = test_new_session(NC_SERVER);
-    NC_SESSION_STATUS_SET(server_session, NC_STATUS_RUNNING);
-    server_session->id = 1;
-    server_session->ti_type = NC_TI_FD;
-    server_session->ti.fd.in = sock[0];
-    server_session->ti.fd.out = sock[0];
-    server_session->ctx = ctx;
-    server_session->flags = NC_SESSION_SHAREDCTX;
+    st->server_session = test_new_session(NC_SERVER);
+    NC_SESSION_STATUS_SET(st->server_session, NC_STATUS_RUNNING);
+    st->server_session->id = 1;
+    st->server_session->ti_type = NC_TI_FD;
+    st->server_session->ti.fd.in = sock[0];
+    st->server_session->ti.fd.out = sock[0];
+    st->server_session->ctx = st->ctx;
+    st->server_session->flags = NC_SESSION_SHAREDCTX;
+
+    nc_session_set_data(st->server_session, st);
 
     /* create client session */
-    client_session = test_new_session(NC_CLIENT);
-    NC_SESSION_STATUS_SET(client_session, NC_STATUS_RUNNING);
-    client_session->id = 1;
-    client_session->ti_type = NC_TI_FD;
-    client_session->ti.fd.in = sock[1];
-    client_session->ti.fd.out = sock[1];
-    client_session->ctx = ctx;
-    client_session->flags = NC_SESSION_SHAREDCTX;
-    client_session->opts.client.msgid = 50;
+    st->client_session = test_new_session(NC_CLIENT);
+    NC_SESSION_STATUS_SET(st->client_session, NC_STATUS_RUNNING);
+    st->client_session->id = 1;
+    st->client_session->ti_type = NC_TI_FD;
+    st->client_session->ti.fd.in = sock[1];
+    st->client_session->ti.fd.out = sock[1];
+    st->client_session->ctx = st->ctx;
+    st->client_session->flags = NC_SESSION_SHAREDCTX;
+    st->client_session->opts.client.msgid = 50;
 
     return 0;
 }
@@ -161,21 +229,21 @@ setup_sessions(void **state)
 static int
 teardown_sessions(void **state)
 {
-    (void)state;
+    struct state *st = *state;
 
-    close(server_session->ti.fd.in);
-    server_session->ti.fd.in = -1;
-    nc_session_free(server_session, NULL);
+    close(st->server_session->ti.fd.in);
+    st->server_session->ti.fd.in = -1;
+    nc_session_free(st->server_session, NULL);
 
-    close(client_session->ti.fd.in);
-    client_session->ti.fd.in = -1;
-    nc_session_free(client_session, NULL);
+    close(st->client_session->ti.fd.in);
+    st->client_session->ti.fd.in = -1;
+    nc_session_free(st->client_session, NULL);
 
     return 0;
 }
 
 static void
-test_send_recv_ok(void)
+test_send_recv_ok(struct state *st)
 {
     int ret;
     uint64_t msgid;
@@ -188,13 +256,13 @@ test_send_recv_ok(void)
     rpc = nc_rpc_get(NULL, 0, 0);
     assert_non_null(rpc);
 
-    msgtype = nc_send_rpc(client_session, rpc, 0, &msgid);
+    msgtype = nc_send_rpc(st->client_session, rpc, 0, &msgid);
     assert_int_equal(msgtype, NC_MSG_RPC);
 
     /* server RPC, send reply */
     ps = nc_ps_new();
     assert_non_null(ps);
-    nc_ps_add_session(ps, server_session);
+    nc_ps_add_session(ps, st->server_session);
 
     ret = nc_ps_poll(ps, 0, NULL);
     assert_int_equal(ret, NC_PSPOLL_RPC);
@@ -203,7 +271,7 @@ test_send_recv_ok(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, &envp, &op);
+    msgtype = nc_recv_reply(st->client_session, rpc, msgid, 0, &envp, &op);
     assert_int_equal(msgtype, NC_MSG_REPLY);
 
     nc_rpc_free(rpc);
@@ -215,27 +283,27 @@ test_send_recv_ok(void)
 static void
 test_send_recv_ok_10(void **state)
 {
-    (void)state;
+    struct state *st = *state;
 
-    server_session->version = NC_PROT_VERSION_10;
-    client_session->version = NC_PROT_VERSION_10;
+    st->server_session->version = NC_PROT_VERSION_10;
+    st->client_session->version = NC_PROT_VERSION_10;
 
-    test_send_recv_ok();
+    test_send_recv_ok(st);
 }
 
 static void
 test_send_recv_ok_11(void **state)
 {
-    (void)state;
+    struct state *st = *state;
 
-    server_session->version = NC_PROT_VERSION_11;
-    client_session->version = NC_PROT_VERSION_11;
+    st->server_session->version = NC_PROT_VERSION_11;
+    st->client_session->version = NC_PROT_VERSION_11;
 
-    test_send_recv_ok();
+    test_send_recv_ok(st);
 }
 
 static void
-test_send_recv_error(void)
+test_send_recv_error(struct state *st)
 {
     int ret;
     uint64_t msgid;
@@ -249,13 +317,13 @@ test_send_recv_error(void)
     rpc = nc_rpc_kill(1);
     assert_non_null(rpc);
 
-    msgtype = nc_send_rpc(client_session, rpc, 0, &msgid);
+    msgtype = nc_send_rpc(st->client_session, rpc, 0, &msgid);
     assert_int_equal(msgtype, NC_MSG_RPC);
 
     /* server RPC, send reply */
     ps = nc_ps_new();
     assert_non_null(ps);
-    nc_ps_add_session(ps, server_session);
+    nc_ps_add_session(ps, st->server_session);
 
     ret = nc_ps_poll(ps, 0, NULL);
     assert_int_equal(ret, NC_PSPOLL_RPC | NC_PSPOLL_REPLY_ERROR);
@@ -264,7 +332,7 @@ test_send_recv_error(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, &envp, &op);
+    msgtype = nc_recv_reply(st->client_session, rpc, msgid, 0, &envp, &op);
     assert_int_equal(msgtype, NC_MSG_REPLY);
 
     nc_rpc_free(rpc);
@@ -280,27 +348,27 @@ test_send_recv_error(void)
 static void
 test_send_recv_error_10(void **state)
 {
-    (void)state;
+    struct state *st = *state;
 
-    server_session->version = NC_PROT_VERSION_10;
-    client_session->version = NC_PROT_VERSION_10;
+    st->server_session->version = NC_PROT_VERSION_10;
+    st->client_session->version = NC_PROT_VERSION_10;
 
-    test_send_recv_error();
+    test_send_recv_error(st);
 }
 
 static void
 test_send_recv_error_11(void **state)
 {
-    (void)state;
+    struct state *st = *state;
 
-    server_session->version = NC_PROT_VERSION_11;
-    client_session->version = NC_PROT_VERSION_11;
+    st->server_session->version = NC_PROT_VERSION_11;
+    st->client_session->version = NC_PROT_VERSION_11;
 
-    test_send_recv_error();
+    test_send_recv_error(st);
 }
 
 static void
-test_send_recv_data(void)
+test_send_recv_data(struct state *st)
 {
     int ret;
     uint64_t msgid;
@@ -313,13 +381,13 @@ test_send_recv_data(void)
     rpc = nc_rpc_getconfig(NC_DATASTORE_RUNNING, NULL, 0, 0);
     assert_non_null(rpc);
 
-    msgtype = nc_send_rpc(client_session, rpc, 0, &msgid);
+    msgtype = nc_send_rpc(st->client_session, rpc, 0, &msgid);
     assert_int_equal(msgtype, NC_MSG_RPC);
 
     /* server RPC, send reply */
     ps = nc_ps_new();
     assert_non_null(ps);
-    nc_ps_add_session(ps, server_session);
+    nc_ps_add_session(ps, st->server_session);
 
     ret = nc_ps_poll(ps, 0, NULL);
     assert_int_equal(ret, NC_PSPOLL_RPC);
@@ -328,7 +396,7 @@ test_send_recv_data(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, &envp, &op);
+    msgtype = nc_recv_reply(st->client_session, rpc, msgid, 0, &envp, &op);
     assert_int_equal(msgtype, NC_MSG_REPLY);
 
     nc_rpc_free(rpc);
@@ -341,46 +409,45 @@ test_send_recv_data(void)
 static void
 test_send_recv_data_10(void **state)
 {
-    (void)state;
+    struct state *st = *state;
 
-    server_session->version = NC_PROT_VERSION_10;
-    client_session->version = NC_PROT_VERSION_10;
+    st->server_session->version = NC_PROT_VERSION_10;
+    st->client_session->version = NC_PROT_VERSION_10;
 
-    test_send_recv_data();
+    test_send_recv_data(st);
 }
 
 static void
 test_send_recv_data_11(void **state)
 {
-    (void)state;
+    struct state *st = *state;
 
-    server_session->version = NC_PROT_VERSION_11;
-    client_session->version = NC_PROT_VERSION_11;
+    st->server_session->version = NC_PROT_VERSION_11;
+    st->client_session->version = NC_PROT_VERSION_11;
 
-    test_send_recv_data();
+    test_send_recv_data(st);
 }
 
 static void *
 server_send_notif_thread(void *arg)
 {
+    struct state *st = arg;
     NC_MSG_TYPE msg_type;
     struct lyd_node *notif_tree;
     struct nc_server_notif *notif;
     struct timespec ts;
     char *buf;
 
-    (void)arg;
-
     /* wait for the RPC callback to be called */
-    pthread_mutex_lock(&state_lock);
-    while (glob_state != 1) {
-        pthread_mutex_unlock(&state_lock);
+    pthread_mutex_lock(&st->state_lock);
+    while (st->glob_state != 1) {
+        pthread_mutex_unlock(&st->state_lock);
         usleep(1000);
-        pthread_mutex_lock(&state_lock);
+        pthread_mutex_lock(&st->state_lock);
     }
 
     /* create notif */
-    lyd_new_path(NULL, ctx, "/nc-notifications:notificationComplete", NULL, 0, &notif_tree);
+    lyd_new_path(NULL, st->ctx, "/nc-notifications:notificationComplete", NULL, 0, &notif_tree);
     assert_non_null(notif_tree);
     clock_gettime(CLOCK_REALTIME, &ts);
     ly_time_ts2str(&ts, &buf);
@@ -388,15 +455,15 @@ server_send_notif_thread(void *arg)
     assert_non_null(notif);
 
     /* send notif */
-    nc_session_inc_notif_status(server_session);
-    msg_type = nc_server_notif_send(server_session, notif, 100);
+    nc_session_inc_notif_status(st->server_session);
+    msg_type = nc_server_notif_send(st->server_session, notif, 100);
     nc_server_notif_free(notif);
     assert_int_equal(msg_type, NC_MSG_NOTIF);
 
     /* update state */
-    glob_state = 2;
-    pthread_barrier_wait(&barrier);
-    pthread_mutex_unlock(&state_lock);
+    st->glob_state = 2;
+    pthread_barrier_wait(&st->barrier);
+    pthread_mutex_unlock(&st->state_lock);
 
     return NULL;
 }
@@ -404,28 +471,28 @@ server_send_notif_thread(void *arg)
 static void *
 thread_recv_notif(void *arg)
 {
-    struct nc_session *session = (struct nc_session *)arg;
+    struct state *st = arg;
     struct lyd_node *envp;
     struct lyd_node *op;
     NC_MSG_TYPE msgtype;
 
-    pthread_barrier_wait(&barrier);
-    msgtype = nc_recv_notif(session, 1000, &envp, &op);
+    pthread_barrier_wait(&st->barrier);
+    msgtype = nc_recv_notif(st->client_session, 1000, &envp, &op);
     assert_int_equal(msgtype, NC_MSG_NOTIF);
     assert_string_equal(op->schema->name, "notificationComplete");
 
     lyd_free_tree(envp);
     lyd_free_tree(op);
 
-    pthread_mutex_lock(&state_lock);
-    glob_state = 3;
-    pthread_mutex_unlock(&state_lock);
+    pthread_mutex_lock(&st->state_lock);
+    st->glob_state = 3;
+    pthread_mutex_unlock(&st->state_lock);
 
-    return (void *)0;
+    return NULL;
 }
 
 static void
-test_send_recv_notif(void)
+test_send_recv_notif(struct state *st)
 {
     int ret;
     pthread_t tid[2];
@@ -439,22 +506,22 @@ test_send_recv_notif(void)
     rpc = nc_rpc_commit(0, 0, NULL, NULL, 0);
     assert_non_null(rpc);
 
-    msgtype = nc_send_rpc(client_session, rpc, 0, &msgid);
+    msgtype = nc_send_rpc(st->client_session, rpc, 0, &msgid);
     assert_int_equal(msgtype, NC_MSG_RPC);
 
     /* client subscription */
-    pthread_create(&tid[0], NULL, thread_recv_notif, client_session);
+    pthread_create(&tid[0], NULL, thread_recv_notif, st);
 
     /* create server */
     ps = nc_ps_new();
     assert_non_null(ps);
-    nc_ps_add_session(ps, server_session);
+    nc_ps_add_session(ps, st->server_session);
 
     /* server will send a notification */
-    pthread_mutex_lock(&state_lock);
-    glob_state = 0;
-    pthread_mutex_unlock(&state_lock);
-    ret = pthread_create(&tid[1], NULL, server_send_notif_thread, NULL);
+    pthread_mutex_lock(&st->state_lock);
+    st->glob_state = 0;
+    pthread_mutex_unlock(&st->state_lock);
+    ret = pthread_create(&tid[1], NULL, server_send_notif_thread, st);
     assert_int_equal(ret, 0);
 
     /* server blocked on RPC */
@@ -462,9 +529,9 @@ test_send_recv_notif(void)
     assert_int_equal(ret, NC_PSPOLL_RPC);
 
     /* RPC, notification finished fine */
-    pthread_mutex_lock(&state_lock);
-    assert_int_equal(glob_state, 3);
-    pthread_mutex_unlock(&state_lock);
+    pthread_mutex_lock(&st->state_lock);
+    assert_int_equal(st->glob_state, 3);
+    pthread_mutex_unlock(&st->state_lock);
 
     /* server finished */
     ret = 0;
@@ -474,7 +541,7 @@ test_send_recv_notif(void)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, msgid, 0, &envp, &op);
+    msgtype = nc_recv_reply(st->client_session, rpc, msgid, 0, &envp, &op);
     assert_int_equal(msgtype, NC_MSG_REPLY);
     nc_rpc_free(rpc);
 
@@ -486,28 +553,29 @@ test_send_recv_notif(void)
 static void
 test_send_recv_notif_10(void **state)
 {
-    (void)state;
+    struct state *st = *state;
 
-    server_session->version = NC_PROT_VERSION_10;
-    client_session->version = NC_PROT_VERSION_10;
+    st->server_session->version = NC_PROT_VERSION_10;
+    st->client_session->version = NC_PROT_VERSION_10;
 
-    test_send_recv_notif();
+    test_send_recv_notif(st);
 }
 
 static void
 test_send_recv_notif_11(void **state)
 {
-    (void)state;
+    struct state *st = *state;
 
-    server_session->version = NC_PROT_VERSION_11;
-    client_session->version = NC_PROT_VERSION_11;
+    st->server_session->version = NC_PROT_VERSION_11;
+    st->client_session->version = NC_PROT_VERSION_11;
 
-    test_send_recv_notif();
+    test_send_recv_notif(st);
 }
 
 static void
 test_send_recv_malformed_10(void **state)
 {
+    struct state *st = *state;
     int ret;
     struct nc_pollsession *ps;
     struct nc_rpc *rpc;
@@ -516,10 +584,8 @@ test_send_recv_malformed_10(void **state)
     NC_MSG_TYPE msgtype;
     const char *msg;
 
-    (void)state;
-
-    server_session->version = NC_PROT_VERSION_10;
-    client_session->version = NC_PROT_VERSION_10;
+    st->server_session->version = NC_PROT_VERSION_10;
+    st->client_session->version = NC_PROT_VERSION_10;
 
     /* write malformed message */
     msg =
@@ -527,14 +593,14 @@ test_send_recv_malformed_10(void **state)
             "  <nc:commit/>"
             "</nc:rpc>"
             "]]>]]>";
-    assert_int_equal(write(client_session->ti.fd.out, msg, strlen(msg)), strlen(msg));
+    assert_int_equal(write(st->client_session->ti.fd.out, msg, strlen(msg)), strlen(msg));
     rpc = nc_rpc_commit(0, 0, NULL, NULL, 0);
     assert_non_null(rpc);
 
     /* server RPC, send reply */
     ps = nc_ps_new();
     assert_non_null(ps);
-    nc_ps_add_session(ps, server_session);
+    nc_ps_add_session(ps, st->server_session);
 
     ret = nc_ps_poll(ps, 0, NULL);
     assert_int_equal(ret, NC_PSPOLL_BAD_RPC | NC_PSPOLL_REPLY_ERROR);
@@ -543,7 +609,7 @@ test_send_recv_malformed_10(void **state)
     nc_ps_free(ps);
 
     /* client reply */
-    msgtype = nc_recv_reply(client_session, rpc, 0, 0, &envp, &op);
+    msgtype = nc_recv_reply(st->client_session, rpc, 0, 0, &envp, &op);
     assert_int_equal(msgtype, NC_MSG_REPLY_ERR_MSGID);
 
     nc_rpc_free(rpc);
@@ -559,43 +625,6 @@ test_send_recv_malformed_10(void **state)
 int
 main(void)
 {
-    int ret;
-    const struct lys_module *module;
-    struct lysc_node *node;
-    const char *nc_features[] = {"candidate", NULL};
-
-    pthread_barrier_init(&barrier, NULL, 2);
-
-    /* create ctx */
-    ly_ctx_new(ly_yang_module_dir(), 0, &ctx);
-    assert_non_null(ctx);
-    ly_ctx_set_searchdir(ctx, TESTS_DIR "/data/modules");
-
-    /* load modules */
-    module = ly_ctx_load_module(ctx, "ietf-netconf-acm", NULL, NULL);
-    assert_non_null(module);
-
-    module = ly_ctx_load_module(ctx, "ietf-netconf", NULL, nc_features);
-    assert_non_null(module);
-
-    module = ly_ctx_load_module(ctx, "nc-notifications", NULL, NULL);
-    assert_non_null(module);
-
-    /* set RPC callbacks */
-    node = (struct lysc_node *)lys_find_path(module->ctx, NULL, "/ietf-netconf:get", 0);
-    assert_non_null(node);
-    node->priv = my_get_rpc_clb;
-
-    node = (struct lysc_node *)lys_find_path(module->ctx, NULL, "/ietf-netconf:get-config", 0);
-    assert_non_null(node);
-    node->priv = my_getconfig_rpc_clb;
-
-    node = (struct lysc_node *)lys_find_path(module->ctx, NULL, "/ietf-netconf:commit", 0);
-    assert_non_null(node);
-    node->priv = my_commit_rpc_clb;
-
-    nc_server_init();
-
     const struct CMUnitTest comm[] = {
         cmocka_unit_test_setup_teardown(test_send_recv_ok_10, setup_sessions, teardown_sessions),
         cmocka_unit_test_setup_teardown(test_send_recv_error_10, setup_sessions, teardown_sessions),
@@ -608,11 +637,5 @@ main(void)
         cmocka_unit_test_setup_teardown(test_send_recv_notif_11, setup_sessions, teardown_sessions),
     };
 
-    ret = cmocka_run_group_tests(comm, NULL, NULL);
-
-    nc_server_destroy();
-    ly_ctx_destroy(ctx);
-    pthread_barrier_destroy(&barrier);
-
-    return ret;
+    return cmocka_run_group_tests(comm, setup_f, teardown_f);
 }
