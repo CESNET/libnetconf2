@@ -5,7 +5,7 @@
  * @brief libnetconf2 - input/output functions
  *
  * @copyright
- * Copyright (c) 2015 - 2025 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 #define _GNU_SOURCE /* asprintf, signals */
 
 #include <assert.h>
+#include <ctype.h>
 #include <errno.h>
 #include <grp.h>
 #include <inttypes.h>
@@ -64,13 +65,16 @@ const char *nc_msgtype2str[] = {
  * @param[in] session Session to use.
  * @param[in] buf Buffer to write to.
  * @param[in] count Number of bytes to read.
+ * @param[in] no_wait Do not wait or log if no data are available, just return 0.
  * @param[in] inact_timeout Inactive timeout to use when reading.
  * @param[in] ts_act_timeout Active timeout to use when reading.
  * @return Number of bytes read;
+ * @return 0 on no data (or only WS chars) if @p no_wait is set;
  * @return -1 on error.
  */
 static ssize_t
-nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_timeout, struct timespec *ts_act_timeout)
+nc_read(struct nc_session *session, char *buf, uint32_t count, int no_wait, uint32_t inact_timeout,
+        struct timespec *ts_act_timeout)
 {
     uint32_t readd = 0;
     ssize_t r = -1;
@@ -80,6 +84,7 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
 
     assert(session);
     assert(buf);
+    assert(no_wait || (inact_timeout && ts_act_timeout));
 
     status = NC_SESSION_STATUS_GET(session);
     if ((status != NC_STATUS_RUNNING) && (status != NC_STATUS_STARTING)) {
@@ -159,6 +164,11 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, uint32_t inact_ti
 
         if (r == 0) {
             /* nothing read */
+            if (no_wait) {
+                /* do not wait */
+                break;
+            }
+
             if (!interrupted) {
                 usleep(NC_TIMEOUT_STEP);
             }
@@ -203,7 +213,7 @@ static int
 nc_read_until(struct nc_session *session, const char *endtag, uint32_t inact_timeout, struct timespec *ts_act_timeout,
         char **buf, uint32_t *buf_size)
 {
-    char *local_buf = NULL;
+    char *local_buf = NULL, c;
     ssize_t r;
     uint32_t len, i, matched = 0, count = 0, local_size = 0;
 
@@ -213,6 +223,42 @@ nc_read_until(struct nc_session *session, const char *endtag, uint32_t inact_tim
     if (!buf) {
         buf = &local_buf;
         buf_size = &local_size;
+    }
+
+    if (session->version == NC_PROT_VERSION_10) {
+        /* read all the WS characters */
+        do {
+            r = nc_read(session, &c, 1, 1, 0, NULL);
+            if (r > 0) {
+                count += r;
+            }
+        } while ((r == 1) && isspace(c));
+        if (r == 0) {
+            if (count) {
+                /* only WS characters, ignore */
+                count = 0;
+                goto cleanup;
+            }
+            /* else continue normally */
+        } else if (r == -1) {
+            /* error */
+            count = -1;
+            goto cleanup;
+        } else if (r == 1) {
+            /* we have read 1 non-WS character */
+            assert(!isspace(c));
+            if (!*buf_size) {
+                *buf_size += NC_READ_BUF_SIZE_STEP;
+                *buf = nc_realloc(*buf, (*buf_size + 1) * sizeof **buf);
+                NC_CHECK_ERRMEM_GOTO(!*buf, count = -1, cleanup);
+            }
+
+            (*buf)[0] = c;
+            count = 1;
+            if (c == endtag[0]) {
+                matched = 1;
+            }
+        }
     }
 
     len = strlen(endtag);
@@ -231,17 +277,17 @@ nc_read_until(struct nc_session *session, const char *endtag, uint32_t inact_tim
         }
 
         /* get another character */
-        r = nc_read(session, *buf + count, len - matched, inact_timeout, ts_act_timeout);
+        r = nc_read(session, *buf + count, len - matched, 0, inact_timeout, ts_act_timeout);
         if ((r < 0) || ((size_t)r != len - matched)) {
             count = -1;
             goto cleanup;
         }
 
-        count += len - matched;
+        count += (size_t)r;
 
-        for (i = len - matched; i > 0; i--) {
+        for (i = (size_t)r; i > 0; i--) {
             if (!strncmp(endtag + matched, *buf + (count - i), i)) {
-                /*part of endtag found */
+                /* part of endtag found */
                 matched += i;
                 break;
             } else {
@@ -296,7 +342,7 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, int passing_io_lock, 
     switch (session->version) {
     case NC_PROT_VERSION_10:
         r = nc_read_until(session, NC_VERSION_10_ENDTAG, inact_timeout, &ts_act_timeout, buf, buf_len);
-        if (r < 0) {
+        if (r < 1) {
             ret = r;
             goto cleanup;
         }
@@ -313,12 +359,12 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, int passing_io_lock, 
 
         while (1) {
             r = nc_read_until(session, "\n#", inact_timeout, &ts_act_timeout, NULL, NULL);
-            if (r < 0) {
+            if (r < 1) {
                 ret = r;
                 goto cleanup;
             }
             r = nc_read_until(session, "\n", inact_timeout, &ts_act_timeout, &frame_size_buf, &frame_buf_len);
-            if (r < 0) {
+            if (r < 1) {
                 ret = r;
                 goto cleanup;
             }
@@ -357,8 +403,8 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, int passing_io_lock, 
             }
 
             /* read the next chunk */
-            r = nc_read(session, *buf + buf_used, chunk_len, inact_timeout, &ts_act_timeout);
-            if (r == -1) {
+            r = nc_read(session, *buf + buf_used, chunk_len, 0, inact_timeout, &ts_act_timeout);
+            if (r < 1) {
                 ret = r;
                 goto cleanup;
             }

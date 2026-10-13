@@ -3107,7 +3107,7 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
             if (NC_SESSION_STATUS_GET(cur_session) != NC_STATUS_RUNNING) {
                 ret |= NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR;
             }
-        } else if (!(ret & NC_PSPOLL_REPLY_ERROR)) {
+        } else if (ret & NC_PSPOLL_RPC) {
             cur_session->opts.server.last_rpc = ts_cur.tv_sec;
 
             /* process RPC and send a reply */

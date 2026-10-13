@@ -199,6 +199,8 @@ setup_sessions(void **state)
 
     /* create communication channel */
     socketpair(AF_UNIX, SOCK_STREAM, 0, sock);
+    fcntl(sock[0], F_SETFL, O_NONBLOCK);
+    fcntl(sock[1], F_SETFL, O_NONBLOCK);
 
     /* create server session */
     st->server_session = test_new_session(NC_SERVER);
@@ -259,6 +261,12 @@ test_send_recv_ok(struct state *st)
     msgtype = nc_send_rpc(st->client_session, rpc, 0, &msgid);
     assert_int_equal(msgtype, NC_MSG_RPC);
 
+    if (st->client_session->version == NC_PROT_VERSION_10) {
+        /* send also some WS characters that should be ignored */
+        ret = write(st->client_session->ti.fd.out, " \f\n\r\t\v", 6);
+        assert_int_equal(ret, 6);
+    }
+
     /* server RPC, send reply */
     ps = nc_ps_new();
     assert_non_null(ps);
@@ -266,6 +274,10 @@ test_send_recv_ok(struct state *st)
 
     ret = nc_ps_poll(ps, 0, NULL);
     assert_int_equal(ret, NC_PSPOLL_RPC);
+
+    /* any WS characters should not matter */
+    ret = nc_ps_poll(ps, 0, NULL);
+    assert_int_equal(ret, NC_PSPOLL_TIMEOUT);
 
     /* server finished */
     nc_ps_free(ps);
