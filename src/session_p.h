@@ -1041,7 +1041,7 @@ struct nc_bind_desc {
 };
 
 /**
- * @brief Type of the session
+ * @brief Type of the session.
  */
 typedef enum {
     NC_CLIENT,        /**< client side */
@@ -1049,7 +1049,7 @@ typedef enum {
 } NC_SIDE;
 
 /**
- * @brief Container to serialize RPC messages
+ * @brief Container to serialize RPC messages.
  */
 struct nc_msg_cont {
     struct ly_in *msg;
@@ -1058,7 +1058,7 @@ struct nc_msg_cont {
 };
 
 /**
- * @brief NETCONF session structure
+ * @brief NETCONF session structure.
  */
 struct nc_session {
     ATOMIC_T status;             /**< status of the session (::NC_STATUS), read/written by any thread using
@@ -1075,9 +1075,11 @@ struct nc_session {
     NC_PROT_VERSION version;     /**< NETCONF protocol version */
     char **cpblts;               /**< NETCONF capabilities received from the other end */
 
-    /* Transport implementation */
+    /* transport implementation */
     NC_TRANSPORT_IMPL ti_type;   /**< transport implementation type to select items from ti union */
-    pthread_mutex_t *io_lock;    /**< input/output lock, note that in case of libssh TI, it will be shared with
+    pthread_mutex_t *io_rd_lock; /**< socket read lock, note that in case of libssh TI, it will be shared with
+                                      other NETCONF sessions on the same SSH session (but different SSH channel) */
+    pthread_mutex_t *io_wr_lock; /**< socket write lock, note that in case of libssh TI, it will be shared with
                                       other NETCONF sessions on the same SSH session (but different SSH channel) */
 
     union {
@@ -1130,8 +1132,8 @@ struct nc_session {
 
 /* server flags */
 #ifdef NC_ENABLED_SSH_TLS
-#define NC_SESSION_SSH_AUTHENTICATED 0x10   /**< SSH session authenticated */
-#define NC_SESSION_SSH_SUBSYS_NETCONF 0x20  /**< netconf subsystem requested */
+# define NC_SESSION_SSH_AUTHENTICATED 0x10   /**< SSH session authenticated */
+# define NC_SESSION_SSH_SUBSYS_NETCONF 0x20  /**< netconf subsystem requested */
 #endif
 
     union {

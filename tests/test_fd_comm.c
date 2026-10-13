@@ -110,11 +110,13 @@ test_new_session(NC_SIDE side)
         sess->opts.server.last_rpc = ts.tv_sec;
     }
 
-    sess->io_lock = malloc(sizeof *sess->io_lock);
-    if (!sess->io_lock) {
+    sess->io_rd_lock = malloc(sizeof *sess->io_rd_lock);
+    sess->io_wr_lock = malloc(sizeof *sess->io_wr_lock);
+    if (!sess->io_rd_lock || !sess->io_wr_lock) {
         goto error;
     }
-    pthread_mutex_init(sess->io_lock, NULL);
+    pthread_mutex_init(sess->io_rd_lock, NULL);
+    pthread_mutex_init(sess->io_wr_lock, NULL);
 
     return sess;
 
