@@ -213,7 +213,7 @@ static int
 nc_read_until(struct nc_session *session, const char *endtag, uint32_t inact_timeout, struct timespec *ts_act_timeout,
         char **buf, uint32_t *buf_size)
 {
-    char *local_buf = NULL, c;
+    char *local_buf = NULL, c[2];
     ssize_t r;
     uint32_t len, i, matched = 0, count = 0, local_size = 0;
 
@@ -228,11 +228,11 @@ nc_read_until(struct nc_session *session, const char *endtag, uint32_t inact_tim
     if (session->version == NC_PROT_VERSION_10) {
         /* read all the WS characters */
         do {
-            r = nc_read(session, &c, 1, 1, 0, NULL);
+            r = nc_read(session, c, 1, 1, 0, NULL);
             if (r > 0) {
                 count += r;
             }
-        } while ((r == 1) && isspace(c));
+        } while ((r == 1) && isspace(c[0]));
         if (r == 0) {
             if (count) {
                 /* only WS characters, ignore */
@@ -246,16 +246,16 @@ nc_read_until(struct nc_session *session, const char *endtag, uint32_t inact_tim
             goto cleanup;
         } else if (r == 1) {
             /* we have read 1 non-WS character */
-            assert(!isspace(c));
+            assert(!isspace(c[0]));
             if (!*buf_size) {
                 *buf_size += NC_READ_BUF_SIZE_STEP;
                 *buf = nc_realloc(*buf, (*buf_size + 1) * sizeof **buf);
                 NC_CHECK_ERRMEM_GOTO(!*buf, count = -1, cleanup);
             }
 
-            (*buf)[0] = c;
+            (*buf)[0] = c[0];
             count = 1;
-            if (c == endtag[0]) {
+            if (c[0] == endtag[0]) {
                 matched = 1;
             }
         }
