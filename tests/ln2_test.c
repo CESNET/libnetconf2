@@ -131,6 +131,7 @@ ln2_glob_test_setup(struct ln2_test_ctx **test_ctx)
 
     /* set verbosity */
     nc_verbosity(NC_VERB_VERBOSE);
+    ly_log_level(LY_LLWRN);
 
     /* initialize server */
     ret = nc_server_init();
