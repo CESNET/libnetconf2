@@ -36,6 +36,8 @@ struct test_tls_data {
     int root_ca;                /**< Whether the root CA is used (client-only). */
     int intermediate_ca;        /**< Whether the intermediate CA is used (client-only). */
     int expect_fail;            /**< Whether the connection is expected to fail. */
+    const char *client_cert;    /**< Client certificate path (CTN tests). */
+    const char *username;       /**< Expected username, NULL if no username can be resolved (CTN tests). */
 };
 
 int TEST_PORT = 10050;
@@ -1106,6 +1108,146 @@ test_nc_tls_ctn_san(void **state)
     }
 }
 
+/*
+ * Test CTN common name and SAN values: the username must be the value of the actual commonName attribute and
+ * never a part of another subject attribute, a SAN value with a NUL character must not be truncated into a name.
+ */
+
+static void *
+server_thread_ctn(void *arg)
+{
+    int ret;
+    NC_MSG_TYPE msgtype;
+    struct nc_session *session = NULL;
+    struct nc_pollsession *ps = NULL;
+    struct ln2_test_ctx *test_ctx = arg;
+    struct test_tls_data *test_data = test_ctx->test_data;
+
+    ps = nc_ps_new();
+    assert_non_null(ps);
+
+    /* wait for the client to be ready to connect */
+    pthread_barrier_wait(&test_ctx->barrier);
+
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
+    if (!test_data->username) {
+        /* no username can be resolved, the client must not be authenticated */
+        assert_int_equal(msgtype, NC_MSG_ERROR);
+        assert_null(session);
+        nc_ps_free(ps);
+        return NULL;
+    }
+    assert_int_equal(msgtype, NC_MSG_HELLO);
+
+    assert_string_equal(nc_session_get_username(session), test_data->username);
+
+    ret = nc_ps_add_session(ps, session);
+    assert_int_equal(ret, 0);
+
+    /* poll until the session is terminated by the client */
+    do {
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+        assert_int_equal(ret & NC_PSPOLL_RPC, NC_PSPOLL_RPC);
+    } while (!(ret & NC_PSPOLL_SESSION_TERM));
+
+    /* the terminated session was removed from ps and we own it now */
+    nc_session_free(session, NULL);
+    nc_ps_free(ps);
+    return NULL;
+}
+
+static void *
+client_thread_ctn(void *arg)
+{
+    int ret;
+    struct nc_session *session = NULL;
+    struct ln2_test_ctx *test_ctx = arg;
+    struct test_tls_data *test_data = test_ctx->test_data;
+
+    ret = nc_client_set_schema_searchpath(MODULES_DIR);
+    assert_int_equal(ret, 0);
+
+    /* all the CTN client certs share the key */
+    ret = nc_client_tls_set_cert_key_paths(test_data->client_cert, TESTS_DIR "/data/client.key");
+    assert_int_equal(ret, 0);
+
+    ret = nc_client_tls_set_trusted_ca_paths(NULL, TESTS_DIR "/data");
+    assert_int_equal(ret, 0);
+
+    pthread_barrier_wait(&test_ctx->barrier);
+    session = nc_connect_tls("127.0.0.1", TEST_PORT, NULL);
+
+    if (!test_data->username) {
+        /* the connection is expected to fail */
+        assert_null(session);
+        return NULL;
+    }
+
+    assert_non_null(session);
+
+    nc_session_free(session, NULL);
+    return NULL;
+}
+
+static void
+test_nc_tls_ctn_connect(void **state, const char *client_cert, const char *username)
+{
+    int ret, i;
+    pthread_t tids[2];
+    struct ln2_test_ctx *test_ctx = *state;
+    struct test_tls_data *test_data = test_ctx->test_data;
+
+    test_data->client_cert = client_cert;
+    test_data->username = username;
+
+    ret = pthread_create(&tids[0], NULL, client_thread_ctn, *state);
+    assert_int_equal(ret, 0);
+    ret = pthread_create(&tids[1], NULL, server_thread_ctn, *state);
+    assert_int_equal(ret, 0);
+
+    for (i = 0; i < 2; i++) {
+        pthread_join(tids[i], NULL);
+    }
+}
+
+static void
+test_nc_tls_ctn_cn(void **state)
+{
+    int ret;
+    struct ln2_test_ctx *test_ctx = *state;
+    struct test_tls_data *test_data = test_ctx->test_data;
+
+    /* create CTN entry matching the client CA cert's fingerprint */
+    ret = nc_server_config_add_tls_ctn(test_ctx->ctx, "endpt", 1,
+            "02:E5:3F:E7:C7:28:8D:F8:3B:EC:AC:AB:85:AB:76:48:68:47:0D:B5:C3", NC_TLS_CTN_COMMON_NAME, NULL, &test_data->tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_data(test_data->tree);
+    assert_int_equal(ret, 0);
+
+    /* subject C=CZ, OU=CN=root, CN=operator, a preceding attribute value must not be taken for the commonName */
+    test_nc_tls_ctn_connect(state, TESTS_DIR "/data/ctn/cn_ou_inject.crt", "operator");
+}
+
+static void
+test_nc_tls_ctn_san_nul(void **state)
+{
+    int ret;
+    struct ln2_test_ctx *test_ctx = *state;
+    struct test_tls_data *test_data = test_ctx->test_data;
+
+    /* create CTN entry matching the client CA cert's fingerprint */
+    ret = nc_server_config_add_tls_ctn(test_ctx->ctx, "endpt", 1,
+            "02:E5:3F:E7:C7:28:8D:F8:3B:EC:AC:AB:85:AB:76:48:68:47:0D:B5:C3", NC_TLS_CTN_SAN_RFC822_NAME, NULL, &test_data->tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_setup_data(test_data->tree);
+    assert_int_equal(ret, 0);
+
+    /* the only SAN is rfc822Name "root\0@example.com", it must not be truncated to "root" */
+    test_nc_tls_ctn_connect(state, TESTS_DIR "/data/ctn/san_nul.crt", NULL);
+}
+
 static void
 test_nc_tls_free_test_data(void *test_data)
 {
@@ -1282,6 +1424,8 @@ main(void)
         cmocka_unit_test_setup_teardown(test_cipher_suites, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_tls_version, setup_f, ln2_glob_test_teardown),
         cmocka_unit_test_setup_teardown(test_nc_tls_ctn_san, setup_ctn_san, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_nc_tls_ctn_cn, setup_ctn_san, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_nc_tls_ctn_san_nul, setup_ctn_san, ln2_glob_test_teardown),
     };
 
     /* try to get ports from the environment, otherwise use the default */

@@ -278,41 +278,16 @@ nc_server_tls_sha512(void *cert)
 static int
 nc_server_tls_get_username(void *cert, struct nc_ctn *ctn, char **username)
 {
-    char *subject, *cn, *san_value = NULL, rdn_separator;
+    char *san_value = NULL;
     void *sans;
     int i, nsans = 0, rc;
     NC_TLS_CTN_MAPTYPE san_type = 0;
-
-#ifdef HAVE_LIBMEDTLS
-    rdn_separator = ',';
-#else
-    rdn_separator = '/';
-#endif
 
     if (ctn->map_type == NC_TLS_CTN_SPECIFIED) {
         *username = strdup(ctn->name);
         NC_CHECK_ERRMEM_RET(!*username, -1);
     } else if (ctn->map_type == NC_TLS_CTN_COMMON_NAME) {
-        subject = nc_server_tls_get_subject_wrap(cert);
-        if (!subject) {
-            return -1;
-        }
-
-        cn = strstr(subject, "CN=");
-        if (!cn) {
-            WRN(NULL, "Certificate does not include the commonName field.");
-            free(subject);
-            return 1;
-        }
-
-        /* skip "CN=" */
-        cn += 3;
-        if (strchr(cn, rdn_separator)) {
-            *strchr(cn, rdn_separator) = '\0';
-        }
-        *username = strdup(cn);
-        free(subject);
-        NC_CHECK_ERRMEM_RET(!*username, -1);
+        return nc_server_tls_get_cn_wrap(cert, username);
     } else {
         sans = nc_tls_get_sans_wrap(cert);
         if (!sans) {
@@ -329,7 +304,7 @@ nc_server_tls_get_username(void *cert, struct nc_ctn *ctn, char **username)
                     return -1;
                 }
 
-                /* got a type that we dont care about */
+                /* got a type that we dont care about or an unusable value */
                 continue;
             }
 

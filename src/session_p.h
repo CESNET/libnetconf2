@@ -232,6 +232,11 @@ extern struct nc_server_opts server_opts;
  */
 #define NC_TLS_KEYLOGFILE_ENV "SSLKEYLOGFILE"
 
+/**
+ * Maximum size of a buffer for a certificate DN string (MbedTLS).
+ */
+#define NC_TLS_DN_STR_MAX_LEN 65536
+
 #define NC_VERSION_10_ENDTAG "]]>]]>"
 #define NC_VERSION_10_ENDTAG_LEN 6
 
