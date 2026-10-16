@@ -40,7 +40,7 @@ struct test_ch_data {
 
 /* set by the log callback in the call-home client thread, polled by the test thread */
 static ATOMIC_T expected_msg_received;
-char expected[512];
+static ATOMIC_PTR_T expected;
 
 int TEST_PORT = 10050, TEST_PORT_2 = 10051, TEST_PORT_3 = 10052, TEST_PORT_4 = 10053;
 const char *TEST_PORT_STR = "10050", *TEST_PORT_2_STR = "10051", *TEST_PORT_3_STR = "10052", *TEST_PORT_4_STR = "10053";
@@ -48,10 +48,12 @@ const char *TEST_PORT_STR = "10050", *TEST_PORT_2_STR = "10051", *TEST_PORT_3_ST
 static void
 test_msg_callback(const struct nc_session *session, NC_VERB_LEVEL level, const char *msg)
 {
+    const char *exp = ATOMIC_PTR_LOAD_RELAXED(expected);
+
     (void) level;
     (void) session;
 
-    if (strstr(msg, expected)) {
+    if (exp && strstr(msg, exp)) {
         ATOMIC_STORE_RELAXED(expected_msg_received, 1);
     }
 
@@ -99,7 +101,7 @@ server_thread_ssh(void *arg)
     /* set print clb so we get access to messages */
     nc_set_print_clb_session(test_msg_callback);
     ATOMIC_STORE_RELAXED(expected_msg_received, 0);
-    strcpy(expected, "reconnecting in");
+    ATOMIC_PTR_STORE_RELAXED(expected, "reconnecting in");
 
     /* prepare data for deleting the call-home client */
     ret = nc_server_config_del_ch_client("ch_ssh", &test_data->tree);
@@ -435,7 +437,7 @@ server_thread_delete_while_session(void *arg)
 
     nc_set_print_clb_session(test_msg_callback);
     ATOMIC_STORE_RELAXED(expected_msg_received, 0);
-    strcpy(expected, "thread exit");
+    ATOMIC_PTR_STORE_RELAXED(expected, "thread exit");
 
     ps = nc_ps_new();
     assert_non_null(ps);
