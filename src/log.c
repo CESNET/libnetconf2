@@ -40,7 +40,12 @@
  */
 ATOMIC_T verbose_level = 0;
 
-void (*print_clb)(const struct nc_session *session, NC_VERB_LEVEL level, const char *msg);
+typedef void (*nc_print_clb)(const struct nc_session *session, NC_VERB_LEVEL level, const char *msg);
+
+/**
+ * @brief libnetconf print callback, can be changed while other threads are logging
+ */
+ATOMIC_PTR_T print_clb;
 
 API void
 nc_verbosity(NC_VERB_LEVEL level)
@@ -103,6 +108,7 @@ nc_log_vprintf(const struct nc_session *session, NC_VERB_LEVEL level, const char
     char *msg;
     void *mem;
     int req_len;
+    nc_print_clb clb;
 
     msg = malloc(NC_MSG_SIZE);
     if (!msg) {
@@ -130,8 +136,9 @@ nc_log_vprintf(const struct nc_session *session, NC_VERB_LEVEL level, const char
         }
     }
 
-    if (print_clb) {
-        print_clb(session, level, msg);
+    clb = (nc_print_clb)ATOMIC_PTR_LOAD_RELAXED(print_clb);
+    if (clb) {
+        clb(session, level, msg);
     } else if (session && session->id) {
         fprintf(stderr, "Session %" PRIu32 " %s: %s\n", session->id, verb[level].label, msg);
     } else {
@@ -156,5 +163,5 @@ nc_log_printf(const struct nc_session *session, NC_VERB_LEVEL level, const char 
 API void
 nc_set_print_clb_session(void (*clb)(const struct nc_session *, NC_VERB_LEVEL, const char *))
 {
-    print_clb = clb;
+    ATOMIC_PTR_STORE_RELAXED(print_clb, clb);
 }
