@@ -184,6 +184,12 @@ nc_server_tls_dn2str(const mbedtls_x509_name *dn)
     NC_CHECK_ERRMEM_RET(!str, NULL);
 
     while ((r = mbedtls_x509_dn_gets(str, len, dn)) == MBEDTLS_ERR_X509_BUFFER_TOO_SMALL) {
+        /* the error is also returned for any attribute value longer than MBEDTLS_X509_MAX_DN_NAME_SIZE,
+         * which no buffer size can fix, so limit the growth */
+        if (len >= NC_TLS_DN_STR_MAX_LEN) {
+            break;
+        }
+
         len <<= 1;
         str = nc_realloc(str, len);
         NC_CHECK_ERRMEM_RET(!str, NULL);
@@ -888,6 +894,52 @@ nc_server_tls_get_issuer_wrap(void *cert)
     return nc_server_tls_dn2str(&(((mbedtls_x509_crt *)cert)->issuer));
 }
 
+int
+nc_server_tls_get_cn_wrap(void *cert, char **cn)
+{
+    const mbedtls_x509_name *iter, *cn_attr = NULL;
+
+    *cn = NULL;
+
+    for (iter = &((mbedtls_x509_crt *)cert)->subject; iter; iter = iter->next) {
+        if (!iter->oid.p) {
+            continue;
+        }
+
+        /* skip attributes other than commonName */
+        if (MBEDTLS_OID_CMP(MBEDTLS_OID_AT_CN, &iter->oid)) {
+            continue;
+        }
+
+        if (cn_attr) {
+            /* the name would be ambiguous */
+            WRN(NULL, "Certificate includes multiple commonName fields.");
+            return 1;
+        }
+        cn_attr = iter;
+    }
+    if (!cn_attr) {
+        WRN(NULL, "Certificate does not include the commonName field.");
+        return 1;
+    }
+
+    /* the name must be in UTF-8 (RFC 6353), so only accept string types that are UTF-8 compatible */
+    if ((cn_attr->val.tag != MBEDTLS_ASN1_UTF8_STRING) && (cn_attr->val.tag != MBEDTLS_ASN1_PRINTABLE_STRING) &&
+            (cn_attr->val.tag != MBEDTLS_ASN1_IA5_STRING)) {
+        WRN(NULL, "Certificate commonName uses an unsupported string type.");
+        return 1;
+    }
+    if (!cn_attr->val.len) {
+        WRN(NULL, "Certificate commonName is empty.");
+        return 1;
+    }
+
+    *cn = strndup((const char *)cn_attr->val.p, cn_attr->val.len);
+    NC_CHECK_ERRMEM_RET(!*cn, -1);
+
+    return 0;
+}
+
 void *
 nc_tls_get_sans_wrap(void *cert)
 {
@@ -922,7 +974,7 @@ nc_tls_get_san_value_type_wrap(void *sans, int idx, char **san_value, NC_TLS_CTN
     int i, rc, ret = 0;
     mbedtls_x509_sequence *iter;
     mbedtls_x509_subject_alternative_name san = {0};
-    const mbedtls_x509_buf *ip;
+    const mbedtls_x509_buf *ip, *str;
 
     *san_value = NULL;
     *san_type = NC_TLS_CTN_UNKNOWN;
@@ -942,20 +994,28 @@ nc_tls_get_san_value_type_wrap(void *sans, int idx, char **san_value, NC_TLS_CTN
     /* get its type and value */
     switch (san.type) {
     case MBEDTLS_X509_SAN_DNS_NAME:
-        *san_type = NC_TLS_CTN_SAN_DNS_NAME;
-        *san_value = strndup((const char *)san.san.unstructured_name.p, san.san.unstructured_name.len);
-        NC_CHECK_ERRMEM_GOTO(!*san_value, ret = -1, cleanup);
-        break;
     case MBEDTLS_X509_SAN_RFC822_NAME:
-        *san_type = NC_TLS_CTN_SAN_RFC822_NAME;
-        *san_value = strndup((const char *)san.san.unstructured_name.p, san.san.unstructured_name.len);
+        str = &san.san.unstructured_name;
+        if (!str->len) {
+            WRN(NULL, "SAN value is empty, skipping.");
+            ret = 1;
+            goto cleanup;
+        } else if (memchr(str->p, '\0', str->len)) {
+            /* the value would get truncated */
+            WRN(NULL, "SAN value includes a NUL character, skipping.");
+            ret = 1;
+            goto cleanup;
+        }
+
+        *san_type = (san.type == MBEDTLS_X509_SAN_DNS_NAME) ? NC_TLS_CTN_SAN_DNS_NAME : NC_TLS_CTN_SAN_RFC822_NAME;
+        *san_value = strndup((const char *)str->p, str->len);
         NC_CHECK_ERRMEM_GOTO(!*san_value, ret = -1, cleanup);
         break;
     case MBEDTLS_X509_SAN_IP_ADDRESS:
         *san_type = NC_TLS_CTN_SAN_IP_ADDRESS;
         ip = &san.san.unstructured_name;
         if (ip->len == 4) {
-            rc = asprintf(san_value, "%d.%d.%d.%d", ip->p[0], ip->p[1], ip->p[2], ip->p[3]) == -1;
+            rc = asprintf(san_value, "%d.%d.%d.%d", ip->p[0], ip->p[1], ip->p[2], ip->p[3]);
             NC_CHECK_ERRMEM_GOTO(rc == -1, ret = -1, cleanup);
         } else if (ip->len == 16) {
             rc = asprintf(san_value, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",

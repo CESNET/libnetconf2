@@ -595,6 +595,51 @@ nc_server_tls_get_issuer_wrap(void *cert)
     return X509_NAME_oneline(X509_get_issuer_name(cert), NULL, 0);
 }
 
+int
+nc_server_tls_get_cn_wrap(void *cert, char **cn)
+{
+    int rc = 0, idx, len;
+    X509_NAME *subject;
+    X509_NAME_ENTRY *entry;
+    unsigned char *utf8 = NULL;
+
+    *cn = NULL;
+
+    /* find the index of the first commonName attribute in the subject, -1 means searching from the start */
+    subject = X509_get_subject_name(cert);
+    idx = X509_NAME_get_index_by_NID(subject, NID_commonName, -1);
+    if (idx < 0) {
+        WRN(NULL, "Certificate does not include the commonName field.");
+        return 1;
+    }
+
+    /* search again after the found attribute, another commonName would make the name ambiguous */
+    if (X509_NAME_get_index_by_NID(subject, NID_commonName, idx) > -1) {
+        WRN(NULL, "Certificate includes multiple commonName fields.");
+        return 1;
+    }
+
+    /* the name must be in UTF-8 (RFC 6353), so convert the value from whatever string type it is */
+    entry = X509_NAME_get_entry(subject, idx);
+    len = ASN1_STRING_to_UTF8(&utf8, X509_NAME_ENTRY_get_data(entry));
+    if (len < 0) {
+        WRN(NULL, "Certificate commonName could not be converted to UTF-8 (%s).", ERR_reason_error_string(ERR_get_error()));
+        return 1;
+    }
+    if (!len) {
+        WRN(NULL, "Certificate commonName is empty.");
+        rc = 1;
+        goto cleanup;
+    }
+
+    *cn = strdup((char *)utf8);
+    NC_CHECK_ERRMEM_GOTO(!*cn, rc = -1, cleanup);
+
+cleanup:
+    OPENSSL_free(utf8);
+    return rc;
+}
+
 void *
 nc_tls_get_sans_wrap(void *cert)
 {
@@ -618,8 +663,9 @@ nc_tls_get_san_value_type_wrap(void *sans, int idx, char **san_value, NC_TLS_CTN
 {
     int ret = 0;
     GENERAL_NAME *san;
-    int ip_length;
+    int ip_length, str_len;
     const unsigned char *ip_data;
+    ASN1_IA5STRING *str;
 
     *san_value = NULL;
     *san_type = NC_TLS_CTN_UNKNOWN;
@@ -633,13 +679,22 @@ nc_tls_get_san_value_type_wrap(void *sans, int idx, char **san_value, NC_TLS_CTN
     /* get its type and value */
     switch (san->type) {
     case GEN_EMAIL:
-        *san_type = NC_TLS_CTN_SAN_RFC822_NAME;
-        *san_value = strdup((char *)ASN1_STRING_get0_data(san->d.rfc822Name));
-        NC_CHECK_ERRMEM_RET(!*san_value, -1);
-        break;
     case GEN_DNS:
-        *san_type = NC_TLS_CTN_SAN_DNS_NAME;
-        *san_value = strdup((char *)ASN1_STRING_get0_data(san->d.dNSName));
+        str = (san->type == GEN_EMAIL) ? san->d.rfc822Name : san->d.dNSName;
+        str_len = ASN1_STRING_length(str);
+        if (!str_len) {
+            WRN(NULL, "SAN value is empty, skipping.");
+            ret = 1;
+            break;
+        } else if (memchr(ASN1_STRING_get0_data(str), '\0', str_len)) {
+            /* the value would get truncated */
+            WRN(NULL, "SAN value includes a NUL character, skipping.");
+            ret = 1;
+            break;
+        }
+
+        *san_type = (san->type == GEN_EMAIL) ? NC_TLS_CTN_SAN_RFC822_NAME : NC_TLS_CTN_SAN_DNS_NAME;
+        *san_value = strndup((char *)ASN1_STRING_get0_data(str), str_len);
         NC_CHECK_ERRMEM_RET(!*san_value, -1);
         break;
     case GEN_IPADD:

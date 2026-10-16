@@ -270,6 +270,17 @@ char * nc_server_tls_get_subject_wrap(void *cert);
 char * nc_server_tls_get_issuer_wrap(void *cert);
 
 /**
+ * @brief Get the commonName of a certificate.
+ *
+ * @param[in] cert Certificate to get the commonName from.
+ * @param[out] cn Parsed commonName.
+ * @return 0 on success.
+ * @return 1 if no usable commonName was found.
+ * @return -1 on error.
+ */
+int nc_server_tls_get_cn_wrap(void *cert, char **cn);
+
+/**
  * @brief Get the Subject Alternative Names of the certificate.
  *
  * @param[in] cert Certificate.
@@ -299,7 +310,9 @@ int nc_tls_get_num_sans_wrap(void *sans);
  * @param[in] idx Index of the SAN.
  * @param[out] san_value SAN value.
  * @param[out] san_type SAN type.
- * @return 0 on success, non-zero on fail.
+ * @return 0 on success.
+ * @return 1 if the SAN is of an unsupported type or its value cannot be used.
+ * @return -1 on error.
  */
 int nc_tls_get_san_value_type_wrap(void *sans, int idx, char **san_value, NC_TLS_CTN_MAPTYPE *san_type);
 
