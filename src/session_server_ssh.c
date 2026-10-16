@@ -794,8 +794,7 @@ nc_server_ssh_new_channel_session(struct nc_session *session, ssh_channel channe
 
     NC_SESSION_STATUS_SET(new_session, NC_STATUS_STARTING);
     new_session->ti_type = NC_TI_SSH;
-    new_session->io_rd_lock = session->io_rd_lock;
-    new_session->io_wr_lock = session->io_wr_lock;
+    new_session->io_lock = session->io_lock;
     new_session->ti.libssh.channel = channel;
     new_session->ti.libssh.session = session->ti.libssh.session;
     new_session->username = strdup(session->username);
@@ -823,8 +822,7 @@ nc_server_ssh_new_channel_session(struct nc_session *session, ssh_channel channe
 error:
     /* detach the state shared with the parent session, so that nc_session_free() does not free it */
     new_session->ti.libssh.session = NULL;
-    new_session->io_rd_lock = NULL;
-    new_session->io_wr_lock = NULL;
+    new_session->io_lock = NULL;
     nc_session_free(new_session, NULL);
     return NULL;
 }

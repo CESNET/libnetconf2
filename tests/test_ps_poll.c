@@ -132,16 +132,14 @@ test_new_session(uint32_t id)
     nc_timeouttime_get(&ts, 0);
     sess->opts.server.last_rpc = ts.tv_sec;
 
-    sess->io_rd_lock = malloc(sizeof *sess->io_rd_lock);
-    sess->io_wr_lock = malloc(sizeof *sess->io_wr_lock);
-    if (!sess->io_rd_lock || !sess->io_wr_lock) {
+    sess->io_lock = malloc(sizeof *sess->io_lock);
+    if (!sess->io_lock) {
         free(sess);
         close(sock[0]);
         close(sock[1]);
         return NULL;
     }
-    pthread_mutex_init(sess->io_rd_lock, NULL);
-    pthread_mutex_init(sess->io_wr_lock, NULL);
+    pthread_mutex_init(sess->io_lock, NULL);
 
     NC_SESSION_STATUS_SET(sess, NC_STATUS_RUNNING);
     sess->id = id;
@@ -154,10 +152,8 @@ test_new_session(uint32_t id)
         pthread_mutex_destroy(&sess->opts.server.ntf_status_lock);
         pthread_mutex_destroy(&sess->opts.server.rpc_lock);
         pthread_cond_destroy(&sess->opts.server.rpc_cond);
-        pthread_mutex_destroy(sess->io_rd_lock);
-        free(sess->io_rd_lock);
-        pthread_mutex_destroy(sess->io_wr_lock);
-        free(sess->io_wr_lock);
+        pthread_mutex_destroy(sess->io_lock);
+        free(sess->io_lock);
         free(sess);
         close(sock[0]);
         close(sock[1]);
@@ -175,10 +171,8 @@ test_free_session(struct nc_session *sess)
     pthread_mutex_destroy(&sess->opts.server.ntf_status_lock);
     pthread_mutex_destroy(&sess->opts.server.rpc_lock);
     pthread_cond_destroy(&sess->opts.server.rpc_cond);
-    pthread_mutex_destroy(sess->io_rd_lock);
-    free(sess->io_rd_lock);
-    pthread_mutex_destroy(sess->io_wr_lock);
-    free(sess->io_wr_lock);
+    pthread_mutex_destroy(sess->io_lock);
+    free(sess->io_lock);
     free(sess);
 }
 

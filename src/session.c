@@ -285,17 +285,11 @@ nc_new_session(NC_SIDE side, int shared_ti)
     }
 
     if (!shared_ti) {
-        sess->io_rd_lock = malloc(sizeof *sess->io_rd_lock);
-        if (!sess->io_rd_lock) {
+        sess->io_lock = malloc(sizeof *sess->io_lock);
+        if (!sess->io_lock) {
             goto error;
         }
-        pthread_mutex_init(sess->io_rd_lock, NULL);
-
-        sess->io_wr_lock = malloc(sizeof *sess->io_wr_lock);
-        if (!sess->io_wr_lock) {
-            goto error;
-        }
-        pthread_mutex_init(sess->io_wr_lock, NULL);
+        pthread_mutex_init(sess->io_lock, NULL);
     }
 
     return sess;
@@ -975,14 +969,8 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
          * SSH channel). So destroy the SSH session only if there is no other NETCONF session using
          * it. Also, avoid concurrent free by multiple threads of sessions that share the SSH session.
          */
-        /* SESSION IO RD/WR LOCK */
-        r = nc_mutex_lock(session->io_rd_lock, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
-        if (r == 1) {
-            r = nc_mutex_lock(session->io_wr_lock, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
-            if (r != 1) {
-                nc_mutex_unlock(session->io_rd_lock, __func__);
-            }
-        }
+        /* SESSION IO LOCK */
+        r = nc_mutex_lock(session->io_lock, NC_SESSION_FREE_LOCK_TIMEOUT, __func__);
 
         if (session->ti.libssh.channel) {
             if ((session->side == NC_CLIENT) ||
@@ -993,8 +981,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
                  * NC_CLIENT: we are waiting for the server to acknowledge our SSH channel EOF
                  * by sending us its own SSH channel EOF. */
                 if (ssh_channel_poll_timeout(session->ti.libssh.channel, NC_SESSION_FREE_SSH_POLL_EOF_TIMEOUT, 0) != SSH_EOF) {
-                    WRN(session, "Timeout for receiving SSH channel EOF from the %s elapsed.",
-                            session->side == NC_CLIENT ? "server" : "client");
+                    WRN(session, "Timeout for receiving SSH channel EOF from the %s elapsed.", session->side == NC_CLIENT ? "server" : "client");
                 }
             }
             ssh_channel_free(session->ti.libssh.channel);
@@ -1092,10 +1079,9 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
 #endif
         }
 
-        /* SESSION IO RD/WR UNLOCK */
+        /* SESSION IO UNLOCK */
         if (r == 1) {
-            nc_mutex_unlock(session->io_rd_lock, __func__);
-            nc_mutex_unlock(session->io_wr_lock, __func__);
+            nc_mutex_unlock(session->io_lock, __func__);
         }
         break;
     }
@@ -1248,13 +1234,9 @@ nc_session_free(struct nc_session *session, void (*data_free)(void *))
         pthread_cond_destroy(&session->opts.server.rpc_cond);
     }
 
-    if (session->io_rd_lock && !multisession) {
-        pthread_mutex_destroy(session->io_rd_lock);
-        free(session->io_rd_lock);
-    }
-    if (session->io_wr_lock && !multisession) {
-        pthread_mutex_destroy(session->io_wr_lock);
-        free(session->io_wr_lock);
+    if (session->io_lock && !multisession) {
+        pthread_mutex_destroy(session->io_lock);
+        free(session->io_lock);
     }
 
     if (!(session->flags & NC_SESSION_SHAREDCTX)) {

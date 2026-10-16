@@ -2799,7 +2799,7 @@ nc_ps_poll_session_io(struct nc_session *session, time_t now_mono, char *msg)
      * held here and ::nc_server_notif_send() may keep the lock for an unbounded time (::nc_write()
      * has no deadline, a peer that stops reading blocks it). Skipping costs the session one poll
      * interval, waiting would stall the whole pollsession */
-    r = nc_mutex_lock(session->io_rd_lock, 0, __func__);
+    r = nc_mutex_lock(session->io_lock, 0, __func__);
     if (r < 0) {
         return NC_PSPOLL_ERROR;
     } else if (!r) {
@@ -2931,7 +2931,7 @@ nc_ps_poll_session_io(struct nc_session *session, time_t now_mono, char *msg)
         break;
     }
 
-    nc_mutex_unlock(session->io_rd_lock, __func__);
+    nc_mutex_unlock(session->io_lock, __func__);
     return ret;
 }
 

@@ -68,10 +68,8 @@ setup_write(void **state)
     w->session->version = NC_PROT_VERSION_10;
     w->session->opts.client.msgid = 999;
     w->session->ti_type = NC_TI_FD;
-    w->session->io_rd_lock = malloc(sizeof *w->session->io_rd_lock);
-    pthread_mutex_init(w->session->io_rd_lock, NULL);
-    w->session->io_wr_lock = malloc(sizeof *w->session->io_wr_lock);
-    pthread_mutex_init(w->session->io_wr_lock, NULL);
+    w->session->io_lock = malloc(sizeof *w->session->io_lock);
+    pthread_mutex_init(w->session->io_lock, NULL);
     w->session->ti.fd.in = pipes[0];
     w->session->ti.fd.out = pipes[1];
 

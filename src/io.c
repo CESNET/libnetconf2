@@ -330,8 +330,8 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, int passing_io_lock, 
     nc_timeouttime_get(&ts_act_timeout, NC_READ_ACT_TIMEOUT * 1000);
 
     if (!passing_io_lock) {
-        /* SESSION IO RD LOCK */
-        ret = nc_mutex_lock(session->io_rd_lock, io_timeout, __func__);
+        /* SESSION IO LOCK */
+        ret = nc_mutex_lock(session->io_lock, io_timeout, __func__);
         if (ret < 1) {
             goto cleanup;
         }
@@ -422,8 +422,8 @@ nc_read_msg_io(struct nc_session *session, int io_timeout, int passing_io_lock, 
 
 cleanup:
     if (io_locked) {
-        /* SESSION IO RD UNLOCK */
-        nc_mutex_unlock(session->io_rd_lock, __func__);
+        /* SESSION IO UNLOCK */
+        nc_mutex_unlock(session->io_lock, __func__);
     }
     free(frame_size_buf);
     return ret;
@@ -547,8 +547,8 @@ nc_read_msg_poll_io(struct nc_session *session, int io_timeout, struct ly_in **m
         return -1;
     }
 
-    /* SESSION IO RD LOCK */
-    ret = nc_mutex_lock(session->io_rd_lock, io_timeout, __func__);
+    /* SESSION IO LOCK */
+    ret = nc_mutex_lock(session->io_lock, io_timeout, __func__);
     if (ret < 1) {
         return ret;
     }
@@ -557,16 +557,16 @@ nc_read_msg_poll_io(struct nc_session *session, int io_timeout, struct ly_in **m
     if (ret < 1) {
         /* timed out or error */
 
-        /* SESSION IO RD UNLOCK */
-        nc_mutex_unlock(session->io_rd_lock, __func__);
+        /* SESSION IO UNLOCK */
+        nc_mutex_unlock(session->io_lock, __func__);
         return ret;
     }
 
     /* read msg */
     ret = nc_read_msg_io(session, io_timeout, 1, &buf, &buf_len);
 
-    /* SESSION IO RD UNLOCK */
-    nc_mutex_unlock(session->io_rd_lock, __func__);
+    /* SESSION IO UNLOCK */
+    nc_mutex_unlock(session->io_lock, __func__);
 
     if (ret > 0) {
         ret = 1;
@@ -920,8 +920,8 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
     arg.session = session;
     arg.len = 0;
 
-    /* SESSION IO WR LOCK */
-    ret = nc_mutex_lock(session->io_wr_lock, io_timeout, __func__);
+    /* SESSION IO LOCK */
+    ret = nc_mutex_lock(session->io_lock, io_timeout, __func__);
     if (ret < 0) {
         return NC_MSG_ERROR;
     } else if (!ret) {
@@ -1147,7 +1147,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
 
 cleanup:
     va_end(ap);
-    nc_mutex_unlock(session->io_wr_lock, __func__);
+    nc_mutex_unlock(session->io_lock, __func__);
     return ret;
 }
 

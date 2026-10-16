@@ -1930,8 +1930,7 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     /* share some parameters including the IO lock (we are using one socket for both sessions) */
     new_session->ti_type = NC_TI_SSH;
     new_session->ti.libssh.session = session->ti.libssh.session;
-    new_session->io_rd_lock = session->io_rd_lock;
-    new_session->io_wr_lock = session->io_wr_lock;
+    new_session->io_lock = session->io_lock;
 
     /* append to the session ring list */
     if (!session->ti.libssh.next) {
@@ -1944,20 +1943,13 @@ nc_connect_ssh_channel(struct nc_session *session, struct ly_ctx *ctx)
     }
 
     /* create the channel safely */
-    if (nc_mutex_lock(new_session->io_rd_lock, -1, __func__) != 1) {
+    if (nc_mutex_lock(new_session->io_lock, -1, __func__) != 1) {
         goto fail;
     }
-    if (nc_mutex_lock(new_session->io_wr_lock, -1, __func__) != 1) {
-        nc_mutex_unlock(new_session->io_rd_lock, __func__);
-        goto fail;
-    }
-
     if (open_netconf_channel(new_session) != 1) {
         goto fail;
     }
-
-    nc_mutex_unlock(new_session->io_wr_lock, __func__);
-    nc_mutex_unlock(new_session->io_rd_lock, __func__);
+    nc_mutex_unlock(new_session->io_lock, __func__);
 
     if (nc_client_session_new_ctx(new_session, ctx) != EXIT_SUCCESS) {
         goto fail;
