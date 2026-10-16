@@ -38,6 +38,7 @@ struct test_ch_data {
     pthread_barrier_t *barrier2;
 };
 
+pthread_mutex_t msg_lock = PTHREAD_MUTEX_INITIALIZER;
 char buffer[512];
 char expected[512];
 
@@ -50,9 +51,11 @@ test_msg_callback(const struct nc_session *session, NC_VERB_LEVEL level, const c
     (void) level;
     (void) session;
 
+    pthread_mutex_lock(&msg_lock);
     if (strstr(msg, expected)) {
         strncpy(buffer, msg, 511);
     }
+    pthread_mutex_unlock(&msg_lock);
 
     printf("%s\n", msg);
 }
@@ -89,7 +92,7 @@ ch_new_session_cb(const char *client_name, struct nc_session *new_session, void 
 static void *
 server_thread_ssh(void *arg)
 {
-    int ret;
+    int ret, new_msg;
     struct nc_session *session;
     struct nc_pollsession *ps;
     struct ln2_test_ctx *test_ctx = arg;
@@ -115,6 +118,7 @@ server_thread_ssh(void *arg)
     assert_int_equal(ret, 0);
 
     /* poll */
+    new_msg = 0;
     do {
         ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
         if (ret & NC_PSPOLL_SESSION_TERM) {
@@ -123,7 +127,13 @@ server_thread_ssh(void *arg)
         } else if (ret & (NC_PSPOLL_TIMEOUT | NC_PSPOLL_NOSESSIONS)) {
             usleep(500);
         }
-    } while (!strlen(buffer));
+
+        pthread_mutex_lock(&msg_lock);
+        if (strlen(buffer)) {
+            new_msg = 1;
+        }
+        pthread_mutex_unlock(&msg_lock);
+    } while (!new_msg);
 
     /* delete the call-home client, the thread should end */
     ret = nc_server_config_setup_data(test_data->tree);
