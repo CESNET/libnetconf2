@@ -38,7 +38,8 @@ struct test_ch_data {
     pthread_barrier_t *barrier2;
 };
 
-char buffer[512];
+/* set by the log callback in the call-home client thread, polled by the test thread */
+static ATOMIC_T expected_msg_received;
 char expected[512];
 
 int TEST_PORT = 10050, TEST_PORT_2 = 10051, TEST_PORT_3 = 10052, TEST_PORT_4 = 10053;
@@ -51,7 +52,7 @@ test_msg_callback(const struct nc_session *session, NC_VERB_LEVEL level, const c
     (void) session;
 
     if (strstr(msg, expected)) {
-        strncpy(buffer, msg, 511);
+        ATOMIC_STORE_RELAXED(expected_msg_received, 1);
     }
 
     printf("%s\n", msg);
@@ -97,7 +98,7 @@ server_thread_ssh(void *arg)
 
     /* set print clb so we get access to messages */
     nc_set_print_clb_session(test_msg_callback);
-    buffer[0] = '\0';
+    ATOMIC_STORE_RELAXED(expected_msg_received, 0);
     strcpy(expected, "reconnecting in");
 
     /* prepare data for deleting the call-home client */
@@ -123,7 +124,7 @@ server_thread_ssh(void *arg)
         } else if (ret & (NC_PSPOLL_TIMEOUT | NC_PSPOLL_NOSESSIONS)) {
             usleep(500);
         }
-    } while (!strlen(buffer));
+    } while (!ATOMIC_LOAD_RELAXED(expected_msg_received));
 
     /* delete the call-home client, the thread should end */
     ret = nc_server_config_setup_data(test_data->tree);
@@ -433,7 +434,7 @@ server_thread_delete_while_session(void *arg)
     struct test_ch_data *test_data = test_ctx->test_data;
 
     nc_set_print_clb_session(test_msg_callback);
-    buffer[0] = '\0';
+    ATOMIC_STORE_RELAXED(expected_msg_received, 0);
     strcpy(expected, "thread exit");
 
     ps = nc_ps_new();
@@ -464,9 +465,9 @@ server_thread_delete_while_session(void *arg)
 
     do {
         usleep(5000);
-    } while (!strlen(buffer));
+    } while (!ATOMIC_LOAD_RELAXED(expected_msg_received));
 
-    assert_true(strlen(buffer) > 0);
+    assert_true(ATOMIC_LOAD_RELAXED(expected_msg_received));
 
     pthread_barrier_wait(test_data->barrier2);
 
