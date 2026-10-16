@@ -100,8 +100,10 @@ server_thread_ssh(void *arg)
 
     /* set print clb so we get access to messages */
     nc_set_print_clb_session(test_msg_callback);
+    pthread_mutex_lock(&msg_lock);
     buffer[0] = '\0';
     strcpy(expected, "reconnecting in");
+    pthread_mutex_unlock(&msg_lock);
 
     /* prepare data for deleting the call-home client */
     ret = nc_server_config_del_ch_client("ch_ssh", &test_data->tree);
@@ -443,8 +445,10 @@ server_thread_delete_while_session(void *arg)
     struct test_ch_data *test_data = test_ctx->test_data;
 
     nc_set_print_clb_session(test_msg_callback);
+    pthread_mutex_lock(&msg_lock);
     buffer[0] = '\0';
     strcpy(expected, "thread exit");
+    pthread_mutex_unlock(&msg_lock);
 
     ps = nc_ps_new();
     assert_non_null(ps);
