@@ -258,7 +258,7 @@ nc_ssh_check_local_user_support(struct nc_session *session)
     rc = lys_feature_value(mod, "local-users-supported");
     if (rc == LY_SUCCESS) {
         return 1;
-    } else if (rc == LY_ENOTFOUND) {
+    } else if (rc == LY_ENOT) {
         return 0;
     } else {
         return -1;
