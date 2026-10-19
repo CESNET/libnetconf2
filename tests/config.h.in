@@ -23,6 +23,7 @@
 #define BUILD_DIR "@CMAKE_BINARY_DIR@"
 
 #cmakedefine HAVE_MBEDTLS
+#cmakedefine HAVE_SHADOW
 
 @SSH_MACRO@
 @TLS_MACRO@
