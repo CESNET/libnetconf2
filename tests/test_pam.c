@@ -70,6 +70,10 @@ client_thread(void *arg)
     ret = nc_client_ssh_set_username("test");
     assert_int_equal(ret, 0);
 
+    /* system users are offered all the methods, use only keyboard-interactive */
+    nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PUBLICKEY, -1);
+    nc_client_ssh_set_auth_pref(NC_SSH_AUTH_PASSWORD, -1);
+
     /* set keyboard-interactive authentication callback */
     nc_client_ssh_set_auth_interactive_clb(auth_interactive, NULL);
 
@@ -132,11 +136,50 @@ setup_f(void **state)
     return 0;
 }
 
+static int
+setup_system_users(void **state)
+{
+    int ret;
+    struct lyd_node *tree = NULL;
+    struct ln2_test_ctx *test_ctx;
+    struct lys_module *mod;
+    const char *no_features[] = {NULL};
+
+    ret = ln2_glob_test_setup(&test_ctx);
+    assert_int_equal(ret, 0);
+
+    *state = test_ctx;
+
+    /* disable local-users-supported feature */
+    mod = ly_ctx_get_module_implemented(test_ctx->ctx, "ietf-ssh-server");
+    assert_non_null(mod);
+    ret = lys_set_implemented(mod, no_features);
+    assert_int_equal(ret, LY_SUCCESS);
+
+    ret = nc_server_config_add_address_port(test_ctx->ctx, "endpt", NC_TI_SSH, "127.0.0.1", TEST_PORT, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_config_add_ssh_hostkey(test_ctx->ctx, "endpt", "hostkey", TESTS_DIR "/data/key_ecdsa", NULL, &tree);
+    assert_int_equal(ret, 0);
+
+    ret = nc_server_ssh_set_pam_conf_filename("netconf.conf");
+    assert_int_equal(ret, 0);
+
+    /* configure the server based on the data, there are no users to configure */
+    ret = nc_server_config_setup_data(tree);
+    assert_int_equal(ret, 0);
+
+    lyd_free_all(tree);
+
+    return 0;
+}
+
 int
 main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup_teardown(test_nc_pam, setup_f, ln2_glob_test_teardown)
+        cmocka_unit_test_setup_teardown(test_nc_pam, setup_f, ln2_glob_test_teardown),
+        cmocka_unit_test_setup_teardown(test_nc_pam, setup_system_users, ln2_glob_test_teardown),
     };
 
     /* try to get ports from the environment, otherwise use the default */
