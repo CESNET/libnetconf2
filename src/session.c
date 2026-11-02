@@ -36,15 +36,18 @@
 #include "netconf.h"
 #include "session_p.h"
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
+# include "session_crypto_wrapper.h"
+#endif /* NC_SSH or NC_TLS */
 
-#include "session_server_ssh_wrapper.h"
-#include "session_wrapper.h"
+#ifdef NC_SSH
+# include <libssh/libssh.h>
+# include "session_server_ssh_wrapper.h"
+#endif /* NC_SSH */
 
-#include <curl/curl.h>
-#include <libssh/libssh.h>
-
-#endif /* NC_ENABLED_SSH_TLS */
+#ifdef NC_TLS
+# include <curl/curl.h>
+#endif /* NC_TLS */
 
 /* in seconds */
 #define NC_CLIENT_HELLO_TIMEOUT 60
@@ -144,7 +147,7 @@ nc_poll(struct pollfd *pfd, uint16_t pfd_count, int timeout_ms)
     return rc;
 }
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
 
 void *
 nc_base64der_to_cert(const char *data)
@@ -159,7 +162,7 @@ nc_base64der_to_cert(const char *data)
         return NULL;
     }
 
-    cert = nc_tls_pem_to_cert_wrap(buf);
+    cert = nc_pem_to_cert_wrap(buf);
     free(buf);
     return cert;
 }
@@ -199,7 +202,7 @@ nc_is_pk_subject_public_key_info(const char *b64)
     tmp = bin;
 
     /* try to parse the supposed SubjectPublicKeyInfo binary data */
-    if (nc_tls_is_der_subpubkey_wrap(tmp, len)) {
+    if (nc_is_der_subpubkey_wrap(tmp, len)) {
         /* success, it's most likely SubjectPublicKeyInfo */
         ret = 1;
     } else {
@@ -212,7 +215,7 @@ cleanup:
     return ret;
 }
 
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH or NC_TLS */
 
 int
 nc_sock_configure_ka(int sock, const struct nc_keepalives *ka)
@@ -672,7 +675,7 @@ nc_session_get_port(const struct nc_session *session)
     return session->port;
 }
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
 
 API const char *
 nc_session_ssh_get_protocol_string(const struct nc_session *session)
@@ -697,7 +700,7 @@ nc_session_ssh_get_banner(const struct nc_session *session)
     return nc_session_ssh_get_protocol_string(session);
 }
 
-#endif
+#endif /* NC_SSH */
 
 API const struct ly_ctx *
 nc_session_get_ctx(const struct nc_session *session)
@@ -779,7 +782,7 @@ nc_session_free_send_transport_shutdown(struct nc_session *session)
     case NC_TI_UNIX:
         /* nothing needed - the transport will be closed by caller */
         break;
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     case NC_TI_SSH:
         if (session->ti.libssh.channel) {
             if (session->side == NC_SERVER) {
@@ -793,13 +796,15 @@ nc_session_free_send_transport_shutdown(struct nc_session *session)
             }
         }
         break;
+#endif /* NC_SSH */
+#ifdef NC_TLS
     case NC_TI_TLS:
         /* send TLS close_notify alert - we can still receive data from the peer, but not send */
         if (session->ti.tls.session) {
             nc_tls_close_notify_wrap(session->ti.tls.session);
         }
         break;
-#endif
+#endif /* NC_TLS */
     default:
         break;
     }
@@ -958,7 +963,7 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
         sock = session->ti.unixsock.sock;
         break;
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     case NC_TI_SSH: {
         int r;
         struct nc_session *siter;
@@ -1085,6 +1090,8 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
         }
         break;
     }
+#endif /* NC_SSH */
+#ifdef NC_TLS
     case NC_TI_TLS:
         sock = nc_tls_get_fd_wrap(session);
 
@@ -1096,11 +1103,11 @@ nc_session_free_transport(struct nc_session *session, int *multisession)
         session->ti.tls.config = NULL;
 
         if (session->side == NC_SERVER) {
-            nc_tls_cert_destroy_wrap(session->opts.server.client_cert);
+            nc_cert_destroy_wrap(session->opts.server.client_cert);
         }
 
         break;
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
     case NC_TI_NONE:
         break;
     }
@@ -1932,7 +1939,7 @@ nc_ch_handshake_io(struct nc_session *session)
     return type;
 }
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_TLS
 
 /**
  * @brief CURL callback for downloading data.
@@ -2541,7 +2548,7 @@ cleanup:
     return ret;
 }
 
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
 
 /**
  * @brief Initialize or destroy the global state of the libraries used by libnetconf2.
@@ -2553,14 +2560,19 @@ cleanup:
 static int
 nc_global_init_destroy(NC_SIDE side, int destroy)
 {
-#ifdef NC_ENABLED_SSH_TLS
-    /* lock protecting the init flags and the global init of the libraries, which is not thread-safe */
-    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+    int rc = 0, *inited;
+    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER; /* lock protecting the init flags and the init functions */
+    static int init_client = 0, init_server = 0; /* whether the client/server side has the libraries initialized */
 
-    /* whether the client/server side has the libraries initialized */
-    static int init_client = 0, init_server = 0;
-
-    int rc = 0, curl_inited = 0, tls_inited = 0, *inited;
+#ifdef NC_TLS
+    int curl_inited = 0;
+#endif /* NC_TLS */
+#if defined (NC_SSH) || defined (NC_TLS)
+    int tls_inited = 0;
+#endif /* NC_SSH or NC_TLS */
+#ifdef NC_SSH
+    int libssh_inited = 0;
+#endif /* NC_SSH */
 
     inited = (side == NC_CLIENT) ? &init_client : &init_server;
 
@@ -2576,9 +2588,15 @@ nc_global_init_destroy(NC_SIDE side, int destroy)
 
         if (!init_client && !init_server) {
             /* the last side using the libraries, destroy them in the reverse order */
+#ifdef NC_SSH
             ssh_finalize();
+#endif /* NC_SSH */
+#if defined (NC_SSH) || defined (NC_TLS)
             nc_tls_backend_destroy_wrap();
+#endif /* NC_SSH or NC_TLS */
+#ifdef NC_TLS
             curl_global_cleanup();
+#endif /* NC_TLS */
         }
         goto cleanup;
     }
@@ -2589,50 +2607,59 @@ nc_global_init_destroy(NC_SIDE side, int destroy)
         goto cleanup;
     }
 
+#ifdef NC_TLS
     if (curl_global_init(CURL_GLOBAL_SSL | CURL_GLOBAL_ACK_EINTR)) {
         ERR(NULL, "%s: failed to init CURL.", __func__);
         rc = -1;
         goto cleanup;
     }
     curl_inited = 1;
+#endif /* NC_TLS */
 
+#if defined (NC_SSH) || defined (NC_TLS)
     if (nc_tls_backend_init_wrap()) {
         ERR(NULL, "%s: failed to init the SSL library backend.", __func__);
         rc = -1;
         goto cleanup;
     }
     tls_inited = 1;
+#endif /* NC_SSH or NC_TLS */
 
+#ifdef NC_SSH
     /* optional for dynamic library, mandatory for static */
     if (ssh_init()) {
         ERR(NULL, "%s: failed to init libssh.", __func__);
         rc = -1;
         goto cleanup;
     }
+    libssh_inited = 1;
+#endif /* NC_SSH */
 
     *inited = 1;
 
 cleanup:
     if (rc) {
-        /* leave no library initialized behind */
+#ifdef NC_SSH
+        if (libssh_inited) {
+            ssh_finalize();
+        }
+#endif /* NC_SSH */
+#if defined (NC_SSH) || defined (NC_TLS)
         if (tls_inited) {
             nc_tls_backend_destroy_wrap();
         }
+#endif /* NC_SSH or NC_TLS */
+#ifdef NC_TLS
         if (curl_inited) {
             curl_global_cleanup();
         }
+#endif /* NC_TLS */
     }
 
     /* GLOBAL INIT UNLOCK */
     pthread_mutex_unlock(&lock);
 
     return rc;
-#else
-    (void)side;
-    (void)destroy;
-
-    return 0;
-#endif /* NC_ENABLED_SSH_TLS */
 }
 
 int

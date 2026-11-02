@@ -1,10 +1,11 @@
 /**
  * @file server_config.h
  * @author Roman Janota <janota@cesnet.cz>
+ * @author Michal Vasko <mvasko@cesnet.cz>
  * @brief libnetconf2 server configuration
  *
  * @copyright
- * Copyright (c) 2023 CESNET, z.s.p.o.
+ * Copyright (c) 2023 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -112,7 +113,7 @@ int nc_server_config_setup_data(const struct lyd_node *data);
  */
 int nc_server_config_setup_path(const struct ly_ctx *ctx, const char *path);
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
 
 /**
  * @brief Creates new YANG configuration data nodes for address and port.
@@ -120,98 +121,15 @@ int nc_server_config_setup_path(const struct ly_ctx *ctx, const char *path);
  * @param[in] ctx libyang context.
  * @param[in] endpt_name Arbitrary identifier of the endpoint.
  * If an endpoint with this identifier already exists, its contents might be changed.
- * @param[in] transport Either SSH or TLS transport for the given endpoint.
+ * @param[in] transport Either SSH or TLS transport of the given endpoint.
  * @param[in] address New listening address.
  * @param[in] port New listening port.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * @param[in,out] config Configuration YANG data tree. If NULL, it will be created.
  * Otherwise the new YANG data will be added to the previous data and may override it.
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_add_address_port(const struct ly_ctx *ctx, const char *endpt_name, NC_TRANSPORT_IMPL transport,
         const char *address, uint16_t port, struct lyd_node **config);
-
-#endif /* NC_ENABLED_SSH_TLS */
-
-/**
- * @brief Deletes an endpoint from the YANG data.
- *
- * @param[in] endpt_name Optional identifier of an endpoint to be deleted.
- * If NULL, all of the endpoints will be deleted.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note If the last endpoint is deleted, the parent listen presence container
- * is also deleted to maintain a valid YANG data tree.
- */
-int nc_server_config_del_endpt(const char *endpt_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG data nodes for a UNIX socket endpoint.
- *
- * To learn how authentication works, look at ::nc_server_config_add_unix_user_mapping().
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its contents might be changed.
- * @param[in] path Path to the UNIX socket. The parent directory must be writable by the server process.
- * @param[in] mode Optional UNIX socket file mode in octal format (e.g., "0777").
- * If NULL, the default value ("0660") will be used.
- * @param[in] owner Optional owner of the UNIX socket file.
- * If NULL, the owner will be set to the user running the server process.
- * @param[in] group Optional group of the UNIX socket file.
- * If NULL, the group will be set to the group of the user running the server process.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- *
- */
-int nc_server_config_add_unix_socket(const struct ly_ctx *ctx, const char *endpt_name, const char *path,
-        const char *mode, const char *owner, const char *group, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG data nodes for a UNIX username mapping.
- *
- * Specifies who can connect to a UNIX socket endpoint. There are 3 following scenarios:
- *
- * 1) If no mappings are configured for the client @p system_user, then the client can
- * only connect if its username matches @p netconf_user.
- *
- * 2) If a mapping for the client @p system_user is configured, but no @p netconf_user s
- * are specified, then the client cannot connect with any username.
- *
- * 3) If a mapping for the client @p system_user is configured, and at least one @p netconf_user
- * is specified, then the client can connect only with one of the specified usernames.
- * If a wildcard value "*" is configured for @p netconf_user, then the client can connect
- * with any NETCONF username.
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its contents might be changed.
- * @param[in] system_user System user name, who the mapping will be created for.
- * @param[in] netconf_user Username that the @p system_user can use to connect to the endpoint.
- * Special value "*" can be used to allow any username.
- * If NULL, empty mapping will be created, which means that the @p system_user
- * can not connect to the endpoint with any username.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_unix_user_mapping(const struct ly_ctx *ctx, const char *endpt_name,
-        const char *system_user, const char *netconf_user, struct lyd_node **config);
-
-/**
- * @brief Deletes a UNIX username mapping from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in] system_user Optional identifier of a system user whose mapping will be deleted.
- * If NULL, all of the mappings for the endpoint will be deleted.
- * @param[in,out] config Configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_unix_user_mapping(const char *endpt_name, const char *system_user,
-        struct lyd_node **config);
-
-#ifdef NC_ENABLED_SSH_TLS
 
 /**
  * @brief Creates new YANG data nodes for an asymmetric key in the keystore.
@@ -325,8 +243,89 @@ int nc_server_config_add_truststore_cert(const struct ly_ctx *ctx, const char *c
  * @param[in,out] config Configuration YANG data tree.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_del_truststore_cert(const char *cert_bag_name,
-        const char *cert_name, struct lyd_node **config);
+int nc_server_config_del_truststore_cert(const char *cert_bag_name, const char *cert_name, struct lyd_node **config);
+
+#endif /* NC_SSH or NC_TLS */
+
+/**
+ * @brief Deletes an endpoint from the YANG data.
+ *
+ * @note If the last endpoint is deleted, the parent listen presence container
+ * is also deleted to maintain a valid YANG data tree.
+ *
+ * @param[in] endpt_name Optional identifier of an endpoint to be deleted.
+ * If NULL, all of the endpoints will be deleted.
+ * @param[in,out] config Modified configuration YANG data tree.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_del_endpt(const char *endpt_name, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG data nodes for a UNIX socket endpoint.
+ *
+ * To learn how authentication works, look at ::nc_server_config_add_unix_user_mapping().
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, its contents might be changed.
+ * @param[in] path Path to the UNIX socket. The parent directory must be writable by the server process.
+ * @param[in] mode Optional UNIX socket file mode in octal format (e.g., "0777").
+ * If NULL, the default value ("0660") will be used.
+ * @param[in] owner Optional owner of the UNIX socket file.
+ * If NULL, the owner will be set to the user running the server process.
+ * @param[in] group Optional group of the UNIX socket file.
+ * If NULL, the group will be set to the group of the user running the server process.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_add_unix_socket(const struct ly_ctx *ctx, const char *endpt_name, const char *path,
+        const char *mode, const char *owner, const char *group, struct lyd_node **config);
+
+/**
+ * @brief Creates new YANG data nodes for a UNIX username mapping.
+ *
+ * Specifies who can connect to a UNIX socket endpoint. There are 3 following scenarios:
+ *
+ * 1) If no mappings are configured for the client @p system_user, then the client can
+ * only connect if its username matches @p netconf_user.
+ *
+ * 2) If a mapping for the client @p system_user is configured, but no @p netconf_user s
+ * are specified, then the client cannot connect with any username.
+ *
+ * 3) If a mapping for the client @p system_user is configured, and at least one @p netconf_user
+ * is specified, then the client can connect only with one of the specified usernames.
+ * If a wildcard value "*" is configured for @p netconf_user, then the client can connect
+ * with any NETCONF username.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] endpt_name Arbitrary identifier of the endpoint.
+ * If an endpoint with this identifier already exists, its contents might be changed.
+ * @param[in] system_user System user name, who the mapping will be created for.
+ * @param[in] netconf_user Username that the @p system_user can use to connect to the endpoint.
+ * Special value "*" can be used to allow any username.
+ * If NULL, empty mapping will be created, which means that the @p system_user
+ * can not connect to the endpoint with any username.
+ * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
+ * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_add_unix_user_mapping(const struct ly_ctx *ctx, const char *endpt_name,
+        const char *system_user, const char *netconf_user, struct lyd_node **config);
+
+/**
+ * @brief Deletes a UNIX username mapping from the YANG data.
+ *
+ * @param[in] endpt_name Identifier of an existing endpoint.
+ * @param[in] system_user Optional identifier of a system user whose mapping will be deleted.
+ * If NULL, all of the mappings for the endpoint will be deleted.
+ * @param[in,out] config Configuration YANG data tree.
+ * @return 0 on success, non-zero otherwise.
+ */
+int nc_server_config_del_unix_user_mapping(const char *endpt_name, const char *system_user,
+        struct lyd_node **config);
+
+#ifdef NC_SSH
 
 /**
  * @brief Gets all the SSH transport algorithms supported by the server.
@@ -341,17 +340,6 @@ int nc_server_config_del_truststore_cert(const char *cert_bag_name,
 int nc_server_config_oper_get_supported_ssh_algs(const struct ly_ctx *ctx, struct lyd_node **supported_algs);
 
 /**
- * @brief Gets all the TLS transport cipher suites supported by the server.
- *
- * @note Actual usable cipher suites depend on the underlying TLS library and its version.
- *
- * @param[in] ctx libyang context.
- * @param[out] supported_algs Supported cipher suites.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_oper_get_supported_tls_algs(const struct ly_ctx *ctx, struct lyd_node **supported_algs);
-
-/**
  * @brief Gets the last modified time of an SSH user's password.
  *
  * @param[in] ch_client Name of the call-home client the user is configured on. NULL if the user is on a listening endpoint.
@@ -360,143 +348,8 @@ int nc_server_config_oper_get_supported_tls_algs(const struct ly_ctx *ctx, struc
  * @param[out] last_modified Time of the last password modification.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_oper_get_user_password_last_modified(const char *ch_client,
-        const char *endpoint, const char *username, time_t *last_modified);
-
-/**
- * @} Server Configuration Functions
- */
-
-/**
- * @defgroup server_config_ssh SSH Server Configuration
- * @ingroup server_config
- *
- * @brief SSH server configuration creation and deletion
- * @{
- */
-
-/**
- * @brief Creates new YANG configuration data nodes for a hostkey.
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its hostkey might be changed.
- * @param[in] hostkey_name Arbitrary identifier of the hostkey.
- * If a hostkey with this identifier already exists, its contents will be changed.
- * @param[in] privkey_path Path to a file containing a private key.
- * The private key has to be in a PEM format. Only RSA and ECDSA keys are supported.
- * @param[in] pubkey_path Optional path to a file containing a public key. If NULL, public key will be
- * generated from the private key.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ssh_hostkey(const struct ly_ctx *ctx, const char *endpt_name, const char *hostkey_name,
-        const char *privkey_path, const char *pubkey_path, struct lyd_node **config);
-
-/**
- * @brief Deletes a hostkey from the YANG data.
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in] hostkey_name Optional identifier of the hostkey to be deleted.
- * If NULL, all of the hostkeys on this endpoint will be deleted.
- * @param[in,out] config Configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note If the last hostkey is deleted, the configuration becomes invalid.
- * Add a new hostkey to make it valid again.
- */
-int nc_server_config_del_ssh_hostkey(const struct ly_ctx *ctx, const char *endpt_name,
-        const char *hostkey_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG data nodes for a reference to an asymmetric key located in the keystore.
- *
- * This asymmetric key pair will be used as the SSH hostkey.
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of an endpoint.
- * If an endpoint with this identifier already exists, its contents will be changed.
- * @param[in] hostkey_name Arbitrary identifier of the endpoint's hostkey.
- * If an endpoint's hostkey with this identifier already exists, its contents will be changed.
- * @param[in] keystore_reference Name of the asymmetric key pair to be referenced and used as a hostkey.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ssh_keystore_ref(const struct ly_ctx *ctx, const char *endpt_name, const char *hostkey_name,
-        const char *keystore_reference, struct lyd_node **config);
-
-/**
- * @brief Deletes a keystore reference from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in] hostkey_name Identifier of an existing hostkey on the given endpoint.
- * @param[in,out] config Configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_ssh_keystore_ref(const char *endpt_name, const char *hostkey_name,
-        struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for an SSH user's public key authentication method.
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its user might be changed.
- * @param[in] user_name Arbitrary identifier of the user.
- * If an user with this identifier already exists, its contents will be changed.
- * @param[in] pubkey_name Arbitrary identifier of the user's public key.
- * If a public key with this identifier already exists for this user, its contents will be changed.
- * @param[in] pubkey_path Path to a file containing the user's public key.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ssh_user_pubkey(const struct ly_ctx *ctx, const char *endpt_name,
-        const char *user_name, const char *pubkey_name, const char *pubkey_path, struct lyd_node **config);
-
-/**
- * @brief Deletes an SSH user's public key from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in] user_name Identifier of an existing user on the given endpoint.
- * @param[in] pubkey_name Optional identifier of a public key to be deleted.
- * If NULL, all of the users public keys will be deleted.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_ssh_user_pubkey(const char *endpt_name, const char *user_name,
-        const char *pubkey_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for an SSH user that will use system's authorized_keys to authenticate.
- *
- * The path to the authorized_keys file must be configured to successfully
- * authenticate, see ::nc_server_ssh_set_authkey_path_format().
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its user might be changed.
- * @param[in] user_name Arbitrary identifier of the user.
- * If an user with this identifier already exists, its contents will be changed.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ssh_user_authkey(const struct ly_ctx *ctx, const char *endpt_name,
-        const char *user_name, struct lyd_node **config);
-
-/**
- * @brief Deletes an SSH user's authorized_keys method from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in] user_name Identifier of an existing user on the given endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_ssh_user_authkey(const char *endpt_name, const char *user_name, struct lyd_node **config);
+int nc_server_config_oper_get_user_password_last_modified(const char *ch_client, const char *endpoint,
+        const char *username, time_t *last_modified);
 
 /**
  * @brief Hashes a clear-text 'iana-crypt-hash' password the way the server stores it in its configuration.
@@ -512,385 +365,28 @@ int nc_server_config_del_ssh_user_authkey(const char *endpt_name, const char *us
  */
 int nc_server_config_hash_password(const char *crypt_hash, char **hashed_password);
 
+#endif /* NC_SSH */
+
+#ifdef NC_TLS
+
 /**
- * @brief Creates new YANG configuration data nodes for an SSH user's password authentication method.
+ * @brief Gets all the TLS transport cipher suites supported by the server.
+ *
+ * @note Actual usable cipher suites depend on the underlying TLS library and its version.
  *
  * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its user might be changed.
- * @param[in] user_name Arbitrary identifier of the user.
- * If an user with this identifier already exists, its contents will be changed.
- * @param[in] password Clear-text password to be set for the user. It will be hashed.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
+ * @param[out] supported_algs Supported cipher suites.
  * @return 0 on success, non-zero otherwise.
  */
-int nc_server_config_add_ssh_user_password(const struct ly_ctx *ctx, const char *endpt_name,
-        const char *user_name, const char *password, struct lyd_node **config);
+int nc_server_config_oper_get_supported_tls_algs(const struct ly_ctx *ctx, struct lyd_node **supported_algs);
+
+#endif /* NC_TLS */
 
 /**
- * @brief Deletes an SSH user's password from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in] user_name Identifier of an existing user on the given endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_ssh_user_password(const char *endpt_name, const char *user_name,
-        struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for an SSH user's keyboard interactive authentication method.
- *
- * One of Linux PAM, local users, or user callback is used to authenticate users with this SSH method (see \ref ln2doc_kbdint "the documentation").
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its user might be changed.
- * @param[in] user_name Arbitrary identifier of the user.
- * If an user with this identifier already exists, its contents will be changed.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ssh_user_interactive(const struct ly_ctx *ctx, const char *endpt_name,
-        const char *user_name, struct lyd_node **config);
-
-/**
- * @brief Deletes an SSH user's keyboard interactive authentication from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in] user_name Identifier of an existing user on the given endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_ssh_user_interactive(const char *endpt_name, const char *user_name,
-        struct lyd_node **config);
-
-/**
- * @brief Deletes an SSH user from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in] user_name Optional identifier of an user to be deleted.
- * If NULL, all of the users on this endpoint will be deleted.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_ssh_user(const char *endpt_name,
-        const char *user_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG data nodes for a reference to a public key bag located in the truststore.
- *
- * The public key's located in the bag will be used for client authentication.
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of an endpoint.
- * If an endpoint with this identifier already exists, its contents will be changed.
- * @param[in] user_name Arbitrary identifier of the endpoint's user.
- * If an endpoint's user with this identifier already exists, its contents will be changed.
- * @param[in] truststore_reference Name of the public key bag to be referenced and used for authentication.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ssh_truststore_ref(const struct ly_ctx *ctx, const char *endpt_name, const char *user_name,
-        const char *truststore_reference, struct lyd_node **config);
-
-/**
- * @brief Deletes a truststore reference from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in] user_name Identifier of an user on the given endpoint whose truststore reference will be deleted.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_ssh_truststore_ref(const char *endpt_name, const char *user_name,
-        struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes, which will be a reference to another SSH endpoint's users.
- *
- * Whenever a client tries to connect to the referencing endpoint, all of its users will be tried first. If no match is
- * found, the referenced endpoint's configured users will be tried.
- *
- * @param[in] ctx libyang context
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its contents will be changed.
- * @param[in] referenced_endpt Identifier of an endpoint, which has to exist whenever this data
- * is applied. The referenced endpoint can reference another one and so on, but there mustn't be a cycle.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ssh_endpoint_client_ref(const struct ly_ctx *ctx, const char *endpt_name,
-        const char *referenced_endpt, struct lyd_node **config);
-
-/**
- * @brief Deletes reference to another SSH endpoint's users from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_ssh_endpoint_client_ref(const char *endpt_name, struct lyd_node **config);
-
-/**
- * @} SSH Server Configuration
+ * @} Server Configuration Functions
  */
 
-/**
- * @defgroup server_config_tls TLS Server Configuration
- * @ingroup server_config
- *
- * @brief TLS server configuration creation and deletion
- * @{
- */
-
-/**
- * @brief Creates new YANG configuration data nodes for a server's certificate.
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its server certificate will be changed.
- * @param[in] privkey_path Path to the server's PEM encoded private key file.
- * @param[in] pubkey_path Optional path to the server's public key file. If not provided,
- * it will be generated from the private key.
- * @param[in] cert_path Path to the server's certificate file.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_tls_server_cert(const struct ly_ctx *ctx, const char *endpt_name, const char *privkey_path,
-        const char *pubkey_path, const char *cert_path, struct lyd_node **config);
-
-/**
- * @brief Deletes the server's certificate from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note Deleting the server certificate makes the configuration invalid.
- * Add a new server certificate to make it valid again.
- */
-int nc_server_config_del_tls_server_cert(const char *endpt_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for a keystore reference to the TLS server's certificate.
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its contents will be changed.
- * @param[in] asym_key_ref Name of the asymmetric key pair in the keystore to be referenced.
- * @param[in] cert_ref Name of the certificate, which must belong to the given asymmetric key pair, to be referenced.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_tls_keystore_ref(const struct ly_ctx *ctx, const char *endpt_name, const char *asym_key_ref,
-        const char *cert_ref, struct lyd_node **config);
-
-/**
- * @brief Deletes a TLS server certificate keystore reference from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note Deleting the keystore reference makes the configuration invalid.
- * Add a new keystore reference to make it valid again.
- */
-int nc_server_config_del_tls_keystore_ref(const char *endpt_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for a client's (end-entity) certificate.
- *
- * A client certificate is authenticated if it is an exact match to a configured client certificate.
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its contents will be changed.
- * @param[in] cert_name Arbitrary identifier of the client's certificate.
- * If a client certificate with this identifier already exists, it will be changed.
- * @param[in] cert_path Path to the client's certificate file.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_tls_client_cert(const struct ly_ctx *ctx, const char *endpt_name, const char *cert_name,
-        const char *cert_path, struct lyd_node **config);
-
-/**
- * @brief Deletes a client (end-entity) certificate from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in] cert_name Optional name of a certificate to be deleted.
- * If NULL, all of the end-entity certificates on the given endpoint will be deleted.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note If the last certificate is deleted, the parent ee-certs container and
- * possibly the client-authentication container are also deleted to maintain
- * a valid YANG data tree.
- */
-int nc_server_config_del_tls_client_cert(const char *endpt_name, const char *cert_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for a truststore reference to a set of client (end-entity) certificates.
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its contents will be changed.
- * @param[in] cert_bag_ref Identifier of the certificate bag in the truststore to be referenced.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_tls_client_cert_truststore_ref(const struct ly_ctx *ctx, const char *endpt_name,
-        const char *cert_bag_ref, struct lyd_node **config);
-
-/**
- * @brief Deletes a client (end-entity) certificates truststore reference from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note The parent ee-certs container and possibly the client-authentication
- * container are also deleted to maintain a valid YANG data tree.
- */
-int nc_server_config_del_tls_client_cert_truststore_ref(const char *endpt_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for a client certificate authority (trust-anchor) certificate.
- *
- * A client certificate is authenticated if it has a valid chain of trust to any configured CA cert.
- * The configured CA cert, up to which the valid chain of trust can be built, does not have to be
- * self-signed (the root CA). That means that the chain may be incomplete, yet the client will be authenticated.
- *
- * For example assume a certificate chain
- * A <- B <- C,
- * where A is the root CA, then the client certificate C will be authenticated either
- * if solely B is configured, or if both A and B are configured. C will not be authenticated
- * if just A is configured as a CA certificate.
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its contents will be changed.
- * @param[in] cert_name Arbitrary identifier of the certificate authority certificate.
- * If a CA with this identifier already exists, it will be changed.
- * @param[in] cert_path Path to the CA certificate file.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_tls_ca_cert(const struct ly_ctx *ctx, const char *endpt_name, const char *cert_name,
-        const char *cert_path, struct lyd_node **config);
-
-/**
- * @brief Deletes a client certificate authority (trust-anchor) certificate from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in] cert_name Optional name of a certificate to be deleted.
- * If NULL, all of the CA certificates on the given endpoint will be deleted.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note If the last certificate is deleted, the parent ca-certs container and
- * possibly the client-authentication container are also deleted to maintain
- * a valid YANG data tree.
- */
-int nc_server_config_del_tls_ca_cert(const char *endpt_name, const char *cert_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for a truststore reference to a set of client certificate authority (trust-anchor) certificates.
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its contents will be changed.
- * @param[in] cert_bag_ref Identifier of the certificate bag in the truststore to be referenced.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_tls_ca_cert_truststore_ref(const struct ly_ctx *ctx, const char *endpt_name,
-        const char *cert_bag_ref, struct lyd_node **config);
-
-/**
- * @brief Deletes a client certificate authority (trust-anchor) certificates truststore reference from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note The parent ca-certs container and possibly the client-authentication
- * container are also deleted to maintain a valid YANG data tree.
- */
-int nc_server_config_del_tls_ca_cert_truststore_ref(const char *endpt_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes, which will be a reference to another TLS endpoint's certificates.
- *
- * Whenever an user tries to connect to the referencing endpoint, all of its certificates will be tried first. If no match is
- * found, the referenced endpoint's configured certificates will be tried. The same applies to cert-to-name entries.
- *
- * @param[in] ctx libyang context
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its contents will be changed.
- * @param[in] referenced_endpt Identifier of an endpoint, which has to exist whenever this data
- * is applied. The referenced endpoint can reference another one and so on, but there mustn't be a cycle.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_tls_endpoint_client_ref(const struct ly_ctx *ctx, const char *endpt_name,
-        const char *referenced_endpt, struct lyd_node **config);
-
-/**
- * @brief Deletes reference to another TLS endpoint's users from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_tls_endpoint_client_ref(const char *endpt_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for a cert-to-name entry.
- *
- * @param[in] ctx libyang context.
- * @param[in] endpt_name Arbitrary identifier of the endpoint.
- * If an endpoint with this identifier already exists, its contents will be changed.
- * @param[in] id ID of the entry. The lower the ID, the higher the priority of the entry (it will be checked earlier).
- * @param[in] fingerprint Optional fingerprint of the entry. The fingerprint should always be set, however if it is
- * not set, it will match any certificate. Entry with no fingerprint should therefore be placed only as the last entry.
- * @param[in] map_type Mapping username to the certificate option.
- * @param[in] name Username for this cert-to-name entry. Mandatory if @p map_type is set to ::NC_TLS_CTN_SPECIFIED.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_tls_ctn(const struct ly_ctx *ctx, const char *endpt_name, uint32_t id, const char *fingerprint,
-        NC_TLS_CTN_MAPTYPE map_type, const char *name, struct lyd_node **config);
-
-/**
- * @brief Deletes a cert-to-name entry from the YANG data.
- *
- * @param[in] endpt_name Identifier of an existing endpoint.
- * @param[in] id Optional ID of the CTN entry.
- * If 0, all of the cert-to-name entries on the given endpoint will be deleted.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note If the last cert-to-name entry is deleted, the configuration becomes
- * invalid. Add a new cert-to-name entry to make it valid again.
- */
-int nc_server_config_del_tls_ctn(const char *endpt_name, uint32_t id, struct lyd_node **config);
-
-/**
- * @} TLS Server Configuration
- */
+#if defined (NC_SSH) || defined (NC_TLS)
 
 /**
  * @defgroup server_config_ch Call Home Server Configuration
@@ -929,8 +425,6 @@ int nc_server_config_del_tls_ctn(const char *endpt_name, uint32_t id, struct lyd
  */
 int nc_server_config_add_ch_address_port(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
         NC_TRANSPORT_IMPL transport, const char *address, const char *port, struct lyd_node **config);
-
-#endif /* NC_ENABLED_SSH_TLS */
 
 /**
  * @brief Deletes a Call Home client from the YANG data.
@@ -1083,506 +577,10 @@ int nc_server_config_del_ch_reconnect_strategy(const char *client_name, struct l
  * @} Call Home Server Configuration Functions
  */
 
-#ifdef NC_ENABLED_SSH_TLS
-
-/**
- * @defgroup server_config_ch_ssh SSH Call Home Server Configuration
- * @ingroup server_config_ch
- *
- * @brief SSH Call Home server configuration creation and deletion
- * @{
- */
-
-/**
- * @brief Creates new YANG data nodes for a Call Home SSH hostkey.
- *
- * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the Call Home client.
- * If a Call Home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
- * If the client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] hostkey_name Arbitrary identifier of the endpoint's hostkey.
- * If the endpoint's hostkey with this identifier already exists, its contents will be changed.
- * @param[in] privkey_path Path to a file containing a private key.
- * The private key has to be in a PEM format. Only RSA and ECDSA keys are supported.
- * @param[in] pubkey_path Path to a file containing a public key. If NULL, public key will be
- * generated from the private key.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ch_ssh_hostkey(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
-        const char *hostkey_name, const char *privkey_path, const char *pubkey_path, struct lyd_node **config);
-
-/**
- * @brief Deletes a Call Home hostkey from the YANG data.
- *
- * @param[in] client_name Identifier of an existing Call Home client.
- * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
- * @param[in] hostkey_name Optional identifier of a hostkey to be deleted.
- * If NULL, all of the hostkeys on the given endpoint will be deleted.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note If the last hostkey is deleted, the configuration becomes invalid.
- * Add a new hostkey to make it valid again.
- */
-int nc_server_config_del_ch_ssh_hostkey(const char *client_name, const char *endpt_name,
-        const char *hostkey_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG data nodes for a reference to an asymmetric key located in the keystore.
- *
- * This asymmetric key pair will be used as the Call Home SSH hostkey.
- *
- * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the Call Home client.
- * If a Call Home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
- * If the client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] hostkey_name Arbitrary identifier of the endpoint's hostkey.
- * If the endpoint's hostkey with this identifier already exists, its contents will be changed.
- * @param[in] keystore_reference Name of the asymmetric key pair to be referenced and used as a hostkey.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ch_ssh_keystore_ref(const struct ly_ctx *ctx, const char *client_name,
-        const char *endpt_name, const char *hostkey_name, const char *keystore_reference, struct lyd_node **config);
-
-/**
- * @brief Deletes a Call Home keystore reference from the YANG data.
- *
- * @param[in] client_name Identifier of an existing Call Home client.
- * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
- * @param[in] hostkey_name Identifier of an existing hostkey that belongs to the given CH endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_ch_ssh_keystore_ref(const char *client_name, const char *endpt_name,
-        const char *hostkey_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG data nodes for a Call Home SSH user's public key authentication method.
- *
- * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the Call Home client.
- * If a Call Home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
- * If the client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] user_name Arbitrary identifier of the endpoint's user.
- * If the endpoint's user with this identifier already exists, its contents will be changed.
- * @param[in] pubkey_name Arbitrary identifier of the user's public key.
- * If the user's public key with this identifier already exists, its contents will be changed.
- * @param[in] pubkey_path Path to a file containing a public key.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ch_ssh_user_pubkey(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
-        const char *user_name, const char *pubkey_name, const char *pubkey_path, struct lyd_node **config);
-
-/**
- * @brief Deletes a Call Home SSH user's public key from the YANG data.
- *
- * @param[in] client_name Identifier of an existing Call Home client.
- * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
- * @param[in] user_name Identifier of an existing SSH user that belongs to the given CH endpoint.
- * @param[in] pubkey_name Optional identifier of a public key to be deleted.
- * If NULL, all of the public keys which belong to the given SSH user will be deleted.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_ch_ssh_user_pubkey(const char *client_name, const char *endpt_name,
-        const char *user_name, const char *pubkey_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for a Call Home SSH user that will use system's authorized_keys to authenticate.
- *
- * The path to the authorized_keys file must be configured to successfully
- * authenticate, see ::nc_server_ssh_set_authkey_path_format().
- *
- * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the Call Home client.
- * If a Call Home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
- * If the client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] user_name Arbitrary identifier of the endpoint's user.
- * If the endpoint's user with this identifier already exists, its contents will be changed.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ch_ssh_user_authkey(const struct ly_ctx *ctx, const char *client_name,
-        const char *endpt_name, const char *user_name, struct lyd_node **config);
-
-/**
- * @brief Deletes a Call Home SSH user's authorized_keys method from the YANG data.
- *
- * @param[in] client_name Identifier of an existing Call Home client.
- * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
- * @param[in] user_name Identifier of an existing user on the given endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_ch_del_ssh_user_authkey(const char *client_name, const char *endpt_name,
-        const char *user_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG data nodes for a Call Home SSH user's password authentication method.
- *
- * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the Call Home client.
- * If a Call Home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
- * If the client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] user_name Arbitrary identifier of the endpoint's user.
- * If the endpoint's user with this identifier already exists, its contents will be changed.
- * @param[in] password Clear-text password to be set for the user. It will be hashed.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ch_ssh_user_password(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
-        const char *user_name, const char *password, struct lyd_node **config);
-
-/**
- * @brief Deletes a Call Home SSH user's password from the YANG data.
- *
- * @param[in] client_name Identifier of an existing Call Home client.
- * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
- * @param[in] user_name Identifier of an existing SSH user that belongs to the given CH endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_ch_ssh_user_password(const char *client_name, const char *endpt_name,
-        const char *user_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for a Call Home SSH user's keyboard interactive authentication method.
- *
- * One of Linux PAM, local users, or user callback is used to authenticate users with this SSH method (see \ref ln2doc_kbdint "the documentation").
- *
- * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the Call Home client.
- * If a Call Home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
- * If the client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] user_name Arbitrary identifier of the endpoint's user.
- * If the endpoint's user with this identifier already exists, its contents will be changed.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ch_ssh_user_interactive(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
-        const char *user_name, struct lyd_node **config);
-
-/**
- * @brief Deletes a Call Home SSH user's keyboard interactive authentication from the YANG data.
- *
- * @param[in] client_name Identifier of an existing Call Home client.
- * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
- * @param[in] user_name Identifier of an existing SSH user that belongs to the given CH endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_ch_ssh_user_interactive(const char *client_name, const char *endpt_name,
-        const char *user_name, struct lyd_node **config);
-
-/**
- * @brief Deletes a Call Home SSH user from the YANG data.
- *
- * @param[in] client_name Identifier of an existing Call Home client.
- * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
- * @param[in] user_name Identifier of an existing SSH user that belongs to the given CH endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_ch_ssh_user(const char *client_name, const char *endpt_name,
-        const char *user_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG data nodes for a reference to a public key bag located in the truststore.
- *
- * The public key's located in the bag will be used for Call Home SSH client authentication.
- *
- * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the Call Home client.
- * If a Call Home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the client's endpoint.
- * If the client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] user_name Arbitrary identifier of the endpoint's user.
- * If the endpoint's user with this identifier already exists, its contents will be changed.
- * @param[in] truststore_reference Name of the public key bag to be referenced and used for authentication.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ch_ssh_truststore_ref(const struct ly_ctx *ctx, const char *client_name,
-        const char *endpt_name, const char *user_name, const char *truststore_reference, struct lyd_node **config);
-
-/**
- * @brief Deletes a Call Home SSH truststore reference from the YANG data.
- *
- * @param[in] client_name Identifier of an existing Call Home client.
- * @param[in] endpt_name Identifier of an existing endpoint that belongs to the given CH client.
- * @param[in] user_name Identifier of an existing SSH user that belongs to the given CH endpoint.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_del_ch_ssh_truststore_ref(const char *client_name, const char *endpt_name,
-        const char *user_name, struct lyd_node **config);
-
-/**
- * @} SSH Call Home Server Configuration
- */
-
-/**
- * @defgroup server_config_ch_tls TLS Call Home Server Configuration
- * @ingroup server_config_ch
- *
- * @brief TLS Call Home server configuration creation and deletion
- * @{
- */
-
-/**
- * @brief Creates new YANG configuration data nodes for a Call Home server's certificate.
- *
- * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the Call Home client.
- * If a Call Home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
- * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] privkey_path Path to the server's PEM encoded private key file.
- * @param[in] pubkey_path Optional path to the server's public key file. If not provided,
- * it will be generated from the private key.
- * @param[in] cert_path Path to the server's certificate file.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ch_tls_server_cert(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
-        const char *privkey_path, const char *pubkey_path, const char *cert_path, struct lyd_node **config);
-
-/**
- * @brief Deletes a Call Home server certificate from the YANG data.
- *
- * @param[in] client_name Identifier of an existing Call Home client.
- * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note Deleting the server certificate makes the configuration invalid.
- * Add a new server certificate to make it valid again.
- */
-int nc_server_config_del_ch_tls_server_cert(const char *client_name, const char *endpt_name,
-        struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for a keystore reference to the Call Home TLS server's certificate.
- *
- * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the Call Home client.
- * If a Call Home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
- * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] asym_key_ref Name of the asymmetric key pair in the keystore to be referenced.
- * @param[in] cert_ref Name of the certificate, which must belong to the given asymmetric key pair, to be referenced.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ch_tls_keystore_ref(const struct ly_ctx *ctx, const char *client_name,
-        const char *endpt_name, const char *asym_key_ref, const char *cert_ref, struct lyd_node **config);
-
-/**
- * @brief Deletes a TLS server certificate keystore reference from the YANG data.
- *
- * @param[in] client_name Identifier of an existing Call Home client.
- * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note Deleting the keystore reference makes the configuration invalid.
- * Add a new keystore reference to make it valid again.
- */
-int nc_server_config_del_ch_tls_keystore_ref(const char *client_name, const char *endpt_name,
-        struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for a Call Home client's (end-entity) certificate.
- *
- * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the Call Home client.
- * If a Call Home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
- * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] cert_name Arbitrary identifier of the Call Home endpoint's end-entity certificate.
- * If an Call Home endpoint's end-entity certificate with this identifier already exists, its contents will be changed.
- * @param[in] cert_path Path to the certificate file.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ch_tls_client_cert(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
-        const char *cert_name, const char *cert_path, struct lyd_node **config);
-
-/**
- * @brief Deletes a Call Home client (end-entity) certificate from the YANG data.
- *
- * @param[in] client_name Identifier of an existing Call Home client.
- * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
- * @param[in] cert_name Optional identifier of a client certificate to be deleted.
- * If NULL, all of the client certificates will be deleted.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note If the last certificate is deleted, the parent ee-certs container and
- * possibly the client-authentication container are also deleted to maintain
- * a valid YANG data tree.
- */
-int nc_server_config_del_ch_tls_client_cert(const char *client_name, const char *endpt_name,
-        const char *cert_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for a Call Home truststore reference to a set of client (end-entity) certificates.
- *
- * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the Call Home client.
- * If a Call Home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
- * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] cert_bag_ref Identifier of the certificate bag in the truststore to be referenced.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ch_tls_client_cert_truststore_ref(const struct ly_ctx *ctx, const char *client_name,
-        const char *endpt_name, const char *cert_bag_ref, struct lyd_node **config);
-
-/**
- * @brief Deletes a Call Home client (end-entity) certificates truststore reference from the YANG data.
- *
- * @param[in] client_name Identifier of an existing Call Home client.
- * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note The parent ee-certs container and possibly the client-authentication
- * container are also deleted to maintain a valid YANG data tree.
- */
-int nc_server_config_del_ch_tls_client_cert_truststore_ref(const char *client_name, const char *endpt_name,
-        struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for a client certificate authority (trust-anchor) certificate.
- *
- * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the Call Home client.
- * If a Call Home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
- * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] cert_name Arbitrary identifier of the Call Home endpoint's certificate authority certificate.
- * If an Call Home endpoint's CA certificate with this identifier already exists, its contents will be changed.
- * @param[in] cert_path Path to the certificate file.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ch_tls_ca_cert(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
-        const char *cert_name, const char *cert_path, struct lyd_node **config);
-
-/**
- * @brief Deletes a Call Home client certificate authority (trust-anchor) certificate from the YANG data.
- *
- * @param[in] client_name Identifier of an existing Call Home client.
- * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
- * @param[in] cert_name Optional identifier of a CA certificate to be deleted.
- * If NULL, all of the CA certificates will be deleted.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note If the last certificate is deleted, the parent ca-certs container and
- * possibly the client-authentication container are also deleted to maintain
- * a valid YANG data tree.
- */
-int nc_server_config_del_ch_tls_ca_cert(const char *client_name, const char *endpt_name,
-        const char *cert_name, struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for a Call Home truststore reference to a set of client certificate authority (trust-anchor) certificates.
- *
- * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the Call Home client.
- * If a Call Home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
- * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] cert_bag_ref Identifier of the certificate bag in the truststore to be referenced.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ch_tls_ca_cert_truststore_ref(const struct ly_ctx *ctx, const char *client_name,
-        const char *endpt_name, const char *cert_bag_ref, struct lyd_node **config);
-
-/**
- * @brief Deletes a Call Home client certificate authority (trust-anchor) certificates truststore reference from the YANG data.
- *
- * @param[in] client_name Identifier of an existing Call Home client.
- * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note The parent ca-certs container and possibly the client-authentication
- * container are also deleted to maintain a valid YANG data tree.
- */
-int nc_server_config_del_ch_tls_ca_cert_truststore_ref(const char *client_name, const char *endpt_name,
-        struct lyd_node **config);
-
-/**
- * @brief Creates new YANG configuration data nodes for a Call Home cert-to-name entry.
- *
- * @param[in] ctx libyang context.
- * @param[in] client_name Arbitrary identifier of the Call Home client.
- * If a Call Home client with this identifier already exists, its contents will be changed.
- * @param[in] endpt_name Arbitrary identifier of the Call Home client's endpoint.
- * If a Call Home client's endpoint with this identifier already exists, its contents will be changed.
- * @param[in] id ID of the entry. The lower the ID, the higher the priority of the entry (it will be checked earlier).
- * @param[in] fingerprint Optional fingerprint of the entry. The fingerprint should always be set, however if it is
- * not set, it will match any certificate. Entry with no fingerprint should therefore be placed only as the last entry.
- * @param[in] map_type Mapping username to the certificate option.
- * @param[in] name Username for this cert-to-name entry. Mandatory if @p map_type is set to ::NC_TLS_CTN_SPECIFIED.
- * @param[in,out] config Configuration YANG data tree. If *config is NULL, it will be created.
- * Otherwise the new YANG data will be added to the previous data and may override it.
- * @return 0 on success, non-zero otherwise.
- */
-int nc_server_config_add_ch_tls_ctn(const struct ly_ctx *ctx, const char *client_name, const char *endpt_name,
-        uint32_t id, const char *fingerprint, NC_TLS_CTN_MAPTYPE map_type, const char *name, struct lyd_node **config);
-
-/**
- * @brief Deletes a Call Home cert-to-name entry from the YANG data.
- *
- * @param[in] client_name Identifier of an existing Call Home client.
- * @param[in] endpt_name Identifier of an existing Call Home endpoint that belongs to the given client.
- * @param[in] id Optional identifier of the Call Home CTN entry to be deleted.
- * If 0, all of the CTN entries will be deleted.
- * @param[in,out] config Modified configuration YANG data tree.
- * @return 0 on success, non-zero otherwise.
- *
- * @note If the last cert-to-name entry is deleted, the configuration becomes
- * invalid. Add a new cert-to-name entry to make it valid again.
- */
-int nc_server_config_del_ch_tls_ctn(const char *client_name, const char *endpt_name,
-        uint32_t id, struct lyd_node **config);
-
-/**
- * @} TLS Call Home Server Configuration
- */
-
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH or NC_TLS */
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* NC_SESSION_SERVER_H_ */
+#endif /* NC_CONFIG_SERVER_H_ */

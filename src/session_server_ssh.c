@@ -45,9 +45,9 @@
 #include "log_p.h"
 #include "nc_version.h"
 #include "session.h"
+#include "session_crypto_wrapper.h"
 #include "session_p.h"
 #include "session_server_ssh_wrapper.h"
-#include "session_wrapper.h"
 
 /*
  * Password-based authentication lockout.
@@ -70,7 +70,7 @@
  * @param[in] username User to look for.
  * @return Its entry, NULL if it has none.
  */
-static struct nc_authlock_entry *
+static struct nc_ssh_authlock_entry *
 nc_authlock_find(const char *username)
 {
     LYA_COUNT_T u;
@@ -90,9 +90,9 @@ nc_authlock_find(const char *username)
  * @param[in] entry Entry to remove.
  */
 static void
-nc_authlock_remove(struct nc_authlock_entry *entry)
+nc_authlock_remove(struct nc_ssh_authlock_entry *entry)
 {
-    struct nc_authlock_entry *last = &server_opts.authlock[LYA_COUNT(server_opts.authlock) - 1];
+    struct nc_ssh_authlock_entry *last = &server_opts.authlock[LYA_COUNT(server_opts.authlock) - 1];
 
     free(entry->username);
     if (entry != last) {
@@ -138,8 +138,8 @@ nc_authlock_prune(uint16_t reset_interval, time_t now)
 static void
 nc_authlock_record(struct nc_session *session, const char *username, int success)
 {
-    const struct nc_authlock_opts *opts = &session->opts.server.config->authlock;
-    struct nc_authlock_entry *entry;
+    const struct nc_ssh_authlock_opts *opts = &session->opts.server.config->authlock;
+    struct nc_ssh_authlock_entry *entry;
     time_t now = time(NULL);
     char *name;
 
@@ -214,7 +214,7 @@ nc_server_ssh_authlock_free(void)
 static int
 nc_authlock_denied(struct nc_session *session, const char *username)
 {
-    struct nc_authlock_entry *entry;
+    struct nc_ssh_authlock_entry *entry;
     time_t now = time(NULL), remaining = 0;
 
     if (!session->opts.server.config->authlock.max_fails) {
@@ -265,7 +265,7 @@ nc_ssh_check_local_user_support(struct nc_session *session)
     }
 }
 
-struct nc_auth_client *
+struct nc_ssh_auth_client *
 nc_ssh_find_auth_client(struct nc_server_ssh_opts *opts, const char *user, struct nc_session *session)
 {
     const struct nc_endpt *referenced_endpt;
@@ -293,8 +293,8 @@ nc_ssh_find_auth_client(struct nc_server_ssh_opts *opts, const char *user, struc
 }
 
 void
-nc_ssh_auth_state_init(struct nc_session *session, struct nc_auth_state *auth_state,
-        int local_users_supported, struct nc_auth_client *auth_client)
+nc_ssh_auth_state_init(struct nc_session *session, struct nc_ssh_auth_state *auth_state,
+        int local_users_supported, struct nc_ssh_auth_client *auth_client)
 {
     if (auth_state->method_count) {
         return;
@@ -309,7 +309,7 @@ nc_ssh_auth_state_init(struct nc_session *session, struct nc_auth_state *auth_st
             auth_state->methods |= SSH_AUTH_METHOD_PASSWORD;
             auth_state->method_count++;
         }
-        if (auth_client->kbdint_method != NC_KBDINT_AUTH_METHOD_NONE) {
+        if (auth_client->kbdint_method != NC_SSH_KBDINT_AUTH_METHOD_NONE) {
             auth_state->methods |= SSH_AUTH_METHOD_INTERACTIVE;
             auth_state->method_count++;
         }
@@ -328,7 +328,7 @@ nc_ssh_auth_state_init(struct nc_session *session, struct nc_auth_state *auth_st
 }
 
 int
-nc_ssh_auth_success(struct nc_session *session, struct nc_auth_state *auth_state, int method)
+nc_ssh_auth_success(struct nc_session *session, struct nc_ssh_auth_state *auth_state, int method)
 {
     auth_state->success_methods |= method;
     auth_state->success_count++;
@@ -375,7 +375,7 @@ nc_server_ssh_auth_attempt_failed(struct nc_session *session, const struct nc_se
 
 int
 nc_server_ssh_auth_password_check(struct nc_session *session, const char *user,
-        const char *password, struct nc_auth_client *auth_client, int local_users_supported)
+        const char *password, struct nc_ssh_auth_client *auth_client, int local_users_supported)
 {
     int rc;
     char *stored_password = NULL;
@@ -423,7 +423,7 @@ nc_server_ssh_auth_password_check(struct nc_session *session, const char *user,
 
 int
 nc_server_ssh_kbdint_select_method(struct nc_session *session, int local_users_supported,
-        struct nc_auth_client *auth_client, enum nc_kbdint_backend *backend)
+        struct nc_ssh_auth_client *auth_client, enum nc_ssh_kbdint_backend *backend)
 {
     int custom_clb_set;
 
@@ -431,11 +431,11 @@ nc_server_ssh_kbdint_select_method(struct nc_session *session, int local_users_s
 
     if (!local_users_supported) {
         /* system users always authenticate against the system method */
-        *backend = NC_KBDINT_BACKEND_SYSTEM;
+        *backend = NC_SSH_KBDINT_BACKEND_SYSTEM;
         return 0;
     }
 
-    if (auth_client->kbdint_method == NC_KBDINT_AUTH_METHOD_NONE) {
+    if (auth_client->kbdint_method == NC_SSH_KBDINT_AUTH_METHOD_NONE) {
         /* client requested kbdint auth, but it is not configured for this user, so just deny */
         DBG(session,
                 "User \"%s\" does not have kbdint method configured, but a request was received.", session->username);
@@ -452,12 +452,12 @@ nc_server_ssh_kbdint_select_method(struct nc_session *session, int local_users_s
 
     if (custom_clb_set) {
         /* custom callback has higher priority */
-        *backend = NC_KBDINT_BACKEND_CUSTOM_CLB;
+        *backend = NC_SSH_KBDINT_BACKEND_CUSTOM_CLB;
         return 0;
     }
 
-    if (auth_client->kbdint_method == NC_KBDINT_AUTH_METHOD_SYSTEM) {
-        *backend = NC_KBDINT_BACKEND_SYSTEM;
+    if (auth_client->kbdint_method == NC_SSH_KBDINT_AUTH_METHOD_SYSTEM) {
+        *backend = NC_SSH_KBDINT_BACKEND_SYSTEM;
         return 0;
     }
 
@@ -468,7 +468,7 @@ nc_server_ssh_kbdint_select_method(struct nc_session *session, int local_users_s
 
 int
 nc_server_ssh_auth_pubkey_check(struct nc_session *session, ssh_key pubkey,
-        struct nc_auth_client *auth_client, int local_users_supported)
+        struct nc_ssh_auth_client *auth_client, int local_users_supported)
 {
     struct nc_public_key *pubkeys = NULL;
     uint32_t pubkey_count = 0, i;
@@ -1946,7 +1946,7 @@ nc_ssh_bind_add_hostkeys(const struct nc_server_config *config, ssh_bind sbind, 
 {
     int rc;
     char *privkey_path;
-    struct nc_hostkey *hostkey = NULL;
+    struct nc_ssh_hostkey *hostkey = NULL;
     struct nc_asymmetric_key *key = NULL;
 
     LYA_FOR_EACH(opts->hostkeys, hostkey) {
@@ -1986,7 +1986,7 @@ nc_accept_ssh_session_auth(struct nc_session *session, struct nc_server_ssh_opts
     int ret;
 #else
     ssh_message msg;
-    struct nc_auth_state auth_state = {0};
+    struct nc_ssh_auth_state auth_state = {0};
 #endif
 
     DBG(session, "SSH authentication...");

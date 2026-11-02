@@ -1,0 +1,2865 @@
+/**
+ * @file session_crypto_mbedtls.c
+ * @author Roman Janota <janota@cesnet.cz>
+ * @brief libnetconf2 - wrapped MbedTLS function calls for TLS/asymmetric cryptography support
+ *
+ * This file is a wrapper for MbedTLS function calls. The implementation is done
+ * in such a way that the original libnetconf2 code is not dependent on MbedTLS.
+ * This file is included in the build process only if MbedTLS is being used.
+ *
+ * @copyright
+ * Copyright (c) 2024 - 2026 CESNET, z.s.p.o.
+ *
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://opensource.org/licenses/BSD-3-Clause
+ */
+
+#define _GNU_SOURCE
+
+#include "session_crypto_wrapper.h"
+
+#include <ctype.h>
+#include <errno.h>
+#include <poll.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "compat.h"
+#include "config.h"
+#include "log_p.h"
+#include "session.h"
+#include "session_p.h"
+
+#include <mbedtls/base64.h>
+#include <mbedtls/bignum.h>
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/entropy.h>
+#include <mbedtls/error.h>
+#include <mbedtls/net_sockets.h>
+#include <mbedtls/oid.h>
+#include <mbedtls/pem.h>
+#include <mbedtls/ssl.h>
+#include <mbedtls/x509.h>
+#include <mbedtls/x509_crl.h>
+#include <mbedtls/x509_crt.h>
+
+/**
+ * @brief Create a new private key context.
+ *
+ * @return New private key context or NULL.
+ */
+static void *
+nc_pkey_new_wrap(void)
+{
+    mbedtls_pk_context *pkey;
+
+    pkey = malloc(sizeof *pkey);
+    NC_CHECK_ERRMEM_RET(!pkey, NULL);
+
+    mbedtls_pk_init(pkey);
+    return pkey;
+}
+
+/**
+ * @brief Converts MbedTLS error code to a string and merges it with an arbitrary error message.
+ *
+ * @param[in] session NETCONF session.
+ * @param[in] mbedtls_err_code MbedTLS error code.
+ * @param[in] orig_err_msg_fmt Original error message format string.
+ * @param[in] ... Additional arguments for the original error message.
+ */
+static void
+nc_mbedtls_strerr(const struct nc_session *session, int mbedtls_err_code, const char *orig_err_msg_fmt, ...)
+{
+    va_list args;
+    char *err_buf = NULL, *err_msg_fmt = NULL;
+    size_t err_buf_len = 0, err_msg_fmt_len = 0;
+    const char *high_err_str, *low_err_str;
+
+    va_start(args, orig_err_msg_fmt);
+
+    /* get the length of the error strings */
+    high_err_str = mbedtls_high_level_strerr(mbedtls_err_code);
+    low_err_str = mbedtls_low_level_strerr(mbedtls_err_code);
+    if (high_err_str) {
+        err_buf_len += strlen(high_err_str);
+    }
+    if (low_err_str) {
+        err_buf_len += strlen(low_err_str);
+    }
+    if (!err_buf_len) {
+        /* just print the original error message */
+        nc_log_vprintf(session, NC_VERB_ERROR, orig_err_msg_fmt, args);
+        goto cleanup;
+    }
+
+    if (high_err_str && low_err_str) {
+        /* for a colon and 2 spaces */
+        err_buf_len += 3;
+    }
+
+    /* allocate the mbedtls error buffer */
+    err_buf = malloc(err_buf_len + 1);
+    if (!err_buf) {
+        /* just print the original error message */
+        nc_log_vprintf(session, NC_VERB_ERROR, orig_err_msg_fmt, args);
+        goto cleanup;
+    }
+
+    /* fill the error buffer and print it */
+    if (high_err_str && low_err_str) {
+        snprintf(err_buf, err_buf_len + 1, "%s : %s", high_err_str, low_err_str);
+    } else if (high_err_str) {
+        snprintf(err_buf, err_buf_len + 1, "%s", high_err_str);
+    } else {
+        snprintf(err_buf, err_buf_len + 1, "%s", low_err_str);
+    }
+
+    /* allocate the new error format string buffer, err_msg = "orig_err_msg (MbedTLS err)." */
+    err_msg_fmt_len = strlen(orig_err_msg_fmt) + strlen(" (") + strlen(err_buf) + strlen(").");
+    err_msg_fmt = malloc(err_msg_fmt_len + 1);
+    if (!err_msg_fmt) {
+        /* just print the original error message */
+        nc_log_vprintf(session, NC_VERB_ERROR, orig_err_msg_fmt, args);
+        goto cleanup;
+    }
+
+    /* fill the new error format string */
+    snprintf(err_msg_fmt, err_msg_fmt_len + 1, "%s (%s).", orig_err_msg_fmt, err_buf);
+
+    /* print the error message */
+    nc_log_vprintf(session, NC_VERB_ERROR, err_msg_fmt, args);
+
+cleanup:
+    va_end(args);
+    free(err_msg_fmt);
+    free(err_buf);
+}
+
+/**
+ * @brief Create a new random number generator context.
+ *
+ * @param[out] ctr_drbg Random bit generator context.
+ * @param[out] entropy Entropy context.
+ * @return 0 on success, 1 on failure.
+ */
+static int
+nc_rng_new(mbedtls_ctr_drbg_context **ctr_drbg, mbedtls_entropy_context **entropy)
+{
+    int rc;
+
+    *ctr_drbg = NULL;
+    *entropy = NULL;
+
+    *entropy = malloc(sizeof **entropy);
+    NC_CHECK_ERRMEM_GOTO(!*entropy, , fail);
+    *ctr_drbg = malloc(sizeof **ctr_drbg);
+    NC_CHECK_ERRMEM_GOTO(!*ctr_drbg, , fail);
+
+    mbedtls_entropy_init(*entropy);
+    mbedtls_ctr_drbg_init(*ctr_drbg);
+
+    rc = mbedtls_ctr_drbg_seed(*ctr_drbg, mbedtls_entropy_func, *entropy, NULL, 0);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Seeding ctr_drbg failed");
+        goto fail;
+    }
+
+    return 0;
+
+fail:
+    mbedtls_ctr_drbg_free(*ctr_drbg);
+    free(*ctr_drbg);
+    if (*entropy) {
+        mbedtls_entropy_free(*entropy);
+        free(*entropy);
+    }
+    *ctr_drbg = NULL;
+    *entropy = NULL;
+    return 1;
+}
+
+/**
+ * @brief Destroy the random number generator context.
+ *
+ * @param[in] ctr_drbg Random bit generator context.
+ * @param[in] entropy Entropy context.
+ */
+static void
+nc_rng_destroy(mbedtls_ctr_drbg_context *ctr_drbg, mbedtls_entropy_context *entropy)
+{
+    mbedtls_ctr_drbg_free(ctr_drbg);
+    free(ctr_drbg);
+    if (entropy) {
+        mbedtls_entropy_free(entropy);
+        free(entropy);
+    }
+}
+
+/**
+ * @brief Create a new MbedTLS certificate.
+ *
+ * @return Created certificate, NULL on error.
+ */
+static void *
+nc_cert_new(void)
+{
+    mbedtls_x509_crt *cert;
+
+    cert = malloc(sizeof *cert);
+    NC_CHECK_ERRMEM_RET(!cert, NULL);
+
+    mbedtls_x509_crt_init(cert);
+    return cert;
+}
+
+/**
+ * @brief Get a string representation of the verification error.
+ *
+ * @param[in] err Verification error code.
+ * @return String representation of the error. Caller is responsible for freeing it.
+ */
+static char *
+nc_tls_get_verify_err_str(int err)
+{
+    int ret;
+    char *err_buf = NULL;
+
+    err_buf = malloc(256);
+    NC_CHECK_ERRMEM_RET(!err_buf, NULL);
+
+    ret = mbedtls_x509_crt_verify_info(err_buf, 256, "", err);
+    if (ret < 0) {
+        free(err_buf);
+        return NULL;
+    }
+
+    /* strip the NL */
+    err_buf[ret - 1] = '\0';
+
+    return err_buf;
+}
+
+int
+nc_tls_backend_init_wrap(void)
+{
+    int r;
+
+    r = psa_crypto_init();
+
+    if (r) {
+        nc_mbedtls_strerr(NULL, r, "Failed to initialize PSA crypto");
+        return -1;
+    }
+
+    return 0;
+}
+
+void
+nc_tls_backend_destroy_wrap(void)
+{
+    mbedtls_psa_crypto_free();
+}
+
+#ifdef NC_TLS
+
+/**
+ * @brief List of supported cipher suites for MbedTLS.
+ *
+ * This list is used to populate the operational data for supported cipher suites.
+ * Obtained from <mbedtls/cipher_suites.h> v4.0.0.
+ */
+const char *nc_tls_supported_cipher_suites[] = {
+    "TLS_PSK_WITH_NULL_SHA", "TLS_PSK_WITH_AES_128_CBC_SHA", "TLS_PSK_WITH_AES_256_CBC_SHA",
+    "TLS_PSK_WITH_AES_128_GCM_SHA256", "TLS_PSK_WITH_AES_256_GCM_SHA384", "TLS_PSK_WITH_AES_128_CBC_SHA256",
+    "TLS_PSK_WITH_AES_256_CBC_SHA384", "TLS_PSK_WITH_NULL_SHA256", "TLS_PSK_WITH_NULL_SHA384",
+    "TLS_ECDHE_ECDSA_WITH_NULL_SHA", "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA", "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA",
+    "TLS_ECDHE_RSA_WITH_NULL_SHA", "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA", "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+    "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256", "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384",
+    "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256", "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
+    "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA", "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA", "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256",
+    "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384", "TLS_ECDHE_PSK_WITH_NULL_SHA", "TLS_ECDHE_PSK_WITH_NULL_SHA256",
+    "TLS_ECDHE_PSK_WITH_NULL_SHA384", "TLS_ECDHE_ECDSA_WITH_ARIA_128_CBC_SHA256",
+    "TLS_ECDHE_ECDSA_WITH_ARIA_256_CBC_SHA384", "TLS_ECDHE_RSA_WITH_ARIA_128_CBC_SHA256",
+    "TLS_ECDHE_RSA_WITH_ARIA_256_CBC_SHA384", "TLS_ECDHE_ECDSA_WITH_ARIA_128_GCM_SHA256",
+    "TLS_ECDHE_ECDSA_WITH_ARIA_256_GCM_SHA384", "TLS_ECDHE_RSA_WITH_ARIA_128_GCM_SHA256",
+    "TLS_ECDHE_RSA_WITH_ARIA_256_GCM_SHA384", "TLS_PSK_WITH_ARIA_128_CBC_SHA256", "TLS_PSK_WITH_ARIA_256_CBC_SHA384",
+    "TLS_PSK_WITH_ARIA_128_GCM_SHA256", "TLS_PSK_WITH_ARIA_256_GCM_SHA384", "TLS_ECDHE_PSK_WITH_ARIA_128_CBC_SHA256",
+    "TLS_ECDHE_PSK_WITH_ARIA_256_CBC_SHA384", "TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384", "TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384", "TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_GCM_SHA256",
+    "TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_GCM_SHA384", "TLS_ECDHE_RSA_WITH_CAMELLIA_128_GCM_SHA256",
+    "TLS_ECDHE_RSA_WITH_CAMELLIA_256_GCM_SHA384", "TLS_PSK_WITH_CAMELLIA_128_GCM_SHA256",
+    "TLS_PSK_WITH_CAMELLIA_256_GCM_SHA384", "TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384", "TLS_ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256",
+    "TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384", "TLS_PSK_WITH_AES_128_CCM", "TLS_PSK_WITH_AES_256_CCM",
+    "TLS_PSK_WITH_AES_128_CCM_8", "TLS_PSK_WITH_AES_256_CCM_8", "TLS_ECDHE_ECDSA_WITH_AES_128_CCM",
+    "TLS_ECDHE_ECDSA_WITH_AES_256_CCM", "TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8", "TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8",
+    "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256", "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+    "TLS_PSK_WITH_CHACHA20_POLY1305_SHA256", "TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256", NULL
+};
+
+void *
+nc_tls_session_new_wrap(void *tls_cfg)
+{
+    int rc;
+    mbedtls_ssl_context *session;
+
+    session = malloc(sizeof *session);
+    NC_CHECK_ERRMEM_RET(!session, NULL);
+
+    mbedtls_ssl_init(session);
+
+    rc = mbedtls_ssl_setup(session, tls_cfg);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Setting up TLS session failed");
+        mbedtls_ssl_free(session);
+        free(session);
+        return NULL;
+    }
+
+    return session;
+}
+
+void
+nc_tls_session_destroy_wrap(void *tls_session)
+{
+    mbedtls_ssl_free(tls_session);
+    free(tls_session);
+}
+
+void *
+nc_tls_config_new_wrap(int side)
+{
+    int r;
+    mbedtls_ssl_config *tls_cfg;
+
+    tls_cfg = malloc(sizeof *tls_cfg);
+    NC_CHECK_ERRMEM_RET(!tls_cfg, NULL);
+
+    mbedtls_ssl_config_init(tls_cfg);
+
+    /* set default config data */
+    if (side == NC_SERVER) {
+        r = mbedtls_ssl_config_defaults(tls_cfg, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
+    } else {
+        r = mbedtls_ssl_config_defaults(tls_cfg, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
+    }
+    if (r) {
+        nc_mbedtls_strerr(NULL, r, "Setting default TLS config failed");
+        mbedtls_ssl_config_free(tls_cfg);
+        free(tls_cfg);
+        return NULL;
+    }
+
+    return tls_cfg;
+}
+
+void
+nc_tls_config_destroy_wrap(void *tls_cfg)
+{
+    if (!tls_cfg) {
+        return;
+    }
+
+    mbedtls_ssl_config_free(tls_cfg);
+    free(tls_cfg);
+}
+
+void *
+nc_tls_cert_store_new_wrap(void)
+{
+    /* certificate is the same as a certificate store in MbedTLS */
+    return nc_cert_new();
+}
+
+void
+nc_tls_cert_store_destroy_wrap(void *cert_store)
+{
+    /* certificate is the same as a certificate store in MbedTLS */
+    nc_cert_destroy_wrap(cert_store);
+}
+
+int
+nc_tls_add_cert_to_store_wrap(void *cert, void *cert_store)
+{
+    mbedtls_x509_crt *iter;
+
+    /* store is a linked list */
+    iter = cert_store;
+    while (iter->next) {
+        iter = iter->next;
+    }
+    iter->next = cert;
+
+    return 0;
+}
+
+void *
+nc_tls_get_sans_wrap(void *cert)
+{
+    return &(((mbedtls_x509_crt *)cert)->subject_alt_names);
+}
+
+void
+nc_tls_sans_destroy_wrap(void *UNUSED(sans))
+{
+    return;
+}
+
+int
+nc_tls_get_num_sans_wrap(void *sans)
+{
+    mbedtls_x509_sequence *iter;
+    int n = 0;
+
+    /* sans are a linked list */
+    iter = sans;
+    while (iter) {
+        ++n;
+        iter = iter->next;
+    }
+
+    return n;
+}
+
+int
+nc_tls_get_san_value_type_wrap(void *sans, int idx, char **san_value, NC_TLS_CTN_MAPTYPE *san_type)
+{
+    int i, rc, ret = 0;
+    mbedtls_x509_sequence *iter;
+    mbedtls_x509_subject_alternative_name san = {0};
+    const mbedtls_x509_buf *ip, *str;
+
+    *san_value = NULL;
+    *san_type = NC_TLS_CTN_UNKNOWN;
+
+    /* find the SAN */
+    iter = sans;
+    for (i = 0; i < idx; i++) {
+        iter = iter->next;
+    }
+
+    /* parse it */
+    rc = mbedtls_x509_parse_subject_alt_name(&iter->buf, &san);
+    if (rc && (rc != MBEDTLS_ERR_X509_FEATURE_UNAVAILABLE)) {
+        return -1;
+    }
+
+    /* get its type and value */
+    switch (san.type) {
+    case MBEDTLS_X509_SAN_DNS_NAME:
+    case MBEDTLS_X509_SAN_RFC822_NAME:
+        str = &san.san.unstructured_name;
+        if (!str->len) {
+            WRN(NULL, "SAN value is empty, skipping.");
+            ret = 1;
+            goto cleanup;
+        } else if (memchr(str->p, '\0', str->len)) {
+            /* the value would get truncated */
+            WRN(NULL, "SAN value includes a NUL character, skipping.");
+            ret = 1;
+            goto cleanup;
+        }
+
+        *san_type = (san.type == MBEDTLS_X509_SAN_DNS_NAME) ? NC_TLS_CTN_SAN_DNS_NAME : NC_TLS_CTN_SAN_RFC822_NAME;
+        *san_value = strndup((const char *)str->p, str->len);
+        NC_CHECK_ERRMEM_GOTO(!*san_value, ret = -1, cleanup);
+        break;
+    case MBEDTLS_X509_SAN_IP_ADDRESS:
+        *san_type = NC_TLS_CTN_SAN_IP_ADDRESS;
+        ip = &san.san.unstructured_name;
+        if (ip->len == 4) {
+            rc = asprintf(san_value, "%d.%d.%d.%d", ip->p[0], ip->p[1], ip->p[2], ip->p[3]);
+            NC_CHECK_ERRMEM_GOTO(rc == -1, ret = -1, cleanup);
+        } else if (ip->len == 16) {
+            rc = asprintf(san_value, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+                    ip->p[0], ip->p[1], ip->p[2], ip->p[3], ip->p[4], ip->p[5],
+                    ip->p[6], ip->p[7], ip->p[8], ip->p[9], ip->p[10], ip->p[11],
+                    ip->p[12], ip->p[13], ip->p[14], ip->p[15]);
+            NC_CHECK_ERRMEM_GOTO(rc == -1, ret = -1, cleanup);
+        } else {
+            WRN(NULL, "SAN IP address in an unknown format (length is %d).", ip->len);
+            ret = 1;
+        }
+        break;
+    default:
+        /* we dont care about other types */
+        *san_type = NC_TLS_CTN_UNKNOWN;
+        ret = 1;
+        break;
+    }
+
+cleanup:
+    mbedtls_x509_free_subject_alt_name(&san);
+    return ret;
+}
+
+int
+nc_tls_get_num_certs_wrap(void *chain)
+{
+    mbedtls_x509_crt *iter;
+    int n = 0;
+
+    /* chain is a linked list */
+    iter = chain;
+    while (iter) {
+        ++n;
+        iter = iter->next;
+    }
+
+    return n;
+}
+
+void *
+nc_tls_get_cert_wrap(void *chain, int idx)
+{
+    int i;
+    mbedtls_x509_crt *iter;
+
+    if (!chain || (idx < 0)) {
+        return NULL;
+    }
+
+    iter = chain;
+    for (i = 0; iter && (i < idx); i++) {
+        iter = iter->next;
+    }
+
+    return iter;
+}
+
+int
+nc_tls_init_ctx_wrap(void *cert, void *pkey, void *cert_store, void *cipher_suites, struct nc_tls_ctx *tls_ctx)
+{
+    /* setup rng */
+    if (nc_rng_new(&tls_ctx->ctr_drbg, &tls_ctx->entropy)) {
+        return 1;
+    }
+
+    /* fill the context */
+    tls_ctx->cipher_suites = cipher_suites;
+    tls_ctx->sock = malloc(sizeof *tls_ctx->sock);
+    NC_CHECK_ERRMEM_RET(!tls_ctx->sock, 1);
+    tls_ctx->cert = cert;
+    tls_ctx->pkey = pkey;
+    tls_ctx->cert_store = cert_store;
+    return 0;
+}
+
+int
+nc_tls_setup_config_from_ctx_wrap(struct nc_tls_ctx *tls_ctx, void *tls_cfg)
+{
+    /* set config's rng */
+    mbedtls_ssl_conf_rng(tls_cfg, mbedtls_ctr_drbg_random, tls_ctx->ctr_drbg);
+    /* set config's cert and key */
+    mbedtls_ssl_conf_own_cert(tls_cfg, tls_ctx->cert, tls_ctx->pkey);
+    /*
+     * Do NOT pass a CRL store to mbedtls_ssl_conf_ca_chain. CRL verification
+     * is done post-handshake so that CRLs for peer certificates (received
+     * during the handshake) can also be downloaded and checked.
+     */
+    mbedtls_ssl_conf_ca_chain(tls_cfg, tls_ctx->cert_store, NULL);
+
+    return 0;
+}
+
+void
+nc_tls_ctx_destroy_wrap(struct nc_tls_ctx *tls_ctx)
+{
+    nc_rng_destroy(tls_ctx->ctr_drbg, tls_ctx->entropy);
+    nc_cert_destroy_wrap(tls_ctx->cert);
+    nc_privkey_destroy_wrap(tls_ctx->pkey);
+    nc_tls_cert_store_destroy_wrap(tls_ctx->cert_store);
+    free(tls_ctx->sock);
+    free(tls_ctx->cipher_suites);
+}
+
+uint32_t
+nc_tls_get_verify_result_wrap(void *tls_session)
+{
+    return mbedtls_ssl_get_verify_result(tls_session);
+}
+
+char *
+nc_tls_verify_error_string_wrap(uint32_t err_code)
+{
+    return nc_tls_get_verify_err_str(err_code);
+}
+
+/**
+ * @brief Callback for sending data.
+ *
+ * @param[in] ctx Socket.
+ * @param[in] buf Data to send.
+ * @param[in] len Length of the data.
+ * @return Number of bytes sent or negative value on error.
+ */
+static int
+nc_tls_send(void *ctx, const unsigned char *buf, size_t len)
+{
+    int sock, ret;
+
+    NC_CHECK_ARG_RET(NULL, ctx, MBEDTLS_ERR_NET_INVALID_CONTEXT);
+
+    sock = *(int *)ctx;
+
+    ret = send(sock, buf, len, MSG_NOSIGNAL);
+    if (ret < 0) {
+        if ((errno == EWOULDBLOCK) || (errno == EAGAIN) || (errno == EINTR)) {
+            return MBEDTLS_ERR_SSL_WANT_WRITE;
+        } else if ((errno == EPIPE) || (errno == ECONNRESET)) {
+            return MBEDTLS_ERR_NET_CONN_RESET;
+        } else {
+            return MBEDTLS_ERR_NET_SEND_FAILED;
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * @brief Callback for receiving data.
+ *
+ * @param[in] ctx Socket.
+ * @param[out] buf Buffer to store the received data.
+ * @param[in] len Length of the buffer.
+ * @return Number of bytes received or negative value on error.
+ */
+static int
+nc_tls_recv(void *ctx, unsigned char *buf, size_t len)
+{
+    int sock, ret;
+
+    NC_CHECK_ARG_RET(NULL, ctx, MBEDTLS_ERR_NET_INVALID_CONTEXT);
+
+    sock = *(int *)ctx;
+
+    ret = recv(sock, buf, len, 0);
+    if (ret < 0) {
+        if ((errno == EWOULDBLOCK) || (errno == EAGAIN) || (errno == EINTR)) {
+            return MBEDTLS_ERR_SSL_WANT_READ;
+        } else if ((errno == EPIPE) || (errno == ECONNRESET)) {
+            return MBEDTLS_ERR_NET_CONN_RESET;
+        } else {
+            return MBEDTLS_ERR_NET_RECV_FAILED;
+        }
+    }
+
+    return ret;
+}
+
+void
+nc_tls_set_fd_wrap(void *tls_session, int sock, struct nc_tls_ctx *tls_ctx)
+{
+    /* mbedtls sets a pointer to the sock, which is stored in tls_ctx */
+    *tls_ctx->sock = sock;
+    mbedtls_ssl_set_bio(tls_session, tls_ctx->sock, nc_tls_send, nc_tls_recv, NULL);
+}
+
+int
+nc_tls_read_wrap(struct nc_session *session, unsigned char *buf, size_t size)
+{
+    int rc;
+    mbedtls_ssl_context *tls_session = session->ti.tls.session;
+
+    rc = mbedtls_ssl_read(tls_session, buf, size);
+    if (rc <= 0) {
+        switch (rc) {
+        case MBEDTLS_ERR_SSL_WANT_READ:
+        case MBEDTLS_ERR_SSL_WANT_WRITE:
+            rc = 0;
+            break;
+        case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+            nc_mbedtls_strerr(session, rc, "Communication socket unexpectedly closed");
+            NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+            NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_DROPPED);
+            rc = -1;
+            break;
+        default:
+            nc_mbedtls_strerr(session, rc, "TLS communication error occurred");
+            NC_SESSION_STATUS_SET(session, NC_STATUS_INVALID);
+            NC_SESSION_TERM_REASON_SET(session, NC_SESSION_TERM_OTHER);
+            rc = -1;
+            break;
+        }
+    }
+
+    return rc;
+}
+
+int
+nc_tls_write_wrap(struct nc_session *session, const unsigned char *buf, size_t size)
+{
+    int rc = 0;
+    mbedtls_ssl_context *tls_session = session->ti.tls.session;
+
+    rc = mbedtls_ssl_write(tls_session, buf, size);
+    if (rc < 0) {
+        switch (rc) {
+        case MBEDTLS_ERR_SSL_WANT_READ:
+        case MBEDTLS_ERR_SSL_WANT_WRITE:
+            rc = 0;
+            break;
+        case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+            nc_mbedtls_strerr(session, rc, "TLS connection was properly closed.");
+            rc = -1;
+            break;
+        default:
+            nc_mbedtls_strerr(session, rc, "TLS communication error occurred");
+            rc = -1;
+            break;
+        }
+    }
+
+    return rc;
+}
+
+int
+nc_tls_get_num_pending_bytes_wrap(void *tls_session)
+{
+    return mbedtls_ssl_get_bytes_avail(tls_session);
+}
+
+int
+nc_tls_get_fd_wrap(const struct nc_session *session)
+{
+    return session->ti.tls.ctx.sock ? *session->ti.tls.ctx.sock : -1;
+}
+
+void
+nc_tls_close_notify_wrap(void *tls_session)
+{
+    int rc;
+
+    while ((rc = mbedtls_ssl_close_notify(tls_session))) {
+        if ((rc != MBEDTLS_ERR_SSL_WANT_READ) && (rc != MBEDTLS_ERR_SSL_WANT_WRITE)) {
+            /* some error occurred */
+            nc_mbedtls_strerr(NULL, rc, "Sending TLS close notify failed");
+            return;
+        }
+    }
+}
+
+/**
+ * @brief Convert the MbedTLS key export type to a label for the keylog file.
+ *
+ * @param[in] type MbedTLS key export type.
+ * @return Label for the keylog file or NULL if the type is not supported.
+ */
+static const char *
+nc_tls_keylog_type2label(mbedtls_ssl_key_export_type type)
+{
+    switch (type) {
+    case MBEDTLS_SSL_KEY_EXPORT_TLS12_MASTER_SECRET:
+        return "CLIENT_RANDOM";
+#ifdef MBEDTLS_SSL_PROTO_TLS1_3
+    case MBEDTLS_SSL_KEY_EXPORT_TLS1_3_CLIENT_HANDSHAKE_TRAFFIC_SECRET:
+        return "CLIENT_HANDSHAKE_TRAFFIC_SECRET";
+    case MBEDTLS_SSL_KEY_EXPORT_TLS1_3_SERVER_HANDSHAKE_TRAFFIC_SECRET:
+        return "SERVER_HANDSHAKE_TRAFFIC_SECRET";
+    case MBEDTLS_SSL_KEY_EXPORT_TLS1_3_CLIENT_APPLICATION_TRAFFIC_SECRET:
+        return "CLIENT_TRAFFIC_SECRET_0";
+    case MBEDTLS_SSL_KEY_EXPORT_TLS1_3_SERVER_APPLICATION_TRAFFIC_SECRET:
+        return "SERVER_TRAFFIC_SECRET_0";
+#endif
+    default:
+        return NULL;
+    }
+}
+
+/**
+ * @brief Callback for writing a line in the keylog file.
+ */
+static void
+nc_tls_keylog_write_line(void *UNUSED(p_expkey), mbedtls_ssl_key_export_type type, const unsigned char *secret,
+        size_t secret_len, const unsigned char client_random[32],
+        const unsigned char UNUSED(server_random[32]), mbedtls_tls_prf_types UNUSED(tls_prf_type))
+{
+    size_t linelen, len = 0, i, client_random_len;
+    char buf[256];
+    const char *label;
+
+    if (!server_opts.tls_keylog_file) {
+        return;
+    }
+
+    label = nc_tls_keylog_type2label(type);
+    if (!label) {
+        /* type not supported */
+        return;
+    }
+
+    /* <Label> <space> 0x<ClientRandom> <space> 0x<Secret> */
+    linelen = strlen(label) + 1 + 2 * 32 + 1 + 2 * secret_len + 1;
+    if (linelen > sizeof(buf)) {
+        /* sanity check, should not happen since the max len should be 196 bytes */
+        return;
+    }
+
+    /* write the label */
+    len += sprintf(buf + len, "%s ", label);
+
+    /* write the client random */
+    client_random_len = 32;
+    for (i = 0; i < client_random_len; i++) {
+        len += sprintf(buf + len, "%02x", client_random[i]);
+    }
+    len += sprintf(buf + len, " ");
+
+    /* write the secret */
+    for (i = 0; i < secret_len; i++) {
+        len += sprintf(buf + len, "%02x", secret[i]);
+    }
+
+    len += sprintf(buf + len, "\n");
+    buf[len] = '\0';
+
+    if (len != linelen) {
+        return;
+    }
+
+    fputs(buf, server_opts.tls_keylog_file);
+    fflush(server_opts.tls_keylog_file);
+}
+
+void
+nc_tls_keylog_session_wrap(void *session)
+{
+    mbedtls_ssl_set_export_keys_cb(session, nc_tls_keylog_write_line, NULL);
+}
+
+void *
+nc_tls_get_peer_cert_chain_wrap(void *tls_session)
+{
+    return (mbedtls_x509_crt *)mbedtls_ssl_get_peer_cert(tls_session);
+}
+
+int
+nc_tls_verify_cert_chain_crl_wrap(void *cert_chain, void *cert_store, void *crl_store)
+{
+    const mbedtls_x509_crt *peer_chain = cert_chain;
+    const mbedtls_x509_crt *trust_ca = cert_store;
+    const mbedtls_x509_crl *ca_crl = crl_store;
+    uint32_t flags = 0;
+    int ret;
+
+    if (!crl_store || !cert_store) {
+        return 0;
+    }
+
+    /* skip verification if the CRL store is empty (no CRLs were downloaded) */
+    if (((mbedtls_x509_crl *)crl_store)->raw.len == 0) {
+        DBG(NULL, "No CRLs in store, skipping CRL verification.");
+        return 0;
+    }
+
+    /* CAs with no CRL in the store are silently left unchecked by MbedTLS, which is the
+     * behavior the OpenSSL backend emulates with its verification callback */
+    ret = mbedtls_x509_crt_verify((mbedtls_x509_crt *)peer_chain,
+            (mbedtls_x509_crt *)trust_ca, (mbedtls_x509_crl *)ca_crl,
+            NULL, &flags, NULL, NULL);
+    if (ret != 0) {
+        ERR(NULL, "CRL verification failed (%s).", nc_tls_get_verify_err_str(flags));
+        return 1;
+    }
+
+    return 0;
+}
+
+void *
+nc_tls_get_cert_store_wrap(void *UNUSED(tls_cfg), struct nc_tls_ctx *tls_ctx)
+{
+    return tls_ctx->cert_store;
+}
+
+void *
+nc_tls_crl_store_for_post_handshake_wrap(void *UNUSED(cert_store))
+{
+    mbedtls_x509_crl *crl;
+
+    crl = malloc(sizeof *crl);
+    NC_CHECK_ERRMEM_RET(!crl, NULL);
+
+    mbedtls_x509_crl_init(crl);
+    return crl;
+}
+
+void
+nc_tls_crl_store_post_handshake_free_wrap(void *crl_store)
+{
+    mbedtls_x509_crl_free(crl_store);
+    free(crl_store);
+}
+
+int
+nc_server_tls_add_crl_to_store_wrap(const unsigned char *crl_data, size_t size, void *crl_store)
+{
+    int r, rc = 0;
+    unsigned char *pem = NULL;
+
+    if (!crl_data || !size) {
+        ERR(NULL, "CRL data is empty.");
+        return 1;
+    }
+
+    /* determine the format by checking for the PEM header */
+    if (!strncmp((const char *)crl_data, "-----BEGIN", 10)) {
+        /* PEM requires null-terminated data for mbedtls_x509_crl_parse */
+        pem = malloc(size + 1);
+        NC_CHECK_ERRMEM_GOTO(!pem, rc = 1, cleanup);
+        memcpy(pem, crl_data, size);
+        pem[size] = '\0';
+        r = mbedtls_x509_crl_parse(crl_store, pem, size + 1);
+    } else {
+        r = mbedtls_x509_crl_parse_der(crl_store, crl_data, size);
+    }
+    if (r) {
+        nc_mbedtls_strerr(NULL, r, "Parsing downloaded CRL failed");
+        rc = 1;
+        goto cleanup;
+    }
+
+cleanup:
+    free(pem);
+    return rc;
+}
+
+int
+nc_server_tls_set_tls_versions_wrap(void *tls_cfg, enum nc_tls_version min, enum nc_tls_version max)
+{
+    /* set the minimum version if any, otherwise leave it to MbedTLS default */
+    if (min & NC_TLS_VERSION_1_2) {
+        mbedtls_ssl_conf_min_tls_version(tls_cfg, MBEDTLS_SSL_VERSION_TLS1_2);
+    } else if (min & NC_TLS_VERSION_1_3) {
+        mbedtls_ssl_conf_min_tls_version(tls_cfg, MBEDTLS_SSL_VERSION_TLS1_3);
+    }
+
+    /* set the maximum version if any, otherwise leave it to MbedTLS default */
+    if (max & NC_TLS_VERSION_1_3) {
+        mbedtls_ssl_conf_max_tls_version(tls_cfg, MBEDTLS_SSL_VERSION_TLS1_3);
+    } else if (max & NC_TLS_VERSION_1_2) {
+        mbedtls_ssl_conf_max_tls_version(tls_cfg, MBEDTLS_SSL_VERSION_TLS1_2);
+    }
+
+    return 0;
+}
+
+/**
+ * @brief Duplicates a certificate.
+ *
+ * @param[in] cert Certificate to duplicate.
+ * @return Duplicated certificate or NULL.
+ */
+static mbedtls_x509_crt *
+nc_tls_cert_dup(const mbedtls_x509_crt *cert)
+{
+    mbedtls_x509_crt *new_cert;
+
+    new_cert = nc_cert_new();
+    if (!new_cert) {
+        return NULL;
+    }
+
+    if (mbedtls_x509_crt_parse_der(new_cert, cert->raw.p, cert->raw.len)) {
+        free(new_cert);
+        return NULL;
+    }
+
+    return new_cert;
+}
+
+/**
+ * @brief Duplicate a certificate and prepend it to a chain.
+ *
+ * @param[in] cert Certificate to duplicate and prepend.
+ * @param[in,out] chain Chain to prepend the certificate to.
+ * @return 0 on success, -1 on error.
+ */
+static int
+nc_server_tls_prepend_cert_to_chain(mbedtls_x509_crt *cert, mbedtls_x509_crt **chain)
+{
+    mbedtls_x509_crt *copy;
+
+    copy = nc_tls_cert_dup(cert);
+    if (!copy) {
+        return -1;
+    }
+
+    copy->next = *chain;
+    *chain = copy;
+
+    return 0;
+}
+
+/**
+ * @brief Check whether a certificate is already present in a chain.
+ *
+ * @param[in] cert Certificate to search for.
+ * @param[in] chain Certificate chain.
+ * @return 1 if found, 0 otherwise.
+ */
+static int
+nc_server_tls_cert_in_chain(const mbedtls_x509_crt *cert, const mbedtls_x509_crt *chain)
+{
+    const mbedtls_x509_crt *iter;
+
+    for (iter = chain; iter; iter = iter->next) {
+        if (cert->raw.p && iter->raw.p && (cert->raw.len == iter->raw.len) && !memcmp(cert->raw.p, iter->raw.p, cert->raw.len)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * @brief Prepend issuer chain for a certificate.
+ *
+ * Repeatedly parse issuer_raw of @p cert into a certificate, then parse issuer_raw
+ * of that parsed issuer, and so on. Parsed issuers are prepended into @p chain in
+ * root-first order so that prepending the actual cert afterwards yields peer-first
+ * order.
+ *
+ * @param[in] cert Certificate whose issuers are to be prepended.
+ * @param[in,out] chain Chain to prepend issuer certificates to.
+ * @return 0 on success, -1 on error.
+ */
+static int
+nc_server_tls_prepend_issuer_chain(mbedtls_x509_crt *cert, mbedtls_x509_crt **chain)
+{
+    size_t i = 0;
+    mbedtls_x509_crt *copy;
+    const mbedtls_x509_crt *issuer, *iter, *cur;
+    mbedtls_x509_crt *issuers[MBEDTLS_X509_MAX_VERIFY_CHAIN_SIZE - 1];
+
+    cur = cert;
+    while (cur && (i < (sizeof issuers / sizeof *issuers))) {
+        if (!cur->issuer_raw.p || !cur->issuer_raw.len) {
+            break;
+        }
+
+        if ((cur->issuer_raw.len == cur->subject_raw.len) && !memcmp(cur->issuer_raw.p, cur->subject_raw.p, cur->issuer_raw.len)) {
+            /* self-issued root reached */
+            break;
+        }
+
+        /* find issuer cert by matching issuer DN to subject DN */
+        issuer = NULL;
+        for (iter = cert; iter; iter = iter->next) {
+            if ((iter->subject_raw.len == cur->issuer_raw.len) &&
+                    !memcmp(iter->subject_raw.p, cur->issuer_raw.p, cur->issuer_raw.len)) {
+                issuer = iter;
+                break;
+            }
+        }
+        if (!issuer) {
+            /* no more issuers available in the certificate set */
+            break;
+        }
+
+        if (nc_server_tls_cert_in_chain(issuer, *chain)) {
+            /* already present in chain */
+            break;
+        }
+
+        copy = nc_tls_cert_dup(issuer);
+        if (!copy) {
+            goto error;
+        }
+
+        issuers[i] = copy;
+        ++i;
+        cur = issuer;
+    }
+
+    while (i) {
+        --i;
+        issuers[i]->next = *chain;
+        *chain = issuers[i];
+    }
+
+    return 0;
+
+error:
+    while (i) {
+        --i;
+        nc_cert_destroy_wrap(issuers[i]);
+    }
+    return -1;
+}
+
+#ifdef NC_COMPLY_WITH_ORAN_WG11
+
+/**
+ * @brief Check that a client certificate complies with the O-RAN WG11 6.9.3 key usage requirements.
+ *
+ * The end-entity (client) certificate MUST carry the clientAuth Extended Key Usage and a Key Usage
+ * extension with the digitalSignature bit set (the client signs the CertificateVerify handshake message).
+ *
+ * @param[in] session Session for logging.
+ * @param[in] cert Client (leaf) certificate to check.
+ * @param[in,out] flags Verification flags, set on failure.
+ * @return 0 if the certificate complies, non-zero otherwise.
+ */
+static int
+nc_server_tls_check_oran_wg11_usage(struct nc_session *session, mbedtls_x509_crt *cert, uint32_t *flags)
+{
+    const mbedtls_x509_sequence *usage;
+    int has_client_auth = 0;
+
+    /* the client certificate MUST carry the clientAuth Extended Key Usage */
+    for (usage = &cert->ext_key_usage; usage && usage->buf.p; usage = usage->next) {
+        if (!MBEDTLS_OID_CMP(MBEDTLS_OID_CLIENT_AUTH, &usage->buf)) {
+            has_client_auth = 1;
+            break;
+        }
+    }
+    if (!has_client_auth) {
+        ERR(session, "Cert verify: fail (client certificate lacks the required clientAuth Extended Key Usage).");
+        *flags |= MBEDTLS_X509_BADCERT_EXT_KEY_USAGE;
+        return 1;
+    }
+
+    /* the client certificate MUST also carry a Key Usage extension with the digitalSignature bit set */
+    if (!mbedtls_x509_crt_has_ext_type(cert, MBEDTLS_X509_EXT_KEY_USAGE) ||
+            mbedtls_x509_crt_check_key_usage(cert, MBEDTLS_X509_KU_DIGITAL_SIGNATURE)) {
+        ERR(session, "Cert verify: fail (client certificate lacks the required digitalSignature Key Usage).");
+        *flags |= MBEDTLS_X509_BADCERT_KEY_USAGE;
+        return 1;
+    }
+
+    return 0;
+}
+
+#endif /* NC_COMPLY_WITH_ORAN_WG11 */
+
+/**
+ * @brief Verify a certificate.
+ *
+ * @param[in] cb_data Callback data (session, opts, data for CTN).
+ * @param[in] cert Certificate to verify.
+ * @param[in] depth Certificate depth in the chain.
+ * @param[in,out] flags Verification flags. Used to propagate errors.
+ * @return 0 on success (verification result is based on the value of flags), non-zero on fatal-error.
+ */
+static int
+nc_server_tls_verify_cb(void *cb_data, mbedtls_x509_crt *cert, int depth, uint32_t *flags)
+{
+    int ret = 0;
+    struct nc_tls_verify_cb_data *data = cb_data;
+    char *err;
+
+    if (!data->chain) {
+        /* first call, prepend the issuer chain so that we have the whole chain available for CTN */
+        ret = nc_server_tls_prepend_issuer_chain(cert, (mbedtls_x509_crt **)&data->chain);
+        if (ret) {
+            nc_cert_destroy_wrap(data->chain);
+            return MBEDTLS_ERR_X509_ALLOC_FAILED;
+        }
+    }
+
+    /* prepend to the chain we're building to maintain peer-first order */
+    if (!nc_server_tls_cert_in_chain(cert, (const mbedtls_x509_crt *)data->chain)) {
+        ret = nc_server_tls_prepend_cert_to_chain(cert, (mbedtls_x509_crt **)&data->chain);
+        if (ret) {
+            nc_cert_destroy_wrap(data->chain);
+            return MBEDTLS_ERR_X509_ALLOC_FAILED;
+        }
+    }
+
+    if (!*flags) {
+        /* in-built verification was successful */
+        ret = nc_server_tls_verify_cert(cert, depth, 1, data);
+    } else {
+        /* in-built verification failed, but the client still may be authenticated if:
+         * 1) the peer cert matches any configured end-entity cert
+         * 2) the peer cert has a valid chain of trust to any configured certificate authority cert
+         * otherwise just continue until we reach the peer cert (depth = 0)
+         */
+        if ((depth == 0) && (*flags == MBEDTLS_X509_BADCERT_NOT_TRUSTED)) {
+            /* not trusted self-signed peer certificate, case 1) */
+            ret = nc_server_tls_verify_cert(cert, depth, 0, data);
+            if (!ret) {
+                *flags &= ~MBEDTLS_X509_BADCERT_NOT_TRUSTED;
+            }
+        } else if (*flags == MBEDTLS_X509_BADCERT_MISSING) {
+            /* full chain of trust is invalid, but it may be valid partially, case 2) */
+            ret = nc_server_tls_verify_cert(cert, depth, 0, data);
+            if (!ret) {
+                *flags &= ~MBEDTLS_X509_BADCERT_MISSING;
+            }
+        } else {
+            err = nc_tls_get_verify_err_str(*flags);
+            ERR(data->session, "Cert verify: fail (%s).", err);
+            free(err);
+            ret = 1;
+        }
+    }
+
+    if ((ret == -1) || (depth == 0)) {
+        /* free the chain */
+        nc_cert_destroy_wrap(data->chain);
+    }
+
+    if (ret == -1) {
+        /* fatal error */
+        return MBEDTLS_ERR_X509_ALLOC_FAILED;
+    } else if (!ret) {
+        /* success */
+        if ((depth == 0) && (!data->session->opts.server.client_cert)) {
+#ifdef NC_COMPLY_WITH_ORAN_WG11
+            /* O-RAN WG11 6.9.3: enforce the clientAuth Extended Key Usage and digitalSignature Key Usage */
+            if (nc_server_tls_check_oran_wg11_usage(data->session, cert, flags)) {
+                return 0;
+            }
+#endif /* NC_COMPLY_WITH_ORAN_WG11 */
+
+            /* copy the client cert */
+            data->session->opts.server.client_cert = nc_tls_cert_dup(cert);
+            if (!data->session->opts.server.client_cert) {
+                return MBEDTLS_ERR_X509_ALLOC_FAILED;
+            }
+        }
+        return 0;
+    } else {
+        if (depth > 0) {
+            /* chain verify failed, but peer cert can still match */
+            return 0;
+        } else {
+            /* failed to verify peer cert, but return 0 so that we can propagate the error via the flags */
+            if (!*flags) {
+                *flags |= MBEDTLS_X509_BADCERT_OTHER;
+            }
+            return 0;
+        }
+    }
+}
+
+void
+nc_server_tls_set_verify_wrap(void *tls_cfg, struct nc_tls_verify_cb_data *cb_data)
+{
+    mbedtls_ssl_conf_authmode(tls_cfg, MBEDTLS_SSL_VERIFY_REQUIRED);
+    mbedtls_ssl_conf_verify(tls_cfg, nc_server_tls_verify_cb, cb_data);
+}
+
+/**
+ * @brief Converts DN to a string.
+ *
+ * @param[in] dn Internal DN representation.
+ * @return DN string on success, NULL of fail.
+ */
+static char *
+nc_server_tls_dn2str(const mbedtls_x509_name *dn)
+{
+    char *str;
+    size_t len = 64;
+    int r;
+
+    str = malloc(len);
+    NC_CHECK_ERRMEM_RET(!str, NULL);
+
+    while ((r = mbedtls_x509_dn_gets(str, len, dn)) == MBEDTLS_ERR_X509_BUFFER_TOO_SMALL) {
+        /* the error is also returned for any attribute value longer than MBEDTLS_X509_MAX_DN_NAME_SIZE,
+         * which no buffer size can fix, so limit the growth */
+        if (len >= NC_TLS_DN_STR_MAX_LEN) {
+            break;
+        }
+
+        len <<= 1;
+        str = nc_realloc(str, len);
+        NC_CHECK_ERRMEM_RET(!str, NULL);
+    }
+    if (r < 1) {
+        free(str);
+        nc_mbedtls_strerr(NULL, r, "Failed to convert DN to string");
+        return NULL;
+    }
+
+    return str;
+}
+
+char *
+nc_server_tls_get_subject_wrap(void *cert)
+{
+    return nc_server_tls_dn2str(&(((mbedtls_x509_crt *)cert)->subject));
+}
+
+char *
+nc_server_tls_get_issuer_wrap(void *cert)
+{
+    return nc_server_tls_dn2str(&(((mbedtls_x509_crt *)cert)->issuer));
+}
+
+int
+nc_server_tls_get_cn_wrap(void *cert, char **cn)
+{
+    const mbedtls_x509_name *iter, *cn_attr = NULL;
+
+    *cn = NULL;
+
+    for (iter = &((mbedtls_x509_crt *)cert)->subject; iter; iter = iter->next) {
+        if (!iter->oid.p) {
+            continue;
+        }
+
+        /* skip attributes other than commonName */
+        if (MBEDTLS_OID_CMP(MBEDTLS_OID_AT_CN, &iter->oid)) {
+            continue;
+        }
+
+        if (cn_attr) {
+            /* the name would be ambiguous */
+            WRN(NULL, "Certificate includes multiple commonName fields.");
+            return 1;
+        }
+        cn_attr = iter;
+    }
+    if (!cn_attr) {
+        WRN(NULL, "Certificate does not include the commonName field.");
+        return 1;
+    }
+
+    /* the name must be in UTF-8 (RFC 6353), so only accept string types that are UTF-8 compatible */
+    if ((cn_attr->val.tag != MBEDTLS_ASN1_UTF8_STRING) && (cn_attr->val.tag != MBEDTLS_ASN1_PRINTABLE_STRING) &&
+            (cn_attr->val.tag != MBEDTLS_ASN1_IA5_STRING)) {
+        WRN(NULL, "Certificate commonName uses an unsupported string type.");
+        return 1;
+    }
+    if (!cn_attr->val.len) {
+        WRN(NULL, "Certificate commonName is empty.");
+        return 1;
+    }
+
+    *cn = strndup((const char *)cn_attr->val.p, cn_attr->val.len);
+    NC_CHECK_ERRMEM_RET(!*cn, -1);
+
+    return 0;
+}
+
+int
+nc_server_tls_certs_match_wrap(void *cert1, void *cert2)
+{
+    mbedtls_x509_crt *c1 = cert1;
+    mbedtls_x509_crt *c2 = cert2;
+
+    if (!c1 || !c2) {
+        return 0;
+    }
+
+    /* compare raw DER encoded data */
+    if (!c1->raw.p || !c2->raw.p || (c1->raw.len != c2->raw.len) ||
+            memcmp(c1->raw.p, c2->raw.p, c1->raw.len)) {
+        return 0;
+    }
+
+    return 1;
+}
+
+int
+nc_server_tls_md5_wrap(void *cert, unsigned char *buf)
+{
+    int rc;
+    mbedtls_x509_crt *c = cert;
+
+    rc = mbedtls_md5(c->raw.p, c->raw.len, buf);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Calculating MD5 digest failed");
+        return 1;
+    }
+
+    return 0;
+}
+
+int
+nc_server_tls_sha1_wrap(void *cert, unsigned char *buf)
+{
+    int rc;
+    mbedtls_x509_crt *c = cert;
+
+    rc = mbedtls_sha1(c->raw.p, c->raw.len, buf);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Calculating SHA-1 digest failed");
+        return 1;
+    }
+
+    return 0;
+}
+
+int
+nc_server_tls_sha224_wrap(void *cert, unsigned char *buf)
+{
+    int rc;
+    mbedtls_x509_crt *c = cert;
+
+    rc = mbedtls_sha256(c->raw.p, c->raw.len, buf, 1);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Calculating SHA-224 digest failed");
+        return 1;
+    }
+
+    return 0;
+}
+
+int
+nc_server_tls_sha256_wrap(void *cert, unsigned char *buf)
+{
+    int rc;
+    mbedtls_x509_crt *c = cert;
+
+    rc = mbedtls_sha256(c->raw.p, c->raw.len, buf, 0);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Calculating SHA-256 digest failed");
+        return 1;
+    }
+
+    return 0;
+}
+
+int
+nc_server_tls_sha384_wrap(void *cert, unsigned char *buf)
+{
+    int rc;
+    mbedtls_x509_crt *c = cert;
+
+    rc = mbedtls_sha512(c->raw.p, c->raw.len, buf, 1);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Calculating SHA-384 digest failed");
+        return 1;
+    }
+
+    return 0;
+}
+
+int
+nc_server_tls_sha512_wrap(void *cert, unsigned char *buf)
+{
+    int rc;
+    mbedtls_x509_crt *c = cert;
+
+    rc = mbedtls_sha512(c->raw.p, c->raw.len, buf, 0);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Calculating SHA-512 digest failed");
+        return 1;
+    }
+
+    return 0;
+}
+
+int
+nc_server_tls_handshake_step_wrap(void *tls_session)
+{
+    int rc = 0;
+
+    rc = mbedtls_ssl_handshake(tls_session);
+    if (!rc) {
+        return 1;
+    } else if ((rc == MBEDTLS_ERR_SSL_WANT_READ) || (rc == MBEDTLS_ERR_SSL_WANT_WRITE)) {
+        return 0;
+    } else {
+        return rc;
+    }
+}
+
+void
+nc_server_tls_print_accept_err_wrap(int accept_ret, void *UNUSED(tls_session))
+{
+    nc_mbedtls_strerr(NULL, accept_ret, "TLS accept failed");
+}
+
+/**
+ * @brief Parse the CRL distribution points X509v3 extension and obtain the URIs.
+ *
+ * @param[in,out] p Pointer to the DER encoded extension. When the function gets called, this should
+ * point to the first byte in the value of CRLDistributionPoints.
+ * @param[in] len Length of the CRLDistributionPoints ASN.1 encoded value.
+ * @param[out] uris Array of URIs found in the extension.
+ * @param[out] uri_count Number of URIs found in the extension.
+ * @return 0 on success, non-zero on error.
+ */
+static int
+nc_server_tls_parse_crl_dist_points(unsigned char **p, size_t len, char ***uris, int *uri_count)
+{
+    char **tmp_uris, *uri;
+    int ret = 0;
+    size_t name_len;
+    unsigned char *end_crl_dist_points, *end_general_names, *end_names, tag, tag_class, tag_value;
+
+    /*
+     * parsing the value of CRLDistributionPoints
+     *
+     * CRLDistributionPoints ::= SEQUENCE SIZE (1..MAX) OF DistributionPoint
+     */
+    end_crl_dist_points = *p + len;
+    while (*p < end_crl_dist_points) {
+        /*
+         * DistributionPoint ::= SEQUENCE {
+         *      distributionPoint       [0]     DistributionPointName OPTIONAL,
+         *      reasons                 [1]     ReasonFlags OPTIONAL,
+         *      cRLIssuer               [2]     GeneralNames OPTIONAL }
+         */
+        ret = mbedtls_asn1_get_tag(p, end_crl_dist_points, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
+        if (ret) {
+            nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
+            goto cleanup;
+        }
+        if (!len) {
+            /* empty sequence */
+            continue;
+        }
+
+        /* parse distributionPoint */
+        ret = mbedtls_asn1_get_tag(p, end_crl_dist_points, &len, MBEDTLS_ASN1_CONTEXT_SPECIFIC | MBEDTLS_ASN1_CONSTRUCTED | 0);
+        if (!ret) {
+            /*
+             * DistributionPointName ::= CHOICE {
+             *      fullName                [0]     GeneralNames,
+             *      nameRelativeToCRLIssuer [1]     RelativeDistinguishedName }
+             */
+            ret = mbedtls_asn1_get_tag(p, end_crl_dist_points, &len, MBEDTLS_ASN1_CONTEXT_SPECIFIC | MBEDTLS_ASN1_CONSTRUCTED | 0);
+            if (ret) {
+                if ((ret == MBEDTLS_ERR_ASN1_UNEXPECTED_TAG) && (**p == (MBEDTLS_ASN1_CONTEXT_SPECIFIC | MBEDTLS_ASN1_CONSTRUCTED | 1))) {
+                    /* it's nameRelativeToCRLIssuer, but we don't support it */
+                    ERR(NULL, "Failed to parse CRL distribution points extension (nameRelativeToCRLIssuer not yet supported).");
+                    goto cleanup;
+                } else {
+                    nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
+                    goto cleanup;
+                }
+            }
+
+            /*
+             * GeneralNames ::= SEQUENCE SIZE (1..MAX) OF GeneralName
+             *
+             * The fullName [0] implicitly tags the GeneralNames SEQUENCE,
+             * so the [0] CONSTRUCTED tag replaces the SEQUENCE tag.
+             * No inner SEQUENCE to parse — *p already points at the GeneralName entries.
+             */
+            end_general_names = *p + len;
+            end_names = end_general_names;
+            while (*p < end_names) {
+                tag = **p;
+                tag_class = tag & MBEDTLS_ASN1_TAG_CLASS_MASK;
+                tag_value = tag & MBEDTLS_ASN1_TAG_VALUE_MASK;
+                /*
+                 * read the GeneralName tag and length
+                 *
+                 * GeneralName ::= CHOICE {
+                 *      otherName                 [0]  AnotherName,
+                 *      rfc822Name                [1]  IA5String,
+                 *      dNSName                   [2]  IA5String,
+                 *      x400Address               [3]  ORAddress,
+                 *      directoryName             [4]  Name,
+                 *      ediPartyName              [5]  EDIPartyName,
+                 *      uniformResourceIdentifier [6]  IA5String,
+                 *      iPAddress                 [7]  OCTET STRING,
+                 *      registeredID              [8]  OBJECT IDENTIFIER }
+                 */
+                ret = mbedtls_asn1_get_tag(p, end_names, &name_len, MBEDTLS_ASN1_CONTEXT_SPECIFIC | (tag & MBEDTLS_ASN1_CONSTRUCTED) | tag_value);
+                if (ret) {
+                    nc_mbedtls_strerr(NULL, ret, "Failed to parse GeneralName in CRL distribution points extension");
+                    goto cleanup;
+                }
+
+                /* uniformResourceIdentifier [6] IA5String */
+                if ((tag_class == MBEDTLS_ASN1_CONTEXT_SPECIFIC) &&
+                        (tag_value == MBEDTLS_X509_SAN_UNIFORM_RESOURCE_IDENTIFIER)) {
+                    uri = strndup((char *)*p, name_len);
+                    if (!uri) {
+                        ERRMEM;
+                        ret = 1;
+                        goto cleanup;
+                    }
+
+                    tmp_uris = realloc(*uris, (*uri_count + 1) * sizeof **uris);
+                    if (!tmp_uris) {
+                        ERRMEM;
+                        free(uri);
+                        ret = 1;
+                        goto cleanup;
+                    }
+                    *uris = tmp_uris;
+
+                    (*uris)[*uri_count] = uri;
+                    ++(*uri_count);
+                }
+
+                /* Move to the next GeneralName */
+                *p += name_len;
+            }
+
+        } else if (ret != MBEDTLS_ERR_ASN1_UNEXPECTED_TAG) {
+            /* failed to parse it, but not because it's optional */
+            nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
+            goto cleanup;
+        }
+    }
+
+cleanup:
+    return ret;
+}
+
+int
+nc_server_tls_get_crl_distpoint_uris_wrap(void *leaf_cert, void *cert_store, char ***uris, int *uri_count)
+{
+    int ret = 0, is_critical = 0, cert_count, i;
+    mbedtls_x509_crt *cert;
+    unsigned char *p, *end_v3_ext, *end_ext, *end_ext_octet;
+    size_t len;
+    mbedtls_x509_buf ext_oid = {0};
+
+    if (!uris || !uri_count) {
+        ERRINT;
+        return 1;
+    }
+
+    *uris = NULL;
+    *uri_count = 0;
+
+    if (cert_store) {
+        /* get the number of certs in the store */
+        cert = cert_store;
+        cert_count = 0;
+        while (cert) {
+            ++cert_count;
+            cert = cert->next;
+        }
+    } else {
+        cert_count = 0;
+    }
+
+    /* iterate over leaf cert (i = -1) and all the certs in the store */
+    for (i = -1; i < cert_count; i++) {
+        if (i == -1) {
+            cert = leaf_cert;
+        } else if (i == 0) {
+            cert = cert_store;
+        } else {
+            cert = cert->next;
+        }
+
+        if (!cert->v3_ext.len) {
+            /* no extensions, skip this cert */
+            continue;
+        }
+
+        /* go over all the extensions and try to find the CRL distribution points */
+        p = cert->v3_ext.p;
+        end_v3_ext = p + cert->v3_ext.len;
+
+        /*
+         * Extensions  ::=  SEQUENCE SIZE (1..MAX) OF Extension
+         */
+        ret = mbedtls_asn1_get_tag(&p, end_v3_ext, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
+        if (ret) {
+            nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
+            goto cleanup;
+        }
+
+        while (p < end_v3_ext) {
+            /*
+             * Extension  ::=  SEQUENCE  {
+             *      extnID      OBJECT IDENTIFIER,
+             *      critical    BOOLEAN DEFAULT FALSE,
+             *      extnValue   OCTET STRING  }
+             */
+            ret = mbedtls_asn1_get_tag(&p, end_v3_ext, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
+            if (ret) {
+                nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
+                goto cleanup;
+            }
+
+            end_ext = p + len;
+
+            /* parse extnID */
+            ret = mbedtls_asn1_get_tag(&p, end_ext, &ext_oid.len, MBEDTLS_ASN1_OID);
+            if (ret) {
+                nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
+                goto cleanup;
+            }
+            ext_oid.tag = MBEDTLS_ASN1_OID;
+            ext_oid.p = p;
+
+            if (memcmp(ext_oid.p, MBEDTLS_OID_CRL_DISTRIBUTION_POINTS, ext_oid.len)) {
+                /* not the extension we are looking for */
+                p = end_ext;
+                continue;
+            }
+
+            p += ext_oid.len;
+
+            /* parse optional critical */
+            ret = mbedtls_asn1_get_bool(&p, end_ext, &is_critical);
+            if (ret && (ret != MBEDTLS_ERR_ASN1_UNEXPECTED_TAG)) {
+                nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
+                goto cleanup;
+            }
+
+            /* parse extnValue */
+            ret = mbedtls_asn1_get_tag(&p, end_ext, &len, MBEDTLS_ASN1_OCTET_STRING);
+            if (ret) {
+                nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
+                goto cleanup;
+            }
+
+            end_ext_octet = p + len;
+
+            /*
+             * parse extnValue, that is CRLDistributionPoints
+             *
+             * CRLDistributionPoints ::= SEQUENCE SIZE (1..MAX) OF DistributionPoint
+             */
+            ret = mbedtls_asn1_get_tag(&p, end_ext_octet, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
+            if (ret) {
+                nc_mbedtls_strerr(NULL, ret, "Failed to parse CRL distribution points extension");
+                goto cleanup;
+            }
+            if (p + len != end_ext_octet) {
+                /* length mismatch */
+                ERR(NULL, "Failed to parse CRL distribution points extension (length mismatch).");
+                goto cleanup;
+            } else if (!len) {
+                /* empty sequence, but size is 1..max */
+                ERR(NULL, "Failed to parse CRL distribution points extension (empty sequence).");
+                goto cleanup;
+            }
+
+            /* parse the distribution points and obtain the uris */
+            ret = nc_server_tls_parse_crl_dist_points(&p, len, uris, uri_count);
+            if (ret) {
+                goto cleanup;
+            }
+        }
+    }
+
+cleanup:
+    return ret;
+}
+
+const char *
+nc_server_tls_cipher_suite_name_to_internal_wrap(const char *iana_name)
+{
+    if (!strcmp(iana_name, "TLS_AES_128_GCM_SHA256")) {
+        return "TLS1-3-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_AES_256_GCM_SHA384")) {
+        return "TLS1-3-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_CHACHA20_POLY1305_SHA256")) {
+        return "TLS1-3-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_AES_128_CCM_SHA256")) {
+        return "TLS1-3-AES-128-CCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_AES_128_CCM_8_SHA256")) {
+        return "TLS1-3-AES-128-CCM-8-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-ECDHE-RSA-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-DHE-RSA-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-PSK-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-ECDHE-PSK-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-DHE-PSK-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256")) {
+        return "TLS-RSA-PSK-WITH-CHACHA20-POLY1305-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_256_CCM")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-256-CCM";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-256-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_128_CCM")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-128-CCM";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8")) {
+        return "TLS-ECDHE-ECDSA-WITH-AES-128-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-ECDHE-ECDSA-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-ECDHE-ECDSA-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_NULL_SHA")) {
+        return "TLS-ECDHE-ECDSA-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA")) {
+        return "TLS-ECDHE-RSA-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA")) {
+        return "TLS-ECDHE-RSA-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-ECDHE-RSA-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-ECDHE-RSA-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-ECDHE-RSA-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-ECDHE-RSA-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-ECDHE-RSA-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-ECDHE-RSA-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-ECDHE-RSA-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-ECDHE-RSA-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_NULL_SHA")) {
+        return "TLS-ECDHE-RSA-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-DHE-RSA-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-DHE-RSA-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-DHE-RSA-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_256_CBC_SHA256")) {
+        return "TLS-DHE-RSA-WITH-AES-256-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_128_CBC_SHA")) {
+        return "TLS-DHE-RSA-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_256_CBC_SHA")) {
+        return "TLS-DHE-RSA-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_256_CCM")) {
+        return "TLS-DHE-RSA-WITH-AES-256-CCM";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_256_CCM_8")) {
+        return "TLS-DHE-RSA-WITH-AES-256-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_128_CCM")) {
+        return "TLS-DHE-RSA-WITH-AES-128-CCM";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_AES_128_CCM_8")) {
+        return "TLS-DHE-RSA-WITH-AES-128-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-DHE-RSA-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256")) {
+        return "TLS-DHE-RSA-WITH-CAMELLIA-256-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA")) {
+        return "TLS-DHE-RSA-WITH-CAMELLIA-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA")) {
+        return "TLS-DHE-RSA-WITH-CAMELLIA-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-DHE-RSA-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-DHE-RSA-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-RSA-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-RSA-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-RSA-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_256_CBC_SHA256")) {
+        return "TLS-RSA-WITH-AES-256-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_128_CBC_SHA")) {
+        return "TLS-RSA-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_256_CBC_SHA")) {
+        return "TLS-RSA-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_256_CCM")) {
+        return "TLS-RSA-WITH-AES-256-CCM";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_256_CCM_8")) {
+        return "TLS-RSA-WITH-AES-256-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_128_CCM")) {
+        return "TLS-RSA-WITH-AES-128-CCM";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_AES_128_CCM_8")) {
+        return "TLS-RSA-WITH-AES-128-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-RSA-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256")) {
+        return "TLS-RSA-WITH-CAMELLIA-256-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA")) {
+        return "TLS-RSA-WITH-CAMELLIA-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_CAMELLIA_256_CBC_SHA")) {
+        return "TLS-RSA-WITH-CAMELLIA-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-RSA-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-RSA-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA")) {
+        return "TLS-ECDH-RSA-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA")) {
+        return "TLS-ECDH-RSA-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-ECDH-RSA-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-ECDH-RSA-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-ECDH-RSA-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-ECDH-RSA-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-ECDH-RSA-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-ECDH-RSA-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-ECDH-RSA-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-ECDH-RSA-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_NULL_SHA")) {
+        return "TLS-ECDH-RSA-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA")) {
+        return "TLS-ECDH-ECDSA-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA")) {
+        return "TLS-ECDH-ECDSA-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-ECDH-ECDSA-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-ECDH-ECDSA-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-ECDH-ECDSA-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-ECDH-ECDSA-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-ECDH-ECDSA-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-ECDH-ECDSA-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-ECDH-ECDSA-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-ECDH-ECDSA-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_NULL_SHA")) {
+        return "TLS-ECDH-ECDSA-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-PSK-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-PSK-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-PSK-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-PSK-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_128_CBC_SHA")) {
+        return "TLS-PSK-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_256_CBC_SHA")) {
+        return "TLS-PSK-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_256_CCM")) {
+        return "TLS-PSK-WITH-AES-256-CCM";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_256_CCM_8")) {
+        return "TLS-PSK-WITH-AES-256-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_128_CCM")) {
+        return "TLS-PSK-WITH-AES-128-CCM";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_AES_128_CCM_8")) {
+        return "TLS-PSK-WITH-AES-128-CCM-8";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-PSK-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-PSK-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-PSK-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-PSK-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-DHE-PSK-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-DHE-PSK-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-DHE-PSK-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-DHE-PSK-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_128_CBC_SHA")) {
+        return "TLS-DHE-PSK-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_256_CBC_SHA")) {
+        return "TLS-DHE-PSK-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_256_CCM")) {
+        return "TLS-DHE-PSK-WITH-AES-256-CCM";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_AES_128_CCM")) {
+        return "TLS-DHE-PSK-WITH-AES-128-CCM";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-DHE-PSK-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-DHE-PSK-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-DHE-PSK-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-DHE-PSK-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-ECDHE-PSK-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-ECDHE-PSK-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA")) {
+        return "TLS-ECDHE-PSK-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA")) {
+        return "TLS-ECDHE-PSK-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-ECDHE-PSK-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-ECDHE-PSK-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_AES_128_GCM_SHA256")) {
+        return "TLS-RSA-PSK-WITH-AES-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_AES_256_GCM_SHA384")) {
+        return "TLS-RSA-PSK-WITH-AES-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_AES_128_CBC_SHA256")) {
+        return "TLS-RSA-PSK-WITH-AES-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_AES_256_CBC_SHA384")) {
+        return "TLS-RSA-PSK-WITH-AES-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_AES_128_CBC_SHA")) {
+        return "TLS-RSA-PSK-WITH-AES-128-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_AES_256_CBC_SHA")) {
+        return "TLS-RSA-PSK-WITH-AES-256-CBC-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256")) {
+        return "TLS-RSA-PSK-WITH-CAMELLIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384")) {
+        return "TLS-RSA-PSK-WITH-CAMELLIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_CAMELLIA_128_GCM_SHA256")) {
+        return "TLS-RSA-PSK-WITH-CAMELLIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_CAMELLIA_256_GCM_SHA384")) {
+        return "TLS-RSA-PSK-WITH-CAMELLIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_NULL_MD5")) {
+        return "TLS-RSA-WITH-NULL-MD5";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_NULL_SHA")) {
+        return "TLS-RSA-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_NULL_SHA256")) {
+        return "TLS-RSA-WITH-NULL-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_NULL_SHA")) {
+        return "TLS-PSK-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_NULL_SHA256")) {
+        return "TLS-PSK-WITH-NULL-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_NULL_SHA384")) {
+        return "TLS-PSK-WITH-NULL-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_NULL_SHA")) {
+        return "TLS-DHE-PSK-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_NULL_SHA256")) {
+        return "TLS-DHE-PSK-WITH-NULL-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_NULL_SHA384")) {
+        return "TLS-DHE-PSK-WITH-NULL-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_NULL_SHA")) {
+        return "TLS-ECDHE-PSK-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_NULL_SHA256")) {
+        return "TLS-ECDHE-PSK-WITH-NULL-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_NULL_SHA384")) {
+        return "TLS-ECDHE-PSK-WITH-NULL-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_NULL_SHA")) {
+        return "TLS-RSA-PSK-WITH-NULL-SHA";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_NULL_SHA256")) {
+        return "TLS-RSA-PSK-WITH-NULL-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_NULL_SHA384")) {
+        return "TLS-RSA-PSK-WITH-NULL-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-RSA-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-RSA-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-RSA-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-RSA-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-RSA-PSK-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-RSA-PSK-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-RSA-PSK-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_RSA_PSK_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-RSA-PSK-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-PSK-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-PSK-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-PSK-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_PSK_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-PSK-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-ECDH-RSA-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-ECDH-RSA-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-ECDH-RSA-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_RSA_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-ECDH-RSA-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-ECDHE-RSA-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-ECDHE-RSA-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-ECDHE-RSA-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_RSA_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-ECDHE-RSA-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-ECDHE-PSK-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_PSK_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-ECDHE-PSK-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-ECDHE-ECDSA-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-ECDHE-ECDSA-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDHE_ECDSA_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-ECDHE-ECDSA-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-ECDH-ECDSA-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-ECDH-ECDSA-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-ECDH-ECDSA-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_ECDH_ECDSA_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-ECDH-ECDSA-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-DHE-RSA-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-DHE-RSA-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-DHE-RSA-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_RSA_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-DHE-RSA-WITH-ARIA-128-CBC-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_ARIA_256_GCM_SHA384")) {
+        return "TLS-DHE-PSK-WITH-ARIA-256-GCM-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_ARIA_256_CBC_SHA384")) {
+        return "TLS-DHE-PSK-WITH-ARIA-256-CBC-SHA384";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_ARIA_128_GCM_SHA256")) {
+        return "TLS-DHE-PSK-WITH-ARIA-128-GCM-SHA256";
+    } else if (!strcmp(iana_name, "TLS_DHE_PSK_WITH_ARIA_128_CBC_SHA256")) {
+        return "TLS-DHE-PSK-WITH-ARIA-128-CBC-SHA256";
+    }
+
+    /* not found */
+    WRN(NULL, "Cipher suite name \"%s\" not supported by MbedTLS.", iana_name);
+    return NULL;
+}
+
+int
+nc_server_tls_set_cipher_suites_wrap(void *tls_cfg, const char *cipher_suites, void **cipher_suites_out)
+{
+    int rc = 0, *mbedtls_ciphersuites, i;
+    size_t count;
+    const char *p;
+    char *suites_copy, *suite, *saveptr;
+
+    /* copy the suites for strtok_r */
+    suites_copy = strdup(cipher_suites);
+    NC_CHECK_ERRMEM_RET(!suites_copy, 1);
+
+    /* count the amount of cipher suites in the colon-separated list, we always have at least one */
+    count = 1;
+    for (p = cipher_suites; *p; p++) {
+        if (*p == ':') {
+            count++;
+        }
+    }
+
+    /* allocate this many mbedtls ciphersuites + 1 for terminating 0 */
+    mbedtls_ciphersuites = malloc((count + 1) * sizeof *mbedtls_ciphersuites);
+    NC_CHECK_ERRMEM_GOTO(!mbedtls_ciphersuites, rc = 1, cleanup);
+
+    /* convert each cipher suite name to mbedtls internal ID */
+    i = 0;
+    while ((suite = strtok_r(i ? NULL : suites_copy, ":", &saveptr))) {
+        mbedtls_ciphersuites[i] = mbedtls_ssl_get_ciphersuite_id(suite);
+        i++;
+    }
+    mbedtls_ciphersuites[i] = 0;
+
+    mbedtls_ssl_conf_ciphersuites(tls_cfg, mbedtls_ciphersuites);
+
+    *cipher_suites_out = mbedtls_ciphersuites;
+
+cleanup:
+    free(suites_copy);
+    return rc;
+}
+
+int
+nc_client_tls_set_verify_wrap(void *tls_cfg)
+{
+    mbedtls_ssl_conf_authmode(tls_cfg, MBEDTLS_SSL_VERIFY_REQUIRED);
+    return 0;
+}
+
+int
+nc_client_tls_handshake_step_wrap(void *tls_session, int sock)
+{
+    int rc = 0;
+    struct pollfd pfd = {sock, 0, 0};
+
+    rc = mbedtls_ssl_handshake(tls_session);
+    if (!rc) {
+        return 1;
+    } else if ((rc == MBEDTLS_ERR_SSL_WANT_READ) || (rc == MBEDTLS_ERR_SSL_WANT_WRITE)) {
+        /* check for EPIPE */
+        if (poll(&pfd, 1, 0) < 0) {
+            return -1;
+        } else {
+            if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                return -1;
+            } else {
+                return 0;
+            }
+        }
+    } else {
+        return rc;
+    }
+}
+
+int
+nc_client_tls_load_cert_key_wrap(const char *cert_path, const char *key_path, void **cert, void **pkey)
+{
+    int ret = 0;
+    mbedtls_x509_crt *c;
+    mbedtls_pk_context *pk;
+
+    NC_CHECK_ARG_RET(NULL, cert_path, key_path, cert, pkey, 1);
+
+    c = nc_cert_new();
+    if (!c) {
+        return 1;
+    }
+
+    ret = mbedtls_x509_crt_parse_file(c, cert_path);
+    if (ret) {
+        nc_mbedtls_strerr(NULL, ret, "Parsing certificate from file \"%s\" failed", cert_path);
+        goto cleanup;
+    }
+
+    pk = nc_import_privkey_file_wrap(key_path);
+    if (!pk) {
+        ret = 1;
+        goto cleanup;
+    }
+
+    *cert = c;
+    c = NULL;
+    *pkey = pk;
+
+cleanup:
+    nc_cert_destroy_wrap(c);
+    return ret;
+}
+
+int
+nc_client_tls_load_trusted_certs_wrap(void *cert_store, const char *file_path, const char *dir_path)
+{
+    int rc;
+
+    if (file_path && ((rc = mbedtls_x509_crt_parse_file(cert_store, file_path)) < 0)) {
+        nc_mbedtls_strerr(NULL, rc, "Loading CA certificate from file \"%s\" failed", file_path);
+        return 1;
+    }
+
+    if (dir_path && ((rc = mbedtls_x509_crt_parse_path(cert_store, dir_path)) < 0)) {
+        nc_mbedtls_strerr(NULL, rc, "Loading CA certificate from directory \"%s\" failed", dir_path);
+        return 1;
+    }
+
+    return 0;
+}
+
+int
+nc_client_tls_set_hostname_wrap(void *tls_session, const char *hostname)
+{
+    int rc;
+
+    rc = mbedtls_ssl_set_hostname(tls_session, hostname);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Setting hostname failed");
+        return 1;
+    }
+
+    return 0;
+}
+
+void
+nc_client_tls_print_connect_err_wrap(int connect_ret, const char *peername, void *UNUSED(tls_session))
+{
+    if (peername) {
+        nc_mbedtls_strerr(NULL, connect_ret, "TLS connect to host \"%s\" failed", peername);
+    } else {
+        nc_mbedtls_strerr(NULL, connect_ret, "TLS connect to an unknown host failed");
+    }
+}
+
+#endif /* NC_TLS */
+
+#ifdef NC_SSH
+
+int
+nc_ssh_generate_random_bytes_wrap(void *buf, size_t num)
+{
+    int rc = 0;
+    mbedtls_ctr_drbg_context *ctr_drbg = NULL;
+    mbedtls_entropy_context *entropy = NULL;
+
+    rc = nc_rng_new(&ctr_drbg, &entropy);
+    if (rc) {
+        goto cleanup;
+    }
+
+    rc = mbedtls_ctr_drbg_random(ctr_drbg, buf, num);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Creating random bytes failed");
+        goto cleanup;
+    }
+
+cleanup:
+    nc_rng_destroy(ctr_drbg, entropy);
+    return rc;
+}
+
+#endif /* NC_SSH */
+
+void
+nc_cert_destroy_wrap(void *cert)
+{
+    mbedtls_x509_crt_free(cert);
+    free(cert);
+}
+
+void
+nc_privkey_destroy_wrap(void *pkey)
+{
+    mbedtls_pk_free(pkey);
+    free(pkey);
+}
+
+void *
+nc_pem_to_cert_wrap(const char *cert_data)
+{
+    int rc;
+    mbedtls_x509_crt *cert;
+
+    cert = nc_cert_new();
+    if (!cert) {
+        return NULL;
+    }
+
+    rc = mbedtls_x509_crt_parse(cert, (const unsigned char *)cert_data, strlen(cert_data) + 1);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Parsing certificate data failed");
+        nc_cert_destroy_wrap(cert);
+        return NULL;
+    }
+
+    return cert;
+}
+
+void *
+nc_pem_to_privkey_wrap(const char *privkey_data)
+{
+    int rc = 0;
+    mbedtls_pk_context *pkey = NULL;
+    mbedtls_ctr_drbg_context *ctr_drbg = NULL;
+    mbedtls_entropy_context *entropy = NULL;
+
+    rc = nc_rng_new(&ctr_drbg, &entropy);
+    if (rc) {
+        goto cleanup;
+    }
+
+    pkey = nc_pkey_new_wrap();
+    if (!pkey) {
+        rc = 1;
+        goto cleanup;
+    }
+
+    rc = mbedtls_pk_parse_key(pkey, (const unsigned char *)privkey_data, strlen(privkey_data) + 1, NULL, 0, mbedtls_ctr_drbg_random, ctr_drbg);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Parsing private key data failed");
+        goto cleanup;
+    }
+
+cleanup:
+    if (rc) {
+        nc_privkey_destroy_wrap(pkey);
+        pkey = NULL;
+    }
+    nc_rng_destroy(ctr_drbg, entropy);
+    return pkey;
+}
+
+int
+nc_is_der_subpubkey_wrap(unsigned char *der, long len)
+{
+    int ret;
+    mbedtls_pk_context *pkey;
+
+    pkey = nc_pkey_new_wrap();
+    if (!pkey) {
+        return -1;
+    }
+
+    ret = mbedtls_pk_parse_subpubkey(&der, der + len, pkey);
+    nc_privkey_destroy_wrap(pkey);
+
+    return !ret;
+}
+
+int
+nc_base64_decode_wrap(const char *base64, unsigned char **bin)
+{
+    size_t size;
+    int rc;
+
+    /* get the size of the decoded data */
+    rc = mbedtls_base64_decode(NULL, 0, &size, (const unsigned char *)base64, strlen(base64));
+    if (rc != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+        nc_mbedtls_strerr(NULL, rc, "Base64 decoding failed");
+        return -1;
+    }
+
+    *bin = malloc(size);
+    NC_CHECK_ERRMEM_RET(!*bin, -1);
+
+    /* decode */
+    rc = mbedtls_base64_decode(*bin, size, &size, (const unsigned char *)base64, strlen(base64));
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Base64 decoding failed");
+        free(*bin);
+        *bin = NULL;
+        return -1;
+    }
+
+    return size;
+}
+
+int
+nc_base64_encode_wrap(const unsigned char *bin, size_t len, char **base64)
+{
+    size_t size;
+    int rc;
+
+    rc = mbedtls_base64_encode(NULL, 0, &size, bin, len);
+    if (rc != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+        nc_mbedtls_strerr(NULL, rc, "Base64 encoding failed");
+        return -1;
+    }
+
+    *base64 = malloc(size);
+    NC_CHECK_ERRMEM_RET(!*base64, -1);
+
+    rc = mbedtls_base64_encode((unsigned char *)*base64, size, &size, bin, len);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Base64 encoding failed");
+        free(*base64);
+        *base64 = NULL;
+        return -1;
+    }
+
+    return 0;
+}
+
+void *
+nc_import_privkey_file_wrap(const char *privkey_path)
+{
+    int rc;
+    mbedtls_pk_context *pkey;
+    mbedtls_ctr_drbg_context *ctr_drbg;
+    mbedtls_entropy_context *entropy;
+
+    if (nc_rng_new(&ctr_drbg, &entropy)) {
+        return NULL;
+    }
+
+    pkey = nc_pkey_new_wrap();
+    if (!pkey) {
+        nc_rng_destroy(ctr_drbg, entropy);
+        return NULL;
+    }
+
+    rc = mbedtls_pk_parse_keyfile(pkey, privkey_path, NULL, mbedtls_ctr_drbg_random, ctr_drbg);
+    nc_rng_destroy(ctr_drbg, entropy);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Parsing private key from file \"%s\" failed", privkey_path);
+        nc_privkey_destroy_wrap(pkey);
+        return NULL;
+    }
+    return pkey;
+}
+
+void *
+nc_import_cert_file_wrap(const char *cert_path)
+{
+    int rc;
+    mbedtls_x509_crt *c;
+
+    c = nc_cert_new();
+    if (!c) {
+        return NULL;
+    }
+
+    rc = mbedtls_x509_crt_parse_file(c, cert_path);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Parsing certificate from file \"%s\" failed", cert_path);
+        nc_cert_destroy_wrap(c);
+        return NULL;
+    }
+
+    return c;
+}
+
+#ifdef NC_SSH
+
+/**
+ * @brief Convert a PKCS#1/SEC1 private key to OpenSSH format.
+ *
+ * @param[in] pk Private key in PKCS#1/SEC1 PEM format.
+ * @param[out] privkey Private key in OpenSSH format.
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_privkey_export_openssh(const char *pk, char **privkey)
+{
+    int rc = 0;
+    ssh_key sshkey = NULL;
+
+    (void)pk;
+    *privkey = NULL;
+
+    /* older versions of libssh (< v0.11.0) do not support exporting to OpenSSH format,
+     * signal this to the caller by returning success with NULL privkey */
+#if (LIBSSH_VERSION_MAJOR > 0) || (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR >= 11)
+    /* load the SEC1/PKCS#1 using libssh */
+    if (ssh_pki_import_privkey_base64(pk, NULL, NULL, NULL, &sshkey)) {
+        ERR(NULL, "Importing the private key to libssh failed (%s).", ssh_get_error(NULL));
+        rc = 1;
+        goto cleanup;
+    }
+
+    /* export to OpenSSH format */
+    if (ssh_pki_export_privkey_base64_format(sshkey, NULL, NULL, NULL, privkey, SSH_FILE_FORMAT_OPENSSH)) {
+        ERR(NULL, "Exporting the private key to OpenSSH format failed (%s).", ssh_get_error(NULL));
+        rc = 1;
+        goto cleanup;
+    }
+
+cleanup:
+#endif // (LIBSSH_VERSION_MAJOR > 0) || (LIBSSH_VERSION_MAJOR == 0 && LIBSSH_VERSION_MINOR >= 11)
+
+    ssh_key_free(sshkey);
+    return rc;
+}
+
+#endif /* NC_SSH */
+
+int
+nc_privkey_export_wrap(void *pkey, enum nc_privkey_format format, char **privkey)
+{
+    int r, rc = 0;
+    size_t size = 128;
+    char *pk;
+
+    if (format == NC_PRIVKEY_FORMAT_UNKNOWN) {
+        ERRINT;
+        return 1;
+    }
+
+    /* use mbedtls_pk_write_key_pem to write either PKCS#1 or SEC1 format */
+    pk = malloc(size);
+    NC_CHECK_ERRMEM_RET(!pk, 1);
+
+    /* try to write the key, reallocating if the buffer is too small */
+    while ((r = mbedtls_pk_write_key_pem(pkey,
+            (unsigned char *)pk, size)) == MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+        size <<= 1;
+        pk = nc_realloc(pk, size);
+        NC_CHECK_ERRMEM_RET(!pk, 1);
+    }
+    if (r < 0) {
+        nc_mbedtls_strerr(NULL, r, "Exporting private key to PEM format failed");
+        rc = 1;
+        goto cleanup;
+    }
+
+#ifdef NC_SSH
+    if (format == NC_PRIVKEY_FORMAT_OPENSSH) {
+        rc = nc_privkey_export_openssh(pk, privkey);
+        if (rc) {
+            goto cleanup;
+        }
+
+        if (!*privkey) {
+            /* privkey not converted, just use the PEM as is (PKCS#1 or SEC1) */
+            *privkey = pk;
+            pk = NULL;
+        }
+    } else
+#endif /* NC_SSH */
+    {
+        /* return the PEM as is (PKCS#1 or SEC1), mbedtls can not do NC_PRIVKEY_FORMAT_X509 */
+        *privkey = pk;
+        pk = NULL;
+    }
+
+cleanup:
+    free(pk);
+    return rc;
+}
+
+char *
+nc_export_cert_pem_wrap(void *cert)
+{
+    char *b64 = NULL, *pem = NULL;
+
+    /* encode the certificate */
+    if (nc_base64_encode_wrap(((mbedtls_x509_crt *)cert)->raw.p, ((mbedtls_x509_crt *)cert)->raw.len, &b64)) {
+        goto cleanup;
+    }
+
+    if (asprintf(&pem, "-----BEGIN CERTIFICATE-----\n%s\n-----END CERTIFICATE-----\n", b64) == -1) {
+        ERRMEM;
+        pem = NULL;
+        goto cleanup;
+    }
+
+cleanup:
+    free(b64);
+    return pem;
+}
+
+char *
+nc_export_pubkey_pem_wrap(void *pkey)
+{
+    int rc;
+    char *pem;
+    size_t size = 128;
+
+    pem = malloc(size);
+    NC_CHECK_ERRMEM_RET(!pem, NULL);
+
+    while ((rc = mbedtls_pk_write_pubkey_pem(pkey, (unsigned char *)pem, size)) == MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+        size <<= 1;
+        pem = nc_realloc(pem, size);
+        NC_CHECK_ERRMEM_RET(!pem, NULL);
+    }
+    if (rc < 0) {
+        nc_mbedtls_strerr(NULL, rc, "Exporting public key to PEM format failed");
+        free(pem);
+        return NULL;
+    }
+
+    return pem;
+}
+
+int
+nc_privkey_is_rsa_wrap(void *pkey)
+{
+    return mbedtls_pk_get_type(pkey) == MBEDTLS_PK_RSA;
+}
+
+int
+nc_get_rsa_pubkey_params_wrap(void *pkey, void **e, void **n)
+{
+    int rc;
+    mbedtls_mpi *exp = NULL, *mod = NULL;
+
+    exp = malloc(sizeof *exp);
+    mod = malloc(sizeof *mod);
+    if (!exp || !mod) {
+        ERRMEM;
+        goto fail;
+    }
+    mbedtls_mpi_init(exp);
+    mbedtls_mpi_init(mod);
+
+    if ((rc = mbedtls_rsa_export(mbedtls_pk_rsa(*(mbedtls_pk_context *)pkey), mod, NULL, NULL, NULL, exp))) {
+        nc_mbedtls_strerr(NULL, rc, "Failed to export RSA public key parameters");
+        goto fail;
+    }
+
+    *e = exp;
+    *n = mod;
+    return 0;
+
+fail:
+    mbedtls_mpi_free(exp);
+    mbedtls_mpi_free(mod);
+    free(exp);
+    free(mod);
+    return 1;
+}
+
+void
+nc_destroy_mpi_wrap(void *mpi)
+{
+    mbedtls_mpi_free(mpi);
+    free(mpi);
+}
+
+int
+nc_privkey_is_ec_wrap(void *pkey)
+{
+    return mbedtls_pk_get_type(pkey) == MBEDTLS_PK_ECKEY;
+}
+
+char *
+nc_get_ec_group_wrap(void *pkey)
+{
+    const mbedtls_ecp_curve_info *curve_info;
+    mbedtls_ecp_group_id group_id;
+    mbedtls_ecp_keypair *ec;
+
+    /* get the group ID from the EC key */
+    ec = mbedtls_pk_ec(*(mbedtls_pk_context *)pkey);
+    group_id = ec->private_grp.id;
+
+    /* get the group name based on the id */
+    curve_info = mbedtls_ecp_curve_info_from_grp_id(group_id);
+    return strdup(curve_info->name);
+}
+
+int
+nc_get_ec_pubkey_params_wrap(void *pkey, void **q, void **q_grp)
+{
+    int ret;
+    mbedtls_ecp_group *grp = NULL;
+    mbedtls_ecp_point *p = NULL;
+    mbedtls_mpi *d = NULL;
+
+    /* init group, mpi and point */
+    grp = malloc(sizeof *grp);
+    d = malloc(sizeof *d);
+    p = malloc(sizeof *p);
+    if (!grp || !p || !d) {
+        ERRMEM;
+        ret = 1;
+        goto cleanup;
+    }
+    mbedtls_ecp_group_init(grp);
+    mbedtls_mpi_init(d);
+    mbedtls_ecp_point_init(p);
+
+    /* get the group and public key */
+    ret = mbedtls_ecp_export(mbedtls_pk_ec(*(mbedtls_pk_context *)pkey), grp, d, p);
+    if (ret) {
+        nc_mbedtls_strerr(NULL, ret, "Failed to export EC private key parameters");
+        ret = 1;
+        goto cleanup;
+    }
+
+    *q_grp = grp;
+    grp = NULL;
+    *q = p;
+    p = NULL;
+
+cleanup:
+    mbedtls_ecp_group_free(grp);
+    free(grp);
+    mbedtls_mpi_free(d);
+    free(d);
+    mbedtls_ecp_point_free(p);
+    free(p);
+    return ret;
+}
+
+int
+nc_ec_point_to_bin_wrap(void *q, void *q_grp, unsigned char **bin, int *bin_len)
+{
+    int rc;
+    unsigned char *buf;
+    size_t buf_len = 32, out_len;
+
+    buf = malloc(buf_len);
+    NC_CHECK_ERRMEM_RET(!buf, 1);
+
+    while ((rc = (mbedtls_ecp_point_write_binary(q_grp, q, MBEDTLS_ECP_PF_COMPRESSED, &out_len, buf, buf_len)))) {
+        if (rc != MBEDTLS_ERR_ECP_BUFFER_TOO_SMALL) {
+            break;
+        }
+        buf_len <<= 1;
+        buf = nc_realloc(buf, buf_len);
+        NC_CHECK_ERRMEM_RET(!buf, 1);
+    }
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Failed to write EC public key binary");
+        free(buf);
+        return 1;
+    }
+
+    *bin = buf;
+    *bin_len = out_len;
+    return 0;
+}
+
+void
+nc_ec_point_destroy_wrap(void *p)
+{
+    mbedtls_ecp_point_free(p);
+    free(p);
+}
+
+void
+nc_ec_group_destroy_wrap(void *grp)
+{
+    mbedtls_ecp_group_free(grp);
+    free(grp);
+}
+
+int
+nc_mpi2bin_wrap(void *mpi, unsigned char **bin, int *bin_len)
+{
+    int rc;
+    unsigned char *buf;
+    int buf_len;
+
+    buf_len = mbedtls_mpi_size(mpi);
+    buf = malloc(buf_len);
+    NC_CHECK_ERRMEM_RET(!buf, 1);
+
+    rc = mbedtls_mpi_write_binary(mpi, buf, buf_len);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Failed to convert MPI to binary");
+        free(buf);
+        return 1;
+    }
+
+    *bin = buf;
+    *bin_len = buf_len;
+    return 0;
+}
+
+void *
+nc_import_pubkey_file_wrap(const char *pubkey_path)
+{
+    int rc = 0;
+    mbedtls_pk_context *pk = NULL;
+
+    pk = nc_pkey_new_wrap();
+    if (!pk) {
+        return NULL;
+    }
+
+    rc = mbedtls_pk_parse_public_keyfile(pk, pubkey_path);
+    if (rc) {
+        nc_mbedtls_strerr(NULL, rc, "Parsing public key from file \"%s\" failed", pubkey_path);
+        nc_privkey_destroy_wrap(pk);
+        return NULL;
+    }
+
+    return pk;
+}
+
+time_t
+nc_get_cert_exp_time_wrap(void *cert)
+{
+    struct tm t = {0};
+    mbedtls_x509_time *valid_to;
+
+    valid_to = &((mbedtls_x509_crt *)cert)->valid_to;
+
+    t.tm_sec = valid_to->sec;
+    t.tm_min = valid_to->min;
+    t.tm_hour = valid_to->hour;
+
+    t.tm_mday = valid_to->day;
+    t.tm_mon = valid_to->mon - 1;
+    t.tm_year = valid_to->year - 1900;
+
+    /* let system figure out the DST */
+    t.tm_isdst = -1;
+
+    return timegm(&t);
+}

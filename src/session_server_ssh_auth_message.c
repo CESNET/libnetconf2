@@ -206,7 +206,7 @@ nc_server_ssh_msg_auth_kbdint_system(struct nc_session *session, ssh_message msg
  * @return 0 if the authentication was successful, -1 if not (@p msg already replied to).
  */
 static int
-nc_server_ssh_msg_auth_none(int local_users_supported, struct nc_auth_client *auth_client, ssh_message msg)
+nc_server_ssh_msg_auth_none(int local_users_supported, struct nc_ssh_auth_client *auth_client, ssh_message msg)
 {
     assert(!local_users_supported || auth_client);
 
@@ -229,11 +229,12 @@ nc_server_ssh_msg_auth_none(int local_users_supported, struct nc_auth_client *au
  */
 static int
 nc_server_ssh_msg_auth_password(struct nc_session *session, int local_users_supported,
-        struct nc_auth_client *auth_client, ssh_message msg)
+        struct nc_ssh_auth_client *auth_client, ssh_message msg)
 {
     int rc;
 
-    rc = nc_server_ssh_auth_password_check(session, session->username, ssh_message_auth_password(msg), auth_client, local_users_supported);
+    rc = nc_server_ssh_auth_password_check(session, session->username, ssh_message_auth_password(msg), auth_client,
+            local_users_supported);
 
     return rc ? 1 : 0;
 }
@@ -249,7 +250,7 @@ nc_server_ssh_msg_auth_password(struct nc_session *session, int local_users_supp
  */
 static int
 nc_server_ssh_msg_auth_pubkey(struct nc_session *session, int local_users_supported,
-        struct nc_auth_client *auth_client, ssh_message msg)
+        struct nc_ssh_auth_client *auth_client, ssh_message msg)
 {
     int signature_state, ret;
 
@@ -277,10 +278,10 @@ nc_server_ssh_msg_auth_pubkey(struct nc_session *session, int local_users_suppor
  * @return 0 if the authentication was successful, 1 if not.
  */
 static int
-nc_server_ssh_msg_auth_kbdint(struct nc_session *session, int local_users_supported, struct nc_auth_client *auth_client, ssh_message msg)
+nc_server_ssh_msg_auth_kbdint(struct nc_session *session, int local_users_supported, struct nc_ssh_auth_client *auth_client, ssh_message msg)
 {
     int r;
-    enum nc_kbdint_backend backend;
+    enum nc_ssh_kbdint_backend backend;
 
     int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg,
             void *user_data);
@@ -291,7 +292,7 @@ nc_server_ssh_msg_auth_kbdint(struct nc_session *session, int local_users_suppor
         return 1;
     }
 
-    if (backend == NC_KBDINT_BACKEND_CUSTOM_CLB) {
+    if (backend == NC_SSH_KBDINT_BACKEND_CUSTOM_CLB) {
         /* custom callback has higher priority, it must not be called with the options lock held */
         if (nc_server_ssh_get_interactive_auth_clb(&interactive_auth_clb, &interactive_auth_data)) {
             return 1;
@@ -394,11 +395,11 @@ nc_server_ssh_msg_channel_subsystem(struct nc_session *session, ssh_channel chan
  */
 static int
 nc_server_ssh_msg_auth(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg,
-        int method, const char *str_method, int local_users_supported, struct nc_auth_state *auth_state)
+        int method, const char *str_method, int local_users_supported, struct nc_ssh_auth_state *auth_state)
 {
     const char *username;
     int ret = 0;
-    struct nc_auth_client *auth_client = NULL;
+    struct nc_ssh_auth_client *auth_client = NULL;
     int first_time = 0;
 
     /* save the username, do not let the client change it */
@@ -476,7 +477,8 @@ nc_server_ssh_msg_auth(struct nc_session *session, struct nc_server_ssh_opts *op
 }
 
 int
-nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg, struct nc_auth_state *auth_state)
+nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg,
+        struct nc_ssh_auth_state *auth_state)
 {
     const char *str_type, *str_subtype = NULL;
     int subtype, type, local_users_supported;

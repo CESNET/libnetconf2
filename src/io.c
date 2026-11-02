@@ -41,11 +41,9 @@
 #include "session.h"
 #include "session_p.h"
 
-#ifdef NC_ENABLED_SSH_TLS
-
-#include "session_wrapper.h"
-
-#endif /* NC_ENABLED_SSH_TLS */
+#ifdef NC_TLS
+# include "session_crypto_wrapper.h"
+#endif /* NC_TLS */
 
 const char *nc_msgtype2str[] = {
     "error",
@@ -129,7 +127,7 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, int no_wait, uint
             }
             break;
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
         case NC_TI_SSH:
             /* read via libssh */
             r = ssh_channel_read(session->ti.libssh.channel, buf + readd, count - readd, 0);
@@ -151,7 +149,9 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, int no_wait, uint
                 break;
             }
             break;
+#endif /* NC_SSH */
 
+#ifdef NC_TLS
         case NC_TI_TLS:
             r = nc_tls_read_wrap(session, (unsigned char *)buf + readd, count - readd);
             if (r < 0) {
@@ -159,7 +159,7 @@ nc_read(struct nc_session *session, char *buf, uint32_t count, int no_wait, uint
                 return r;
             }
             break;
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
         }
 
         if (r == 0) {
@@ -444,7 +444,7 @@ nc_read_poll(struct nc_session *session, int io_timeout)
     }
 
     switch (session->ti_type) {
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     case NC_TI_SSH:
         if (io_timeout == -1) {
             /* BUG libssh 0.11.0 replaces timeout -1 with 0 for non-blocking sessions */
@@ -471,6 +471,8 @@ nc_read_poll(struct nc_session *session, int io_timeout)
             fds.revents = 0;
         }
         break;
+#endif /* NC_SSH */
+#ifdef NC_TLS
     case NC_TI_TLS:
         ret = nc_tls_get_num_pending_bytes_wrap(session->ti.tls.session);
         if (ret) {
@@ -481,7 +483,7 @@ nc_read_poll(struct nc_session *session, int io_timeout)
         }
 
         fds.fd = nc_tls_get_fd_wrap(session);
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
     /* fallthrough */
     case NC_TI_FD:
     case NC_TI_UNIX:
@@ -598,14 +600,16 @@ nc_session_is_connected(const struct nc_session *session)
     case NC_TI_UNIX:
         fds.fd = session->ti.unixsock.sock;
         break;
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     case NC_TI_SSH:
         fds.fd = ssh_get_fd(session->ti.libssh.session);
         break;
+#endif /* NC_SSH */
+#ifdef NC_TLS
     case NC_TI_TLS:
         fds.fd = nc_tls_get_fd_wrap(session);
         break;
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
     default:
         return 0;
     }
@@ -676,7 +680,7 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
             }
             break;
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
         case NC_TI_SSH:
             if (ssh_channel_is_closed(session->ti.libssh.channel)) {
                 ERR(session, "SSH channel unexpectedly closed.");
@@ -690,6 +694,8 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
                 return -1;
             }
             break;
+#endif /* NC_SSH */
+#ifdef NC_TLS
         case NC_TI_TLS:
             c = nc_tls_write_wrap(session, (const unsigned char *)buf + written, count - written);
             if (c < 0) {
@@ -697,7 +703,7 @@ nc_write(struct nc_session *session, const void *buf, uint32_t count)
                 return -1;
             }
             break;
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
         default:
             ERRINT;
             return -1;

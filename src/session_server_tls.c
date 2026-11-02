@@ -5,7 +5,7 @@
  * @brief libnetconf2 TLS server session manipulation functions
  *
  * @copyright
- * Copyright (c) 2015 - 2023 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -24,14 +24,12 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <curl/curl.h>
-
 #include "compat.h"
 #include "config.h"
 #include "log_p.h"
 #include "session.h"
+#include "session_crypto_wrapper.h"
 #include "session_p.h"
-#include "session_wrapper.h"
 
 /**
  * @brief Get certificate and private key data from keystore.
@@ -143,7 +141,7 @@ nc_base64der_to_privkey(const char *in, const char *key_str)
         return NULL;
     }
 
-    pkey = nc_tls_pem_to_privkey_wrap(buf);
+    pkey = nc_pem_to_privkey_wrap(buf);
     free(buf);
     return pkey;
 }
@@ -276,7 +274,7 @@ nc_server_tls_sha512(void *cert)
  * @return 0 if username was resolved, 1 if no applicable field was found, -1 on error.
  */
 static int
-nc_server_tls_get_username(void *cert, struct nc_ctn *ctn, char **username)
+nc_server_tls_get_username(void *cert, struct nc_tls_ctn *ctn, char **username)
 {
     char *san_value = NULL;
     void *sans;
@@ -401,7 +399,7 @@ nc_server_tls_fingerprint_get_value(const char *fingerprint)
  * @return 0 on match with resolved username, 1 on no match, -1 on error.
  */
 static int
-nc_server_tls_cert_to_name(struct nc_ctn *ctn, void *cert_chain, char **username)
+nc_server_tls_cert_to_name(struct nc_tls_ctn *ctn, void *cert_chain, char **username)
 {
     int rc = 1, i, cert_count, fingerprint_match = 0;
     char *digest_hex = NULL;
@@ -502,7 +500,7 @@ _nc_server_tls_cert_to_name(const struct nc_server_config *config, struct nc_ser
 {
     int rc = 1;
     const struct nc_endpt *referenced_endpt;
-    struct nc_ctn *ctn;
+    struct nc_tls_ctn *ctn;
 
     for (ctn = opts->ctn; ctn; ctn = ctn->next) {
         rc = nc_server_tls_cert_to_name(ctn, cert_chain, username);
@@ -561,7 +559,7 @@ _nc_server_tls_verify_peer_cert(const struct nc_server_config *config, void *pee
 
         /* compare stored with received */
         rc = nc_server_tls_certs_match_wrap(peer_cert, cert);
-        nc_tls_cert_destroy_wrap(cert);
+        nc_cert_destroy_wrap(cert);
         if (rc) {
             /* found a match */
             VRB(NULL, "Cert verify: fail, but the end-entity certificate is trusted, continuing.");
@@ -744,7 +742,7 @@ nc_server_tls_load_server_cert_key(const struct nc_server_config *config, struct
 
     pkey = nc_base64der_to_privkey(privkey_data, nc_privkey_format_to_str(privkey_type));
     if (!pkey) {
-        nc_tls_cert_destroy_wrap(cert);
+        nc_cert_destroy_wrap(cert);
         return 1;
     }
 
@@ -782,7 +780,7 @@ nc_server_tls_load_trusted_certs(const struct nc_server_config *config,
 
         /* store cert in cert store */
         if (nc_tls_add_cert_to_store_wrap(cert, cert_store)) {
-            nc_tls_cert_destroy_wrap(cert);
+            nc_cert_destroy_wrap(cert);
             return 1;
         }
     }
@@ -1006,8 +1004,8 @@ fail:
     }
 
     nc_tls_config_destroy_wrap(tls_cfg);
-    nc_tls_cert_destroy_wrap(srv_cert);
-    nc_tls_privkey_destroy_wrap(srv_pkey);
+    nc_cert_destroy_wrap(srv_cert);
+    nc_privkey_destroy_wrap(srv_pkey);
     nc_tls_cert_store_destroy_wrap(cert_store);
     free(cipher_suites);
 

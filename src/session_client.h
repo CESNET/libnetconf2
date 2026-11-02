@@ -26,9 +26,9 @@ extern "C" {
 #include "netconf.h"
 #include "session.h"
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
 # include <libssh/libssh.h>
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH */
 
 /**
  * @addtogroup client
@@ -193,7 +193,7 @@ struct nc_session *nc_connect_unix(const char *address, struct ly_ctx *ctx);
 
 /** @} Client Session */
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
 
 /**
  * @defgroup client_ssh Client SSH
@@ -418,6 +418,10 @@ struct nc_session *nc_connect_ssh_channel(struct nc_session *session, struct ly_
 
 /** @} Client SSH */
 
+#endif /* NC_SSH */
+
+#ifdef NC_TLS
+
 /**
  * @defgroup client_tls Client TLS
  * @ingroup client
@@ -482,7 +486,7 @@ struct nc_session *nc_connect_tls(const char *host, uint16_t port, struct ly_ctx
 
 /** @} Client TLS */
 
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
 
 /**
  * @addtogroup client_session

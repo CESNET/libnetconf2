@@ -69,7 +69,7 @@ libnetconf2_test(NAME test_thread_messages)
 libnetconf2_test(NAME test_unix_socket)
 
 # tests depending on SSH/TLS
-if(ENABLE_SSH_TLS)
+if(ENABLE_SSH AND ENABLE_TLS)
     libnetconf2_test(NAME test_authkeys)
     libnetconf2_test(NAME test_cert_exp_notif)
     libnetconf2_test(NAME test_ch PORT_COUNT 2)
