@@ -18,7 +18,7 @@
 #define _GNU_SOURCE /* pthread_rwlock_t */
 
 #cmakedefine HAVE_CRYPT_H
-#ifdef HAVE_CRYPT_H
+#if defined (NC_SSH) && defined (HAVE_CRYPT_H)
 # include <crypt.h>
 #endif
 
@@ -228,7 +228,7 @@ char *strchrnul(const char *s, int c);
 char *get_current_dir_name(void);
 #endif
 
-#ifndef HAVE_CRYPT_R
+#if defined (NC_SSH) && !defined (HAVE_CRYPT_R)
 
 /* unused anyway */
 struct crypt_data {
