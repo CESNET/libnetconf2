@@ -380,7 +380,7 @@ get_current_dir_name(void)
 
 #endif
 
-#ifndef HAVE_CRYPT_R
+#if defined (NC_SSH) && !defined (HAVE_CRYPT_R)
 char *
 crypt_r(const char *phrase, const char *setting, struct crypt_data *data)
 {
