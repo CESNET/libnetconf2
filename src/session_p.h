@@ -5,7 +5,7 @@
  * @brief libnetconf2 session manipulation
  *
  * @copyright
- * Copyright (c) 2017 - 2025 CESNET, z.s.p.o.
+ * Copyright (c) 2017 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -26,17 +26,19 @@
 
 #include <libyang/libyang.h>
 
+#ifdef NC_SSH
+# include <libssh/libssh.h>
+#endif /* NC_SSH */
+
 #include "compat.h"
 #include "config.h"
 #include "session_client.h"
 #include "session_server.h"
 #include "session_server_ch.h"
 
-#ifdef NC_ENABLED_SSH_TLS
-
-#include "session_wrapper.h"
-
-#endif /* NC_ENABLED_SSH_TLS */
+#ifdef NC_TLS
+# include "session_crypto_wrapper.h"
+#endif /* NC_TLS */
 
 extern struct nc_server_opts server_opts;
 
@@ -271,11 +273,6 @@ enum nc_store_type {
     NC_STORE_SYSTEM         /**< key/certificate is managed by the system */
 };
 
-#ifdef NC_ENABLED_SSH_TLS
-
-#include <curl/curl.h>
-#include <libssh/libssh.h>
-
 /**
  * @brief Enumeration of SSH public key formats.
  */
@@ -299,9 +296,9 @@ enum nc_privkey_format {
 /**
  * @brief Enumeration of SSH keyboard-interactive authentication methods.
  */
-enum nc_kbdint_auth_method {
-    NC_KBDINT_AUTH_METHOD_NONE = 0,     /**< Keyboard-interactive authentication disabled. */
-    NC_KBDINT_AUTH_METHOD_SYSTEM        /**< Keyboard-interactive authentication is left to the system (PAM, shadow, etc.). */
+enum nc_ssh_kbdint_auth_method {
+    NC_SSH_KBDINT_AUTH_METHOD_NONE = 0,     /**< Keyboard-interactive authentication disabled. */
+    NC_SSH_KBDINT_AUTH_METHOD_SYSTEM        /**< Keyboard-interactive authentication is left to the system (PAM, shadow, etc.). */
 };
 
 /**
@@ -375,7 +372,7 @@ struct nc_keystore {
 /**
  * @brief Tracks the state of a client's authentication.
  */
-struct nc_auth_state {
+struct nc_ssh_auth_state {
     int methods;            /**< Bit field of authentication methods that the user supports. */
     int method_count;       /**< Number of authentication methods that the user supports. */
     int success_methods;    /**< Bit field of authentication methods that the user successfully authenticated with. */
@@ -385,7 +382,7 @@ struct nc_auth_state {
 /**
  * @brief Client authorized to connect to the server over SSH.
  */
-struct nc_auth_client {
+struct nc_ssh_auth_client {
     char *username;                             /**< Identifier of the client. */
 
     enum nc_store_type pubkey_store;            /**< Specifies how/where the client's public keys are stored. */
@@ -397,15 +394,15 @@ struct nc_auth_client {
     char *password;                             /**< Password for password authentication. */
     time_t password_last_modified;              /**< Time of the last password modification. */
 
-    enum nc_kbdint_auth_method kbdint_method;   /**< Keyboard-interactive authentication method,
-                                                  *  may be extended by e.g. a union for each method when needed. */
+    enum nc_ssh_kbdint_auth_method kbdint_method;   /**< Keyboard-interactive authentication method,
+                                                      *  may be extended by e.g. a union for each method when needed. */
     int none_enabled;                           /**< Whether "none" authentication is enabled for this user. */
 };
 
 /**
  * @brief Server's SSH host key.
  */
-struct nc_hostkey {
+struct nc_ssh_hostkey {
     char *name;                         /**<  Identifier of the hostkey. */
 
     enum nc_store_type store;           /**< Specifies how/where the key is stored. */
@@ -418,7 +415,7 @@ struct nc_hostkey {
 /**
  * @brief Password-based authentication lockout policy of the server, shared by all the SSH endpoints.
  */
-struct nc_authlock_opts {
+struct nc_ssh_authlock_opts {
     uint16_t max_fails;         /**< consecutive failed password-based authentications that lock a user out,
                                      0 if the lockout is disabled */
     uint16_t duration;          /**< how long a user stays locked out, seconds */
@@ -429,23 +426,23 @@ struct nc_authlock_opts {
  * @brief Server options for configuring the SSH transport protocol.
  */
 struct nc_server_ssh_opts {
-    struct nc_hostkey *hostkeys;            /**< Server's hostkeys (sized-array, see libyang docs). */
+    struct nc_ssh_hostkey *hostkeys;            /**< Server's hostkeys (sized-array, see libyang docs). */
 
-    struct nc_auth_client *auth_clients;    /**< Server's authorized clients (sized-array, see libyang docs). */
+    struct nc_ssh_auth_client *auth_clients;    /**< Server's authorized clients (sized-array, see libyang docs). */
 
-    char *referenced_endpt_name;            /**< Reference to another endpoint (used for client authentication). */
+    char *referenced_endpt_name;                /**< Reference to another endpoint (used for client authentication). */
 
-    char *hostkey_algs;                     /**< Used hostkey algorithms (comma-separated list). */
-    char *encryption_algs;                  /**< Used encryption algorithms (comma-separated list). */
-    char *kex_algs;                         /**< Used key exchange algorithms (comma-separated list). */
-    char *mac_algs;                         /**< Used MAC algorithms (comma-separated list). */
+    char *hostkey_algs;                         /**< Used hostkey algorithms (comma-separated list). */
+    char *encryption_algs;                      /**< Used encryption algorithms (comma-separated list). */
+    char *kex_algs;                             /**< Used key exchange algorithms (comma-separated list). */
+    char *mac_algs;                             /**< Used MAC algorithms (comma-separated list). */
 
-    char *banner;                           /**< SSH banner message, sent before authentication. */
+    char *banner;                               /**< SSH banner message, sent before authentication. */
 
-    uint16_t auth_timeout;                  /**< Authentication timeout. */
+    uint16_t auth_timeout;                      /**< Authentication timeout. */
 
-    uint16_t max_auth_attempts;             /**< Failed authentication attempts allowed within a single session,
-                                                 0 for no limit. */
+    uint16_t max_auth_attempts;                 /**< Failed authentication attempts allowed within a single session,
+                                                     0 for no limit. */
 };
 
 /**
@@ -459,12 +456,12 @@ struct nc_curl_data {
 /**
  * @brief Cert-to-name entries.
  */
-struct nc_ctn {
+struct nc_tls_ctn {
     uint32_t id;                        /**< ID of the entry, the lower the higher priority */
     char *fingerprint;                  /**< Fingerprint of the entry */
     NC_TLS_CTN_MAPTYPE map_type;        /**< Specifies how to get the username from the certificate */
     char *name;                         /**< Username for this entry */
-    struct nc_ctn *next;                /**< Linked-list reference to the next entry */
+    struct nc_tls_ctn *next;                /**< Linked-list reference to the next entry */
 };
 
 /**
@@ -511,7 +508,7 @@ struct nc_server_tls_opts {
 
     struct nc_server_tls_client_auth client_auth;   /**< Client authentication configuration. */
 
-    struct nc_ctn *ctn;                 /**< Cert-to-name entries linked list */
+    struct nc_tls_ctn *ctn;                 /**< Cert-to-name entries linked list */
 
     char *referenced_endpt_name;        /**< Reference to another endpoint (used for client authentication). */
 
@@ -520,8 +517,6 @@ struct nc_server_tls_opts {
 
     char *cipher_suites;                /**< Allowed cipher suites (colon-separated list). */
 };
-
-#endif /* NC_ENABLED_SSH_TLS */
 
 /**
  * @brief TCP keepalives configuration.
@@ -570,8 +565,6 @@ struct nc_client_unix_opts {
     char *username;
 };
 
-#ifdef NC_ENABLED_SSH_TLS
-
 /* number of all supported authentication methods */
 #define NC_SSH_AUTH_COUNT 3
 
@@ -613,8 +606,6 @@ struct nc_client_tls_opts {
     char *ca_file;
     char *ca_dir;
 };
-
-#endif /* NC_ENABLED_SSH_TLS */
 
 /**
  * @brief Stores data for the client monitoring thread.
@@ -665,16 +656,16 @@ struct nc_client_context {
 
     struct nc_client_unix_opts unix_opts;
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     struct nc_client_ssh_opts ssh_opts;
     struct nc_client_ssh_opts ssh_ch_opts;
+#endif /* NC_SSH */
 
+#ifdef NC_TLS
     struct nc_client_tls_opts tls_opts;
     struct nc_client_tls_opts tls_ch_opts;
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
 };
-
-#ifdef NC_ENABLED_SSH_TLS
 
 /**
  * @brief Stores time information used for creating certificate expiration intervals.
@@ -736,8 +727,6 @@ struct nc_cert_path_aux {
     (cp)->ts_cbag_name = (ts_cbag); \
     (cp)->ts_cert_name = (ts_cert)
 
-#endif /* NC_ENABLED_SSH_TLS */
-
 /**
  * @brief Call Home client thread data.
  */
@@ -791,10 +780,12 @@ struct nc_server_config {
 
         NC_TRANSPORT_IMPL ti;       /**< Transport implementation of the endpoint. */
         union {
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
             struct nc_server_ssh_opts *ssh;     /**< SSH transport options. */
+#endif /* NC_SSH */
+#ifdef NC_TLS
             struct nc_server_tls_opts *tls;     /**< TLS transport options. */
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
             struct nc_server_unix_opts *unix;   /**< UNIX socket transport options. */
         } opts;
     } *endpts;      /**< Listening endpoints (sized-array, see libyang docs). */
@@ -814,10 +805,12 @@ struct nc_server_config {
 
             NC_TRANSPORT_IMPL ti;           /**< Transport implementation of the Call Home endpoint. */
             union {
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
                 struct nc_server_ssh_opts *ssh;     /**< SSH transport options for the Call Home endpoint. */
+#endif /* NC_SSH */
+#ifdef NC_TLS
                 struct nc_server_tls_opts *tls;     /**< TLS transport options for the Call Home endpoint. */
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
             } opts;
         } *ch_endpts;                       /**< Call Home endpoints (sized-array, see libyang docs). */
 
@@ -833,7 +826,7 @@ struct nc_server_config {
         uint16_t max_wait;                  /**< Maximum time to wait for a Call Home connection in seconds. */
     } *ch_clients;                          /**< Call Home clients (sized-array, see libyang docs). */
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
     struct nc_keystore keystore;        /**< Asymmetric and symmetric key storage used for server identity. */
     struct nc_truststore truststore;    /**< Public keys and certificates storage used for client authentication. */
 
@@ -846,9 +839,11 @@ struct nc_server_config {
         struct nc_cert_exp_time anchor; /**< Lower bound of the given interval. */
         struct nc_cert_exp_time period; /**< Period of the given interval. */
     } *cert_exp_notif_intervals;        /**< Certificate expiration notification intervals (sized-array, see libyang docs). */
+#endif /* NC_SSH or NC_TLS */
 
-    struct nc_authlock_opts authlock;   /**< SSH password-based authentication lockout policy. */
-#endif /* NC_ENABLED_SSH_TLS */
+#ifdef NC_SSH
+    struct nc_ssh_authlock_opts authlock;   /**< SSH password-based authentication lockout policy. */
+#endif /* NC_SSH */
 };
 
 struct nc_server_opts {
@@ -938,15 +933,18 @@ struct nc_server_opts {
      */
     pthread_rwlock_t opts_lock;
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     char *authkey_path_fmt;             /**< Path to users' public keys that may contain tokens with special meaning. */
     char *pam_config_name;              /**< PAM configuration file name. */
     char *ssh_protocol_string;          /**< SSH protocol identification string. */
     int (*interactive_auth_clb)(const struct nc_session *session, ssh_session ssh_sess, ssh_message msg, void *user_data);
     void *interactive_auth_data;
     void (*interactive_auth_data_free)(void *data);
+#endif /* NC_SSH **/
 
+#ifdef NC_TLS
     int (*user_verify_clb)(const struct nc_session *session);
+#endif /* NC_TLS */
 
     /**
      * @brief Data for automatically dispatching Call Home clients.
@@ -961,13 +959,16 @@ struct nc_server_opts {
         void *new_session_fail_cb_data;                         /**< Data passed to the new_session_fail_cb callback. */
     } ch_dispatch_data;
 
+#if defined (NC_SSH) || defined (NC_TLS)
     struct {
         pthread_t tid;              /**< Thread ID of the certificate expiration notification thread. */
         int thread_running;         /**< Flag representing the runningness of the cert exp notification thread. */
         pthread_mutex_t lock;       /**< Certificate expiration notification thread's data and cond lock. */
         pthread_cond_t cond;        /**< Condition for the certificate expiration notification thread. */
     } cert_exp_notif;
+#endif /* NC_SSH or NC_TLS */
 
+#ifdef NC_SSH
     /* ACCESS locked - authlock lock - leaf lock, never acquire another lock while holding it */
     pthread_mutex_t authlock_lock;      /**< Lock for the password-based authentication lockout tally. */
 
@@ -977,13 +978,13 @@ struct nc_server_opts {
      * Shared by all the SSH endpoints, an entry is created on the first failure of a user. Only users
      * known to the server ever get one, so the tally is bounded by the number of users.
      */
-    struct nc_authlock_entry {
+    struct nc_ssh_authlock_entry {
         char *username;         /**< User the tally belongs to. */
         uint32_t fails;         /**< Consecutive failed password-based authentications. */
         time_t last_fail;       /**< When the last one was. */
         time_t locked_until;    /**< No password-based authentication before this, 0 if not locked out. */
     } *authlock;    /**< Password-based authentication lockout tally (sized-array, see libyang docs). */
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH */
 
     /**
      * @brief Entry for a UNIX socket path configured via API (Hidden).
@@ -999,10 +1000,10 @@ struct nc_server_opts {
     /* ACCESS unlocked */
     ATOMIC_T new_session_id;
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_TLS
     /* ACCESS unlocked - set from env */
     FILE *tls_keylog_file;                  /**< File to log TLS secrets to. */
-#endif
+#endif /* NC_TLS */
 
     /* ACCESS locked - separate lock to allow concurrent reads of the config while an update is being applied */
     pthread_mutex_t config_update_lock; /**< Lock for synchronizing configuration updates, used to wait for pending
@@ -1095,7 +1096,7 @@ struct nc_session {
         struct {
             int sock;            /**< socket file descriptor */
         } unixsock;              /**< NC_TI_UNIX transport implementation structure */
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
         struct {
             ssh_channel channel;
             ssh_session session;
@@ -1107,13 +1108,15 @@ struct nc_session {
                                           otherwise there is a ring list of the NETCONF sessions */
             ssh_event event; /**< libssh event structure used for the callback-based auth (libssh >= 0.12) */
         } libssh;
+#endif /* NC_SSH */
 
+#ifdef NC_TLS
         struct {
             void *session;
             void *config;
             struct nc_tls_ctx ctx;
         } tls;
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
     } ti;                          /**< transport implementation data */
     char *username;
     char *host;
@@ -1136,10 +1139,8 @@ struct nc_session {
 #define NC_SESSION_CLIENT_MONITORED 0x40    /**< session is being monitored by the client monitoring thread */
 
 /* server flags */
-#ifdef NC_ENABLED_SSH_TLS
 #define NC_SESSION_SSH_AUTHENTICATED 0x10   /**< SSH session authenticated */
 #define NC_SESSION_SSH_SUBSYS_NETCONF 0x20  /**< netconf subsystem requested */
-#endif
 
     union {
         struct {
@@ -1188,7 +1189,7 @@ struct nc_session {
              */
             const struct nc_server_config *config;
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
             /**
              * @brief Running flag of the Call Home thread performing the transport handshake.
              *
@@ -1198,11 +1199,15 @@ struct nc_session {
              * by ::nc_connect_ch_endpt() exactly like ::nc_session.opts.server.config.
              */
             ATOMIC_T *ch_thread_running;
+#endif /* NC_SSH or NC_TLS */
 
-            uint16_t ssh_auth_attempts;    /**< number of failed SSH authentication attempts */
+#ifdef NC_SSH
+            uint16_t ssh_auth_attempts; /**< number of failed SSH authentication attempts */
+#endif /* NC_SSH */
 
-            void *client_cert;                /**< TLS client certificate if used for authentication */
-#endif /* NC_ENABLED_SSH_TLS */
+#ifdef NC_TLS
+            void *client_cert;          /**< TLS client certificate if used for authentication */
+#endif /* NC_TLS */
         } server;
     } opts;
 };
@@ -1272,7 +1277,7 @@ struct nc_ntf_thread_arg {
     void (*free_data)(void *);
 };
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
 
 /**
  * @brief PAM callback arguments.
@@ -1281,6 +1286,10 @@ struct nc_pam_thread_arg {
     ssh_message msg;                /**< libssh message */
     struct nc_session *session;     /**< NETCONF session */
 };
+
+#endif /* NC_SSH */
+
+#if defined (NC_SSH) || defined (NC_TLS)
 
 /**
  * @brief Converts private key format to a string.
@@ -1309,7 +1318,7 @@ int nc_is_pk_subject_public_key_info(const char *b64);
  */
 void * nc_base64der_to_cert(const char *data);
 
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH or NC_TLS */
 
 /**
  * @brief Start monitoring a session.
@@ -1352,6 +1361,13 @@ void nc_client_msgs_free(struct nc_session *session);
  */
 struct nc_client_context *nc_client_context_location(void);
 
+/**
+ * @brief Similar to realloc() but frees ptr on error.
+ *
+ * @param[in] ptr Current memory to change.
+ * @param[in] size New size of the memory.
+ * @return New memory, NULL on error.
+ */
 void *nc_realloc(void *ptr, size_t size);
 
 /**
@@ -1373,7 +1389,7 @@ int nc_server_binds_reconcile(const struct nc_server_config *config);
  */
 void nc_server_binds_destroy(void);
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
 
 /**
  * @brief Reconcile the Call Home thread registry with the given server configuration.
@@ -1397,7 +1413,7 @@ void nc_server_binds_destroy(void);
  */
 int nc_server_ch_clients_reconcile(const struct nc_server_config *config);
 
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH or NC_TLS */
 
 /**
  * @brief Acquire a reference to the currently published server configuration generation.
@@ -1752,68 +1768,12 @@ int nc_client_ch_del_bind(const char *address, uint16_t port, NC_TRANSPORT_IMPL 
  */
 NC_MSG_TYPE nc_connect_callhome(const char *host, uint16_t port, NC_TRANSPORT_IMPL ti, struct nc_session **session);
 
-#ifdef NC_ENABLED_SSH_TLS
-
-/**
- * @brief Get the names of all the Call Home clients that have a thread running.
- *
- * @param[out] names Copies of the client names (sized-array, see libyang docs), free with
- * ::nc_server_ch_thread_names_free().
- * @return 0 on success, 1 on error.
- */
-int nc_server_ch_thread_names_get(char ***names);
-
-/**
- * @brief Free the Call Home client names returned by ::nc_server_ch_thread_names_get().
- *
- * @param[in] names Client names to free, may be NULL.
- */
-void nc_server_ch_thread_names_free(char **names);
-
-/**
- * @brief Stop all the Call Home client threads and free the thread registry.
- *
- * @return 0 on success, 1 on error.
- */
-int nc_server_ch_threads_destroy(void);
-
 /**
  * @brief Free the password-based authentication lockout tally.
  *
- * Must not be called before every thread that may authenticate a client has been joined.
+ * Must not be called before joining every thread that may authenticate a client.
  */
 void nc_server_ssh_authlock_free(void);
-
-/**
- * @brief Stop a dispatched Call Home client thread, if such thread was dispatched for the given client.
- *
- * Takes no configuration lock at all, the thread is looked up in the Call Home thread registry.
- *
- * @param[in] client_name Name of the Call Home client to stop the thread for.
- * @return 0 if the thread was successfully stopped or none was running, 1 on error.
- */
-int nc_session_server_ch_client_dispatch_stop(const char *client_name);
-
-/**
- * @brief Dispatch a thread connecting to a listening NETCONF client and creating Call Home sessions.
- *
- * The thread is added to the Call Home thread registry and created atomically, so it is findable by
- * ::nc_session_server_ch_client_dispatch_stop() and by a concurrent configuration apply from the
- * moment it exists. There is never more than one thread per Call Home client.
- *
- * @param[in] client_name Name of the Call Home client to dispatch the thread for.
- * @param[in] acquire_ctx_cb Callback for acquiring new session context.
- * @param[in] release_ctx_cb Callback for releasing session context.
- * @param[in] ctx_cb_data Arbitrary user data passed to @p acquire_ctx_cb and @p release_ctx_cb.
- * @param[in] new_session_cb Callback called for every established session on the client.
- * @param[in] new_session_cb_data Arbitrary user data passed to @p new_session_cb.
- * @return 0 if the thread was successfully created.
- * @return 1 if a thread is already running for the client and nothing was done.
- * @return -1 on error.
- */
-int _nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
-        nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
-        void *new_session_cb_data);
 
 /**
  * @brief Accept a server Call Home connection on a socket.
@@ -1890,8 +1850,6 @@ void _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts);
  * @return 0 on success, non-zero on failure.
  */
 int nc_session_tls_crl_verify_post_handshake(void *tls_session, void *cert_store);
-
-#endif /* NC_ENABLED_SSH_TLS */
 
 /**
  * @brief Check whether a module is not ignored by the server.

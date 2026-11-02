@@ -91,8 +91,9 @@ else()
 endif()
 option(ENABLE_EXAMPLES "Build examples" ON)
 option(ENABLE_COVERAGE "Build code coverage report from tests" OFF)
-option(ENABLE_SSH_TLS "Enable NETCONF over SSH and TLS support (via libssh and OpenSSL)" ON)
-option(ENABLE_DNSSEC "Enable support for SSHFP retrieval using DNSSEC for SSH (requires OpenSSL and libval)" OFF)
+option(ENABLE_SSH "Enable NETCONF over SSH support (requires libssh)" ON)
+option(ENABLE_TLS "Enable NETCONF over TLS support (requires OpenSSL or MbedTLS)" ON)
+option(ENABLE_DNSSEC "Enable support for SSHFP retrieval using DNSSEC for SSH (requires libval and OpenSSL)" OFF)
 option(ENABLE_PAM "Detect and use PAM" ON)
 option(ENABLE_COMMON_TARGETS "Define common custom target names such as 'doc' or 'uninstall', may cause conflicts when using add_subdirectory() to build this project" ON)
 option(ENABLE_IP_FREEBIND "Enable the IP_FREEBIND/IPV6_FREEBIND options on the listening TCP socket" OFF)
@@ -121,21 +122,6 @@ set(libsrc
     src/server_config_util.c
     src/proxy_unix.c)
 
-if(ENABLE_SSH_TLS)
-    list(APPEND libsrc
-        src/session_client_ssh.c
-        src/session_server_ssh.c
-        src/server_config_util_ssh.c
-        src/session_client_tls.c
-        src/session_server_tls.c
-        src/server_config_util_tls.c)
-    set(SSH_TLS_MACRO "#ifndef NC_ENABLED_SSH_TLS\n#define NC_ENABLED_SSH_TLS\n#endif")
-endif()
-
-if(ENABLE_IP_FREEBIND)
-    check_symbol_exists(IP_FREEBIND "netinet/in.h" NC_ENABLE_IP_FREEBIND)
-endif()
-
 set(headers
     src/log.h
     src/netconf.h
@@ -143,9 +129,7 @@ set(headers
     src/messages_client.h
     src/messages_server.h
     src/session_client.h
-    src/session_client_ch.h
     src/session_server.h
-    src/session_server_ch.h
     src/server_config.h
     src/proxy_unix.h)
 
@@ -158,11 +142,46 @@ set(doxy_files
     src/messages_client.h
     src/messages_server.h
     src/session_client.h
-    src/session_client_ch.h
     src/session_server.h
-    src/session_server_ch.h
     src/server_config.h
     src/proxy_unix.h)
+
+if(ENABLE_SSH)
+    list(APPEND libsrc
+        src/session_client_ssh.c
+        src/session_server_ssh.c
+        src/server_config_util_ssh.c)
+    list(APPEND headers
+        src/server_config_ssh.h)
+    list(APPEND doxy_files
+        src/server_config_ssh.h)
+    set(SSH_MACRO "#ifndef NC_SSH\n# define NC_SSH\n#endif")
+    set(SSH_SERVER_INCLUDE_MACRO "#include <libnetconf2/server_config_ssh.h>")
+endif()
+
+if(ENABLE_TLS)
+    list(APPEND libsrc
+        src/session_client_tls.c
+        src/session_server_tls.c
+        src/server_config_util_tls.c)
+    list(APPEND headers
+        src/server_config_tls.h)
+    list(APPEND doxy_files
+        src/server_config_tls.h)
+    set(TLS_MACRO "#ifndef NC_TLS\n# define NC_TLS\n#endif")
+    set(TLS_SERVER_INCLUDE_MACRO "#include <libnetconf2/server_config_tls.h>")
+endif()
+
+if(ENABLE_SSH OR ENABLE_TLS)
+    list(APPEND headers
+        src/session_server_ch.h
+        src/session_client_ch.h)
+    list(APPEND doxy_files
+        src/session_server_ch.h
+        src/session_client_ch.h)
+    set(CH_SERVER_INCLUDE_MACRO "#include <libnetconf2/session_server_ch.h>")
+    set(CH_CLIENT_INCLUDE_MACRO "#include <libnetconf2/session_client_ch.h>")
+endif()
 
 # source files to be covered by the 'format' target
 set(format_sources
@@ -177,14 +196,23 @@ set(format_sources
 #
 # checks
 #
-if(ENABLE_DNSSEC AND NOT ENABLE_SSH_TLS)
+if(ENABLE_DNSSEC AND NOT ENABLE_SSH)
     message(WARNING "DNSSEC SSHFP retrieval cannot be used without SSH support.")
     set(ENABLE_DNSSEC OFF)
 endif()
 
-if(ENABLE_COMPLY_WITH_ORAN_WG11 AND NOT ENABLE_SSH_TLS)
+if(ENABLE_COMPLY_WITH_ORAN_WG11 AND NOT ENABLE_TLS)
     message(WARNING "O-RAN WG11 compliance cannot be used without TLS support.")
     set(ENABLE_COMPLY_WITH_ORAN_WG11 OFF)
+endif()
+if(ENABLE_COMPLY_WITH_ORAN_WG11)
+    # comply with the O-RAN WG11 security spec (e.g. client cert Extended Key Usage and Key Usage checks)
+    set(NC_COMPLY_WITH_ORAN_WG11 ON)
+endif()
+
+if(ENABLE_EXAMPLES AND NOT ENABLE_SSH)
+    message(WARNING "Examples will not be compiled because SSH is disabled.")
+    set(ENABLE_EXAMPLES OFF)
 endif()
 
 if(ENABLE_VALGRIND_TESTS)
@@ -209,7 +237,7 @@ if(ENABLE_COVERAGE)
     gen_coverage_enable(${ENABLE_TESTS})
 endif()
 
-if ("${BUILD_TYPE_UPPER}" STREQUAL "DEBUG")
+if("${BUILD_TYPE_UPPER}" STREQUAL "DEBUG")
     source_format_enable(0.77)
 endif()
 
@@ -248,36 +276,37 @@ check_function_exists(pthread_timedjoin_np HAVE_PTHREAD_TIMEDJOIN_NP)
 # header file compatibility
 check_include_file("shadow.h" HAVE_SHADOW)
 check_include_file("termios.h" HAVE_TERMIOS)
+if(ENABLE_IP_FREEBIND)
+    check_symbol_exists(IP_FREEBIND "netinet/in.h" NC_ENABLE_IP_FREEBIND)
+endif()
 
-if(ENABLE_SSH_TLS)
-    # dependencies - mbedTLS (higher preference) or OpenSSL
-    find_package(MbedTLS 3.5.0)
-    if (MBEDTLS_FOUND)
+# dependencies - libval
+if(ENABLE_DNSSEC)
+    find_package(LibVAL REQUIRED)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_DNSSEC")
+    target_link_libraries(netconf2 ${LIBVAL_LIBRARIES})
+    include_directories(${LIBVAL_INCLUDE_DIRS})
+endif()
+
+if(ENABLE_SSH OR ENABLE_TLS)
+    # dependencies - mbedTLS (preferred normally) or OpenSSL (preferred and required with DNSSEC)
+    if(NOT ENABLE_DNSSEC)
+        find_package(MbedTLS 3.5.0)
+    endif()
+    if(MBEDTLS_FOUND)
         # dependencies - mbedtls
         set(HAVE_MBEDTLS TRUE)
-        list(APPEND libsrc src/session_mbedtls.c)
+        list(APPEND libsrc src/session_crypto_mbedtls.c)
         include_directories(${MBEDTLS_INCLUDE_DIRS})
         target_link_libraries(netconf2 ${MBEDTLS_LIBRARIES})
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${MBEDTLS_LIBRARIES})
     else()
         # dependencies - openssl
         find_package(OpenSSL 3.0.0 REQUIRED)
-        list(APPEND libsrc src/session_openssl.c)
+        list(APPEND libsrc src/session_crypto_openssl.c)
         include_directories(${OPENSSL_INCLUDE_DIR})
         target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${OPENSSL_LIBRARIES})
-    endif()
-
-    # dependencies - libssh
-    find_package(LibSSH 0.9.5 REQUIRED)
-    target_link_libraries(netconf2 ${LIBSSH_LIBRARIES})
-    list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBSSH_LIBRARIES})
-    include_directories(${LIBSSH_INCLUDE_DIRS})
-
-    if(LIBSSH_VERSION VERSION_GREATER_EQUAL "0.12.0")
-        list(APPEND libsrc src/session_server_ssh_auth_callback.c)
-    else ()
-        list(APPEND libsrc src/session_server_ssh_auth_message.c)
     endif()
 
     # dependencies - libcurl
@@ -288,6 +317,20 @@ if(ENABLE_SSH_TLS)
         target_link_libraries(netconf2 ${CURL_LIBRARIES})
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARY})
         include_directories(${CURL_INCLUDE_DIRS})
+    endif()
+endif()
+
+if(ENABLE_SSH)
+    # dependencies - libssh
+    find_package(LibSSH 0.9.5 REQUIRED)
+    target_link_libraries(netconf2 ${LIBSSH_LIBRARIES})
+    list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBSSH_LIBRARIES})
+    include_directories(${LIBSSH_INCLUDE_DIRS})
+
+    if(LIBSSH_VERSION VERSION_GREATER_EQUAL "0.12.0")
+        list(APPEND libsrc src/session_server_ssh_auth_callback.c)
+    else ()
+        list(APPEND libsrc src/session_server_ssh_auth_message.c)
     endif()
 
     # crypt (if not found, assume no library needs to be linked)
@@ -319,28 +362,20 @@ if(ENABLE_SSH_TLS)
     else()
         message(WARNING "SSH Keyboard Interactive system method: disabled")
     endif()
-
-    # set compiler flag
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_ENABLED_SSH_TLS")
-
-    # comply with the O-RAN WG11 security spec (e.g. client cert Extended Key Usage and Key Usage checks)
-    if(ENABLE_COMPLY_WITH_ORAN_WG11)
-        set(NC_COMPLY_WITH_ORAN_WG11 ON)
-    endif()
-endif()
-
-# dependencies - libval
-if(ENABLE_DNSSEC)
-    find_package(LibVAL REQUIRED)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_DNSSEC")
-    target_link_libraries(netconf2 ${LIBVAL_LIBRARIES})
-    include_directories(${LIBVAL_INCLUDE_DIRS})
 endif()
 
 # dependencies - libyang
 find_package(LibYANG ${LIBYANG_DEP_SOVERSION} REQUIRED)
 target_link_libraries(netconf2 ${LIBYANG_LIBRARIES})
 include_directories(${LIBYANG_INCLUDE_DIRS})
+
+# set compiler flags
+if(ENABLE_SSH)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_SSH")
+endif()
+if(ENABLE_TLS)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_TLS")
+endif()
 
 # set sources
 target_sources(netconf2 PRIVATE ${libsrc} ${compatsrc})
@@ -384,11 +419,7 @@ endif()
 
 # examples
 if(ENABLE_EXAMPLES)
-    if(NOT ENABLE_SSH_TLS)
-        message(WARNING "Examples will not be compiled because SSH and TLS are disabled.")
-    else()
-        add_subdirectory(examples)
-    endif()
+    add_subdirectory(examples)
 endif()
 
 # tests

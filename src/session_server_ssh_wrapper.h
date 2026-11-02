@@ -19,21 +19,19 @@
 #include "config.h" /* Expose HAVE_LIBPAM, HAVE_SHADOW */
 #include "session_p.h"
 
-#ifdef NC_ENABLED_SSH_TLS
-    # include <libssh/server.h>
-#endif
+#include <libssh/server.h>
 
 #ifdef HAVE_LIBPAM
-#   include <security/pam_appl.h>
+# include <security/pam_appl.h>
 
 /** Fixed prompt name sent with every keyboard-interactive request. */
-#define NC_PAM_KBDINT_NAME "Keyboard-Interactive Authentication"
+# define NC_PAM_KBDINT_NAME "Keyboard-Interactive Authentication"
 
 /** Fixed prompt instruction sent with every keyboard-interactive request. */
-#define NC_PAM_KBDINT_INSTRUCTION "Please enter your authentication token"
+# define NC_PAM_KBDINT_INSTRUCTION "Please enter your authentication token"
 #endif
 #ifdef HAVE_SHADOW
-#   include <shadow.h>
+# include <shadow.h>
 #endif
 
 #define LIBSSH_0_12 (LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 12, 0))
@@ -138,9 +136,9 @@ struct nc_server_ssh_cb_data {
      * handshake so that a later dereference fails immediately instead of reading freed memory.
      */
     struct nc_server_ssh_opts *opts;
-    struct nc_auth_state auth_state;  /**< Tracks multi-method authentication state. */
-    struct nc_ssh_channel_cb_data *channels;  /**< List of additional channel callback data,
-                                                   tracked so non-netconf channels can be freed. */
+    struct nc_ssh_auth_state auth_state;        /**< Tracks multi-method authentication state. */
+    struct nc_ssh_channel_cb_data *channels;    /**< List of additional channel callback data,
+                                                     tracked so non-netconf channels can be freed. */
 #ifdef HAVE_LIBPAM
     struct nc_server_ssh_cb_pam_data *pam_kbdint;  /**< PAM thread bridge state. */
 #endif
@@ -192,7 +190,8 @@ int nc_server_ssh_cb_auth_password(ssh_session libssh_sess, const char *user, co
  * @return SSH_AUTH_SUCCESS if authentication is successful (or probe accepted).
  * @return SSH_AUTH_DENIED otherwise.
  */
-int nc_server_ssh_cb_auth_pubkey(ssh_session libssh_sess, const char *user, struct ssh_key_struct *pubkey, char signature_state, void *userdata);
+int nc_server_ssh_cb_auth_pubkey(ssh_session libssh_sess, const char *user, struct ssh_key_struct *pubkey,
+        char signature_state, void *userdata);
 
 /**
  * @brief Callback function for SSH keyboard-interactive authentication.
@@ -227,7 +226,8 @@ ssh_channel nc_server_ssh_cb_channel_open_request_session(ssh_session libssh_ses
  * @param[in] auth_state State of the authentication.
  * @return 0 if the message was handled, 1 if it is left up to libssh.
  */
-int nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg, struct nc_auth_state *auth_state);
+int nc_session_ssh_msg(struct nc_session *session, struct nc_server_ssh_opts *opts, ssh_message msg,
+        struct nc_ssh_auth_state *auth_state);
 
 #endif
 
@@ -258,7 +258,7 @@ int nc_ssh_check_local_user_support(struct nc_session *session);
  * @return Pointer to the authentication client if found.
  * @return NULL otherwise.
  */
-struct nc_auth_client *nc_ssh_find_auth_client(struct nc_server_ssh_opts *opts, const char *user, struct nc_session *session);
+struct nc_ssh_auth_client *nc_ssh_find_auth_client(struct nc_server_ssh_opts *opts, const char *user, struct nc_session *session);
 
 /**
  * @brief Initialize the authentication state for multi-method authentication.
@@ -268,8 +268,8 @@ struct nc_auth_client *nc_ssh_find_auth_client(struct nc_server_ssh_opts *opts, 
  * @param[in] local_users_supported Whether local users are supported.
  * @param[in] auth_client The authenticated client configuration (may be NULL if !local_users_supported).
  */
-void nc_ssh_auth_state_init(struct nc_session *session, struct nc_auth_state *auth_state,
-        int local_users_supported, struct nc_auth_client *auth_client);
+void nc_ssh_auth_state_init(struct nc_session *session, struct nc_ssh_auth_state *auth_state,
+        int local_users_supported, struct nc_ssh_auth_client *auth_client);
 
 /**
  * @brief Handle a successful authentication attempt, tracking partial/multi-method auth.
@@ -280,7 +280,7 @@ void nc_ssh_auth_state_init(struct nc_session *session, struct nc_auth_state *au
  * @return SSH_AUTH_SUCCESS if fully authenticated.
  * @return SSH_AUTH_PARTIAL if more methods are needed.
  */
-int nc_ssh_auth_success(struct nc_session *session, struct nc_auth_state *auth_state, int method);
+int nc_ssh_auth_success(struct nc_session *session, struct nc_ssh_auth_state *auth_state, int method);
 
 /**
  * @brief Send the SSH issue banner if configured.
@@ -354,8 +354,8 @@ void nc_server_ssh_auth_attempt_failed(struct nc_session *session, const struct 
  * @param[in] local_users_supported Flag indicating if local users are used.
  * @return 0 on success (password matches), non-zero on failure.
  */
-int nc_server_ssh_auth_password_check(struct nc_session *session, const char *user,
-        const char *password, struct nc_auth_client *auth_client, int local_users_supported);
+int nc_server_ssh_auth_password_check(struct nc_session *session, const char *user, const char *password,
+        struct nc_ssh_auth_client *auth_client, int local_users_supported);
 
 /**
  * @brief Authenticate a user by verifying a public key against configured or system public keys.
@@ -366,15 +366,15 @@ int nc_server_ssh_auth_password_check(struct nc_session *session, const char *us
  * @param[in] local_users_supported Flag indicating if local users are configured.
  * @return 0 on success (key matches an authorized key), non-zero on failure/error.
  */
-int nc_server_ssh_auth_pubkey_check(struct nc_session *session, ssh_key pubkey,
-        struct nc_auth_client *auth_client, int local_users_supported);
+int nc_server_ssh_auth_pubkey_check(struct nc_session *session, ssh_key pubkey, struct nc_ssh_auth_client *auth_client,
+        int local_users_supported);
 
 /**
  * @brief Keyboard-interactive authentication backend.
  */
-enum nc_kbdint_backend {
-    NC_KBDINT_BACKEND_SYSTEM,       /**< Authenticate via the system method (PAM or shadow). */
-    NC_KBDINT_BACKEND_CUSTOM_CLB    /**< Authenticate via the custom keyboard-interactive callback. */
+enum nc_ssh_kbdint_backend {
+    NC_SSH_KBDINT_BACKEND_SYSTEM,       /**< Authenticate via the system method (PAM or shadow). */
+    NC_SSH_KBDINT_BACKEND_CUSTOM_CLB    /**< Authenticate via the custom keyboard-interactive callback. */
 };
 
 /**
@@ -387,7 +387,7 @@ enum nc_kbdint_backend {
  * @return 0 if a backend was selected, non-zero if the request must be denied (the reason was already logged).
  */
 int nc_server_ssh_kbdint_select_method(struct nc_session *session, int local_users_supported,
-        struct nc_auth_client *auth_client, enum nc_kbdint_backend *backend);
+        struct nc_ssh_auth_client *auth_client, enum nc_ssh_kbdint_backend *backend);
 
 /**
  * @brief Get the configured custom keyboard-interactive authentication callback and its data.
@@ -425,6 +425,7 @@ int nc_server_ssh_channel_subsys_check(struct nc_session *session, ssh_channel c
 struct nc_session *nc_server_ssh_new_channel_session(struct nc_session *session, ssh_channel channel);
 
 #ifdef HAVE_LIBPAM
+
 /**
  * @brief Parse PAM conversation messages into keyboard-interactive prompts.
  *
@@ -437,9 +438,8 @@ struct nc_session *nc_server_ssh_new_channel_session(struct nc_session *session,
  * @param[out] echo Echo flags for the prompts.
  * @return PAM_SUCCESS on success, PAM_CONV_ERR on bad input, PAM_BUF_ERR on OOM.
  */
-int nc_server_ssh_pam_conv_parse(struct nc_session *session, int n_messages,
-        const struct pam_message **msg, struct pam_response **resp,
-        int *n_prompts, const char ***prompts, char **echo);
+int nc_server_ssh_pam_conv_parse(struct nc_session *session, int n_messages, const struct pam_message **msg,
+        struct pam_response **resp, int *n_prompts, const char ***prompts, char **echo);
 
 /**
  * @brief Fill a prepared PAM response array with the client's answers.
@@ -452,8 +452,8 @@ int nc_server_ssh_pam_conv_parse(struct nc_session *session, int n_messages,
  * @return PAM_SUCCESS on success, PAM_CONV_ERR if the answer count does not
  * match the prompt count, PAM_BUF_ERR on OOM.
  */
-int nc_server_ssh_pam_conv_fill(struct nc_session *session, struct pam_response *resp,
-        int n_prompts, int n_answers, const char **answers);
+int nc_server_ssh_pam_conv_fill(struct nc_session *session, struct pam_response *resp, int n_prompts, int n_answers,
+        const char **answers);
 
 /**
  * @brief Get a copy of the configured PAM service name.
@@ -473,11 +473,12 @@ int nc_server_ssh_get_pam_conf_filename(char **filename);
  * @param[in] conv PAM conversation prepared by the caller.
  * @return PAM_SUCCESS (0) on success, a PAM error code or 1 otherwise.
  */
-int nc_server_ssh_pam_authenticate(struct nc_session *session, const char *username,
-        const struct pam_conv *conv);
+int nc_server_ssh_pam_authenticate(struct nc_session *session, const char *username, const struct pam_conv *conv);
+
 #endif /* HAVE_LIBPAM */
 
 #ifdef HAVE_SHADOW
+
 /**
  * @brief Get the user's hashed password from the system.
  *
@@ -505,6 +506,7 @@ int nc_server_ssh_kbdint_send_passwd_prompt(struct nc_session *session, const ch
  * @return 0 if the password matches, non-zero otherwise.
  */
 int nc_server_ssh_kbdint_verify_passwd(struct nc_session *session, const char *username, int n_answers);
+
 #endif /* HAVE_SHADOW */
 
 #endif /* _SESSION_SERVER_SSH_WRAPPER_H_ */

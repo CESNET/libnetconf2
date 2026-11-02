@@ -1,10 +1,11 @@
 /**
  * @file log.h
  * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @author Michal Vasko <mvasko@cesnet.cz>
  * @brief libnetconf2 logger
  *
  * @copyright
- * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -50,7 +51,7 @@ typedef enum NC_VERB_LEVEL {
  */
 void nc_verbosity(NC_VERB_LEVEL level);
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
 
 /**
  * @brief Set libssh verbosity level.
@@ -69,7 +70,7 @@ void nc_verbosity(NC_VERB_LEVEL level);
  */
 void nc_libssh_thread_verbosity(int level);
 
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH */
 
 /**
  * @brief Set libnetconf print callback.

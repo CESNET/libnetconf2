@@ -47,8 +47,7 @@
  * @return PAM_CONV_ERR otherwise.
  */
 static int
-nc_server_ssh_cb_pam_conv(int n_messages, const struct pam_message **msg,
-        struct pam_response **resp, void *appdata_ptr)
+nc_server_ssh_cb_pam_conv(int n_messages, const struct pam_message **msg, struct pam_response **resp, void *appdata_ptr)
 {
     struct nc_server_ssh_cb_pam_data *data = appdata_ptr;
     int r, n_prompts = 0;
@@ -476,7 +475,7 @@ nc_server_ssh_cb_kbdint_shadow_response(struct nc_session *session, const char *
  */
 static int
 nc_server_ssh_cb_auth_common_setup(struct nc_server_ssh_cb_data *cb_data, const char *user,
-        int *local_users_supported, struct nc_auth_client **auth_client)
+        int *local_users_supported, struct nc_ssh_auth_client **auth_client)
 {
     struct nc_session *session = cb_data->session;
     struct nc_server_ssh_opts *opts = cb_data->opts;
@@ -543,7 +542,7 @@ nc_server_ssh_cb_auth_none(ssh_session UNUSED(libssh_sess), const char *user, vo
 {
     struct nc_server_ssh_cb_data *cb_data = (struct nc_server_ssh_cb_data *)userdata;
     struct nc_session *session = cb_data->session;
-    struct nc_auth_client *auth_client = NULL;
+    struct nc_ssh_auth_client *auth_client = NULL;
     int local_users_supported = 0;
 
     if (nc_server_ssh_cb_auth_common_setup(cb_data, user, &local_users_supported, &auth_client)) {
@@ -564,7 +563,7 @@ nc_server_ssh_cb_auth_password(ssh_session UNUSED(libssh_sess), const char *user
     struct nc_server_ssh_cb_data *cb_data = (struct nc_server_ssh_cb_data *)userdata;
     struct nc_session *session = cb_data->session;
     int local_users_supported = 0;
-    struct nc_auth_client *auth_client = NULL;
+    struct nc_ssh_auth_client *auth_client = NULL;
     int rc = 0;
 
     if (nc_server_ssh_cb_auth_common_setup(cb_data, user, &local_users_supported, &auth_client)) {
@@ -586,7 +585,7 @@ nc_server_ssh_cb_auth_pubkey(ssh_session UNUSED(libssh_sess), const char *user, 
 {
     struct nc_server_ssh_cb_data *cb_data = (struct nc_server_ssh_cb_data *)userdata;
     struct nc_session *session = cb_data->session;
-    struct nc_auth_client *auth_client = NULL;
+    struct nc_ssh_auth_client *auth_client = NULL;
     int local_users_supported = 0;
     int ret = 0;
 
@@ -654,8 +653,8 @@ nc_server_ssh_cb_auth_kbdint(ssh_message message, ssh_session UNUSED(libssh_sess
 {
     struct nc_server_ssh_cb_data *cb_data = (struct nc_server_ssh_cb_data *)userdata;
     struct nc_session *session = cb_data->session;
-    struct nc_auth_client *auth_client = NULL;
-    enum nc_kbdint_backend backend;
+    struct nc_ssh_auth_client *auth_client = NULL;
+    enum nc_ssh_kbdint_backend backend;
     int local_users_supported = 0;
     int ret = SSH_AUTH_DENIED;
     const char *user;
@@ -690,7 +689,7 @@ nc_server_ssh_cb_auth_kbdint(ssh_message message, ssh_session UNUSED(libssh_sess
         return SSH_AUTH_DENIED;
     }
 
-    if (backend == NC_KBDINT_BACKEND_CUSTOM_CLB) {
+    if (backend == NC_SSH_KBDINT_BACKEND_CUSTOM_CLB) {
         /* custom interactive auth callback, it must not be called with the options lock held */
         if (nc_server_ssh_get_interactive_auth_clb(&interactive_auth_clb, &interactive_auth_data)) {
             nc_server_ssh_auth_attempt_failed(session, cb_data->opts);

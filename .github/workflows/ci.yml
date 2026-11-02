@@ -55,7 +55,7 @@ jobs:
             build-type: "Release",
             dep-build-type: "Release",
             cc: "gcc",
-            options: "-DENABLE_TESTS=ON -DENABLE_DNSSEC=ON",
+            options: "-DENABLE_TESTS=ON",
             tls-lib: "MbedTLS",
             packages: "",
             snaps: "",
@@ -63,7 +63,7 @@ jobs:
             make-target: ""
           }
           - {
-            name: "Release, clang",
+            name: "Release, clang, OpenSSL",
             os: "ubuntu-24.04",
             build-type: "Release",
             dep-build-type: "Release",
@@ -89,12 +89,64 @@ jobs:
             make-target: ""
           }
           - {
+            name: "Debug, gcc, OpenSSL, SSH only",
+            os: "ubuntu-24.04",
+            build-type: "Debug",
+            dep-build-type: "Release",
+            cc: "gcc",
+            options: "-DENABLE_DNSSEC=ON -DENABLE_SSH=ON -DENABLE_TLS=OFF",
+            tls-lib: "OpenSSL",
+            packages: "valgrind",
+            snaps: "",
+            make-prepend: "",
+            make-target: ""
+          }
+          - {
+            name: "Debug, gcc, OpenSSL, TLS only",
+            os: "ubuntu-24.04",
+            build-type: "Debug",
+            dep-build-type: "Release",
+            cc: "gcc",
+            options: "-DENABLE_DNSSEC=ON -DENABLE_SSH=OFF -DENABLE_TLS=ON",
+            tls-lib: "OpenSSL",
+            packages: "valgrind",
+            snaps: "",
+            make-prepend: "",
+            make-target: ""
+          }
+          - {
             name: "Debug, gcc, MbedTLS",
             os: "ubuntu-24.04",
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "gcc",
-            options: "-DENABLE_DNSSEC=ON",
+            options: "",
+            tls-lib: "MbedTLS",
+            packages: "valgrind",
+            snaps: "",
+            make-prepend: "",
+            make-target: ""
+          }
+          - {
+            name: "Debug, gcc, MbedTLS, SSH only",
+            os: "ubuntu-24.04",
+            build-type: "Debug",
+            dep-build-type: "Release",
+            cc: "gcc",
+            options: "-DENABLE_SSH=ON -DENABLE_TLS=OFF",
+            tls-lib: "MbedTLS",
+            packages: "valgrind",
+            snaps: "",
+            make-prepend: "",
+            make-target: ""
+          }
+          - {
+            name: "Debug, gcc, MbedTLS, TLS only",
+            os: "ubuntu-24.04",
+            build-type: "Debug",
+            dep-build-type: "Release",
+            cc: "gcc",
+            options: "-DENABLE_SSH=OFF -DENABLE_TLS=ON",
             tls-lib: "MbedTLS",
             packages: "valgrind",
             snaps: "",
@@ -121,7 +173,7 @@ jobs:
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "gcc",
-            options: "-DENABLE_SSH_TLS=OFF",
+            options: "-DENABLE_SSH=OFF -DENABLE_TLS=OFF",
             tls-lib: "",
             packages: "valgrind",
             snaps: "",

@@ -4,7 +4,7 @@
  * @brief libnetconf2 server session manipulation functions
  *
  * @copyright
- * Copyright (c) 2015 - 2024 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -43,15 +43,14 @@
 #include "session_server.h"
 #include "session_server_ch.h"
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
+# include "session_crypto_wrapper.h"
+#endif /* NC_SSH or NC_TLS */
 
-#include "session_server_ssh_wrapper.h"
-#include "session_wrapper.h"
-
-#include <curl/curl.h>
-#include <libssh/libssh.h>
-
-#endif /* NC_ENABLED_SSH_TLS */
+#ifdef NC_SSH
+# include <libssh/libssh.h>
+# include "session_server_ssh_wrapper.h"
+#endif /* NC_SSH */
 
 struct nc_server_opts server_opts = {
     .hello_lock = PTHREAD_RWLOCK_INITIALIZER,
@@ -60,130 +59,19 @@ struct nc_server_opts server_opts = {
     .binds_lock = PTHREAD_MUTEX_INITIALIZER,
     .opts_lock = PTHREAD_RWLOCK_INITIALIZER,
     .ch_threads_lock = PTHREAD_MUTEX_INITIALIZER,
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     .authlock_lock = PTHREAD_MUTEX_INITIALIZER,
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH */
 };
 
 static nc_rpc_clb global_rpc_clb = NULL;
 
-#ifdef NC_ENABLED_SSH_TLS
-
 /**
- * @brief Free a Call Home thread argument.
+ * @brief Free the Call Home client names returned by ::nc_server_ch_thread_names_get().
  *
- * @param[in] thread_arg Thread argument to free, may be NULL.
+ * @param[in] names Client names to free, may be NULL.
  */
 static void
-nc_server_ch_thread_arg_free(struct nc_server_ch_thread_arg *thread_arg)
-{
-    if (!thread_arg) {
-        return;
-    }
-
-    free(thread_arg->client_name);
-    if (thread_arg->notify_pipe[0] != -1) {
-        close(thread_arg->notify_pipe[0]);
-    }
-    if (thread_arg->notify_pipe[1] != -1) {
-        close(thread_arg->notify_pipe[1]);
-    }
-    free(thread_arg);
-}
-
-/**
- * @brief Remove a Call Home thread argument from the thread registry.
- *
- * The registry entry is the ownership token of the thread argument, whoever removes it becomes
- * responsible for terminating the thread and freeing the argument.
- *
- * @param[in] client_name Name of the Call Home client to unregister the thread of.
- * @param[out] thread_arg Unregistered thread argument, NULL if the client had no thread registered.
- * @return 0 on success, 1 on error.
- */
-static int
-nc_server_ch_thread_reg_del(const char *client_name, struct nc_server_ch_thread_arg **thread_arg)
-{
-    LYA_COUNT_T u;
-
-    *thread_arg = NULL;
-
-    /* CH THREADS LOCK */
-    if (nc_mutex_lock(&server_opts.ch_threads_lock, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
-        return 1;
-    }
-
-    LYA_FOR(server_opts.ch_threads, u) {
-        if (strcmp(server_opts.ch_threads[u]->client_name, client_name)) {
-            continue;
-        }
-
-        *thread_arg = server_opts.ch_threads[u];
-
-        /* swap the last entry into the hole, the order of the registry is irrelevant */
-        server_opts.ch_threads[u] = server_opts.ch_threads[LYA_COUNT(server_opts.ch_threads) - 1];
-        LYA_DECREMENT_FREE(server_opts.ch_threads);
-        break;
-    }
-
-    /* CH THREADS UNLOCK */
-    nc_mutex_unlock(&server_opts.ch_threads_lock, __func__);
-    return 0;
-}
-
-/**
- * @brief Unregister a Call Home thread that is terminating on its own and free its argument.
- *
- * Called by the Call Home thread itself right before it returns. Normally the thread only ever
- * terminates because ::nc_session_server_ch_client_dispatch_stop() told it to, in which case the
- * stopper has already removed the registry entry and does all the cleanup itself. If the thread
- * terminates for any other reason (an unrecoverable error), it has to take itself out of the
- * registry, otherwise every later configuration apply would believe the client is still running
- * and would never dispatch it again.
- *
- * The registry entry is the ownership token of the thread argument, so the entry removal decides
- * who cleans up and the ::nc_server_opts.ch_threads_lock makes that decision atomic.
- *
- * @param[in] thread_arg Argument of the calling thread.
- */
-static void
-nc_server_ch_thread_unreg_self(struct nc_server_ch_thread_arg *thread_arg)
-{
-    LYA_COUNT_T u;
-    int found = 0;
-
-    /* CH THREADS LOCK */
-    if (nc_mutex_lock(&server_opts.ch_threads_lock, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
-        return;
-    }
-
-    LYA_FOR(server_opts.ch_threads, u) {
-        if (server_opts.ch_threads[u] != thread_arg) {
-            continue;
-        }
-
-        found = 1;
-
-        /* swap the last entry into the hole, the order of the registry is irrelevant */
-        server_opts.ch_threads[u] = server_opts.ch_threads[LYA_COUNT(server_opts.ch_threads) - 1];
-        LYA_DECREMENT_FREE(server_opts.ch_threads);
-        break;
-    }
-
-    /* CH THREADS UNLOCK */
-    nc_mutex_unlock(&server_opts.ch_threads_lock, __func__);
-
-    if (!found) {
-        /* someone else owns us now and will join us, nothing to do */
-        return;
-    }
-
-    /* nobody is going to join us anymore, so make sure our resources are reclaimed */
-    pthread_detach(thread_arg->tid);
-    nc_server_ch_thread_arg_free(thread_arg);
-}
-
-void
 nc_server_ch_thread_names_free(char **names)
 {
     LYA_COUNT_T u;
@@ -194,7 +82,14 @@ nc_server_ch_thread_names_free(char **names)
     LYA_FREE(names);
 }
 
-int
+/**
+ * @brief Get the names of all the Call Home clients that have a thread running.
+ *
+ * @param[out] names Copies of the client names (sized-array, see libyang docs), free with
+ * ::nc_server_ch_thread_names_free().
+ * @return 0 on success, 1 on error.
+ */
+static int
 nc_server_ch_thread_names_get(char ***names)
 {
     int rc = 0;
@@ -227,31 +122,6 @@ cleanup:
     }
     return rc ? 1 : 0;
 }
-
-/**
- * @brief Get a CH client with the given @p name from a pinned configuration.
- *
- * @param[in] config Pinned server configuration to search.
- * @param[in] name Name of the CH client to find.
- * @return CH client, NULL if not found.
- */
-static const struct nc_ch_client *
-nc_server_ch_client_get_pinned(const struct nc_server_config *config, const char *name)
-{
-    LYA_COUNT_T u;
-
-    assert(name);
-
-    LYA_FOR(config->ch_clients, u) {
-        if (!strcmp(config->ch_clients[u].name, name)) {
-            return &config->ch_clients[u];
-        }
-    }
-
-    return NULL;
-}
-
-#endif /* NC_ENABLED_SSH_TLS */
 
 int
 nc_server_endpt_get(const struct nc_server_config *config, const char *name, const struct nc_endpt **endpt)
@@ -407,48 +277,6 @@ cleanup:
     }
     return ret;
 }
-
-#ifdef NC_ENABLED_SSH_TLS
-
-API void
-nc_server_ch_set_dispatch_data(nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
-        nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
-        void *new_session_cb_data)
-{
-    NC_CHECK_ARG_RET(NULL, acquire_ctx_cb, release_ctx_cb, new_session_cb, );
-
-    /* OPTS WRITE LOCK */
-    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_WRITE, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
-        return;
-    }
-
-    server_opts.ch_dispatch_data.acquire_ctx_cb = acquire_ctx_cb;
-    server_opts.ch_dispatch_data.release_ctx_cb = release_ctx_cb;
-    server_opts.ch_dispatch_data.ctx_cb_data = ctx_cb_data;
-    server_opts.ch_dispatch_data.new_session_cb = new_session_cb;
-    server_opts.ch_dispatch_data.new_session_cb_data = new_session_cb_data;
-
-    /* OPTS WRITE UNLOCK */
-    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
-}
-
-API void
-nc_server_ch_set_new_session_fail_cb(nc_server_ch_new_session_fail_cb new_session_fail_cb,
-        void *new_session_fail_cb_data)
-{
-    /* OPTS WRITE LOCK */
-    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_WRITE, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
-        return;
-    }
-
-    server_opts.ch_dispatch_data.new_session_fail_cb = new_session_fail_cb;
-    server_opts.ch_dispatch_data.new_session_fail_cb_data = new_session_fail_cb_data;
-
-    /* OPTS WRITE UNLOCK */
-    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
-}
-
-#endif
 
 int
 nc_sock_bind_inet(int sock, const char *address, uint16_t port, int is_ipv4)
@@ -1459,7 +1287,7 @@ nc_server_init_cb_ctx(const struct ly_ctx *ctx)
     }
 }
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_TLS
 
 /**
  * @brief Open the keylog file for writing TLS secrets.
@@ -1480,7 +1308,7 @@ nc_server_keylog_file_open(void)
     }
 }
 
-#endif
+#endif /* NC_TLS */
 
 /**
  * @brief Initialize a rwlock.
@@ -1529,9 +1357,9 @@ nc_server_init(void)
 {
     int glob_inited = 0;
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
     int r;
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH or NC_TLS */
 
     ATOMIC_STORE_RELAXED(server_opts.new_session_id, 1);
 
@@ -1558,7 +1386,7 @@ nc_server_init(void)
     }
     glob_inited = 1;
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
     if ((r = pthread_mutex_init(&server_opts.cert_exp_notif.lock, NULL))) {
         ERR(NULL, "%s: failed to init certificate expiration notification thread lock(%s).", __func__, strerror(r));
         goto error;
@@ -1567,10 +1395,12 @@ nc_server_init(void)
         ERR(NULL, "%s: failed to init certificate expiration notification thread condition(%s).", __func__, strerror(r));
         goto error;
     }
+#endif /* NC_SSH or NC_TLS */
 
+#ifdef NC_TLS
     /* try to open the keylog file for writing TLS secrets */
     nc_server_keylog_file_open();
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
 
     return 0;
 
@@ -1585,6 +1415,156 @@ error:
     return -1;
 }
 
+/**
+ * @brief Remove a Call Home thread argument from the thread registry.
+ *
+ * The registry entry is the ownership token of the thread argument, whoever removes it becomes
+ * responsible for terminating the thread and freeing the argument.
+ *
+ * @param[in] client_name Name of the Call Home client to unregister the thread of.
+ * @param[out] thread_arg Unregistered thread argument, NULL if the client had no thread registered.
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_server_ch_thread_reg_del(const char *client_name, struct nc_server_ch_thread_arg **thread_arg)
+{
+    LYA_COUNT_T u;
+
+    *thread_arg = NULL;
+
+    /* CH THREADS LOCK */
+    if (nc_mutex_lock(&server_opts.ch_threads_lock, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
+
+    LYA_FOR(server_opts.ch_threads, u) {
+        if (strcmp(server_opts.ch_threads[u]->client_name, client_name)) {
+            continue;
+        }
+
+        *thread_arg = server_opts.ch_threads[u];
+
+        /* swap the last entry into the hole, the order of the registry is irrelevant */
+        server_opts.ch_threads[u] = server_opts.ch_threads[LYA_COUNT(server_opts.ch_threads) - 1];
+        LYA_DECREMENT_FREE(server_opts.ch_threads);
+        break;
+    }
+
+    /* CH THREADS UNLOCK */
+    nc_mutex_unlock(&server_opts.ch_threads_lock, __func__);
+    return 0;
+}
+
+/**
+ * @brief Free a Call Home thread argument.
+ *
+ * @param[in] thread_arg Thread argument to free, may be NULL.
+ */
+static void
+nc_server_ch_thread_arg_free(struct nc_server_ch_thread_arg *thread_arg)
+{
+    if (!thread_arg) {
+        return;
+    }
+
+    free(thread_arg->client_name);
+    if (thread_arg->notify_pipe[0] != -1) {
+        close(thread_arg->notify_pipe[0]);
+    }
+    if (thread_arg->notify_pipe[1] != -1) {
+        close(thread_arg->notify_pipe[1]);
+    }
+    free(thread_arg);
+}
+
+/**
+ * @brief Stop a dispatched Call Home client thread, if such thread was dispatched for the given client.
+ *
+ * Takes no configuration lock at all, the thread is looked up in the Call Home thread registry.
+ *
+ * @param[in] client_name Name of the Call Home client to stop the thread for.
+ * @return 0 if the thread was successfully stopped or none was running, 1 on error.
+ */
+static int
+nc_session_server_ch_client_dispatch_stop(const char *client_name)
+{
+    int r;
+    struct nc_server_ch_thread_arg *thread_arg;
+
+    /* unregister the thread first, so that no other caller can find and join the same one */
+    if (nc_server_ch_thread_reg_del(client_name, &thread_arg)) {
+        return 1;
+    }
+    if (!thread_arg) {
+        /* no thread is running for this client */
+        return 0;
+    }
+
+    /* notify the thread to stop */
+    ATOMIC_STORE_RELAXED(thread_arg->thread_running, 0);
+
+    /* wake up the thread if it's in thread_wait */
+    if (write(thread_arg->notify_pipe[1], "x", 1) == -1) {
+        if (errno != EAGAIN) {
+            ERR(NULL, "Writing to the notify pipe failed (%s).", strerror(errno));
+        }
+        /* EAGAIN is fine: pipe buffer is full, meaning it's already been signaled */
+    }
+
+    /* wait for the thread to end, no lock is held so a stalled handshake blocks nothing else */
+    r = pthread_join(thread_arg->tid, NULL);
+    if (r) {
+        ERR(NULL, "Joining Call Home client \"%s\" thread failed (%s), its data will be leaked.",
+                client_name, strerror(r));
+        return 1;
+    }
+
+    /* the registry entry was ours, so is the cleanup */
+    nc_server_ch_thread_arg_free(thread_arg);
+
+    return 0;
+}
+
+/**
+ * @brief Stop all the Call Home client threads and free the thread registry.
+ *
+ * @return 0 on success, 1 on error.
+ */
+static int
+nc_server_ch_threads_destroy(void)
+{
+    int rc = 0;
+    char **names = NULL;
+    LYA_COUNT_T u;
+
+    if (nc_server_ch_thread_names_get(&names)) {
+        return 1;
+    }
+
+    LYA_FOR(names, u) {
+        if (nc_session_server_ch_client_dispatch_stop(names[u])) {
+            rc = 1;
+        }
+    }
+    nc_server_ch_thread_names_free(names);
+
+    /* CH THREADS LOCK */
+    if (nc_mutex_lock(&server_opts.ch_threads_lock, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
+        return 1;
+    }
+    if (LYA_COUNT(server_opts.ch_threads)) {
+        ERRINT;
+        rc = 1;
+    }
+    LYA_FREE(server_opts.ch_threads);
+    server_opts.ch_threads = NULL;
+
+    /* CH THREADS UNLOCK */
+    nc_mutex_unlock(&server_opts.ch_threads_lock, __func__);
+
+    return rc;
+}
+
 API int
 nc_server_destroy(void)
 {
@@ -1593,11 +1573,11 @@ nc_server_destroy(void)
     struct nc_server_config *config;
     uint32_t i;
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     void *interactive_auth_data;
 
     void (*interactive_auth_data_free)(void *data);
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH */
 
     for (i = 0; i < server_opts.capabilities_count; i++) {
         free(server_opts.capabilities[i]);
@@ -1611,13 +1591,13 @@ nc_server_destroy(void)
     server_opts.content_id_data = NULL;
     server_opts.content_id_data_free = NULL;
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
     /* destroy the certificate expiration notification thread */
     if ((rc = nc_server_notif_cert_expiration_thread_stop(1))) {
         ERR(NULL, "%s: failed to stop certificate expiration notification thread.", __func__);
         goto cleanup;
     }
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH or NC_TLS */
 
     /* CONFIG UPDATE LOCK - the same timeout as the appliers use, destroying the server must not
      * fail just because a legitimate configuration apply is in progress */
@@ -1627,12 +1607,10 @@ nc_server_destroy(void)
     }
     config_update_locked = 1;
 
-#ifdef NC_ENABLED_SSH_TLS
     /* stop all dispatched CH threads, no configuration lock may be held while joining them */
     if ((rc = nc_server_ch_threads_destroy())) {
         goto cleanup;
     }
-#endif /* NC_ENABLED_SSH_TLS */
 
     /* stop listening on all the registered sockets */
     nc_server_binds_destroy();
@@ -1644,7 +1622,7 @@ nc_server_destroy(void)
     }
     opts_locked = 1;
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     free(server_opts.authkey_path_fmt);
     server_opts.authkey_path_fmt = NULL;
     free(server_opts.pam_config_name);
@@ -1656,11 +1634,14 @@ nc_server_destroy(void)
     interactive_auth_data_free = server_opts.interactive_auth_data_free;
     server_opts.interactive_auth_data = NULL;
     server_opts.interactive_auth_data_free = NULL;
+#endif /* NC_SSH */
+
+#ifdef NC_TLS
     server_opts.user_verify_clb = NULL;
+#endif /* NC_TLS */
 
     /* Call Home dispatch data, its callback data does not have to be valid once the server is destroyed */
     memset(&server_opts.ch_dispatch_data, 0, sizeof server_opts.ch_dispatch_data);
-#endif /* NC_ENABLED_SSH_TLS */
 
     /* hidden UNIX socket paths */
     LYA_FOR(server_opts.unix_paths, i) {
@@ -1676,12 +1657,12 @@ nc_server_destroy(void)
     nc_rwlock_unlock(&server_opts.opts_lock, __func__);
     opts_locked = 0;
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     /* free the user data only once the lock is released, the callback may call back into the library */
     if (interactive_auth_data && interactive_auth_data_free) {
         interactive_auth_data_free(interactive_auth_data);
     }
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH */
 
     /* CONFIG WR LOCK - unpublish the configuration, a concurrent acquire must not see a stale pointer */
     if (nc_rwlock_lock(&server_opts.config_lock, NC_RWLOCK_WRITE, NC_CONFIG_LOCK_TIMEOUT, __func__) != 1) {
@@ -1698,17 +1679,19 @@ nc_server_destroy(void)
     /* the configuration is destroyed once its last reader releases it */
     nc_server_config_release(config);
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     /* free the password-based authentication lockout tally; only safe here, once the Call Home and
      * accept threads that authenticate clients have been joined */
     nc_server_ssh_authlock_free();
+#endif /* NC_SSH */
 
+#ifdef NC_TLS
     /* close the TLS keylog file */
     if (server_opts.tls_keylog_file) {
         fclose(server_opts.tls_keylog_file);
         server_opts.tls_keylog_file = NULL;
     }
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
 
     nc_global_destroy(NC_SERVER);
 
@@ -2727,7 +2710,8 @@ nc_server_send_reply_io(struct nc_session *session, int io_timeout, const struct
     return ret;
 }
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
+
 /**
  * @brief Scan the session ring for a newly established NETCONF SSH channel.
  *
@@ -2753,7 +2737,7 @@ nc_ps_ssh_find_new_channel(struct nc_session *session)
     return 0;
 }
 
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH */
 
 /**
  * @brief Poll a session from pspoll.
@@ -2779,11 +2763,11 @@ nc_ps_poll_session_io(struct nc_session *session, time_t now_mono, char *msg)
     int r, ret = 0;
     uint16_t idle_timeout;
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
 #if !LIBSSH_0_12
     ssh_message ssh_msg;
 #endif
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH */
 
     /* check timeout first, read the mirror so that the poll path needs no configuration at all */
     idle_timeout = (uint16_t)ATOMIC_LOAD_RELAXED(server_opts.idle_timeout);
@@ -2807,7 +2791,7 @@ nc_ps_poll_session_io(struct nc_session *session, time_t now_mono, char *msg)
     }
 
     switch (session->ti_type) {
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     case NC_TI_SSH:
 #if LIBSSH_0_12
         if (nc_ps_ssh_find_new_channel(session)) {
@@ -2856,6 +2840,9 @@ nc_ps_poll_session_io(struct nc_session *session, time_t now_mono, char *msg)
             ret = NC_PSPOLL_RPC;
         }
         break;
+#endif /* NC_SSH */
+
+#ifdef NC_TLS
     case NC_TI_TLS:
         r = nc_tls_get_num_pending_bytes_wrap(session->ti.tls.session);
         if (!r) {
@@ -2895,7 +2882,7 @@ nc_ps_poll_session_io(struct nc_session *session, time_t now_mono, char *msg)
             ret = NC_PSPOLL_RPC;
         }
         break;
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
     case NC_TI_FD:
     case NC_TI_UNIX:
         pfd.fd = (session->ti_type == NC_TI_FD) ? session->ti.fd.in : session->ti.unixsock.sock;
@@ -3083,10 +3070,10 @@ nc_ps_poll(struct nc_pollsession *ps, int timeout, struct nc_session **session)
         }
         break;
     case NC_PSPOLL_RPC:
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     case NC_PSPOLL_SSH_CHANNEL:
     case NC_PSPOLL_SSH_MSG:
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH */
         if (session) {
             *session = cur_session;
         }
@@ -3216,10 +3203,8 @@ cleanup:
 static int
 nc_server_bind_and_listen(const struct nc_endpt *endpt, const char *address, uint16_t port, int *sock)
 {
-#ifndef NC_ENABLED_SSH_TLS
-    /* only UNIX endpoints exist, which have no port */
+    /* avoid unused var warning */
     (void)port;
-#endif
 
     *sock = -1;
 
@@ -3229,18 +3214,21 @@ nc_server_bind_and_listen(const struct nc_endpt *endpt, const char *address, uin
         NC_CHECK_RET(*sock == -1, 1);
         VRB(NULL, "Listening on %s for UNIX connections.", address);
         break;
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     case NC_TI_SSH:
         *sock = nc_sock_listen_inet(address, port);
         NC_CHECK_RET(*sock == -1, 1);
         VRB(NULL, "Listening on %s:%" PRIu16 " for SSH connections.", address, port);
         break;
+#endif /* NC_SSH */
+
+#ifdef NC_TLS
     case NC_TI_TLS:
         *sock = nc_sock_listen_inet(address, port);
         NC_CHECK_RET(*sock == -1, 1);
         VRB(NULL, "Listening on %s:%" PRIu16 " for TLS connections.", address, port);
         break;
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
     default:
         ERRINT;
         return 1;
@@ -3804,7 +3792,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
     (*session)->opts.server.config = config;
 
     /* sock gets assigned to session or closed */
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     if (config->endpts[endpt_idx].ti == NC_TI_SSH) {
         ret = nc_accept_ssh_session(*session, config->endpts[endpt_idx].opts.ssh, sock);
         sock = -1;
@@ -3815,7 +3803,10 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
             msgtype = NC_MSG_WOULDBLOCK;
             goto cleanup;
         }
-    } else if (config->endpts[endpt_idx].ti == NC_TI_TLS) {
+    } else
+#endif /* NC_SSH */
+#ifdef NC_TLS
+    if (config->endpts[endpt_idx].ti == NC_TI_TLS) {
         (*session)->data = config->endpts[endpt_idx].opts.tls;
         ret = nc_accept_tls_session(*session, config->endpts[endpt_idx].opts.tls, sock);
         sock = -1;
@@ -3827,7 +3818,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
             goto cleanup;
         }
     } else
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
     if (config->endpts[endpt_idx].ti == NC_TI_UNIX) {
         (*session)->data = config->endpts[endpt_idx].opts.unix;
         ret = nc_accept_unix_session(*session, sock);
@@ -3884,7 +3875,7 @@ cleanup:
     return msgtype;
 }
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
 
 int
 nc_session_handshake_interrupted(const struct nc_session *session)
@@ -3913,6 +3904,29 @@ nc_session_handshake_poll_timeout(const struct nc_session *session, int32_t time
     }
 
     return timeout;
+}
+
+/**
+ * @brief Get a CH client with the given @p name from a pinned configuration.
+ *
+ * @param[in] config Pinned server configuration to search.
+ * @param[in] name Name of the CH client to find.
+ * @return CH client, NULL if not found.
+ */
+static const struct nc_ch_client *
+nc_server_ch_client_get_pinned(const struct nc_server_config *config, const char *name)
+{
+    LYA_COUNT_T u;
+
+    assert(name);
+
+    LYA_FOR(config->ch_clients, u) {
+        if (!strcmp(config->ch_clients[u].name, name)) {
+            return &config->ch_clients[u];
+        }
+    }
+
+    return NULL;
 }
 
 API int
@@ -4033,6 +4047,7 @@ nc_connect_ch_endpt(const struct nc_server_config *config, const struct nc_ch_en
     (*session)->opts.server.ch_thread_running = ch_thread_running;
 
     /* sock gets assigned to session or closed */
+#ifdef NC_SSH
     if (endpt->ti == NC_TI_SSH) {
         ret = nc_accept_ssh_session(*session, endpt->opts.ssh, sock);
         (*session)->data = NULL;
@@ -4044,7 +4059,11 @@ nc_connect_ch_endpt(const struct nc_server_config *config, const struct nc_ch_en
             msgtype = NC_MSG_WOULDBLOCK;
             goto fail;
         }
-    } else if (endpt->ti == NC_TI_TLS) {
+    } else
+#endif /* NC_SSH */
+
+#ifdef NC_TLS
+    if (endpt->ti == NC_TI_TLS) {
         (*session)->data = endpt->opts.tls;
         ret = nc_accept_tls_session(*session, endpt->opts.tls, sock);
         (*session)->data = NULL;
@@ -4056,7 +4075,9 @@ nc_connect_ch_endpt(const struct nc_server_config *config, const struct nc_ch_en
             msgtype = NC_MSG_WOULDBLOCK;
             goto fail;
         }
-    } else {
+    } else
+#endif /* NC_TLS */
+    {
         ERRINT;
         close(sock);
         msgtype = NC_MSG_ERROR;
@@ -4375,6 +4396,58 @@ nc_server_ch_client_acquire_with_endpt(struct nc_server_ch_thread_arg *data, con
 }
 
 /**
+ * @brief Unregister a Call Home thread that is terminating on its own and free its argument.
+ *
+ * Called by the Call Home thread itself right before it returns. Normally the thread only ever
+ * terminates because ::nc_session_server_ch_client_dispatch_stop() told it to, in which case the
+ * stopper has already removed the registry entry and does all the cleanup itself. If the thread
+ * terminates for any other reason (an unrecoverable error), it has to take itself out of the
+ * registry, otherwise every later configuration apply would believe the client is still running
+ * and would never dispatch it again.
+ *
+ * The registry entry is the ownership token of the thread argument, so the entry removal decides
+ * who cleans up and the ::nc_server_opts.ch_threads_lock makes that decision atomic.
+ *
+ * @param[in] thread_arg Argument of the calling thread.
+ */
+static void
+nc_server_ch_thread_unreg_self(struct nc_server_ch_thread_arg *thread_arg)
+{
+    LYA_COUNT_T u;
+    int found = 0;
+
+    /* CH THREADS LOCK */
+    if (nc_mutex_lock(&server_opts.ch_threads_lock, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
+        return;
+    }
+
+    LYA_FOR(server_opts.ch_threads, u) {
+        if (server_opts.ch_threads[u] != thread_arg) {
+            continue;
+        }
+
+        found = 1;
+
+        /* swap the last entry into the hole, the order of the registry is irrelevant */
+        server_opts.ch_threads[u] = server_opts.ch_threads[LYA_COUNT(server_opts.ch_threads) - 1];
+        LYA_DECREMENT_FREE(server_opts.ch_threads);
+        break;
+    }
+
+    /* CH THREADS UNLOCK */
+    nc_mutex_unlock(&server_opts.ch_threads_lock, __func__);
+
+    if (!found) {
+        /* someone else owns us now and will join us, nothing to do */
+        return;
+    }
+
+    /* nobody is going to join us anymore, so make sure our resources are reclaimed */
+    pthread_detach(thread_arg->tid);
+    nc_server_ch_thread_arg_free(thread_arg);
+}
+
+/**
  * @brief Call Home client management thread.
  *
  * Runs until ::nc_server_ch_thread_arg.thread_running is cleared or an unrecoverable error occurs.
@@ -4618,81 +4691,24 @@ cleanup:
     return NULL;
 }
 
-int
-nc_session_server_ch_client_dispatch_stop(const char *client_name)
-{
-    int r;
-    struct nc_server_ch_thread_arg *thread_arg;
-
-    /* unregister the thread first, so that no other caller can find and join the same one */
-    if (nc_server_ch_thread_reg_del(client_name, &thread_arg)) {
-        return 1;
-    }
-    if (!thread_arg) {
-        /* no thread is running for this client */
-        return 0;
-    }
-
-    /* notify the thread to stop */
-    ATOMIC_STORE_RELAXED(thread_arg->thread_running, 0);
-
-    /* wake up the thread if it's in thread_wait */
-    if (write(thread_arg->notify_pipe[1], "x", 1) == -1) {
-        if (errno != EAGAIN) {
-            ERR(NULL, "Writing to the notify pipe failed (%s).", strerror(errno));
-        }
-        /* EAGAIN is fine: pipe buffer is full, meaning it's already been signaled */
-    }
-
-    /* wait for the thread to end, no lock is held so a stalled handshake blocks nothing else */
-    r = pthread_join(thread_arg->tid, NULL);
-    if (r) {
-        ERR(NULL, "Joining Call Home client \"%s\" thread failed (%s), its data will be leaked.",
-                client_name, strerror(r));
-        return 1;
-    }
-
-    /* the registry entry was ours, so is the cleanup */
-    nc_server_ch_thread_arg_free(thread_arg);
-
-    return 0;
-}
-
-int
-nc_server_ch_threads_destroy(void)
-{
-    int rc = 0;
-    char **names = NULL;
-    LYA_COUNT_T u;
-
-    if (nc_server_ch_thread_names_get(&names)) {
-        return 1;
-    }
-
-    LYA_FOR(names, u) {
-        if (nc_session_server_ch_client_dispatch_stop(names[u])) {
-            rc = 1;
-        }
-    }
-    nc_server_ch_thread_names_free(names);
-
-    /* CH THREADS LOCK */
-    if (nc_mutex_lock(&server_opts.ch_threads_lock, NC_CH_THREADS_LOCK_TIMEOUT, __func__) != 1) {
-        return 1;
-    }
-    if (LYA_COUNT(server_opts.ch_threads)) {
-        ERRINT;
-        rc = 1;
-    }
-    LYA_FREE(server_opts.ch_threads);
-    server_opts.ch_threads = NULL;
-    /* CH THREADS UNLOCK */
-    nc_mutex_unlock(&server_opts.ch_threads_lock, __func__);
-
-    return rc;
-}
-
-int
+/**
+ * @brief Dispatch a thread connecting to a listening NETCONF client and creating Call Home sessions.
+ *
+ * The thread is added to the Call Home thread registry and created atomically, so it is findable by
+ * ::nc_session_server_ch_client_dispatch_stop() and by a concurrent configuration apply from the
+ * moment it exists. There is never more than one thread per Call Home client.
+ *
+ * @param[in] client_name Name of the Call Home client to dispatch the thread for.
+ * @param[in] acquire_ctx_cb Callback for acquiring new session context.
+ * @param[in] release_ctx_cb Callback for releasing session context.
+ * @param[in] ctx_cb_data Arbitrary user data passed to @p acquire_ctx_cb and @p release_ctx_cb.
+ * @param[in] new_session_cb Callback called for every established session on the client.
+ * @param[in] new_session_cb_data Arbitrary user data passed to @p new_session_cb.
+ * @return 0 if the thread was successfully created.
+ * @return 1 if a thread is already running for the client and nothing was done.
+ * @return -1 on error.
+ */
+static int
 _nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
         nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
         void *new_session_cb_data)
@@ -4821,6 +4837,44 @@ nc_connect_ch_client_dispatch(const char *client_name, nc_server_ch_session_acqu
 cleanup:
     nc_server_config_release(config);
     return rc;
+}
+
+API void
+nc_server_ch_set_dispatch_data(nc_server_ch_session_acquire_ctx_cb acquire_ctx_cb,
+        nc_server_ch_session_release_ctx_cb release_ctx_cb, void *ctx_cb_data, nc_server_ch_new_session_cb new_session_cb,
+        void *new_session_cb_data)
+{
+    NC_CHECK_ARG_RET(NULL, acquire_ctx_cb, release_ctx_cb, new_session_cb, );
+
+    /* OPTS WRITE LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_WRITE, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
+        return;
+    }
+
+    server_opts.ch_dispatch_data.acquire_ctx_cb = acquire_ctx_cb;
+    server_opts.ch_dispatch_data.release_ctx_cb = release_ctx_cb;
+    server_opts.ch_dispatch_data.ctx_cb_data = ctx_cb_data;
+    server_opts.ch_dispatch_data.new_session_cb = new_session_cb;
+    server_opts.ch_dispatch_data.new_session_cb_data = new_session_cb_data;
+
+    /* OPTS WRITE UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
+}
+
+API void
+nc_server_ch_set_new_session_fail_cb(nc_server_ch_new_session_fail_cb new_session_fail_cb,
+        void *new_session_fail_cb_data)
+{
+    /* OPTS WRITE LOCK */
+    if (nc_rwlock_lock(&server_opts.opts_lock, NC_RWLOCK_WRITE, NC_OPTS_LOCK_TIMEOUT, __func__) != 1) {
+        return;
+    }
+
+    server_opts.ch_dispatch_data.new_session_fail_cb = new_session_fail_cb;
+    server_opts.ch_dispatch_data.new_session_fail_cb_data = new_session_fail_cb_data;
+
+    /* OPTS WRITE UNLOCK */
+    nc_rwlock_unlock(&server_opts.opts_lock, __func__);
 }
 
 /**
@@ -4994,7 +5048,7 @@ cleanup:
     return rc ? 1 : 0;
 }
 
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH or NC_TLS */
 
 API struct timespec
 nc_session_get_start_time(const struct nc_session *session)
@@ -5071,7 +5125,7 @@ nc_session_get_notif_status(const struct nc_session *session)
     return ntf_status;
 }
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
 
 /**
  * @brief Get the XPath for the certificate expiration notification.
@@ -5337,8 +5391,8 @@ nc_server_notif_cert_exp_first_notif_time_get(struct nc_cert_exp_time_interval *
  */
 static int
 nc_server_notif_cert_exp_date_append(const char *cert_data, struct nc_cert_path_aux *cp,
-        struct nc_cert_exp_time_interval *intervals, uint32_t interval_count,
-        struct nc_cert_expiration **exp_dates, uint32_t *exp_date_count)
+        struct nc_cert_exp_time_interval *intervals, uint32_t interval_count, struct nc_cert_expiration **exp_dates,
+        uint32_t *exp_date_count)
 {
     int ret = 0;
     void *cert = NULL;
@@ -5351,7 +5405,7 @@ nc_server_notif_cert_exp_date_append(const char *cert_data, struct nc_cert_path_
     }
 
     /* get expiration date */
-    exp_time = nc_tls_get_cert_exp_time_wrap(cert);
+    exp_time = nc_get_cert_exp_time_wrap(cert);
     if (exp_time == -1) {
         ret = 1;
         goto cleanup;
@@ -5384,9 +5438,11 @@ nc_server_notif_cert_exp_date_append(const char *cert_data, struct nc_cert_path_
     ++(*exp_date_count);
 
 cleanup:
-    nc_tls_cert_destroy_wrap(cert);
+    nc_cert_destroy_wrap(cert);
     return ret;
 }
+
+#ifdef NC_TLS
 
 /**
  * @brief Get the certificate expiration dates for all the certificates in the given endpoint.
@@ -5402,8 +5458,8 @@ cleanup:
  */
 static int
 nc_server_notif_cert_exp_dates_endpt_get(const char *ch_client_name, const char *endpt_name, struct nc_server_tls_opts *opts,
-        struct nc_cert_exp_time_interval *intervals, uint32_t interval_count,
-        struct nc_cert_expiration **exp_dates, uint32_t *exp_date_count)
+        struct nc_cert_exp_time_interval *intervals, uint32_t interval_count, struct nc_cert_expiration **exp_dates,
+        uint32_t *exp_date_count)
 {
     int ret = 0;
     LYA_COUNT_T i;
@@ -5449,6 +5505,8 @@ cleanup:
     return ret;
 }
 
+#endif /* NC_TLS */
+
 /**
  * @brief Get the certificate expiration dates for all the certificates in the server configuration.
  *
@@ -5464,14 +5522,11 @@ nc_server_notif_cert_exp_dates_get(struct nc_cert_exp_time_interval *intervals, 
 {
     int ret = 0;
     const struct nc_server_config *config;
-    const struct nc_endpt *endpt;
-    const struct nc_ch_client *ch_client;
-    const struct nc_ch_endpt *ch_endpt;
     struct nc_certificate *cert;
     const struct nc_keystore *ks;
     const struct nc_truststore *ts;
     struct nc_cert_path_aux cp = {0};
-    LYA_COUNT_T i, u, v;
+    LYA_COUNT_T i;
 
     NC_CHECK_ARG_RET(NULL, intervals, interval_count, exp_dates, exp_date_count, 1);
 
@@ -5486,6 +5541,12 @@ nc_server_notif_cert_exp_dates_get(struct nc_cert_exp_time_interval *intervals, 
     /* the aliases must only be taken from the pinned configuration */
     ks = &config->keystore;
     ts = &config->truststore;
+
+#ifdef NC_TLS
+    const struct nc_endpt *endpt;
+    const struct nc_ch_client *ch_client;
+    const struct nc_ch_endpt *ch_endpt;
+    LYA_COUNT_T u, v;
 
     /* first go through listen certs */
     LYA_FOR(config->endpts, u) {
@@ -5513,6 +5574,7 @@ nc_server_notif_cert_exp_dates_get(struct nc_cert_exp_time_interval *intervals, 
             }
         }
     }
+#endif /* NC_TLS */
 
     /* keystore certs */
     LYA_FOR(ks->entries, i) {
@@ -5869,7 +5931,7 @@ nc_server_notif_cert_expiration_thread_stop(int wait)
     return 0;
 }
 
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH or NC_TLS */
 
 int
 nc_server_is_mod_ignored(const struct nc_server_config *config, const char *mod_name)

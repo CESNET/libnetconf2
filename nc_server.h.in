@@ -5,7 +5,7 @@
  * @brief libnetconf2 main public header for NETCONF servers.
  *
  * @copyright
- * Copyright (c) 2015 - 2025 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -21,14 +21,19 @@
 extern "C" {
 #endif
 
-@SSH_TLS_MACRO@
+@SSH_MACRO@
+@SSH_SERVER_INCLUDE_MACRO@
+
+@TLS_MACRO@
+@TLS_SERVER_INCLUDE_MACRO@
+
+@CH_SERVER_INCLUDE_MACRO@
 
 #include <libnetconf2/netconf.h>
 #include <libnetconf2/log.h>
 #include <libnetconf2/messages_server.h>
 #include <libnetconf2/server_config.h>
 #include <libnetconf2/session_server.h>
-#include <libnetconf2/session_server_ch.h>
 
 #ifdef __cplusplus
 }

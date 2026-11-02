@@ -1,11 +1,11 @@
 /**
  * @file nc_client.h
  * @author Radek Krejci <rkrejci@cesnet.cz>
- * @author Michal Vasko
+ * @author Michal Vasko <mvasko@cesnet.cz>
  * @brief libnetconf2 main public header for NETCONF clients.
  *
  * @copyright
- * Copyright (c) 2015 - 2025 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -21,13 +21,16 @@
 extern "C" {
 #endif
 
-@SSH_TLS_MACRO@
+@SSH_MACRO@
+
+@TLS_MACRO@
+
+@CH_CLIENT_INCLUDE_MACRO@
 
 #include <libnetconf2/netconf.h>
 #include <libnetconf2/log.h>
 #include <libnetconf2/messages_client.h>
 #include <libnetconf2/session_client.h>
-#include <libnetconf2/session_client_ch.h>
 #include <libnetconf2/proxy_unix.h>
 
 #ifdef __cplusplus

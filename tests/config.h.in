@@ -26,8 +26,10 @@
 #cmakedefine HAVE_SHADOW
 
 @SSH_MACRO@
-@TLS_MACRO@
+@SSH_SERVER_INCLUDE_MACRO@
 
+@TLS_MACRO@
+@TLS_SERVER_INCLUDE_MACRO@
 
 /* nc_server.h local includes (not to use the installed ones) */
 #include "netconf.h"

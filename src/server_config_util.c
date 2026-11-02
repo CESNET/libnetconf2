@@ -31,11 +31,9 @@
 #include "session.h"
 #include "session_p.h"
 
-#ifdef NC_ENABLED_SSH_TLS
-
-#include "session_wrapper.h"
-
-#endif /* NC_ENABLED_SSH_TLS */
+#if defined (NC_SSH) || defined (NC_TLS)
+# include "session_crypto_wrapper.h"
+#endif /* NC_SSH or NC_TLS */
 
 int
 nc_server_config_create(const struct ly_ctx *ctx, struct lyd_node **tree, const char *value, const char *path_fmt, ...)
@@ -350,7 +348,7 @@ nc_server_config_del_unix_user_mapping(const char *endpt_name, const char *syste
     }
 }
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
 
 const char *
 nc_server_config_util_privkey_format_to_identityref(enum nc_privkey_format format)
@@ -381,7 +379,7 @@ nc_server_config_util_rsa_pubkey_param_to_bin(void *bn, unsigned char **bin, int
     *bin = NULL;
 
     /* convert to binary */
-    if (nc_tls_mpi2bin_wrap(bn, &bin_tmp, bin_len)) {
+    if (nc_mpi2bin_wrap(bn, &bin_tmp, bin_len)) {
         ret = 1;
         goto cleanup;
     }
@@ -417,12 +415,12 @@ nc_server_config_util_pkey_to_ssh_pubkey(void *pkey, char **pubkey)
 
     NC_CHECK_ARG_RET(NULL, pkey, pubkey, 1);
 
-    if (nc_tls_privkey_is_rsa_wrap(pkey)) {
+    if (nc_privkey_is_rsa_wrap(pkey)) {
         /* RSA key */
         algorithm_name = "ssh-rsa";
 
         /* get the public key params */
-        if (nc_tls_get_rsa_pubkey_params_wrap(pkey, &e, &n)) {
+        if (nc_get_rsa_pubkey_params_wrap(pkey, &e, &n)) {
             ret = 1;
             goto cleanup;
         }
@@ -460,9 +458,9 @@ nc_server_config_util_pkey_to_ssh_pubkey(void *pkey, char **pubkey)
         memcpy(bin_tmp, &n_len_be, 4);
         bin_tmp += 4;
         memcpy(bin_tmp, n_bin, n_len);
-    } else if (nc_tls_privkey_is_ec_wrap(pkey)) {
+    } else if (nc_privkey_is_ec_wrap(pkey)) {
         /* EC Private key, get it's group first */
-        ec_group = nc_tls_get_ec_group_wrap(pkey);
+        ec_group = nc_get_ec_group_wrap(pkey);
         if (!ec_group) {
             ret = 1;
             goto cleanup;
@@ -485,7 +483,7 @@ nc_server_config_util_pkey_to_ssh_pubkey(void *pkey, char **pubkey)
         }
 
         /* get the public key - p, which is a point on the elliptic curve */
-        ret = nc_tls_get_ec_pubkey_params_wrap(pkey, &p, &p_grp);
+        ret = nc_get_ec_pubkey_params_wrap(pkey, &p, &p_grp);
         if (ret) {
             ERR(NULL, "Getting public key point from the EC private key failed.");
             ret = 1;
@@ -493,7 +491,7 @@ nc_server_config_util_pkey_to_ssh_pubkey(void *pkey, char **pubkey)
         }
 
         /* EC point to bin */
-        ret = nc_tls_ec_point_to_bin_wrap(p, p_grp, &p_bin, &p_len);
+        ret = nc_ec_point_to_bin_wrap(p, p_grp, &p_bin, &p_len);
         if (ret) {
             ERR(NULL, "Converting EC public key point to binary failed.");
             ret = 1;
@@ -541,10 +539,10 @@ nc_server_config_util_pkey_to_ssh_pubkey(void *pkey, char **pubkey)
     }
 
 cleanup:
-    nc_tls_destroy_mpi_wrap(e);
-    nc_tls_destroy_mpi_wrap(n);
-    nc_tls_ec_point_destroy_wrap(p);
-    nc_tls_ec_group_destroy_wrap(p_grp);
+    nc_destroy_mpi_wrap(e);
+    nc_destroy_mpi_wrap(n);
+    nc_ec_point_destroy_wrap(p);
+    nc_ec_group_destroy_wrap(p_grp);
     free(bin);
     free(e_bin);
     free(n_bin);
@@ -562,7 +560,7 @@ nc_server_config_util_pkey_to_spki_pubkey(void *pkey, char **pubkey)
 
     NC_CHECK_ARG_RET(NULL, pkey, pubkey, 1);
 
-    pub_pem = nc_tls_export_pubkey_pem_wrap(pkey);
+    pub_pem = nc_export_pubkey_pem_wrap(pkey);
     if (!pub_pem) {
         ret = 1;
         goto cleanup;
@@ -587,12 +585,12 @@ nc_server_config_util_read_certificate(const char *cert_path, char **cert)
 
     NC_CHECK_ARG_RET(NULL, cert_path, cert, 1);
 
-    crt = nc_tls_import_cert_file_wrap(cert_path);
+    crt = nc_import_cert_file_wrap(cert_path);
     if (!crt) {
         return 1;
     }
 
-    pem = nc_tls_export_cert_pem_wrap(crt);
+    pem = nc_export_cert_pem_wrap(crt);
     if (!pem) {
         ret = 1;
         goto cleanup;
@@ -605,7 +603,7 @@ nc_server_config_util_read_certificate(const char *cert_path, char **cert)
 
 cleanup:
     free(pem);
-    nc_tls_cert_destroy_wrap(crt);
+    nc_cert_destroy_wrap(crt);
     return ret;
 }
 
@@ -678,15 +676,17 @@ nc_server_config_util_read_spki_pubkey(const char *pubkey_path, char **pubkey)
     NC_CHECK_ARG_RET(NULL, pubkey_path, pubkey, 1);
 
     /* read the pubkey from file */
-    pub_pkey = nc_tls_import_pubkey_file_wrap(pubkey_path);
+    pub_pkey = nc_import_pubkey_file_wrap(pubkey_path);
     if (!pub_pkey) {
         return 1;
     }
 
     ret = nc_server_config_util_pkey_to_ssh_pubkey(pub_pkey, pubkey);
-    nc_tls_privkey_destroy_wrap(pub_pkey);
+    nc_privkey_destroy_wrap(pub_pkey);
     return ret;
 }
+
+#ifdef NC_SSH
 
 static int
 nc_server_config_util_read_openssh_pubkey(const char *pubkey_path, char **pubkey)
@@ -712,6 +712,8 @@ cleanup:
     ssh_key_free(pub_sshkey);
     return 0;
 }
+
+#endif /* NC_SSH */
 
 int
 nc_server_config_util_get_ssh_pubkey_file(const char *pubkey_path, char **pubkey)
@@ -748,8 +750,12 @@ nc_server_config_util_get_ssh_pubkey_file(const char *pubkey_path, char **pubkey
         /* it's ssh2 public key */
         ret = nc_server_config_util_read_ssh2_pubkey(pubkey_path, pubkey);
     } else {
+#ifdef NC_SSH
         /* it's probably OpenSSH public key */
         ret = nc_server_config_util_read_openssh_pubkey(pubkey_path, pubkey);
+#else
+        ret = -1;
+#endif /* NC_SSH */
     }
     if (ret) {
         ERR(NULL, "Error getting public key from file \"%s\".", pubkey_path);
@@ -761,6 +767,52 @@ cleanup:
     return ret;
 }
 
+#ifdef NC_SSH
+
+/**
+ * @brief Get private key using libssh functions.
+ *
+ * @param[in] privkey_path Path to the private key file.
+ * @param[out] pkey TLS backend's underlying private key structure.
+ * @return 0 on success, 1 on failure.
+ */
+static int
+nc_server_config_util_get_privkey_libssh(const char *privkey_path, void **pkey)
+{
+    int ret = 0;
+    ssh_key key = NULL;
+    char *privkey_buf = NULL;
+
+    /* import the OpenSSH private key using libssh */
+    ret = ssh_pki_import_privkey_file(privkey_path, NULL, NULL, NULL, &key);
+    if (ret) {
+        ERR(NULL, "Importing privkey from file \"%s\" failed.", privkey_path);
+        ret = 1;
+        goto cleanup;
+    }
+
+    /* export the key in PEM */
+    ret = ssh_pki_export_privkey_base64(key, NULL, NULL, NULL, &privkey_buf);
+    if (ret) {
+        ERR(NULL, "Exporting privkey to base64 failed.");
+        goto cleanup;
+    }
+
+    /* convert the base64 PEM to libtls private key representation */
+    *pkey = nc_pem_to_privkey_wrap(privkey_buf);
+    if (!*pkey) {
+        ret = 1;
+        goto cleanup;
+    }
+
+cleanup:
+    free(privkey_buf);
+    ssh_key_free(key);
+    return ret;
+}
+
+#endif /* NC_SSH */
+
 int
 nc_server_config_util_get_spki_pubkey_file(const char *pubkey_path, char **pubkey)
 {
@@ -771,7 +823,7 @@ nc_server_config_util_get_spki_pubkey_file(const char *pubkey_path, char **pubke
 
     *pubkey = NULL;
 
-    pkey = nc_tls_import_pubkey_file_wrap(pubkey_path);
+    pkey = nc_import_pubkey_file_wrap(pubkey_path);
     if (!pkey) {
         return 1;
     }
@@ -782,7 +834,7 @@ nc_server_config_util_get_spki_pubkey_file(const char *pubkey_path, char **pubke
     }
 
 cleanup:
-    nc_tls_privkey_destroy_wrap(pkey);
+    nc_privkey_destroy_wrap(pkey);
     return ret;
 }
 
@@ -823,50 +875,8 @@ nc_server_config_util_get_privkey_libtls(const char *privkey_path, void **pkey)
 {
     *pkey = NULL;
 
-    *pkey = nc_tls_import_privkey_file_wrap(privkey_path);
+    *pkey = nc_import_privkey_file_wrap(privkey_path);
     return *pkey ? 0 : 1;
-}
-
-/**
- * @brief Get private key using libssh functions.
- *
- * @param[in] privkey_path Path to the private key file.
- * @param[out] pkey TLS backend's underlying private key structure.
- * @return 0 on success, 1 on failure.
- */
-static int
-nc_server_config_util_get_privkey_libssh(const char *privkey_path, void **pkey)
-{
-    int ret = 0;
-    ssh_key key = NULL;
-    char *privkey_buf = NULL;
-
-    /* import the OpenSSH private key using libssh */
-    ret = ssh_pki_import_privkey_file(privkey_path, NULL, NULL, NULL, &key);
-    if (ret) {
-        ERR(NULL, "Importing privkey from file \"%s\" failed.", privkey_path);
-        ret = 1;
-        goto cleanup;
-    }
-
-    /* export the key in PEM */
-    ret = ssh_pki_export_privkey_base64(key, NULL, NULL, NULL, &privkey_buf);
-    if (ret) {
-        ERR(NULL, "Exporting privkey to base64 failed.");
-        goto cleanup;
-    }
-
-    /* convert the base64 PEM to libtls private key representation */
-    *pkey = nc_tls_pem_to_privkey_wrap(privkey_buf);
-    if (!*pkey) {
-        ret = 1;
-        goto cleanup;
-    }
-
-cleanup:
-    free(privkey_buf);
-    ssh_key_free(key);
-    return ret;
 }
 
 static int
@@ -942,10 +952,12 @@ nc_server_config_util_get_privkey(const char *privkey_path, enum nc_privkey_form
         /* the TLS lib can do this */
         ret = nc_server_config_util_get_privkey_libtls(privkey_path, pkey);
         break;
+#ifdef NC_SSH
     case NC_PRIVKEY_FORMAT_OPENSSH:
         /* need the help of libssh */
         ret = nc_server_config_util_get_privkey_libssh(privkey_path, pkey);
         break;
+#endif /* NC_SSH */
     default:
         ERR(NULL, "Private key format not recognized.");
         ret = 1;
@@ -958,7 +970,7 @@ nc_server_config_util_get_privkey(const char *privkey_path, enum nc_privkey_form
     /* export the private key to its original format type,
      * all of this was done to avoid having to parse the private key ourselves
      * and since we have a "pkey" we can be sure, that the private key is valid */
-    ret = nc_tls_privkey_export_wrap(*pkey, *privkey_format, &priv);
+    ret = nc_privkey_export_wrap(*pkey, *privkey_format, &priv);
     if (ret) {
         goto cleanup;
     }
@@ -1031,7 +1043,7 @@ nc_server_config_util_get_asym_key_pair(const char *privkey_path, const char *pu
     }
 
 cleanup:
-    nc_tls_privkey_destroy_wrap(pkey);
+    nc_privkey_destroy_wrap(pkey);
     return ret;
 }
 
@@ -1049,11 +1061,17 @@ nc_server_config_add_address_port(const struct ly_ctx *ctx, const char *endpt_na
     path_fmt = "/ietf-netconf-server:netconf-server/listen/endpoints/endpoint[name='%s']/%s/tcp-server-parameters/"
             "local-bind[local-address='%s']/local-port";
 
+#ifdef NC_SSH
     if (transport == NC_TI_SSH) {
         transport_str = "ssh";
-    } else if (transport == NC_TI_TLS) {
+    } else
+#endif /* NC_SSH */
+#ifdef NC_TLS
+    if (transport == NC_TI_TLS) {
         transport_str = "tls";
-    } else {
+    } else
+#endif /* NC_TLS */
+    {
         ERR(NULL, "Can not set address and port of a non SSH/TLS endpoint.");
         ret = 1;
         goto cleanup;
@@ -1078,15 +1096,21 @@ nc_server_config_add_ch_address_port(const struct ly_ctx *ctx, const char *clien
 
     NC_CHECK_ARG_RET(NULL, ctx, client_name, endpt_name, address, port, config, 1);
 
+#ifdef NC_SSH
     if (transport == NC_TI_SSH) {
         /* SSH path */
         address_fmt = "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/tcp-client-parameters/remote-address";
         port_fmt = "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/endpoint[name='%s']/ssh/tcp-client-parameters/remote-port";
-    } else if (transport == NC_TI_TLS) {
+    } else
+#endif /* NC_SSH */
+#ifdef NC_TLS
+    if (transport == NC_TI_TLS) {
         /* TLS path */
         address_fmt = "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tcp-client-parameters/remote-address";
         port_fmt = "/ietf-netconf-server:netconf-server/call-home/netconf-client[name='%s']/endpoints/endpoint[name='%s']/tls/tcp-client-parameters/remote-port";
-    } else {
+    } else
+#endif /* NC_TLS */
+    {
         ERR(NULL, "Transport not supported.");
         ret = 1;
         goto cleanup;
@@ -1160,27 +1184,28 @@ nc_server_config_add_keystore_asym_key(const struct ly_ctx *ctx, NC_TRANSPORT_IM
 
     NC_CHECK_ARG_RET(NULL, ctx, asym_key_name, privkey_path, config, 1);
 
-    /* get the keys as a string from the given files */
+    /* get the keys as a string from the given files and pubkey format */
+#ifdef NC_SSH
     if (ti == NC_TI_SSH) {
         ret = nc_server_config_util_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_SSH, &privkey,
                 &privkey_type, &pubkey);
-    } else if (ti == NC_TI_TLS) {
+        pubkey_format = "ietf-crypto-types:ssh-public-key-format";
+    } else
+#endif /* NC_SSH */
+#ifdef NC_TLS
+    if (ti == NC_TI_TLS) {
         ret = nc_server_config_util_get_asym_key_pair(privkey_path, pubkey_path, NC_PUBKEY_FORMAT_X509, &privkey,
                 &privkey_type, &pubkey);
-    } else {
+        pubkey_format = "ietf-crypto-types:subject-public-key-info-format";
+    } else
+#endif /* NC_TLS */
+    {
         ERR(NULL, "Only SSH and TLS transports can be used to create an asymmetric key pair in the keystore.");
         ret = 1;
         goto cleanup;
     }
     if (ret) {
         goto cleanup;
-    }
-
-    /* get pubkey format str */
-    if (ti == NC_TI_SSH) {
-        pubkey_format = "ietf-crypto-types:ssh-public-key-format";
-    } else {
-        pubkey_format = "ietf-crypto-types:subject-public-key-info-format";
     }
 
     /* get privkey identityref value */
@@ -1356,8 +1381,6 @@ nc_server_config_del_truststore_cert(const char *cert_bag_name,
     }
 }
 
-#endif /* NC_ENABLED_SSH_TLS */
-
 API int
 nc_server_config_add_ch_persistent(const struct ly_ctx *ctx, const char *ch_client_name, struct lyd_node **config)
 {
@@ -1516,3 +1539,5 @@ nc_server_config_del_ch_reconnect_strategy(const char *ch_client_name, struct ly
     return nc_server_config_delete(config, "/ietf-netconf-server:netconf-server/call-home/"
             "netconf-client[name='%s']/reconnect-strategy", ch_client_name);
 }
+
+#endif /* NC_SSH or NC_TLS */

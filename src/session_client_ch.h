@@ -4,7 +4,7 @@
  * @brief libnetconf2 Call Home session client manipulation
  *
  * @copyright
- * Copyright (c) 2015 - 2023 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -22,15 +22,13 @@ extern "C" {
 
 #include <libyang/libyang.h>
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
 # include <libssh/libssh.h>
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH */
 
 #include "messages_client.h"
 #include "netconf.h"
 #include "session.h"
-
-#ifdef NC_ENABLED_SSH_TLS
 
 /**
  * @defgroup client_ch Client-side Call Home
@@ -54,6 +52,8 @@ extern "C" {
 int nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session);
 
 /** @} Client-side Call Home */
+
+#ifdef NC_SSH
 
 /**
  * @defgroup client_ch_ssh Client-side Call Home on SSH
@@ -250,6 +250,10 @@ const char *nc_client_ssh_ch_get_username(void);
 
 /** @} Client-side Call Home on SSH */
 
+#endif /* NC_SSH */
+
+#ifdef NC_TLS
+
 /**
  * @defgroup client_ch_tls Client-side Call Home on TLS
  * @ingroup client_ch
@@ -325,7 +329,7 @@ void nc_client_tls_ch_get_trusted_ca_paths(const char **ca_file, const char **ca
 
 /** @} Client-side Call Home on TLS */
 
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
 
 #ifdef __cplusplus
 }
