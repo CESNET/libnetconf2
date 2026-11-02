@@ -4,10 +4,8 @@
  * @author Michal Vasko <mvasko@cesnet.cz>
  * @brief libnetconf2 - TLS specific session client transport functions
  *
- * This source is compiled only with libssl.
- *
  * @copyright
- * Copyright (c) 2015 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -31,8 +29,8 @@
 #include "log_p.h"
 #include "session_client.h"
 #include "session_client_ch.h"
+#include "session_crypto_wrapper.h"
 #include "session_p.h"
-#include "session_wrapper.h"
 
 void
 _nc_client_tls_destroy_opts(struct nc_client_tls_opts *opts)
@@ -317,8 +315,8 @@ fail:
     }
 
     nc_tls_session_destroy_wrap(tls_session);
-    nc_tls_cert_destroy_wrap(cli_cert);
-    nc_tls_privkey_destroy_wrap(cli_pkey);
+    nc_cert_destroy_wrap(cli_cert);
+    nc_privkey_destroy_wrap(cli_pkey);
     nc_tls_cert_store_destroy_wrap(cert_store);
     nc_tls_config_destroy_wrap(tls_cfg);
     return NULL;

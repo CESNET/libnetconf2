@@ -35,8 +35,8 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#ifdef NC_ENABLED_SSH_TLS
-#include <libssh/libssh.h>
+#ifdef NC_SSH
+# include <libssh/libssh.h>
 #endif
 #include <libyang/libyang.h>
 
@@ -50,11 +50,11 @@
 
 static const char *ncds2str[] = {NULL, "config", "url", "running", "startup", "candidate"};
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
 char *sshauth_password(const char *username, const char *hostname, void *priv);
 char *sshauth_interactive(const char *auth_name, const char *instruction, const char *prompt, int echo, void *priv);
 char *sshauth_privkey_passphrase(const char *privkey_path, void *priv);
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH */
 
 static pthread_once_t nc_client_context_once = PTHREAD_ONCE_INIT;
 static pthread_key_t nc_client_context_key;
@@ -78,7 +78,7 @@ nc_client_context_free(void *ptr)
     free(c->opts.capabilities);
     free(c->unix_opts.username);
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
     for (i = 0; i < c->opts.ch_bind_count; ++i) {
         close(c->opts.ch_binds_aux[i].sock);
         free((char *)c->opts.ch_binds[i].address);
@@ -86,13 +86,18 @@ nc_client_context_free(void *ptr)
     free(c->opts.ch_binds);
     c->opts.ch_binds = NULL;
     c->opts.ch_bind_count = 0;
+#endif /* NC_SSH or NC_TLS */
 
+#ifdef NC_SSH
     _nc_client_ssh_destroy_opts(&c->ssh_opts);
     _nc_client_ssh_destroy_opts(&c->ssh_ch_opts);
+#endif /* NC_SSH */
 
+#ifdef NC_TLS
     _nc_client_tls_destroy_opts(&c->tls_opts);
     _nc_client_tls_destroy_opts(&c->tls_ch_opts);
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
+
     free(c);
 }
 
@@ -122,7 +127,7 @@ nc_client_context_location(void)
         e->opts.ka.idle_time = 1;
         e->opts.ka.max_probes = 10;
         e->opts.ka.probe_interval = 5;
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
 # ifdef HAVE_TERMIOS
         e->ssh_opts.knownhosts_mode = NC_SSH_KNOWNHOSTS_ASK;
 # else
@@ -143,7 +148,7 @@ nc_client_context_location(void)
         e->ssh_ch_opts.auth_pref[0].value = 1;
         e->ssh_ch_opts.auth_pref[1].value = 2;
         e->ssh_ch_opts.auth_pref[2].value = 3;
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH */
 
         /* init the monitoring thread data lock */
         pthread_mutex_init(&e->opts.monitoring_thread_data.lock, NULL);
@@ -1753,7 +1758,7 @@ error:
     return -1;
 }
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
 
 int
 nc_client_ch_add_bind_listen(const char *address, uint16_t port, const char *hostname, NC_TRANSPORT_IMPL ti)
@@ -1872,11 +1877,17 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
         return -1;
     }
 
+#ifdef NC_SSH
     if (client_opts.ch_binds_aux[bind_idx].ti == NC_TI_SSH) {
         *session = nc_accept_callhome_ssh_sock(sock, host, port, ctx);
-    } else if (client_opts.ch_binds_aux[bind_idx].ti == NC_TI_TLS) {
+    } else
+#endif /* NC_SSH */
+#ifdef NC_TLS
+    if (client_opts.ch_binds_aux[bind_idx].ti == NC_TI_TLS) {
         *session = nc_accept_callhome_tls_sock(sock, host, port, ctx, client_opts.ch_binds_aux[bind_idx].hostname);
-    } else {
+    } else
+#endif /* NC_TLS */
+    {
         close(sock);
         *session = NULL;
     }
@@ -1890,7 +1901,7 @@ nc_accept_callhome(int timeout, struct ly_ctx *ctx, struct nc_session **session)
     return 1;
 }
 
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH or NC_TLS */
 
 API int
 nc_session_ntf_thread_running(const struct nc_session *session)
@@ -1916,11 +1927,16 @@ nc_client_destroy(void)
 {
     nc_client_set_schema_searchpath(NULL);
     nc_client_unix_set_username(NULL);
-#ifdef NC_ENABLED_SSH_TLS
+
+#if defined (NC_SSH) || defined (NC_TLS)
     nc_client_ch_del_bind(NULL, 0, 0);
+#endif /* NC_SSH or NC_TLS */
+#ifdef NC_SSH
     nc_client_ssh_destroy_opts();
+#endif /* NC_SSH */
+#ifdef NC_TLS
     nc_client_tls_destroy_opts();
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
 
     nc_global_destroy(NC_CLIENT);
 }
@@ -3265,14 +3281,16 @@ nc_client_monitoring_get_session_fd(struct nc_session *session)
     case NC_TI_UNIX:
         fd = session->ti.unixsock.sock;
         break;
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     case NC_TI_SSH:
         fd = ssh_get_fd(session->ti.libssh.session);
         break;
+#endif /* NC_SSH */
+#ifdef NC_TLS
     case NC_TI_TLS:
         fd = nc_tls_get_fd_wrap(session);
         break;
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
     case NC_TI_NONE:
         /* invalid */
         break;

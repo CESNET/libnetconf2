@@ -4,7 +4,7 @@
  * @brief libnetconf2 server configuration utlities header
  *
  * @copyright
- * Copyright (c) 2023 CESNET, z.s.p.o.
+ * Copyright (c) 2023 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -19,8 +19,6 @@
 #include <libyang/libyang.h>
 
 #include "session_p.h"
-
-#ifdef NC_ENABLED_SSH_TLS
 
 /* private key's pkcs8 header */
 #define NC_PKCS8_PRIVKEY_HEADER "-----BEGIN PRIVATE KEY-----\n"
@@ -93,7 +91,6 @@ int nc_server_config_util_get_asym_key_pair(const char *privkey_path, const char
  *
  * @param[in] pubkey_path Path to the public key.
  * @param[out] pubkey Base64 encoded public key.
- *
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_util_get_ssh_pubkey_file(const char *pubkey_path, char **pubkey);
@@ -103,7 +100,6 @@ int nc_server_config_util_get_ssh_pubkey_file(const char *pubkey_path, char **pu
  *
  * @param[in] cert_path Path to the certificate.
  * @param[out] cert Base64 PEM encoded certificate data.
- *
  * @return 0 on success, non-zero otherwise.
  */
 int nc_server_config_util_read_certificate(const char *cert_path, char **cert);
@@ -112,12 +108,9 @@ int nc_server_config_util_read_certificate(const char *cert_path, char **cert);
  * @brief Converts private key format to its associated identityref value.
  *
  * @param[in] format Private key format.
- *
  * @return Identityref on success, NULL on failure.
  */
 const char *nc_server_config_util_privkey_format_to_identityref(enum nc_privkey_format format);
-
-#endif /* NC_ENABLED_SSH_TLS */
 
 /**
  * @brief Creates YANG data nodes in a path and gives the final node a value.
@@ -166,4 +159,4 @@ int nc_server_config_delete(struct lyd_node **tree, const char *path_fmt, ...);
  */
 int nc_server_config_check_delete(struct lyd_node **tree, const char *path_fmt, ...);
 
-#endif /* NC_CONFIG_NEW_H_ */
+#endif /* NC_SERVER_CONFIG_UTIL_H_ */

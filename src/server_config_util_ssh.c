@@ -4,7 +4,7 @@
  * @brief libnetconf2 server SSH configuration utilities
  *
  * @copyright
- * Copyright (c) 2023 CESNET, z.s.p.o.
+ * Copyright (c) 2023 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@
 #include "config.h"
 #include "log_p.h"
 #include "server_config.h"
+#include "session_crypto_wrapper.h"
 #include "session_p.h"
 
 static int
@@ -514,7 +515,7 @@ nc_server_config_crypt_password(const char *password, char **hashed_password)
     NC_CHECK_ERRMEM_GOTO(!cdata, ret = 1, cleanup);
 
     /* generate a random salt compatible with crypt SHA-512: "$6$<salt>$" */
-    if (nc_tls_generate_random_bytes_wrap(rnd, sizeof rnd)) {
+    if (nc_ssh_generate_random_bytes_wrap(rnd, sizeof rnd)) {
         ret = 1;
         goto cleanup;
     }

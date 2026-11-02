@@ -4,7 +4,7 @@
  * @brief libnetconf2 Call Home session server manipulation
  *
  * @copyright
- * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -26,8 +26,6 @@ extern "C" {
 
 #include "netconf.h"
 #include "session.h"
-
-#ifdef NC_ENABLED_SSH_TLS
 
 /**
  * @defgroup server_ch Server-side Call Home
@@ -147,8 +145,6 @@ void nc_server_ch_set_new_session_fail_cb(nc_server_ch_new_session_fail_cb new_s
         void *new_session_fail_cb_data);
 
 /** @} Server-side Call Home Functions */
-
-#endif /* NC_ENABLED_SSH_TLS */
 
 #ifdef __cplusplus
 }

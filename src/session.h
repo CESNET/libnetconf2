@@ -5,7 +5,7 @@
  * @brief libnetconf2 session manipulation
  *
  * @copyright
- * Copyright (c) 2015 - 2023 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -21,9 +21,9 @@
 extern "C" {
 #endif
 
-#include "netconf.h"
+#include <stdint.h>
 
-#ifdef NC_ENABLED_SSH_TLS
+#include "netconf.h"
 
 /**
  * @brief Enumeration of NETCONF SSH authentication methods
@@ -58,8 +58,6 @@ typedef enum {
     NC_TLS_CTN_COMMON_NAME      /**< common name as username */
 } NC_TLS_CTN_MAPTYPE;
 
-#endif /* NC_ENABLED_SSH_TLS */
-
 /**
  * @brief Enumeration of the supported NETCONF protocol versions
  */
@@ -87,11 +85,13 @@ typedef enum {
     NC_TI_FD,         /**< file descriptors - use standard input/output, transport protocol is implemented
                            outside the current application */
     NC_TI_UNIX,       /**< unix socket */
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
     NC_TI_SSH,        /**< SSH - use libssh library, only for NETCONF over SSH transport */
+#endif /* NC_SSH */
 
+#ifdef NC_TLS
     NC_TI_TLS         /**< TLS - use either OpenSSL or MbedTLS library, only for NETCONF over TLS transport */
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
 } NC_TRANSPORT_IMPL;
 
 /**
@@ -189,7 +189,7 @@ const char *nc_session_get_host(const struct nc_session *session);
  */
 uint16_t nc_session_get_port(const struct nc_session *session);
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
 
 /**
  * @brief Get the SSH protocol identification string sent by the peer.
@@ -208,7 +208,7 @@ const char *nc_session_ssh_get_protocol_string(const struct nc_session *session)
  */
 const char *nc_session_ssh_get_banner(const struct nc_session *session);
 
-#endif
+#endif /* NC_SSH */
 
 /**
  * @brief Get session path (unix socket only).

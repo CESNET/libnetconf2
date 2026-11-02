@@ -4,7 +4,7 @@
  * @brief libnetconf2 session server manipulation
  *
  * @copyright
- * Copyright (c) 2015 - 2021 CESNET, z.s.p.o.
+ * Copyright (c) 2015 - 2026 CESNET, z.s.p.o.
  *
  * This source code is licensed under BSD 3-Clause License (the "License").
  * You may not use this file except in compliance with the License.
@@ -27,11 +27,11 @@ extern "C" {
 #include "netconf.h"
 #include "session.h"
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
 # include <libssh/callbacks.h>
 # include <libssh/libssh.h>
 # include <libssh/server.h>
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH */
 
 /**
  * @defgroup server_session Server Session
@@ -353,10 +353,10 @@ uint16_t nc_ps_session_count(struct nc_pollsession *ps);
 #define NC_PSPOLL_SESSION_ERROR 0x0040 /**< Some session was terminated incorrectly (not by a \<close-session\> or \<kill-session\> RPC). */
 #define NC_PSPOLL_ERROR 0x0080         /**< Other fatal errors (they are printed). */
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
 # define NC_PSPOLL_SSH_MSG 0x00100      /**< SSH message received (and processed, if relevant, only with SSH support). */
 # define NC_PSPOLL_SSH_CHANNEL 0x0200   /**< New SSH channel opened on an existing session (only with SSH support). */
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH */
 
 /**
  * @brief Poll sessions and process any received RPCs.
@@ -437,7 +437,7 @@ uint32_t nc_server_endpt_count(void);
  */
 NC_MSG_TYPE nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session);
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
 
 /**
  * @brief Accept a new NETCONF session on an SSH session of a running NETCONF @p orig_session.
@@ -462,7 +462,7 @@ NC_MSG_TYPE nc_session_accept_ssh_channel(struct nc_session *orig_session, struc
  */
 NC_MSG_TYPE nc_ps_accept_ssh_channel(struct nc_pollsession *ps, struct nc_session **session);
 
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH */
 
 /**
  * @brief Set the UNIX socket path for a given endpoint name.
@@ -507,7 +507,7 @@ int nc_server_get_unix_socket_dir(char **dir);
 
 /** @} Server Session */
 
-#ifdef NC_ENABLED_SSH_TLS
+#ifdef NC_SSH
 
 /**
  * @defgroup server_ssh Server SSH
@@ -625,6 +625,10 @@ int nc_server_ssh_set_protocol_string(const char *prefix);
 
 /** @} Server SSH */
 
+#endif /* NC_SSH */
+
+#ifdef NC_TLS
+
 /**
  * @defgroup server_tls Server TLS
  * @ingroup server
@@ -653,7 +657,7 @@ void nc_server_tls_set_verify_clb(int (*verify_clb)(const struct nc_session *ses
 
 /** @} Server TLS */
 
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_TLS */
 
 /**
  * @addtogroup server_session
@@ -695,7 +699,7 @@ void nc_session_dec_notif_status(struct nc_session *session);
  */
 int nc_session_get_notif_status(const struct nc_session *session);
 
-#ifdef NC_ENABLED_SSH_TLS
+#if defined (NC_SSH) || defined (NC_TLS)
 
 /**
  * @brief Start the certificate expiration notification thread.
@@ -709,7 +713,6 @@ int nc_session_get_notif_status(const struct nc_session *session);
  * @param[in] cert_exp_notif_clb The callback to be called when a notification is generated.
  * @param[in] user_data Arbitrary user data to pass to the callback.
  * @param[in] free_data Optional callback to free the user data.
- *
  * @return 0 on success, 1 on error.
  */
 int nc_server_notif_cert_expiration_thread_start(nc_cert_exp_notif_clb cert_exp_notif_clb,
@@ -725,7 +728,7 @@ int nc_server_notif_cert_expiration_thread_start(nc_cert_exp_notif_clb cert_exp_
  */
 int nc_server_notif_cert_expiration_thread_stop(int wait);
 
-#endif /* NC_ENABLED_SSH_TLS */
+#endif /* NC_SSH or NC_TLS */
 
 /** @} Server Session */
 
