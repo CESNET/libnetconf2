@@ -442,7 +442,7 @@ module ietf-netconf-server {
        application that supports both 'listen' and 'call-home'
        protocol stacks for a multiplicity of connections.";
     container listen {
-      if-feature "ssh-listen or tls-listen";
+      // if-feature "ssh-listen or tls-listen";
       presence
         "Indicates that server-listening ports have been configured.
          This statement is present so the mandatory descendant
