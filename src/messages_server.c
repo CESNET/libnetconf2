@@ -768,7 +768,10 @@ nc_err_add_info_other(struct lyd_node *err, struct lyd_node *other)
         return -1;
     }
 
-    lyd_insert_child(info, other);
+    if (lyd_insert_child(info, other)) {
+        lyd_free_tree(info);
+        return -1;
+    }
 
     return 0;
 }
