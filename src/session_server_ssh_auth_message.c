@@ -59,11 +59,11 @@ nc_pam_conv_clb(int n_messages, const struct pam_message **msg, struct pam_respo
     /* parse the PAM messages into prompts */
     r = nc_server_ssh_pam_conv_parse(clb_data->session, n_messages, msg, resp, &n_prompts, &prompts, &echo);
     if (r != PAM_SUCCESS) {
-        return r;
+        goto cleanup;
     }
     if (!n_prompts) {
         /* there are no requests left for the user, only messages with some information for the client were sent */
-        return PAM_SUCCESS;
+        goto cleanup;
     }
 
     /* print all the keyboard-interactive challenges to the user */
