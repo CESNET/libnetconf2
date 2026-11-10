@@ -908,6 +908,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
     struct lyd_node_opaq *rpc_envp;
     struct nc_server_notif *notif;
     struct nc_server_reply *reply;
+    const struct ly_ctx *ctx;
     char *buf;
     struct nc_wclb_arg arg;
     const char **capabilities;
@@ -983,17 +984,24 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         rpc_envp = va_arg(ap, struct lyd_node_opaq *);
         reply = va_arg(ap, struct nc_server_reply *);
 
+        /* get correct context even for extension (schema-mount) data */
+        if (reply->type == NC_RPL_DATA) {
+            ctx = LYD_CTX(((struct nc_server_reply_data *)reply)->data);
+        } else if (reply->type == NC_RPL_ERROR) {
+            ctx = LYD_CTX(((struct nc_server_reply_error *)reply)->err);
+        } else {
+            ctx = session->ctx;
+        }
+
         /* build a rpc-reply opaque node that can be simply printed */
         if (rpc_envp) {
-            if (lyd_new_opaq2(NULL, session->ctx, "rpc-reply", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns,
-                    &reply_envp)) {
+            if (lyd_new_opaq2(NULL, ctx, "rpc-reply", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns, &reply_envp)) {
                 ERRINT;
                 ret = NC_MSG_ERROR;
                 goto cleanup;
             }
         } else {
-            if (lyd_new_opaq2(NULL, session->ctx, "rpc-reply", NULL, NULL, NC_NS_BASE,
-                    &reply_envp)) {
+            if (lyd_new_opaq2(NULL, ctx, "rpc-reply", NULL, NULL, NC_NS_BASE, &reply_envp)) {
                 ERRINT;
                 ret = NC_MSG_ERROR;
                 goto cleanup;
