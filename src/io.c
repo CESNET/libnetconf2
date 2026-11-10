@@ -1038,12 +1038,20 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
             assert(node->schema->nodetype & (LYS_RPC | LYS_ACTION));
             LY_LIST_FOR_SAFE(lyd_child(node), next, node) {
                 /* temporary */
-                lyd_insert_child(reply_envp, node);
+                if (lyd_insert_child(reply_envp, node)) {
+                    ERRINT;
+                    ret = NC_MSG_ERROR;
+                    goto cleanup;
+                }
             }
             break;
         case NC_RPL_ERROR:
             /* temporary */
-            lyd_insert_child(reply_envp, ((struct nc_server_reply_error *)reply)->err);
+            if (lyd_insert_child(reply_envp, ((struct nc_server_reply_error *)reply)->err)) {
+                ERRINT;
+                ret = NC_MSG_ERROR;
+                goto cleanup;
+            }
             break;
         default:
             ERRINT;
