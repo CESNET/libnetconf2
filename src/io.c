@@ -904,7 +904,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
     va_list ap;
     int count, ret;
     const char *attrs, *str;
-    struct lyd_node *op, *reply_envp, *node, *next;
+    struct lyd_node *op, *reply_envp = NULL, *node, *next;
     struct lyd_node_opaq *rpc_envp;
     struct nc_server_notif *notif;
     struct nc_server_reply *reply;
@@ -1012,8 +1012,6 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
         case NC_RPL_OK:
             assert(rpc_envp != NULL);
             if (lyd_new_opaq2(reply_envp, NULL, "ok", NULL, rpc_envp->name.prefix, rpc_envp->name.module_ns, NULL)) {
-                lyd_free_tree(reply_envp);
-
                 ERRINT;
                 ret = NC_MSG_ERROR;
                 goto cleanup;
@@ -1065,21 +1063,19 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
 
         /* cleanup */
         switch (reply->type) {
-        case NC_RPL_OK:
-            /* just free everything */
-            lyd_free_tree(reply_envp);
-            break;
         case NC_RPL_DATA:
             LY_LIST_FOR_SAFE(lyd_child(reply_envp), next, node) {
                 /* connect back to the reply structure */
-                lyd_insert_child(((struct nc_server_reply_data *)reply)->data, node);
+                if (lyd_insert_child(((struct nc_server_reply_data *)reply)->data, node)) {
+                    ERRINT;
+                    ret = NC_MSG_ERROR;
+                    goto cleanup;
+                }
             }
-            lyd_free_tree(reply_envp);
             break;
         case NC_RPL_ERROR:
             /* unlink from the data reply */
             lyd_unlink_tree(lyd_child(reply_envp));
-            lyd_free_tree(reply_envp);
             break;
         default:
             break;
@@ -1161,6 +1157,7 @@ nc_write_msg_io(struct nc_session *session, int io_timeout, int type, ...)
 
 cleanup:
     va_end(ap);
+    lyd_free_tree(reply_envp);
     nc_mutex_unlock(session->io_lock, __func__);
     return ret;
 }
