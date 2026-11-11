@@ -45,9 +45,9 @@
 # include "session_server_ssh_wrapper.h"
 #endif /* NC_SSH */
 
-#ifdef NC_TLS
+#ifdef HAVE_CURL
 # include <curl/curl.h>
-#endif /* NC_TLS */
+#endif /* HAVE_CURL */
 
 /* in seconds */
 #define NC_CLIENT_HELLO_TIMEOUT 60
@@ -1939,7 +1939,7 @@ nc_ch_handshake_io(struct nc_session *session)
     return type;
 }
 
-#ifdef NC_TLS
+#ifdef HAVE_CURL
 
 /**
  * @brief CURL callback for downloading data.
@@ -2548,7 +2548,15 @@ cleanup:
     return ret;
 }
 
-#endif /* NC_TLS */
+#else /* HAVE_CURL */
+
+int
+nc_session_tls_crl_verify_post_handshake(void *UNUSED(tls_session), void *UNUSED(cert_store))
+{
+    return 0;
+}
+
+#endif /* HAVE_CURL */
 
 /**
  * @brief Initialize or destroy the global state of the libraries used by libnetconf2.
@@ -2564,9 +2572,9 @@ nc_global_init_destroy(NC_SIDE side, int destroy)
     static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER; /* lock protecting the init flags and the init functions */
     static int init_client = 0, init_server = 0; /* whether the client/server side has the libraries initialized */
 
-#ifdef NC_TLS
+#ifdef HAVE_CURL
     int curl_inited = 0;
-#endif /* NC_TLS */
+#endif /* HAVE_CURL */
 #if defined (NC_SSH) || defined (NC_TLS)
     int tls_inited = 0;
 #endif /* NC_SSH or NC_TLS */
@@ -2594,9 +2602,9 @@ nc_global_init_destroy(NC_SIDE side, int destroy)
 #if defined (NC_SSH) || defined (NC_TLS)
             nc_tls_backend_destroy_wrap();
 #endif /* NC_SSH or NC_TLS */
-#ifdef NC_TLS
+#ifdef HAVE_CURL
             curl_global_cleanup();
-#endif /* NC_TLS */
+#endif /* HAVE_CURL */
         }
         goto cleanup;
     }
@@ -2607,14 +2615,14 @@ nc_global_init_destroy(NC_SIDE side, int destroy)
         goto cleanup;
     }
 
-#ifdef NC_TLS
+#ifdef HAVE_CURL
     if (curl_global_init(CURL_GLOBAL_SSL | CURL_GLOBAL_ACK_EINTR)) {
         ERR(NULL, "%s: failed to init CURL.", __func__);
         rc = -1;
         goto cleanup;
     }
     curl_inited = 1;
-#endif /* NC_TLS */
+#endif /* HAVE_CURL */
 
 #if defined (NC_SSH) || defined (NC_TLS)
     if (nc_tls_backend_init_wrap()) {
@@ -2649,11 +2657,11 @@ cleanup:
             nc_tls_backend_destroy_wrap();
         }
 #endif /* NC_SSH or NC_TLS */
-#ifdef NC_TLS
+#ifdef HAVE_CURL
         if (curl_inited) {
             curl_global_cleanup();
         }
-#endif /* NC_TLS */
+#endif /* HAVE_CURL */
     }
 
     /* GLOBAL INIT UNLOCK */

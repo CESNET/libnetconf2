@@ -65,10 +65,10 @@ the `distro` directory.
 * [libyang](https://github.com/CESNET/libyang)
 * libssh >= 0.9.5 (for SSH support)
 * OpenSSL >= 3.0.0 or MbedTLS >= 3.5.0 (for TLS support)
-* curl >= 7.30.0
 
 #### Optional
 
+* curl >= 7.30.0 (for TLS CRL check support)
 * libpam (for PAM-based SSH `keyboard-interactive` authentication method)
 * libval (only for DNSSEC SSHFP retrieval)
   * [DNSSEC-Tools/dnssec-tools/validator](https://github.com/DNSSEC-Tools/DNSSEC-Tools/tree/master/dnssec-tools/validator)
@@ -119,7 +119,7 @@ $ cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr ..
 
 The NETCONF protocol specification allows to use the protocol on top of
 several transport protocols. **libnetconf2** provides support for SSH and
-TLS transport. By default, both SSH and TLS transport is enabled. Disabling
+TLS transport. By default, both SSH and TLS transports are enabled. Disabling
 and enabling each of the transport protocols can be made
 in the same way. The following command has actually the same effect as
 specifying no option since it specifies the default settings.

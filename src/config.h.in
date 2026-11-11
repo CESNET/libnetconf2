@@ -40,6 +40,11 @@
 #cmakedefine HAVE_TERMIOS
 
 /*
+ * Support for URL
+ */
+#cmakedefine HAVE_CURL
+
+/*
  * Support for keyboard-interactive SSH authentication method
  */
 #cmakedefine HAVE_LIBPAM
