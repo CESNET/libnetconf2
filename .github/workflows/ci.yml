@@ -107,7 +107,20 @@ jobs:
             build-type: "Debug",
             dep-build-type: "Release",
             cc: "gcc",
-            options: "-DENABLE_DNSSEC=ON -DENABLE_SSH=OFF -DENABLE_TLS=ON",
+            options: "-DENABLE_SSH=OFF -DENABLE_TLS=ON",
+            tls-lib: "OpenSSL",
+            packages: "valgrind",
+            snaps: "",
+            make-prepend: "",
+            make-target: ""
+          }
+          - {
+            name: "Debug, gcc, OpenSSL, TLS only, no CRL",
+            os: "ubuntu-24.04",
+            build-type: "Debug",
+            dep-build-type: "Release",
+            cc: "gcc",
+            options: "-DENABLE_SSH=OFF -DENABLE_TLS=ON -DENABLE_CRL=OFF",
             tls-lib: "OpenSSL",
             packages: "valgrind",
             snaps: "",
