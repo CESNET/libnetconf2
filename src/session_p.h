@@ -140,7 +140,7 @@ extern struct nc_server_opts server_opts;
  * Limits the time spent on DNS resolution and TCP handshake per URI,
  * preventing long delays on unreachable CRL distribution points.
  */
-#define NC_CURL_CONNECT_TIMEOUT_MS 2000
+#define NC_CURL_CONNECT_TIMEOUT_MS 2000L
 
 /**
  * @brief Timeout in msec for a whole CRL download.
@@ -150,7 +150,7 @@ extern struct nc_server_opts server_opts;
  * handshake, and a Call Home handshake blocks a configuration apply, the whole transfer has to be
  * bounded as well.
  */
-#define NC_CURL_TIMEOUT_MS 10000
+#define NC_CURL_TIMEOUT_MS 10000L
 
 /**
  * @brief Timeout in msec for acquiring the hello_lock
