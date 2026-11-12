@@ -305,7 +305,7 @@ jobs:
           cd mbedtls
           mkdir build
           cd build
-          CC=${{ matrix.config.cc }} cmake -DUSE_SHARED_MBEDTLS_LIBRARY=On -DENABLE_TESTING=Off ..
+          CC=${{ matrix.config.cc }} cmake -DUSE_SHARED_MBEDTLS_LIBRARY=On -DENABLE_TESTING=Off -DENABLE_PROGRAMS=Off ..
           make -j2
           sudo make install
         if: ${{ matrix.config.tls-lib == 'MbedTLS' }}
