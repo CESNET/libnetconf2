@@ -3738,7 +3738,7 @@ nc_accept(int timeout, const struct ly_ctx *ctx, struct nc_session **session)
     char *host = NULL;
     uint16_t port = 0;
     struct timespec ts_cur;
-    LYA_COUNT_T endpt_idx;
+    LYA_COUNT_T endpt_idx = 0;
     const struct nc_server_config *config;
 
     NC_CHECK_ARG_RET(NULL, ctx, session, NC_MSG_ERROR);
