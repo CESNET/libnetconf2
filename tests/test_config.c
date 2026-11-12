@@ -1400,7 +1400,7 @@ test_ch_endpoint_order(void **state)
     while (!threads.endpt[0] && !ret) {
         ret = pthread_cond_timedwait(&threads.cond, &threads.lock, &ts);
     }
-    strncpy(endpt, threads.endpt, sizeof endpt);
+    snprintf(endpt, sizeof endpt, "%s", threads.endpt);
     pthread_mutex_unlock(&threads.lock);
 
     /* only report the failure once the lock is released */
