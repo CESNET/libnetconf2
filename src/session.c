@@ -1761,6 +1761,10 @@ nc_client_recv_hello_io(struct nc_session *session)
             ERR(session, "Failed to parse server <hello>.");
             rc = NC_MSG_ERROR;
             goto cleanup;
+        } else if (!lyd_child(hello)) {
+            ERR(session, "Parsed server <hello> without any capabilities.");
+            rc = NC_MSG_ERROR;
+            goto cleanup;
         }
 
         LY_LIST_FOR(lyd_child(hello), iter) {
@@ -1841,6 +1845,8 @@ nc_server_recv_hello_io(struct nc_session *session)
     int r, ver = -1, flag = 0, timeout_io;
     uint16_t idle_timeout;
 
+    assert(!session->cpblts);
+
     if (session->flags & NC_SESSION_CALLHOME) {
         timeout_io = NC_SERVER_CH_HELLO_TIMEOUT * 1000;
     } else {
@@ -1854,6 +1860,10 @@ nc_server_recv_hello_io(struct nc_session *session)
         /* parse <hello> data */
         if (lyd_parse_data(session->ctx, NULL, msg, LYD_XML, LYD_PARSE_ONLY | LYD_PARSE_OPAQ, 0, &hello)) {
             ERR(session, "Failed to parse client <hello>.");
+            rc = NC_MSG_ERROR;
+            goto cleanup;
+        } else if (!lyd_child(hello)) {
+            ERR(session, "Parsed client <hello> without any capabilities.");
             rc = NC_MSG_ERROR;
             goto cleanup;
         }
