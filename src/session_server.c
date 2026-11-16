@@ -2343,7 +2343,7 @@ nc_rpc_err_find_lysc_node(const struct ly_ctx *ctx, const struct ly_err_item *ly
     char *str, *last;
     const struct lysc_node *cn;
 
-    if (!ly_err->schema_path) {
+    if (!ly_err || !ly_err->schema_path) {
         return NULL;
     }
 
@@ -2436,14 +2436,13 @@ nc_server_prepare_rpc_err(struct nc_session *session, struct lyd_node *envp)
     NC_ERR_TYPE errtype;
     const char *attr;
     char *str = NULL, *errmsg = NULL, *schema_path = NULL;
-    LY_ERR errcode;
 
     /* envelope was not parsed */
     if (!envp && (session->version != NC_PROT_VERSION_11)) {
         return NULL;
     }
     ly_err = ly_err_last(session->ctx);
-    if (!envp && !strcmp("Missing XML namespace.", ly_err->msg)) {
+    if (!envp && ly_err && !strcmp("Missing XML namespace.", ly_err->msg)) {
         reply = nc_err(session->ctx, NC_ERR_MISSING_ATTR, NC_ERR_TYPE_RPC, "xmlns", "rpc");
         goto cleanup;
     } else if (!envp) {
@@ -2456,19 +2455,20 @@ nc_server_prepare_rpc_err(struct nc_session *session, struct lyd_node *envp)
     assert(envp);
 
     /* store strings, to avoid overwriting ly_err */
-    errmsg = strdup(ly_err->msg);
+    if (ly_err) {
+        errmsg = strdup(ly_err->msg);
+    }
     if (!errmsg) {
         reply = nc_err(session->ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
         goto cleanup;
     }
-    if (ly_err->schema_path) {
+    if (ly_err && ly_err->schema_path) {
         schema_path = strdup(ly_err->schema_path);
         if (!schema_path) {
             reply = nc_err(session->ctx, NC_ERR_OP_FAILED, NC_ERR_TYPE_APP);
             goto cleanup;
         }
     }
-    errcode = ly_err->err;
 
     /* find out in which layer the error occurred */
     cn = nc_rpc_err_find_lysc_node(session->ctx, ly_err);
@@ -2489,7 +2489,7 @@ nc_server_prepare_rpc_err(struct nc_session *session, struct lyd_node *envp)
         reply = nc_err(session->ctx, NC_ERR_UNKNOWN_ATTR, errtype, attr, cn->name);
     } else if (nc_strstarts("Invalid character sequence", errmsg)) {
         reply = nc_err(session->ctx, NC_ERR_MALFORMED_MSG);
-    } else if (errcode == LY_EMEM) {
+    } else if (ly_err && (ly_err->err == LY_EMEM)) {
         /* <error-tag>resource-denied</error-tag> */
         reply = nc_err(session->ctx, NC_ERR_RES_DENIED, errtype);
     } else {
