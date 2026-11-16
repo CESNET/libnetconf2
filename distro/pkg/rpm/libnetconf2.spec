@@ -12,7 +12,7 @@ BuildRequires:  libssh-devel
 BuildRequires:  openssl-devel
 BuildRequires:  pam-devel
 BuildRequires:  pkgconfig(libyang) >= 5
-BuildRequires: 	libcurl-devel
+BuildRequires:  libcurl-devel
 
 %package devel
 Summary:    Headers of libnetconf2 library
