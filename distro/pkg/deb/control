@@ -10,6 +10,7 @@ Build-Depends: cmake,
                libssl-dev (>= 3.0.0),
                libssh-dev (>= 0.9.5),
                libpam0g-dev,
+               libcrypt-dev,
                libcurl4-openssl-dev (>= 7.30.0)
 Vcs-Browser: https://github.com/CESNET/libnetconf2/tree/master
 Vcs-Git: https://github.com/CESNET/libnetconf2.git
