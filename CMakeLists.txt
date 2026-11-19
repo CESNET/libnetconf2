@@ -72,10 +72,8 @@ set(LIBNETCONF2_MICRO_SOVERSION 7)
 set(LIBNETCONF2_SOVERSION_FULL ${LIBNETCONF2_MAJOR_SOVERSION}.${LIBNETCONF2_MINOR_SOVERSION}.${LIBNETCONF2_MICRO_SOVERSION})
 set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_SOVERSION})
 
-# Version of libyang library that this project depends on
-set(LIBYANG_DEP_VERSION 6.3.0)
+# SO version of libyang library that this project depends on
 set(LIBYANG_DEP_SOVERSION 5.9.2)
-set(LIBYANG_DEP_SOVERSION_MAJOR 5)
 
 # global C flags
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -fvisibility=hidden -std=c99")
@@ -323,12 +321,12 @@ endif()
 
 if(ENABLE_SSH)
     # dependencies - libssh
-    find_package(LibSSH 0.9.5 REQUIRED)
-    target_link_libraries(netconf2 ${LIBSSH_LIBRARIES})
-    list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBSSH_LIBRARIES})
-    include_directories(${LIBSSH_INCLUDE_DIRS})
+    find_package(libssh 0.9.5 CONFIG REQUIRED)
+    message(STATUS "Found libssh ${libssh_VERSION}: ${libssh_DIR}")
+    target_link_libraries(netconf2 ssh)
+    list(APPEND CMAKE_REQUIRED_LIBRARIES ssh)
 
-    if(LIBSSH_VERSION VERSION_GREATER_EQUAL "0.12.0")
+    if(libssh_VERSION VERSION_GREATER_EQUAL "0.12.0")
         list(APPEND libsrc src/session_server_ssh_auth_callback.c)
     else ()
         list(APPEND libsrc src/session_server_ssh_auth_message.c)
@@ -384,9 +382,9 @@ if(ENABLE_TLS AND ENABLE_CRL)
 endif()
 
 # dependencies - libyang
-find_package(LibYANG ${LIBYANG_DEP_SOVERSION} REQUIRED)
-target_link_libraries(netconf2 ${LIBYANG_LIBRARIES})
-include_directories(${LIBYANG_INCLUDE_DIRS})
+find_package(LibYANG ${LIBYANG_DEP_SOVERSION} CONFIG REQUIRED)
+message(STATUS "Found LibYANG ${LibYANG_VERSION}: ${LibYANG_DIR}")
+target_link_libraries(netconf2 LibYANG::yang)
 
 # set compiler flags
 if(ENABLE_SSH)

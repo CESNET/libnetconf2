@@ -11,6 +11,8 @@ foreach(src IN LISTS libsrc)
     list(APPEND test_srcs "../${src}")
 endforeach()
 add_library(testobj OBJECT ${test_srcs} ${compatsrc})
+# the library sources need the include directories of the netconf2 dependencies
+target_link_libraries(testobj PRIVATE netconf2)
 
 set(TEST_SRC "ln2_test.c")
 set(NEXT_TEST_PORT 10050)
@@ -33,7 +35,7 @@ function(libnetconf2_test)
     cmake_parse_arguments(TEST "" "NAME;PORT_COUNT" "WRAP_FUNCS" ${ARGN})
 
     add_executable(${TEST_NAME} $<TARGET_OBJECTS:testobj> ${TEST_SRC} ${TEST_NAME}.c)
-    target_link_libraries(${TEST_NAME} ${CMOCKA_LIBRARIES} ${LIBYANG_LIBRARIES} netconf2)
+    target_link_libraries(${TEST_NAME} ${CMOCKA_LIBRARIES} netconf2)
     target_include_directories(${TEST_NAME} PRIVATE ${CMOCKA_INCLUDE_DIR})
 
     # wrap functions
