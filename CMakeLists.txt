@@ -16,6 +16,7 @@ include(ABICheck)
 include(SourceFormat)
 include(GenDoc)
 include(GenCoverage)
+include(GenConfigPackage)
 
 if(POLICY CMP0075)
     cmake_policy(SET CMP0075 NEW)
@@ -74,6 +75,9 @@ set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_SOVERSION})
 
 # SO version of libyang library that this project depends on
 set(LIBYANG_DEP_SOVERSION 5.9.2)
+
+# Version of libssh library that this project depends on
+set(LIBSSH_DEP_VERSION 0.9.5)
 
 # global C flags
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -fvisibility=hidden -std=c99")
@@ -310,6 +314,7 @@ if(ENABLE_SSH OR ENABLE_TLS)
     if(MBEDTLS_FOUND)
         # dependencies - mbedtls
         set(HAVE_MBEDTLS TRUE)
+        set(TLS_BACKEND MbedTLS)
         list(APPEND libsrc src/session_crypto_mbedtls.c)
         include_directories(${MBEDTLS_INCLUDE_DIRS})
         list(APPEND NC_PRIVATE_LIBS ${MBEDTLS_LIBRARIES})
@@ -318,6 +323,7 @@ if(ENABLE_SSH OR ENABLE_TLS)
     else()
         # dependencies - openssl
         find_package(OpenSSL 3.0.0 REQUIRED)
+        set(TLS_BACKEND OpenSSL)
         list(APPEND libsrc src/session_crypto_openssl.c)
         include_directories(${OPENSSL_INCLUDE_DIR})
         list(APPEND NC_PRIVATE_LIBS ${OPENSSL_LIBRARIES})
@@ -328,7 +334,7 @@ endif()
 
 if(ENABLE_SSH)
     # dependencies - libssh
-    find_package(libssh 0.9.5 CONFIG REQUIRED)
+    find_package(libssh ${LIBSSH_DEP_VERSION} CONFIG REQUIRED)
     message(STATUS "Found libssh ${libssh_VERSION}: ${libssh_DIR}")
     # public, the public headers include libssh
     target_link_libraries(netconf2 PUBLIC ssh)
@@ -427,13 +433,37 @@ endforeach()
 install(DIRECTORY "${PROJECT_SOURCE_DIR}/modules/" DESTINATION ${YANG_MODULE_DIR} FILES_MATCHING PATTERN "*.yang")
 
 # install library
-install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS netconf2 EXPORT LibNETCONF2Targets DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # install headers
 install(FILES ${PROJECT_BINARY_DIR}/include/nc_client.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES ${PROJECT_BINARY_DIR}/include/nc_server.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES ${PROJECT_BINARY_DIR}/include/nc_version.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(DIRECTORY ${PROJECT_BINARY_DIR}/include/libnetconf2 DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+# CMake config package, for the build tree and the installation
+if(BUILD_SHARED_LIBS)
+    # libyang for the installed package, under the same prefix
+    set(NC_LIBYANG_HINT ${CMAKE_INSTALL_LIBDIR}/cmake/LibYANG)
+    # libyang for the build tree package, the one libnetconf2 was built with
+    set(NC_LIBYANG_HINT_BUILD ${LibYANG_DIR})
+
+    # the build tree uses the YANG modules from the source tree
+    set(YANG_MODULE_DIR_BUILD ${PROJECT_SOURCE_DIR}/modules)
+    set(NC_PATH_VARS NC_LIBYANG_HINT YANG_MODULE_DIR)
+
+    if(ENABLE_SSH)
+        # libssh the same way as libyang
+        set(NC_LIBSSH_HINT ${CMAKE_INSTALL_LIBDIR}/cmake/libssh)
+        set(NC_LIBSSH_HINT_BUILD ${libssh_DIR})
+        list(APPEND NC_PATH_VARS NC_LIBSSH_HINT)
+    endif()
+
+    # the package version is the SO version, which all the dependent projects check
+    gen_config_package(LibNETCONF2 ${LIBNETCONF2_SOVERSION_FULL} PATH_VARS ${NC_PATH_VARS})
+else()
+    message(STATUS "Static build, CMake config package is not installed")
+endif()
 
 # generate and install pkg-config file, the install directories in its paths may be absolute
 if(IS_ABSOLUTE "${CMAKE_INSTALL_INCLUDEDIR}")
