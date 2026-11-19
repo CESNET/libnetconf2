@@ -50,6 +50,7 @@ servers. NETCONF is the NETwork CONFiguration protocol introduced by IETF.
 %doc CODINGSTYLE.md
 %{_libdir}/libnetconf2.so
 %{_libdir}/pkgconfig/libnetconf2.pc
+%{_libdir}/cmake/LibNETCONF2/
 %{_includedir}/*.h
 %{_includedir}/libnetconf2/*.h
 %dir %{_includedir}/libnetconf2/
