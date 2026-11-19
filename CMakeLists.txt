@@ -9,6 +9,7 @@ include(GNUInstallDirs)
 include(CheckFunctionExists)
 include(CheckCSourceCompiles)
 include(CheckIncludeFile)
+include(CheckLibraryExists)
 include(CheckSymbolExists)
 include(UseCompat)
 include(ABICheck)
@@ -251,14 +252,14 @@ endif()
 # targets
 #
 
+# netconf2 sourceless target - need it for linking libs, but the required sources will be added later
+add_library(netconf2)
+
 # private dependencies of a static build, for Libs.private of libnetconf2.pc
 set(PC_LIBS_PRIVATE "")
 
-# use compat
+# use compat, may link a library to netconf2
 use_compat()
-
-# netconf2 sourceless target - need it for linking libs, but the required sources will be added later
-add_library(netconf2)
 
 # set the shared library version
 set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_SOVERSION_FULL} SOVERSION ${LIBNETCONF2_SOVERSION})
