@@ -414,11 +414,14 @@ target_link_libraries(netconf2 PRIVATE nccompat)
 # generate config file
 configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)
 
-# generate and copy public header files
+# generate and copy public headers, configure_file() refreshes the copies whenever they change
 configure_file("${PROJECT_SOURCE_DIR}/nc_client.h.in" "${PROJECT_BINARY_DIR}/include/nc_client.h")
 configure_file("${PROJECT_SOURCE_DIR}/nc_server.h.in" "${PROJECT_BINARY_DIR}/include/nc_server.h")
 configure_file("${PROJECT_SOURCE_DIR}/nc_version.h.in" "${PROJECT_BINARY_DIR}/include/nc_version.h")
-file(COPY ${headers} DESTINATION "${PROJECT_BINARY_DIR}/include/libnetconf2")
+foreach(h IN LISTS headers)
+    get_filename_component(h_name ${h} NAME)
+    configure_file(${PROJECT_SOURCE_DIR}/${h} ${PROJECT_BINARY_DIR}/include/libnetconf2/${h_name} COPYONLY)
+endforeach()
 
 # install YANG modules
 install(DIRECTORY "${PROJECT_SOURCE_DIR}/modules/" DESTINATION ${YANG_MODULE_DIR} FILES_MATCHING PATTERN "*.yang")
