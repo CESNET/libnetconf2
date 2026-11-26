@@ -24,6 +24,9 @@
 #define NC_ACCEPT_TIMEOUT 4000
 #define NC_PS_POLL_TIMEOUT 2000
 
+/* timeout of sending or receiving a single message */
+#define NC_MSG_TIMEOUT_MS 1000
+
 #define SETUP_FAIL_LOG \
     fprintf(stderr, "Setup fail in %s:%d.\n", __FILE__, __LINE__)
 
@@ -84,5 +87,21 @@ int ln2_glob_test_teardown(void **state);
  * @param[in] test_data Test data.
  */
 void ln2_glob_test_free_test_data(void *test_data);
+
+/**
+ * @brief Create NETCONF sessions on both ends of a new socketpair.
+ *
+ * Each session makes its handshake with a fake peer on a separate socketpair, which chooses the NETCONF
+ * version, and is then switched to its end of the shared socketpair. Disables the client context autofill,
+ * the fake server provides no YANG modules.
+ *
+ * @param[in] ctx libyang context of the sessions.
+ * @param[in] version NETCONF version, 0 for 1.0, 1 for 1.1, as returned by ::nc_session_get_version().
+ * @param[out] server Created server session.
+ * @param[out] client Created client session, NULL if not needed.
+ * @param[out] fds Socketpair, the server end first, the caller closes both after freeing the sessions.
+ */
+void ln2_glob_test_fd_sessions(struct ly_ctx *ctx, int version, struct nc_session **server, struct nc_session **client,
+        int fds[2]);
 
 #endif

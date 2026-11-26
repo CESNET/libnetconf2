@@ -15,6 +15,7 @@
 
 #define _GNU_SOURCE
 
+#include <dlfcn.h>
 #include <errno.h>
 #include <pthread.h>
 #include <setjmp.h>
@@ -45,18 +46,20 @@ const char *TEST_PORT_STR = "10050";
 static char banner_buffer[512];
 static const char *expected_banner_text = "This is a test SSH banner message";
 
-char *__real_ssh_get_issue_banner(ssh_session session);
-
 /**
  * @brief Wrapper for ssh_get_issue_banner to store the banner for later checks.
+ *
+ * Exported to replace the one called by libnetconf2.
  */
-char *
-__wrap_ssh_get_issue_banner(ssh_session session)
+__attribute__((visibility("default"))) char *
+ssh_get_issue_banner(ssh_session session)
 {
+    char *(*real_get_issue_banner)(ssh_session session);
     char *banner;
 
     /* get the real banner */
-    banner = __real_ssh_get_issue_banner(session);
+    real_get_issue_banner = (char *(*)(ssh_session))dlsym(RTLD_NEXT, "ssh_get_issue_banner");
+    banner = real_get_issue_banner(session);
     if (banner) {
         /* store the banner for later checks */
         strncpy(banner_buffer, banner, sizeof(banner_buffer) - 1);

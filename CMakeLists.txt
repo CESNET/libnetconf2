@@ -257,9 +257,6 @@ endif()
 # netconf2 sourceless target - need it for linking libs, but the required sources will be added later
 add_library(netconf2)
 
-# private dependencies, linked to netconf2 and the tests, which contain the library code
-set(NC_PRIVATE_LIBS "")
-
 # private dependencies of a static build, for Libs.private of libnetconf2.pc
 set(PC_LIBS_PRIVATE "")
 
@@ -279,7 +276,7 @@ include_directories(${PROJECT_BINARY_DIR}/include)
 # dependencies - pthread
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)
-list(APPEND NC_PRIVATE_LIBS Threads::Threads)
+target_link_libraries(netconf2 PRIVATE Threads::Threads)
 if(CMAKE_THREAD_LIBS_INIT)
     # the thread library flag for the .pc file
     string(APPEND PC_LIBS_PRIVATE " ${CMAKE_THREAD_LIBS_INIT}")
@@ -301,7 +298,7 @@ endif()
 if(ENABLE_DNSSEC)
     find_package(LibVAL REQUIRED)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_DNSSEC")
-    list(APPEND NC_PRIVATE_LIBS ${LIBVAL_LIBRARIES})
+    target_link_libraries(netconf2 PRIVATE ${LIBVAL_LIBRARIES})
     string(APPEND PC_LIBS_PRIVATE " -lval-threads -lsres")
     include_directories(${LIBVAL_INCLUDE_DIRS})
 endif()
@@ -317,7 +314,7 @@ if(ENABLE_SSH OR ENABLE_TLS)
         set(TLS_BACKEND MbedTLS)
         list(APPEND libsrc src/session_crypto_mbedtls.c)
         include_directories(${MBEDTLS_INCLUDE_DIRS})
-        list(APPEND NC_PRIVATE_LIBS ${MBEDTLS_LIBRARIES})
+        target_link_libraries(netconf2 PRIVATE ${MBEDTLS_LIBRARIES})
         string(APPEND PC_LIBS_PRIVATE " -lmbedtls -lmbedx509 -lmbedcrypto")
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${MBEDTLS_LIBRARIES})
     else()
@@ -326,7 +323,7 @@ if(ENABLE_SSH OR ENABLE_TLS)
         set(TLS_BACKEND OpenSSL)
         list(APPEND libsrc src/session_crypto_openssl.c)
         include_directories(${OPENSSL_INCLUDE_DIR})
-        list(APPEND NC_PRIVATE_LIBS ${OPENSSL_LIBRARIES})
+        target_link_libraries(netconf2 PRIVATE ${OPENSSL_LIBRARIES})
         string(APPEND PC_LIBS_PRIVATE " -lssl -lcrypto")
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${OPENSSL_LIBRARIES})
     endif()
@@ -358,7 +355,7 @@ if(ENABLE_SSH)
         if(NOT HAVE_LIBCRYPT)
             message(FATAL_ERROR "Could NOT find Lib${LIBCRYPT} (library implementing crypt(3))")
         endif()
-        list(APPEND NC_PRIVATE_LIBS ${LIBCRYPT})
+        target_link_libraries(netconf2 PRIVATE ${LIBCRYPT})
         string(APPEND PC_LIBS_PRIVATE " -l${LIBCRYPT}")
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBCRYPT})
     endif()
@@ -370,7 +367,7 @@ if(ENABLE_SSH)
     if(LibPAM_FOUND)
         set(HAVE_LIBPAM TRUE)
 
-        list(APPEND NC_PRIVATE_LIBS ${LIBPAM_LIBRARIES})
+        target_link_libraries(netconf2 PRIVATE ${LIBPAM_LIBRARIES})
         string(APPEND PC_LIBS_PRIVATE " -lpam")
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBPAM_LIBRARIES})
         include_directories(${LIBPAM_INCLUDE_DIRS})
@@ -388,7 +385,7 @@ if(ENABLE_TLS AND ENABLE_CRL)
     find_package(CURL 7.30.0)
     if(CURL_FOUND)
         set(HAVE_CURL TRUE)
-        list(APPEND NC_PRIVATE_LIBS CURL::libcurl)
+        target_link_libraries(netconf2 PRIVATE CURL::libcurl)
         string(APPEND PC_LIBS_PRIVATE " -lcurl")
     else()
         message(WARNING "CRL certificate verification disabled (LibCURL not found)")
@@ -399,9 +396,6 @@ endif()
 find_package(LibYANG ${LIBYANG_DEP_SOVERSION} CONFIG REQUIRED)
 message(STATUS "Found LibYANG ${LibYANG_VERSION}: ${LibYANG_DIR}")
 target_link_libraries(netconf2 PUBLIC LibYANG::yang)
-
-# link the collected private dependencies
-target_link_libraries(netconf2 PRIVATE ${NC_PRIVATE_LIBS})
 
 # public headers with SSH and TLS functions, also when included directly instead of nc_client.h/nc_server.h
 if(ENABLE_SSH)
@@ -416,6 +410,12 @@ endif()
 # set sources
 target_sources(netconf2 PRIVATE ${libsrc})
 target_link_libraries(netconf2 PRIVATE nccompat)
+
+# netconf2 for the executables and tests of this project. They call compat and pthread functions
+# directly and need their own compat objects, because those in netconf2 are hidden.
+add_library(ncbin INTERFACE)
+target_sources(ncbin INTERFACE $<TARGET_OBJECTS:nccompat>)
+target_link_libraries(ncbin INTERFACE netconf2 Threads::Threads)
 
 # generate config file
 configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)

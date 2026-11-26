@@ -17,10 +17,16 @@
 
 #include <assert.h>
 #include <pthread.h>
+#include <setjmp.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <cmocka.h>
 
 #include "ln2_test.h"
 
@@ -201,4 +207,72 @@ void
 ln2_glob_test_free_test_data(void *test_data)
 {
     free(test_data);
+}
+
+/**
+ * @brief Write a \<hello\> message advertising a single NETCONF base version.
+ *
+ * @param[in] fd File descriptor to write to.
+ * @param[in] version NETCONF version, 0 for 1.0, 1 for 1.1.
+ * @param[in] server Whether it is a server \<hello\>, with a session ID.
+ * @return 0 on success, -1 on error.
+ */
+static int
+ln2_test_write_hello(int fd, int version, int server)
+{
+    char *hello;
+    int len, rc = 0;
+
+    len = asprintf(&hello, "<hello xmlns=\"urn:ietf:params:xml:ns:netconf:base:1.0\"><capabilities>"
+            "<capability>urn:ietf:params:netconf:base:1.%d</capability></capabilities>%s</hello>]]>]]>",
+            version, server ? "<session-id>1</session-id>" : "");
+    if (len == -1) {
+        return -1;
+    }
+
+    if (write(fd, hello, len) != len) {
+        rc = -1;
+    }
+    free(hello);
+    return rc;
+}
+
+void
+ln2_glob_test_fd_sessions(struct ly_ctx *ctx, int version, struct nc_session **server, struct nc_session **client,
+        int fds[2])
+{
+    int link[2], peer[2];
+
+    /* the sessions communicate over this socketpair */
+    assert_int_equal(socketpair(AF_UNIX, SOCK_STREAM, 0, link), 0);
+    fds[0] = link[0];
+    fds[1] = link[1];
+
+    if (client) {
+        /* handshake with a fake server on its own socketpair, which also gets the client hello */
+        assert_int_equal(socketpair(AF_UNIX, SOCK_STREAM, 0, peer), 0);
+        assert_int_equal(ln2_test_write_hello(peer[0], version, 1), 0);
+
+        /* the fake server provides no YANG modules, the client uses the context as it is */
+        nc_client_set_new_session_context_autofill(0);
+        *client = nc_connect_inout(peer[1], peer[1], ctx);
+        assert_non_null(*client);
+        assert_int_equal(nc_session_get_version(*client), version);
+
+        /* switch the client to its end of the link */
+        assert_int_not_equal(dup2(link[1], peer[1]), -1);
+        close(peer[0]);
+        close(link[1]);
+        fds[1] = peer[1];
+    }
+
+    /* the same for the server with a fake client */
+    assert_int_equal(socketpair(AF_UNIX, SOCK_STREAM, 0, peer), 0);
+    assert_int_equal(ln2_test_write_hello(peer[1], version, 0), 0);
+    assert_int_equal(nc_accept_inout(peer[0], peer[0], "test", ctx, server), NC_MSG_HELLO);
+    assert_int_equal(nc_session_get_version(*server), version);
+    assert_int_not_equal(dup2(link[0], peer[0]), -1);
+    close(peer[1]);
+    close(link[0]);
+    fds[0] = peer[0];
 }

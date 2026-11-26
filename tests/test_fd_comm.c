@@ -31,9 +31,6 @@
 #include <cmocka.h>
 #include <libyang/libyang.h>
 
-#include <messages_p.h>
-#include <session_p.h>
-
 #include "ln2_test.h"
 
 struct state {
@@ -43,6 +40,7 @@ struct state {
     pthread_mutex_t state_lock;
     pthread_barrier_t barrier;
     int glob_state;
+    int fds[2];
 };
 
 static struct nc_server_reply *
@@ -60,7 +58,7 @@ my_getconfig_rpc_clb(struct lyd_node *rpc, struct nc_session *session)
 
     assert_string_equal(rpc->schema->name, "get-config");
 
-    lyd_new_path(NULL, session->ctx, "/ietf-netconf:get-config/data", NULL, LYD_NEW_VAL_OUTPUT, &data);
+    lyd_new_path(NULL, nc_session_get_ctx(session), "/ietf-netconf:get-config/data", NULL, LYD_NEW_VAL_OUTPUT, &data);
     assert_non_null(data);
 
     return nc_server_reply_data(data, NC_WD_EXPLICIT, NC_PARAMTYPE_FREE);
@@ -134,6 +132,7 @@ setup_f(void **state)
     node->priv = my_commit_rpc_clb;
 
     nc_server_init();
+    nc_client_init();
 
     *state = st;
     return 0;
@@ -144,6 +143,7 @@ teardown_f(void **state)
 {
     struct state *st = *state;
 
+    nc_client_destroy();
     nc_server_destroy();
     ly_ctx_destroy(st->ctx);
     pthread_mutex_destroy(&st->state_lock);
@@ -153,77 +153,37 @@ teardown_f(void **state)
     return 0;
 }
 
-static struct nc_session *
-test_new_session(NC_SIDE side)
-{
-    struct nc_session *sess;
-    struct timespec ts;
-
-    sess = calloc(1, sizeof *sess);
-    if (!sess) {
-        return NULL;
-    }
-
-    sess->side = side;
-
-    if (side == NC_SERVER) {
-        pthread_mutex_init(&sess->opts.server.ntf_status_lock, NULL);
-        pthread_mutex_init(&sess->opts.server.rpc_lock, NULL);
-        pthread_cond_init(&sess->opts.server.rpc_cond, NULL);
-        sess->opts.server.rpc_inuse = 0;
-
-        nc_timeouttime_get(&ts, 0);
-        sess->opts.server.last_rpc = ts.tv_sec;
-    }
-
-    sess->io_lock = malloc(sizeof *sess->io_lock);
-    if (!sess->io_lock) {
-        goto error;
-    }
-    pthread_mutex_init(sess->io_lock, NULL);
-
-    return sess;
-
-error:
-    free(sess);
-    return NULL;
-}
-
+/**
+ * @brief Create the server and client sessions.
+ *
+ * @param[in] state Test state.
+ * @param[in] version NETCONF version, 0 for 1.0, 1 for 1.1.
+ * @return 0 on success, non-zero on error.
+ */
 static int
-setup_sessions(void **state)
+setup_sessions(void **state, int version)
 {
     struct state *st = *state;
-    int sock[2];
 
-    /* create communication channel */
-    socketpair(AF_UNIX, SOCK_STREAM, 0, sock);
-    fcntl(sock[0], F_SETFL, O_NONBLOCK);
-    fcntl(sock[1], F_SETFL, O_NONBLOCK);
-
-    /* create server session */
-    st->server_session = test_new_session(NC_SERVER);
-    NC_SESSION_STATUS_SET(st->server_session, NC_STATUS_RUNNING);
-    st->server_session->id = 1;
-    st->server_session->ti_type = NC_TI_FD;
-    st->server_session->ti.fd.in = sock[0];
-    st->server_session->ti.fd.out = sock[0];
-    st->server_session->ctx = st->ctx;
-    st->server_session->flags = NC_SESSION_SHAREDCTX;
+    ln2_glob_test_fd_sessions(st->ctx, version, &st->server_session, &st->client_session, st->fds);
+    fcntl(st->fds[0], F_SETFL, O_NONBLOCK);
+    fcntl(st->fds[1], F_SETFL, O_NONBLOCK);
 
     nc_session_set_data(st->server_session, st);
 
-    /* create client session */
-    st->client_session = test_new_session(NC_CLIENT);
-    NC_SESSION_STATUS_SET(st->client_session, NC_STATUS_RUNNING);
-    st->client_session->id = 1;
-    st->client_session->ti_type = NC_TI_FD;
-    st->client_session->ti.fd.in = sock[1];
-    st->client_session->ti.fd.out = sock[1];
-    st->client_session->ctx = st->ctx;
-    st->client_session->flags = NC_SESSION_SHAREDCTX;
-    st->client_session->opts.client.msgid = 50;
-
     return 0;
+}
+
+static int
+setup_sessions_10(void **state)
+{
+    return setup_sessions(state, 0);
+}
+
+static int
+setup_sessions_11(void **state)
+{
+    return setup_sessions(state, 1);
 }
 
 static int
@@ -231,20 +191,19 @@ teardown_sessions(void **state)
 {
     struct state *st = *state;
 
-    close(st->server_session->ti.fd.in);
-    st->server_session->ti.fd.in = -1;
+    /* close the socketpair first so that the client does not wait for a <close-session> reply */
+    close(st->fds[0]);
+    close(st->fds[1]);
     nc_session_free(st->server_session, NULL);
-
-    close(st->client_session->ti.fd.in);
-    st->client_session->ti.fd.in = -1;
     nc_session_free(st->client_session, NULL);
 
     return 0;
 }
 
 static void
-test_send_recv_ok(struct state *st)
+test_send_recv_ok(void **state)
 {
+    struct state *st = *state;
     int ret;
     uint64_t msgid;
     NC_MSG_TYPE msgtype;
@@ -259,9 +218,9 @@ test_send_recv_ok(struct state *st)
     msgtype = nc_send_rpc(st->client_session, rpc, 0, &msgid);
     assert_int_equal(msgtype, NC_MSG_RPC);
 
-    if (st->client_session->version == NC_PROT_VERSION_10) {
+    if (!nc_session_get_version(st->client_session)) {
         /* send also some WS characters that should be ignored */
-        ret = write(st->client_session->ti.fd.out, " \f\n\r\t\v", 6);
+        ret = write(st->fds[1], " \f\n\r\t\v", 6);
         assert_int_equal(ret, 6);
     }
 
@@ -291,30 +250,9 @@ test_send_recv_ok(struct state *st)
 }
 
 static void
-test_send_recv_ok_10(void **state)
+test_send_recv_error(void **state)
 {
     struct state *st = *state;
-
-    st->server_session->version = NC_PROT_VERSION_10;
-    st->client_session->version = NC_PROT_VERSION_10;
-
-    test_send_recv_ok(st);
-}
-
-static void
-test_send_recv_ok_11(void **state)
-{
-    struct state *st = *state;
-
-    st->server_session->version = NC_PROT_VERSION_11;
-    st->client_session->version = NC_PROT_VERSION_11;
-
-    test_send_recv_ok(st);
-}
-
-static void
-test_send_recv_error(struct state *st)
-{
     int ret;
     uint64_t msgid;
     NC_MSG_TYPE msgtype;
@@ -356,30 +294,9 @@ test_send_recv_error(struct state *st)
 }
 
 static void
-test_send_recv_error_10(void **state)
+test_send_recv_data(void **state)
 {
     struct state *st = *state;
-
-    st->server_session->version = NC_PROT_VERSION_10;
-    st->client_session->version = NC_PROT_VERSION_10;
-
-    test_send_recv_error(st);
-}
-
-static void
-test_send_recv_error_11(void **state)
-{
-    struct state *st = *state;
-
-    st->server_session->version = NC_PROT_VERSION_11;
-    st->client_session->version = NC_PROT_VERSION_11;
-
-    test_send_recv_error(st);
-}
-
-static void
-test_send_recv_data(struct state *st)
-{
     int ret;
     uint64_t msgid;
     NC_MSG_TYPE msgtype;
@@ -414,28 +331,6 @@ test_send_recv_data(struct state *st)
     lyd_free_tree(envp);
     assert_non_null(op);
     lyd_free_tree(op);
-}
-
-static void
-test_send_recv_data_10(void **state)
-{
-    struct state *st = *state;
-
-    st->server_session->version = NC_PROT_VERSION_10;
-    st->client_session->version = NC_PROT_VERSION_10;
-
-    test_send_recv_data(st);
-}
-
-static void
-test_send_recv_data_11(void **state)
-{
-    struct state *st = *state;
-
-    st->server_session->version = NC_PROT_VERSION_11;
-    st->client_session->version = NC_PROT_VERSION_11;
-
-    test_send_recv_data(st);
 }
 
 static void *
@@ -487,7 +382,7 @@ thread_recv_notif(void *arg)
     NC_MSG_TYPE msgtype;
 
     pthread_barrier_wait(&st->barrier);
-    msgtype = nc_recv_notif(st->client_session, 1000, &envp, &op);
+    msgtype = nc_recv_notif(st->client_session, NC_MSG_TIMEOUT_MS, &envp, &op);
     assert_int_equal(msgtype, NC_MSG_NOTIF);
     assert_string_equal(op->schema->name, "notificationComplete");
 
@@ -502,8 +397,9 @@ thread_recv_notif(void *arg)
 }
 
 static void
-test_send_recv_notif(struct state *st)
+test_send_recv_notif(void **state)
 {
+    struct state *st = *state;
     int ret;
     pthread_t tid[2];
     uint64_t msgid;
@@ -561,28 +457,6 @@ test_send_recv_notif(struct state *st)
 }
 
 static void
-test_send_recv_notif_10(void **state)
-{
-    struct state *st = *state;
-
-    st->server_session->version = NC_PROT_VERSION_10;
-    st->client_session->version = NC_PROT_VERSION_10;
-
-    test_send_recv_notif(st);
-}
-
-static void
-test_send_recv_notif_11(void **state)
-{
-    struct state *st = *state;
-
-    st->server_session->version = NC_PROT_VERSION_11;
-    st->client_session->version = NC_PROT_VERSION_11;
-
-    test_send_recv_notif(st);
-}
-
-static void
 test_send_recv_malformed_10(void **state)
 {
     struct state *st = *state;
@@ -594,16 +468,13 @@ test_send_recv_malformed_10(void **state)
     NC_MSG_TYPE msgtype;
     const char *msg;
 
-    st->server_session->version = NC_PROT_VERSION_10;
-    st->client_session->version = NC_PROT_VERSION_10;
-
     /* write malformed message */
     msg =
             "<nc:rpc xmlns:nc=\"urn:ietf:params:xml:ns:netconf:base:1.0\">"
             "  <nc:commit/>"
             "</nc:rpc>"
             "]]>]]>";
-    assert_int_equal(write(st->client_session->ti.fd.out, msg, strlen(msg)), strlen(msg));
+    assert_int_equal(write(st->fds[1], msg, strlen(msg)), strlen(msg));
     rpc = nc_rpc_commit(0, 0, NULL, NULL, 0);
     assert_non_null(rpc);
 
@@ -636,15 +507,15 @@ int
 main(void)
 {
     const struct CMUnitTest comm[] = {
-        cmocka_unit_test_setup_teardown(test_send_recv_ok_10, setup_sessions, teardown_sessions),
-        cmocka_unit_test_setup_teardown(test_send_recv_error_10, setup_sessions, teardown_sessions),
-        cmocka_unit_test_setup_teardown(test_send_recv_data_10, setup_sessions, teardown_sessions),
-        cmocka_unit_test_setup_teardown(test_send_recv_notif_10, setup_sessions, teardown_sessions),
-        cmocka_unit_test_setup_teardown(test_send_recv_malformed_10, setup_sessions, teardown_sessions),
-        cmocka_unit_test_setup_teardown(test_send_recv_ok_11, setup_sessions, teardown_sessions),
-        cmocka_unit_test_setup_teardown(test_send_recv_error_11, setup_sessions, teardown_sessions),
-        cmocka_unit_test_setup_teardown(test_send_recv_data_11, setup_sessions, teardown_sessions),
-        cmocka_unit_test_setup_teardown(test_send_recv_notif_11, setup_sessions, teardown_sessions),
+        {"test_send_recv_ok_10", test_send_recv_ok, setup_sessions_10, teardown_sessions, NULL},
+        {"test_send_recv_error_10", test_send_recv_error, setup_sessions_10, teardown_sessions, NULL},
+        {"test_send_recv_data_10", test_send_recv_data, setup_sessions_10, teardown_sessions, NULL},
+        {"test_send_recv_notif_10", test_send_recv_notif, setup_sessions_10, teardown_sessions, NULL},
+        cmocka_unit_test_setup_teardown(test_send_recv_malformed_10, setup_sessions_10, teardown_sessions),
+        {"test_send_recv_ok_11", test_send_recv_ok, setup_sessions_11, teardown_sessions, NULL},
+        {"test_send_recv_error_11", test_send_recv_error, setup_sessions_11, teardown_sessions, NULL},
+        {"test_send_recv_data_11", test_send_recv_data, setup_sessions_11, teardown_sessions, NULL},
+        {"test_send_recv_notif_11", test_send_recv_notif, setup_sessions_11, teardown_sessions, NULL},
     };
 
     return cmocka_run_group_tests(comm, setup_f, teardown_f);
