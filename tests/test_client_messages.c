@@ -88,7 +88,7 @@ test_send_rpc(struct test_state *st, struct nc_rpc *rpc, const char *expected)
     assert_int_equal(nc_send_rpc(st->client, rpc, NC_MSG_TIMEOUT_MS, &msgid), NC_MSG_RPC);
 
     /* the server receives the RPC and replies */
-    assert_int_equal(nc_ps_poll(st->ps, NC_PS_POLL_TIMEOUT, NULL), NC_PSPOLL_RPC);
+    assert_int_equal(nc_ps_poll(st->ps, NC_PS_POLL_TIMEOUT_MS, NULL), NC_PSPOLL_RPC);
     assert_int_equal(nc_recv_reply(st->client, rpc, msgid, NC_MSG_TIMEOUT_MS, &envp, &op), NC_MSG_REPLY);
     assert_null(op);
     assert_string_equal(LYD_NAME(lyd_child(envp)), "ok");

@@ -997,7 +997,7 @@ server_thread_ctn_san(void *arg)
     pthread_barrier_wait(&test_ctx->barrier);
 
     /* accept a session and add it to the poll session structure */
-    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT_MS, test_ctx->ctx, &session);
     assert_int_equal(msgtype, NC_MSG_HELLO);
 
     /* the username should be resolved from the client cert's SAN rfc822Name field */
@@ -1009,7 +1009,7 @@ server_thread_ctn_san(void *arg)
 
     /* poll until the session is terminated by the client */
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT_MS, &session);
         assert_int_equal(ret & NC_PSPOLL_RPC, NC_PSPOLL_RPC);
     } while (!(ret & NC_PSPOLL_SESSION_TERM));
 
@@ -1129,7 +1129,7 @@ server_thread_ctn(void *arg)
     /* wait for the client to be ready to connect */
     pthread_barrier_wait(&test_ctx->barrier);
 
-    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT_MS, test_ctx->ctx, &session);
     if (!test_data->username) {
         /* no username can be resolved, the client must not be authenticated */
         assert_int_equal(msgtype, NC_MSG_ERROR);
@@ -1146,7 +1146,7 @@ server_thread_ctn(void *arg)
 
     /* poll until the session is terminated by the client */
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT_MS, &session);
         assert_int_equal(ret & NC_PSPOLL_RPC, NC_PSPOLL_RPC);
     } while (!(ret & NC_PSPOLL_SESSION_TERM));
 

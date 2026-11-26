@@ -21,8 +21,11 @@
 
 #include "tests/config.h"
 
-#define NC_ACCEPT_TIMEOUT 4000
-#define NC_PS_POLL_TIMEOUT 2000
+/* timeout of accepting a new session */
+#define NC_ACCEPT_TIMEOUT_MS 4000
+
+/* timeout of a single poll of the sessions */
+#define NC_PS_POLL_TIMEOUT_MS 2000
 
 /* timeout of sending or receiving a single message */
 #define NC_MSG_TIMEOUT_MS 1000

@@ -302,11 +302,11 @@ auth_server_thread(void *arg)
     pthread_barrier_wait(&test_ctx->barrier);
 
     /* session of the process user is not accepted */
-    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT_MS, test_ctx->ctx, &session);
     assert_int_equal(msgtype, NC_MSG_ERROR);
 
     /* session with the correct username is accepted */
-    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT_MS, test_ctx->ctx, &session);
     assert_int_equal(msgtype, NC_MSG_HELLO);
 
     /* session closed */
@@ -315,7 +315,7 @@ auth_server_thread(void *arg)
     ret = nc_ps_add_session(ps, session);
     assert_int_equal(ret, 0);
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT_MS, &session);
         assert_true(ret & NC_PSPOLL_RPC);
     } while (!(ret & NC_PSPOLL_SESSION_TERM));
 
@@ -402,7 +402,7 @@ test_unix_server_thread_fail(void *arg)
 
     /* try to accept a session, but expect it to time out, as the client should fail to connect, but
      * not cause an error on the server side */
-    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT_MS, test_ctx->ctx, &session);
     assert_int_equal(msgtype, NC_MSG_WOULDBLOCK);
     assert_null(session);
 

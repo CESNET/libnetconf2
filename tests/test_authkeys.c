@@ -51,7 +51,7 @@ server_thread(void *arg)
 
     /* accept a session and add it to the poll session structure */
     pthread_barrier_wait(&test_ctx->barrier);
-    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT_MS, test_ctx->ctx, &session);
 
     /* only continue if we expect to authenticate successfully */
     if (test_data->expect_ok) {
@@ -66,7 +66,7 @@ server_thread(void *arg)
     assert_int_equal(ret, 0);
 
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT_MS, &session);
         assert_int_equal(ret & NC_PSPOLL_RPC, NC_PSPOLL_RPC);
     } while (!(ret & NC_PSPOLL_SESSION_TERM));
 

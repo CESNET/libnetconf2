@@ -66,7 +66,7 @@ server_thread(void *arg)
     while (1) {
         /* config ready, wait for client/server to be ready */
         pthread_barrier_wait(&state->start_barrier);
-        msgtype = nc_accept(NC_ACCEPT_TIMEOUT, ctx, &session);
+        msgtype = nc_accept(NC_ACCEPT_TIMEOUT_MS, ctx, &session);
 
         if (expect_ok) {
             assert_int_equal(msgtype, NC_MSG_HELLO);
@@ -74,7 +74,7 @@ server_thread(void *arg)
             assert_int_equal(ret, 0);
 
             do {
-                ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+                ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT_MS, &session);
                 assert_int_equal(ret & NC_PSPOLL_RPC, NC_PSPOLL_RPC);
             } while (!(ret & NC_PSPOLL_SESSION_TERM));
 

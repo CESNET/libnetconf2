@@ -327,7 +327,7 @@ server_thread(void *arg)
 
     /* wait until the client is ready to connect */
     pthread_barrier_wait(&state->barrier);
-    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, server_ctx, &session);
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT_MS, server_ctx, &session);
     assert_int_equal(msgtype, NC_MSG_HELLO);
 
     /* add sess to ps */
@@ -336,7 +336,7 @@ server_thread(void *arg)
 
     /* serve all the RPCs */
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT_MS, NULL);
     } while (ret & NC_PSPOLL_RPC);
 
     /* increase session notification subscription flag count */

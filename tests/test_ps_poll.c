@@ -32,14 +32,14 @@
 #include "ln2_test.h"
 
 /* long enough that a poll thread holding its turn for the whole timeout is unmistakable */
-#define TEST_POLL_TIMEOUT 1000
+#define TEST_POLL_TIMEOUT_MS 1000
 
 /* more threads than the initial size of the pollsession queue (NC_PS_QUEUE_INIT_SIZE, 6), it has to grow */
 #define TEST_POLLER_COUNT 10
 
 /* a high priority operation must get the turn within one session scan of the polling thread,
  * not within one or more poll timeouts */
-#define TEST_ADD_LIMIT 250
+#define TEST_ADD_LIMIT_MS 250
 
 /* idle timeout of the sessions in seconds */
 #define TEST_IDLE_TIMEOUT_S 2
@@ -155,7 +155,7 @@ test_poller_thread(void *arg)
     struct test_state *st = arg;
 
     while (!ATOMIC_LOAD_RELAXED(st->stop)) {
-        nc_ps_poll(st->ps, TEST_POLL_TIMEOUT, NULL);
+        nc_ps_poll(st->ps, TEST_POLL_TIMEOUT_MS, NULL);
     }
 
     return NULL;
@@ -237,7 +237,7 @@ teardown_f(void **state)
  * @brief Adding a session must not wait for the poll threads to time out.
  *
  * Session addition used to queue up behind all the poll threads in the same FIFO queue, so a
- * newly established session waited poller_count * TEST_POLL_TIMEOUT before it was polled for
+ * newly established session waited poller_count * TEST_POLL_TIMEOUT_MS before it was polled for
  * the first time. It now queues up in front of them and the polling thread hands the turn over.
  * Also verifies that the queue grows past its initial size instead of dropping the session.
  */
@@ -257,7 +257,7 @@ test_add_session_not_blocked(void **state)
     elapsed = test_elapsed(&ts_start);
 
     assert_int_equal(nc_ps_session_count(st->ps), 2);
-    assert_true(elapsed < TEST_ADD_LIMIT);
+    assert_true(elapsed < TEST_ADD_LIMIT_MS);
 }
 
 /**
@@ -280,7 +280,7 @@ test_del_session_not_blocked(void **state)
 
     assert_int_equal(nc_ps_session_count(st->ps), 0);
     test_free_session(sess);
-    assert_true(elapsed < TEST_ADD_LIMIT);
+    assert_true(elapsed < TEST_ADD_LIMIT_MS);
 }
 
 /**

@@ -82,7 +82,7 @@ ln2_glob_test_server_thread(void *arg)
     pthread_barrier_wait(&test_ctx->barrier);
 
     /* accept a session and add it to the poll session structure */
-    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT_MS, test_ctx->ctx, &session);
     if (msgtype != NC_MSG_HELLO) {
         SETUP_FAIL_LOG;
         nc_ps_free(ps);
@@ -94,7 +94,7 @@ ln2_glob_test_server_thread(void *arg)
 
     /* poll until the session is terminated by the client */
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT_MS, &session);
         assert(ret & NC_PSPOLL_RPC);
     } while (!(ret & NC_PSPOLL_SESSION_TERM));
 
@@ -115,7 +115,7 @@ ln2_glob_test_server_thread_fail(void *arg)
     pthread_barrier_wait(&test_ctx->barrier);
 
     /* try to accept a session, but we expect it to fail */
-    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT_MS, test_ctx->ctx, &session);
     assert(msgtype == NC_MSG_ERROR);
     (void)msgtype;
     assert(!session);
