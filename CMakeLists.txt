@@ -408,7 +408,8 @@ if(ENABLE_TLS)
 endif()
 
 # set sources
-target_sources(netconf2 PRIVATE ${libsrc} ${compatsrc})
+target_sources(netconf2 PRIVATE ${libsrc})
+target_link_libraries(netconf2 PRIVATE nccompat)
 
 # generate config file
 configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)

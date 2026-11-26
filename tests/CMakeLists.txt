@@ -10,7 +10,7 @@ endif()
 foreach(src IN LISTS libsrc)
     list(APPEND test_srcs "../${src}")
 endforeach()
-add_library(testobj OBJECT ${test_srcs} ${compatsrc})
+add_library(testobj OBJECT ${test_srcs})
 # the test objects contain the library code, they need also the private netconf2 dependencies
 target_link_libraries(testobj PUBLIC netconf2 ${NC_PRIVATE_LIBS})
 
@@ -35,7 +35,8 @@ function(libnetconf2_test)
     cmake_parse_arguments(TEST "" "NAME;PORT_COUNT" "WRAP_FUNCS" ${ARGN})
 
     add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_NAME}.c)
-    target_link_libraries(${TEST_NAME} ${CMOCKA_LIBRARIES} testobj)
+    # own compat objects, those in netconf2 are hidden
+    target_link_libraries(${TEST_NAME} ${CMOCKA_LIBRARIES} testobj nccompat)
     target_include_directories(${TEST_NAME} PRIVATE ${CMOCKA_INCLUDE_DIR})
 
     # wrap functions
