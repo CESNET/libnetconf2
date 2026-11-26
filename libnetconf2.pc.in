@@ -8,6 +8,6 @@ Version: @LIBNETCONF2_VERSION@
 Requires: @PC_REQUIRES@
 Libs: -L${libdir} -lnetconf2
 Libs.private: @PC_LIBS_PRIVATE@
-Cflags: -I${includedir}
+Cflags: -I${includedir}@PC_CFLAGS@
 
 LN2_SCHEMAS_DIR=@YANG_MODULE_DIR@

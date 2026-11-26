@@ -253,14 +253,20 @@ endif()
 # netconf2 sourceless target - need it for linking libs, but the required sources will be added later
 add_library(netconf2)
 
+# private dependencies, linked to netconf2 and the tests, which contain the library code
+set(NC_PRIVATE_LIBS "")
+
 # private dependencies of a static build, for Libs.private of libnetconf2.pc
 set(PC_LIBS_PRIVATE "")
 
-# use compat, may link a library to netconf2
+# use compat, may add a private dependency
 use_compat()
 
 # set the shared library version
 set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_SOVERSION_FULL} SOVERSION ${LIBNETCONF2_SOVERSION})
+target_include_directories(netconf2 PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 # include repository files with highest priority
 include_directories(${PROJECT_BINARY_DIR}/src)
@@ -269,8 +275,9 @@ include_directories(${PROJECT_BINARY_DIR}/include)
 # dependencies - pthread
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)
-target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
+list(APPEND NC_PRIVATE_LIBS Threads::Threads)
 if(CMAKE_THREAD_LIBS_INIT)
+    # the thread library flag for the .pc file
     string(APPEND PC_LIBS_PRIVATE " ${CMAKE_THREAD_LIBS_INIT}")
 endif()
 
@@ -290,7 +297,7 @@ endif()
 if(ENABLE_DNSSEC)
     find_package(LibVAL REQUIRED)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_DNSSEC")
-    target_link_libraries(netconf2 ${LIBVAL_LIBRARIES})
+    list(APPEND NC_PRIVATE_LIBS ${LIBVAL_LIBRARIES})
     string(APPEND PC_LIBS_PRIVATE " -lval-threads -lsres")
     include_directories(${LIBVAL_INCLUDE_DIRS})
 endif()
@@ -305,7 +312,7 @@ if(ENABLE_SSH OR ENABLE_TLS)
         set(HAVE_MBEDTLS TRUE)
         list(APPEND libsrc src/session_crypto_mbedtls.c)
         include_directories(${MBEDTLS_INCLUDE_DIRS})
-        target_link_libraries(netconf2 ${MBEDTLS_LIBRARIES})
+        list(APPEND NC_PRIVATE_LIBS ${MBEDTLS_LIBRARIES})
         string(APPEND PC_LIBS_PRIVATE " -lmbedtls -lmbedx509 -lmbedcrypto")
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${MBEDTLS_LIBRARIES})
     else()
@@ -313,7 +320,7 @@ if(ENABLE_SSH OR ENABLE_TLS)
         find_package(OpenSSL 3.0.0 REQUIRED)
         list(APPEND libsrc src/session_crypto_openssl.c)
         include_directories(${OPENSSL_INCLUDE_DIR})
-        target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
+        list(APPEND NC_PRIVATE_LIBS ${OPENSSL_LIBRARIES})
         string(APPEND PC_LIBS_PRIVATE " -lssl -lcrypto")
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${OPENSSL_LIBRARIES})
     endif()
@@ -323,7 +330,8 @@ if(ENABLE_SSH)
     # dependencies - libssh
     find_package(libssh 0.9.5 CONFIG REQUIRED)
     message(STATUS "Found libssh ${libssh_VERSION}: ${libssh_DIR}")
-    target_link_libraries(netconf2 ssh)
+    # public, the public headers include libssh
+    target_link_libraries(netconf2 PUBLIC ssh)
     list(APPEND CMAKE_REQUIRED_LIBRARIES ssh)
 
     if(libssh_VERSION VERSION_GREATER_EQUAL "0.12.0")
@@ -344,7 +352,7 @@ if(ENABLE_SSH)
         if(NOT HAVE_LIBCRYPT)
             message(FATAL_ERROR "Could NOT find Lib${LIBCRYPT} (library implementing crypt(3))")
         endif()
-        target_link_libraries(netconf2 ${LIBCRYPT})
+        list(APPEND NC_PRIVATE_LIBS ${LIBCRYPT})
         string(APPEND PC_LIBS_PRIVATE " -l${LIBCRYPT}")
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBCRYPT})
     endif()
@@ -356,7 +364,7 @@ if(ENABLE_SSH)
     if(LibPAM_FOUND)
         set(HAVE_LIBPAM TRUE)
 
-        target_link_libraries(netconf2 ${LIBPAM_LIBRARIES})
+        list(APPEND NC_PRIVATE_LIBS ${LIBPAM_LIBRARIES})
         string(APPEND PC_LIBS_PRIVATE " -lpam")
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBPAM_LIBRARIES})
         include_directories(${LIBPAM_INCLUDE_DIRS})
@@ -374,7 +382,7 @@ if(ENABLE_TLS AND ENABLE_CRL)
     find_package(CURL 7.30.0)
     if(CURL_FOUND)
         set(HAVE_CURL TRUE)
-        target_link_libraries(netconf2 CURL::libcurl)
+        list(APPEND NC_PRIVATE_LIBS CURL::libcurl)
         string(APPEND PC_LIBS_PRIVATE " -lcurl")
     else()
         message(WARNING "CRL certificate verification disabled (LibCURL not found)")
@@ -384,14 +392,19 @@ endif()
 # dependencies - libyang
 find_package(LibYANG ${LIBYANG_DEP_SOVERSION} CONFIG REQUIRED)
 message(STATUS "Found LibYANG ${LibYANG_VERSION}: ${LibYANG_DIR}")
-target_link_libraries(netconf2 LibYANG::yang)
+target_link_libraries(netconf2 PUBLIC LibYANG::yang)
 
-# set compiler flags
+# link the collected private dependencies
+target_link_libraries(netconf2 PRIVATE ${NC_PRIVATE_LIBS})
+
+# public headers with SSH and TLS functions, also when included directly instead of nc_client.h/nc_server.h
 if(ENABLE_SSH)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_SSH")
+    target_compile_definitions(netconf2 PUBLIC NC_SSH)
+    string(APPEND PC_CFLAGS " -DNC_SSH")
 endif()
 if(ENABLE_TLS)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_TLS")
+    target_compile_definitions(netconf2 PUBLIC NC_TLS)
+    string(APPEND PC_CFLAGS " -DNC_TLS")
 endif()
 
 # set sources
