@@ -22,25 +22,30 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <cmocka.h>
 #include <libyang/libyang.h>
 
-#include <session_p.h>
-
+#include "compat.h"
 #include "ln2_test.h"
 
 /* long enough that a poll thread holding its turn for the whole timeout is unmistakable */
-#define TEST_POLL_TIMEOUT 1000
+#define TEST_POLL_TIMEOUT_MS 1000
 
-/* more threads than the queue was sized for, it has to grow */
-#define TEST_POLLER_COUNT (NC_PS_QUEUE_INIT_SIZE + 4)
+/* more threads than the initial size of the pollsession queue (NC_PS_QUEUE_INIT_SIZE, 6), it has to grow */
+#define TEST_POLLER_COUNT 10
 
 /* a high priority operation must get the turn within one session scan of the polling thread,
  * not within one or more poll timeouts */
-#define TEST_ADD_LIMIT 250
+#define TEST_ADD_LIMIT_MS 250
+
+/* idle timeout of the sessions in seconds */
+#define TEST_IDLE_TIMEOUT_S 2
+
+/* poll timeout longer than the idle timeout */
+#define TEST_IDLE_POLL_TIMEOUT_MS (TEST_IDLE_TIMEOUT_S * 1000 + 500)
 
 struct test_state {
     struct nc_pollsession *ps;
@@ -49,131 +54,93 @@ struct test_state {
     ATOMIC_T stop;
 };
 
-/* socketpair peer ends of the created sessions, kept open so that the sessions are not
- * reported as hung up, closed together with their session */
+/* context shared by all the tests */
+static struct ln2_test_ctx *test_ctx;
+
+/* socketpair ends of the created sessions, the peer ends are kept open so that the sessions are
+ * not reported as hung up, closed together with their session */
 static struct {
     struct nc_session *sess;
-    int fd;
-} test_peers[8];
+    int fds[2];
+} test_socks[8];
 
 /**
- * @brief Remember the socketpair peer end of a session.
+ * @brief Create a server session on a socketpair.
  *
- * @param[in] sess Session the peer end belongs to.
- * @param[in] fd Peer end of the session socketpair.
- * @return 0 on success, -1 on error.
+ * @return Created session, NULL on error.
  */
-static int
-test_peer_store(struct nc_session *sess, int fd)
+static struct nc_session *
+test_new_session(void)
 {
     uint32_t i;
 
-    for (i = 0; i < sizeof test_peers / sizeof *test_peers; ++i) {
-        if (!test_peers[i].sess) {
-            test_peers[i].sess = sess;
-            test_peers[i].fd = fd;
-            return 0;
+    for (i = 0; i < sizeof test_socks / sizeof *test_socks; ++i) {
+        if (!test_socks[i].sess) {
+            break;
         }
     }
+    if (i == sizeof test_socks / sizeof *test_socks) {
+        return NULL;
+    }
 
-    return -1;
+    ln2_glob_test_fd_sessions(test_ctx->ctx, 1, &test_socks[i].sess, NULL, test_socks[i].fds);
+    return test_socks[i].sess;
 }
 
 /**
- * @brief Close the socketpair peer end of a session.
+ * @brief Free a session created by ::test_new_session() and close its socketpair.
  *
- * @param[in] sess Session being freed.
+ * @param[in] sess Session to free.
  */
 static void
-test_peer_close(struct nc_session *sess)
+test_free_session(struct nc_session *sess)
 {
     uint32_t i;
 
-    for (i = 0; i < sizeof test_peers / sizeof *test_peers; ++i) {
-        if (test_peers[i].sess == sess) {
-            close(test_peers[i].fd);
-            test_peers[i].sess = NULL;
-            test_peers[i].fd = -1;
+    for (i = 0; i < sizeof test_socks / sizeof *test_socks; ++i) {
+        if (test_socks[i].sess == sess) {
+            nc_session_free(sess, NULL);
+            close(test_socks[i].fds[0]);
+            close(test_socks[i].fds[1]);
+            test_socks[i].sess = NULL;
             return;
         }
     }
 
-    fail_msg("Session %" PRIu32 " has no stored socketpair peer end.", sess->id);
+    fail_msg("Session %" PRIu32 " was not created by the test.", nc_session_get_id(sess));
 }
 
 /**
- * @brief Create a bare server session on a socketpair, without any transport handshake.
+ * @brief Set the server idle timeout.
  *
- * @param[in] id Session ID to use.
- * @return Created session, NULL on error.
+ * @param[in] idle_timeout Idle timeout in seconds, 0 for none.
  */
-static struct nc_session *
-test_new_session(uint32_t id)
+static void
+test_set_idle_timeout(uint16_t idle_timeout)
 {
-    struct nc_session *sess;
-    struct timespec ts;
-    int sock[2];
+    struct lyd_node *tree = NULL;
+    char buf[8];
 
-    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sock)) {
-        return NULL;
-    }
-
-    sess = calloc(1, sizeof *sess);
-    if (!sess) {
-        close(sock[0]);
-        close(sock[1]);
-        return NULL;
-    }
-
-    sess->side = NC_SERVER;
-    pthread_mutex_init(&sess->opts.server.ntf_status_lock, NULL);
-    pthread_mutex_init(&sess->opts.server.rpc_lock, NULL);
-    pthread_cond_init(&sess->opts.server.rpc_cond, NULL);
-    nc_timeouttime_get(&ts, 0);
-    sess->opts.server.last_rpc = ts.tv_sec;
-
-    sess->io_lock = malloc(sizeof *sess->io_lock);
-    if (!sess->io_lock) {
-        free(sess);
-        close(sock[0]);
-        close(sock[1]);
-        return NULL;
-    }
-    pthread_mutex_init(sess->io_lock, NULL);
-
-    NC_SESSION_STATUS_SET(sess, NC_STATUS_RUNNING);
-    sess->id = id;
-    sess->ti_type = NC_TI_FD;
-    sess->ti.fd.in = sock[0];
-    sess->ti.fd.out = sock[0];
-
-    /* remember the socketpair peer end so that it can be closed with the session */
-    if (test_peer_store(sess, sock[1])) {
-        pthread_mutex_destroy(&sess->opts.server.ntf_status_lock);
-        pthread_mutex_destroy(&sess->opts.server.rpc_lock);
-        pthread_cond_destroy(&sess->opts.server.rpc_cond);
-        pthread_mutex_destroy(sess->io_lock);
-        free(sess->io_lock);
-        free(sess);
-        close(sock[0]);
-        close(sock[1]);
-        return NULL;
-    }
-
-    return sess;
+    sprintf(buf, "%" PRIu16, idle_timeout);
+    assert_int_equal(lyd_new_path(NULL, test_ctx->ctx, "/ietf-netconf-server:netconf-server/listen/idle-timeout", buf,
+            0, &tree), LY_SUCCESS);
+    assert_int_equal(nc_server_config_setup_data(tree), 0);
+    lyd_free_all(tree);
 }
 
-static void
-test_free_session(struct nc_session *sess)
+/**
+ * @brief Get the milliseconds elapsed since a time.
+ *
+ * @param[in] ts_start Monotonic time to measure from.
+ * @return Elapsed milliseconds.
+ */
+static int32_t
+test_elapsed(const struct timespec *ts_start)
 {
-    close(sess->ti.fd.in);
-    test_peer_close(sess);
-    pthread_mutex_destroy(&sess->opts.server.ntf_status_lock);
-    pthread_mutex_destroy(&sess->opts.server.rpc_lock);
-    pthread_cond_destroy(&sess->opts.server.rpc_cond);
-    pthread_mutex_destroy(sess->io_lock);
-    free(sess->io_lock);
-    free(sess);
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (ts.tv_sec - ts_start->tv_sec) * 1000 + (ts.tv_nsec - ts_start->tv_nsec) / 1000000;
 }
 
 /**
@@ -188,7 +155,7 @@ test_poller_thread(void *arg)
     struct test_state *st = arg;
 
     while (!ATOMIC_LOAD_RELAXED(st->stop)) {
-        nc_ps_poll(st->ps, TEST_POLL_TIMEOUT, NULL);
+        nc_ps_poll(st->ps, TEST_POLL_TIMEOUT_MS, NULL);
     }
 
     return NULL;
@@ -215,7 +182,7 @@ setup_f(void **state)
     }
 
     /* an already established, idle session, otherwise the pollers would just return no-sessions */
-    sess = test_new_session(1);
+    sess = test_new_session();
     if (!sess) {
         SETUP_FAIL_LOG;
         return 1;
@@ -270,9 +237,9 @@ teardown_f(void **state)
  * @brief Adding a session must not wait for the poll threads to time out.
  *
  * Session addition used to queue up behind all the poll threads in the same FIFO queue, so a
- * newly established session waited poller_count * TEST_POLL_TIMEOUT before it was polled for
+ * newly established session waited poller_count * TEST_POLL_TIMEOUT_MS before it was polled for
  * the first time. It now queues up in front of them and the polling thread hands the turn over.
- * Also verifies that the queue grows past NC_PS_QUEUE_INIT_SIZE instead of dropping the session.
+ * Also verifies that the queue grows past its initial size instead of dropping the session.
  */
 static void
 test_add_session_not_blocked(void **state)
@@ -282,15 +249,15 @@ test_add_session_not_blocked(void **state)
     struct timespec ts_start;
     int32_t elapsed;
 
-    sess = test_new_session(2);
+    sess = test_new_session();
     assert_non_null(sess);
 
-    nc_timeouttime_get(&ts_start, 0);
+    clock_gettime(CLOCK_MONOTONIC, &ts_start);
     assert_int_equal(nc_ps_add_session(st->ps, sess), 0);
-    elapsed = -nc_timeouttime_cur_diff(&ts_start);
+    elapsed = test_elapsed(&ts_start);
 
     assert_int_equal(nc_ps_session_count(st->ps), 2);
-    assert_true(elapsed < TEST_ADD_LIMIT);
+    assert_true(elapsed < TEST_ADD_LIMIT_MS);
 }
 
 /**
@@ -307,13 +274,13 @@ test_del_session_not_blocked(void **state)
     sess = nc_ps_get_session(st->ps, 0);
     assert_non_null(sess);
 
-    nc_timeouttime_get(&ts_start, 0);
+    clock_gettime(CLOCK_MONOTONIC, &ts_start);
     assert_int_equal(nc_ps_del_session(st->ps, sess), 0);
-    elapsed = -nc_timeouttime_cur_diff(&ts_start);
+    elapsed = test_elapsed(&ts_start);
 
     assert_int_equal(nc_ps_session_count(st->ps), 0);
     test_free_session(sess);
-    assert_true(elapsed < TEST_ADD_LIMIT);
+    assert_true(elapsed < TEST_ADD_LIMIT_MS);
 }
 
 /**
@@ -328,7 +295,7 @@ test_idle_timeout(void **state)
 {
     struct nc_pollsession *ps;
     struct nc_session *sess, *term_sess;
-    struct timespec ts, ts_start;
+    struct timespec ts_start;
     int ret;
     int32_t elapsed;
 
@@ -336,23 +303,23 @@ test_idle_timeout(void **state)
 
     ps = nc_ps_new();
     assert_non_null(ps);
+    test_set_idle_timeout(TEST_IDLE_TIMEOUT_S);
 
-    sess = test_new_session(1);
+    /* the session was active just now, so it must survive for the idle timeout, even though the
+     * poll deadline is further away than that */
+    sess = test_new_session();
     assert_non_null(sess);
     assert_int_equal(nc_ps_add_session(ps, sess), 0);
 
-    /* the session was active just now, so with an idle timeout of 2s it must survive for 2s,
-     * even though the poll deadline is further away than that */
-    ATOMIC_STORE_RELAXED(server_opts.idle_timeout, 2);
-
-    nc_timeouttime_get(&ts_start, 0);
-    ret = nc_ps_poll(ps, 2500, &term_sess);
-    elapsed = -nc_timeouttime_cur_diff(&ts_start);
+    clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    ret = nc_ps_poll(ps, TEST_IDLE_POLL_TIMEOUT_MS, &term_sess);
+    elapsed = test_elapsed(&ts_start);
 
     assert_int_equal(ret, NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR);
-    assert_int_equal(NC_SESSION_STATUS_GET(sess), NC_STATUS_INVALID);
-    assert_int_equal(NC_SESSION_TERM_REASON_GET(sess), NC_SESSION_TERM_TIMEOUT);
-    assert_true(elapsed >= 1000);
+    assert_int_equal(nc_session_get_status(sess), NC_STATUS_INVALID);
+    assert_int_equal(nc_session_get_term_reason(sess), NC_SESSION_TERM_TIMEOUT);
+    /* the idle time is counted in whole seconds */
+    assert_true(elapsed >= (TEST_IDLE_TIMEOUT_S - 1) * 1000);
 
     /* the session was handed over to us, it is no longer in ps */
     assert_ptr_equal(term_sess, sess);
@@ -361,22 +328,21 @@ test_idle_timeout(void **state)
     test_free_session(sess);
 
     /* a session that really has been idle for too long is terminated right away */
-    sess = test_new_session(2);
+    sess = test_new_session();
     assert_non_null(sess);
-    nc_timeouttime_get(&ts, 0);
-    sess->opts.server.last_rpc = ts.tv_sec - 3;
+    sleep(TEST_IDLE_TIMEOUT_S);
     assert_int_equal(nc_ps_add_session(ps, sess), 0);
 
-    nc_timeouttime_get(&ts_start, 0);
-    ret = nc_ps_poll(ps, 2500, &term_sess);
-    elapsed = -nc_timeouttime_cur_diff(&ts_start);
+    clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    ret = nc_ps_poll(ps, TEST_IDLE_POLL_TIMEOUT_MS, &term_sess);
+    elapsed = test_elapsed(&ts_start);
 
     assert_int_equal(ret, NC_PSPOLL_SESSION_TERM | NC_PSPOLL_SESSION_ERROR);
-    assert_int_equal(NC_SESSION_STATUS_GET(sess), NC_STATUS_INVALID);
-    assert_int_equal(NC_SESSION_TERM_REASON_GET(sess), NC_SESSION_TERM_TIMEOUT);
+    assert_int_equal(nc_session_get_status(sess), NC_STATUS_INVALID);
+    assert_int_equal(nc_session_get_term_reason(sess), NC_SESSION_TERM_TIMEOUT);
     assert_true(elapsed < 500);
 
-    ATOMIC_STORE_RELAXED(server_opts.idle_timeout, 0);
+    test_set_idle_timeout(0);
 
     assert_ptr_equal(term_sess, sess);
     assert_int_equal(nc_ps_session_count(ps), 0);
@@ -396,7 +362,6 @@ test_term_last_session(void **state)
 {
     struct nc_pollsession *ps;
     struct nc_session *sess[3], *term_sess;
-    struct timespec ts;
     uint16_t i;
     int ret;
 
@@ -404,19 +369,19 @@ test_term_last_session(void **state)
 
     ps = nc_ps_new();
     assert_non_null(ps);
-
-    for (i = 0; i < 3; ++i) {
-        sess[i] = test_new_session(i + 1);
-        assert_non_null(sess[i]);
-    }
+    test_set_idle_timeout(TEST_IDLE_TIMEOUT_S);
 
     /* the last session in the array has been idle for too long, the other two are fine */
-    nc_timeouttime_get(&ts, 0);
-    sess[2]->opts.server.last_rpc = ts.tv_sec - 3;
+    sess[2] = test_new_session();
+    assert_non_null(sess[2]);
+    sleep(TEST_IDLE_TIMEOUT_S);
+    for (i = 0; i < 2; ++i) {
+        sess[i] = test_new_session();
+        assert_non_null(sess[i]);
+    }
     for (i = 0; i < 3; ++i) {
         assert_int_equal(nc_ps_add_session(ps, sess[i]), 0);
     }
-    ATOMIC_STORE_RELAXED(server_opts.idle_timeout, 2);
 
     /* the last session is terminated, removed and handed over */
     ret = nc_ps_poll(ps, 0, &term_sess);
@@ -430,13 +395,29 @@ test_term_last_session(void **state)
     assert_int_equal(ret, NC_PSPOLL_TIMEOUT);
     assert_int_equal(nc_ps_session_count(ps), 2);
 
-    ATOMIC_STORE_RELAXED(server_opts.idle_timeout, 0);
+    test_set_idle_timeout(0);
 
     for (i = 0; i < 2; ++i) {
         assert_int_equal(nc_ps_del_session(ps, sess[i]), 0);
         test_free_session(sess[i]);
     }
     nc_ps_free(ps);
+}
+
+static int
+setup_glob(void **state)
+{
+    (void)state;
+
+    return ln2_glob_test_setup(&test_ctx);
+}
+
+static int
+teardown_glob(void **state)
+{
+    (void)state;
+
+    return ln2_glob_test_teardown((void **)&test_ctx);
 }
 
 int
@@ -449,5 +430,5 @@ main(void)
         cmocka_unit_test(test_term_last_session),
     };
 
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, setup_glob, teardown_glob);
 }

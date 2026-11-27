@@ -235,7 +235,7 @@ test_parallel_accept_nonblocking(void **state)
 static void
 test_parallel_accept_timed(void **state)
 {
-    run_parallel_accept(state, NC_ACCEPT_TIMEOUT);
+    run_parallel_accept(state, NC_ACCEPT_TIMEOUT_MS);
 }
 
 static void

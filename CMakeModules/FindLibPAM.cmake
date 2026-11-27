@@ -80,7 +80,7 @@ else()
   include(FindPackageHandleStandardArgs)
   find_package_handle_standard_args(LibPAM DEFAULT_MSG LIBPAM_LIBRARIES LIBPAM_INCLUDE_DIRS)
 
-  # show the LIBPAM_INCLUDE_DIRS and LIBPAM_LIBRARIES variables only in the advanced view
-  mark_as_advanced(LIBPAM_INCLUDE_DIRS LIBPAM_LIBRARIES)
+  # show the LIBPAM_INCLUDE_DIR and LIBPAM_LIBRARY variables only in the advanced view
+  mark_as_advanced(LIBPAM_INCLUDE_DIR LIBPAM_LIBRARY)
 
 endif()

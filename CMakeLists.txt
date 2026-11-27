@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5...3.28.1)
+cmake_minimum_required(VERSION 3.12...3.28.1)
 
 project(libnetconf2 C)
 
@@ -9,12 +9,14 @@ include(GNUInstallDirs)
 include(CheckFunctionExists)
 include(CheckCSourceCompiles)
 include(CheckIncludeFile)
+include(CheckLibraryExists)
 include(CheckSymbolExists)
 include(UseCompat)
 include(ABICheck)
 include(SourceFormat)
 include(GenDoc)
 include(GenCoverage)
+include(GenConfigPackage)
 
 if(POLICY CMP0075)
     cmake_policy(SET CMP0075 NEW)
@@ -71,10 +73,11 @@ set(LIBNETCONF2_MICRO_SOVERSION 7)
 set(LIBNETCONF2_SOVERSION_FULL ${LIBNETCONF2_MAJOR_SOVERSION}.${LIBNETCONF2_MINOR_SOVERSION}.${LIBNETCONF2_MICRO_SOVERSION})
 set(LIBNETCONF2_SOVERSION ${LIBNETCONF2_MAJOR_SOVERSION})
 
-# Version of libyang library that this project depends on
-set(LIBYANG_DEP_VERSION 6.3.0)
+# SO version of libyang library that this project depends on
 set(LIBYANG_DEP_SOVERSION 5.9.2)
-set(LIBYANG_DEP_SOVERSION_MAJOR 5)
+
+# Version of libssh library that this project depends on
+set(LIBSSH_DEP_VERSION 0.9.5)
 
 # global C flags
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -fvisibility=hidden -std=c99")
@@ -251,14 +254,20 @@ endif()
 # targets
 #
 
-# use compat
-use_compat()
-
 # netconf2 sourceless target - need it for linking libs, but the required sources will be added later
 add_library(netconf2)
 
+# private dependencies of a static build, for Libs.private of libnetconf2.pc
+set(PC_LIBS_PRIVATE "")
+
+# use compat, may add a private dependency
+use_compat()
+
 # set the shared library version
 set_target_properties(netconf2 PROPERTIES VERSION ${LIBNETCONF2_SOVERSION_FULL} SOVERSION ${LIBNETCONF2_SOVERSION})
+target_include_directories(netconf2 PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 # include repository files with highest priority
 include_directories(${PROJECT_BINARY_DIR}/src)
@@ -267,7 +276,11 @@ include_directories(${PROJECT_BINARY_DIR}/include)
 # dependencies - pthread
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)
-target_link_libraries(netconf2 ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(netconf2 PRIVATE Threads::Threads)
+if(CMAKE_THREAD_LIBS_INIT)
+    # the thread library flag for the .pc file
+    string(APPEND PC_LIBS_PRIVATE " ${CMAKE_THREAD_LIBS_INIT}")
+endif()
 
 # check availability for some pthread functions
 set(CMAKE_REQUIRED_LIBRARIES pthread)
@@ -285,7 +298,8 @@ endif()
 if(ENABLE_DNSSEC)
     find_package(LibVAL REQUIRED)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_DNSSEC")
-    target_link_libraries(netconf2 ${LIBVAL_LIBRARIES})
+    target_link_libraries(netconf2 PRIVATE ${LIBVAL_LIBRARIES})
+    string(APPEND PC_LIBS_PRIVATE " -lval-threads -lsres")
     include_directories(${LIBVAL_INCLUDE_DIRS})
 endif()
 
@@ -297,28 +311,33 @@ if(ENABLE_SSH OR ENABLE_TLS)
     if(MBEDTLS_FOUND)
         # dependencies - mbedtls
         set(HAVE_MBEDTLS TRUE)
+        set(TLS_BACKEND MbedTLS)
         list(APPEND libsrc src/session_crypto_mbedtls.c)
         include_directories(${MBEDTLS_INCLUDE_DIRS})
-        target_link_libraries(netconf2 ${MBEDTLS_LIBRARIES})
+        target_link_libraries(netconf2 PRIVATE ${MBEDTLS_LIBRARIES})
+        string(APPEND PC_LIBS_PRIVATE " -lmbedtls -lmbedx509 -lmbedcrypto")
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${MBEDTLS_LIBRARIES})
     else()
         # dependencies - openssl
         find_package(OpenSSL 3.0.0 REQUIRED)
+        set(TLS_BACKEND OpenSSL)
         list(APPEND libsrc src/session_crypto_openssl.c)
         include_directories(${OPENSSL_INCLUDE_DIR})
-        target_link_libraries(netconf2 ${OPENSSL_LIBRARIES})
+        target_link_libraries(netconf2 PRIVATE ${OPENSSL_LIBRARIES})
+        string(APPEND PC_LIBS_PRIVATE " -lssl -lcrypto")
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${OPENSSL_LIBRARIES})
     endif()
 endif()
 
 if(ENABLE_SSH)
     # dependencies - libssh
-    find_package(LibSSH 0.9.5 REQUIRED)
-    target_link_libraries(netconf2 ${LIBSSH_LIBRARIES})
-    list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBSSH_LIBRARIES})
-    include_directories(${LIBSSH_INCLUDE_DIRS})
+    find_package(libssh ${LIBSSH_DEP_VERSION} CONFIG REQUIRED)
+    message(STATUS "Found libssh ${libssh_VERSION}: ${libssh_DIR}")
+    # public, the public headers include libssh
+    target_link_libraries(netconf2 PUBLIC ssh)
+    list(APPEND CMAKE_REQUIRED_LIBRARIES ssh)
 
-    if(LIBSSH_VERSION VERSION_GREATER_EQUAL "0.12.0")
+    if(libssh_VERSION VERSION_GREATER_EQUAL "0.12.0")
         list(APPEND libsrc src/session_server_ssh_auth_callback.c)
     else ()
         list(APPEND libsrc src/session_server_ssh_auth_message.c)
@@ -336,7 +355,8 @@ if(ENABLE_SSH)
         if(NOT HAVE_LIBCRYPT)
             message(FATAL_ERROR "Could NOT find Lib${LIBCRYPT} (library implementing crypt(3))")
         endif()
-        target_link_libraries(netconf2 ${LIBCRYPT})
+        target_link_libraries(netconf2 PRIVATE ${LIBCRYPT})
+        string(APPEND PC_LIBS_PRIVATE " -l${LIBCRYPT}")
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBCRYPT})
     endif()
 
@@ -347,7 +367,8 @@ if(ENABLE_SSH)
     if(LibPAM_FOUND)
         set(HAVE_LIBPAM TRUE)
 
-        target_link_libraries(netconf2 ${LIBPAM_LIBRARIES})
+        target_link_libraries(netconf2 PRIVATE ${LIBPAM_LIBRARIES})
+        string(APPEND PC_LIBS_PRIVATE " -lpam")
         list(APPEND CMAKE_REQUIRED_LIBRARIES ${LIBPAM_LIBRARIES})
         include_directories(${LIBPAM_INCLUDE_DIRS})
 
@@ -364,48 +385,55 @@ if(ENABLE_TLS AND ENABLE_CRL)
     find_package(CURL 7.30.0)
     if(CURL_FOUND)
         set(HAVE_CURL TRUE)
-        if(TARGET CURL::libcurl)
-            target_link_libraries(netconf2 CURL::libcurl)
-        else()
-            target_link_libraries(netconf2 ${CURL_LIBRARIES})
-            list(APPEND CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARY})
-            include_directories(${CURL_INCLUDE_DIRS})
-        endif()
+        target_link_libraries(netconf2 PRIVATE CURL::libcurl)
+        string(APPEND PC_LIBS_PRIVATE " -lcurl")
     else()
         message(WARNING "CRL certificate verification disabled (LibCURL not found)")
     endif()
 endif()
 
 # dependencies - libyang
-find_package(LibYANG ${LIBYANG_DEP_SOVERSION} REQUIRED)
-target_link_libraries(netconf2 ${LIBYANG_LIBRARIES})
-include_directories(${LIBYANG_INCLUDE_DIRS})
+find_package(LibYANG ${LIBYANG_DEP_SOVERSION} CONFIG REQUIRED)
+message(STATUS "Found LibYANG ${LibYANG_VERSION}: ${LibYANG_DIR}")
+target_link_libraries(netconf2 PUBLIC LibYANG::yang)
 
-# set compiler flags
+# public headers with SSH and TLS functions, also when included directly instead of nc_client.h/nc_server.h
 if(ENABLE_SSH)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_SSH")
+    target_compile_definitions(netconf2 PUBLIC NC_SSH)
+    string(APPEND PC_CFLAGS " -DNC_SSH")
 endif()
 if(ENABLE_TLS)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNC_TLS")
+    target_compile_definitions(netconf2 PUBLIC NC_TLS)
+    string(APPEND PC_CFLAGS " -DNC_TLS")
 endif()
 
 # set sources
-target_sources(netconf2 PRIVATE ${libsrc} ${compatsrc})
+target_sources(netconf2 PRIVATE ${libsrc})
+target_link_libraries(netconf2 PRIVATE nccompat)
+
+# netconf2 for the executables and tests of this project. They call compat and pthread functions
+# directly and need their own compat objects, because those in netconf2 are hidden.
+add_library(ncbin INTERFACE)
+target_sources(ncbin INTERFACE $<TARGET_OBJECTS:nccompat>)
+target_link_libraries(ncbin INTERFACE netconf2 Threads::Threads)
 
 # generate config file
 configure_file("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/src/config.h" ESCAPE_QUOTES @ONLY)
 
-# generate and copy public header files
+# generate and copy public headers, configure_file() refreshes the copies whenever they change
 configure_file("${PROJECT_SOURCE_DIR}/nc_client.h.in" "${PROJECT_BINARY_DIR}/include/nc_client.h")
 configure_file("${PROJECT_SOURCE_DIR}/nc_server.h.in" "${PROJECT_BINARY_DIR}/include/nc_server.h")
 configure_file("${PROJECT_SOURCE_DIR}/nc_version.h.in" "${PROJECT_BINARY_DIR}/include/nc_version.h")
-file(COPY ${headers} DESTINATION "${PROJECT_BINARY_DIR}/include/libnetconf2")
+foreach(h IN LISTS headers)
+    get_filename_component(h_name ${h} NAME)
+    configure_file(${PROJECT_SOURCE_DIR}/${h} ${PROJECT_BINARY_DIR}/include/libnetconf2/${h_name} COPYONLY)
+endforeach()
 
 # install YANG modules
 install(DIRECTORY "${PROJECT_SOURCE_DIR}/modules/" DESTINATION ${YANG_MODULE_DIR} FILES_MATCHING PATTERN "*.yang")
 
 # install library
-install(TARGETS netconf2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS netconf2 EXPORT LibNETCONF2Targets DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # install headers
 install(FILES ${PROJECT_BINARY_DIR}/include/nc_client.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
@@ -413,21 +441,50 @@ install(FILES ${PROJECT_BINARY_DIR}/include/nc_server.h DESTINATION ${CMAKE_INST
 install(FILES ${PROJECT_BINARY_DIR}/include/nc_version.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(DIRECTORY ${PROJECT_BINARY_DIR}/include/libnetconf2 DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-# install pkg-config file
-find_package(PkgConfig)
-if(PKG_CONFIG_FOUND)
-    configure_file("libnetconf2.pc.in" "libnetconf2.pc" @ONLY)
-    install(FILES "${PROJECT_BINARY_DIR}/libnetconf2.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
-    # check that pkg-config includes the used path
-    execute_process(COMMAND ${PKG_CONFIG_EXECUTABLE} --variable pc_path pkg-config RESULT_VARIABLE RETURN OUTPUT_VARIABLE PC_PATH ERROR_QUIET)
-    if(RETURN EQUAL 0)
-        string(REGEX MATCH "${CMAKE_INSTALL_LIBDIR}/pkgconfig" SUBSTR "${PC_PATH}")
-        string(LENGTH "${SUBSTR}" SUBSTR_LEN)
-        if(SUBSTR_LEN EQUAL 0)
-            message(WARNING "pkg-config will not detect the new package after installation, adjust PKG_CONFIG_PATH using \"export PKG_CONFIG_PATH=\${PKG_CONFIG_PATH}:${CMAKE_INSTALL_LIBDIR}/pkgconfig\".")
-        endif()
+# CMake config package, for the build tree and the installation
+if(BUILD_SHARED_LIBS)
+    # libyang for the installed package, under the same prefix
+    set(NC_LIBYANG_HINT ${CMAKE_INSTALL_LIBDIR}/cmake/LibYANG)
+    # libyang for the build tree package, the one libnetconf2 was built with
+    set(NC_LIBYANG_HINT_BUILD ${LibYANG_DIR})
+
+    # the build tree uses the YANG modules from the source tree
+    set(YANG_MODULE_DIR_BUILD ${PROJECT_SOURCE_DIR}/modules)
+    set(NC_PATH_VARS NC_LIBYANG_HINT YANG_MODULE_DIR)
+
+    if(ENABLE_SSH)
+        # libssh the same way as libyang
+        set(NC_LIBSSH_HINT ${CMAKE_INSTALL_LIBDIR}/cmake/libssh)
+        set(NC_LIBSSH_HINT_BUILD ${libssh_DIR})
+        list(APPEND NC_PATH_VARS NC_LIBSSH_HINT)
     endif()
+
+    # the package version is the SO version, which all the dependent projects check
+    gen_config_package(LibNETCONF2 ${LIBNETCONF2_SOVERSION_FULL} PATH_VARS ${NC_PATH_VARS})
+else()
+    message(STATUS "Static build, CMake config package is not installed")
 endif()
+
+# generate and install pkg-config file, the install directories in its paths may be absolute
+if(IS_ABSOLUTE "${CMAKE_INSTALL_INCLUDEDIR}")
+    set(PC_INCLUDEDIR "${CMAKE_INSTALL_INCLUDEDIR}")
+else()
+    set(PC_INCLUDEDIR "\${prefix}/${CMAKE_INSTALL_INCLUDEDIR}")
+endif()
+if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}")
+    set(PC_LIBDIR "${CMAKE_INSTALL_LIBDIR}")
+else()
+    set(PC_LIBDIR "\${prefix}/${CMAKE_INSTALL_LIBDIR}")
+endif()
+# libyang and libssh are public, the public headers include them
+set(PC_REQUIRES "libyang")
+if(ENABLE_SSH)
+    string(APPEND PC_REQUIRES " libssh")
+endif()
+# the other dependencies only in Libs.private, Requires.private would need their .pc files even for dynamic linking
+string(STRIP "${PC_LIBS_PRIVATE}" PC_LIBS_PRIVATE)
+configure_file("libnetconf2.pc.in" "libnetconf2.pc" @ONLY)
+install(FILES "${PROJECT_BINARY_DIR}/libnetconf2.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 
 # examples
 if(ENABLE_EXAMPLES)

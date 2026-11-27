@@ -310,7 +310,7 @@ jobs:
             image: "debian:13",
             pkg-setup: "apt-get update -q",
             pkg-cmd: "apt-get install -yq",
-            pkg-packages: "pipx cmake git debhelper pkg-config libcmocka-dev libpcre2-dev libcbor-dev libxxhash-dev zlib1g-dev libssh-dev libssl-dev libpam0g-dev libcurl4-openssl-dev",
+            pkg-packages: "pipx cmake git debhelper libcmocka-dev libpcre2-dev libcbor-dev libxxhash-dev zlib1g-dev libssh-dev libssl-dev libpam0g-dev libcurl4-openssl-dev",
             pipx-install: ""
           }
     container:
@@ -331,9 +331,11 @@ jobs:
           $HOME/.local/bin/apkg build
           $HOME/.local/bin/apkg install
 
+      - uses: actions/checkout@main
+
       - name: Build-and-install-package
         run: |
-          git clone -b ${{ needs.git-branch.outputs.branch-name }} https://github.com/CESNET/libnetconf2.git
-          cd libnetconf2
+          # the container runs as root, the checked out workspace belongs to the runner user
+          git config --global --add safe.directory $GITHUB_WORKSPACE
           $HOME/.local/bin/apkg build
           $HOME/.local/bin/apkg install

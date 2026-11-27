@@ -32,10 +32,9 @@
 int TEST_PORT = 10050;
 const char *TEST_PORT_STR = "10050";
 
-/* mock pam_start to just call pam_start_confdir instead */
-int __real_pam_start(const char *service_name, const char *user, const struct pam_conv *pam_conversation, pam_handle_t **pamh);
-int
-__wrap_pam_start(const char *service_name, const char *user, const struct pam_conv *pam_conversation, pam_handle_t **pamh)
+/* mock pam_start to just call pam_start_confdir instead, exported to replace the one called by libnetconf2 */
+__attribute__((visibility("default"))) int
+pam_start(const char *service_name, const char *user, const struct pam_conv *pam_conversation, pam_handle_t **pamh)
 {
     return pam_start_confdir(service_name, user, pam_conversation, BUILD_DIR "/tests", pamh);
 }

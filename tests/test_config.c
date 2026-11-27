@@ -480,7 +480,7 @@ conn_preserve_server_thread(void *arg)
     pthread_barrier_wait(&test_ctx->barrier);
 
     /* accept a session and add it to the poll session structure */
-    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT_MS, test_ctx->ctx, &session);
     assert_int_equal(msgtype, NC_MSG_HELLO);
 
     ret = nc_ps_add_session(ps, session);
@@ -488,7 +488,7 @@ conn_preserve_server_thread(void *arg)
 
     /* poll until the session is fully established */
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT_MS, NULL);
     } while (ret & NC_PSPOLL_RPC);
 
     /* print port number into the new data */
@@ -513,7 +513,7 @@ conn_preserve_server_thread(void *arg)
 
     /* poll until we receive the rpc from the client */
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, NULL);
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT_MS, NULL);
     } while (!(ret & NC_PSPOLL_RPC));
 
     /* wait for the client */
@@ -1467,7 +1467,7 @@ test_stall_auth_server_thread(void *arg)
     pthread_barrier_wait(&test_ctx->barrier);
 
     /* the client never authenticates, so this is expected to fail after the stall */
-    msgtype = nc_accept(NC_ACCEPT_TIMEOUT, test_ctx->ctx, &session);
+    msgtype = nc_accept(NC_ACCEPT_TIMEOUT_MS, test_ctx->ctx, &session);
     assert_int_not_equal(msgtype, NC_MSG_HELLO);
     nc_session_free(session, NULL);
 

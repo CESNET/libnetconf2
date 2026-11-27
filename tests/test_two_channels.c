@@ -64,7 +64,7 @@ server_thread(void *arg)
                 ret = nc_ps_add_session(ps, new_session);
                 assert_int_equal(ret, 0);
             }
-        } else if (ret & NC_PS_POLL_TIMEOUT) {
+        } else if (ret & NC_PSPOLL_TIMEOUT) {
             usleep(BACKOFF_TIMEOUT_USECS);
             sleep_count++;
             assert_int_not_equal(sleep_count, 50000);

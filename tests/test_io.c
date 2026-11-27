@@ -14,85 +14,85 @@
 
 #define _GNU_SOURCE
 
-#include <errno.h>
-#include <fcntl.h>
 #include <pthread.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 #include <cmocka.h>
 #include <libyang/libyang.h>
 
-#include <messages_p.h>
-#include <session_p.h>
-
 #include "ln2_test.h"
 
 struct wr {
-    struct nc_session *session;
+    struct ln2_test_ctx *test_ctx;
+    struct nc_session *server;
+    struct nc_session *client;
+    int fds[2];
     struct nc_rpc *rpc;
 };
 
+/**
+ * @brief Create the sessions and the RPC to write.
+ *
+ * @param[in] state Test state.
+ * @param[in] version NETCONF version, 0 for 1.0, 1 for 1.1.
+ * @return 0 on success, non-zero on error.
+ */
 static int
-setup_write(void **state)
+setup_write(void **state, int version)
 {
-    (void) state; /* unused */
-    int fd, pipes[2];
     struct wr *w;
 
-    w = malloc(sizeof *w);
-    w->session = calloc(1, sizeof *w->session);
-    ly_ctx_new(ly_yang_module_dir(), 0, &w->session->ctx);
-    ly_ctx_set_searchdir(w->session->ctx, TESTS_DIR "/data/modules");
+    w = calloc(1, sizeof *w);
+    if (!w) {
+        return 1;
+    }
+    *state = w;
 
-    /* ietf-netconf */
-    fd = open(TESTS_DIR "/data/modules/ietf-netconf.yin", O_RDONLY);
-    if (fd == -1) {
-        free(w->session);
-        free(w);
-        return -1;
+    if (ln2_glob_test_setup(&w->test_ctx)) {
+        return 1;
     }
 
-    lys_parse_fd(w->session->ctx, fd, LYS_IN_YIN, NULL);
-    close(fd);
-
-    assert_return_code(pipe(pipes), errno);
-
-    NC_SESSION_STATUS_SET(w->session, NC_STATUS_RUNNING);
-    w->session->version = NC_PROT_VERSION_10;
-    w->session->opts.client.msgid = 999;
-    w->session->ti_type = NC_TI_FD;
-    w->session->io_lock = malloc(sizeof *w->session->io_lock);
-    pthread_mutex_init(w->session->io_lock, NULL);
-    w->session->ti.fd.in = pipes[0];
-    w->session->ti.fd.out = pipes[1];
+    ln2_glob_test_fd_sessions(w->test_ctx->ctx, version, &w->server, &w->client, w->fds);
 
     /* get rpc to write */
     w->rpc = nc_rpc_lock(NC_DATASTORE_RUNNING);
-    assert_non_null(w->rpc);
-
-    *state = w;
+    if (!w->rpc) {
+        return 1;
+    }
 
     return 0;
 }
 
 static int
+setup_write_10(void **state)
+{
+    return setup_write(state, 0);
+}
+
+static int
+setup_write_11(void **state)
+{
+    return setup_write(state, 1);
+}
+
+static int
 teardown_write(void **state)
 {
-    struct wr *w = (struct wr *)*state;
+    struct wr *w = *state;
 
     nc_rpc_free(w->rpc);
-    close(w->session->ti.fd.in);
-    w->session->ti.fd.in = -1;
-    close(w->session->ti.fd.out);
-    w->session->ti.fd.out = -1;
-    nc_session_free(w->session, NULL);
+
+    /* close the socketpair first so that the client does not wait for a <close-session> reply */
+    close(w->fds[0]);
+    close(w->fds[1]);
+    nc_session_free(w->server, NULL);
+    nc_session_free(w->client, NULL);
+
+    ln2_glob_test_teardown((void **)&w->test_ctx);
     free(w);
     *state = NULL;
 
@@ -102,88 +102,42 @@ teardown_write(void **state)
 static void
 test_write_rpc(void **state)
 {
-    struct wr *w = (struct wr *)*state;
+    struct wr *w = *state;
     uint64_t msgid;
     NC_MSG_TYPE type;
 
-    w->session->side = NC_CLIENT;
-
     do {
-        type = nc_send_rpc(w->session, w->rpc, 1000, &msgid);
+        type = nc_send_rpc(w->client, w->rpc, NC_MSG_TIMEOUT_MS, &msgid);
     } while (type == NC_MSG_WOULDBLOCK);
 
     assert_int_equal(type, NC_MSG_RPC);
 
-    assert_int_equal(write(w->session->ti.fd.out, "\n", 1), 1);
-}
-
-static void
-test_write_rpc_10(void **state)
-{
-    struct wr *w = (struct wr *)*state;
-
-    w->session->version = NC_PROT_VERSION_10;
-
-    return test_write_rpc(state);
-}
-
-static void
-test_write_rpc_11(void **state)
-{
-    struct wr *w = (struct wr *)*state;
-
-    w->session->version = NC_PROT_VERSION_11;
-
-    return test_write_rpc(state);
+    assert_int_equal(write(w->fds[1], "\n", 1), 1);
 }
 
 static void
 test_write_rpc_bad(void **state)
 {
-    struct wr *w = (struct wr *)*state;
+    struct wr *w = *state;
     uint64_t msgid;
     NC_MSG_TYPE type;
 
-    w->session->side = NC_SERVER;
-    pthread_mutex_init(&w->session->opts.server.rpc_lock, NULL);
-    pthread_cond_init(&w->session->opts.server.rpc_cond, NULL);
-    w->session->opts.server.rpc_inuse = 0;
-
+    /* only a client can send an RPC */
     do {
-        type = nc_send_rpc(w->session, w->rpc, 1000, &msgid);
+        type = nc_send_rpc(w->server, w->rpc, NC_MSG_TIMEOUT_MS, &msgid);
     } while (type == NC_MSG_WOULDBLOCK);
 
     assert_int_equal(type, NC_MSG_ERROR);
-}
-
-static void
-test_write_rpc_10_bad(void **state)
-{
-    struct wr *w = (struct wr *)*state;
-
-    w->session->version = NC_PROT_VERSION_10;
-
-    return test_write_rpc_bad(state);
-}
-
-static void
-test_write_rpc_11_bad(void **state)
-{
-    struct wr *w = (struct wr *)*state;
-
-    w->session->version = NC_PROT_VERSION_11;
-
-    return test_write_rpc_bad(state);
 }
 
 int
 main(void)
 {
     const struct CMUnitTest io[] = {
-        cmocka_unit_test_setup_teardown(test_write_rpc_10, setup_write, teardown_write),
-        cmocka_unit_test_setup_teardown(test_write_rpc_10_bad, setup_write, teardown_write),
-        cmocka_unit_test_setup_teardown(test_write_rpc_11, setup_write, teardown_write),
-        cmocka_unit_test_setup_teardown(test_write_rpc_11_bad, setup_write, teardown_write)
+        {"test_write_rpc_10", test_write_rpc, setup_write_10, teardown_write, NULL},
+        {"test_write_rpc_10_bad", test_write_rpc_bad, setup_write_10, teardown_write, NULL},
+        {"test_write_rpc_11", test_write_rpc, setup_write_11, teardown_write, NULL},
+        {"test_write_rpc_11_bad", test_write_rpc_bad, setup_write_11, teardown_write, NULL},
     };
 
     return cmocka_run_group_tests(io, NULL, NULL);

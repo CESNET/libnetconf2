@@ -1,7 +1,7 @@
 # - Use compat library providing various functions and macros that may be missing on some systems
 # Once done this will define
 #
-# compatsrc - sources to add to compilation
+# nccompat - OBJECT library with the compat functions
 #
 # Additionally, "compat.h" include directory is added and can be included.
 #
@@ -34,7 +34,9 @@ macro(USE_COMPAT)
 
     set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
     find_package(Threads)
-    list(APPEND CMAKE_REQUIRED_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
+    if(CMAKE_THREAD_LIBS_INIT)
+        list(APPEND CMAKE_REQUIRED_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
+    endif()
 
     check_symbol_exists(pthread_mutex_timedlock "pthread.h" HAVE_PTHREAD_MUTEX_TIMEDLOCK)
     check_symbol_exists(pthread_mutex_clocklock "pthread.h" HAVE_PTHREAD_MUTEX_CLOCKLOCK)
@@ -87,7 +89,8 @@ macro(USE_COMPAT)
     check_symbol_exists(SO_PEERCRED "sys/socket.h" HAVE_SO_PEERCRED)
     if(NOT HAVE_SO_PEERCRED)
         if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
-            target_link_libraries(netconf2 -lsocket)
+            target_link_libraries(netconf2 PRIVATE -lsocket)
+            string(APPEND PC_LIBS_PRIVATE " -lsocket")
             list(APPEND CMAKE_REQUIRED_LIBRARIES socket)
             list(REMOVE_ITEM CMAKE_REQUIRED_LIBRARIES pthread)
             list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_QNX_SOURCE)
@@ -103,10 +106,15 @@ macro(USE_COMPAT)
     list(REMOVE_ITEM CMAKE_REQUIRED_DEFINITIONS -D_POSIX_C_SOURCE=200809L)
     list(REMOVE_ITEM CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
     list(REMOVE_ITEM CMAKE_REQUIRED_DEFINITIONS -D__BSD_VISIBLE=1)
-    list(REMOVE_ITEM CMAKE_REQUIRED_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
+    if(CMAKE_THREAD_LIBS_INIT)
+        list(REMOVE_ITEM CMAKE_REQUIRED_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
+    endif()
 
-    # header and source file (adding the source directly allows for hiding its symbols)
+    # compat.h
     configure_file(${PROJECT_SOURCE_DIR}/compat/compat.h.in ${PROJECT_BINARY_DIR}/compat/compat.h @ONLY)
     include_directories(${PROJECT_BINARY_DIR}/compat)
-    set(compatsrc ${PROJECT_SOURCE_DIR}/compat/compat.c)
+
+    # compat functions, hidden by the global -fvisibility=hidden so that a shared library does not export them
+    add_library(nccompat OBJECT ${PROJECT_SOURCE_DIR}/compat/compat.c)
+    set_target_properties(nccompat PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endmacro()

@@ -60,7 +60,7 @@ the `distro` directory.
 ## Requirements
 
 * C compiler (gcc >= 4.8.4, clang >= 3.0, ...)
-* cmake >= 3.5.0
+* cmake >= 3.12
 * crypt(3)
 * [libyang](https://github.com/CESNET/libyang)
 * libssh >= 0.9.5 (for SSH support)
@@ -217,6 +217,25 @@ following linker parameters:
 ```
 -lnetconf2
 ```
+
+A CMake project finds libnetconf2 by its CMake package, installed into `LIBDIR/cmake/LibNETCONF2`
+(`LIBDIR` is the library directory under the install prefix, e.g. `/usr/local/lib`):
+```
+find_package(LibNETCONF2 5 CONFIG REQUIRED)
+target_link_libraries(myapp PRIVATE LibNETCONF2::netconf2)
+```
+
+The version passed to `find_package()` is the SO version of the library (`NC_VERSION`). The
+package also defines the following variables, holding the values libnetconf2 was built with:
+
+* `LibNETCONF2_PROJECT_VERSION` - project version of libnetconf2,
+* `LibNETCONF2_YANG_MODULE_DIR` - directory with the libnetconf2 YANG modules,
+* `LibNETCONF2_SSH` - whether libnetconf2 supports NETCONF over SSH,
+* `LibNETCONF2_TLS` - whether libnetconf2 supports NETCONF over TLS,
+* `LibNETCONF2_TLS_BACKEND` - crypto library used for SSH and TLS, `OpenSSL` or `MbedTLS`.
+
+To use libnetconf2 from its build directory, pass `-DLibNETCONF2_DIR=<libnetconf2 build directory>`.
+Static builds and older libnetconf2 releases provide no CMake package, use `pkg-config` with them.
 
 ## Examples
 

@@ -15,6 +15,7 @@
 
 #define _GNU_SOURCE
 
+#include <dlfcn.h>
 #include <pthread.h>
 #include <pwd.h>
 #include <setjmp.h>
@@ -48,13 +49,16 @@ int TEST_PORT = 10050;
 const char *TEST_PORT_STR = "10050";
 
 /* mock getpwnam_r to make SYS_USER a system user with its password hash stored directly in its passwd entry,
- * linked shared libraries reference getpwnam_r too, so the wrapper must not be hidden for the linker to accept it */
-int __real_getpwnam_r(const char *name, struct passwd *pwd, char *buf, size_t buflen, struct passwd **result);
+ * exported to replace the one called by libnetconf2 */
 __attribute__((visibility("default"))) int
-__wrap_getpwnam_r(const char *name, struct passwd *pwd, char *buf, size_t buflen, struct passwd **result)
+getpwnam_r(const char *name, struct passwd *pwd, char *buf, size_t buflen, struct passwd **result)
 {
+    int (*real_getpwnam_r)(const char *name, struct passwd *pwd, char *buf, size_t buflen, struct passwd **result);
+
     if (strcmp(name, SYS_USER)) {
-        return __real_getpwnam_r(name, pwd, buf, buflen, result);
+        real_getpwnam_r = (int (*)(const char *, struct passwd *, char *, size_t, struct passwd **))dlsym(RTLD_NEXT,
+                "getpwnam_r");
+        return real_getpwnam_r(name, pwd, buf, buflen, result);
     }
 
     memset(pwd, 0, sizeof *pwd);

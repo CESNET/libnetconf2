@@ -10,7 +10,7 @@ Build-Depends: cmake,
                libssl-dev (>= 3.0.0),
                libssh-dev (>= 0.9.5),
                libpam0g-dev,
-               pkg-config,
+               libcrypt-dev,
                libcurl4-openssl-dev (>= 7.30.0)
 Vcs-Browser: https://github.com/CESNET/libnetconf2/tree/master
 Vcs-Git: https://github.com/CESNET/libnetconf2.git
@@ -30,6 +30,7 @@ Description: library implementing NETCONF protocol - runtime
 
 Package: libnetconf2-dev
 Depends: libyang-dev,
+         libssh-dev (>= 0.9.5),
          libnetconf5 (= ${binary:Version}),
          ${misc:Depends}
 Section: libdevel
@@ -41,5 +42,5 @@ Description: library implementing NETCONF protocol - development files
  .
  Both server and client-side functionality is provided.
  .
- This package contains the C headers, a pkgconfig file, and .so entry
- point for libnetconf2.
+ This package contains the C headers, a pkgconfig file, a CMake package,
+ and .so entry point for libnetconf2.

@@ -122,7 +122,7 @@ server_thread_ssh(void *arg)
     /* poll */
     new_msg = 0;
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT_MS, &session);
         if (ret & NC_PSPOLL_SESSION_TERM) {
             /* the session was removed from ps and we own it now */
             nc_session_free(session, NULL);
@@ -175,7 +175,7 @@ client_thread_ssh(void *arg)
 
     pthread_barrier_wait(&test_ctx->barrier);
     /* connect */
-    ret = nc_accept_callhome(NC_ACCEPT_TIMEOUT, NULL, &session);
+    ret = nc_accept_callhome(NC_ACCEPT_TIMEOUT_MS, NULL, &session);
     assert_int_equal(ret, 1);
 
     ret = nc_client_ssh_ch_del_bind("127.0.0.1", TEST_PORT);
@@ -291,7 +291,7 @@ server_thread_tls(void *arg)
 
     /* poll */
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT_MS, &session);
         if (ret & NC_PSPOLL_SESSION_TERM) {
             /* the session was removed from ps and we own it now */
             nc_session_free(session, NULL);
@@ -334,7 +334,7 @@ client_thread_tls(void *arg)
 
     pthread_barrier_wait(&test_ctx->barrier);
     /* connect */
-    ret = nc_accept_callhome(NC_ACCEPT_TIMEOUT, NULL, &session);
+    ret = nc_accept_callhome(NC_ACCEPT_TIMEOUT_MS, NULL, &session);
     assert_int_equal(ret, 1);
 
     ret = nc_client_tls_ch_del_bind("127.0.0.1", TEST_PORT_2);
@@ -464,7 +464,7 @@ server_thread_delete_while_session(void *arg)
     }
 
     do {
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT_MS, &session);
         if (ret & NC_PSPOLL_SESSION_TERM) {
             /* the session was removed from ps and we own it now */
             nc_session_free(session, NULL);
@@ -510,7 +510,7 @@ client_thread_delete_while_session(void *arg)
 
     pthread_barrier_wait(&test_ctx->barrier);
 
-    ret = nc_accept_callhome(NC_ACCEPT_TIMEOUT, NULL, &session);
+    ret = nc_accept_callhome(NC_ACCEPT_TIMEOUT_MS, NULL, &session);
     assert_int_equal(ret, 1);
 
     /* wait until the server deletes the client */
@@ -642,7 +642,7 @@ server_thread_two_ch(void *arg)
         }
         pthread_mutex_unlock(&session_count_mutex);
 
-        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT, &session);
+        ret = nc_ps_poll(ps, NC_PS_POLL_TIMEOUT_MS, &session);
         if (ret & NC_PSPOLL_SESSION_TERM) {
             /* the session was removed from ps and we own it now */
             nc_session_free(session, NULL);
@@ -678,7 +678,7 @@ client_thread_two_ch(void *arg)
 
     pthread_barrier_wait(&ch_arg->test_ctx->barrier);
 
-    ret = nc_accept_callhome(NC_ACCEPT_TIMEOUT, NULL, &session);
+    ret = nc_accept_callhome(NC_ACCEPT_TIMEOUT_MS, NULL, &session);
     assert_int_equal(ret, 1);
 
     ret = nc_client_ssh_ch_del_bind("127.0.0.1", ch_arg->port);
